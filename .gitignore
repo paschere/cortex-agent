@@ -1,0 +1,15 @@
+node_modules
+.next
+.turbo
+dist
+coverage
+playwright-report
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.vercel
+.wrangler
+.env.vault
+.supabase
