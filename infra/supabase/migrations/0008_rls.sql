@@ -21,19 +21,25 @@ $$;
 
 -- helper: is org admin
 create or replace function public.is_org_admin() returns boolean
-language sql stable security definer as $$
+language sql stable security definer
+set search_path = public, pg_temp
+as $$
   select exists (select 1 from public.users where id = auth.uid() and role = 'org_admin');
 $$;
 
 -- helper: is in team
 create or replace function public.is_in_team(p_team uuid) returns boolean
-language sql stable security definer as $$
+language sql stable security definer
+set search_path = public, pg_temp
+as $$
   select exists (select 1 from public.team_members where team_id = p_team and user_id = auth.uid());
 $$;
 
 -- helper: is team admin
 create or replace function public.is_team_admin(p_team uuid) returns boolean
-language sql stable security definer as $$
+language sql stable security definer
+set search_path = public, pg_temp
+as $$
   select exists (select 1 from public.team_members where team_id = p_team and user_id = auth.uid() and role = 'team_admin');
 $$;
 
@@ -89,18 +95,74 @@ create policy kb_collections_write on public.kb_collections for all
 -- kb_documents inherit collection visibility
 create policy kb_documents_read on public.kb_documents for select
   using (exists (select 1 from public.kb_collections c where c.id = collection_id));
+
 create policy kb_documents_write on public.kb_documents for all
-  using (exists (select 1 from public.kb_collections c where c.id = collection_id))
-  with check (exists (select 1 from public.kb_collections c where c.id = collection_id));
+  using (
+    exists (
+      select 1 from public.kb_collections c
+      where c.id = collection_id
+      and (
+        (c.scope = 'global' and public.is_org_admin())
+        or (c.scope = 'team' and public.is_team_admin(c.scope_id))
+        or (c.scope = 'user' and c.scope_id = auth.uid())
+        or (c.scope = 'conversation' and exists (
+          select 1 from public.conversations conv where conv.id = c.scope_id and conv.user_id = auth.uid()
+        ))
+      )
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.kb_collections c
+      where c.id = collection_id
+      and (
+        (c.scope = 'global' and public.is_org_admin())
+        or (c.scope = 'team' and public.is_team_admin(c.scope_id))
+        or (c.scope = 'user' and c.scope_id = auth.uid())
+        or (c.scope = 'conversation' and exists (
+          select 1 from public.conversations conv where conv.id = c.scope_id and conv.user_id = auth.uid()
+        ))
+      )
+    )
+  );
 
 -- kb_chunks inherit document visibility
 create policy kb_chunks_read on public.kb_chunks for select
   using (exists (select 1 from public.kb_documents d where d.id = document_id));
 
+create policy kb_chunks_write on public.kb_chunks for all
+  using (false) with check (false);
+
 -- gdrive_sync_state inherit collection visibility
 create policy gdrive_sync_state_rw on public.gdrive_sync_state for all
-  using (exists (select 1 from public.kb_collections c where c.id = collection_id))
-  with check (exists (select 1 from public.kb_collections c where c.id = collection_id));
+  using (
+    exists (
+      select 1 from public.kb_collections c
+      where c.id = collection_id
+      and (
+        (c.scope = 'global' and public.is_org_admin())
+        or (c.scope = 'team' and public.is_team_admin(c.scope_id))
+        or (c.scope = 'user' and c.scope_id = auth.uid())
+        or (c.scope = 'conversation' and exists (
+          select 1 from public.conversations conv where conv.id = c.scope_id and conv.user_id = auth.uid()
+        ))
+      )
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.kb_collections c
+      where c.id = collection_id
+      and (
+        (c.scope = 'global' and public.is_org_admin())
+        or (c.scope = 'team' and public.is_team_admin(c.scope_id))
+        or (c.scope = 'user' and c.scope_id = auth.uid())
+        or (c.scope = 'conversation' and exists (
+          select 1 from public.conversations conv where conv.id = c.scope_id and conv.user_id = auth.uid()
+        ))
+      )
+    )
+  );
 
 -- integrations: never readable from client. Only service role accesses tokens.
 create policy integrations_no_client on public.integrations for all using (false) with check (false);
@@ -115,8 +177,12 @@ create policy messages_owner on public.messages for all
 create policy audit_events_read on public.audit_events for select
   using (user_id = auth.uid() or public.is_org_admin());
 
--- rate_limit_buckets: owner only
-create policy rate_limit_buckets_self on public.rate_limit_buckets for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy audit_events_write on public.audit_events for insert
+  with check (false);
+
+-- rate_limit_buckets: owner read only; writes happen only via service role
+create policy rate_limit_buckets_self_read on public.rate_limit_buckets for select
+  using (user_id = auth.uid());
 
 -- Safe view over integrations (no tokens)
 create or replace view public.integrations_view with (security_invoker = true) as
