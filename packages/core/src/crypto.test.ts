@@ -31,4 +31,10 @@ describe('crypto', () => {
   it('produces different ciphertexts for same plaintext (IV randomness)', () => {
     expect(encryptToken('x')).not.toEqual(encryptToken('x'));
   });
+  it('rejects tampered ciphertext', () => {
+    const ct = Buffer.from(encryptToken('secret'), 'base64');
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    ct[28] = (ct[28]! ^ 0xff) & 0xff;
+    expect(() => decryptToken(ct.toString('base64'))).toThrow();
+  });
 });

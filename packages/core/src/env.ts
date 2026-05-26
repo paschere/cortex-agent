@@ -19,7 +19,7 @@ const schema = z.object({
   RATE_ESTIMATOR_SERVICE_TOKEN: z.string().min(1),
   INNGEST_EVENT_KEY: z.string().min(1),
   INNGEST_SIGNING_KEY: z.string().min(1),
-  TOKEN_ENCRYPTION_KEY: z.string().regex(/^[A-Za-z0-9+/=]{40,}$/, 'must be base64 of 32 bytes'),
+  TOKEN_ENCRYPTION_KEY: z.string().regex(/^[A-Za-z0-9+/=]{44}$/, 'must be base64-encoded 32-byte key (exactly 44 chars)'),
   SENTRY_DSN: z.string().optional(),
 });
 

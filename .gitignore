@@ -2,6 +2,7 @@ node_modules
 .next
 .turbo
 dist
+**/*.tsbuildinfo
 coverage
 playwright-report
 .env
