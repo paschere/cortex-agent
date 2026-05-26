@@ -15,3 +15,5 @@ playwright-report
 .wrangler
 .env.vault
 .supabase
+infra/supabase/.branches
+infra/supabase/.temp
