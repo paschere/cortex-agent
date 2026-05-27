@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { bearerAuth } from './auth';
+import { listToolsForAuth } from './bridge';
 
 export interface Env {
   NEXT_PUBLIC_SUPABASE_URL: string;
@@ -26,6 +27,12 @@ app.use('/sse', bearerAuth());
 app.get('/mcp/whoami', (c) => {
   const mcp = c.get('mcp');
   return c.json({ userId: mcp.userId, agentId: mcp.agentId });
+});
+
+app.get('/mcp/tools', async (c) => {
+  const mcp = c.get('mcp');
+  const tools = await listToolsForAuth({ env: c.env, userId: mcp.userId, agentId: mcp.agentId });
+  return c.json({ tools: tools.map((t) => ({ id: t.id, description: t.description })) });
 });
 
 export default app;
