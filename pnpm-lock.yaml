@@ -173,6 +173,31 @@ importers:
         specifier: 2.1.8
         version: 2.1.8(@types/node@20.17.10)(msw@2.7.0(@types/node@20.17.10)(typescript@5.7.2))(terser@5.48.0)
 
+  packages/agents:
+    dependencies:
+      '@supabase/supabase-js':
+        specifier: 2.46.2
+        version: 2.46.2
+      '@zipdev/agent-tools':
+        specifier: workspace:*
+        version: link:../agent-tools
+      '@zipdev/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: 3.23.8
+        version: 3.23.8
+    devDependencies:
+      '@types/node':
+        specifier: 20.17.10
+        version: 20.17.10
+      typescript:
+        specifier: 5.7.2
+        version: 5.7.2
+      vitest:
+        specifier: 2.1.8
+        version: 2.1.8(@types/node@20.17.10)(msw@2.7.0(@types/node@20.17.10)(typescript@5.7.2))(terser@5.48.0)
+
   packages/core:
     dependencies:
       pino:
