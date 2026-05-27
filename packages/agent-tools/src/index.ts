@@ -154,3 +154,6 @@ export { writeAuditEvent } from './audit';
 export { consumeToken } from './rate-limit';
 export { createIntegrationsClient } from './integrations';
 export * from './rate';
+export * from './gmail';
+export * from './gcal';
+export * from './gsheets';
