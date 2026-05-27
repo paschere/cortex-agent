@@ -13,6 +13,29 @@ const ALLOWED_MIME_TYPES = new Set([
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+export async function GET(req: NextRequest) {
+  await requireSession();
+  const sb = getSupabaseServiceClient();
+  const url = new URL(req.url);
+  const collectionId = url.searchParams.get('collectionId');
+
+  if (!collectionId) {
+    return NextResponse.json({ error: 'Missing collectionId query param' }, { status: 400 });
+  }
+
+  const { data, error } = await sb
+    .from('kb_documents')
+    .select('id, title, mime, status, error_message, created_at')
+    .eq('collection_id', collectionId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ documents: data ?? [] });
+}
+
 export async function POST(req: NextRequest) {
   const session = await requireSession();
   const sb = getSupabaseServiceClient();
@@ -25,7 +48,7 @@ export async function POST(req: NextRequest) {
   }
 
   const file = formData.get('file');
-  const collectionId = formData.get('collection_id');
+  const collectionId = formData.get('collection_id') ?? formData.get('collectionId');
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'Missing file field' }, { status: 422 });
