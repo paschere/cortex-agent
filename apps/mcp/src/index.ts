@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { bearerAuth } from './auth';
 
 export interface Env {
   NEXT_PUBLIC_SUPABASE_URL: string;
@@ -17,5 +18,14 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.get('/', (c) => c.text('zipdev-mcp ok'));
 app.get('/health', (c) => c.json({ ok: true }));
+
+// All other routes require bearer auth
+app.use('/mcp/*', bearerAuth());
+app.use('/sse', bearerAuth());
+
+app.get('/mcp/whoami', (c) => {
+  const mcp = c.get('mcp');
+  return c.json({ userId: mcp.userId, agentId: mcp.agentId });
+});
 
 export default app;
