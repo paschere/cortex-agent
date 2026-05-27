@@ -30,19 +30,34 @@ const connectionString =
 
 const pool = new Pool({ connectionString });
 
+// Runtime guard: refuse to serve requests in production with the placeholder
+// secret. Skipped during `next build` (phase-production-build) so that page
+// data collection doesn't fail when secrets aren't injected into the build
+// environment — they only need to be present at runtime.
+const PLACEHOLDER_SECRET = 'build-time-placeholder-do-not-use-at-runtime';
+const resolvedSecret = process.env.BETTER_AUTH_SECRET ?? PLACEHOLDER_SECRET;
+if (
+  process.env.NODE_ENV === 'production' &&
+  process.env.NEXT_PHASE !== 'phase-production-build' &&
+  resolvedSecret === PLACEHOLDER_SECRET
+) {
+  throw new Error('BETTER_AUTH_SECRET must be set in production');
+}
+
 export const auth = betterAuth({
   appName: 'Zipdev Agent',
   database: pool,
   baseURL:
     process.env.BETTER_AUTH_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000',
   // Fallback only used at build/import time when env is unset; real signing
-  // requires BETTER_AUTH_SECRET to be set at runtime.
-  secret:
-    process.env.BETTER_AUTH_SECRET ?? 'build-time-placeholder-do-not-use-at-runtime',
+  // requires BETTER_AUTH_SECRET to be set at runtime (enforced above).
+  secret: resolvedSecret,
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+      accessType: 'offline',
+      prompt: 'select_account consent',
     },
   },
   emailAndPassword: { enabled: false },

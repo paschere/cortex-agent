@@ -20,6 +20,7 @@ export async function middleware(req: NextRequest) {
     const res = await fetch(`${req.nextUrl.origin}/api/auth/get-session`, {
       headers: { cookie: req.headers.get('cookie') ?? '' },
       cache: 'no-store',
+      signal: AbortSignal.timeout(2000),
     });
     if (res.ok) {
       session = (await res.json()) as SessionPayload;

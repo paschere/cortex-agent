@@ -102,3 +102,26 @@ create policy ba_no_client_access_user on public.ba_user for all using (false) w
 create policy ba_no_client_access_session on public.ba_session for all using (false) with check (false);
 create policy ba_no_client_access_account on public.ba_account for all using (false) with check (false);
 create policy ba_no_client_access_verification on public.ba_verification for all using (false) with check (false);
+
+-- ----------------------------------------------------------------------
+-- 3. RLS implications of moving off Supabase Auth
+-- ----------------------------------------------------------------------
+-- IMPORTANT: All policies in 0008_rls.sql key off `auth.uid()`, which only
+-- returns a non-NULL value when the caller authenticated via Supabase Auth.
+-- Since SSO is now handled by better-auth, `auth.uid()` returns NULL for
+-- every request, and those policies effectively evaluate to `false`.
+--
+-- Mitigation for MVP: ALL data access from the API layer MUST go through
+-- the service-role client (`getSupabaseServiceClient()` in
+-- `apps/web/lib/supabase/service.ts`), which bypasses RLS. The session
+-- guard is enforced in application code via `requireSession()`.
+--
+-- Defense-in-depth at the DB level is intentionally deferred. A future
+-- migration may either:
+--   (a) Replace `auth.uid()` checks with `current_setting('app.user_id')`
+--       set via `SET LOCAL` from the API layer, or
+--   (b) Move data access into security-definer SQL functions with explicit
+--       user-id parameters.
+--
+-- Until that migration lands, NEVER use the anon-key (or any non-service)
+-- Postgres client to read `public.*` tables from client code.
