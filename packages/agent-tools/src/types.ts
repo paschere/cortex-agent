@@ -15,6 +15,7 @@ export interface ToolContext {
   integrations: IntegrationsClient;
   logger: Logger;
   signal?: AbortSignal;
+  withSpan?: <T>(name: string, attrs: Record<string, string | number>, fn: () => Promise<T>) => Promise<T>;
 }
 
 export interface ToolDef<I, O> {

@@ -101,7 +101,10 @@ export async function runTool<I, O>(
   }
   let result: O;
   try {
-    result = (await tool.handler(parsed.data, ctx)) as O;
+    const exec = () => tool.handler(parsed.data, ctx) as Promise<O>;
+    result = ctx.withSpan
+      ? await ctx.withSpan(`tool.${tool.id}`, { 'tool.id': tool.id, 'user.id': ctx.userId }, exec)
+      : await exec();
   } catch (err) {
     await writeAuditEvent({
       db: ctx.db,
@@ -150,3 +153,4 @@ export * from './types';
 export { writeAuditEvent } from './audit';
 export { consumeToken } from './rate-limit';
 export { createIntegrationsClient } from './integrations';
+export * from './rate';

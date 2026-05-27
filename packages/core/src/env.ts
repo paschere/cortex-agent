@@ -21,6 +21,7 @@ const schema = z.object({
   INNGEST_SIGNING_KEY: z.string().min(1),
   TOKEN_ENCRYPTION_KEY: z.string().regex(/^[A-Za-z0-9+/=]{44}$/, 'must be base64-encoded 32-byte key (exactly 44 chars)'),
   SENTRY_DSN: z.string().optional(),
+  NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;
