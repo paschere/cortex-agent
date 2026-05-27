@@ -53,6 +53,9 @@ importers:
       '@tanstack/react-query':
         specifier: 5.62.7
         version: 5.62.7(react@19.0.0)
+      '@zipdev/agent-tools':
+        specifier: workspace:*
+        version: link:../../packages/agent-tools
       '@zipdev/core':
         specifier: workspace:*
         version: link:../../packages/core

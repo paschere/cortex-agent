@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@zipdev/core": "workspace:*",
+    "@zipdev/agent-tools": "workspace:*",
     "@supabase/supabase-js": "2.46.2",
     "better-auth": "^1.6.11",
     "next": "15.0.4",

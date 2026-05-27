@@ -5,6 +5,7 @@ const config = {
   reactStrictMode: true,
   experimental: { serverActions: { bodySizeLimit: '12mb' } },
   transpilePackages: ['@zipdev/core', '@zipdev/agent-tools', '@zipdev/agents'],
+  serverExternalPackages: ['inngest'],
   async headers() {
     return [
       {

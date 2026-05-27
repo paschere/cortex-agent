@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { embed } from '@zipdev/agent-tools';
+import { embed } from '@zipdev/agent-tools/src/kb/embedder';
 import { z } from 'zod';
 import type { CollectionScope } from '@zipdev/core';
 
@@ -113,22 +113,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  type HybridSearchRow = {
+    document_id: string;
+    document_title: string;
+    chunk_index: number;
+    content: string;
+    score: number;
+  };
+
   // Map snake_case DB columns to camelCase for API consumers
-  const hits = (data ?? []).map(
-    (row: {
-      document_id: string;
-      document_title: string;
-      chunk_index: number;
-      content: string;
-      score: number;
-    }) => ({
-      documentId: row.document_id,
-      documentTitle: row.document_title,
-      chunkIndex: row.chunk_index,
-      content: row.content,
-      score: row.score,
-    }),
-  );
+  const rows = (data as HybridSearchRow[] | null) ?? [];
+  const hits = rows.map((row) => ({
+    documentId: row.document_id,
+    documentTitle: row.document_title,
+    chunkIndex: row.chunk_index,
+    content: row.content,
+    score: row.score,
+  }));
 
   return NextResponse.json({ hits });
 }

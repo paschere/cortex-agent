@@ -1,5 +1,7 @@
 import { inngest } from '@/lib/inngest';
-import { parseDocument, chunkText, embed } from '@zipdev/agent-tools';
+import { parseDocument } from '@zipdev/agent-tools/src/kb/parsers';
+import { chunkText } from '@zipdev/agent-tools/src/kb/chunker';
+import { embed } from '@zipdev/agent-tools/src/kb/embedder';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 
 export const ingestDocument = inngest.createFunction(
