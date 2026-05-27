@@ -1,0 +1,14 @@
+{
+  "identifier": "default",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "notification:default",
+    "global-shortcut:default",
+    "deep-link:default",
+    "store:default",
+    "updater:default",
+    "core:event:default"
+  ]
+}
