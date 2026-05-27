@@ -5,9 +5,9 @@
   "identifier": "com.zipdev.agent",
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "pnpm build:web",
     "devUrl": "http://localhost:3000/chat",
-    "frontendDist": "https://zipdev-agent.vercel.app/chat"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
@@ -23,7 +23,7 @@
         "fullscreen": false,
         "transparent": false,
         "visible": true,
-        "url": "/chat"
+        "url": "/"
       }
     ],
     "security": {

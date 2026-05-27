@@ -66,6 +66,18 @@ Produces platform-specific bundles in `src-tauri/target/release/bundle/`.
 | Deep-link scheme | `src-tauri/tauri.conf.json` → `plugins.deep-link` | `zipdev-agent://` |
 | Updater public key | `src-tauri/tauri.conf.json` → `plugins.updater.pubkey` | Replace at Task 6 |
 
+## Environment
+
+Set `ZIPDEV_WEB_URL` to point the desktop app at a Zipdev Agent web instance:
+- Local dev: `http://localhost:3000` (default)
+- Production: `https://app.zipdev.com`
+
+The URL is baked in at build time via Vite. To change it, rebuild.
+
+```bash
+ZIPDEV_WEB_URL=https://app.zipdev.com pnpm --filter @zipdev/desktop build
+```
+
 ## Plugins bundled
 
 - `tauri-plugin-shell` — open external URLs

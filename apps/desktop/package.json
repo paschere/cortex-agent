@@ -5,11 +5,14 @@
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build"
+    "dev:web": "vite",
+    "build:web": "vite build",
+    "build": "pnpm build:web && tauri build"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.4.0",
-    "typescript": "5.7.2"
+    "typescript": "5.7.2",
+    "vite": "^6.3.5"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.4.0"
