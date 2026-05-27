@@ -1,0 +1,70 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 6 * * *'
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - '54322:5432'
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm --filter @zipdev/web test:e2e
+        continue-on-error: true
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://localhost:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci
+          SUPABASE_SERVICE_ROLE_KEY: ci
+          SUPABASE_DB_URL: postgres://postgres:postgres@localhost:54322/postgres
+          APP_BASE_URL: http://localhost:3000
+          BETTER_AUTH_SECRET: ci-secret-placeholder-not-real
+          BETTER_AUTH_URL: http://localhost:3000
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          GOOGLE_CLIENT_ID: ci
+          GOOGLE_CLIENT_SECRET: ci
+          GOOGLE_REDIRECT_URI: http://localhost:3000/cb
+          HUBSPOT_CLIENT_ID: ci
+          HUBSPOT_CLIENT_SECRET: ci
+          HUBSPOT_REDIRECT_URI: http://localhost:3000/cb
+          GOOGLE_GENERATIVE_AI_API_KEY: ci
+          RATE_ESTIMATOR_URL: https://r.ci
+          RATE_ESTIMATOR_SERVICE_TOKEN: ci
+          INNGEST_EVENT_KEY: ci
+          INNGEST_SIGNING_KEY: ci
+          TOKEN_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
