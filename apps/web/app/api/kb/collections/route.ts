@@ -124,6 +124,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // For scope='conversation' and scope='user', findOrCreate by (scope, scope_id, name) to avoid duplicates.
+  if (scope === 'conversation' || scope === 'user') {
+    const { data: existing } = await sb
+      .from('kb_collections')
+      .select('id, scope, scope_id, name, agent_id, gdrive_folder_id, created_at')
+      .eq('scope', scope)
+      .eq('scope_id', resolvedScopeId!)
+      .eq('name', name)
+      .maybeSingle();
+    if (existing) {
+      return Response.json({ collection: existing }, { status: 200 });
+    }
+  }
+
   const { data, error } = await sb
     .from('kb_collections')
     .insert({
