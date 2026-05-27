@@ -1,0 +1,53 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "productName": "Zipdev Agent",
+  "version": "0.1.0",
+  "identifier": "com.zipdev.agent",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "pnpm build:web",
+    "devUrl": "http://localhost:3000/chat",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Zipdev Agent",
+        "width": 920,
+        "height": 720,
+        "minWidth": 480,
+        "minHeight": 360,
+        "decorations": true,
+        "resizable": true,
+        "fullscreen": false,
+        "transparent": false,
+        "visible": true,
+        "url": "/"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/zipdev/zipdev-agent/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_AT_TASK_6"
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["zipdev-agent"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "Productivity",
+    "targets": ["dmg", "app", "msi", "nsis", "appimage", "deb"],
+    "icon": ["icons/128x128.png", "icons/icon.icns", "icons/icon.ico"]
+  }
+}

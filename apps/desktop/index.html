@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Zipdev Agent</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #0f0f0f;
+      color: #ccc;
+    }
+  </style>
+</head>
+<body>
+  <p>Loading Zipdev Agent…</p>
+  <script>
+    // __ZIPDEV_WEB_URL__ is replaced at build time by Vite (see vite.config.ts).
+    // Falls back to localhost:3000 for dev mode.
+    var url = __ZIPDEV_WEB_URL__;
+    setTimeout(function () {
+      window.location.replace(url + '/chat');
+    }, 100);
+  </script>
+</body>
+</html>

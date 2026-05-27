@@ -6,6 +6,16 @@ const config = {
   experimental: { serverActions: { bodySizeLimit: '12mb' } },
   transpilePackages: ['@zipdev/core', '@zipdev/agent-tools', '@zipdev/agents'],
   serverExternalPackages: ['inngest'],
+  webpack(webpackConfig) {
+    // Allow webpack to resolve .js imports as .ts for ESM workspace packages
+    webpackConfig.resolve = webpackConfig.resolve ?? {};
+    webpackConfig.resolve.extensionAlias = {
+      ...(webpackConfig.resolve.extensionAlias ?? {}),
+      '.js': ['.ts', '.tsx', '.js'],
+      '.jsx': ['.tsx', '.jsx'],
+    };
+    return webpackConfig;
+  },
   async headers() {
     return [
       {

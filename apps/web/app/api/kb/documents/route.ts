@@ -80,6 +80,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
   }
 
+  // Enforce scope write authority — mirror RLS policy logic
+  const userId = session.id;
+  let hasWriteAccess = false;
+
+  if (collection.scope === 'global') {
+    hasWriteAccess = session.role === 'org_admin';
+  } else if (collection.scope === 'team') {
+    // user must be team_admin on that team (or org_admin)
+    const { data: membership } = await sb
+      .from('team_members')
+      .select('role')
+      .eq('team_id', collection.scope_id as string)
+      .eq('user_id', userId)
+      .maybeSingle();
+    hasWriteAccess = membership?.role === 'team_admin' || session.role === 'org_admin';
+  } else if (collection.scope === 'user') {
+    hasWriteAccess = collection.scope_id === userId;
+  } else if (collection.scope === 'conversation') {
+    // user must own the conversation
+    const { data: conv } = await sb
+      .from('conversations')
+      .select('user_id')
+      .eq('id', collection.scope_id as string)
+      .maybeSingle();
+    hasWriteAccess = conv?.user_id === userId;
+  }
+
+  if (!hasWriteAccess) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const sha256 = createHash('sha256').update(buffer).digest('hex');
   const documentId = randomUUID();
   const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');

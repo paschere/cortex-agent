@@ -1,0 +1,19 @@
+name = "zipdev-mcp"
+main = "src/index.ts"
+compatibility_date = "2024-12-18"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NEXT_PUBLIC_SUPABASE_URL = ""  # set per env via wrangler secret
+
+# Secrets are set via: wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+# - SUPABASE_SERVICE_ROLE_KEY
+# - TOKEN_ENCRYPTION_KEY
+# - GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+# - HUBSPOT_CLIENT_ID, HUBSPOT_CLIENT_SECRET
+# - GOOGLE_GENERATIVE_AI_API_KEY
+# - RATE_ESTIMATOR_URL, RATE_ESTIMATOR_SERVICE_TOKEN
+
+[env.production]
+name = "zipdev-mcp-prod"
+route = "mcp.zipdev.com/*"

@@ -13,6 +13,7 @@ export function Sidebar({ role }: { role: Role }) {
       <Link href="/kb" className="block rounded px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-800">Team / Global KB</Link>
       <div className="text-xs uppercase tracking-wider text-neutral-500 mt-3 mb-1">Setup</div>
       <Link href="/integrations" className="block rounded px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-800">Integrations</Link>
+      <Link href="/mcp-tokens" className="block rounded px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-800">MCP tokens</Link>
       <Link href="/agents" className="block rounded px-2 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-800">Agents</Link>
       {role === 'org_admin' && (
         <>

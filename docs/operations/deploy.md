@@ -37,3 +37,7 @@ TBD — Inngest deployment lands in Task 14. Functions are automatically discove
 - Production: `main` branch or `vercel --prod`.
 - Use separate Supabase projects and separate OAuth client credentials for staging vs production.
 - `TOKEN_ENCRYPTION_KEY` and `BETTER_AUTH_SECRET` must never be shared between environments.
+
+## MCP Connector (Cloudflare Worker)
+
+See [mcp-deploy.md](./mcp-deploy.md).
