@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { UUID } from '@zipdev/core';
+import { logger, type UUID } from '@zipdev/core';
 
 export type AuditStatus = 'ok' | 'error' | 'rate_limited' | 'confirmation_required';
 
@@ -33,6 +33,6 @@ export async function writeAuditEvent(opts: WriteAuditOpts) {
   });
   if (error) {
     // Never throw — audit failures must not break the user's call
-    console.error('audit_events insert failed', { error });
+    logger.error({ err: error }, 'audit_events insert failed');
   }
 }

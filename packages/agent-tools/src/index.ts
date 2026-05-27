@@ -1,4 +1,4 @@
-import { ConfirmationRequiredError, ValidationError } from '@zipdev/core';
+import { ConfirmationRequiredError, RateLimitError, ValidationError } from '@zipdev/core';
 import { writeAuditEvent } from './audit';
 import { consumeToken } from './rate-limit';
 import type { AnyTool, ToolContext, ToolDef } from './types';
@@ -61,7 +61,25 @@ export async function runTool<I, O>(
     });
     throw new ConfirmationRequiredError(tool.id, parsed.data);
   }
-  if (tool.rateLimit) await consumeToken(ctx.db, ctx.userId, tool.id, tool.rateLimit.perMinute);
+  if (tool.rateLimit) {
+    try {
+      await consumeToken(ctx.db, ctx.userId, tool.id, tool.rateLimit.perMinute);
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        await writeAuditEvent({
+          db: ctx.db,
+          userId: ctx.userId,
+          agentId: ctx.agentId,
+          conversationId: ctx.conversationId,
+          toolId: tool.id,
+          input,
+          status: 'rate_limited',
+          latencyMs: Math.round(performance.now() - t0),
+        });
+      }
+      throw err;
+    }
+  }
   if (tool.requiredScopes) {
     for (const r of tool.requiredScopes) {
       const ok = await ctx.integrations.hasScopes(r.provider, r.scopes);
@@ -81,20 +99,9 @@ export async function runTool<I, O>(
       }
     }
   }
+  let result: O;
   try {
-    const result = await tool.handler(parsed.data, ctx);
-    const validated = tool.outputSchema.parse(result);
-    await writeAuditEvent({
-      db: ctx.db,
-      userId: ctx.userId,
-      agentId: ctx.agentId,
-      conversationId: ctx.conversationId,
-      toolId: tool.id,
-      input,
-      status: 'ok',
-      latencyMs: Math.round(performance.now() - t0),
-    });
-    return validated;
+    result = (await tool.handler(parsed.data, ctx)) as O;
   } catch (err) {
     await writeAuditEvent({
       db: ctx.db,
@@ -109,6 +116,34 @@ export async function runTool<I, O>(
     });
     throw err;
   }
+
+  const outParsed = tool.outputSchema.safeParse(result);
+  if (!outParsed.success) {
+    await writeAuditEvent({
+      db: ctx.db,
+      userId: ctx.userId,
+      agentId: ctx.agentId,
+      conversationId: ctx.conversationId,
+      toolId: tool.id,
+      input,
+      status: 'error',
+      latencyMs: Math.round(performance.now() - t0),
+      metadata: { reason: 'output_validation' },
+    });
+    throw new ValidationError(`Invalid output from ${tool.id}`);
+  }
+
+  await writeAuditEvent({
+    db: ctx.db,
+    userId: ctx.userId,
+    agentId: ctx.agentId,
+    conversationId: ctx.conversationId,
+    toolId: tool.id,
+    input,
+    status: 'ok',
+    latencyMs: Math.round(performance.now() - t0),
+  });
+  return outParsed.data;
 }
 
 export * from './types';
