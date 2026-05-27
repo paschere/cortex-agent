@@ -7,11 +7,12 @@ interface ConfirmationPromptProps {
   conversationId: string;
   toolId: string;
   input: unknown;
+  onConfirmed?: () => void;
 }
 
 type Status = 'pending' | 'running' | 'allowed' | 'cancelled' | 'error';
 
-export function ConfirmationPrompt({ conversationId, toolId, input }: ConfirmationPromptProps) {
+export function ConfirmationPrompt({ conversationId, toolId, input, onConfirmed }: ConfirmationPromptProps) {
   const [status, setStatus] = useState<Status>('pending');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
@@ -30,6 +31,7 @@ export function ConfirmationPrompt({ conversationId, toolId, input }: Confirmati
         return;
       }
       setStatus('allowed');
+      onConfirmed?.();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Request failed');
       setStatus('error');

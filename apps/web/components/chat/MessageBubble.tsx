@@ -8,6 +8,7 @@ import { ConfirmationPrompt } from './ConfirmationPrompt';
 interface MessageBubbleProps {
   message: Message;
   conversationId?: string;
+  onConfirmed?: () => void;
 }
 
 type ConfirmationSentinel = {
@@ -22,7 +23,7 @@ function isConfirmationSentinel(v: unknown): v is ConfirmationSentinel {
   return o.__requires_confirmation === true && typeof o.toolId === 'string';
 }
 
-export function MessageBubble({ message, conversationId }: MessageBubbleProps) {
+export function MessageBubble({ message, conversationId, onConfirmed }: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
 
   // Skip data role messages
@@ -75,6 +76,7 @@ export function MessageBubble({ message, conversationId }: MessageBubbleProps) {
             conversationId={conversationId}
             toolId={confirmationData.toolId}
             input={confirmationData.input}
+            onConfirmed={onConfirmed}
           />
         )}
       </div>

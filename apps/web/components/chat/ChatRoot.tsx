@@ -24,7 +24,7 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const router = useRouter();
 
-  const { messages, append, isLoading, setMessages } = useChat({
+  const { messages, append, reload, isLoading, setMessages } = useChat({
     api: '/api/chat',
     initialMessages: initialMessages ?? [],
     body: {
@@ -87,7 +87,7 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
           ))}
         </select>
       </header>
-      <MessageList messages={messages} isLoading={isLoading} conversationId={conversationId} />
+      <MessageList messages={messages} isLoading={isLoading} conversationId={conversationId} onConfirmed={reload} />
       <InputBar onSend={handleSend} disabled={isLoading} conversationId={conversationId} />
     </div>
   );

@@ -8,9 +8,10 @@ interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
   conversationId?: string;
+  onConfirmed?: () => void;
 }
 
-export function MessageList({ messages, isLoading, conversationId }: MessageListProps) {
+export function MessageList({ messages, isLoading, conversationId, onConfirmed }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,7 +26,7 @@ export function MessageList({ messages, isLoading, conversationId }: MessageList
         </div>
       )}
       {messages.map((m) => (
-        <MessageBubble key={m.id} message={m} conversationId={conversationId} />
+        <MessageBubble key={m.id} message={m} conversationId={conversationId} onConfirmed={onConfirmed} />
       ))}
       {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
         <div className="flex items-start gap-2">
