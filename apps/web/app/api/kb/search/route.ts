@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { embed } from '@zipdev/agent-tools/src/kb/embedder';
+import { embed } from '@zipdev/agent-tools';
 import { z } from 'zod';
 import type { CollectionScope } from '@zipdev/core';
 
