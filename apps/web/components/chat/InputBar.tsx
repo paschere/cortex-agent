@@ -22,6 +22,16 @@ interface InputBarProps {
 
 const CHAR_COUNT_THRESHOLD = 3500;
 
+const BRIEFING_COMMAND = '/briefing';
+
+function expandBriefingCommand(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed.toLowerCase().startsWith(BRIEFING_COMMAND)) return null;
+  const company = trimmed.slice(BRIEFING_COMMAND.length).trim();
+  if (!company) return null;
+  return `Fetch a deal health briefing for ${company}: search HubSpot for the company, get the most recent deal, list BANT signals present/missing, and summarize last 3 activities.`;
+}
+
 export function InputBar({
   onSend,
   disabled,
@@ -31,6 +41,7 @@ export function InputBar({
   onAgentChange,
 }: InputBarProps) {
   const [text, setText] = useState('');
+  const [showBriefingHint, setShowBriefingHint] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
@@ -38,10 +49,12 @@ export function InputBar({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = text.trim();
+    const expanded = expandBriefingCommand(text);
+    const trimmed = (expanded ?? text).trim();
     if (!trimmed || disabled) return;
     onSend(trimmed);
     setText('');
+    setShowBriefingHint(false);
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -56,7 +69,9 @@ export function InputBar({
   }
 
   function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    setText(e.target.value);
+    const value = e.target.value;
+    setText(value);
+    setShowBriefingHint(value.toLowerCase().startsWith(BRIEFING_COMMAND));
     // Auto-resize textarea
     const ta = e.target;
     ta.style.height = 'auto';
@@ -139,6 +154,12 @@ export function InputBar({
             <span className="absolute bottom-1 right-2 text-[10px] text-neutral-400 tabular-nums pointer-events-none">
               {text.length}
             </span>
+          )}
+          {showBriefingHint && (
+            <div className="absolute left-0 right-0 top-full mt-1 px-1 text-xs text-neutral-500">
+              <span className="font-mono">/briefing [Company Name]</span> — fetches
+              deal health briefing from HubSpot (press Enter to run)
+            </div>
           )}
         </div>
 
