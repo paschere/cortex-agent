@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { confirmationSummary } from '@/lib/tool-labels';
 
 interface ConfirmationPromptProps {
   conversationId: string;
@@ -66,21 +68,33 @@ export function ConfirmationPrompt({ conversationId, toolId, input, onConfirmed 
     );
   }
 
+  const summary = confirmationSummary(
+    toolId,
+    (input && typeof input === 'object' ? (input as Record<string, unknown>) : {}),
+  );
+
   return (
-    <div className="mt-2 rounded-md border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/30 dark:border-yellow-700 p-2 text-xs">
-      <div className="font-medium mb-1 text-yellow-900 dark:text-yellow-200">
-        Confirm action: <span className="font-mono">{toolId}</span>
+    <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-900/30 dark:border-amber-700 p-2 text-xs">
+      <div className="flex items-center gap-1.5 mb-1 font-medium text-amber-900 dark:text-amber-200">
+        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+        <span>Confirm action</span>
       </div>
-      <pre className="overflow-auto mb-2 rounded bg-yellow-100 dark:bg-yellow-900/50 p-1 text-[10px]">
-        {JSON.stringify(input, null, 2)}
-      </pre>
+      <p className="mb-2 text-sm font-semibold text-amber-900 dark:text-amber-100">{summary}</p>
+      <details className="mb-2">
+        <summary className="cursor-pointer text-amber-700 dark:text-amber-300 select-none">
+          Show details
+        </summary>
+        <pre className="overflow-auto mt-1 rounded bg-amber-100 dark:bg-amber-900/50 p-1 text-[10px]">
+          {JSON.stringify(input, null, 2)}
+        </pre>
+      </details>
       <div className="flex gap-2">
         <Button
           onClick={handleAllow}
           disabled={status === 'running'}
           className="h-6 text-xs px-2 py-0"
         >
-          {status === 'running' ? 'Running...' : 'Allow'}
+          {status === 'running' ? 'Running...' : 'Confirm'}
         </Button>
         <Button
           variant="ghost"
@@ -88,7 +102,7 @@ export function ConfirmationPrompt({ conversationId, toolId, input, onConfirmed 
           disabled={status === 'running'}
           className="h-6 text-xs px-2 py-0"
         >
-          Cancel
+          Dismiss
         </Button>
       </div>
     </div>
