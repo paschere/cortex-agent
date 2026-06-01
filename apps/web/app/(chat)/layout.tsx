@@ -1,7 +1,16 @@
 import type { ReactNode } from 'react';
+import { Sidebar } from '@/components/nav/Sidebar';
+import { MobileSidebarProvider } from '@/components/nav/MobileSidebarContext';
 import { requireSession } from '@/lib/session';
 
 export default async function ChatLayout({ children }: { children: ReactNode }) {
-  await requireSession();
-  return <div className="h-screen flex flex-col">{children}</div>;
+  const user = await requireSession();
+  return (
+    <MobileSidebarProvider>
+      <div className="flex flex-row h-screen overflow-hidden">
+        <Sidebar role={user.role} />
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">{children}</div>
+      </div>
+    </MobileSidebarProvider>
+  );
 }
