@@ -162,3 +162,15 @@ export * from './kb';
 export * from './gdrive';
 export * from './web';
 export * from './format';
+export {
+  isPrivateUrl,
+  fetchExternalToolManifest,
+  callExternalTool,
+  fetchEnabledExternalTools,
+  syncExternalServerManifest,
+} from './external-mcp';
+export type {
+  ExternalToolManifestEntry,
+  ExternalServerRow,
+  EnabledExternalServer,
+} from './external-mcp';
