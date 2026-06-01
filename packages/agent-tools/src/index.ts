@@ -21,6 +21,7 @@ export * from './kb';
 export * from './gdrive';
 export * from './web';
 export * from './format';
+export * from './recruit';
 export {
   isPrivateUrl,
   fetchExternalToolManifest,
