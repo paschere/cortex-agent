@@ -18,6 +18,8 @@ import {
   Cpu,
   MessageSquare,
   ArrowLeft,
+  Users,
+  Bell,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel, PanelHead, Eyebrow } from '@/components/ui/panel';
@@ -91,6 +93,31 @@ const TOOL_GROUPS: ToolGroup[] = [
     label: 'Rate Calculator',
     icon: DollarSign,
     tools: [{ id: 'rate.estimate' }, { id: 'rate.estimate_from_document' }],
+  },
+  {
+    label: 'Recruitment (Workable / Matcher)',
+    icon: Users,
+    tools: [
+      { id: 'recruit.list_requisitions' },
+      { id: 'recruit.get_requisition' },
+      { id: 'recruit.list_candidates' },
+      { id: 'recruit.get_candidate' },
+      { id: 'recruit.list_companies' },
+      { id: 'recruit.pipeline_kanban' },
+      { id: 'recruit.find_matches' },
+      { id: 'recruit.score_candidate' },
+      { id: 'recruit.compare_candidates' },
+      { id: 'recruit.get_presentation' },
+      { id: 'recruit.generate_presentation', write: true },
+      { id: 'recruit.job_insights' },
+      { id: 'recruit.recruiter_analytics' },
+      { id: 'recruit.dashboard_stats' },
+    ],
+  },
+  {
+    label: 'Notifications',
+    icon: Bell,
+    tools: [{ id: 'slack.post_message', write: true }],
   },
   {
     label: 'Knowledge Base',
