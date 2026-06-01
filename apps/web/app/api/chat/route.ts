@@ -28,6 +28,27 @@ function shouldRunRag(message: string): boolean {
   return true
 }
 
+/**
+ * Distill a tool error into a concise, human-readable message the model can
+ * relay to the user. Unwraps Google/HubSpot-style JSON error envelopes and caps
+ * length so a giant 403 payload doesn't flood the context.
+ */
+function toToolErrorMessage(err: unknown): string {
+  let msg = err instanceof Error ? err.message : String(err);
+  // Many Google APIs throw with the raw JSON body as the message.
+  const brace = msg.indexOf('{');
+  if (brace !== -1) {
+    try {
+      const parsed = JSON.parse(msg.slice(brace));
+      const inner = parsed?.error?.message ?? parsed?.message;
+      if (typeof inner === 'string' && inner.length > 0) msg = inner;
+    } catch {
+      // not JSON — keep the original string
+    }
+  }
+  return msg.length > 600 ? `${msg.slice(0, 600)}…` : msg;
+}
+
 const MessageSchema = z.object({
   role: z.enum(['user', 'assistant', 'system']),
   content: z.string(),
@@ -136,7 +157,14 @@ export async function POST(req: NextRequest) {
                   input: err.input,
                 } as unknown as never;
               }
-              throw err;
+              // Never throw: a failed tool must not kill the turn. Return a
+              // structured error so (a) the model can read it, explain it, and
+              // keep going, and (b) the UI renders it as a failed tool card.
+              return {
+                __error: true,
+                tool: t.id,
+                message: toToolErrorMessage(err),
+              } as unknown as never;
             }
           },
         }),
@@ -158,11 +186,19 @@ export async function POST(req: NextRequest) {
           if (!server.trusted) {
             return { __requires_confirmation: true, toolId: sdkName, input: args } as unknown as never;
           }
-          return callExternalTool(server as unknown as ExternalServerRow, t.tool_name, args, {
-            userId: user.id,
-            db,
-            signal: abortSignal,
-          });
+          try {
+            return await callExternalTool(server as unknown as ExternalServerRow, t.tool_name, args, {
+              userId: user.id,
+              db,
+              signal: abortSignal,
+            });
+          } catch (err) {
+            return {
+              __error: true,
+              tool: `${server.name}/${t.tool_name}`,
+              message: toToolErrorMessage(err),
+            } as unknown as never;
+          }
         },
       });
     }
