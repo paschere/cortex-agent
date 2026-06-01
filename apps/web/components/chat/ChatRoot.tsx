@@ -1,18 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useChat } from 'ai/react';
 import type { Message } from 'ai';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
 import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
+import { CommandPalette } from './CommandPalette';
 
 interface AgentInfo {
   slug: string;
   name: string;
   greeting: string;
-  description?: string;
 }
 
 interface ChatRootProps {
@@ -24,18 +24,8 @@ interface ChatRootProps {
 export function ChatRoot({ agents, conversationId: initialConvId, initialMessages }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(agents[0]?.slug ?? 'sales');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const router = useRouter();
-
-  const { data: titleData } = useQuery({
-    queryKey: ['conversation', conversationId],
-    queryFn: () =>
-      fetch(`/api/chat/conversations/${conversationId}`).then((r) => r.json()),
-    enabled: !!conversationId,
-    staleTime: 60_000,
-  });
-
-  const title: string =
-    titleData?.conversation?.title || (conversationId ? 'Conversation' : 'New Chat');
 
   const { messages, append, reload, isLoading, setMessages } = useChat({
     api: '/api/chat',
@@ -78,37 +68,50 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
     await append({ role: 'user', content: text });
   }
 
-  function handleAgentChange(slug: string) {
-    setAgentSlug(slug);
-    setMessages([]);
-  }
+  const hotkeys = useMemo(
+    () => ({
+      'mod+k': () => setPaletteOpen((v) => !v),
+      escape: () => setPaletteOpen(false),
+    }),
+    [],
+  );
+  useGlobalHotkeys(hotkeys);
 
-  function handleSuggestion(text: string) {
-    void handleSend(text);
-  }
+  const handleRegenerate = useCallback(() => {
+    void reload();
+  }, [reload]);
 
   return (
     <div className="flex flex-col h-full max-w-3xl mx-auto w-full">
-      <header className="border-b px-4 py-3 flex items-center text-sm shrink-0">
-        <span className="font-semibold text-neutral-700 dark:text-neutral-300 truncate">
-          {title}
+      <header className="border-b px-4 py-3 flex items-center justify-between text-sm shrink-0">
+        <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+          {initialConvId ? 'Conversation' : 'New Chat'}
         </span>
+        <select
+          value={agentSlug}
+          onChange={(e) => {
+            setAgentSlug(e.target.value);
+            setMessages([]);
+          }}
+          disabled={!!conversationId}
+          className="bg-transparent border rounded px-2 py-1 text-xs"
+        >
+          {agents.map((a) => (
+            <option key={a.slug} value={a.slug}>
+              {a.name}
+            </option>
+          ))}
+        </select>
       </header>
       <MessageList
         messages={messages}
         isLoading={isLoading}
         conversationId={conversationId}
         onConfirmed={reload}
-        onSuggestion={handleSuggestion}
+        onRegenerate={handleRegenerate}
       />
-      <InputBar
-        onSend={handleSend}
-        disabled={isLoading}
-        conversationId={conversationId}
-        agents={agents}
-        agentSlug={agentSlug}
-        onAgentChange={handleAgentChange}
-      />
+      <InputBar onSend={handleSend} disabled={isLoading} conversationId={conversationId} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

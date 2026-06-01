@@ -9,7 +9,7 @@ interface MessageListProps {
   isLoading: boolean;
   conversationId?: string;
   onConfirmed?: () => void;
-  onSuggestion?: (text: string) => void;
+  onRegenerate?: () => void;
 }
 
 export function MessageList({
@@ -17,7 +17,7 @@ export function MessageList({
   isLoading,
   conversationId,
   onConfirmed,
-  onSuggestion,
+  onRegenerate,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -28,29 +28,23 @@ export function MessageList({
   return (
     <div ref={ref} className="flex-1 overflow-y-auto p-4 space-y-3">
       {messages.length === 0 && !isLoading && (
-        <div className="flex flex-col items-center justify-center h-full gap-4 text-neutral-400 text-sm">
-          <span>Start a conversation...</span>
-          {onSuggestion && (
-            <div className="flex flex-wrap justify-center gap-2 max-w-md">
-              {['Summarize my pipeline', 'Which deals close this month?'].map(
-                (s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => onSuggestion(s)}
-                    className="rounded-full border px-3 py-1.5 text-xs text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                  >
-                    {s}
-                  </button>
-                ),
-              )}
-            </div>
-          )}
+        <div className="flex items-center justify-center h-full text-neutral-400 text-sm">
+          Start a conversation...
         </div>
       )}
-      {messages.map((m) => (
-        <MessageBubble key={m.id} message={m} conversationId={conversationId} onConfirmed={onConfirmed} />
-      ))}
+      {messages.map((m, i) => {
+        const isLast = i === messages.length - 1;
+        return (
+          <MessageBubble
+            key={m.id}
+            message={m}
+            conversationId={conversationId}
+            onConfirmed={onConfirmed}
+            onRegenerate={isLast && m.role === 'assistant' ? onRegenerate : undefined}
+            isStreaming={isLast && isLoading}
+          />
+        );
+      })}
       {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
         <div className="flex items-start gap-2">
           <div className="rounded-2xl px-4 py-2 bg-neutral-100 dark:bg-neutral-800 text-sm text-neutral-500 animate-pulse">
