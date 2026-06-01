@@ -8,6 +8,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { ToolCallCard } from './ToolCallCard';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
+import { ProposalCard, type ProposalResult } from './ProposalCard';
 
 interface MessageBubbleProps {
   message: Message;
@@ -27,6 +28,26 @@ function isConfirmationSentinel(v: unknown): v is ConfirmationSentinel {
   if (!v || typeof v !== 'object') return false;
   const o = v as Record<string, unknown>;
   return o.__requires_confirmation === true && typeof o.toolId === 'string';
+}
+
+/**
+ * The Sales composite proposal tool. The AI SDK normalizes the registered id
+ * `sales.draft_proposal` to `sales_draft_proposal`; accept both forms.
+ */
+function isProposalTool(toolName: string): boolean {
+  return toolName === 'sales_draft_proposal' || toolName === 'sales.draft_proposal';
+}
+
+function isProposalResult(v: unknown): v is ProposalResult {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return (
+    !('__error' in o) &&
+    !('__requires_confirmation' in o) &&
+    typeof o.company === 'object' &&
+    o.company !== null &&
+    Array.isArray(o.roles)
+  );
 }
 
 export function MessageBubble({
@@ -78,12 +99,20 @@ export function MessageBubble({
           </div>
         )}
 
-        {/* Tool call cards */}
+        {/* Tool call cards — render the structured ProposalCard for a completed
+            sales_draft_proposal result, otherwise the generic ToolCallCard. */}
         {toolInvocations && toolInvocations.length > 0 && (
           <div className="mt-2 space-y-1">
-            {toolInvocations.map((inv) => (
-              <ToolCallCard key={inv.toolCallId} invocation={inv} />
-            ))}
+            {toolInvocations.map((inv) => {
+              const proposalResult =
+                isProposalTool(inv.toolName) && inv.state === 'result'
+                  ? (inv as { result?: unknown }).result
+                  : undefined;
+              if (proposalResult !== undefined && isProposalResult(proposalResult)) {
+                return <ProposalCard key={inv.toolCallId} result={proposalResult} />;
+              }
+              return <ToolCallCard key={inv.toolCallId} invocation={inv} />;
+            })}
           </div>
         )}
 
