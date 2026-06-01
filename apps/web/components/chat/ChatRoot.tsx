@@ -4,15 +4,15 @@ import { useState } from 'react';
 import { useChat } from 'ai/react';
 import type { Message } from 'ai';
 import { useRouter } from 'next/navigation';
-import { Menu } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
-import { useMobileSidebar } from '@/components/nav/MobileSidebarContext';
 
 interface AgentInfo {
   slug: string;
   name: string;
   greeting: string;
+  description?: string;
 }
 
 interface ChatRootProps {
@@ -25,7 +25,17 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
   const [agentSlug, setAgentSlug] = useState(agents[0]?.slug ?? 'sales');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const router = useRouter();
-  const { setOpen: setSidebarOpen } = useMobileSidebar();
+
+  const { data: titleData } = useQuery({
+    queryKey: ['conversation', conversationId],
+    queryFn: () =>
+      fetch(`/api/chat/conversations/${conversationId}`).then((r) => r.json()),
+    enabled: !!conversationId,
+    staleTime: 60_000,
+  });
+
+  const title: string =
+    titleData?.conversation?.title || (conversationId ? 'Conversation' : 'New Chat');
 
   const { messages, append, reload, isLoading, setMessages } = useChat({
     api: '/api/chat',
@@ -68,46 +78,37 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
     await append({ role: 'user', content: text });
   }
 
+  function handleAgentChange(slug: string) {
+    setAgentSlug(slug);
+    setMessages([]);
+  }
+
+  function handleSuggestion(text: string) {
+    void handleSend(text);
+  }
+
   return (
     <div className="flex flex-col h-full max-w-3xl mx-auto w-full">
-      <header className="border-b px-4 py-3 flex items-center justify-between text-sm shrink-0">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Open menu"
-            className="md:hidden rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-          >
-            <Menu className="h-4 w-4" />
-          </button>
-          <span className="font-semibold text-neutral-700 dark:text-neutral-300">
-            {initialConvId ? 'Conversation' : 'New Chat'}
-          </span>
-        </div>
-        <select
-          value={agentSlug}
-          onChange={(e) => {
-            setAgentSlug(e.target.value);
-            setMessages([]);
-          }}
-          disabled={!!conversationId}
-          className="bg-transparent border rounded px-2 py-1 text-xs"
-        >
-          {agents.map((a) => (
-            <option key={a.slug} value={a.slug}>
-              {a.name}
-            </option>
-          ))}
-        </select>
+      <header className="border-b px-4 py-3 flex items-center text-sm shrink-0">
+        <span className="font-semibold text-neutral-700 dark:text-neutral-300 truncate">
+          {title}
+        </span>
       </header>
       <MessageList
         messages={messages}
         isLoading={isLoading}
         conversationId={conversationId}
         onConfirmed={reload}
-        onSuggestion={handleSend}
+        onSuggestion={handleSuggestion}
       />
-      <InputBar onSend={handleSend} disabled={isLoading} conversationId={conversationId} />
+      <InputBar
+        onSend={handleSend}
+        disabled={isLoading}
+        conversationId={conversationId}
+        agents={agents}
+        agentSlug={agentSlug}
+        onAgentChange={handleAgentChange}
+      />
     </div>
   );
 }
