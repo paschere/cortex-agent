@@ -1,6 +1,35 @@
 import { z } from 'zod';
+import { logger } from '@zipdev/core';
 import { registerTool, getTool, runTool } from '../registry.js';
 import type { ToolContext } from '../types.js';
+
+const ROLE_KEYWORDS: Record<string, string[]> = {
+  frontend:  ['react','vue','angular','svelte','css','html','tailwind','next','nuxt','remix','ui','frontend','front-end','front end'],
+  backend:   ['node','express','django','rails','spring','laravel','fastapi','postgres','mysql','redis','api','backend','back-end','back end'],
+  fullstack: ['fullstack','full-stack','full stack'],
+  data:      ['sql','spark','ml','pandas','dbt','airflow','snowflake','bigquery','data engineer','data scientist','analytics'],
+  devops:    ['docker','k8s','kubernetes','terraform','ci/cd','github actions','sre','platform','infrastructure','devops'],
+  qa:        ['test','qa','cypress','playwright','selenium','jest','quality'],
+  pm:        ['scrum','jira','product','roadmap','agile','sprint','pm'],
+  designer:  ['figma','sketch','ux','ui design','designer','design system'],
+};
+
+const SENIORITY_TO_YEARS: Record<string, number> = { junior: 1, mid: 3, senior: 6, lead: 10 };
+const COUNTRY_TO_REGION: Record<string, string> = { MX:'mx', BR:'br', AR:'ar', CO:'co', CL:'cl', PE:'pe' };
+
+function normalizeRole(freeText: string): { role: string; confidence: number } {
+  const lower = freeText.toLowerCase();
+  const exact = ['frontend','backend','fullstack','data','devops','qa','pm','designer'];
+  if (exact.includes(lower)) return { role: lower, confidence: 1.0 };
+  const hasFE = ROLE_KEYWORDS['frontend']?.some(k => lower.includes(k)) ?? false;
+  const hasBE = ROLE_KEYWORDS['backend']?.some(k => lower.includes(k)) ?? false;
+  if (hasFE && hasBE) return { role: 'fullstack', confidence: 0.8 };
+  for (const [role, keywords] of Object.entries(ROLE_KEYWORDS)) {
+    if (keywords.some(k => lower.includes(k))) return { role, confidence: 0.75 };
+  }
+  logger.warn('normalizeRole: no match, defaulting to fullstack', { freeText });
+  return { role: 'fullstack', confidence: 0.5 };
+}
 
 const SeniorityIn = z.enum(['junior', 'mid', 'senior', 'staff', 'principal']);
 const RateSeniority = z.enum(['junior', 'mid', 'senior', 'lead']);
@@ -110,13 +139,16 @@ export const salesDraftProposal = registerTool({
 
     const roleResults = await Promise.all(
       input.roles.map(async (r) => {
+        const { role: normalizedRole, confidence } = normalizeRole(r.role);
+        const region = COUNTRY_TO_REGION[country?.toUpperCase?.() ?? ''] ?? 'latam';
+        const yearsExperience = SENIORITY_TO_YEARS[r.seniority?.toLowerCase() ?? 'mid'] ?? 3;
         const e = (await runTool(
           rateTool,
           {
-            role: r.role,
+            role: normalizedRole,
             seniority: toRateSeniority(r.seniority),
-            region: 'latam',
-            yearsExperience: 5,
+            region,
+            yearsExperience,
           },
           ctx,
         )) as { monthlyRateUsd: { min: number; max: number }; notes: string };
@@ -126,7 +158,7 @@ export const salesDraftProposal = registerTool({
           qty: r.qty ?? 1,
           techStack: r.techStack ?? [],
           monthlyRange: e.monthlyRateUsd,
-          confidence: 0.8,
+          confidence,
         };
       }),
     );
