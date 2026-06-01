@@ -10,7 +10,19 @@ const CompanyOut = z.object({
   numEmployees: z.number().nullable(),
   country: z.string().nullable(),
 });
-const Output = z.object({ results: z.array(CompanyOut) });
+const Output = z.object({ results: z.array(CompanyOut), markdown: z.string().optional() });
+
+function renderCompanyCard(c: z.infer<typeof CompanyOut>): string {
+  return [
+    `**${c.name ?? 'Unknown company'}**`,
+    c.domain ? `Domain: ${c.domain}` : '',
+    c.industry ? `Industry: ${c.industry}` : '',
+    c.numEmployees != null ? `Employees: ${c.numEmployees.toLocaleString()}` : '',
+    c.country ? `Country: ${c.country}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
 
 export const searchCompanies = registerTool({
   id: 'hubspot.search_companies',
@@ -21,21 +33,28 @@ export const searchCompanies = registerTool({
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     type R = { results: Array<{ id: string; properties: Record<string, string | null> }> };
+    // When the query looks like a domain (contains '.'), search name OR domain.
+    // Separate filterGroups are OR'd together by HubSpot.
+    const filterGroups = input.query.includes('.')
+      ? [
+          { filters: [{ propertyName: 'name', operator: 'CONTAINS_TOKEN', value: input.query }] },
+          { filters: [{ propertyName: 'domain', operator: 'EQ', value: input.query }] },
+        ]
+      : [{ filters: [{ propertyName: 'name', operator: 'CONTAINS_TOKEN', value: input.query }] }];
     const body = {
-      filterGroups: [{ filters: [{ propertyName: 'name', operator: 'CONTAINS_TOKEN', value: input.query }] }],
+      filterGroups,
       properties: ['name', 'domain', 'industry', 'numberofemployees', 'country'],
       limit: input.limit,
     };
     const data = await hsFetch<R>(ctx, '/crm/v3/objects/companies/search', { method: 'POST', body: JSON.stringify(body) });
-    return {
-      results: data.results.map((c) => ({
-        id: c.id,
-        name: c.properties.name ?? null,
-        domain: c.properties.domain ?? null,
-        industry: c.properties.industry ?? null,
-        numEmployees: c.properties.numberofemployees ? Number(c.properties.numberofemployees) : null,
-        country: c.properties.country ?? null,
-      })),
-    };
+    const results = data.results.map((c) => ({
+      id: c.id,
+      name: c.properties.name ?? null,
+      domain: c.properties.domain ?? null,
+      industry: c.properties.industry ?? null,
+      numEmployees: c.properties.numberofemployees ? Number(c.properties.numberofemployees) : null,
+      country: c.properties.country ?? null,
+    }));
+    return { results, markdown: results.map(renderCompanyCard).join('\n\n') };
   },
 });

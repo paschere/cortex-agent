@@ -3,3 +3,7 @@ export { getCompany } from './get-company';
 export { searchDeals } from './search-deals';
 export { getDeal } from './get-deal';
 export { listRecentActivities } from './list-recent-activities';
+export { searchContacts } from './search-contacts';
+export { getContact } from './get-contact';
+export { getPipelineSummary } from './get-pipeline-summary';
+export { getContactTimeline } from './get-contact-timeline';
