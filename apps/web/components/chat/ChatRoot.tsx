@@ -4,8 +4,10 @@ import { useState } from 'react';
 import { useChat } from 'ai/react';
 import type { Message } from 'ai';
 import { useRouter } from 'next/navigation';
+import { Menu } from 'lucide-react';
 import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
+import { useMobileSidebar } from '@/components/nav/MobileSidebarContext';
 
 interface AgentInfo {
   slug: string;
@@ -23,6 +25,7 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
   const [agentSlug, setAgentSlug] = useState(agents[0]?.slug ?? 'sales');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const router = useRouter();
+  const { setOpen: setSidebarOpen } = useMobileSidebar();
 
   const { messages, append, reload, isLoading, setMessages } = useChat({
     api: '/api/chat',
@@ -68,9 +71,19 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
   return (
     <div className="flex flex-col h-full max-w-3xl mx-auto w-full">
       <header className="border-b px-4 py-3 flex items-center justify-between text-sm shrink-0">
-        <span className="font-semibold text-neutral-700 dark:text-neutral-300">
-          {initialConvId ? 'Conversation' : 'New Chat'}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
+            className="md:hidden rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            <Menu className="h-4 w-4" />
+          </button>
+          <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+            {initialConvId ? 'Conversation' : 'New Chat'}
+          </span>
+        </div>
         <select
           value={agentSlug}
           onChange={(e) => {
