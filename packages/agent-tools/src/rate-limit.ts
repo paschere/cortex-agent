@@ -3,7 +3,33 @@ import { RateLimitError, type UUID } from '@zipdev/core';
 
 export async function consumeToken(
   db: SupabaseClient,
-  userId: UUID,
+  userId: string,
+  toolId: string,
+  perMinute: number,
+): Promise<void> {
+  try {
+    const { data, error } = await (db as any).rpc('consume_rate_limit_token', {
+      p_user_id: userId,
+      p_tool_id: toolId,
+      p_per_minute: perMinute,
+    })
+    if (error) {
+      if (error.message?.includes('does not exist')) {
+        // RPC not yet deployed — use legacy path silently
+        return consumeTokenLegacy(db, userId, toolId, perMinute)
+      }
+      throw error
+    }
+    if (data === false) throw new RateLimitError(toolId)
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err
+    // Non-fatal on unexpected errors
+  }
+}
+
+async function consumeTokenLegacy(
+  db: SupabaseClient,
+  userId: string,
   toolId: string,
   perMinute: number,
 ): Promise<void> {
