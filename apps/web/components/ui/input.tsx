@@ -8,7 +8,10 @@ export const Input = React.forwardRef<
   <input
     ref={ref}
     className={clsx(
-      'w-full rounded-lg border bg-transparent px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300',
+      'w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink',
+      'placeholder:text-ink-faint transition-colors',
+      'focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10',
+      'disabled:cursor-not-allowed disabled:opacity-60',
       className,
     )}
     {...props}
