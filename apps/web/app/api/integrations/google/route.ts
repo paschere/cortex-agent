@@ -12,6 +12,8 @@ const ALL_SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly',
   'https://www.googleapis.com/auth/spreadsheets.readonly',
   'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/directory.readonly',
+  'https://www.googleapis.com/auth/contacts.readonly',
 ] as const satisfies string[];
 
 const SCOPE_PRESETS: Record<string, string[]> = {
@@ -27,6 +29,10 @@ const SCOPE_PRESETS: Record<string, string[]> = {
   sheets: [
     'https://www.googleapis.com/auth/spreadsheets.readonly',
     'https://www.googleapis.com/auth/spreadsheets',
+  ],
+  people: [
+    'https://www.googleapis.com/auth/directory.readonly',
+    'https://www.googleapis.com/auth/contacts.readonly',
   ],
   all: ALL_SCOPES,
 };
