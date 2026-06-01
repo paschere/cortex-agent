@@ -20,6 +20,10 @@ import {
   ArrowLeft,
   Users,
   Bell,
+  Github,
+  Layers,
+  Contact,
+  Wallet,
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel, PanelHead, Eyebrow } from '@/components/ui/panel';
@@ -120,9 +124,55 @@ const TOOL_GROUPS: ToolGroup[] = [
     tools: [{ id: 'slack.post_message', write: true }],
   },
   {
+    label: 'GitHub',
+    icon: Github,
+    tools: [
+      { id: 'github.list_repositories' },
+      { id: 'github.get_repository' },
+      { id: 'github.get_repo_contents' },
+      { id: 'github.get_issue' },
+      { id: 'github.list_issue_comments' },
+      { id: 'github.list_pull_requests' },
+      { id: 'github.repo_activity' },
+      { id: 'github.pr_metrics' },
+      { id: 'github.create_issue', write: true },
+      { id: 'github.create_issue_comment', write: true },
+    ],
+  },
+  {
+    label: 'Linear',
+    icon: Layers,
+    tools: [
+      { id: 'linear.list_teams' },
+      { id: 'linear.list_projects' },
+      { id: 'linear.get_project' },
+      { id: 'linear.list_issues' },
+      { id: 'linear.get_issue' },
+      { id: 'linear.list_comments' },
+      { id: 'linear.cycle_stats' },
+      { id: 'linear.workload_stats' },
+      { id: 'linear.create_issue', write: true },
+      { id: 'linear.create_comment', write: true },
+    ],
+  },
+  {
+    label: 'People Directory',
+    icon: Contact,
+    tools: [{ id: 'people.search' }],
+  },
+  {
+    label: 'Payroll',
+    icon: Wallet,
+    tools: [{ id: 'payroll.team_overview' }],
+  },
+  {
     label: 'Knowledge Base',
     icon: BookOpen,
-    tools: [{ id: 'kb.search' }, { id: 'kb.list_collections' }],
+    tools: [
+      { id: 'kb.search' },
+      { id: 'kb.list_collections' },
+      { id: 'kb.create_document', write: true },
+    ],
   },
   {
     label: 'Composite',
