@@ -9,9 +9,16 @@ interface MessageListProps {
   isLoading: boolean;
   conversationId?: string;
   onConfirmed?: () => void;
+  onRegenerate?: () => void;
 }
 
-export function MessageList({ messages, isLoading, conversationId, onConfirmed }: MessageListProps) {
+export function MessageList({
+  messages,
+  isLoading,
+  conversationId,
+  onConfirmed,
+  onRegenerate,
+}: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,9 +32,19 @@ export function MessageList({ messages, isLoading, conversationId, onConfirmed }
           Start a conversation...
         </div>
       )}
-      {messages.map((m) => (
-        <MessageBubble key={m.id} message={m} conversationId={conversationId} onConfirmed={onConfirmed} />
-      ))}
+      {messages.map((m, i) => {
+        const isLast = i === messages.length - 1;
+        return (
+          <MessageBubble
+            key={m.id}
+            message={m}
+            conversationId={conversationId}
+            onConfirmed={onConfirmed}
+            onRegenerate={isLast && m.role === 'assistant' ? onRegenerate : undefined}
+            isStreaming={isLast && isLoading}
+          />
+        );
+      })}
       {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
         <div className="flex items-start gap-2">
           <div className="rounded-2xl px-4 py-2 bg-neutral-100 dark:bg-neutral-800 text-sm text-neutral-500 animate-pulse">

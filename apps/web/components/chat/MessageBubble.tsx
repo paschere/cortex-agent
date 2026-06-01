@@ -2,6 +2,7 @@
 
 import type { Message, ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
+import { Copy, RotateCw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -12,6 +13,8 @@ interface MessageBubbleProps {
   message: Message;
   conversationId?: string;
   onConfirmed?: () => void;
+  onRegenerate?: () => void;
+  isStreaming?: boolean;
 }
 
 type ConfirmationSentinel = {
@@ -26,7 +29,13 @@ function isConfirmationSentinel(v: unknown): v is ConfirmationSentinel {
   return o.__requires_confirmation === true && typeof o.toolId === 'string';
 }
 
-export function MessageBubble({ message, conversationId, onConfirmed }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  conversationId,
+  onConfirmed,
+  onRegenerate,
+  isStreaming,
+}: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
 
   // Skip data role messages
@@ -45,7 +54,7 @@ export function MessageBubble({ message, conversationId, onConfirmed }: MessageB
     : null;
 
   return (
-    <div className={clsx('flex', isUser ? 'justify-end' : 'justify-start')}>
+    <div className={clsx('group relative flex flex-col', isUser ? 'items-end' : 'items-start')}>
       <div
         className={clsx(
           'rounded-2xl px-4 py-2 max-w-[80%] text-sm',
@@ -94,6 +103,27 @@ export function MessageBubble({ message, conversationId, onConfirmed }: MessageB
           />
         )}
       </div>
+
+      {!isUser && !isStreaming && content && (
+        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => navigator.clipboard.writeText(content)}
+            className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            aria-label="Copy"
+          >
+            <Copy className="w-3.5 h-3.5 text-neutral-400" />
+          </button>
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              aria-label="Regenerate"
+            >
+              <RotateCw className="w-3.5 h-3.5 text-neutral-400" />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
