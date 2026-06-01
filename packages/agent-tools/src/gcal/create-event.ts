@@ -14,6 +14,7 @@ export const gcalCreateEvent = registerTool({
     end: z.string(),
     attendees: z.array(z.string().email()).optional(),
     sendUpdates: z.enum(['all', 'externalOnly', 'none']).default('none'),
+    timeZone: z.string().default('America/Mexico_City'),
   }),
   outputSchema: z.object({
     event: z.object({
@@ -32,8 +33,8 @@ export const gcalCreateEvent = registerTool({
     const body = {
       summary: input.summary,
       description: input.description ?? '',
-      start: { dateTime: input.start },
-      end: { dateTime: input.end },
+      start: { dateTime: input.start, timeZone: input.timeZone },
+      end: { dateTime: input.end, timeZone: input.timeZone },
       attendees: (input.attendees ?? []).map((email) => ({ email })),
     };
 
