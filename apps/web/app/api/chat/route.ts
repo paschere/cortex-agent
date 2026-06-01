@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { google } from '@ai-sdk/google';
-import { streamText, tool, type CoreMessage } from 'ai';
+import { streamText, generateText, tool, type CoreMessage } from 'ai';
 import { z } from 'zod';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
@@ -11,6 +11,15 @@ import { ConfirmationRequiredError } from '@zipdev/core';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
+
+const ACKNOWLEDGMENT_RE = /^(ok|yes|no|sure|thanks|got it|sounds good|proceed|continue|sí|claro|dale|perfecto|de acuerdo)[.!?]?$/i
+
+function shouldRunRag(message: string): boolean {
+  const wordCount = message.trim().split(/\s+/).length
+  if (wordCount < 8) return false
+  if (ACKNOWLEDGMENT_RE.test(message.trim())) return false
+  return true
+}
 
 const MessageSchema = z.object({
   role: z.enum(['user', 'assistant', 'system']),
@@ -83,20 +92,16 @@ export async function POST(req: NextRequest) {
 
   const ctx = buildToolContext({ userId: user.id, agentId: agent.id, conversationId });
 
-  // RAG prepend: kb.search top 5 on the last user message
+  // RAG prepend: kb.search top 3 on the last user message (conditional)
   const ragQuery = lastUserMessage?.content ?? '';
-  const ragOut = ragQuery
-    ? await runTool(kbSearch, { query: ragQuery, limit: 5 }, ctx).catch(() => ({
-        hits: [] as Array<{ documentTitle: string; chunkIndex: number; content: string }>,
-      }))
-    : { hits: [] as Array<{ documentTitle: string; chunkIndex: number; content: string }> };
-
-  const ragBlock =
-    ragOut.hits.length > 0
-      ? `<context>\n${ragOut.hits
-          .map((h, i) => `[${i + 1}] ${h.documentTitle} (chunk ${h.chunkIndex}):\n${h.content}`)
-          .join('\n\n')}\n</context>`
-      : '';
+  let ragBlock = ''
+  if (shouldRunRag(ragQuery)) {
+    const ragOut = ragQuery ? await runTool(kbSearch, { query: ragQuery, limit: 3 }, ctx).catch(() => ({ hits: [] })) : { hits: [] }
+    const relevant = (ragOut.hits as Array<{score?: number; documentTitle: string; chunkIndex: number; content: string}>).filter(h => (h.score ?? 1) >= 0.65)
+    if (relevant.length > 0) {
+      ragBlock = '<context>\n' + relevant.map((h, i) => `[^${i+1}] (${(h.score ?? 0).toFixed(2)}) ${h.documentTitle} chunk ${h.chunkIndex}:\n${h.content}`).join('\n\n') + '\n</context>'
+    }
+  }
 
   const allowed = filterTools(agent.allowedTools);
 
@@ -132,10 +137,31 @@ export async function POST(req: NextRequest) {
     }),
   );
 
-  const coreMessages: CoreMessage[] = messages.map((m) => ({
+  let coreMessages: CoreMessage[] = messages.map((m) => ({
     role: m.role as 'user' | 'assistant' | 'system',
     content: m.content,
   }));
+
+  if (conversationId) {
+    try {
+      const { data: dbMessages } = await db
+        .from('messages')
+        .select('role, content')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (dbMessages && dbMessages.length > 0) {
+        const dbSet = new Set(dbMessages.map(m => `${m.role}::${m.content}`))
+        const clientOnly = coreMessages.filter(m => !dbSet.has(`${m.role}::${String(m.content)}`))
+        coreMessages = [
+          ...dbMessages.reverse().map(m => ({ role: m.role as 'user' | 'assistant' | 'system', content: m.content as string })),
+          ...clientOnly,
+        ]
+      }
+    } catch (err) {
+      // non-fatal, use client messages
+    }
+  }
 
   const result = streamText({
     model: google(agent.defaultModel),
@@ -152,6 +178,20 @@ export async function POST(req: NextRequest) {
           tool_calls: toolCalls as unknown as object,
           tool_results: toolResults as unknown as object,
         });
+        // Auto-generate title on first turn
+        const isFirstTurn = coreMessages.filter(m => m.role === 'assistant').length <= 1
+        if (isFirstTurn && lastUserMessage) {
+          void (async () => {
+            try {
+              const { text: titleText } = await generateText({
+                model: google('gemini-2.0-flash'),
+                prompt: `Summarize this sales conversation starter in 5 words or fewer, no punctuation: "${lastUserMessage.content.slice(0, 200)}"`,
+                maxTokens: 20,
+              })
+              await db.from('conversations').update({ title: titleText.trim() }).eq('id', conversationId)
+            } catch { /* non-fatal */ }
+          })()
+        }
         await db.from('audit_events').insert({
           user_id: user.id,
           agent_id: agent.id,

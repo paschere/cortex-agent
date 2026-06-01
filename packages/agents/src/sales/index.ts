@@ -26,6 +26,7 @@ export const salesAgent: AgentDefinition = {
     'gcal.list_events',
     'gcal.create_event',
     'gsheets.read_range',
+    'gsheets.append_row',
     'kb.search',
     'kb.list_collections',
     'sales.draft_proposal',
