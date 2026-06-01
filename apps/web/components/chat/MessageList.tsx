@@ -9,9 +9,16 @@ interface MessageListProps {
   isLoading: boolean;
   conversationId?: string;
   onConfirmed?: () => void;
+  onSuggestion?: (text: string) => void;
 }
 
-export function MessageList({ messages, isLoading, conversationId, onConfirmed }: MessageListProps) {
+export function MessageList({
+  messages,
+  isLoading,
+  conversationId,
+  onConfirmed,
+  onSuggestion,
+}: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,8 +28,24 @@ export function MessageList({ messages, isLoading, conversationId, onConfirmed }
   return (
     <div ref={ref} className="flex-1 overflow-y-auto p-4 space-y-3">
       {messages.length === 0 && !isLoading && (
-        <div className="flex items-center justify-center h-full text-neutral-400 text-sm">
-          Start a conversation...
+        <div className="flex flex-col items-center justify-center h-full gap-4 text-neutral-400 text-sm">
+          <span>Start a conversation...</span>
+          {onSuggestion && (
+            <div className="flex flex-wrap justify-center gap-2 max-w-md">
+              {['Summarize my pipeline', 'Which deals close this month?'].map(
+                (s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => onSuggestion(s)}
+                    className="rounded-full border px-3 py-1.5 text-xs text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  >
+                    {s}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
         </div>
       )}
       {messages.map((m) => (
