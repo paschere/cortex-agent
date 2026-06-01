@@ -4,7 +4,10 @@ import {
   runTool,
   getTool,
   createIntegrationsClient,
+  fetchEnabledExternalTools,
+  callExternalTool,
   type ToolContext,
+  type ExternalServerRow,
 } from '@zipdev/agent-tools';
 import { loadAgent, getAgentTools } from '@zipdev/agents';
 // Side-effect import: register all built-in tools
@@ -23,7 +26,18 @@ export async function listToolsForAuth(ctx: BridgeContext) {
   const sb = makeServiceClient(ctx.env);
   const slug = await resolveAgentSlug(sb, ctx.agentId);
   const agent = await loadAgent(sb, slug);
-  return getAgentTools(agent);
+  const builtins = getAgentTools(agent);
+  const externals = await fetchEnabledExternalTools(sb, ctx.userId);
+  return { builtins, externals };
+}
+
+/**
+ * MCP-safe name for an external (dynamic) MCP tool. Must be byte-identical
+ * everywhere (advertised in tools/list AND looked up in tools/call) or calls
+ * silently fail with "Unknown tool". Capped at 64 chars.
+ */
+export function externalSdkName(serverId: string, toolName: string): string {
+  return ('mcp_' + serverId.replace(/-/g, '').slice(0, 16) + '_' + toolName).slice(0, 64);
 }
 
 export async function callTool(
@@ -41,38 +55,71 @@ export async function callTool(
   const integrations = createIntegrationsClient(sb, ctx.userId, logger);
   const slug = await resolveAgentSlug(sb, ctx.agentId);
   const agent = await loadAgent(sb, slug);
-  const allowed = new Set(getAgentTools(agent).map((t) => t.id));
 
-  // Convert from MCP-safe name back to dotted ID.
-  // Tool IDs are "namespace.verb_noun" (exactly one dot). MCP names replace that
-  // dot with an underscore: "namespace_verb_noun". So we reverse by replacing only
-  // the FIRST underscore back to a dot.
-  const toolId = toolName.replace('_', '.');
-  if (!allowed.has(toolId)) return { ok: false, error: `Tool ${toolId} not allowed for this agent` };
+  // Map MCP-safe built-in names back to dotted tool IDs. Tool IDs are
+  // "namespace.verb_noun"; the MCP name replaces every dot with an underscore.
+  const builtins = getAgentTools(agent);
+  const builtinMap = new Map(builtins.map((t) => [t.id.replaceAll('.', '_'), t.id]));
 
-  const tool = getTool(toolId);
-  if (!tool) return { ok: false, error: `Tool ${toolId} not registered` };
+  const builtinId = builtinMap.get(toolName);
+  if (builtinId) {
+    const tool = getTool(builtinId);
+    if (!tool) return { ok: false, error: `Tool ${builtinId} not registered` };
 
-  const toolCtx: ToolContext = {
-    userId: ctx.userId,
-    agentId: agent.id,
-    db: sb,
-    integrations,
-    logger,
-  };
+    const toolCtx: ToolContext = {
+      userId: ctx.userId,
+      agentId: agent.id,
+      db: sb,
+      integrations,
+      logger,
+    };
 
-  try {
-    const result = await runTool(tool, input, toolCtx, opts);
-    return { ok: true, result };
-  } catch (err) {
-    if (err instanceof ConfirmationRequiredError) {
-      return {
-        ok: false,
-        confirmationRequired: { toolId: err.toolId, input: err.input },
-      };
+    try {
+      const result = await runTool(tool, input, toolCtx, opts);
+      return { ok: true, result };
+    } catch (err) {
+      if (err instanceof ConfirmationRequiredError) {
+        return {
+          ok: false,
+          confirmationRequired: { toolId: err.toolId, input: err.input },
+        };
+      }
+      return { ok: false, error: (err as Error).message };
     }
-    return { ok: false, error: (err as Error).message };
   }
+
+  if (toolName.startsWith('mcp_')) {
+    // External (dynamic) MCP tool. Rebuild the sdkName→{server, originalName}
+    // map fresh (stateless — no ordering dependency on a prior tools/list).
+    const externals = await fetchEnabledExternalTools(sb, ctx.userId);
+    for (const { server, tools } of externals) {
+      for (const t of tools) {
+        if (externalSdkName(server.id, t.tool_name) !== toolName) continue;
+
+        // Confirmation gate: untrusted servers require explicit confirmation,
+        // mirroring the built-in ConfirmationRequiredError sentinel path.
+        const trusted = (server as Record<string, unknown>).trusted === true;
+        if (!trusted && !opts.confirmed) {
+          return { ok: false, confirmationRequired: { toolId: toolName, input } };
+        }
+
+        try {
+          const result = await callExternalTool(
+            server as unknown as ExternalServerRow,
+            t.tool_name,
+            input,
+            { userId: ctx.userId, db: sb },
+          );
+          return { ok: true, result };
+        } catch (err) {
+          return { ok: false, error: (err as Error).message };
+        }
+      }
+    }
+    return { ok: false, error: `Unknown tool: ${toolName}` };
+  }
+
+  return { ok: false, error: `Unknown tool: ${toolName}` };
 }
 
 // Cast to the unparameterised SupabaseClient expected by @zipdev/agent-tools / @zipdev/agents.

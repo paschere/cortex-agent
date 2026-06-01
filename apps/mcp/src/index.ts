@@ -34,8 +34,17 @@ app.get('/mcp/whoami', (c) => {
 
 app.get('/mcp/tools', async (c) => {
   const mcp = c.get('mcp');
-  const tools = await listToolsForAuth({ env: c.env, userId: mcp.userId, agentId: mcp.agentId });
-  return c.json({ tools: tools.map((t) => ({ id: t.id, description: t.description })) });
+  const { builtins, externals } = await listToolsForAuth({
+    env: c.env,
+    userId: mcp.userId,
+    agentId: mcp.agentId,
+  });
+  return c.json({
+    tools: builtins.map((t) => ({ id: t.id, description: t.description })),
+    externals: externals.flatMap(({ server, tools }) =>
+      tools.map((t) => ({ serverId: server.id, name: t.tool_name, description: t.tool_description })),
+    ),
+  });
 });
 
 // SSE transport endpoints for Claude Desktop MCP connector

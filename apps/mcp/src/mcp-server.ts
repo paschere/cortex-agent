@@ -8,7 +8,7 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { listToolsForAuth, callTool, type BridgeContext } from './bridge';
+import { listToolsForAuth, callTool, externalSdkName, type BridgeContext } from './bridge';
 import { PROMPTS, getPromptDefinition } from './prompts';
 import { RESOURCES, readResource } from './resources';
 
@@ -20,17 +20,30 @@ export function buildMcpServer(ctx: BridgeContext): Server {
 
   // list_tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools = await listToolsForAuth(ctx);
-    return {
-      tools: tools.map((t) => ({
-        name: t.id.replaceAll('.', '_'), // MCP-safe name (Claude expects no dots)
-        description: t.description,
-        inputSchema: zodToJsonSchema(t.inputSchema, {
-          name: 'schema',
-          $refStrategy: 'none',
-        }) as { type: 'object'; properties?: Record<string, unknown> },
+    const { builtins, externals } = await listToolsForAuth(ctx);
+
+    const builtinTools = builtins.map((t) => ({
+      name: t.id.replaceAll('.', '_'), // MCP-safe name (Claude expects no dots)
+      description: t.description,
+      inputSchema: zodToJsonSchema(t.inputSchema, {
+        name: 'schema',
+        $refStrategy: 'none',
+      }) as { type: 'object'; properties?: Record<string, unknown> },
+    }));
+
+    const externalTools = externals.flatMap(({ server, tools }) =>
+      tools.map((t) => ({
+        name: externalSdkName(server.id, t.tool_name),
+        description: t.tool_description ?? '',
+        // input_schema_json is already JSON Schema — pass it through directly.
+        inputSchema: (t.input_schema_json ?? { type: 'object', properties: {} }) as {
+          type: 'object';
+          properties?: Record<string, unknown>;
+        },
       })),
-    };
+    );
+
+    return { tools: [...builtinTools, ...externalTools] };
   });
 
   // call_tool
