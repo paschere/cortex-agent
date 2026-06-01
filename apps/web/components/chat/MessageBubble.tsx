@@ -2,6 +2,9 @@
 
 import type { Message, ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
 import { ToolCallCard } from './ToolCallCard';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
 
@@ -51,8 +54,19 @@ export function MessageBubble({ message, conversationId, onConfirmed }: MessageB
             : 'bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100',
         )}
       >
-        {content && (
+        {content && isUser && (
           <div className="whitespace-pre-wrap">{content}</div>
+        )}
+
+        {content && !isUser && (
+          <div className="prose prose-sm dark:prose-invert max-w-none overflow-x-auto prose-headings:mt-2 prose-p:mt-1 prose-p:mb-0 prose-li:my-0 prose-ul:my-1 prose-ol:my-1">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
         )}
 
         {/* Tool call cards */}
