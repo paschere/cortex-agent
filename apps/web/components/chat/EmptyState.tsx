@@ -1,10 +1,19 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { BarChart2, FileText, Calendar, Search, UserCheck, Phone } from 'lucide-react';
+import { BarChart2, FileText, Calendar, Search, UserCheck, Phone, Activity } from 'lucide-react';
 
-const SUGGESTIONS = [
+interface Suggestion {
+  icon: typeof BarChart2;
+  text: string;
+  // Optional override sent to the input when the card is clicked.
+  // Used by the briefing card to prefill the /briefing slash command.
+  value?: string;
+}
+
+const SUGGESTIONS: Suggestion[] = [
   { icon: BarChart2, text: 'Summarize my pipeline' },
+  { icon: Activity, text: 'Get pipeline briefing', value: '/briefing ' },
   { icon: FileText, text: 'Draft a proposal for a new client' },
   { icon: Calendar, text: 'Which deals close this month?' },
   { icon: Search, text: 'Find contacts at a company' },
@@ -33,7 +42,7 @@ export function EmptyState({ onSuggestion }: EmptyStateProps) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05 }}
-            onClick={() => onSuggestion(s.text)}
+            onClick={() => onSuggestion(s.value ?? s.text)}
             className="flex items-center gap-2 rounded-xl border p-3 text-sm text-left hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
           >
             <s.icon className="w-4 h-4 shrink-0 text-neutral-500" />
