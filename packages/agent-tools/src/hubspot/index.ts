@@ -3,3 +3,7 @@ export { getCompany } from './get-company';
 export { searchDeals } from './search-deals';
 export { getDeal } from './get-deal';
 export { listRecentActivities } from './list-recent-activities';
+export { createDeal } from './create-deal';
+export { updateDeal } from './update-deal';
+export { createContact } from './create-contact';
+export { logActivity } from './log-activity';
