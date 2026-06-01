@@ -6,34 +6,50 @@ interface SessionPayload {
   user?: { id: string; email: string };
 }
 
+// better-auth names the session cookie `better-auth.session_token`
+// (prefixed with `__Secure-` when served over https).
+const SESSION_COOKIE_RE = /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=/;
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  // Native fetch against our own /api/auth/get-session endpoint. We avoid
-  // calling better-auth APIs directly here because middleware runs in the
-  // Edge runtime where the `pg` Pool used by lib/auth.ts is not available.
-  let session: SessionPayload | null = null;
-  try {
-    const res = await fetch(`${req.nextUrl.origin}/api/auth/get-session`, {
-      headers: { cookie: req.headers.get('cookie') ?? '' },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(2000),
-    });
-    if (res.ok) {
-      session = (await res.json()) as SessionPayload;
-    }
-  } catch {
-    session = null;
-  }
+  const cookie = req.headers.get('cookie') ?? '';
 
-  if (!session?.user) {
+  // No session cookie at all → definitely signed out. Redirect early.
+  if (!SESSION_COOKIE_RE.test(cookie)) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('next', pathname);
     return NextResponse.redirect(url);
+  }
+
+  // A cookie is present. Validate it, but FAIL OPEN: if the check is slow,
+  // errors, or times out (common during dev cold-compiles), let the request
+  // through. Every protected page/route also calls requireSession() server-side,
+  // which is the real gate — so failing open here can't leak data, it only
+  // avoids bouncing a validly-signed-in user to /login on a transient hiccup.
+  try {
+    const res = await fetch(`${req.nextUrl.origin}/api/auth/get-session`, {
+      headers: { cookie },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      const session = (await res.json()) as SessionPayload | null;
+      // Definitive answer: the cookie exists but is invalid/expired → sign out.
+      if (!session?.user) {
+        const url = req.nextUrl.clone();
+        url.pathname = '/login';
+        url.searchParams.set('next', pathname);
+        return NextResponse.redirect(url);
+      }
+    }
+    // Non-OK response → can't conclude; fail open.
+  } catch {
+    // Timeout / network error → fail open; requireSession() enforces auth.
   }
 
   return NextResponse.next();
