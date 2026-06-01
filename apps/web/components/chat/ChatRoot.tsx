@@ -81,27 +81,17 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
     void reload();
   }, [reload]);
 
+  const handleAgentChange = useCallback((slug: string) => {
+    setAgentSlug(slug);
+    setMessages([]);
+  }, [setMessages]);
+
   return (
     <div className="flex flex-col h-full max-w-3xl mx-auto w-full">
       <header className="border-b px-4 py-3 flex items-center justify-between text-sm shrink-0">
         <span className="font-semibold text-neutral-700 dark:text-neutral-300">
           {initialConvId ? 'Conversation' : 'New Chat'}
         </span>
-        <select
-          value={agentSlug}
-          onChange={(e) => {
-            setAgentSlug(e.target.value);
-            setMessages([]);
-          }}
-          disabled={!!conversationId}
-          className="bg-transparent border rounded px-2 py-1 text-xs"
-        >
-          {agents.map((a) => (
-            <option key={a.slug} value={a.slug}>
-              {a.name}
-            </option>
-          ))}
-        </select>
       </header>
       <MessageList
         messages={messages}
@@ -110,7 +100,14 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
         onConfirmed={reload}
         onRegenerate={handleRegenerate}
       />
-      <InputBar onSend={handleSend} disabled={isLoading} conversationId={conversationId} />
+      <InputBar
+        onSend={handleSend}
+        disabled={isLoading}
+        conversationId={conversationId}
+        agents={agents}
+        agentSlug={agentSlug}
+        onAgentChange={handleAgentChange}
+      />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
