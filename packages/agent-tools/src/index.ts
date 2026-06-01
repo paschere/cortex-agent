@@ -174,3 +174,7 @@ export type {
   ExternalServerRow,
   EnabledExternalServer,
 } from './external-mcp';
+
+// Side-effect import: registers the sales.draft_proposal composite tool.
+// Placed last so registerTool/getTool/runTool are fully initialized first.
+export { salesDraftProposal } from './composite/sales-draft-proposal';

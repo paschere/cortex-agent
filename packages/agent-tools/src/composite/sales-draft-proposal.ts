@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { logger } from '@zipdev/core';
-import { registerTool, getTool, runTool } from '../registry.js';
+import { registerTool, getTool, runTool } from '../index';
 import type { ToolContext } from '../types.js';
 
 const ROLE_KEYWORDS: Record<string, string[]> = {

@@ -254,9 +254,11 @@ describe('kb.search', () => {
     const result = await runTool(kbSearch as unknown as SearchTool, { query: 'anything' }, ctx);
     expect(result.hits).toEqual([]);
 
-    // RPC should not have been called since no collections were found
+    // The hybrid-search RPC should not have been called since no collections were found.
+    // (db.rpc may still be called by the atomic rate limiter via 'consume_rate_limit_token'.)
     const dbMock = ctx.db as unknown as { rpc: ReturnType<typeof vi.fn> };
-    expect(dbMock.rpc).not.toHaveBeenCalled();
+    const hybridSearchCalls = dbMock.rpc.mock.calls.filter((c) => c[0] === 'kb_hybrid_search');
+    expect(hybridSearchCalls).toHaveLength(0);
 
     delete process.env['GOOGLE_GENERATIVE_AI_API_KEY'];
   });
