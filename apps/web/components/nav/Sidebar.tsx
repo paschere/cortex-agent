@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { usePathname, useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import {
@@ -22,6 +22,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   X,
+  Trash2,
   Sparkles,
 } from 'lucide-react';
 import type { Role } from '@zipdev/core';
@@ -141,6 +142,8 @@ function SidebarContent({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations'],
     queryFn: fetchConversations,
@@ -148,6 +151,24 @@ function SidebarContent({
   });
 
   const recent = conversations.slice(0, 5);
+
+  async function handleDelete(e: React.MouseEvent, id: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('Delete this conversation? This cannot be undone.')) return;
+    // Optimistically remove from the cached list.
+    queryClient.setQueryData<Conversation[]>(['conversations'], (prev) =>
+      (prev ?? []).filter((c) => c.id !== id),
+    );
+    const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      // Re-sync on failure.
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      return;
+    }
+    // If the open chat was deleted, leave it.
+    if (pathname === `/chat/${id}`) router.push('/chat');
+  }
 
   return (
     <nav className="scroll-slim flex h-full flex-col gap-1 overflow-y-auto px-3 pb-4" onClick={onNavigate}>
@@ -177,19 +198,29 @@ function SidebarContent({
               const href = `/chat/${c.id}`;
               const active = pathname === href;
               return (
-                <Link
-                  key={c.id}
-                  href={href}
-                  title={c.title ?? 'Untitled'}
-                  className={clsx(
-                    'truncate rounded-[10px] px-2.5 py-1.5 text-[13px] transition-colors',
-                    active
-                      ? 'bg-primary-soft font-semibold text-primary-ink'
-                      : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-                  )}
-                >
-                  {c.title?.trim() || 'Untitled'}
-                </Link>
+                <div key={c.id} className="group/conv relative">
+                  <Link
+                    href={href}
+                    title={c.title ?? 'Untitled'}
+                    className={clsx(
+                      'block truncate rounded-[10px] py-1.5 pl-2.5 pr-8 text-[13px] transition-colors',
+                      active
+                        ? 'bg-primary-soft font-semibold text-primary-ink'
+                        : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+                    )}
+                  >
+                    {c.title?.trim() || 'Untitled'}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDelete(e, c.id)}
+                    aria-label="Delete conversation"
+                    title="Delete conversation"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-[7px] p-1 text-ink-faint opacity-0 transition-opacity hover:bg-rose-soft hover:text-rose focus:opacity-100 group-hover/conv:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               );
             })}
           </div>
