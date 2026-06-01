@@ -255,6 +255,45 @@ async function rpcOverSse(
   }
 }
 
+/**
+ * Fire a JSON-RPC notification (no id, no response expected) to the messages
+ * endpoint. Used for `notifications/initialized`.
+ */
+async function notifyOverSse(
+  conn: SseConnection,
+  messagesHeaders: Record<string, string>,
+  method: string,
+  signal: AbortSignal,
+): Promise<void> {
+  await fetch(conn.messagesUrl, {
+    method: 'POST',
+    headers: { ...messagesHeaders, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', method, params: {} }),
+    signal,
+  }).catch(() => {
+    // notifications are best-effort
+  });
+}
+
+/**
+ * Perform the mandatory MCP initialization handshake: `initialize` request
+ * (request→result) followed by the `notifications/initialized` notification.
+ * Spec-compliant servers (including the SDK `Server` used in apps/mcp) reject
+ * `tools/list` / `tools/call` before this completes.
+ */
+async function mcpHandshake(
+  conn: SseConnection,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+): Promise<void> {
+  await rpcOverSse(conn, headers, 'initialize', {
+    protocolVersion: '2024-11-05',
+    capabilities: {},
+    clientInfo: { name: 'zipdev-agent-external-mcp', version: '1.0.0' },
+  }, signal);
+  await notifyOverSse(conn, headers, 'notifications/initialized', signal);
+}
+
 // ---------------------------------------------------------------------------
 // 2. fetchExternalToolManifest
 // ---------------------------------------------------------------------------
@@ -278,6 +317,7 @@ export async function fetchExternalToolManifest(
 
   const conn = await openSseStream(serverUrl, headers, signal);
   try {
+    await mcpHandshake(conn, headers, signal);
     const result = (await rpcOverSse(conn, headers, 'tools/list', {}, signal)) as {
       tools?: Array<{ name?: unknown; description?: unknown; inputSchema?: unknown }>;
     };
@@ -333,6 +373,7 @@ export async function callExternalTool(
 
   const conn = await openSseStream(server.url, headers, signal);
   try {
+    await mcpHandshake(conn, headers, signal);
     return await rpcOverSse(
       conn,
       headers,
