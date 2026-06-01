@@ -19,3 +19,5 @@ export * from './generate-presentation';
 export * from './get-presentation';
 export * from './job-insights';
 export * from './compare-candidates';
+export { recruiterAnalytics } from './recruiter-analytics';
+export { dashboardStats } from './dashboard-stats';

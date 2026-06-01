@@ -9,6 +9,7 @@ const Body = z.object({
   conversationId: z.string().uuid(),
   toolId: z.string(),
   input: z.unknown(),
+  toolCallId: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -57,12 +58,36 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  await db.from('messages').insert({
-    conversation_id: parsed.data.conversationId,
-    role: 'tool',
-    content: `Confirmed and executed ${parsed.data.toolId}`,
-    tool_results: { [parsed.data.toolId]: out } as object,
-  });
+  // Replace the persisted __requires_confirmation sentinel on the originating
+  // assistant message with the real executed result. Without this, a hard
+  // reload would re-render the confirmation prompt and risk a double-execution.
+  try {
+    const { data: rows } = await db
+      .from('messages')
+      .select('id, tool_results')
+      .eq('conversation_id', parsed.data.conversationId)
+      .eq('role', 'assistant')
+      .not('tool_results', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    for (const row of rows ?? []) {
+      const tr = row.tool_results as Array<Record<string, unknown>> | null;
+      if (!Array.isArray(tr)) continue;
+      const idx = tr.findIndex((e) => {
+        const r = e?.result as { __requires_confirmation?: boolean; toolId?: string } | undefined;
+        if (!r?.__requires_confirmation || r.toolId !== parsed.data.toolId) return false;
+        return parsed.data.toolCallId ? e.toolCallId === parsed.data.toolCallId : true;
+      });
+      if (idx !== -1) {
+        tr[idx] = { ...tr[idx], result: out };
+        await db.from('messages').update({ tool_results: tr }).eq('id', row.id as string);
+        break;
+      }
+    }
+  } catch {
+    // Non-fatal: the action already ran; persistence rewrite is best-effort.
+  }
 
   return NextResponse.json({ result: out });
 }

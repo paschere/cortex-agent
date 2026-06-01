@@ -22,6 +22,7 @@ export * from './gdrive';
 export * from './web';
 export * from './format';
 export * from './recruit';
+export * from './slack';
 export {
   isPrivateUrl,
   fetchExternalToolManifest,

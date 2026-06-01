@@ -141,6 +141,7 @@ export function MessageBubble({
               conversationId={conversationId}
               toolId={confirmationData.toolId}
               input={confirmationData.input}
+              toolCallId={confirmationInvocation?.toolCallId}
               onConfirmed={onConfirmed}
             />
           </div>
