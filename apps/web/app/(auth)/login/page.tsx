@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Sparkles } from 'lucide-react';
 import { authClient } from '@/lib/auth-client';
 
 export default function LoginPage() {
@@ -22,20 +23,28 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="max-w-sm w-full rounded-2xl border bg-white dark:bg-neutral-900 p-8 shadow-sm">
-      <h1 className="text-2xl font-semibold mb-2">Zipdev Agent</h1>
-      <p className="text-neutral-500 text-sm mb-6">
-        Sign in with your @zipdev.com Google account.
-      </p>
-      <button
-        type="button"
-        onClick={signIn}
-        disabled={loading}
-        className="w-full rounded-xl bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 py-2.5 font-medium hover:opacity-90 disabled:opacity-50"
-      >
-        {loading ? 'Redirecting…' : 'Continue with Google'}
-      </button>
-      {err && <p className="mt-4 text-sm text-red-600">{err}</p>}
+    <div className="w-full max-w-sm overflow-hidden rounded-card border border-border bg-surface shadow-card">
+      <div className="hero-mesh px-8 py-10 text-white">
+        <span className="grid h-12 w-12 place-items-center rounded-[14px] bg-white/15 backdrop-blur">
+          <Sparkles className="h-6 w-6" />
+        </span>
+        <h1 className="mt-5 text-2xl font-extrabold tracking-tight">Zipdev Agent</h1>
+        <p className="mt-1 text-[13px] text-white/75">Your AI sales co-pilot.</p>
+      </div>
+      <div className="p-8">
+        <p className="mb-6 text-[13px] text-ink-muted">
+          Sign in with your <span className="font-semibold text-ink">@zipdev.com</span> Google account.
+        </p>
+        <button
+          type="button"
+          onClick={signIn}
+          disabled={loading}
+          className="w-full rounded-pill bg-primary py-2.5 font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
+        >
+          {loading ? 'Redirecting…' : 'Continue with Google'}
+        </button>
+        {err && <p className="mt-4 text-sm text-rose">{err}</p>}
+      </div>
     </div>
   );
 }

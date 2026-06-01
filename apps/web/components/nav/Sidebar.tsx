@@ -7,19 +7,22 @@ import { useQuery } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import {
+  LayoutDashboard,
   MessageSquare,
   MessagesSquare,
   BookOpen,
   Plug,
   KeyRound,
   Bot,
+  Calculator,
   Users,
   UsersRound,
   ScrollText,
-  BarChart2,
+  BarChart3,
   PanelLeftClose,
   PanelLeftOpen,
   X,
+  Sparkles,
 } from 'lucide-react';
 import type { Role } from '@zipdev/core';
 import { useMobileSidebar } from './MobileSidebarContext';
@@ -30,20 +33,41 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const PRIMARY_LINKS: NavItem[] = [
-  { href: '/chat', label: 'Chat', icon: MessageSquare },
-  { href: '/conversations', label: 'Conversations', icon: MessagesSquare },
-  { href: '/kb', label: 'Knowledge Base', icon: BookOpen },
-  { href: '/integrations', label: 'Integrations', icon: Plug },
-  { href: '/mcp-tokens', label: 'MCP Tokens', icon: KeyRound },
-  { href: '/agents', label: 'Agents', icon: Bot },
-];
+interface NavSection {
+  label: string;
+  items: NavItem[];
+  adminOnly?: boolean;
+}
 
-const ADMIN_LINKS: NavItem[] = [
-  { href: '/admin/users', label: 'Users', icon: Users },
-  { href: '/admin/teams', label: 'Teams', icon: UsersRound },
-  { href: '/admin/audit', label: 'Audit log', icon: ScrollText },
-  { href: '/admin/usage', label: 'Usage', icon: BarChart2 },
+const SECTIONS: NavSection[] = [
+  {
+    label: 'Workspace',
+    items: [
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/chat', label: 'Chat', icon: MessageSquare },
+      { href: '/conversations', label: 'Conversations', icon: MessagesSquare },
+      { href: '/kb', label: 'Knowledge Base', icon: BookOpen },
+    ],
+  },
+  {
+    label: 'Tools',
+    items: [
+      { href: '/agents', label: 'Agents', icon: Bot },
+      { href: '/integrations', label: 'Integrations', icon: Plug },
+      { href: '/mcp-tokens', label: 'MCP Servers', icon: KeyRound },
+      { href: '/chat?tool=rate', label: 'Rate Calculator', icon: Calculator },
+    ],
+  },
+  {
+    label: 'System',
+    adminOnly: true,
+    items: [
+      { href: '/admin/users', label: 'Users', icon: Users },
+      { href: '/admin/teams', label: 'Teams', icon: UsersRound },
+      { href: '/admin/usage', label: 'Analytics', icon: BarChart3 },
+      { href: '/admin/audit', label: 'Audit Logs', icon: ScrollText },
+    ],
+  },
 ];
 
 interface Conversation {
@@ -61,58 +85,50 @@ async function fetchConversations(): Promise<Conversation[]> {
   return (j.conversations as Conversation[]) ?? [];
 }
 
-type Bucket = 'Today' | 'Yesterday' | 'This week' | 'Older';
-
-const BUCKET_ORDER: Bucket[] = ['Today', 'Yesterday', 'This week', 'Older'];
-
-function bucketFor(iso: string): Bucket {
-  const now = new Date();
-  const then = new Date(iso);
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfThen = new Date(then.getFullYear(), then.getMonth(), then.getDate());
-  const dayMs = 24 * 60 * 60 * 1000;
-  const diffDays = Math.floor((startOfToday.getTime() - startOfThen.getTime()) / dayMs);
-  if (diffDays <= 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  if (diffDays <= 7) return 'This week';
-  return 'Older';
-}
-
-function groupConversations(items: Conversation[]): Array<[Bucket, Conversation[]]> {
-  const groups = new Map<Bucket, Conversation[]>();
-  for (const c of items) {
-    const b = bucketFor(c.updated_at);
-    const arr = groups.get(b) ?? [];
-    arr.push(c);
-    groups.set(b, arr);
-  }
-  return BUCKET_ORDER.filter((b) => groups.has(b)).map((b) => [b, groups.get(b)!] as [Bucket, Conversation[]]);
+function isActive(pathname: string, href: string): boolean {
+  const base = href.split('?')[0];
+  if (base === '/dashboard') return pathname === '/dashboard';
+  return pathname === base || pathname.startsWith(`${base}/`);
 }
 
 function NavLink({ item, collapsed, pathname }: { item: NavItem; collapsed: boolean; pathname: string }) {
   const Icon = item.icon;
-  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const active = isActive(pathname, item.href);
   return (
     <Link
       href={item.href}
       title={collapsed ? item.label : undefined}
       className={clsx(
-        'flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors',
+        'group relative flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13px] transition-colors',
         active
-          ? 'bg-neutral-100 dark:bg-neutral-800 font-medium'
-          : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800',
-        collapsed && 'justify-center',
+          ? 'bg-primary-soft font-semibold text-primary-ink'
+          : 'font-medium text-ink-muted hover:bg-surface-2 hover:text-ink',
+        collapsed && 'justify-center px-0',
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" />
+      {active && !collapsed && (
+        <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
+      )}
+      <Icon className={clsx('h-[18px] w-[18px] shrink-0', active ? 'text-primary' : 'text-ink-faint group-hover:text-ink-muted')} />
       {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
   );
 }
 
-function SectionLabel({ children, collapsed }: { children: React.ReactNode; collapsed: boolean }) {
-  if (collapsed) return <div className="my-2 border-t dark:border-neutral-800" />;
-  return <div className="mt-4 mb-1 px-2 text-xs uppercase tracking-wider text-neutral-400">{children}</div>;
+function Brand({ collapsed }: { collapsed: boolean }) {
+  return (
+    <div className={clsx('flex items-center gap-2.5', collapsed && 'justify-center')}>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
+        <Sparkles className="h-[18px] w-[18px]" />
+      </span>
+      {!collapsed && (
+        <div className="leading-tight">
+          <div className="text-sm font-extrabold tracking-tight text-ink">Zipdev</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">Agent OS</div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SidebarContent({
@@ -131,55 +147,53 @@ function SidebarContent({
     staleTime: 60_000,
   });
 
-  const grouped = groupConversations(conversations);
+  const recent = conversations.slice(0, 5);
 
   return (
-    <nav className="flex h-full flex-col gap-0.5 overflow-y-auto p-2" onClick={onNavigate}>
-      {PRIMARY_LINKS.map((item) => (
-        <NavLink key={item.href} item={item} collapsed={collapsed} pathname={pathname} />
+    <nav className="scroll-slim flex h-full flex-col gap-1 overflow-y-auto px-3 pb-4" onClick={onNavigate}>
+      {SECTIONS.filter((s) => !s.adminOnly || role === 'org_admin').map((section) => (
+        <div key={section.label} className="mt-3">
+          {!collapsed && (
+            <div className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              {section.label}
+            </div>
+          )}
+          {collapsed && <div className="my-2 border-t border-border" />}
+          <div className="flex flex-col gap-0.5">
+            {section.items.map((item) => (
+              <NavLink key={item.href} item={item} collapsed={collapsed} pathname={pathname} />
+            ))}
+          </div>
+        </div>
       ))}
 
-      {role === 'org_admin' && (
-        <>
-          <SectionLabel collapsed={collapsed}>Admin</SectionLabel>
-          {ADMIN_LINKS.map((item) => (
-            <NavLink key={item.href} item={item} collapsed={collapsed} pathname={pathname} />
-          ))}
-        </>
-      )}
-
-      {!collapsed && (
-        <>
-          <SectionLabel collapsed={collapsed}>Recent</SectionLabel>
-          {grouped.length === 0 ? (
-            <p className="px-2 py-1 text-xs text-neutral-400">No conversations yet</p>
-          ) : (
-            grouped.map(([bucket, items]) => (
-              <div key={bucket} className="mb-1">
-                <div className="px-2 py-1 text-[11px] font-medium text-neutral-400">{bucket}</div>
-                {items.map((c) => {
-                  const href = `/chat/${c.id}`;
-                  const active = pathname === href;
-                  return (
-                    <Link
-                      key={c.id}
-                      href={href}
-                      className={clsx(
-                        'block truncate rounded-lg px-2 py-1 text-sm transition-colors',
-                        active
-                          ? 'bg-neutral-100 dark:bg-neutral-800 font-medium'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800',
-                      )}
-                      title={c.title ?? 'Untitled'}
-                    >
-                      {c.title?.trim() || 'Untitled'}
-                    </Link>
-                  );
-                })}
-              </div>
-            ))
-          )}
-        </>
+      {!collapsed && recent.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+            Recent
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {recent.map((c) => {
+              const href = `/chat/${c.id}`;
+              const active = pathname === href;
+              return (
+                <Link
+                  key={c.id}
+                  href={href}
+                  title={c.title ?? 'Untitled'}
+                  className={clsx(
+                    'truncate rounded-[10px] px-2.5 py-1.5 text-[13px] transition-colors',
+                    active
+                      ? 'bg-primary-soft font-semibold text-primary-ink'
+                      : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
+                  )}
+                >
+                  {c.title?.trim() || 'Untitled'}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       )}
     </nav>
   );
@@ -206,46 +220,58 @@ export function Sidebar({ role }: { role?: Role }) {
       {/* Desktop: collapsible panel, hidden on mobile */}
       <aside
         className={clsx(
-          'hidden md:flex flex-col shrink-0 border-r dark:border-neutral-800 transition-[width] duration-200',
-          collapsed ? 'w-14' : 'w-60',
+          'hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 md:flex',
+          collapsed ? 'w-[68px]' : 'w-64',
         )}
       >
-        <div className="flex items-center justify-between p-2">
+        <div className={clsx('flex items-center justify-between px-3 py-4', collapsed && 'px-0 justify-center')}>
+          <Brand collapsed={collapsed} />
           {!collapsed && (
-            <span className="px-1 text-sm font-semibold text-neutral-700 dark:text-neutral-300">Zipdev</span>
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label="Collapse sidebar"
+              className="rounded-[10px] p-1.5 text-ink-faint hover:bg-surface-2 hover:text-ink-muted"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
           )}
+        </div>
+        {collapsed && (
           <button
             type="button"
             onClick={toggleCollapsed}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            aria-label="Expand sidebar"
+            className="mx-auto mb-1 rounded-[10px] p-1.5 text-ink-faint hover:bg-surface-2 hover:text-ink-muted"
           >
-            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            <PanelLeftOpen className="h-4 w-4" />
           </button>
-        </div>
+        )}
         <div className="min-h-0 flex-1">
           <SidebarContent role={role} collapsed={collapsed} />
         </div>
       </aside>
 
-      {/* Mobile: Radix Dialog drawer, controlled by MobileSidebarContext */}
+      {/* Mobile: Radix Dialog drawer */}
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 md:hidden" />
-          <Dialog.Content className="fixed inset-y-0 left-0 z-50 w-72 border-r bg-white shadow-xl outline-none dark:border-neutral-800 dark:bg-neutral-950 md:hidden">
-            <div className="flex items-center justify-between p-2">
-              <Dialog.Title className="px-1 text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-                Zipdev
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm md:hidden" />
+          <Dialog.Content className="fixed inset-y-0 left-0 z-50 w-72 border-r border-border bg-surface shadow-xl outline-none md:hidden">
+            <div className="flex items-center justify-between px-3 py-4">
+              <Dialog.Title asChild>
+                <div>
+                  <Brand collapsed={false} />
+                </div>
               </Dialog.Title>
               <Dialog.Close
                 aria-label="Close menu"
-                className="rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                className="rounded-[10px] p-1.5 text-ink-faint hover:bg-surface-2 hover:text-ink-muted"
               >
                 <X className="h-4 w-4" />
               </Dialog.Close>
             </div>
             <Dialog.Description className="sr-only">Navigation menu</Dialog.Description>
-            <div className="h-[calc(100%-3rem)]">
+            <div className="h-[calc(100%-4.5rem)]">
               <SidebarContent role={role} collapsed={false} onNavigate={() => setOpen(false)} />
             </div>
           </Dialog.Content>

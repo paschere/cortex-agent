@@ -2,7 +2,15 @@ import './globals.css';
 import 'highlight.js/styles/github-dark-dimmed.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { Plus_Jakarta_Sans } from 'next/font/google';
 import { Providers } from './providers';
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-jakarta',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Zipdev Agent',
@@ -11,8 +19,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100 antialiased">
+    <html lang="en" className={jakarta.variable}>
+      <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>

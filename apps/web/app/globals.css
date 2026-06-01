@@ -3,10 +3,78 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+
+  /* Canvas & surfaces */
+  --canvas: 250 250 252;        /* app background — faint cool gray */
+  --surface: 255 255 255;       /* cards */
+  --surface-2: 248 248 251;     /* inset / hover */
+  --border: 235 235 240;        /* hairline */
+  --border-strong: 224 224 232;
+
+  /* Ink */
+  --ink: 24 24 33;              /* primary text — near-black with a violet tilt */
+  --ink-muted: 110 110 125;     /* secondary text */
+  --ink-faint: 158 158 172;     /* tertiary / labels */
+
+  /* Brand — violet */
+  --primary: 124 58 237;        /* violet-600 */
+  --primary-strong: 109 40 217; /* violet-700 */
+  --primary-soft: 243 240 255;  /* violet-50 tint for chips */
+  --primary-ink: 91 33 182;     /* text on soft */
+
+  /* Accents for stat chips */
+  --emerald: 16 185 129;
+  --emerald-soft: 236 253 245;
+  --amber: 217 119 6;
+  --amber-soft: 254 249 235;
+  --sky: 2 132 199;
+  --sky-soft: 240 249 255;
+  --rose: 225 29 72;
+  --rose-soft: 255 241 242;
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow-card: 0 1px 2px rgb(20 20 33 / 0.04), 0 1px 3px rgb(20 20 33 / 0.03);
+  --shadow-pop: 0 10px 30px -12px rgb(76 29 149 / 0.25);
 }
 
 html,
 body {
   height: 100%;
 }
+
+body {
+  background: rgb(var(--canvas));
+  color: rgb(var(--ink));
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular, tight numerals for big stat figures */
+.stat-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+}
+
+/* Subtle grain-free violet mesh used behind the hero card */
+.hero-mesh {
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgb(167 139 250) 0%, transparent 45%),
+    radial-gradient(120% 160% at 100% 0%, rgb(139 92 246) 0%, transparent 50%),
+    linear-gradient(115deg, rgb(124 58 237), rgb(91 33 182));
+}
+
+@keyframes fade-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise {
+  animation: fade-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* thin scrollbar for sidebar / panels */
+.scroll-slim::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-slim::-webkit-scrollbar-thumb { background: rgb(224 224 232); border-radius: 8px; }
+.scroll-slim::-webkit-scrollbar-track { background: transparent; }
