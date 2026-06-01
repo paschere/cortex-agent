@@ -159,3 +159,5 @@ export * from './gcal';
 export * from './gsheets';
 export * from './hubspot';
 export * from './kb';
+export * from './recruit';
+export * from './slack';
