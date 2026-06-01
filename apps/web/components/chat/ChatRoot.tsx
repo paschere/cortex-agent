@@ -87,7 +87,13 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
           ))}
         </select>
       </header>
-      <MessageList messages={messages} isLoading={isLoading} conversationId={conversationId} onConfirmed={reload} />
+      <MessageList
+        messages={messages}
+        isLoading={isLoading}
+        conversationId={conversationId}
+        onConfirmed={reload}
+        onSuggestion={handleSend}
+      />
       <InputBar onSend={handleSend} disabled={isLoading} conversationId={conversationId} />
     </div>
   );

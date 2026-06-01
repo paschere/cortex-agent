@@ -73,13 +73,7 @@ export function MessageBubble({ message, conversationId, onConfirmed }: MessageB
         {toolInvocations && toolInvocations.length > 0 && (
           <div className="mt-2 space-y-1">
             {toolInvocations.map((inv) => (
-              <ToolCallCard
-                key={inv.toolCallId}
-                name={inv.toolName}
-                args={inv.args}
-                result={'result' in inv ? (inv as { result: unknown }).result : undefined}
-                state={inv.state}
-              />
+              <ToolCallCard key={inv.toolCallId} invocation={inv} />
             ))}
           </div>
         )}
