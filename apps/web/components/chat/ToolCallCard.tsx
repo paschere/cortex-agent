@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, CheckCircle2, AlertCircle, ChevronDown } from 'lucide-react';
+import { clsx } from 'clsx';
 import { toolLabel } from '@/lib/tool-labels';
 import type { ToolInvocation } from 'ai';
 
@@ -17,47 +18,45 @@ export function ToolCallCard({ invocation }: { invocation: ToolInvocation }) {
     typeof result === 'object' &&
     '__error' in (result as Record<string, unknown>);
 
+  const tint = isRunning
+    ? 'border-amber/30 bg-amber-soft'
+    : isError
+      ? 'border-rose/30 bg-rose-soft'
+      : 'border-emerald/30 bg-emerald-soft';
+
   return (
-    <div
-      className={`rounded-lg border text-xs overflow-hidden ${
-        isRunning
-          ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30'
-          : isError
-            ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
-            : 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30'
-      }`}
-    >
+    <div className={clsx('overflow-hidden rounded-[12px] border text-xs', tint)}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-left"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
       >
         {isRunning ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber" />
         ) : isError ? (
-          <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+          <AlertCircle className="h-3.5 w-3.5 text-rose" />
         ) : (
-          <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald" />
         )}
-        <span className="flex-1 font-medium">{label}</span>
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="flex-1 font-semibold text-ink">{label}</span>
+        <ChevronDown className={clsx('h-3.5 w-3.5 text-ink-faint transition-transform', open && 'rotate-180')} />
       </button>
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-2 space-y-1">
+            <div className="space-y-1.5 px-3 pb-2.5">
               {invocation.args !== undefined && (
-                <pre className="text-[10px] bg-white/50 dark:bg-black/20 rounded p-1.5 overflow-x-auto">
+                <pre className="scroll-slim overflow-x-auto rounded-[8px] bg-surface/70 p-2 text-[10px] leading-relaxed text-ink-muted ring-1 ring-border">
                   {JSON.stringify(invocation.args, null, 2)}
                 </pre>
               )}
               {invocation.state === 'result' && result !== undefined && (
-                <pre className="text-[10px] bg-white/50 dark:bg-black/20 rounded p-1.5 overflow-x-auto">
+                <pre className="scroll-slim max-h-56 overflow-auto rounded-[8px] bg-surface/70 p-2 text-[10px] leading-relaxed text-ink-muted ring-1 ring-border">
                   {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
                 </pre>
               )}

@@ -199,7 +199,8 @@ export async function POST(req: NextRequest) {
     system: agent.systemPrompt + (ragBlock ? `\n\n${ragBlock}` : ''),
     messages: coreMessages,
     tools: aiTools,
-    maxSteps: 8,
+    toolChoice: 'auto',
+    maxSteps: 12,
     onFinish: async ({ text, toolCalls, toolResults, usage }) => {
       try {
         await db.from('messages').insert({

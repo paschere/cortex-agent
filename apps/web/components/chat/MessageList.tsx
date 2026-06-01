@@ -3,6 +3,8 @@
 import { useEffect, useRef } from 'react';
 import type { Message } from 'ai';
 import { MessageBubble } from './MessageBubble';
+import { TypingIndicator } from './TypingIndicator';
+import { EmptyState } from './EmptyState';
 
 interface MessageListProps {
   messages: Message[];
@@ -10,6 +12,7 @@ interface MessageListProps {
   conversationId?: string;
   onConfirmed?: () => void;
   onRegenerate?: () => void;
+  onSuggestion?: (text: string) => void;
 }
 
 export function MessageList({
@@ -18,38 +21,43 @@ export function MessageList({
   conversationId,
   onConfirmed,
   onRegenerate,
+  onSuggestion,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, isLoading]);
+    const el = ref.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
+    if (nearBottom || messages.length <= 1) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+  }, [messages, isLoading]);
+
+  const empty = messages.length === 0 && !isLoading;
 
   return (
-    <div ref={ref} className="flex-1 overflow-y-auto p-4 space-y-3">
-      {messages.length === 0 && !isLoading && (
-        <div className="flex items-center justify-center h-full text-neutral-400 text-sm">
-          Start a conversation...
+    <div ref={ref} className="scroll-slim flex-1 overflow-y-auto">
+      {empty ? (
+        <div className="mx-auto flex h-full w-full max-w-3xl">
+          <EmptyState onSuggestion={(t) => onSuggestion?.(t)} />
         </div>
-      )}
-      {messages.map((m, i) => {
-        const isLast = i === messages.length - 1;
-        return (
-          <MessageBubble
-            key={m.id}
-            message={m}
-            conversationId={conversationId}
-            onConfirmed={onConfirmed}
-            onRegenerate={isLast && m.role === 'assistant' ? onRegenerate : undefined}
-            isStreaming={isLast && isLoading}
-          />
-        );
-      })}
-      {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
-        <div className="flex items-start gap-2">
-          <div className="rounded-2xl px-4 py-2 bg-neutral-100 dark:bg-neutral-800 text-sm text-neutral-500 animate-pulse">
-            Thinking...
-          </div>
+      ) : (
+        <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+          {messages.map((m, i) => {
+            const isLast = i === messages.length - 1;
+            return (
+              <MessageBubble
+                key={m.id}
+                message={m}
+                conversationId={conversationId}
+                onConfirmed={onConfirmed}
+                onRegenerate={isLast && m.role === 'assistant' ? onRegenerate : undefined}
+                isStreaming={isLast && isLoading && m.role === 'assistant'}
+              />
+            );
+          })}
+          {isLoading && messages[messages.length - 1]?.role !== 'assistant' && <TypingIndicator />}
         </div>
       )}
     </div>

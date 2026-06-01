@@ -4,7 +4,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { useChat } from 'ai/react';
 import type { Message } from 'ai';
 import { useRouter } from 'next/navigation';
+import { Menu, Sparkles } from 'lucide-react';
 import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
+import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { CommandPalette } from './CommandPalette';
@@ -25,17 +27,16 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
   const [agentSlug, setAgentSlug] = useState(agents[0]?.slug ?? 'sales');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [draft, setDraft] = useState('');
   const router = useRouter();
+  const { setOpen: setSidebarOpen } = useMobileSidebar();
+
+  const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
 
   const { messages, append, reload, isLoading, setMessages } = useChat({
     api: '/api/chat',
     initialMessages: initialMessages ?? [],
-    body: {
-      agentSlug,
-      conversationId,
-    },
-    // Use experimental_prepareRequestBody to always include latest conversationId
-    // and normalize messages to the shape expected by /api/chat
+    body: { agentSlug, conversationId },
     experimental_prepareRequestBody: (options) => {
       const normalizedMessages = options.messages
         .filter((m) => m.role === 'user' || m.role === 'assistant' || m.role === 'system')
@@ -44,13 +45,8 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
           content: typeof m.content === 'string' ? m.content : '',
         }))
         .filter((m) => m.content.length > 0 || m.role !== 'assistant');
-      const body: Record<string, unknown> = {
-        agentSlug,
-        messages: normalizedMessages,
-      };
-      if (conversationId) {
-        body.conversationId = conversationId;
-      }
+      const body: Record<string, unknown> = { agentSlug, messages: normalizedMessages };
+      if (conversationId) body.conversationId = conversationId;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return body as any;
     },
@@ -64,9 +60,7 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
     sendExtraMessageFields: false,
   });
 
-  async function handleSend(text: string) {
-    await append({ role: 'user', content: text });
-  }
+  const handleSend = useCallback((text: string) => void append({ role: 'user', content: text }), [append]);
 
   const hotkeys = useMemo(
     () => ({
@@ -77,29 +71,49 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
   );
   useGlobalHotkeys(hotkeys);
 
-  const handleRegenerate = useCallback(() => {
-    void reload();
-  }, [reload]);
-
-  const handleAgentChange = useCallback((slug: string) => {
-    setAgentSlug(slug);
-    setMessages([]);
-  }, [setMessages]);
+  const handleRegenerate = useCallback(() => void reload(), [reload]);
+  const handleAgentChange = useCallback(
+    (slug: string) => {
+      setAgentSlug(slug);
+      setMessages([]);
+    },
+    [setMessages],
+  );
 
   return (
-    <div className="flex flex-col h-full max-w-3xl mx-auto w-full">
-      <header className="border-b px-4 py-3 flex items-center justify-between text-sm shrink-0">
-        <span className="font-semibold text-neutral-700 dark:text-neutral-300">
-          {initialConvId ? 'Conversation' : 'New Chat'}
-        </span>
+    <div className="flex h-full flex-col bg-canvas">
+      <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur-md">
+        <button
+          type="button"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Open menu"
+          className="rounded-[10px] p-1.5 text-ink-muted hover:bg-surface-2 md:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-7 w-7 place-items-center rounded-[9px] bg-gradient-to-br from-primary to-primary-strong text-white">
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div className="leading-tight">
+            <div className="text-sm font-bold text-ink">{activeAgent?.name ?? 'Chat'}</div>
+            <div className="flex items-center gap-1.5 text-[11px] text-ink-faint">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald" />
+              {conversationId ? 'Conversation' : 'New chat'}
+            </div>
+          </div>
+        </div>
       </header>
+
       <MessageList
         messages={messages}
         isLoading={isLoading}
         conversationId={conversationId}
         onConfirmed={reload}
         onRegenerate={handleRegenerate}
+        onSuggestion={setDraft}
       />
+
       <InputBar
         onSend={handleSend}
         disabled={isLoading}
@@ -107,7 +121,10 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
         agents={agents}
         agentSlug={agentSlug}
         onAgentChange={handleAgentChange}
+        draft={draft}
+        onDraftConsumed={() => setDraft('')}
       />
+
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );

@@ -2,7 +2,8 @@
 
 import type { Message, ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
-import { Copy, RotateCw } from 'lucide-react';
+import { Copy, RotateCw, Sparkles, Check } from 'lucide-react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -30,10 +31,6 @@ function isConfirmationSentinel(v: unknown): v is ConfirmationSentinel {
   return o.__requires_confirmation === true && typeof o.toolId === 'string';
 }
 
-/**
- * The Sales composite proposal tool. The AI SDK normalizes the registered id
- * `sales.draft_proposal` to `sales_draft_proposal`; accept both forms.
- */
 function isProposalTool(toolName: string): boolean {
   return toolName === 'sales_draft_proposal' || toolName === 'sales.draft_proposal';
 }
@@ -50,6 +47,23 @@ function isProposalResult(v: unknown): v is ProposalResult {
   );
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text);
+        setDone(true);
+        setTimeout(() => setDone(false), 1400);
+      }}
+      className="rounded-[8px] p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
+      aria-label="Copy message"
+    >
+      {done ? <Check className="h-3.5 w-3.5 text-emerald" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
 export function MessageBubble({
   message,
   conversationId,
@@ -58,51 +72,56 @@ export function MessageBubble({
   isStreaming,
 }: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
-
-  // Skip data role messages
   if (role === 'data') return null;
-
   const isUser = role === 'user';
 
-  // Find any confirmation-required tool invocations
   const confirmationInvocation = toolInvocations?.find(
     (inv): inv is ToolInvocation & { state: 'result' } =>
       inv.state === 'result' && isConfirmationSentinel((inv as { result?: unknown }).result),
   );
-
   const confirmationData = confirmationInvocation
     ? (confirmationInvocation as unknown as { result: ConfirmationSentinel }).result
     : null;
 
-  return (
-    <div className={clsx('group relative flex flex-col', isUser ? 'items-end' : 'items-start')}>
-      <div
-        className={clsx(
-          'rounded-2xl px-4 py-2 max-w-[80%] text-sm',
-          isUser
-            ? 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900'
-            : 'bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100',
-        )}
-      >
-        {content && isUser && (
-          <div className="whitespace-pre-wrap">{content}</div>
-        )}
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[82%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-white shadow-pop">
+          {content}
+        </div>
+      </div>
+    );
+  }
 
-        {content && !isUser && (
-          <div className="prose prose-sm dark:prose-invert max-w-none overflow-x-auto prose-headings:mt-2 prose-p:mt-1 prose-p:mb-0 prose-li:my-0 prose-ul:my-1 prose-ol:my-1">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeHighlight]}
-            >
+  return (
+    <div className="group flex items-start gap-3">
+      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-primary-strong text-white">
+        <Sparkles className="h-4 w-4" />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        {content && (
+          <div
+            className={clsx(
+              'prose prose-sm max-w-none text-ink',
+              'prose-headings:mt-3 prose-headings:font-bold prose-headings:text-ink',
+              'prose-p:my-1.5 prose-p:leading-relaxed prose-li:my-0.5',
+              'prose-strong:text-ink prose-strong:font-semibold',
+              'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
+              'prose-code:rounded prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-medium prose-code:text-primary-ink prose-code:before:content-[""] prose-code:after:content-[""]',
+              'prose-pre:rounded-[12px] prose-pre:border prose-pre:border-border',
+              'prose-table:text-[13px] prose-th:text-ink prose-td:text-ink-muted',
+              isStreaming && 'after:ml-0.5 after:animate-pulse after:text-primary after:content-["▋"]',
+            )}
+          >
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
               {content}
             </ReactMarkdown>
           </div>
         )}
 
-        {/* Tool call cards — render the structured ProposalCard for a completed
-            sales_draft_proposal result, otherwise the generic ToolCallCard. */}
         {toolInvocations && toolInvocations.length > 0 && (
-          <div className="mt-2 space-y-1">
+          <div className="mt-2 space-y-1.5">
             {toolInvocations.map((inv) => {
               const proposalResult =
                 isProposalTool(inv.toolName) && inv.state === 'result'
@@ -116,37 +135,32 @@ export function MessageBubble({
           </div>
         )}
 
-        {/* Confirmation prompt for tool requiring confirmation */}
         {confirmationData && conversationId && (
-          <ConfirmationPrompt
-            conversationId={conversationId}
-            toolId={confirmationData.toolId}
-            input={confirmationData.input}
-            onConfirmed={onConfirmed}
-          />
+          <div className="mt-2">
+            <ConfirmationPrompt
+              conversationId={conversationId}
+              toolId={confirmationData.toolId}
+              input={confirmationData.input}
+              onConfirmed={onConfirmed}
+            />
+          </div>
+        )}
+
+        {!isStreaming && content && (
+          <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            <CopyButton text={content} />
+            {onRegenerate && (
+              <button
+                onClick={onRegenerate}
+                className="rounded-[8px] p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
+                aria-label="Regenerate response"
+              >
+                <RotateCw className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         )}
       </div>
-
-      {!isUser && !isStreaming && content && (
-        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => navigator.clipboard.writeText(content)}
-            className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800"
-            aria-label="Copy"
-          >
-            <Copy className="w-3.5 h-3.5 text-neutral-400" />
-          </button>
-          {onRegenerate && (
-            <button
-              onClick={onRegenerate}
-              className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800"
-              aria-label="Regenerate"
-            >
-              <RotateCw className="w-3.5 h-3.5 text-neutral-400" />
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }
