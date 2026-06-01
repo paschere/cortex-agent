@@ -19,6 +19,7 @@ export * from './gsheets';
 export * from './hubspot';
 export * from './kb';
 export * from './gdrive';
+export * from './payroll';
 export * from './web';
 export * from './format';
 export * from './recruit';

@@ -17,6 +17,8 @@ const schema = z.object({
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1),
   RATE_ESTIMATOR_URL: z.string().url(),
   RATE_ESTIMATOR_SERVICE_TOKEN: z.string().min(1),
+  PAYROLL_API_URL: z.string().url().optional(),
+  PAYROLL_API_TOKEN: z.string().min(1).optional(),
   INNGEST_EVENT_KEY: z.string().min(1),
   INNGEST_SIGNING_KEY: z.string().min(1),
   TOKEN_ENCRYPTION_KEY: z.string().regex(/^[A-Za-z0-9+/=]{44}$/, 'must be base64-encoded 32-byte key (exactly 44 chars)'),

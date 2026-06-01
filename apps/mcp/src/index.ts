@@ -15,6 +15,8 @@ export interface Env {
   GOOGLE_GENERATIVE_AI_API_KEY: string;
   RATE_ESTIMATOR_URL: string;
   RATE_ESTIMATOR_SERVICE_TOKEN: string;
+  PAYROLL_API_URL?: string;
+  PAYROLL_API_TOKEN?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
