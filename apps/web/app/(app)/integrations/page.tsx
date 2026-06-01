@@ -1,6 +1,11 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import Link from 'next/link';
+import { AddMcpServerForm } from './_components/AddMcpServerForm';
+import { McpServerList, type McpServer } from './_components/McpServerList';
+
+const MAX_MCP_SERVERS = 5;
+const MAX_MCP_TOOLS = 50;
 
 export default async function IntegrationsPage({
   searchParams,
@@ -16,6 +21,38 @@ export default async function IntegrationsPage({
     .eq('user_id', user.id);
 
   const byProvider = Object.fromEntries((rows ?? []).map((r) => [r.provider, r]));
+
+  const { data: mcpRows } = await db
+    .from('user_mcp_servers')
+    .select(
+      'id, name, url, auth_type, auth_value_encrypted, enabled, trusted, tool_count, last_checked_at, last_error, user_mcp_tools(tool_name, tool_description)',
+    )
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true });
+
+  const mcpServers: McpServer[] = (mcpRows ?? []).map((r) => {
+    const row = r as Record<string, unknown> & {
+      auth_value_encrypted: string | null;
+      user_mcp_tools?: Array<{ tool_name: string; tool_description: string | null }>;
+    };
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      url: row.url as string,
+      auth_type: row.auth_type as McpServer['auth_type'],
+      enabled: row.enabled as boolean,
+      trusted: row.trusted as boolean,
+      tool_count: (row.tool_count as number) ?? 0,
+      last_checked_at: (row.last_checked_at as string | null) ?? null,
+      last_error: (row.last_error as string | null) ?? null,
+      authConfigured: !!row.auth_value_encrypted,
+      tools: row.user_mcp_tools ?? [],
+    };
+  });
+
+  const atServerCapacity = mcpServers.length >= MAX_MCP_SERVERS;
+  const totalTools = mcpServers.reduce((sum, s) => sum + s.tool_count, 0);
+  const atToolCapacity = totalTools >= MAX_MCP_TOOLS;
 
   return (
     <div className="space-y-6">
@@ -84,6 +121,37 @@ export default async function IntegrationsPage({
             </Link>
           )}
         </header>
+      </section>
+
+      <section className="rounded-2xl border p-5">
+        <header>
+          <h2 className="font-medium">External MCP Servers</h2>
+          <p className="text-sm text-neutral-500">
+            Connect your own Model Context Protocol servers (Notion, Linear, self-hosted). Their
+            tools become available to the agent. Max {MAX_MCP_SERVERS} servers, {MAX_MCP_TOOLS}{' '}
+            tools total.
+          </p>
+        </header>
+
+        <McpServerList servers={mcpServers} />
+
+        {atServerCapacity && (
+          <p className="mt-4 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/20">
+            Max {MAX_MCP_SERVERS} servers reached. Delete one to add another.
+          </p>
+        )}
+        {atToolCapacity && (
+          <p className="mt-2 rounded bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/20">
+            50-tool total limit reached. New tools will not be synced until you remove some.
+          </p>
+        )}
+
+        {!atServerCapacity && (
+          <div className="mt-4 border-t pt-4">
+            <h3 className="text-sm font-medium">Add a server</h3>
+            <AddMcpServerForm disabled={atServerCapacity} />
+          </div>
+        )}
       </section>
     </div>
   );

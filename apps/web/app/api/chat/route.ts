@@ -1,12 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { google } from '@ai-sdk/google';
-import { streamText, generateText, tool, type CoreMessage } from 'ai';
+import { streamText, generateText, tool, jsonSchema, type CoreMessage, type CoreTool } from 'ai';
 import { z } from 'zod';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildToolContext } from '@/lib/agent';
 import { loadAgent } from '@zipdev/agents';
-import { filterTools, runTool, kbSearch } from '@zipdev/agent-tools';
+import {
+  filterTools,
+  runTool,
+  kbSearch,
+  fetchEnabledExternalTools,
+  callExternalTool,
+  type ExternalServerRow,
+} from '@zipdev/agent-tools';
 import { ConfirmationRequiredError } from '@zipdev/core';
 
 export const runtime = 'nodejs';
@@ -108,7 +115,7 @@ export async function POST(req: NextRequest) {
   // AI SDK requires tool names matching ^[a-zA-Z0-9_-]+$ — replace dots with underscores
   // Build reverse map to find original tool by its AI SDK name
   const toolNameToId = new Map<string, string>();
-  const aiTools = Object.fromEntries(
+  const aiTools: Record<string, CoreTool> = Object.fromEntries(
     allowed.map((t) => {
       const sdkName = t.id.replaceAll('.', '_');
       toolNameToId.set(sdkName, t.id);
@@ -136,6 +143,30 @@ export async function POST(req: NextRequest) {
       ];
     }),
   );
+
+  // Inject per-user external (dynamic) MCP tools. Failures here must never
+  // break the chat turn, so the whole fetch is best-effort.
+  const externalServers = await fetchEnabledExternalTools(db, user.id).catch(() => []);
+  for (const { server, tools } of externalServers) {
+    for (const t of tools) {
+      const prefix = 'mcp_' + server.id.replace(/-/g, '').slice(0, 16) + '_';
+      const sdkName = (prefix + t.tool_name).slice(0, 64);
+      aiTools[sdkName] = tool({
+        description: (t.tool_description ?? '').slice(0, 500),
+        parameters: jsonSchema((t.input_schema_json ?? { type: 'object', properties: {} }) as Parameters<typeof jsonSchema>[0]),
+        execute: async (args, { abortSignal }) => {
+          if (!server.trusted) {
+            return { __requires_confirmation: true, toolId: sdkName, input: args } as unknown as never;
+          }
+          return callExternalTool(server as unknown as ExternalServerRow, t.tool_name, args, {
+            userId: user.id,
+            db,
+            signal: abortSignal,
+          });
+        },
+      });
+    }
+  }
 
   let coreMessages: CoreMessage[] = messages.map((m) => ({
     role: m.role as 'user' | 'assistant' | 'system',
