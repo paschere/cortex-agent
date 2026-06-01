@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useChat } from 'ai/react';
 import type { Message } from 'ai';
-import { useRouter } from 'next/navigation';
 import { Menu, Sparkles } from 'lucide-react';
 import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
@@ -28,7 +27,6 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [draft, setDraft] = useState('');
-  const router = useRouter();
   const { setOpen: setSidebarOpen } = useMobileSidebar();
 
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
@@ -54,7 +52,11 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
       const newConvId = response.headers.get('X-Conversation-Id');
       if (newConvId && newConvId !== conversationId) {
         setConversationId(newConvId);
-        router.replace(`/chat/${newConvId}`);
+        // Update the URL WITHOUT a Next.js navigation. router.replace() would
+        // remount the [conversationId] route and reload initialMessages from the
+        // DB mid-stream — wiping the messages until a manual reload. history API
+        // changes the address bar while keeping the live useChat state intact.
+        window.history.replaceState(null, '', `/chat/${newConvId}`);
       }
     },
     sendExtraMessageFields: false,
