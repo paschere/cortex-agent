@@ -9,7 +9,22 @@ export const rateEstimate = registerTool({
   description:
     'Estimate monthly USD rate for a LATAM staffing role. Returns a min/max range with notes. Uses the Zipdev 2026-Q1 pricing table.',
   inputSchema: z.object({
-    role: z.enum(['frontend', 'backend', 'fullstack', 'data', 'devops', 'qa', 'pm', 'designer']),
+    role: z.enum([
+      'frontend',
+      'backend',
+      'fullstack',
+      'data',
+      'devops',
+      'qa',
+      'pm',
+      'designer',
+      'mobile',
+      'ml_engineer',
+      'security',
+      'sre',
+      'other',
+    ]),
+    openRole: z.string().optional().describe('Free-text role description; used when role is "other"'),
     seniority: z.enum(['junior', 'mid', 'senior', 'lead']),
     region: z.enum(['mx', 'latam', 'br', 'ar', 'co', 'cl', 'pe']),
     yearsExperience: z.number().int().min(0).max(40),

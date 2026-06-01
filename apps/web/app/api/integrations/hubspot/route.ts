@@ -10,6 +10,9 @@ const SCOPES = [
   'crm.objects.contacts.read',
   'crm.schemas.companies.read',
   'crm.schemas.deals.read',
+  'crm.objects.contacts.write',
+  'crm.objects.deals.write',
+  'crm.objects.notes.write',
   'oauth',
 ];
 
