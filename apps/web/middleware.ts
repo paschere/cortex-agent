@@ -11,6 +11,10 @@ const PUBLIC_PATHS = [
   '/.well-known/oauth-protected-resource',
   '/.well-known/oauth-authorization-server',
   '/api/oauth',
+  // The MCP endpoint authenticates with an OAuth bearer token (no better-auth
+  // session cookie), so it must bypass the session-cookie redirect. It enforces
+  // its own bearer validation and returns 401 + WWW-Authenticate when missing.
+  '/api/mcp',
 ];
 
 interface SessionPayload {
