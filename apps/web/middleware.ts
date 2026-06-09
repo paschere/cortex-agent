@@ -1,6 +1,17 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/api/auth', '/_next', '/favicon.ico'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/api/auth',
+  '/_next',
+  '/favicon.ico',
+  // OAuth 2.1 authorization server + discovery for the MCP connector. These
+  // endpoints are bearer-only / public metadata; the authorize route enforces
+  // its own session check and redirects to /login when needed.
+  '/.well-known/oauth-protected-resource',
+  '/.well-known/oauth-authorization-server',
+  '/api/oauth',
+];
 
 interface SessionPayload {
   user?: { id: string; email: string };
