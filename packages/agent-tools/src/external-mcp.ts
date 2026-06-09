@@ -109,6 +109,39 @@ export function isPrivateUrl(rawUrl: string): boolean {
   return PRIVATE_PATTERNS.some((p) => p.test(host));
 }
 
+/**
+ * Stronger SSRF guard: the string check above blocks IP literals, but a
+ * hostname like `evil.com` can resolve to 127.0.0.1 or 169.254.169.254
+ * (DNS rebinding) and pass it. This additionally resolves the hostname and
+ * rejects it if ANY resolved address is private.
+ *
+ * DNS resolution is Node-only; in the Cloudflare Worker runtime `node:dns` is
+ * unavailable, so we fall back to the string check + the platform's own egress
+ * filtering. Throws an Error starting with "Blocked" when the host is unsafe.
+ */
+export async function assertPublicHost(rawUrl: string): Promise<void> {
+  if (isPrivateUrl(rawUrl)) {
+    throw new Error(`Blocked: ${rawUrl} is a private, loopback, or malformed URL`);
+  }
+  const host = new URL(rawUrl).hostname.replace(/^\[|\]$/g, '');
+  // If the host is already an IP literal, isPrivateUrl covered it.
+  if (/^[0-9.]+$/.test(host) || host.includes(':')) return;
+  try {
+    const dns = await import('node:dns/promises');
+    const records = await dns.lookup(host, { all: true });
+    for (const r of records) {
+      const probe = r.address.includes(':') ? `http://[${r.address}]` : `http://${r.address}`;
+      if (isPrivateUrl(probe)) {
+        throw new Error(`Blocked: ${host} resolves to private IP ${r.address}`);
+      }
+    }
+  } catch (err) {
+    // Re-throw our own block; swallow "dns unavailable" (Workers) and let the
+    // real fetch surface genuine resolution failures (ENOTFOUND, etc.).
+    if (err instanceof Error && err.message.startsWith('Blocked')) throw err;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Low-level MCP SSE client
 // ---------------------------------------------------------------------------
@@ -308,9 +341,7 @@ export async function fetchExternalToolManifest(
   authType: string,
   authValueDecrypted: string | null,
 ): Promise<ExternalToolManifestEntry[]> {
-  if (isPrivateUrl(serverUrl)) {
-    throw new Error(`SSRF blocked: ${serverUrl} is a private/disallowed URL`);
-  }
+  await assertPublicHost(serverUrl); // string + DNS-resolution SSRF guard
 
   const signal = AbortSignal.timeout(MANIFEST_GET_TIMEOUT_MS);
   const headers = authHeaders(authType, authValueDecrypted);
@@ -357,9 +388,7 @@ export async function callExternalTool(
   args: unknown,
   ctx: { userId: string; db: SupabaseClient; signal?: AbortSignal },
 ): Promise<unknown> {
-  if (isPrivateUrl(server.url)) {
-    throw new Error(`SSRF blocked: ${server.url} is a private/disallowed URL`);
-  }
+  await assertPublicHost(server.url); // string + DNS-resolution SSRF guard
 
   // Rate limit external proxy calls per (user, server).
   await consumeToken(ctx.db, ctx.userId, `mcp_proxy:${server.id}`, 30);

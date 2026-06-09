@@ -1,6 +1,7 @@
 import { IntegrationError } from '@zipdev/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { assertPublicHost } from '../external-mcp';
 
 /**
  * String/hostname-based SSRF guard. Blocks loopback, link-local, cloud metadata,
@@ -65,6 +66,12 @@ export const webScrape = registerTool({
         "LinkedIn URLs return a login wall — use web_search with the person's name instead",
         'web',
       );
+    }
+    // DNS-resolution SSRF guard (catches hostnames that resolve to private IPs).
+    try {
+      await assertPublicHost(input.url);
+    } catch (err) {
+      throw new IntegrationError(err instanceof Error ? err.message : 'URL not allowed', 'web');
     }
 
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
