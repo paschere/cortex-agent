@@ -44,7 +44,8 @@
     "rehype-highlight": "^7.0.0",
     "remark-gfm": "^4.0.0",
     "tailwind-merge": "2.5.5",
-    "zod": "3.25.28"
+    "zod": "3.25.28",
+    "zod-to-json-schema": "3.24.1"
   },
   "devDependencies": {
     "@playwright/test": "1.49.1",
