@@ -14,7 +14,9 @@ const PUBLIC_PATHS = [
   // The MCP endpoint authenticates with an OAuth bearer token (no better-auth
   // session cookie), so it must bypass the session-cookie redirect. It enforces
   // its own bearer validation and returns 401 + WWW-Authenticate when missing.
+  // '/mcp' is the canonical public URL (rewritten to /api/mcp in next.config).
   '/api/mcp',
+  '/mcp',
 ];
 
 interface SessionPayload {

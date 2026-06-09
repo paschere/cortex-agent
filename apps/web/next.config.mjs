@@ -16,6 +16,11 @@ const config = {
     };
     return webpackConfig;
   },
+  async rewrites() {
+    // Canonical MCP connector URL is /mcp (matches the RFC 9728 resource id and
+    // the path-based protected-resource metadata). The handler lives at /api/mcp.
+    return [{ source: '/mcp', destination: '/api/mcp' }];
+  },
   async headers() {
     return [
       {
