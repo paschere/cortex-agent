@@ -114,7 +114,7 @@ async function validate(
 
 function consentHtml(p: AuthParams, clientName: string, userEmail: string): string {
   // The original query string is preserved as hidden inputs and re-submitted.
-  const fields = [
+  const fields: [string, string][] = [
     ['response_type', p.responseType],
     ['client_id', p.clientId],
     ['redirect_uri', p.redirectUri],
