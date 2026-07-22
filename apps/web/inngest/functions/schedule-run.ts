@@ -1,0 +1,252 @@
+import { buildToolContext } from '@/lib/agent';
+import { sendEmail } from '@/lib/email';
+import { inngest } from '@/lib/inngest';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { google } from '@ai-sdk/google';
+import { filterTools, getTool, runTool } from '@zipdev/agent-tools';
+import { type CoreTool, generateText, tool } from 'ai';
+
+const MAX_OUTPUT_CHARS = 8000;
+
+interface JobRow {
+  id: string;
+  user_id: string;
+  agent_id: string;
+  name: string;
+  kind: 'tool' | 'agent';
+  tool_id: string | null;
+  tool_input: Record<string, unknown> | null;
+  instruction: string | null;
+  schedule_kind: 'once' | 'cron';
+  status: string;
+  allow_unattended_writes: boolean;
+  notify_conversation: boolean;
+  notify_email: boolean;
+  conversation_id: string | null;
+  user_email: string | null;
+}
+
+interface ExecResult {
+  ok: boolean;
+  output: string;
+  error?: string;
+}
+
+function truncate(s: string): string {
+  return s.length > MAX_OUTPUT_CHARS ? `${s.slice(0, MAX_OUTPUT_CHARS)}\n… (truncated)` : s;
+}
+
+/** Run the job's fixed tool call. Never throws — errors become the result. */
+async function executeToolJob(job: JobRow): Promise<ExecResult> {
+  const toolDef = getTool(job.tool_id ?? '');
+  if (!toolDef) return { ok: false, output: '', error: `Unknown tool: ${job.tool_id}` };
+  const ctx = buildToolContext({ userId: job.user_id, agentId: job.agent_id });
+  try {
+    const result = await runTool(toolDef, job.tool_input ?? {}, ctx, {
+      confirmed: job.allow_unattended_writes,
+    });
+    return { ok: true, output: truncate(JSON.stringify(result, null, 2)) };
+  } catch (err) {
+    return { ok: false, output: '', error: (err as Error).message.slice(0, 2000) };
+  }
+}
+
+/**
+ * Run an unattended agent turn: same tool wiring as the chat route, but with
+ * no human available — confirmation-gated tools are skipped unless the job
+ * opted into unattended writes.
+ */
+async function executeAgentJob(job: JobRow): Promise<ExecResult> {
+  const db = getSupabaseServiceClient();
+  const { data: agent, error } = await db
+    .from('agents')
+    .select('id, system_prompt, default_model, allowed_tool_ids')
+    .eq('id', job.agent_id)
+    .single();
+  if (error || !agent) return { ok: false, output: '', error: `Agent ${job.agent_id} not found` };
+
+  const ctx = buildToolContext({ userId: job.user_id, agentId: job.agent_id });
+  const allowed = filterTools(agent.allowed_tool_ids as string[]);
+
+  const aiTools: Record<string, CoreTool> = Object.fromEntries(
+    allowed.map((t) => [
+      t.id.replaceAll('.', '_'),
+      tool({
+        description: t.description,
+        parameters: t.inputSchema,
+        execute: async (args, { abortSignal }) => {
+          if (t.requiresConfirmation && !job.allow_unattended_writes) {
+            return {
+              __skipped: true,
+              tool: t.id,
+              reason:
+                'This tool requires human confirmation and the job does not allow unattended writes. Report this to the user instead.',
+            } as unknown as never;
+          }
+          try {
+            return await runTool(
+              t,
+              args,
+              { ...ctx, signal: abortSignal },
+              { confirmed: job.allow_unattended_writes },
+            );
+          } catch (err) {
+            return {
+              __error: true,
+              tool: t.id,
+              message: (err as Error).message.slice(0, 600),
+            } as unknown as never;
+          }
+        },
+      }),
+    ]),
+  );
+
+  const system = `${agent.system_prompt as string}
+
+---
+UNATTENDED SCHEDULED RUN. You are executing the scheduled job "${job.name}" with no human present:
+- Do NOT ask questions or wait for confirmation — nobody will answer.
+- If a tool returns __skipped (requires confirmation), note it in your report and move on.
+- Finish with a single self-contained report of what you did and found, in the language of the instruction.`;
+
+  try {
+    const result = await generateText({
+      model: google(agent.default_model as string),
+      system,
+      messages: [{ role: 'user', content: job.instruction ?? '' }],
+      tools: aiTools,
+      toolChoice: 'auto',
+      maxSteps: 12,
+    });
+    const text = result.text.trim();
+    if (!text) return { ok: false, output: '', error: 'Agent produced no final text' };
+    return { ok: true, output: truncate(text) };
+  } catch (err) {
+    return { ok: false, output: '', error: (err as Error).message.slice(0, 2000) };
+  }
+}
+
+export const scheduleRun = inngest.createFunction(
+  { id: 'schedule-run', concurrency: { limit: 5 } },
+  { event: 'scheduled/job.run' },
+  async ({ event, step }) => {
+    const jobId = event.data.jobId as string;
+    const scheduledFor = event.data.scheduledFor as string;
+
+    const job = await step.run('load-job', async (): Promise<JobRow | null> => {
+      const db = getSupabaseServiceClient();
+      const { data, error } = await db
+        .from('scheduled_jobs')
+        .select(
+          'id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id',
+        )
+        .eq('id', jobId)
+        .maybeSingle();
+      if (error) throw new Error(`Failed to load job ${jobId}: ${error.message}`);
+      if (!data) return null;
+      const { data: user } = await db
+        .from('users')
+        .select('email')
+        .eq('id', data.user_id as string)
+        .maybeSingle();
+      return { ...data, user_email: (user?.email as string | null) ?? null } as JobRow;
+    });
+
+    // Cancelled/paused between dispatch and execution — do nothing.
+    if (!job) return { skipped: 'job not found' };
+    if (job.status !== 'active') return { skipped: `job is ${job.status}` };
+
+    const runId = await step.run('create-run', async () => {
+      const db = getSupabaseServiceClient();
+      const { data, error } = await db
+        .from('scheduled_job_runs')
+        .insert({ job_id: job.id, status: 'running', metadata: { scheduledFor } })
+        .select('id')
+        .single();
+      if (error || !data) throw new Error(`Failed to create run row: ${error?.message}`);
+      return data.id as string;
+    });
+
+    // Execution never throws: failures are captured in the result so Inngest
+    // does not retry (and possibly double-execute) side-effectful work.
+    const result = await step.run(
+      'execute',
+      async (): Promise<ExecResult> =>
+        job.kind === 'tool' ? executeToolJob(job) : executeAgentJob(job),
+    );
+
+    if (job.notify_conversation) {
+      await step.run('deliver-conversation', async () => {
+        const db = getSupabaseServiceClient();
+        let conversationId = job.conversation_id;
+        if (!conversationId) {
+          const { data: conv, error } = await db
+            .from('conversations')
+            .insert({
+              user_id: job.user_id,
+              agent_id: job.agent_id,
+              surface: 'web',
+              title: `⏱ ${job.name}`.slice(0, 60),
+            })
+            .select('id')
+            .single();
+          if (error || !conv) throw new Error(`Failed to create conversation: ${error?.message}`);
+          conversationId = conv.id as string;
+          await db
+            .from('scheduled_jobs')
+            .update({ conversation_id: conversationId })
+            .eq('id', job.id);
+        }
+        const content = result.ok
+          ? `**Scheduled run — ${job.name}**\n\n${result.output}`
+          : `**Scheduled run — ${job.name}** failed:\n\n${result.error}`;
+        const { error: msgErr } = await db
+          .from('messages')
+          .insert({ conversation_id: conversationId, role: 'assistant', content });
+        if (msgErr) throw new Error(`Failed to insert message: ${msgErr.message}`);
+        return conversationId;
+      });
+    }
+
+    if (job.notify_email && job.user_email) {
+      await step.run('deliver-email', async () =>
+        sendEmail({
+          to: job.user_email as string,
+          subject: `[Zipdev Agent] ${job.name} — ${result.ok ? 'done' : 'failed'}`,
+          text: result.ok ? result.output : `The scheduled job failed:\n\n${result.error}`,
+        }),
+      );
+    }
+
+    await step.run('finalize', async () => {
+      const db = getSupabaseServiceClient();
+      const { error: runErr } = await db
+        .from('scheduled_job_runs')
+        .update({
+          status: result.ok ? 'ok' : 'error',
+          finished_at: new Date().toISOString(),
+          output: result.ok ? result.output : null,
+          error: result.ok ? null : result.error,
+        })
+        .eq('id', runId);
+      if (runErr) throw new Error(`Failed to finalize run: ${runErr.message}`);
+
+      await db
+        .from('scheduled_jobs')
+        .update({ last_run_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', job.id);
+      // One-offs are done after their single run (guarded so a cancel that
+      // happened mid-run is not clobbered back to completed).
+      if (job.schedule_kind === 'once') {
+        await db
+          .from('scheduled_jobs')
+          .update({ status: 'completed' })
+          .eq('id', job.id)
+          .eq('status', 'active');
+      }
+    });
+
+    return { ok: result.ok, runId };
+  },
+);

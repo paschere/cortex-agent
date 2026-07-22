@@ -1,13 +1,13 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { UploadDropzone } from './UploadDropzone';
-import { DocumentList } from './DocumentList';
-import { DriveConnect } from './DriveConnect';
-import { TestSearchBox } from './TestSearchBox';
 import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useState } from 'react';
+import { DocumentList } from './DocumentList';
+import { DriveSyncPanel } from './DriveSyncPanel';
+import { TestSearchBox } from './TestSearchBox';
+import { UploadDropzone } from './UploadDropzone';
 
 interface Collection {
   id: string;
@@ -37,9 +37,7 @@ export function CollectionView({
     const j = await r.json();
     const all = (j.collections as Collection[]) ?? [];
     const filtered = all.filter(
-      (c) =>
-        c.scope === scope &&
-        (scopeId ? c.scope_id === scopeId : c.scope_id === null),
+      (c) => c.scope === scope && (scopeId ? c.scope_id === scopeId : c.scope_id === null),
     );
     setCollections(filtered);
     setSelectedId((prev) => {
@@ -123,10 +121,7 @@ export function CollectionView({
               }}
             />
           </Card>
-          <Card>
-            <h2 className="font-medium mb-3">Google Drive sync</h2>
-            <DriveConnect />
-          </Card>
+          <DriveSyncPanel collectionId={selected.id} />
           <Card>
             <h2 className="font-medium mb-3">Documents</h2>
             <DocumentList collectionId={selected.id} />

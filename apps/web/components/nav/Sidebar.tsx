@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import {
+  AlarmClock,
   LayoutDashboard,
   MessageSquare,
   MessagesSquare,
@@ -55,6 +56,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: '/agents', label: 'Agents', icon: Bot },
       { href: '/integrations', label: 'Integrations', icon: Plug },
+      { href: '/schedules', label: 'Scheduled Jobs', icon: AlarmClock },
       { href: '/mcp-tokens', label: 'MCP Servers', icon: KeyRound },
       { href: '/chat?tool=rate', label: 'Rate Calculator', icon: Calculator },
     ],

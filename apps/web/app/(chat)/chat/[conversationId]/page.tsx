@@ -49,10 +49,11 @@ export default async function ResumeChatPage({
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 
-  // Verify conversation ownership
+  // Verify conversation ownership (and recover its agent so a resumed chat
+  // stays on the same agent instead of defaulting to the first in the list).
   const { data: conv } = await db
     .from('conversations')
-    .select('id')
+    .select('id, agents(slug)')
     .eq('id', conversationId)
     .eq('user_id', user.id)
     .maybeSingle();
@@ -81,11 +82,15 @@ export default async function ResumeChatPage({
       };
     });
 
+  const convAgents = conv.agents as { slug: string } | { slug: string }[] | null;
+  const convAgentSlug = Array.isArray(convAgents) ? convAgents[0]?.slug : convAgents?.slug;
+
   return (
     <ChatRoot
       agents={agents}
       conversationId={conversationId}
       initialMessages={initialMessages}
+      initialAgentSlug={convAgentSlug}
     />
   );
 }

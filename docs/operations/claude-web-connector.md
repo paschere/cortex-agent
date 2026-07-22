@@ -22,6 +22,17 @@ https://app.zipdev.com/api/mcp
 
 That is the only URL you paste. Everything else is auto-discovered.
 
+## Claude Code
+
+The repo ships a project-scoped `.mcp.json` pointing at
+`https://app.zipdev.com/mcp`, so anyone opening this repo in Claude Code gets
+the Zipdev tools after approving the server (Claude Code runs the same OAuth
+flow in the browser). To use it in any other project or globally:
+
+```bash
+claude mcp add --transport http zipdev https://app.zipdev.com/mcp
+```
+
 ## What happens after you paste the URL
 
 1. claude.ai calls `GET <issuer>/api/mcp` with no token and gets a `401` whose

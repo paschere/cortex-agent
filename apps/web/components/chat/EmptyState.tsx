@@ -1,7 +1,20 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { BarChart2, FileText, Calendar, Search, UserCheck, Mail, Activity, Sparkles } from 'lucide-react';
+import {
+  BarChart2,
+  FileText,
+  Calendar,
+  Search,
+  UserCheck,
+  Mail,
+  Activity,
+  Sparkles,
+  Users,
+  Calculator,
+  AlarmClock,
+  HeartHandshake,
+} from 'lucide-react';
 
 interface Suggestion {
   icon: typeof BarChart2;
@@ -10,7 +23,13 @@ interface Suggestion {
   value?: string;
 }
 
-const SUGGESTIONS: Suggestion[] = [
+interface AgentInfo {
+  slug: string;
+  name: string;
+  greeting: string;
+}
+
+const SALES_SUGGESTIONS: Suggestion[] = [
   { icon: BarChart2, text: 'Summarize my pipeline' },
   { icon: Activity, text: 'Get a deal briefing', value: '/briefing ' },
   { icon: FileText, text: 'Draft a proposal for a new client' },
@@ -20,7 +39,47 @@ const SUGGESTIONS: Suggestion[] = [
   { icon: UserCheck, text: 'Qualify this lead' },
 ];
 
-export function EmptyState({ onSuggestion }: { onSuggestion: (text: string) => void }) {
+// One suggestion per front (sales, recruiting, rates, HR, clients, routines) —
+// the point of the empty state is to show Zippy's breadth in one glance.
+const ZIPPY_SUGGESTIONS: Suggestion[] = [
+  { icon: BarChart2, text: 'Summarize my pipeline and flag stuck deals' },
+  { icon: Users, text: 'Find candidates for a senior React role' },
+  { icon: Calculator, text: 'What would 2 senior QAs and a DevOps lead cost?' },
+  { icon: HeartHandshake, text: 'Prep me for my next client call' },
+  { icon: AlarmClock, text: 'Every Friday at 4, send each client their active-candidates report' },
+  { icon: Mail, text: 'Draft a follow-up email in my voice' },
+];
+
+const COPY: Record<string, { title: string; subtitle: string; suggestions: Suggestion[] }> = {
+  zippy: {
+    title: 'Zippy — your super-agent',
+    subtitle:
+      'It sells, it recruits, it runs HR, it takes care of clients — grounded in your live CRM, talent pool, and Knowledge Base. One goal in, a whole operation out.',
+    suggestions: ZIPPY_SUGGESTIONS,
+  },
+  sales: {
+    title: 'Zipdev Sales co-pilot',
+    subtitle:
+      'Ask about your pipeline, draft proposals, research prospects, or send follow-ups — grounded in your live CRM and inbox.',
+    suggestions: SALES_SUGGESTIONS,
+  },
+};
+
+const DEFAULT_COPY = COPY.sales as (typeof COPY)[string];
+
+export function EmptyState({
+  agent,
+  onSuggestion,
+}: {
+  agent?: AgentInfo;
+  onSuggestion: (text: string) => void;
+}) {
+  const copy = (agent && COPY[agent.slug]) ?? {
+    ...DEFAULT_COPY,
+    title: agent?.name ?? DEFAULT_COPY.title,
+    subtitle: agent?.greeting ?? DEFAULT_COPY.subtitle,
+  };
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
       <motion.div
@@ -31,13 +90,11 @@ export function EmptyState({ onSuggestion }: { onSuggestion: (text: string) => v
         <span className="grid h-14 w-14 place-items-center rounded-[18px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
           <Sparkles className="h-7 w-7" />
         </span>
-        <h2 className="mt-5 text-xl font-extrabold tracking-tight text-ink">Zipdev Sales co-pilot</h2>
-        <p className="mt-1 max-w-sm text-[13px] text-ink-muted">
-          Ask about your pipeline, draft proposals, research prospects, or send follow-ups — grounded in your live CRM and inbox.
-        </p>
+        <h2 className="mt-5 text-xl font-extrabold tracking-tight text-ink">{copy.title}</h2>
+        <p className="mt-1 max-w-sm text-[13px] text-ink-muted">{copy.subtitle}</p>
       </motion.div>
       <div className="grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
-        {SUGGESTIONS.map((s, i) => (
+        {copy.suggestions.map((s, i) => (
           <motion.button
             key={s.text}
             type="button"

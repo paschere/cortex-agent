@@ -36,3 +36,20 @@ export async function driveGetText(
   if (!r.ok) throw new IntegrationError(`Drive ${r.status} ${path}: ${await r.text()}`, 'google');
   return r.text();
 }
+
+/** GET a Drive API endpoint and return the raw bytes (binary media downloads, alt=media). */
+export async function driveGetBytes(
+  ctx: ToolContext,
+  path: string,
+  params: Record<string, string> = {},
+): Promise<Buffer> {
+  const { token } = await ctx.integrations.getAccessToken('google');
+  const url = new URL(`${BASE}${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const r = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: ctx.signal,
+  });
+  if (!r.ok) throw new IntegrationError(`Drive ${r.status} ${path}: ${await r.text()}`, 'google');
+  return Buffer.from(await r.arrayBuffer());
+}

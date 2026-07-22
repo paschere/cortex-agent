@@ -3,7 +3,7 @@ export type UUID = string;
 export type Role = 'member' | 'team_admin' | 'org_admin';
 export type CollectionScope = 'global' | 'team' | 'user' | 'conversation';
 export type Surface = 'web' | 'desktop' | 'mcp';
-export type IntegrationProvider = 'google' | 'hubspot';
+export type IntegrationProvider = 'google' | 'hubspot' | 'github' | 'linear';
 export type DocumentStatus = 'pending' | 'ingesting' | 'ready' | 'failed';
 
 export interface User {

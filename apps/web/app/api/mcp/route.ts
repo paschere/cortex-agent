@@ -14,10 +14,18 @@
  * Protected Resource Metadata (RFC 9728) document so it can begin the OAuth
  * flow. See infra/supabase/migrations/0025_oauth_mcp.sql + apps/web/lib/oauth.ts.
  *
- * Tool execution is NOT reinvented here: we reuse the exact same path as the
- * chat route — loadAgent -> filterTools(agent.allowedTools) -> runTool with a
- * ToolContext from buildToolContext(). The only MCP-specific glue is JSON-RPC
- * framing and the dot<->underscore tool-name mapping Claude requires.
+ * Tool surface: the UNION of every agent's allowed tools (sales, recruiting,
+ * zippy, …) loaded from the `agents` table, executed through the exact same
+ * path as the chat route — filterTools -> runTool with a ToolContext from
+ * buildToolContext(). Each tool is attributed to the first agent that allows
+ * it so audit events keep a real agent_id.
+ *
+ * Confirmation-gated tools (requiresConfirmation) cannot pop a UI over MCP.
+ * Instead, an unconfirmed call returns a signed confirmation token (see
+ * lib/mcp-confirm.ts) plus instructions; after the user explicitly approves,
+ * Claude calls the virtual `zipdev_confirm_action` tool with that token and
+ * the action executes with { confirmed: true } — same contract as
+ * /api/chat/confirm on the web.
  *
  * We hand-roll JSON-RPC rather than use the MCP SDK server transport (that
  * transport is Node-stream based and awkward inside a Next.js route handler).
@@ -28,8 +36,8 @@ import { randomUUID } from 'node:crypto';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildToolContext } from '@/lib/agent';
 import { sha256, issuer } from '@/lib/oauth';
-import { loadAgent } from '@zipdev/agents';
-import { filterTools, runTool, type AnyTool } from '@zipdev/agent-tools';
+import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confirm';
+import { filterTools, getTool, runTool, type AnyTool } from '@zipdev/agent-tools';
 import { ConfirmationRequiredError } from '@zipdev/core';
 
 export const runtime = 'nodejs';
@@ -39,9 +47,23 @@ export const maxDuration = 300;
 /** The MCP protocol version we implement / advertise. */
 const PROTOCOL_VERSION = '2025-03-26';
 const SERVER_NAME = 'zipdev-agent';
-const SERVER_VERSION = '0.1.0';
-/** Which agent's allowed-tools we expose over MCP. */
-const AGENT_SLUG = 'sales';
+const SERVER_VERSION = '0.2.0';
+
+/**
+ * Served on `initialize` — this is the closest MCP gets to a system prompt,
+ * and it is what makes Claude behave like a Zipdev agent instead of a generic
+ * assistant with tools.
+ */
+const INSTRUCTIONS = `You are connected to Zipdev Agent — the operations brain of Zipdev, a nearshore developer-talent company. This server exposes every tool that powers Zipdev's internal AI agents (Sales, Recruiting, Zippy Developer) plus the shared Knowledge Base.
+
+How to work with it:
+1. **Orient first.** Call \`zipdev_overview\` early in a session to see which integrations the user has connected, which agents exist, and which Knowledge Base collections are visible.
+2. **The KB is the Zipdev brain.** Before answering anything that could be covered by internal knowledge — clients, playbooks, rates, candidates, processes, past proposals — search it with \`kb_search\` and ground your answer in the hits.
+3. **Ground every claim in tool data.** Never invent a deal, contact, repo, issue, rate, or statistic. Fetch it this turn and cite ids inline (HubSpot deal ids, \`owner/repo#123\`, \`ENG-45\`) so the user can verify.
+4. **Write actions are confirmation-gated.** Tools that create, update, send, or post do NOT execute on first call — they return a confirmation token and the exact validated payload. Show the user precisely what will happen, ask for explicit approval, and only then call \`zipdev_confirm_action\` with the token. If the user declines, do nothing.
+5. **Respond in the user's language.** Spanish in → Spanish out.
+
+Be sharp, concise, and evidence-first. Numbers over adjectives. Lead with the answer, then the support.`;
 
 // ---------------------------------------------------------------------------
 // CORS — claude.ai (web/desktop/mobile) calls this cross-origin.
@@ -160,11 +182,386 @@ function unauthorized(): NextResponse {
 }
 
 // ---------------------------------------------------------------------------
-// MCP capability data
+// Agent catalog — union of every agent's allowed tools.
+// ---------------------------------------------------------------------------
+interface AgentRow {
+  id: string;
+  slug: string;
+  name: string;
+  system_prompt: string;
+  allowed_tool_ids: string[];
+}
+
+interface CatalogEntry {
+  tool: AnyTool;
+  /** First agent (by slug order) that allows this tool — used for audit attribution. */
+  agentId: string;
+  agentSlug: string;
+}
+
+// Module-level cache: agents change via migrations, not at runtime, so 60s
+// staleness is fine and saves a DB round-trip per JSON-RPC message.
+const AGENTS_CACHE_TTL_MS = 60_000;
+let agentsCache: { at: number; agents: AgentRow[] } | null = null;
+
+async function loadAllAgents(): Promise<AgentRow[]> {
+  if (agentsCache && Date.now() - agentsCache.at < AGENTS_CACHE_TTL_MS) {
+    return agentsCache.agents;
+  }
+  const db = getSupabaseServiceClient();
+  const { data, error } = await db
+    .from('agents')
+    .select('id, slug, name, system_prompt, allowed_tool_ids')
+    .order('slug');
+  if (error || !data || data.length === 0) {
+    throw new Error(`Failed to load agents: ${error?.message ?? 'no rows'}`);
+  }
+  const agents = data as unknown as AgentRow[];
+  agentsCache = { at: Date.now(), agents };
+  return agents;
+}
+
+// MCP tool name == tool id with dots replaced by underscores (Claude rejects dots).
+function toMcpName(id: string): string {
+  return id.replaceAll('.', '_');
+}
+
+async function buildCatalog(): Promise<Map<string, CatalogEntry>> {
+  const agents = await loadAllAgents();
+  // Zippy first: shared tools attribute to the super-agent (audit trail and
+  // MCP conversations read as Zippy's work, matching the product story).
+  const ordered = [...agents].sort((a, b) =>
+    a.slug === 'zippy' ? -1 : b.slug === 'zippy' ? 1 : a.slug.localeCompare(b.slug),
+  );
+  const catalog = new Map<string, CatalogEntry>();
+  for (const agent of ordered) {
+    for (const tool of filterTools(agent.allowed_tool_ids ?? [])) {
+      const name = toMcpName(tool.id);
+      if (!catalog.has(name)) {
+        catalog.set(name, { tool, agentId: agent.id, agentSlug: agent.slug });
+      }
+    }
+  }
+  return catalog;
+}
+
+// ---------------------------------------------------------------------------
+// Tool definitions (tools/list payload)
 // ---------------------------------------------------------------------------
 
-/** Static prompt list (data only — mirrors apps/mcp/src/prompts.ts). */
-const PROMPTS = [
+const FAMILY_TITLES: Record<string, string> = {
+  hubspot: 'HubSpot',
+  kb: 'Knowledge Base',
+  gmail: 'Gmail',
+  gcal: 'Google Calendar',
+  gsheets: 'Google Sheets',
+  gdrive: 'Google Drive',
+  github: 'GitHub',
+  linear: 'Linear',
+  web: 'Web',
+  rate: 'Rates',
+  recruit: 'Recruiting',
+  slack: 'Slack',
+  people: 'People',
+  payroll: 'Payroll',
+  sales: 'Sales',
+  format: 'Formatting',
+};
+
+/** 'hubspot.search_companies' -> 'HubSpot · Search Companies' */
+function toolTitle(id: string): string {
+  const [family = '', ...rest] = id.split('.');
+  const action = rest
+    .join('.')
+    .split('_')
+    .map((w) => (w ? w[0]!.toUpperCase() + w.slice(1) : w))
+    .join(' ');
+  const familyTitle = FAMILY_TITLES[family] ?? family;
+  return action ? `${familyTitle} · ${action}` : familyTitle;
+}
+
+function toInputSchema(tool: AnyTool): Record<string, unknown> {
+  const schema = zodToJsonSchema(tool.inputSchema, { $refStrategy: 'none' }) as Record<
+    string,
+    unknown
+  >;
+  delete schema.$schema;
+  if (schema.type !== 'object') return { type: 'object', properties: {} };
+  return schema;
+}
+
+function buildToolDefs(catalog: Map<string, CatalogEntry>) {
+  const defs = [...catalog.entries()].map(([name, { tool }]) => ({
+    name,
+    description: tool.description,
+    inputSchema: toInputSchema(tool),
+    annotations: {
+      title: toolTitle(tool.id),
+      readOnlyHint: !tool.requiresConfirmation,
+      destructiveHint: Boolean(tool.requiresConfirmation),
+      openWorldHint: true,
+    },
+  }));
+
+  // Virtual, MCP-only tools — not in the registry.
+  defs.unshift(
+    {
+      name: 'zipdev_overview',
+      description:
+        "Orient yourself in the user's Zipdev workspace: which agents exist and what they can do, which integrations the user has connected (HubSpot, Google, GitHub, Linear, Slack, …), and which Knowledge Base collections are visible. Call this early in a session.",
+      inputSchema: { type: 'object', properties: {} },
+      annotations: {
+        title: 'Zipdev · Workspace Overview',
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    {
+      name: 'zipdev_confirm_action',
+      description:
+        'Execute a previously proposed side-effect action AFTER the user has explicitly approved it. Pass the confirmation_token returned by the gated tool call. Never call this without showing the user the exact payload and receiving a clear yes.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          confirmation_token: {
+            type: 'string',
+            description: 'The token returned by the confirmation-gated tool call.',
+          },
+        },
+        required: ['confirmation_token'],
+      },
+      annotations: {
+        title: 'Zipdev · Confirm Action',
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+    },
+  );
+
+  return defs;
+}
+
+// ---------------------------------------------------------------------------
+// Session memory — MCP tool calls persist into `conversations`/`messages`
+// (surface 'mcp', keyed by Claude's Mcp-Session-Id via external_key) so work
+// done from claude.ai shows up in Zipdev OS like any other conversation.
+// ---------------------------------------------------------------------------
+
+const MAX_PERSISTED_RESULT_CHARS = 20_000;
+
+async function getOrCreateMcpConversation(
+  auth: AuthResult,
+  sessionId: string,
+  agentId: string,
+): Promise<string | null> {
+  const db = getSupabaseServiceClient();
+  const externalKey = `mcp:${sessionId}`;
+
+  const { data: existing } = await db
+    .from('conversations')
+    .select('id')
+    .eq('user_id', auth.userId)
+    .eq('external_key', externalKey)
+    .maybeSingle();
+  if (existing) return existing.id as string;
+
+  const { data: created, error } = await db
+    .from('conversations')
+    .insert({
+      user_id: auth.userId,
+      agent_id: agentId,
+      surface: 'mcp',
+      title: `Claude · ${new Date().toISOString().slice(0, 10)}`,
+      external_key: externalKey,
+    })
+    .select('id')
+    .single();
+  if (error || !created) return null;
+  return created.id as string;
+}
+
+/** Best-effort: never let persistence failures break a tool call. */
+async function persistToolMessage(opts: {
+  conversationId: string;
+  toolId: string;
+  args: unknown;
+  result: unknown;
+  isError: boolean;
+}): Promise<void> {
+  try {
+    let result: unknown = opts.result ?? null;
+    const resultJson = JSON.stringify(result);
+    if (resultJson.length > MAX_PERSISTED_RESULT_CHARS) {
+      result = { __truncated: true, preview: resultJson.slice(0, MAX_PERSISTED_RESULT_CHARS) };
+    }
+    if (opts.isError) {
+      result = { __error: true, message: result };
+    }
+
+    const db = getSupabaseServiceClient();
+    const toolCallId = randomUUID();
+    await db.from('messages').insert({
+      conversation_id: opts.conversationId,
+      role: 'assistant',
+      content: '',
+      tool_calls: [{ toolCallId, toolName: opts.toolId.replaceAll('.', '_'), args: opts.args }],
+      tool_results: [{ toolCallId, result }],
+    });
+    await db
+      .from('conversations')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', opts.conversationId);
+  } catch {
+    // best-effort
+  }
+}
+
+/** Resolve the session's conversation id, or undefined when unavailable. */
+async function resolveMcpConversation(
+  auth: AuthResult,
+  sessionId: string | null,
+  agentId: string,
+): Promise<string | undefined> {
+  if (!sessionId) return undefined;
+  try {
+    return (await getOrCreateMcpConversation(auth, sessionId, agentId)) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Virtual tool handlers
+// ---------------------------------------------------------------------------
+
+async function handleOverview(auth: AuthResult): Promise<unknown> {
+  const db = getSupabaseServiceClient();
+  const agents = await loadAllAgents();
+  const catalog = await buildCatalog();
+
+  const [integrationsRes, collectionsRes] = await Promise.all([
+    db.from('integrations').select('provider, scopes').eq('user_id', auth.userId),
+    db
+      .from('kb_collections')
+      .select('id, name, scope')
+      .or(`scope.eq.global,and(scope.eq.user,scope_id.eq.${auth.userId})`),
+  ]);
+
+  return {
+    workspace: 'Zipdev',
+    agents: agents.map((a) => ({
+      slug: a.slug,
+      name: a.name,
+      toolCount: filterTools(a.allowed_tool_ids ?? []).length,
+    })),
+    totalToolsExposed: catalog.size,
+    connectedIntegrations: (integrationsRes.data ?? []).map((i) => ({
+      provider: i.provider as string,
+      scopes: (i.scopes as string[] | null) ?? [],
+    })),
+    knowledgeBase: {
+      collections: (collectionsRes.data ?? []).map((c) => ({
+        id: c.id as string,
+        name: c.name as string,
+        scope: c.scope as string,
+      })),
+      searchTool: 'kb_search',
+    },
+    confirmationProtocol:
+      'Write tools return a confirmation_token instead of executing. Show the payload to the user, get explicit approval, then call zipdev_confirm_action.',
+  };
+}
+
+async function handleConfirmAction(
+  args: Record<string, unknown>,
+  auth: AuthResult,
+  sessionId: string | null,
+): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
+  const token = typeof args.confirmation_token === 'string' ? args.confirmation_token : '';
+  const payload = token ? verifyConfirmationToken(token, auth.userId) : null;
+  if (!payload) {
+    return {
+      content: [
+        {
+          type: 'text',
+          text: 'Invalid or expired confirmation token. Re-run the original tool call to get a fresh token, show the payload to the user, and confirm again.',
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  const tool = getTool(payload.toolId);
+  if (!tool) {
+    return {
+      content: [{ type: 'text', text: `Unknown tool in token: ${payload.toolId}` }],
+      isError: true,
+    };
+  }
+
+  const conversationId = await resolveMcpConversation(auth, sessionId, payload.agentId);
+  const ctx = buildToolContext({ userId: auth.userId, agentId: payload.agentId, conversationId });
+  const result = await runTool(tool, payload.input, ctx, { confirmed: true });
+  if (conversationId) {
+    await persistToolMessage({
+      conversationId,
+      toolId: payload.toolId,
+      args: payload.input,
+      result,
+      isError: false,
+    });
+  }
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `✅ Executed ${payload.toolId}.\n\n${JSON.stringify(result, null, 2)}`,
+      },
+    ],
+  };
+}
+
+function confirmationRequiredResult(
+  err: ConfirmationRequiredError,
+  auth: AuthResult,
+  agentId: string,
+): { content: Array<{ type: 'text'; text: string }> } {
+  const token = mintConfirmationToken({
+    userId: auth.userId,
+    agentId,
+    toolId: err.toolId,
+    input: err.input,
+  });
+  const text = [
+    `⏸️ Confirmation required — \`${err.toolId}\` has side effects and was NOT executed.`,
+    '',
+    'Validated payload that WILL run on confirmation:',
+    '```json',
+    JSON.stringify(err.input, null, 2),
+    '```',
+    'Next step: show this payload to the user and ask for explicit approval. If (and only if) they approve, call `zipdev_confirm_action` with:',
+    '```json',
+    JSON.stringify({ confirmation_token: token }),
+    '```',
+    'The token expires in 15 minutes and is bound to this user. If the user declines, do nothing.',
+  ].join('\n');
+  return { content: [{ type: 'text', text }] };
+}
+
+// ---------------------------------------------------------------------------
+// Prompts
+// ---------------------------------------------------------------------------
+
+interface PromptDef {
+  name: string;
+  description: string;
+  arguments: Array<{ name: string; description: string; required: boolean }>;
+  render: (args: Record<string, string>) => string;
+}
+
+const PROMPTS: PromptDef[] = [
   {
     name: 'draft-proposal',
     description: 'Draft a complete client proposal for a Zipdev candidate role.',
@@ -173,11 +570,17 @@ const PROMPTS = [
       { name: 'seniority', description: 'junior | mid | senior | lead', required: true },
       { name: 'companyId', description: 'Optional HubSpot company ID for context', required: false },
     ],
+    render: (a) =>
+      `Draft a complete Zipdev client proposal for a ${a.seniority ?? ''} ${a.role ?? ''} role.` +
+      (a.companyId ? ` Pull company context from HubSpot company ${a.companyId} first.` : '') +
+      ' Search the Knowledge Base (kb_search) for prior proposals and rate guidance, estimate the rate with rate_estimate, and structure the proposal with scope, profile, rate, and next steps.',
   },
   {
     name: 'qualify-lead',
     description: 'Walk through qualifying a sales lead from HubSpot data.',
     arguments: [{ name: 'dealId', description: 'HubSpot deal ID', required: true }],
+    render: (a) =>
+      `Qualify HubSpot deal ${a.dealId ?? ''}: fetch the deal, its company and recent activities, check the Knowledge Base for prior interactions, and give a BANT-style assessment with a clear go/no-go recommendation.`,
   },
   {
     name: 'rate-question',
@@ -187,29 +590,81 @@ const PROMPTS = [
       { name: 'seniority', description: 'Seniority level', required: true },
       { name: 'region', description: 'Optional region', required: false },
     ],
+    render: (a) =>
+      `Estimate the rate for a ${a.seniority ?? ''} ${a.role ?? ''}${a.region ? ` in ${a.region}` : ''} using the rate estimation tool, and explain the drivers behind the number.`,
+  },
+  {
+    name: 'document-repo',
+    description: 'Read a GitHub repository and persist Markdown docs to the Knowledge Base.',
+    arguments: [
+      { name: 'repo', description: 'owner/name of the repository', required: true },
+    ],
+    render: (a) =>
+      `Document the GitHub repository ${a.repo ?? ''}: check kb_search for existing docs first, read the repo structure and key files with the github tools, synthesize concise Markdown documentation (purpose, architecture, setup, key modules), and save it with kb_create_document.`,
+  },
+  {
+    name: 'project-status',
+    description: 'Summarize the current status of a Linear project with real metrics.',
+    arguments: [
+      { name: 'project', description: 'Linear project name or ID', required: true },
+    ],
+    render: (a) =>
+      `Report the status of Linear project "${a.project ?? ''}": fetch the project, its issues by state, cycle stats, and per-person workload. Lead with a one-line health verdict, then the numbers, then risks. Cite issue ids inline.`,
   },
 ];
 
-/** Static resource list. */
-const RESOURCES = [
-  { uri: 'zipdev://agent/system-prompt', name: 'Current agent system prompt', mimeType: 'text/markdown' },
-  { uri: 'zipdev://kb/collections', name: 'Visible KB collections', mimeType: 'application/json' },
-];
+// ---------------------------------------------------------------------------
+// Resources
+// ---------------------------------------------------------------------------
 
-// MCP tool name == tool id with dots replaced by underscores (Claude rejects dots).
-function toMcpName(id: string): string {
-  return id.replaceAll('.', '_');
+async function listResources(): Promise<Array<{ uri: string; name: string; mimeType: string }>> {
+  const agents = await loadAllAgents();
+  return [
+    ...agents.map((a) => ({
+      uri: `zipdev://agents/${a.slug}/system-prompt`,
+      name: `${a.name} — system prompt`,
+      mimeType: 'text/markdown',
+    })),
+    // Back-compat alias for the original single-agent resource.
+    { uri: 'zipdev://agent/system-prompt', name: 'Sales agent system prompt', mimeType: 'text/markdown' },
+    { uri: 'zipdev://kb/collections', name: 'Visible KB collections', mimeType: 'application/json' },
+    { uri: 'zipdev://integrations/status', name: 'Connected integrations', mimeType: 'application/json' },
+  ];
 }
 
-function buildToolDefs(tools: AnyTool[]) {
-  return tools.map((t) => ({
-    name: toMcpName(t.id),
-    description: t.description,
-    inputSchema: zodToJsonSchema(t.inputSchema, {
-      name: 'schema',
-      $refStrategy: 'none',
-    }) as { type: 'object'; properties?: Record<string, unknown> },
-  }));
+async function readResource(uri: string, auth: AuthResult): Promise<JsonRpcResponse['result'] | null> {
+  const db = getSupabaseServiceClient();
+
+  const agentMatch = /^zipdev:\/\/agents\/([a-z0-9-]+)\/system-prompt$/.exec(uri);
+  if (agentMatch || uri === 'zipdev://agent/system-prompt') {
+    const slug = agentMatch ? agentMatch[1]! : 'sales';
+    const agents = await loadAllAgents();
+    const agent = agents.find((a) => a.slug === slug);
+    if (!agent) return null;
+    return { contents: [{ uri, mimeType: 'text/markdown', text: agent.system_prompt }] };
+  }
+
+  if (uri === 'zipdev://kb/collections') {
+    const { data: collections } = await db
+      .from('kb_collections')
+      .select('id, scope, scope_id, name')
+      .or(`scope.eq.global,and(scope.eq.user,scope_id.eq.${auth.userId})`);
+    return {
+      contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(collections ?? []) }],
+    };
+  }
+
+  if (uri === 'zipdev://integrations/status') {
+    const { data } = await db
+      .from('integrations')
+      .select('provider, scopes, expires_at')
+      .eq('user_id', auth.userId);
+    return {
+      contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(data ?? []) }],
+    };
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -220,6 +675,7 @@ async function dispatch(
   params: unknown,
   id: JsonRpcId,
   auth: AuthResult,
+  sessionId: string | null,
 ): Promise<JsonRpcResponse> {
   switch (method) {
     case 'initialize':
@@ -227,16 +683,15 @@ async function dispatch(
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {}, prompts: {}, resources: {} },
         serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
+        instructions: INSTRUCTIONS,
       });
 
     case 'ping':
       return rpcOk(id, {});
 
     case 'tools/list': {
-      const db = getSupabaseServiceClient();
-      const agent = await loadAgent(db, AGENT_SLUG);
-      const tools = filterTools(agent.allowedTools);
-      return rpcOk(id, { tools: buildToolDefs(tools) });
+      const catalog = await buildCatalog();
+      return rpcOk(id, { tools: buildToolDefs(catalog) });
     }
 
     case 'tools/call': {
@@ -244,35 +699,49 @@ async function dispatch(
       const mcpName = p.name ?? '';
       const args = p.arguments ?? {};
 
-      const db = getSupabaseServiceClient();
-      const agent = await loadAgent(db, AGENT_SLUG);
-      const tools = filterTools(agent.allowedTools);
-      const tool = tools.find((t) => toMcpName(t.id) === mcpName);
-      if (!tool) {
-        return rpcOk(id, {
-          content: [{ type: 'text', text: `Unknown tool: ${mcpName}` }],
-          isError: true,
-        });
-      }
-
-      const ctx = buildToolContext({ userId: auth.userId, agentId: agent.id });
       try {
-        const result = await runTool(tool, args, ctx);
-        return rpcOk(id, {
-          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-        });
-      } catch (err) {
-        if (err instanceof ConfirmationRequiredError) {
+        if (mcpName === 'zipdev_overview') {
+          const overview = await handleOverview(auth);
           return rpcOk(id, {
-            content: [
-              {
-                type: 'text',
-                text: `Confirmation required to run "${tool.id}". This action has side effects and must be confirmed before executing.`,
-              },
-            ],
+            content: [{ type: 'text', text: JSON.stringify(overview, null, 2) }],
+          });
+        }
+        if (mcpName === 'zipdev_confirm_action') {
+          return rpcOk(id, await handleConfirmAction(args, auth, sessionId));
+        }
+
+        const catalog = await buildCatalog();
+        const entry = catalog.get(mcpName);
+        if (!entry) {
+          return rpcOk(id, {
+            content: [{ type: 'text', text: `Unknown tool: ${mcpName}` }],
             isError: true,
           });
         }
+
+        const conversationId = await resolveMcpConversation(auth, sessionId, entry.agentId);
+        const ctx = buildToolContext({ userId: auth.userId, agentId: entry.agentId, conversationId });
+        try {
+          const result = await runTool(entry.tool, args, ctx);
+          if (conversationId) {
+            await persistToolMessage({
+              conversationId,
+              toolId: entry.tool.id,
+              args,
+              result,
+              isError: false,
+            });
+          }
+          return rpcOk(id, {
+            content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          });
+        } catch (err) {
+          if (err instanceof ConfirmationRequiredError) {
+            return rpcOk(id, confirmationRequiredResult(err, auth, entry.agentId));
+          }
+          throw err;
+        }
+      } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return rpcOk(id, {
           content: [{ type: 'text', text: message.slice(0, 4000) }],
@@ -282,34 +751,46 @@ async function dispatch(
     }
 
     case 'prompts/list':
-      return rpcOk(id, { prompts: PROMPTS });
+      return rpcOk(id, {
+        prompts: PROMPTS.map(({ name, description, arguments: promptArgs }) => ({
+          name,
+          description,
+          arguments: promptArgs,
+        })),
+      });
+
+    case 'prompts/get': {
+      const p = (params ?? {}) as { name?: string; arguments?: Record<string, string> };
+      const prompt = PROMPTS.find((pr) => pr.name === p.name);
+      if (!prompt) return rpcErr(id, INVALID_REQUEST, `Unknown prompt: ${p.name ?? ''}`);
+      const missing = prompt.arguments.filter((a) => a.required && !(p.arguments ?? {})[a.name]);
+      if (missing.length > 0) {
+        return rpcErr(
+          id,
+          INVALID_REQUEST,
+          `Missing required arguments: ${missing.map((m) => m.name).join(', ')}`,
+        );
+      }
+      return rpcOk(id, {
+        description: prompt.description,
+        messages: [
+          {
+            role: 'user',
+            content: { type: 'text', text: prompt.render(p.arguments ?? {}) },
+          },
+        ],
+      });
+    }
 
     case 'resources/list':
-      return rpcOk(id, { resources: RESOURCES });
+      return rpcOk(id, { resources: await listResources() });
 
     case 'resources/read': {
       const p = (params ?? {}) as { uri?: string };
       const uri = p.uri ?? '';
-      const db = getSupabaseServiceClient();
-
-      if (uri === 'zipdev://agent/system-prompt') {
-        const agent = await loadAgent(db, AGENT_SLUG);
-        return rpcOk(id, {
-          contents: [{ uri, mimeType: 'text/markdown', text: agent.systemPrompt }],
-        });
-      }
-      if (uri === 'zipdev://kb/collections') {
-        const { data: collections } = await db
-          .from('kb_collections')
-          .select('id, scope, scope_id, name')
-          .or(`scope.eq.global,and(scope.eq.user,scope_id.eq.${auth.userId})`);
-        return rpcOk(id, {
-          contents: [
-            { uri, mimeType: 'application/json', text: JSON.stringify(collections ?? []) },
-          ],
-        });
-      }
-      return rpcErr(id, INVALID_REQUEST, `Unknown resource: ${uri}`);
+      const result = await readResource(uri, auth);
+      if (result === null) return rpcErr(id, INVALID_REQUEST, `Unknown resource: ${uri}`);
+      return rpcOk(id, result);
     }
 
     default:
@@ -372,13 +853,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // assign a session id on the response.
   const hasInitialize = requests.some((r) => r.method === 'initialize');
 
+  // Claude echoes the Mcp-Session-Id we minted at initialize; it keys the
+  // session's conversation record (memory shared with the web app).
+  const sessionId = req.headers.get('mcp-session-id');
+
   // Dispatch every request. Notifications mixed into a batch are simply ignored
   // here (no response emitted for them).
   const responses: JsonRpcResponse[] = [];
   for (const r of requests) {
     const reqId = r.id ?? null;
     try {
-      responses.push(await dispatch(r.method, r.params, reqId, auth));
+      responses.push(await dispatch(r.method, r.params, reqId, auth, sessionId));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       responses.push(rpcErr(reqId, INTERNAL_ERROR, message));

@@ -55,7 +55,7 @@ const MessageSchema = z.object({
 });
 
 const Body = z.object({
-  agentSlug: z.string().default('sales'),
+  agentSlug: z.string().default('zippy'),
   conversationId: z.string().uuid().optional(),
   messages: z.array(MessageSchema).min(1),
 });

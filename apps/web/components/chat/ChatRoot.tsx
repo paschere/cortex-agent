@@ -20,10 +20,17 @@ interface ChatRootProps {
   agents: AgentInfo[];
   conversationId?: string;
   initialMessages?: Message[];
+  /** Agent of a resumed conversation — keeps it pinned instead of defaulting to agents[0]. */
+  initialAgentSlug?: string;
 }
 
-export function ChatRoot({ agents, conversationId: initialConvId, initialMessages }: ChatRootProps) {
-  const [agentSlug, setAgentSlug] = useState(agents[0]?.slug ?? 'sales');
+export function ChatRoot({
+  agents,
+  conversationId: initialConvId,
+  initialMessages,
+  initialAgentSlug,
+}: ChatRootProps) {
+  const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'zippy');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [draft, setDraft] = useState('');
@@ -111,6 +118,7 @@ export function ChatRoot({ agents, conversationId: initialConvId, initialMessage
         messages={messages}
         isLoading={isLoading}
         conversationId={conversationId}
+        agent={activeAgent}
         onConfirmed={reload}
         onRegenerate={handleRegenerate}
         onSuggestion={setDraft}

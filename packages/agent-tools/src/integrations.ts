@@ -1,5 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { decryptToken, encryptToken, IntegrationError, type Logger, type UUID } from '@zipdev/core';
+import {
+  decryptToken,
+  encryptToken,
+  IntegrationError,
+  type IntegrationProvider,
+  type Logger,
+  type UUID,
+} from '@zipdev/core';
 import type { IntegrationsClient } from './types';
 
 interface RefreshFn {
@@ -11,7 +18,9 @@ interface RefreshFn {
   }>;
 }
 
-const REFRESHERS: Record<'google' | 'hubspot', RefreshFn> = {
+// github/linear are absent: their tokens are long-lived (null expires_at), so the
+// refresh path in getAccessToken is never reached for them.
+const REFRESHERS: Partial<Record<IntegrationProvider, RefreshFn>> = {
   async google(rt) {
     const r = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -72,7 +81,9 @@ export function createIntegrationsClient(
       }
       if (!data.refresh_token_enc)
         throw new IntegrationError(`No refresh token for ${provider}`, provider);
-      const refreshed = await REFRESHERS[provider](decryptToken(data.refresh_token_enc as string));
+      const refresher = REFRESHERS[provider];
+      if (!refresher) throw new IntegrationError(`No refresher for ${provider}`, provider);
+      const refreshed = await refresher(decryptToken(data.refresh_token_enc as string));
       const newScopes = refreshed.scope ? refreshed.scope.split(' ') : (data.scopes as string[]);
       const newRefresh = refreshed.refresh_token ?? decryptToken(data.refresh_token_enc as string);
       await db

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await sb
     .from('kb_documents')
-    .select('id, title, mime, status, error_message, created_at')
+    .select('id, title, mime, status, error_message, source, created_at')
     .eq('collection_id', collectionId)
     .order('created_at', { ascending: false });
 

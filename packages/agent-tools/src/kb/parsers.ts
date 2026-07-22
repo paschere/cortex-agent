@@ -21,7 +21,7 @@ export async function parseDocument(buffer: Buffer, mime: string): Promise<Parse
     return { text: r.value };
   }
 
-  if (m === 'text/plain' || m === 'text/markdown') {
+  if (m === 'text/plain' || m === 'text/markdown' || m === 'text/csv') {
     return { text: buffer.toString('utf-8') };
   }
 

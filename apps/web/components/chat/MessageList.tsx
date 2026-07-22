@@ -10,6 +10,7 @@ interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
   conversationId?: string;
+  agent?: { slug: string; name: string; greeting: string };
   onConfirmed?: () => void;
   onRegenerate?: () => void;
   onSuggestion?: (text: string) => void;
@@ -19,6 +20,7 @@ export function MessageList({
   messages,
   isLoading,
   conversationId,
+  agent,
   onConfirmed,
   onRegenerate,
   onSuggestion,
@@ -40,7 +42,7 @@ export function MessageList({
     <div ref={ref} className="scroll-slim flex-1 overflow-y-auto">
       {empty ? (
         <div className="mx-auto flex h-full w-full max-w-3xl">
-          <EmptyState onSuggestion={(t) => onSuggestion?.(t)} />
+          <EmptyState agent={agent} onSuggestion={(t) => onSuggestion?.(t)} />
         </div>
       ) : (
         <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">

@@ -5,3 +5,4 @@ export type { Chunk } from './chunker';
 export { embed } from './embedder';
 export { kbSearch } from './search';
 export { kbListCollections } from './list-collections';
+export { kbCreateDocument } from './create-document';

@@ -28,6 +28,9 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   web_scrape: { label: 'Fetch Web Page', icon: 'Link' },
   gdrive_search_files: { label: 'Search Drive Files', icon: 'FolderSearch' },
   gdrive_read_doc: { label: 'Read Drive Document', icon: 'FileSearch' },
+  schedule_create: { label: 'Create Scheduled Job', icon: 'AlarmClockPlus' },
+  schedule_list: { label: 'List Scheduled Jobs', icon: 'AlarmClock' },
+  schedule_update: { label: 'Update Scheduled Job', icon: 'AlarmClockCheck' },
 };
 
 function toTitleCase(s: string): string {
@@ -65,6 +68,12 @@ export function confirmationSummary(toolId: string, input: Record<string, unknow
       return `Create calendar event "${input.summary}" on ${input.start}`;
     case 'gsheets_append_row':
       return `Append row to sheet "${input.spreadsheetId}"`;
+    case 'schedule_create': {
+      const when =
+        input.scheduleKind === 'once' ? `once at ${input.runAt}` : `on cron "${input.cron}" (${input.timezone ?? 'UTC'})`;
+      const writes = input.allowUnattendedWrites ? ' · unattended writes ALLOWED' : '';
+      return `Schedule "${input.name}" — runs ${when}${writes}`;
+    }
     default:
       return `Run: ${toolLabel(toolId).label}`;
   }

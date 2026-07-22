@@ -15,6 +15,12 @@ describe('parseDocument', () => {
     expect(result.text).toContain('some text');
   });
 
+  it('returns csv text unchanged', async () => {
+    const result = await parseDocument(Buffer.from('name,age\nalice,30'), 'text/csv');
+    expect(result.text).toBe('name,age\nalice,30');
+    expect(result.pages).toBeUndefined();
+  });
+
   it('throws ValidationError for unsupported mime type', async () => {
     await expect(
       parseDocument(Buffer.from(''), 'application/octet-stream'),

@@ -17,3 +17,6 @@ playwright-report
 .supabase
 infra/supabase/.branches
 infra/supabase/.temp
+
+# Claude Code workspace (workflow worktrees, session state)
+.claude/

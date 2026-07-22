@@ -1,10 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Logger, UUID } from '@zipdev/core';
+import type { IntegrationProvider, Logger, UUID } from '@zipdev/core';
 import type { z } from 'zod';
 
 export interface IntegrationsClient {
-  getAccessToken(provider: 'google' | 'hubspot'): Promise<{ token: string; scopes: string[] }>;
-  hasScopes(provider: 'google' | 'hubspot', scopes: string[]): Promise<boolean>;
+  getAccessToken(provider: IntegrationProvider): Promise<{ token: string; scopes: string[] }>;
+  hasScopes(provider: IntegrationProvider, scopes: string[]): Promise<boolean>;
 }
 
 export interface ToolContext {
@@ -24,7 +24,7 @@ export interface ToolDef<I, O> {
   inputSchema: z.ZodType<I>;
   outputSchema: z.ZodType<O>;
   requiresConfirmation?: boolean;
-  requiredScopes?: { provider: 'google' | 'hubspot'; scopes: string[] }[];
+  requiredScopes?: { provider: IntegrationProvider; scopes: string[] }[];
   rateLimit?: { perMinute: number };
   handler: (input: I, ctx: ToolContext) => Promise<O>;
 }
