@@ -55,6 +55,19 @@ const REFRESHERS: Partial<Record<IntegrationProvider, RefreshFn>> = {
   },
 };
 
+/**
+ * HubSpot "service account": a Private App token (pat-...) shared by the whole
+ * workspace. When HUBSPOT_PRIVATE_APP_TOKEN is set, every user transparently
+ * uses it — no per-user OAuth connect flow, no refresh. Scope enforcement
+ * happens in HubSpot (the private app's configured scopes); requiredScopes
+ * checks pass because the token is portal-wide. Per-user attribution is
+ * preserved in our own audit_events.
+ */
+function privateAppToken(provider: IntegrationProvider): string | null {
+  if (provider === 'hubspot') return process.env.HUBSPOT_PRIVATE_APP_TOKEN ?? null;
+  return null;
+}
+
 export function createIntegrationsClient(
   db: SupabaseClient,
   userId: UUID,
@@ -62,6 +75,8 @@ export function createIntegrationsClient(
 ): IntegrationsClient {
   return {
     async getAccessToken(provider) {
+      const serviceToken = privateAppToken(provider);
+      if (serviceToken) return { token: serviceToken, scopes: ['*'] };
       const { data, error } = await db
         .from('integrations')
         .select('id, access_token_enc, refresh_token_enc, scopes, expires_at')
@@ -100,6 +115,7 @@ export function createIntegrationsClient(
       return { token: refreshed.access_token, scopes: newScopes };
     },
     async hasScopes(provider, scopes) {
+      if (privateAppToken(provider)) return true;
       const { data } = await db
         .from('integrations')
         .select('scopes')

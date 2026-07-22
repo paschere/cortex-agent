@@ -17,6 +17,9 @@ export async function GET(req: NextRequest) {
   }
 
   const env = getEnv();
+  if (env.HUBSPOT_PRIVATE_APP_TOKEN || !env.HUBSPOT_CLIENT_ID || !env.HUBSPOT_CLIENT_SECRET || !env.HUBSPOT_REDIRECT_URI) {
+    return NextResponse.redirect(new URL('/integrations?error=private_app_mode', req.url));
+  }
   const tokenRes = await fetch('https://api.hubapi.com/oauth/v1/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

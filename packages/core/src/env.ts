@@ -11,9 +11,12 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),
-  HUBSPOT_CLIENT_ID: z.string().min(1),
-  HUBSPOT_CLIENT_SECRET: z.string().min(1),
-  HUBSPOT_REDIRECT_URI: z.string().url(),
+  // HubSpot auth: either a workspace-wide Private App token (preferred) or the
+  // per-user OAuth app trio. At least one must be configured for hubspot.* tools.
+  HUBSPOT_PRIVATE_APP_TOKEN: z.string().min(1).optional(),
+  HUBSPOT_CLIENT_ID: z.string().min(1).optional(),
+  HUBSPOT_CLIENT_SECRET: z.string().min(1).optional(),
+  HUBSPOT_REDIRECT_URI: z.string().url().optional(),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1),
   RATE_ESTIMATOR_URL: z.string().url(),
   RATE_ESTIMATOR_SERVICE_TOKEN: z.string().min(1),

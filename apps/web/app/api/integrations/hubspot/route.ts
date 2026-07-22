@@ -18,6 +18,15 @@ const SCOPES = [
 
 export async function GET(_req: NextRequest) {
   await requireSession();
+  const env = getEnv();
+  // Private-app mode: HubSpot access is workspace-wide via
+  // HUBSPOT_PRIVATE_APP_TOKEN — there is nothing to connect per user.
+  if (env.HUBSPOT_PRIVATE_APP_TOKEN || !env.HUBSPOT_CLIENT_ID || !env.HUBSPOT_REDIRECT_URI) {
+    return NextResponse.json(
+      { error: 'HubSpot uses a workspace private app; per-user connect is disabled.' },
+      { status: 409 },
+    );
+  }
   const state = randomBytes(16).toString('hex');
   const cookieStore = await cookies();
   cookieStore.set('h_oauth_state', state, {
@@ -26,7 +35,6 @@ export async function GET(_req: NextRequest) {
     secure: process.env.NODE_ENV === 'production',
     maxAge: 600,
   });
-  const env = getEnv();
   const auth = new URL('https://app.hubspot.com/oauth/authorize');
   auth.searchParams.set('client_id', env.HUBSPOT_CLIENT_ID);
   auth.searchParams.set('redirect_uri', env.HUBSPOT_REDIRECT_URI);

@@ -110,7 +110,9 @@ export default async function IntegrationsPage({
               Read-only access to deals, companies, contacts, activities.
             </p>
           </div>
-          {byProvider.hubspot ? (
+          {process.env.HUBSPOT_PRIVATE_APP_TOKEN ? (
+            <span className="text-xs text-green-700">Connected (workspace)</span>
+          ) : byProvider.hubspot ? (
             <span className="text-xs text-green-700">Connected</span>
           ) : (
             <Link
