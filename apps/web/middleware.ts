@@ -17,6 +17,9 @@ const PUBLIC_PATHS = [
   // '/mcp' is the canonical public URL (rewritten to /api/mcp in next.config).
   '/api/mcp',
   '/mcp',
+  // Inngest Cloud calls this to sync/invoke functions; it authenticates with
+  // the INNGEST_SIGNING_KEY, not a session cookie.
+  '/api/inngest',
 ];
 
 interface SessionPayload {

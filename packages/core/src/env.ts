@@ -22,8 +22,10 @@ const schema = z.object({
   RATE_ESTIMATOR_SERVICE_TOKEN: z.string().min(1),
   PAYROLL_API_URL: z.string().url().optional(),
   PAYROLL_API_TOKEN: z.string().min(1).optional(),
-  INNGEST_EVENT_KEY: z.string().min(1),
-  INNGEST_SIGNING_KEY: z.string().min(1),
+  // Optional so the app can boot before Inngest Cloud is wired; the
+  // /api/inngest route 404s until INNGEST_SIGNING_KEY is provisioned.
+  INNGEST_EVENT_KEY: z.string().min(1).optional(),
+  INNGEST_SIGNING_KEY: z.string().min(1).optional(),
   TOKEN_ENCRYPTION_KEY: z.string().regex(/^[A-Za-z0-9+/=]{44}$/, 'must be base64-encoded 32-byte key (exactly 44 chars)'),
   SENTRY_DSN: z.string().optional(),
   NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
