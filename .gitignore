@@ -20,3 +20,6 @@ infra/supabase/.temp
 
 # Claude Code workspace (workflow worktrees, session state)
 .claude/
+
+.vercel
+.env*
