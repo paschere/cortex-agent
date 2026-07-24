@@ -25,6 +25,7 @@ import {
   X,
   Trash2,
   Sparkles,
+  Workflow,
 } from 'lucide-react';
 import type { Role } from '@zipdev/core';
 import { useMobileSidebar } from './MobileSidebarContext';
@@ -54,6 +55,7 @@ const SECTIONS: NavSection[] = [
   {
     label: 'Tools',
     items: [
+      { href: '/pipelines', label: 'Pipelines', icon: Workflow },
       { href: '/agents', label: 'Agents', icon: Bot },
       { href: '/integrations', label: 'Integrations', icon: Plug },
       { href: '/schedules', label: 'Scheduled Jobs', icon: AlarmClock },

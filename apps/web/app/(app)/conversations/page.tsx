@@ -19,15 +19,25 @@ interface ConversationRow {
 
 export const dynamic = 'force-dynamic';
 
-export default async function ConversationsPage() {
+export default async function ConversationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ surface?: string }>;
+}) {
   const user = await requireSession();
+  const { surface } = await searchParams;
+  // Claude/MCP session logs are hidden by default (they're activity records,
+  // not chats). ?surface=mcp shows them; ?surface=all shows everything.
   const sb = getSupabaseServiceClient();
-  const { data } = await sb
+  let q = sb
     .from('conversations')
     .select('id, title, agent_id, surface, created_at, updated_at, agents(name)')
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
     .limit(50);
+  if (surface === 'mcp') q = q.eq('surface', 'mcp');
+  else if (surface !== 'all') q = q.neq('surface', 'mcp');
+  const { data } = await q;
 
   const conversations = (data ?? []) as unknown as ConversationRow[];
 
@@ -38,6 +48,21 @@ export default async function ConversationsPage() {
         subtitle={`${conversations.length} conversation${conversations.length === 1 ? '' : 's'}`}
         icon={<MessagesSquare className="h-5 w-5" />}
       />
+      <div className="mb-3 flex gap-2 text-xs">
+        <Link
+          href="/conversations"
+          className={!surface ? 'font-bold text-primary' : 'text-ink-faint hover:text-ink'}
+        >
+          Chats
+        </Link>
+        <span className="text-ink-faint">·</span>
+        <Link
+          href="/conversations?surface=mcp"
+          className={surface === 'mcp' ? 'font-bold text-primary' : 'text-ink-faint hover:text-ink'}
+        >
+          Claude sessions
+        </Link>
+      </div>
 
       <Panel className="overflow-hidden">
         {conversations.length === 0 ? (

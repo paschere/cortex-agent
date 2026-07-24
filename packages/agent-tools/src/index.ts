@@ -30,6 +30,7 @@ export * from './slack';
 export * from './people';
 export * from './growth';
 export * from './workable';
+export * from './pipeline';
 export {
   isPrivateUrl,
   fetchExternalToolManifest,
