@@ -28,6 +28,7 @@ export * from './format';
 export * from './recruit';
 export * from './slack';
 export * from './people';
+export * from './growth';
 export {
   isPrivateUrl,
   fetchExternalToolManifest,
