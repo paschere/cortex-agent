@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
+import { encryptToken } from '@zipdev/core';
 
 /**
  * Server-side better-auth instance.
@@ -44,6 +45,77 @@ if (
   throw new Error('BETTER_AUTH_SECRET must be set in production');
 }
 
+/**
+ * Every Google scope the agent tools use. Requested at SSO login so one
+ * sign-in provisions the whole toolbelt — no separate "Connect Google" step.
+ * Mirror of the requiredScopes declared across packages/agent-tools.
+ */
+const GOOGLE_TOOL_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/contacts.readonly',
+  'https://www.googleapis.com/auth/directory.readonly',
+];
+
+/**
+ * Copy the Google OAuth tokens better-auth just stored (ba_account) into
+ * public.integrations (encrypted), which is where the agent tools read from.
+ * Best-effort: a sync failure must never break login.
+ */
+async function syncGoogleIntegration(account: {
+  providerId: string;
+  userId: string;
+  accessToken?: string | null;
+  refreshToken?: string | null;
+  accessTokenExpiresAt?: Date | null;
+  scope?: string | null;
+}): Promise<void> {
+  if (account.providerId !== 'google' || !account.accessToken) return;
+  try {
+    const { rows } = await pool.query(
+      `select u.id from public.users u
+       join public.ba_user b on lower(b.email) = lower(u.email)
+       where b.id = $1`,
+      [account.userId],
+    );
+    const userId = rows[0]?.id as string | undefined;
+    if (!userId) return;
+
+    const scopes = (account.scope ?? '').split(/[\s,]+/).filter(Boolean);
+    const expiresAt = account.accessTokenExpiresAt
+      ? new Date(account.accessTokenExpiresAt).toISOString()
+      : null;
+
+    // Google only re-issues the refresh token on full consent; keep the
+    // stored one when the new login didn't include it.
+    await pool.query(
+      `insert into public.integrations
+         (user_id, provider, access_token_enc, refresh_token_enc, scopes, expires_at, updated_at)
+       values ($1, 'google', $2, $3, $4, $5, now())
+       on conflict (user_id, provider) do update set
+         access_token_enc  = excluded.access_token_enc,
+         refresh_token_enc = coalesce(excluded.refresh_token_enc, public.integrations.refresh_token_enc),
+         scopes            = excluded.scopes,
+         expires_at        = excluded.expires_at,
+         updated_at        = now()`,
+      [
+        userId,
+        encryptToken(account.accessToken),
+        account.refreshToken ? encryptToken(account.refreshToken) : null,
+        scopes,
+        expiresAt,
+      ],
+    );
+  } catch (err) {
+    console.error('[auth] google integration sync failed', err);
+  }
+}
+
 export const auth = betterAuth({
   appName: 'Zippy',
   database: pool,
@@ -58,6 +130,7 @@ export const auth = betterAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
       accessType: 'offline',
       prompt: 'select_account consent',
+      scope: GOOGLE_TOOL_SCOPES,
     },
   },
   emailAndPassword: { enabled: false },
@@ -95,6 +168,20 @@ export const auth = betterAuth({
                set name = coalesce(excluded.name, public.users.name)`,
             [user.email, user.name],
           );
+        },
+      },
+    },
+    // Token sync: fires on first Google login (create) and every re-login
+    // (update), keeping public.integrations fresh for the agent tools.
+    account: {
+      create: {
+        after: async (account) => {
+          await syncGoogleIntegration(account as Parameters<typeof syncGoogleIntegration>[0]);
+        },
+      },
+      update: {
+        after: async (account) => {
+          await syncGoogleIntegration(account as Parameters<typeof syncGoogleIntegration>[0]);
         },
       },
     },
