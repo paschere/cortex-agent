@@ -137,25 +137,93 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Authorize ${esc(clientName)}</title>
+<title>Connect ${esc(clientName)} · Zippy</title>
+<link rel="icon" href="/icon.png" />
 <style>
-  body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #fafafa; display: flex; min-height: 100vh; align-items: center; justify-content: center; margin: 0; }
-  .card { max-width: 24rem; width: 100%; background: #171717; border: 1px solid #262626; border-radius: 1rem; padding: 2rem; box-sizing: border-box; }
-  h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
-  p { color: #a3a3a3; font-size: .9rem; line-height: 1.4; }
-  .scope { background: #262626; border-radius: .5rem; padding: .5rem .75rem; font-size: .85rem; margin: 1rem 0; }
-  .actions { display: flex; gap: .75rem; margin-top: 1.5rem; }
-  button { flex: 1; padding: .65rem; border-radius: .65rem; font-weight: 600; font-size: .95rem; cursor: pointer; border: 1px solid #262626; }
-  .approve { background: #fafafa; color: #0a0a0a; border-color: #fafafa; }
-  .deny { background: transparent; color: #fafafa; }
+  :root {
+    --plum: #9658A3;
+    --accent: #7E4390;
+    --ink: #241A2E;
+    --ink-soft: #5C4E68;
+    --line: #E6DDEE;
+    --chip: #F3EBF8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background: linear-gradient(180deg, #FAF8FC 0%, #F3EBF8 100%);
+    color: var(--ink);
+    display: flex; min-height: 100vh; align-items: center; justify-content: center;
+    margin: 0; padding: 24px;
+  }
+  .card {
+    max-width: 26rem; width: 100%;
+    background: #ffffff;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 2.25rem 2rem 2rem;
+    box-shadow: 0 20px 60px -30px rgba(60, 20, 80, .28);
+    text-align: center;
+  }
+  .logos {
+    display: flex; align-items: center; justify-content: center; gap: 18px;
+    margin-bottom: 1.5rem;
+  }
+  .logos .zippy {
+    width: 64px; height: 64px; border-radius: 18px;
+    box-shadow: 0 8px 22px -8px rgba(120, 60, 160, .45);
+  }
+  .logos .link {
+    color: var(--plum); font-size: 22px; letter-spacing: 2px; user-select: none;
+  }
+  .logos .client {
+    width: 64px; height: 64px; border-radius: 18px;
+    display: grid; place-items: center;
+    background: var(--chip); border: 1px solid var(--line);
+    font-weight: 800; font-size: 24px; color: var(--accent);
+  }
+  h1 { font-size: 1.2rem; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .sub { color: var(--ink-soft); font-size: .88rem; line-height: 1.5; margin: 0; }
+  .sub strong { color: var(--ink); }
+  .grants {
+    text-align: left; margin: 1.4rem 0; padding: .9rem 1rem;
+    background: var(--chip); border-radius: 14px;
+    font-size: .84rem; color: var(--ink-soft); line-height: 1.65;
+  }
+  .grants li { margin-left: 1.1rem; }
+  .grants b { color: var(--ink); }
+  .actions { display: flex; gap: .75rem; margin-top: 1.4rem; }
+  button {
+    flex: 1; padding: .72rem; border-radius: 12px;
+    font-weight: 700; font-size: .95rem; cursor: pointer;
+    border: 1px solid var(--line); transition: filter .15s ease;
+  }
+  button:hover { filter: brightness(.96); }
+  .approve { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .deny { background: #fff; color: var(--ink-soft); }
+  .foot {
+    margin-top: 1.5rem; padding-top: 1.1rem; border-top: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    font-size: .72rem; color: var(--ink-soft);
+  }
+  .foot img { height: 16px; width: auto; display: block; }
 </style>
 </head>
 <body>
   <div class="card">
-    <h1>Authorize ${esc(clientName)}</h1>
-    <p><strong>${esc(clientName)}</strong> wants to connect to Zippy as <strong>${esc(userEmail)}</strong>.</p>
-    <div class="scope">Requested access: <code>${esc(p.scope)}</code></div>
-    <p>Approving grants ${esc(clientName)} access to the Zippy MCP tools on your behalf.</p>
+    <div class="logos">
+      <img class="zippy" src="/icon.png" alt="Zippy" />
+      <span class="link">⇄</span>
+      <span class="client" aria-hidden="true">${esc((clientName[0] ?? 'C').toUpperCase())}</span>
+    </div>
+    <h1>Connect ${esc(clientName)} to Zippy</h1>
+    <p class="sub">Signed in as <strong>${esc(userEmail)}</strong></p>
+    <div class="grants">
+      Approving lets <b>${esc(clientName)}</b> use Zippy on your behalf:
+      <li>Your access, your permissions — nothing more</li>
+      <li>Writes always ask you before executing</li>
+      <li>Every action is logged in Zipdev</li>
+    </div>
     <form method="POST" action="/api/oauth/authorize">
       ${hidden}
       <div class="actions">
@@ -163,6 +231,10 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
         <button class="approve" type="submit" name="decision" value="approve">Approve</button>
       </div>
     </form>
+    <div class="foot">
+      <img src="/zipdev-logo.png" alt="Zipdev" />
+      <span>· Zippy — Zipdev's super-agent</span>
+    </div>
   </div>
 </body>
 </html>`;
