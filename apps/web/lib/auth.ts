@@ -39,9 +39,16 @@ const connectionString =
 // certificate in certificate chain"). Disabling verification HERE is scoped
 // to this one DB connection — never set NODE_TLS_REJECT_UNAUTHORIZED=0,
 // which kills TLS verification for every outbound request in the process.
+// pg-connection-string treats sslmode=require as verify-full and its parsed
+// ssl config wins over the explicit `ssl` option — so strip sslmode from the
+// URL and pass the ssl object ourselves. Deterministic, no precedence games.
 const isRemoteDb = /sslmode=/.test(connectionString);
+const cleanConnectionString = connectionString.replace(/[?&]sslmode=[^&]*/g, (m) =>
+  m.startsWith('?') ? '?' : '',
+).replace(/\?&/, '?').replace(/\?$/, '');
+
 const pool = new Pool({
-  connectionString,
+  connectionString: cleanConnectionString,
   ...(isRemoteDb ? { ssl: { rejectUnauthorized: false } } : {}),
   max: 2,
   idleTimeoutMillis: 30_000,
