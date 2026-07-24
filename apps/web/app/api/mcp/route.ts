@@ -54,7 +54,7 @@ const SERVER_VERSION = '0.2.0';
  * and it is what makes Claude behave like a Zipdev agent instead of a generic
  * assistant with tools.
  */
-const INSTRUCTIONS = `You are connected to Zipdev Agent — the operations brain of Zipdev, a nearshore developer-talent company. This server exposes every tool that powers Zipdev's internal AI agents (Sales, Recruiting, Zippy Developer) plus the shared Knowledge Base.
+const INSTRUCTIONS = `You are connected to Zippy — the operations brain of Zipdev, a nearshore developer-talent company. This server exposes every tool that powers Zipdev's internal AI agents (Sales, Recruiting, Zippy Developer) plus the shared Knowledge Base.
 
 How to work with it:
 1. **Orient first.** Call \`zipdev_overview\` early in a session to see which integrations the user has connected, which agents exist, and which Knowledge Base collections are visible.

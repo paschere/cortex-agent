@@ -153,9 +153,9 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
 <body>
   <div class="card">
     <h1>Authorize ${esc(clientName)}</h1>
-    <p><strong>${esc(clientName)}</strong> wants to connect to Zipdev Agent as <strong>${esc(userEmail)}</strong>.</p>
+    <p><strong>${esc(clientName)}</strong> wants to connect to Zippy as <strong>${esc(userEmail)}</strong>.</p>
     <div class="scope">Requested access: <code>${esc(p.scope)}</code></div>
-    <p>Approving grants ${esc(clientName)} access to the Zipdev Agent MCP tools on your behalf.</p>
+    <p>Approving grants ${esc(clientName)} access to the Zippy MCP tools on your behalf.</p>
     <form method="POST" action="/api/oauth/authorize">
       ${hidden}
       <div class="actions">

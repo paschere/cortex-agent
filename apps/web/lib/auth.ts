@@ -45,7 +45,7 @@ if (
 }
 
 export const auth = betterAuth({
-  appName: 'Zipdev Agent',
+  appName: 'Zippy',
   database: pool,
   baseURL:
     process.env.BETTER_AUTH_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000',

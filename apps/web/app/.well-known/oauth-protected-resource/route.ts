@@ -17,7 +17,7 @@ export function GET() {
     authorization_servers: [issuer()],
     scopes_supported: [MCP_SCOPE],
     bearer_methods_supported: ['header'],
-    resource_name: 'Zipdev Agent MCP',
+    resource_name: 'Zippy MCP',
   });
 }
 

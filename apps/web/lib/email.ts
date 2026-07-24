@@ -16,7 +16,7 @@ export async function sendEmail(opts: {
     logger.warn('sendEmail skipped: RESEND_API_KEY not configured', { to: opts.to });
     return { sent: false, reason: 'RESEND_API_KEY not configured' };
   }
-  const from = process.env.EMAIL_FROM ?? 'Zipdev Agent <onboarding@resend.dev>';
+  const from = process.env.EMAIL_FROM ?? 'Zippy <onboarding@resend.dev>';
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',

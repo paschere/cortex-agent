@@ -213,7 +213,7 @@ export const scheduleRun = inngest.createFunction(
       await step.run('deliver-email', async () =>
         sendEmail({
           to: job.user_email as string,
-          subject: `[Zipdev Agent] ${job.name} — ${result.ok ? 'done' : 'failed'}`,
+          subject: `[Zippy] ${job.name} — ${result.ok ? 'done' : 'failed'}`,
           text: result.ok ? result.output : `The scheduled job failed:\n\n${result.error}`,
         }),
       );

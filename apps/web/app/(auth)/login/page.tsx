@@ -28,7 +28,7 @@ export default function LoginPage() {
         <span className="grid h-12 w-12 place-items-center rounded-[14px] bg-white/15 backdrop-blur">
           <Sparkles className="h-6 w-6" />
         </span>
-        <h1 className="mt-5 text-2xl font-extrabold tracking-tight">Zipdev Agent</h1>
+        <h1 className="mt-5 text-2xl font-extrabold tracking-tight">Zippy</h1>
         <p className="mt-1 text-[13px] text-white/75">Your AI sales co-pilot.</p>
       </div>
       <div className="p-8">
