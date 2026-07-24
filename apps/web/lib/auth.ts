@@ -33,8 +33,16 @@ const connectionString =
 // must stay tiny or Supabase's pooler client limit is exhausted as instances
 // scale out (EMAXCONNSESSION). Pair with the TRANSACTION pooler (port 6543),
 // which multiplexes many clients over few backend connections.
+//
+// ssl.rejectUnauthorized=false: Supabase's pooler presents a cert signed by
+// Supabase's own CA, which Node doesn't trust out of the box ("self-signed
+// certificate in certificate chain"). Disabling verification HERE is scoped
+// to this one DB connection — never set NODE_TLS_REJECT_UNAUTHORIZED=0,
+// which kills TLS verification for every outbound request in the process.
+const isRemoteDb = /sslmode=/.test(connectionString);
 const pool = new Pool({
   connectionString,
+  ...(isRemoteDb ? { ssl: { rejectUnauthorized: false } } : {}),
   max: 2,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
