@@ -4,4 +4,5 @@ export {
   pipelineGet,
   pipelineUpdate,
   pipelineRun,
+  pipelineFinishRun,
 } from './tools';

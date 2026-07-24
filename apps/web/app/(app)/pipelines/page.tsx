@@ -1,7 +1,7 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import Link from 'next/link';
-import { Workflow, Play, Hash, Clock } from 'lucide-react';
+import { Workflow, Play, Hash, Clock, UserCheck } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
@@ -12,15 +12,21 @@ interface ParamDef {
   required?: boolean;
 }
 
+interface StepDef {
+  title: string;
+  checkpoint?: boolean;
+}
+
 interface PipelineRow {
   id: string;
   slug: string;
   name: string;
   description: string;
+  emoji: string;
   params: ParamDef[];
+  steps: StepDef[];
   times_run: number;
   last_run_at: string | null;
-  created_at: string;
 }
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +36,7 @@ export default async function PipelinesPage() {
   const sb = getSupabaseServiceClient();
   const { data } = await sb
     .from('pipelines')
-    .select('id, slug, name, description, params, times_run, last_run_at, created_at')
+    .select('id, slug, name, description, emoji, params, steps, times_run, last_run_at')
     .eq('archived', false)
     .order('times_run', { ascending: false });
 
@@ -59,50 +65,78 @@ export default async function PipelinesPage() {
         </Panel>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {pipelines.map((p) => (
-            <Panel key={p.id} className="flex flex-col gap-3 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-[14px] font-bold text-ink">{p.name}</div>
-                  <div className="truncate font-mono text-[11px] text-ink-faint">{p.slug}</div>
-                </div>
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
-                  <Workflow className="h-4 w-4" />
-                </span>
-              </div>
-
-              {p.description && (
-                <p className="line-clamp-2 text-[12.5px] leading-snug text-ink-muted">{p.description}</p>
-              )}
-
-              {p.params.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {p.params.map((param) => (
-                    <span
-                      key={param.name}
-                      title={param.description}
-                      className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 font-mono text-[10.5px] text-ink-muted"
-                    >
-                      <Hash className="h-3 w-3" />
-                      {param.name}
-                      {param.required !== false && <span className="text-rose">*</span>}
+          {pipelines.map((p) => {
+            const steps = p.steps ?? [];
+            return (
+              <Link key={p.id} href={`/pipelines/${p.slug}`} className="group block">
+                <Panel className="flex h-full flex-col gap-3 p-4 transition-all group-hover:-translate-y-0.5 group-hover:shadow-pop">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[14px] font-bold text-ink">{p.name}</div>
+                      <div className="truncate font-mono text-[11px] text-ink-faint">{p.slug}</div>
+                    </div>
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-primary-soft text-[19px]">
+                      {p.emoji || '⚡'}
                     </span>
-                  ))}
-                </div>
-              )}
+                  </div>
 
-              <div className="mt-auto flex items-center justify-between border-t border-border pt-2.5 text-[11.5px] text-ink-faint">
-                <span className="inline-flex items-center gap-1">
-                  <Play className="h-3.5 w-3.5" />
-                  {p.times_run} run{p.times_run === 1 ? '' : 's'}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
-                  {p.last_run_at ? `last ${relativeTime(p.last_run_at)}` : 'never run'}
-                </span>
-              </div>
-            </Panel>
-          ))}
+                  {p.description && (
+                    <p className="line-clamp-2 text-[12.5px] leading-snug text-ink-muted">
+                      {p.description}
+                    </p>
+                  )}
+
+                  {/* Step track: one dot per step, amber = human checkpoint */}
+                  {steps.length > 0 && (
+                    <div className="flex items-center gap-1" title={steps.map((s, i) => `${i + 1}. ${s.title}`).join('\n')}>
+                      {steps.map((s, i) => (
+                        <span key={`${p.id}-${i}`} className="flex items-center gap-1">
+                          {i > 0 && <span className="h-px w-2.5 bg-border" />}
+                          <span
+                            className={
+                              s.checkpoint
+                                ? 'grid h-4.5 w-4.5 place-items-center rounded-full bg-amber-soft'
+                                : 'h-2 w-2 rounded-full bg-primary'
+                            }
+                            style={s.checkpoint ? { height: 18, width: 18 } : undefined}
+                          >
+                            {s.checkpoint && <UserCheck className="h-2.5 w-2.5 text-amber" />}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {(p.params ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.params.map((param) => (
+                        <span
+                          key={param.name}
+                          title={param.description}
+                          className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 font-mono text-[10.5px] text-ink-muted"
+                        >
+                          <Hash className="h-3 w-3" />
+                          {param.name}
+                          {param.required !== false && <span className="text-rose">*</span>}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-auto flex items-center justify-between border-t border-border pt-2.5 text-[11.5px] text-ink-faint">
+                    <span className="inline-flex items-center gap-1">
+                      <Play className="h-3.5 w-3.5" />
+                      {p.times_run} run{p.times_run === 1 ? '' : 's'}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" />
+                      {p.last_run_at ? `last ${relativeTime(p.last_run_at)}` : 'never run'}
+                    </span>
+                  </div>
+                </Panel>
+              </Link>
+            );
+          })}
         </div>
       )}
     </>
