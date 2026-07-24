@@ -1,10 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import type { AgentDefinition } from '../types.js';
+import { systemPrompt } from './system-prompt.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-export const systemPrompt = readFileSync(join(__dirname, 'system-prompt.md'), 'utf-8');
+export { systemPrompt };
 
 export const recruitingAgent: AgentDefinition = {
   id: 'recruiting',
