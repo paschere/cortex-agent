@@ -64,7 +64,9 @@ function errorRedirect(
   if (description) url.searchParams.set('error_description', description);
   if (state) url.searchParams.set('state', state);
   url.searchParams.set('iss', issuer());
-  return NextResponse.redirect(url);
+  // 303: the consent screen submits via POST; the client's callback only
+  // accepts GET. Default redirect (307) preserves POST → 405 at claude.ai.
+  return NextResponse.redirect(url, 303);
 }
 
 /**
@@ -206,7 +208,7 @@ export async function POST(req: NextRequest) {
     const next = `/api/oauth/authorize?${sp.toString()}`;
     const login = new URL('/login', issuer());
     login.searchParams.set('next', next);
-    return NextResponse.redirect(login);
+    return NextResponse.redirect(login, 303);
   }
 
   if (decision !== 'approve') {
@@ -232,5 +234,7 @@ export async function POST(req: NextRequest) {
   redirect.searchParams.set('code', code);
   if (p.state) redirect.searchParams.set('state', p.state);
   redirect.searchParams.set('iss', issuer());
-  return NextResponse.redirect(redirect);
+  // 303 (not the 307 default): browsers must follow with GET — claude.ai's
+  // auth_callback rejects POST with 405.
+  return NextResponse.redirect(redirect, 303);
 }
