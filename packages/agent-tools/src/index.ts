@@ -31,6 +31,7 @@ export * from './people';
 export * from './growth';
 export * from './workable';
 export * from './pipeline';
+export * from './zippy';
 export {
   isPrivateUrl,
   fetchExternalToolManifest,

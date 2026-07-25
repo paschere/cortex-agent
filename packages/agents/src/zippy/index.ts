@@ -53,6 +53,7 @@ export const zippyAgent: AgentDefinition = {
     'growth.*',
     'workable.*',
     'pipeline.*',
+    'zippy.*',
   ],
   kbScopes: ['global', 'team:sales', 'user', 'conversation'],
   greeting: 'Hey — I’m Zippy. Sales, recruiting, HR, or clients: what are we tackling?',
