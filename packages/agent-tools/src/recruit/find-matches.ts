@@ -5,7 +5,7 @@ import { matcherFetch } from './client';
 export const findMatches = registerTool({
   id: 'recruit.find_matches',
   description:
-    "Kick off the AI matching engine to find and recommend candidates for a job (requisition). This is a fire-and-forget operation: it starts an async matching run that scores candidates by skills, embedding similarity, and cross-job signals, then writes the ranked results into the job's sync status. The candidate list is NOT returned immediately by this call — use recruit.job_insights or the job detail to read results once matching completes. Use this when a user asks to 'find candidates for', 'match candidates to', or 'run sourcing for' a job.",
+    "Kick off candidate matching for a job (requisition): starts an async run that scores candidates by skills, embedding similarity, and cross-job signals. Results are NOT returned by this call — immediately follow up with recruit.wait_for_matches, which polls server-side and returns the pool when ready. Use when a user asks to 'find candidates for' or 'match candidates to' a job. HOW TO PHRASE IT TO THE USER: plain human language only — say you're preparing the shortlist and it takes a couple of minutes, then OFFER to fetch results ('¿Quieres que revise si ya están listos?'). Never mention tool names, 'fire-and-forget', 'engines', or ids.",
   inputSchema: z.object({
     jobId: z.string().min(1),
     limit: z.number().int().min(1).max(200).optional(),

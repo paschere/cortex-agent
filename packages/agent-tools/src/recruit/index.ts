@@ -5,6 +5,7 @@ import './get-candidate';
 import './list-companies';
 import './pipeline-kanban';
 import './find-matches';
+import './wait-for-matches';
 import './score-candidate';
 import './compare-candidates';
 import './generate-presentation';
@@ -22,6 +23,7 @@ export { pipelineKanban } from './pipeline-kanban';
 
 export * from './client';
 export * from './find-matches';
+export * from './wait-for-matches';
 export * from './score-candidate';
 export * from './generate-presentation';
 export * from './get-presentation';
