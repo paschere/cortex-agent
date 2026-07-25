@@ -60,7 +60,7 @@ How to work with it:
 1. **Orient first.** Call \`zipdev_overview\` early in a session to see which integrations the user has connected, which agents exist, and which Knowledge Base collections are visible.
 2. **The KB is the Zipdev brain.** Before answering anything that could be covered by internal knowledge — clients, playbooks, rates, candidates, processes, past proposals — search it with \`kb_search\` and ground your answer in the hits.
 3. **Ground every claim in tool data.** Never invent a deal, contact, repo, issue, rate, or statistic. Fetch it this turn and cite ids inline (HubSpot deal ids, \`owner/repo#123\`, \`ENG-45\`) so the user can verify.
-4. **Write actions are confirmation-gated.** Tools that create, update, send, or post do NOT execute on first call — they return a confirmation token and the exact validated payload. Show the user precisely what will happen, ask for explicit approval, and only then call \`zipdev_confirm_action\` with the token. If the user declines, do nothing.
+4. **Write actions are confirmation-gated.** Tools that create, update, send, or post do NOT execute on first call — they return a confirmation_id and the exact validated payload, plus WHY the action is gated. Explain that to the user in their language, show precisely what will happen, ask for explicit approval, and only then call \`zipdev_confirm_action\` with the id. If the user declines, do nothing.
 5. **Respond in the user's language.** Spanish in → Spanish out.
 
 Be sharp, concise, and evidence-first. Numbers over adjectives. Lead with the answer, then the support.`;
@@ -320,16 +320,19 @@ function buildToolDefs(catalog: Map<string, CatalogEntry>) {
     {
       name: 'zipdev_confirm_action',
       description:
-        'Execute a previously proposed side-effect action AFTER the user has explicitly approved it. Pass the confirmation_token returned by the gated tool call. Never call this without showing the user the exact payload and receiving a clear yes.',
+        'Execute a previously proposed side-effect action AFTER the user has explicitly approved it. Pass the confirmation_id returned by the gated tool call (single-use, expires in 15 minutes). Never call this without showing the user the exact payload and receiving a clear yes.',
       inputSchema: {
         type: 'object',
         properties: {
+          confirmation_id: {
+            type: 'string',
+            description: 'The confirmation id returned by the confirmation-gated tool call.',
+          },
           confirmation_token: {
             type: 'string',
-            description: 'The token returned by the confirmation-gated tool call.',
+            description: 'Legacy: full token from older sessions. Prefer confirmation_id.',
           },
         },
-        required: ['confirmation_token'],
       },
       annotations: {
         title: 'Zipdev · Confirm Action',
@@ -470,7 +473,7 @@ async function handleOverview(auth: AuthResult): Promise<unknown> {
       searchTool: 'kb_search',
     },
     confirmationProtocol:
-      'Write tools return a confirmation_token instead of executing. Show the payload to the user, get explicit approval, then call zipdev_confirm_action.',
+      'Write tools return a confirmation_id instead of executing. Show the payload to the user, get explicit approval, then call zipdev_confirm_action with that id.',
   };
 }
 
@@ -479,14 +482,38 @@ async function handleConfirmAction(
   auth: AuthResult,
   sessionId: string | null,
 ): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
-  const token = typeof args.confirmation_token === 'string' ? args.confirmation_token : '';
-  const payload = token ? verifyConfirmationToken(token, auth.userId) : null;
+  let payload: { toolId: string; agentId: string; input: unknown } | null = null;
+
+  const confirmationId = typeof args.confirmation_id === 'string' ? args.confirmation_id : '';
+  if (confirmationId) {
+    // Consume (delete + return) so the id is single-use even under retries.
+    const db = getSupabaseServiceClient();
+    const { data: row } = await db
+      .from('mcp_pending_actions')
+      .delete()
+      .eq('id', confirmationId)
+      .eq('user_id', auth.userId)
+      .select('tool_id, agent_id, input, expires_at')
+      .maybeSingle();
+    if (row && new Date(row.expires_at as string).getTime() > Date.now()) {
+      payload = {
+        toolId: row.tool_id as string,
+        agentId: row.agent_id as string,
+        input: row.input,
+      };
+    }
+  } else {
+    // Legacy stateless token (pre-0033 sessions may still hold one).
+    const token = typeof args.confirmation_token === 'string' ? args.confirmation_token : '';
+    payload = token ? verifyConfirmationToken(token, auth.userId) : null;
+  }
+
   if (!payload) {
     return {
       content: [
         {
           type: 'text',
-          text: 'Invalid or expired confirmation token. Re-run the original tool call to get a fresh token, show the payload to the user, and confirm again.',
+          text: 'Invalid, expired, or already-used confirmation id. Re-run the original tool call to stage the action again, show the payload to the user, and confirm with the fresh id.',
         },
       ],
       isError: true,
@@ -582,17 +609,36 @@ function confirmationReason(toolId: string): string {
   return `Executes a write against ${system} — it changes real data outside this conversation and may be visible to other people.`;
 }
 
-function confirmationRequiredResult(
+const PENDING_ACTION_TTL_MS = 15 * 60_000;
+
+async function confirmationRequiredResult(
   err: ConfirmationRequiredError,
   auth: AuthResult,
   agentId: string,
-): { content: Array<{ type: 'text'; text: string }> } {
-  const token = mintConfirmationToken({
-    userId: auth.userId,
-    agentId,
-    toolId: err.toolId,
-    input: err.input,
-  });
+): Promise<{ content: Array<{ type: 'text'; text: string }> }> {
+  // Persist the validated input server-side; the model only round-trips a
+  // short single-use id. (The old HMAC token embedded the whole payload and
+  // got truncated by the model on large inputs.)
+  const db = getSupabaseServiceClient();
+  const { data: pending, error } = await db
+    .from('mcp_pending_actions')
+    .insert({
+      user_id: auth.userId,
+      agent_id: agentId,
+      tool_id: err.toolId,
+      input: err.input,
+      expires_at: new Date(Date.now() + PENDING_ACTION_TTL_MS).toISOString(),
+    })
+    .select('id')
+    .single();
+  if (error || !pending) {
+    return {
+      content: [
+        { type: 'text', text: `Could not stage the action for confirmation: ${error?.message ?? 'unknown error'}` },
+      ],
+    };
+  }
+  const confirmationId = pending.id as string;
   const text = [
     `⏸️ CONFIRMATION REQUIRED — \`${toolTitle(err.toolId)}\` (\`${err.toolId}\`) was NOT executed.`,
     '',
@@ -609,9 +655,9 @@ function confirmationRequiredResult(
     '```',
     'If (and only if) the user explicitly approves, call `zipdev_confirm_action` with:',
     '```json',
-    JSON.stringify({ confirmation_token: token }),
+    JSON.stringify({ confirmation_id: confirmationId }),
     '```',
-    'The token expires in 15 minutes and is bound to this user. If they decline or ask for changes, do NOT call it — adjust and re-propose instead.',
+    'The confirmation id is single-use, bound to this user, and expires in 15 minutes. If they decline or ask for changes, do NOT call it — adjust and re-propose instead.',
   ].join('\n');
   return { content: [{ type: 'text', text }] };
 }
@@ -748,7 +794,20 @@ async function dispatch(
       return rpcOk(id, {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {}, prompts: {}, resources: {} },
-        serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
+        serverInfo: {
+          name: SERVER_NAME,
+          title: 'Zippy',
+          version: SERVER_VERSION,
+          websiteUrl: issuer(),
+          // MCP spec ≥2025-06-18 icon metadata; harmlessly ignored by older clients.
+          icons: [
+            {
+              src: `${issuer()}/icon.png`,
+              mimeType: 'image/png',
+              sizes: ['512x512'],
+            },
+          ],
+        },
         instructions: INSTRUCTIONS,
       });
 
@@ -803,7 +862,7 @@ async function dispatch(
           });
         } catch (err) {
           if (err instanceof ConfirmationRequiredError) {
-            return rpcOk(id, confirmationRequiredResult(err, auth, entry.agentId));
+            return rpcOk(id, await confirmationRequiredResult(err, auth, entry.agentId));
           }
           throw err;
         }
