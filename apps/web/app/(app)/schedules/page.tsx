@@ -1,5 +1,7 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { AlarmClock } from 'lucide-react';
+import { PageHeader } from '@/components/ui/page-header';
 import { ScheduleList, type ScheduledJob } from './_components/ScheduleList';
 
 export default async function SchedulesPage() {
@@ -36,16 +38,13 @@ export default async function SchedulesPage() {
   }));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Scheduled Jobs</h1>
-        <p className="text-sm text-neutral-500 mt-1">
-          Jobs created from chat (&ldquo;every day at 9am, …&rdquo;) run unattended and post their
-          results to a conversation. Ask an agent to create one with{' '}
-          <code className="text-xs">schedule.create</code>.
-        </p>
-      </div>
+    <>
+      <PageHeader
+        title="Routines"
+        subtitle="Unattended jobs Zippy runs on schedule — created from any chat in plain words"
+        icon={<AlarmClock className="h-5 w-5" />}
+      />
       <ScheduleList jobs={jobs} />
-    </div>
+    </>
   );
 }

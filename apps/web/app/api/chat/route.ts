@@ -29,6 +29,41 @@ function shouldRunRag(message: string): boolean {
 }
 
 /**
+ * Context-aware tool scoping. Sending 80+ function declarations to the model
+ * on every message measurably degrades its tool selection ("dumb" picks) and
+ * adds latency. Core families are always available; situational families are
+ * included only when the recent conversation mentions them.
+ */
+const CORE_FAMILIES = new Set(['kb', 'rate', 'sales', 'web', 'pipeline', 'schedule', 'zippy', 'format']);
+
+const FAMILY_TRIGGERS: Array<{ family: string; re: RegExp }> = [
+  { family: 'hubspot', re: /hubspot|deal|pipeline de ventas|crm|prospect|client|cliente|company|empresa|contact/i },
+  { family: 'recruit', re: /candidat|recruit|reclut|talent|shortlist|score|entrevista|interview|requisition|vacante/i },
+  { family: 'workable', re: /workable|ats|stage|etapa|req\b/i },
+  { family: 'gmail', re: /email|correo|mail|inbox|draft|enviar|send|responder|reply/i },
+  { family: 'gcal', re: /calendar|calendario|meeting|reuni[oó]n|agenda|invite|evento|event|schedule a call/i },
+  { family: 'gsheets', re: /sheet|hoja de c[aá]lculo|spreadsheet|excel|fila|row/i },
+  { family: 'gdrive', re: /drive|documento|document|doc\b|archivo|file/i },
+  { family: 'github', re: /github|repo|pull request|\bpr\b|issue|commit|c[oó]digo|code/i },
+  { family: 'linear', re: /linear|sprint|cycle|ticket|roadmap|eng-\d+/i },
+  { family: 'slack', re: /slack|canal|channel|mensaje al equipo/i },
+  { family: 'growth', re: /signal|se[ñn]al|outreach|lead|prospecc|job post|growth|cold email/i },
+  { family: 'payroll', re: /payroll|n[oó]mina|salar|pay rate|bill rate|pago/i },
+  { family: 'people', re: /team member|equipo asignado|roster|staff/i },
+];
+
+function scopeTools<T extends { id: string }>(tools: T[], recentText: string): T[] {
+  if (tools.length <= 40) return tools;
+  const active = new Set(CORE_FAMILIES);
+  for (const { family, re } of FAMILY_TRIGGERS) {
+    if (re.test(recentText)) active.add(family);
+  }
+  const scoped = tools.filter((t) => active.has(t.id.split('.')[0] ?? ''));
+  // Safety net: never scope below a useful floor.
+  return scoped.length >= 10 ? scoped : tools;
+}
+
+/**
  * Distill a tool error into a concise, human-readable message the model can
  * relay to the user. Unwraps Google/HubSpot-style JSON error envelopes and caps
  * length so a giant 403 payload doesn't flood the context.
@@ -120,10 +155,13 @@ export async function POST(req: NextRequest) {
 
   const ctx = buildToolContext({ userId: user.id, agentId: agent.id, conversationId });
 
-  // RAG prepend: kb.search top 3 on the last user message (conditional)
+  // RAG prepend: kb.search top 3 on the last user message (conditional).
+  // Skipped entirely while the KB has no indexed chunks — saves an embedding
+  // round-trip per message on fresh workspaces.
   const ragQuery = lastUserMessage?.content ?? '';
   let ragBlock = ''
-  if (shouldRunRag(ragQuery)) {
+  const { count: chunkCount } = await db.from('kb_chunks').select('id', { count: 'exact', head: true });
+  if ((chunkCount ?? 0) > 0 && shouldRunRag(ragQuery)) {
     const ragOut = ragQuery ? await runTool(kbSearch, { query: ragQuery, limit: 3 }, ctx).catch(() => ({ hits: [] })) : { hits: [] }
     const relevant = (ragOut.hits as Array<{score?: number; documentTitle: string; chunkIndex: number; content: string}>).filter(h => (h.score ?? 1) >= 0.65)
     if (relevant.length > 0) {
@@ -131,7 +169,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const allowed = filterTools(agent.allowedTools);
+  const recentText = messages
+    .filter((m) => m.role === 'user')
+    .slice(-4)
+    .map((m) => m.content)
+    .join('\n');
+  const allowed = scopeTools(filterTools(agent.allowedTools), recentText);
 
   // AI SDK requires tool names matching ^[a-zA-Z0-9_-]+$ — replace dots with underscores
   // Build reverse map to find original tool by its AI SDK name
@@ -252,7 +295,7 @@ export async function POST(req: NextRequest) {
           void (async () => {
             try {
               const { text: titleText } = await generateText({
-                model: google('gemini-2.0-flash'),
+                model: google('gemini-2.5-flash'),
                 prompt: `Summarize this sales conversation starter in 5 words or fewer, no punctuation: "${lastUserMessage.content.slice(0, 200)}"`,
                 maxTokens: 20,
               })

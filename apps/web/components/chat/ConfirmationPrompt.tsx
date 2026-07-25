@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ShieldAlert, Check, X, Loader2, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 import { confirmationSummary } from '@/lib/tool-labels';
+import { confirmationReason } from '@/lib/confirmation-notes';
 
 interface ConfirmationPromptProps {
   conversationId: string;
@@ -81,6 +82,7 @@ export function ConfirmationPrompt({
         <div className="min-w-0 flex-1">
           <div className="text-[11px] font-bold uppercase tracking-wider text-amber">Confirmation required</div>
           <p className="mt-0.5 text-sm font-semibold text-ink">{summary}</p>
+          <p className="mt-1 text-[12px] leading-snug text-ink-muted">{confirmationReason(toolId)}</p>
         </div>
       </div>
 
