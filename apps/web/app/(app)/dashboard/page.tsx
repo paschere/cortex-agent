@@ -1,361 +1,363 @@
 import Link from 'next/link';
+import { clsx } from 'clsx';
 import {
-  MessagesSquare,
-  Bot,
-  Wrench,
-  Gauge,
-  Send,
-  Users2,
-  GitBranch,
-  Sparkles,
-  Activity,
+  AlarmClock,
   ArrowRight,
+  BadgeCheck,
   BookOpen,
+  MessagesSquare,
+  Radar,
+  Sparkles,
+  Workflow,
+  Wrench,
+  Zap,
 } from 'lucide-react';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { PageHeader } from '@/components/ui/page-header';
-import { Panel, PanelHead, StatCard, ProgressRow, IconChip } from '@/components/ui/panel';
+import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
-import { toolLabel } from '@/lib/tool-labels';
 
 export const dynamic = 'force-dynamic';
 
-interface AuditRow {
-  tool_id: string;
+interface RunRow {
+  id: string;
   status: string;
-  latency_ms: number | null;
-  created_at: string;
-  user_id: string;
+  started_at: string;
+  output: string | null;
+  error: string | null;
+  scheduled_jobs: { name: string } | { name: string }[] | null;
 }
 
-const TONES = ['primary', 'emerald', 'amber', 'sky', 'rose'] as const;
+interface ConversationRow {
+  id: string;
+  title: string | null;
+  updated_at: string;
+  agents: { name: string } | { name: string }[] | null;
+}
+
+function relName(rel: { name: string } | { name: string }[] | null): string | undefined {
+  return Array.isArray(rel) ? rel[0]?.name : rel?.name;
+}
 
 export default async function DashboardPage() {
   const user = await requireSession();
   const sb = getSupabaseServiceClient();
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [convCount, agentCount, kbDocs, auditRes, recentConvRes, usersRes] = await Promise.all([
-    sb.from('conversations').select('id', { count: 'exact', head: true }),
-    sb.from('agents').select('id', { count: 'exact', head: true }),
-    sb.from('kb_documents').select('id', { count: 'exact', head: true }),
-    sb
-      .from('audit_events')
-      .select('tool_id, status, latency_ms, created_at, user_id')
-      .gte('created_at', since)
-      .order('created_at', { ascending: false }),
-    sb
-      .from('conversations')
-      .select('id, title, updated_at, user_id, agents(name)')
-      .order('updated_at', { ascending: false })
-      .limit(6),
-    sb.from('users').select('id, name, email'),
-  ]);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const nowIso = new Date().toISOString();
 
-  const audit = (auditRes.data ?? []) as AuditRow[];
-  const totalConversations = convCount.count ?? 0;
-  const totalAgents = agentCount.count ?? 0;
-  const totalDocs = kbDocs.count ?? 0;
+  const [toolCallsRes, signalsRes, approvalsRes, routinesRes, runsRes, convsRes] =
+    await Promise.all([
+      sb
+        .from('audit_events')
+        .select('id', { count: 'exact', head: true })
+        .neq('tool_id', '__agent_turn')
+        .gte('created_at', todayStart.toISOString()),
+      sb
+        .from('growth_signals')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'new'),
+      sb
+        .from('mcp_pending_actions')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gt('expires_at', nowIso),
+      sb
+        .from('scheduled_jobs')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'active'),
+      sb
+        .from('scheduled_job_runs')
+        .select('id, status, started_at, output, error, scheduled_jobs!inner(name, user_id)')
+        .eq('scheduled_jobs.user_id', user.id)
+        .order('started_at', { ascending: false })
+        .limit(6),
+      sb
+        .from('conversations')
+        .select('id, title, updated_at, agents(name)')
+        .eq('user_id', user.id)
+        .neq('surface', 'mcp')
+        .order('updated_at', { ascending: false })
+        .limit(5),
+    ]);
 
-  // Separate real tool calls from synthetic agent-turn markers.
-  const toolCalls = audit.filter((a) => a.tool_id !== '__agent_turn');
-  const okCount = toolCalls.filter((a) => a.status === 'ok').length;
-  const errCount = toolCalls.filter((a) => a.status === 'error').length;
-  const pendingCount = toolCalls.filter((a) => a.status === 'confirmation_required').length;
-  const rateLimited = toolCalls.filter((a) => a.status === 'rate_limited').length;
-  const totalCalls = toolCalls.length;
-  const successRate = totalCalls > 0 ? Math.round((okCount / totalCalls) * 100) : 0;
-  const agentTurns = audit.filter((a) => a.tool_id === '__agent_turn').length;
+  const toolCallsToday = toolCallsRes.count ?? 0;
+  const newSignals = signalsRes.count ?? 0;
+  const pendingApprovals = approvalsRes.count ?? 0;
+  const activeRoutines = routinesRes.count ?? 0;
 
-  const latencies = toolCalls.map((a) => a.latency_ms ?? 0).filter((n) => n > 0);
-  const avgLatency =
-    latencies.length > 0 ? Math.round(latencies.reduce((s, n) => s + n, 0) / latencies.length) : 0;
+  const runs = (runsRes.data ?? []) as unknown as RunRow[];
+  const conversations = (convsRes.data ?? []) as unknown as ConversationRow[];
 
-  // Tool usage breakdown (top 5).
-  const byTool: Record<string, number> = {};
-  for (const a of toolCalls) byTool[a.tool_id] = (byTool[a.tool_id] ?? 0) + 1;
-  const topTools = Object.entries(byTool)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-  const topToolMax = topTools.length > 0 ? Math.max(...topTools.map(([, n]) => n)) : 0;
-
-  // Per-user activity (team workload).
-  const byUser: Record<string, number> = {};
-  for (const a of audit) byUser[a.user_id] = (byUser[a.user_id] ?? 0) + 1;
-  const userMap = new Map(
-    ((usersRes.data ?? []) as { id: string; name: string | null; email: string }[]).map((u) => [
-      u.id,
-      u.name?.trim() || u.email,
-    ]),
-  );
-  const teamRows = Object.entries(byUser)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-  const teamMax = teamRows.length > 0 ? Math.max(...teamRows.map(([, n]) => n)) : 0;
-
-  const recentConvs = (recentConvRes.data ?? []) as {
-    id: string;
-    title: string | null;
-    updated_at: string;
-    agents: { name: string } | { name: string }[] | null;
-  }[];
-
-  const heroTotal = totalCalls + agentTurns;
+  const firstName = (user.name?.trim() || user.email.split('@')[0] || 'hola').split(/\s+/)[0];
+  const needsYou = pendingApprovals + newSignals;
 
   return (
     <>
-      <PageHeader
-        title="Sales Co-pilot"
-        subtitle="Workspace overview · last 7 days"
-        icon={<Sparkles className="h-5 w-5" />}
-        actions={
-          <Link
-            href="/chat"
-            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong"
-          >
-            New chat
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        }
-      />
-
-      {/* KPI row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Conversations"
-          value={totalConversations.toLocaleString()}
-          sub={`${agentTurns} agent turns this week`}
-          icon={<MessagesSquare className="h-[18px] w-[18px]" />}
-          tone="primary"
-          delay={0}
-        />
-        <StatCard
-          label="Active Agents"
-          value={String(totalAgents)}
-          sub="Sales co-pilot online"
-          icon={<Bot className="h-[18px] w-[18px]" />}
-          tone="sky"
-          delay={60}
-        />
-        <StatCard
-          label="Tool Calls"
-          value={totalCalls.toLocaleString()}
-          sub={`${okCount} succeeded · ${errCount} failed`}
-          icon={<Wrench className="h-[18px] w-[18px]" />}
-          tone="amber"
-          delay={120}
-        />
-        <StatCard
-          label="Success Rate"
-          value={`${successRate}%`}
-          sub={totalCalls > 0 ? `${okCount}/${totalCalls} ok` : 'No calls yet'}
-          icon={<Gauge className="h-[18px] w-[18px]" />}
-          tone="emerald"
-          delay={180}
-        />
-      </div>
-
-      {/* Hero — gradient activity banner */}
-      <div className="hero-mesh animate-rise mt-4 overflow-hidden rounded-card p-6 text-white shadow-pop" style={{ animationDelay: '120ms' }}>
-        <div className="flex flex-wrap items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <span className="grid h-11 w-11 place-items-center rounded-[14px] bg-white/15 backdrop-blur">
-              <Send className="h-5 w-5" />
+      {/* Greeting hero */}
+      <Panel className="animate-rise mb-4 p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-5">
+          <div className="flex items-center gap-4">
+            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
+              <Zap className="h-6 w-6" />
             </span>
             <div>
-              <div className="text-lg font-bold leading-tight">Agent Activity</div>
-              <div className="text-[13px] text-white/70">{heroTotal} actions executed this week</div>
+              <h1 className="text-[22px] font-extrabold tracking-tight text-ink">
+                Hola, {firstName}
+              </h1>
+              <p className="mt-0.5 text-[13px] text-ink-muted">
+                Esto es lo que pasó mientras no estabas ⚡
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-8">
-            {[
-              { n: heroTotal, l: 'Total' },
-              { n: pendingCount, l: 'Pending' },
-              { n: okCount, l: 'Succeeded' },
-              { n: errCount + rateLimited, l: 'Blocked' },
-            ].map((m) => (
-              <div key={m.l} className="text-center">
-                <div className="stat-num text-3xl">{m.n}</div>
-                <div className="text-[11px] uppercase tracking-wider text-white/60">{m.l}</div>
-              </div>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <StatChip
+              icon={<Wrench className="h-3.5 w-3.5" />}
+              value={toolCallsToday}
+              label="tool calls hoy"
+            />
+            <StatChip
+              icon={<Radar className="h-3.5 w-3.5" />}
+              value={newSignals}
+              label="señales nuevas"
+              tone={newSignals > 0 ? 'amber' : 'default'}
+            />
+            <StatChip
+              icon={<BadgeCheck className="h-3.5 w-3.5" />}
+              value={pendingApprovals}
+              label="por aprobar"
+              tone={pendingApprovals > 0 ? 'amber' : 'default'}
+            />
+            <StatChip
+              icon={<AlarmClock className="h-3.5 w-3.5" />}
+              value={activeRoutines}
+              label="rutinas activas"
+            />
           </div>
         </div>
-      </div>
+      </Panel>
 
-      {/* Middle row: Team Workload + Tool Pipeline */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel className="pb-5">
-          <PanelHead icon={<Users2 className="h-4 w-4" />} title="Team Workload" right={`${teamRows.length} active`} />
-          <div className="mt-4 space-y-4 px-5">
-            {teamRows.length === 0 ? (
-              <EmptyHint>No activity recorded this week.</EmptyHint>
-            ) : (
-              teamRows.map(([uid, n], i) => (
-                <ProgressRow
-                  key={uid}
-                  label={userMap.get(uid) ?? 'Unknown user'}
-                  value={n}
-                  total={teamMax}
-                  tone={TONES[i % TONES.length]}
-                />
-              ))
-            )}
+      {/* Needs you */}
+      {needsYou > 0 && (
+        <Link
+          href="/approvals"
+          className="group mb-4 flex items-center gap-3 rounded-card border border-amber/40 bg-amber-soft px-4 py-3 shadow-card transition-colors hover:border-amber/70"
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-amber text-white">
+            <BadgeCheck className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1 text-[13px]">
+            <span className="font-semibold text-ink">Zippy te necesita</span>
+            <span className="text-ink-muted">
+              {' '}
+              — {pendingApprovals > 0 && `${pendingApprovals} acción${pendingApprovals === 1 ? '' : 'es'} esperando tu OK`}
+              {pendingApprovals > 0 && newSignals > 0 && ' · '}
+              {newSignals > 0 && `${newSignals} señal${newSignals === 1 ? '' : 'es'} de growth por revisar`}
+            </span>
           </div>
-        </Panel>
+          <ArrowRight className="h-4 w-4 shrink-0 text-amber transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      )}
 
-        <Panel className="pb-5">
-          <PanelHead icon={<GitBranch className="h-4 w-4" />} title="Tool Pipeline" right={`${totalCalls} calls`} />
-          <div className="mt-4 space-y-4 px-5">
-            {topTools.length === 0 ? (
-              <EmptyHint>No tools have run yet. Start a chat to see activity.</EmptyHint>
-            ) : (
-              topTools.map(([tool, n], i) => (
-                <ProgressRow
-                  key={tool}
-                  label={toolLabel(tool.replaceAll('.', '_')).label}
-                  value={n}
-                  total={topToolMax}
-                  tone={TONES[i % TONES.length]}
-                />
-              ))
-            )}
-          </div>
-        </Panel>
-      </div>
-
-      {/* Bottom row: AI Performance + Recent Activity */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel className="pb-5">
-          <PanelHead icon={<Gauge className="h-4 w-4" />} title="AI Performance" />
-          <div className="mt-4 space-y-4 px-5">
-            <Metric label="Success Rate" value={`${successRate}%`} bar={successRate} tone="emerald" />
-            <Metric
-              label="Confirmation Gate"
-              value={totalCalls > 0 ? `${Math.round((pendingCount / totalCalls) * 100)}%` : '0%'}
-              bar={totalCalls > 0 ? Math.round((pendingCount / totalCalls) * 100) : 0}
-              tone="primary"
-            />
-            <div className="flex items-center justify-between border-t border-border pt-3 text-[13px]">
-              <span className="text-ink-muted">Avg processing</span>
-              <span className="stat-num text-ink">{avgLatency > 0 ? `${avgLatency} ms` : '—'}</span>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Latest routine runs */}
+        <Panel className="p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              Rutinas — últimas corridas
             </div>
-            <div className="flex items-center justify-between text-[13px]">
-              <span className="text-ink-muted">KB documents</span>
-              <span className="stat-num text-ink">{totalDocs}</span>
-            </div>
-          </div>
-        </Panel>
-
-        <Panel className="pb-3">
-          <PanelHead icon={<Activity className="h-4 w-4" />} title="Recent Activity" />
-          <div className="mt-2 px-3">
-            {recentConvs.length === 0 ? (
-              <div className="px-2 py-6">
-                <EmptyHint>No conversations yet.</EmptyHint>
-              </div>
-            ) : (
-              <ul className="divide-y divide-border">
-                {recentConvs.map((c) => {
-                  const agentName = Array.isArray(c.agents) ? c.agents[0]?.name : c.agents?.name;
-                  return (
-                    <li key={c.id}>
-                      <Link
-                        href={`/chat/${c.id}`}
-                        className="flex items-center gap-3 rounded-[10px] px-2 py-2.5 transition-colors hover:bg-surface-2"
-                      >
-                        <IconChip tone="primary">
-                          <MessagesSquare className="h-4 w-4" />
-                        </IconChip>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[13px] font-medium text-ink">
-                            {c.title?.trim() || 'Untitled conversation'}
-                          </div>
-                          <div className="truncate text-xs text-ink-faint">{agentName ?? 'Sales'}</div>
-                        </div>
-                        <span className="shrink-0 text-xs text-ink-faint">{relativeTime(c.updated_at)}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-          <div className="px-5 pb-2 pt-2">
             <Link
-              href="/conversations"
-              className="inline-flex items-center gap-1 text-[13px] font-semibold text-primary hover:text-primary-strong"
+              href="/schedules"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
             >
-              View all <ArrowRight className="h-3.5 w-3.5" />
+              Ver rutinas <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
+          {runs.length === 0 ? (
+            <EmptyHint>
+              Ninguna rutina ha corrido todavía. Pídele una a Zippy desde el chat.
+            </EmptyHint>
+          ) : (
+            <ul className="divide-y divide-border">
+              {runs.map((r) => {
+                const excerpt = (r.status === 'error' ? r.error : r.output)?.trim();
+                return (
+                  <li key={r.id} className="py-2.5 first:pt-0 last:pb-0">
+                    <div className="flex items-center gap-2">
+                      <StatusPill status={r.status} />
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
+                        {relName(r.scheduled_jobs) ?? 'Rutina'}
+                      </span>
+                      <span className="shrink-0 text-xs text-ink-faint">
+                        {relativeTime(r.started_at)}
+                      </span>
+                    </div>
+                    {excerpt && (
+                      <p
+                        className={clsx(
+                          'mt-1 line-clamp-2 text-[12px] leading-snug',
+                          r.status === 'error' ? 'text-rose' : 'text-ink-muted',
+                        )}
+                      >
+                        {excerpt}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
+
+        {/* Recent conversations */}
+        <Panel className="p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              Conversaciones recientes
+            </div>
+            <Link
+              href="/chat"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
+            >
+              Nuevo chat <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+          {conversations.length === 0 ? (
+            <EmptyHint>Todavía no tienes conversaciones. Empieza una con Zippy.</EmptyHint>
+          ) : (
+            <ul className="divide-y divide-border">
+              {conversations.map((c) => (
+                <li key={c.id}>
+                  <Link
+                    href={`/chat/${c.id}`}
+                    className="flex items-center gap-3 rounded-[10px] px-1.5 py-2.5 transition-colors hover:bg-surface-2"
+                  >
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
+                      <MessagesSquare className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] font-medium text-ink">
+                        {c.title?.trim() || 'Conversación sin título'}
+                      </div>
+                      <div className="truncate text-xs text-ink-faint">
+                        {relName(c.agents) ?? 'Zippy'}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-xs text-ink-faint">
+                      {relativeTime(c.updated_at)}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </Panel>
       </div>
 
-      {/* Quick links */}
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <QuickLink href="/kb" icon={<BookOpen className="h-[18px] w-[18px]" />} title="Knowledge Base" sub={`${totalDocs} documents indexed`} tone="sky" />
-        <QuickLink href="/integrations" icon={<Wrench className="h-[18px] w-[18px]" />} title="Integrations" sub="HubSpot · Google · MCP" tone="amber" />
-        <QuickLink href="/agents" icon={<Bot className="h-[18px] w-[18px]" />} title="Agents" sub={`${totalAgents} configured`} tone="primary" />
+      {/* Quick actions */}
+      <div className="mt-4">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+          Acciones rápidas
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <QuickAction
+            href="/chat"
+            icon={<Sparkles className="h-4 w-4" />}
+            label="Nuevo chat"
+          />
+          <QuickAction
+            href="/pipelines"
+            icon={<Workflow className="h-4 w-4" />}
+            label="Run a pipeline"
+          />
+          <QuickAction
+            href="/kb"
+            icon={<BookOpen className="h-4 w-4" />}
+            label="Search the brain"
+          />
+          <QuickAction
+            href="/schedules"
+            icon={<AlarmClock className="h-4 w-4" />}
+            label="Routines"
+          />
+        </div>
       </div>
     </>
   );
 }
 
 function EmptyHint({ children }: { children: React.ReactNode }) {
-  return <p className="py-4 text-center text-[13px] text-ink-faint">{children}</p>;
+  return <p className="py-6 text-center text-[13px] text-ink-faint">{children}</p>;
 }
 
-function Metric({
-  label,
+function StatChip({
+  icon,
   value,
-  bar,
-  tone,
+  label,
+  tone = 'default',
 }: {
+  icon: React.ReactNode;
+  value: number;
   label: string;
-  value: string;
-  bar: number;
-  tone: 'primary' | 'emerald';
+  tone?: 'default' | 'amber';
 }) {
-  const color = tone === 'emerald' ? 'bg-emerald' : 'bg-primary';
   return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between text-[13px]">
-        <span className="text-ink-muted">{label}</span>
-        <span className="stat-num text-ink">{value}</span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
-        <div className={`h-full rounded-full ${color} transition-[width] duration-700`} style={{ width: `${Math.min(bar, 100)}%` }} />
-      </div>
-    </div>
+    <span
+      className={clsx(
+        'inline-flex items-center gap-1.5 rounded-pill border px-3 py-1.5 text-xs',
+        tone === 'amber'
+          ? 'border-amber/40 bg-amber-soft text-amber'
+          : 'border-border bg-surface-2 text-ink-muted',
+      )}
+    >
+      {icon}
+      <span className={clsx('stat-num text-[13px]', tone === 'amber' ? 'text-amber' : 'text-ink')}>
+        {value.toLocaleString()}
+      </span>
+      {label}
+    </span>
   );
 }
 
-function QuickLink({
+function StatusPill({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    ok: 'bg-emerald-soft text-emerald',
+    error: 'bg-rose-soft text-rose',
+    running: 'bg-surface-2 text-ink-faint',
+  };
+  return (
+    <span
+      className={clsx(
+        'inline-flex shrink-0 items-center rounded-pill px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide',
+        styles[status] ?? 'bg-surface-2 text-ink-faint',
+      )}
+    >
+      {status}
+    </span>
+  );
+}
+
+function QuickAction({
   href,
   icon,
-  title,
-  sub,
-  tone,
+  label,
 }: {
   href: string;
   icon: React.ReactNode;
-  title: string;
-  sub: string;
-  tone: 'primary' | 'sky' | 'amber';
+  label: string;
 }) {
   return (
     <Link
       href={href}
-      className="group flex items-center gap-3 rounded-card border border-border bg-surface p-4 shadow-card transition-colors hover:border-primary/30"
+      className="group flex items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 py-3 shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-pop"
     >
-      <IconChip tone={tone}>{icon}</IconChip>
-      <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-semibold text-ink">{title}</div>
-        <div className="truncate text-xs text-ink-faint">{sub}</div>
-      </div>
-      <ArrowRight className="h-4 w-4 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
+        {icon}
+      </span>
+      <span className="truncate text-[13px] font-semibold text-ink">{label}</span>
+      <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
     </Link>
   );
 }

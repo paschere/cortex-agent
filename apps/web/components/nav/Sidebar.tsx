@@ -8,6 +8,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
+  Inbox,
   LayoutDashboard,
   MessageSquare,
   MessagesSquare,
@@ -48,6 +49,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { href: '/chat', label: 'Chat', icon: MessageSquare },
+      { href: '/approvals', label: 'Approvals', icon: Inbox },
       { href: '/conversations', label: 'Conversations', icon: MessagesSquare },
       { href: '/kb', label: 'Knowledge Base', icon: BookOpen },
     ],

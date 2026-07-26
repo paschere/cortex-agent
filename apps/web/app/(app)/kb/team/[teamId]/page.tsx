@@ -36,6 +36,11 @@ export default async function TeamKb({
   const title = team?.name ? `${team.name as string} KB` : 'Team Knowledge Base';
 
   return (
-    <CollectionView scope="team" scopeId={teamId} title={title} />
+    <CollectionView
+      scope="team"
+      scopeId={teamId}
+      title={title}
+      subtitle="Shared documents available to everyone on this team"
+    />
   );
 }

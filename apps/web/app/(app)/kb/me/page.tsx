@@ -4,6 +4,11 @@ import { requireSession } from '@/lib/session';
 export default async function MyKb() {
   const user = await requireSession();
   return (
-    <CollectionView scope="user" scopeId={user.id} title="My Knowledge Base" />
+    <CollectionView
+      scope="user"
+      scopeId={user.id}
+      title="My Knowledge Base"
+      subtitle="Personal documents only your agents can see"
+    />
   );
 }

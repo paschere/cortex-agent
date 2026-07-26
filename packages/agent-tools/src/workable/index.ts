@@ -6,3 +6,9 @@ export {
   workableMoveCandidate,
   workableCreateComment,
 } from './tools';
+export {
+  workableSearchCandidates,
+  workableJobCandidatesSummary,
+  workableListJobQuestions,
+  workableListRecentActivity,
+} from './tools-extra';
