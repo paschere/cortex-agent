@@ -18,6 +18,7 @@ export default async function AgentsPage() {
   const { data } = await sb
     .from('agents')
     .select('id, slug, name, default_model, allowed_tool_ids, teams(name)')
+    .eq('archived', false)
     .order('name');
 
   const agents: AgentRow[] = (data ?? []) as unknown as AgentRow[];

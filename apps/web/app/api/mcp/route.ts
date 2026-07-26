@@ -37,6 +37,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildToolContext } from '@/lib/agent';
 import { sha256, issuer } from '@/lib/oauth';
 import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confirm';
+import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { filterTools, getTool, runTool, type AnyTool } from '@zipdev/agent-tools';
 import { ConfirmationRequiredError } from '@zipdev/core';
 
@@ -221,6 +222,7 @@ async function loadAllAgents(): Promise<AgentRow[]> {
   const { data, error } = await db
     .from('agents')
     .select('id, slug, name, system_prompt, allowed_tool_ids')
+    .eq('archived', false)
     .order('slug');
   if (error || !data || data.length === 0) {
     throw new Error(`Failed to load agents: ${error?.message ?? 'no rows'}`);
@@ -235,8 +237,14 @@ function toMcpName(id: string): string {
   return id.replaceAll('.', '_');
 }
 
-async function buildCatalog(): Promise<Map<string, CatalogEntry>> {
+/**
+ * The catalog is per-user: team tool permissions are a deny-list layered on
+ * top of the agents' allowed tools, so a blocked tool is neither advertised in
+ * tools/list nor resolvable in tools/call (it falls through to "Unknown tool").
+ */
+async function buildCatalog(userId?: string): Promise<Map<string, CatalogEntry>> {
   const agents = await loadAllAgents();
+  const denied = userId ? await deniedToolPatterns(getSupabaseServiceClient(), userId) : [];
   // Zippy first: shared tools attribute to the super-agent (audit trail and
   // MCP conversations read as Zippy's work, matching the product story).
   const ordered = [...agents].sort((a, b) =>
@@ -245,6 +253,7 @@ async function buildCatalog(): Promise<Map<string, CatalogEntry>> {
   const catalog = new Map<string, CatalogEntry>();
   for (const agent of ordered) {
     for (const tool of filterTools(agent.allowed_tool_ids ?? [])) {
+      if (denied.length > 0 && isToolDenied(tool.id, denied)) continue;
       const name = toMcpName(tool.id);
       if (!catalog.has(name)) {
         catalog.set(name, { tool, agentId: agent.id, agentSlug: agent.slug });
@@ -451,7 +460,7 @@ async function resolveMcpConversation(
 async function handleOverview(auth: AuthResult): Promise<unknown> {
   const db = getSupabaseServiceClient();
   const agents = await loadAllAgents();
-  const catalog = await buildCatalog();
+  const catalog = await buildCatalog(auth.userId);
 
   const [integrationsRes, collectionsRes] = await Promise.all([
     db.from('integrations').select('provider, scopes').eq('user_id', auth.userId),
@@ -533,6 +542,15 @@ async function handleConfirmAction(
   if (!tool) {
     return {
       content: [{ type: 'text', text: `Unknown tool in token: ${payload.toolId}` }],
+      isError: true,
+    };
+  }
+  // A team may have blocked the tool after the action was staged — a denied
+  // tool must never execute, even with a valid confirmation id.
+  const denied = await deniedToolPatterns(getSupabaseServiceClient(), auth.userId);
+  if (isToolDenied(payload.toolId, denied)) {
+    return {
+      content: [{ type: 'text', text: `Unknown tool: ${toMcpName(payload.toolId)}` }],
       isError: true,
     };
   }
@@ -783,7 +801,7 @@ async function dispatch(
       return rpcOk(id, {});
 
     case 'tools/list': {
-      const catalog = await buildCatalog();
+      const catalog = await buildCatalog(auth.userId);
       return rpcOk(id, { tools: buildToolDefs(catalog) });
     }
 
@@ -803,7 +821,7 @@ async function dispatch(
           return rpcOk(id, await handleConfirmAction(args, auth, sessionId));
         }
 
-        const catalog = await buildCatalog();
+        const catalog = await buildCatalog(auth.userId);
         const entry = catalog.get(mcpName);
         if (!entry) {
           return rpcOk(id, {

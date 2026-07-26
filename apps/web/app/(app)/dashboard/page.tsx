@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -6,7 +7,10 @@ import {
   BadgeCheck,
   BookOpen,
   MessagesSquare,
+  Plug,
   Radar,
+  ScrollText,
+  ShieldCheck,
   Sparkles,
   Workflow,
   Wrench,
@@ -16,6 +20,7 @@ import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { ConnectZippy } from './_components/ConnectZippy';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +98,18 @@ export default async function DashboardPage() {
 
   const firstName = (user.name?.trim() || user.email.split('@')[0] || 'hola').split(/\s+/)[0];
   const needsYou = pendingApprovals + newSignals;
+
+  // Connector URL — env first, then the incoming request host, so it is correct
+  // in local dev, previews and production without any hardcoding.
+  const configuredOrigin = process.env.APP_BASE_URL ?? process.env.BETTER_AUTH_URL ?? '';
+  let origin = configuredOrigin;
+  if (!origin) {
+    const h = await headers();
+    const host = h.get('host');
+    origin = host ? `https://${host}` : '';
+  }
+  const mcpUrl = `${origin.replace(/\/+$/, '')}/mcp`;
+  const isAdmin = user.role === 'org_admin';
 
   return (
     <>
@@ -284,7 +301,79 @@ export default async function DashboardPage() {
           />
         </div>
       </div>
+
+      {/* Connect Zippy anywhere */}
+      <Panel className="mt-4 p-5">
+        <div className="flex items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-primary-soft text-primary">
+            <Plug className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-bold tracking-tight text-ink">
+              Connect Zippy anywhere
+            </h2>
+            <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+              The same brain — every tool, the Knowledge Base, pipelines and routines — inside any
+              MCP-capable assistant. It runs with your own permissions and every action stays
+              audited.
+            </p>
+          </div>
+        </div>
+
+        <ConnectZippy url={mcpUrl} />
+
+        {/* Trust strip */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-[11.5px]">
+          <TrustItem
+            href="/tools"
+            icon={<ShieldCheck className="h-3.5 w-3.5" />}
+            label="Your access, your permissions"
+          />
+          <span className="text-ink-faint">·</span>
+          <TrustItem
+            href="/approvals"
+            icon={<BadgeCheck className="h-3.5 w-3.5" />}
+            label="Writes ask before running"
+          />
+          <span className="text-ink-faint">·</span>
+          <TrustItem
+            href={isAdmin ? '/admin/audit' : undefined}
+            icon={<ScrollText className="h-3.5 w-3.5" />}
+            label="Every action audited"
+          />
+        </div>
+      </Panel>
     </>
+  );
+}
+
+function TrustItem({
+  href,
+  icon,
+  label,
+}: {
+  href?: string;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  const body = (
+    <>
+      <span className="text-primary">{icon}</span>
+      {label}
+    </>
+  );
+  if (!href) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-ink-muted">{body}</span>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1.5 text-ink-muted transition-colors hover:text-primary"
+    >
+      {body}
+    </Link>
   );
 }
 

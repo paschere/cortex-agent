@@ -2,9 +2,10 @@ import { listTools } from '@zipdev/agent-tools';
 import { BookOpenCheck, Layers, ShieldAlert, Wrench } from 'lucide-react';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { deniedToolPatterns } from '@/lib/tool-access';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatCard } from '@/components/ui/panel';
-import { ToolsCatalog, type CatalogTool, type CatalogUser } from './_components/ToolsCatalog';
+import { ToolsCatalog, type CatalogTeam, type CatalogTool } from './_components/ToolsCatalog';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,34 +25,48 @@ function matchPattern(pat: string, id: string): boolean {
 export default async function ToolsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ user?: string }>;
+  searchParams: Promise<{ team?: string }>;
 }) {
   const session = await requireSession();
   const isAdmin = session.role === 'org_admin';
-  const { user: requestedUserId = '' } = await searchParams;
+  const { team: requestedTeamId = '' } = await searchParams;
 
   const sb = getSupabaseServiceClient();
   const { data: agentData } = await sb.from('agents').select('slug, name, allowed_tool_ids');
   const agents = (agentData ?? []) as AgentRow[];
 
-  let users: CatalogUser[] = [];
-  let selectedUserId = '';
-  let overrides: Record<string, boolean> = {};
+  // Patterns denied to the signed-in user by their own teams — used for the
+  // "Not available to your team" badge on the read-only catalog.
+  const myDenied = await deniedToolPatterns(sb, session.id);
+
+  let teams: CatalogTeam[] = [];
+  let selectedTeamId = '';
+  let teamDenied: string[] = [];
   if (isAdmin) {
-    const { data: userData } = await sb
-      .from('users')
-      .select('id, email, name, role')
-      .order('email', { ascending: true });
-    users = (userData ?? []) as CatalogUser[];
-    if (requestedUserId && users.some((u) => u.id === requestedUserId)) {
-      selectedUserId = requestedUserId;
+    const [{ data: teamData }, { data: memberData }] = await Promise.all([
+      sb.from('teams').select('id, name').order('name', { ascending: true }),
+      sb.from('team_members').select('team_id'),
+    ]);
+    const memberCounts = ((memberData ?? []) as { team_id: string }[]).reduce<
+      Record<string, number>
+    >((acc, m) => {
+      acc[m.team_id] = (acc[m.team_id] ?? 0) + 1;
+      return acc;
+    }, {});
+    teams = ((teamData ?? []) as { id: string; name: string }[]).map((t) => ({
+      id: t.id,
+      name: t.name,
+      memberCount: memberCounts[t.id] ?? 0,
+    }));
+
+    if (requestedTeamId && teams.some((t) => t.id === requestedTeamId)) {
+      selectedTeamId = requestedTeamId;
       const { data: rows } = await sb
-        .from('user_tool_overrides')
-        .select('tool_id, enabled')
-        .eq('user_id', selectedUserId);
-      overrides = Object.fromEntries(
-        ((rows ?? []) as { tool_id: string; enabled: boolean }[]).map((r) => [r.tool_id, r.enabled]),
-      );
+        .from('team_tool_permissions')
+        .select('tool_pattern')
+        .eq('team_id', selectedTeamId)
+        .eq('allowed', false);
+      teamDenied = ((rows ?? []) as { tool_pattern: string }[]).map((r) => r.tool_pattern);
     }
   }
 
@@ -118,9 +133,10 @@ export default async function ToolsPage({
       <ToolsCatalog
         tools={tools}
         isAdmin={isAdmin}
-        users={users}
-        selectedUserId={selectedUserId}
-        initialOverrides={overrides}
+        teams={teams}
+        selectedTeamId={selectedTeamId}
+        initialTeamDenied={teamDenied}
+        myDenied={myDenied}
       />
     </>
   );

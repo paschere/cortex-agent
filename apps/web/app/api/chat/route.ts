@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildToolContext } from '@/lib/agent';
+import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { loadAgent } from '@zipdev/agents';
 import {
   filterTools,
@@ -174,7 +175,14 @@ export async function POST(req: NextRequest) {
     .slice(-4)
     .map((m) => m.content)
     .join('\n');
-  const allowed = scopeTools(filterTools(agent.allowedTools), recentText);
+  const scoped = scopeTools(filterTools(agent.allowedTools), recentText);
+  // Team tool permissions are a deny-list layered on the agent's tools:
+  // anything blocked by ANY of the user's teams never reaches the model.
+  const deniedPatterns = await deniedToolPatterns(db, user.id);
+  const allowed =
+    deniedPatterns.length > 0
+      ? scoped.filter((t) => !isToolDenied(t.id, deniedPatterns))
+      : scoped;
 
   // AI SDK requires tool names matching ^[a-zA-Z0-9_-]+$ — replace dots with underscores
   // Build reverse map to find original tool by its AI SDK name
