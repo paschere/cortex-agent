@@ -105,10 +105,10 @@ export default async function DashboardPage() {
             </span>
             <div>
               <h1 className="text-[22px] font-extrabold tracking-tight text-ink">
-                Hola, {firstName}
+                Hi, {firstName}
               </h1>
               <p className="mt-0.5 text-[13px] text-ink-muted">
-                Esto es lo que pasó mientras no estabas ⚡
+                Here is what happened while you were away ⚡
               </p>
             </div>
           </div>
@@ -116,24 +116,24 @@ export default async function DashboardPage() {
             <StatChip
               icon={<Wrench className="h-3.5 w-3.5" />}
               value={toolCallsToday}
-              label="tool calls hoy"
+              label="tool calls today"
             />
             <StatChip
               icon={<Radar className="h-3.5 w-3.5" />}
               value={newSignals}
-              label="señales nuevas"
+              label="new signals"
               tone={newSignals > 0 ? 'amber' : 'default'}
             />
             <StatChip
               icon={<BadgeCheck className="h-3.5 w-3.5" />}
               value={pendingApprovals}
-              label="por aprobar"
+              label="to approve"
               tone={pendingApprovals > 0 ? 'amber' : 'default'}
             />
             <StatChip
               icon={<AlarmClock className="h-3.5 w-3.5" />}
               value={activeRoutines}
-              label="rutinas activas"
+              label="active routines"
             />
           </div>
         </div>
@@ -149,12 +149,12 @@ export default async function DashboardPage() {
             <BadgeCheck className="h-4 w-4" />
           </span>
           <div className="min-w-0 flex-1 text-[13px]">
-            <span className="font-semibold text-ink">Zippy te necesita</span>
+            <span className="font-semibold text-ink">Zippy needs you</span>
             <span className="text-ink-muted">
               {' '}
-              — {pendingApprovals > 0 && `${pendingApprovals} acción${pendingApprovals === 1 ? '' : 'es'} esperando tu OK`}
+              — {pendingApprovals > 0 && `${pendingApprovals} action${pendingApprovals === 1 ? '' : 's'} awaiting your OK`}
               {pendingApprovals > 0 && newSignals > 0 && ' · '}
-              {newSignals > 0 && `${newSignals} señal${newSignals === 1 ? '' : 'es'} de growth por revisar`}
+              {newSignals > 0 && `${newSignals} growth signal${newSignals === 1 ? '' : 's'} to review`}
             </span>
           </div>
           <ArrowRight className="h-4 w-4 shrink-0 text-amber transition-transform group-hover:translate-x-0.5" />
@@ -166,18 +166,18 @@ export default async function DashboardPage() {
         <Panel className="p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Rutinas — últimas corridas
+              Routines — latest runs
             </div>
             <Link
               href="/schedules"
               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
             >
-              Ver rutinas <ArrowRight className="h-3 w-3" />
+              View routines <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
           {runs.length === 0 ? (
             <EmptyHint>
-              Ninguna rutina ha corrido todavía. Pídele una a Zippy desde el chat.
+              No routine has run yet. Ask Zippy for one in the chat.
             </EmptyHint>
           ) : (
             <ul className="divide-y divide-border">
@@ -215,17 +215,17 @@ export default async function DashboardPage() {
         <Panel className="p-4">
           <div className="mb-3 flex items-center justify-between">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Conversaciones recientes
+              Recent conversations
             </div>
             <Link
               href="/chat"
               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
             >
-              Nuevo chat <ArrowRight className="h-3 w-3" />
+              New chat <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
           {conversations.length === 0 ? (
-            <EmptyHint>Todavía no tienes conversaciones. Empieza una con Zippy.</EmptyHint>
+            <EmptyHint>No conversations yet. Start one with Zippy.</EmptyHint>
           ) : (
             <ul className="divide-y divide-border">
               {conversations.map((c) => (
@@ -239,7 +239,7 @@ export default async function DashboardPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px] font-medium text-ink">
-                        {c.title?.trim() || 'Conversación sin título'}
+                        {c.title?.trim() || 'Untitled conversation'}
                       </div>
                       <div className="truncate text-xs text-ink-faint">
                         {relName(c.agents) ?? 'Zippy'}
@@ -259,13 +259,13 @@ export default async function DashboardPage() {
       {/* Quick actions */}
       <div className="mt-4">
         <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-          Acciones rápidas
+          Quick actions
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <QuickAction
             href="/chat"
             icon={<Sparkles className="h-4 w-4" />}
-            label="Nuevo chat"
+            label="New chat"
           />
           <QuickAction
             href="/pipelines"
