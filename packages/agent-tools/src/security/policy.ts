@@ -201,6 +201,15 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // rather than being inferred from the payload: with a human present it asks
   // first, and on a schedule it is refused outright.
   'apollo.enrich_people': { sensitivity: 'pii', alwaysBulk: true },
+  // The company-signal tools are the exception to the family default. Job
+  // advertisements and press articles are published material about a business,
+  // and neither projection carries a contact detail — so classifying them as
+  // personal data would spend the sensitive-read budget, and flag every result,
+  // for something anyone can read on a careers page.
+  'apollo.company_job_postings': { sensitivity: 'public', blastRadius: 'read' },
+  'apollo.company_news': { sensitivity: 'public', blastRadius: 'read' },
+  // Our own consumption counters: no data about anyone at all.
+  'apollo.remaining_lookups': { sensitivity: 'internal', blastRadius: 'read' },
 
   // --- rate tools carry pay/bill rates but are calculators, not payroll ------
   'rate.estimate': { sensitivity: 'financial', blastRadius: 'read' },

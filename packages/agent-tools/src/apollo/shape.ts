@@ -32,6 +32,9 @@ export const DATASET = {
   personEnrichment: 'Apollo person enrichment',
   companySearch: 'Apollo company search',
   companyEnrichment: 'Apollo company enrichment',
+  jobPostings: 'Apollo job postings',
+  companyNews: 'Apollo company news',
+  accountUsage: 'Apollo account usage',
 } as const;
 
 export function sourceOf(dataset: string): z.infer<typeof sourceSchema> {
@@ -188,6 +191,82 @@ export function adaptPersonMatch(p: RawSearchPerson): PersonMatch | null {
     // that is not an explicit "no" as a yes.
     hasDirectPhone: p.has_direct_phone === true || p.has_direct_phone === 'true',
     lastVerifiedAt: p.last_refreshed_at ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Hiring and news signals
+// ---------------------------------------------------------------------------
+
+/**
+ * One advertised role. Apollo returns an internal id for each posting, but
+ * nothing follows up on a posting by id, so it is dropped rather than carried
+ * into a payload a human may end up reading.
+ */
+export const jobPostingSchema = z.object({
+  title: z.string().nullable(),
+  url: z.string().nullable(),
+  location: z.string().nullable(),
+  postedAt: z.string().nullable(),
+  /** When Apollo last saw the ad still live — a stale date means it may be filled. */
+  lastSeenAt: z.string().nullable(),
+});
+
+export type JobPosting = z.infer<typeof jobPostingSchema>;
+
+export interface RawJobPosting {
+  title?: string | null;
+  url?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  posted_at?: string | null;
+  last_seen_at?: string | null;
+}
+
+export function adaptJobPosting(j: RawJobPosting): JobPosting {
+  return {
+    title: j.title ?? null,
+    url: j.url ?? null,
+    location: joinLocation(j.city, j.state, j.country),
+    postedAt: j.posted_at ?? null,
+    lastSeenAt: j.last_seen_at ?? null,
+  };
+}
+
+const MAX_SNIPPET = 300;
+const MAX_CATEGORIES = 5;
+
+export const newsArticleSchema = z.object({
+  headline: z.string().nullable(),
+  url: z.string().nullable(),
+  /** Who published it, by site — named `publisher` so it never shadows `source`. */
+  publisher: z.string().nullable(),
+  summary: z.string().nullable(),
+  publishedAt: z.string().nullable(),
+  /** Apollo's own labels for the event, e.g. "investment", "hires". */
+  categories: z.array(z.string()),
+});
+
+export type NewsArticle = z.infer<typeof newsArticleSchema>;
+
+export interface RawNewsArticle {
+  title?: string | null;
+  url?: string | null;
+  domain?: string | null;
+  snippet?: string | null;
+  published_at?: string | null;
+  event_categories?: string[] | null;
+}
+
+export function adaptNewsArticle(a: RawNewsArticle): NewsArticle {
+  return {
+    headline: a.title ?? null,
+    url: a.url ?? null,
+    publisher: a.domain ?? null,
+    summary: a.snippet ? a.snippet.slice(0, MAX_SNIPPET) : null,
+    publishedAt: a.published_at ?? null,
+    categories: (a.event_categories ?? []).slice(0, MAX_CATEGORIES),
   };
 }
 

@@ -80,10 +80,8 @@ interface LinkedUser {
  * worked. Rather than depend on a console checkbox staying a particular way,
  * we detect the add-on invocation from the request body and answer in kind.
  */
-let respondAsAddOn = false;
-
-function jsonText(text: string): NextResponse {
-  if (respondAsAddOn) {
+function jsonText(text: string, asAddOn: boolean): NextResponse {
+  if (asAddOn) {
     return NextResponse.json({
       hostAppDataAction: {
         chatDataAction: { createMessageAction: { message: { text } } },
@@ -126,7 +124,10 @@ function unwrapChatEvent(body: Record<string, unknown>): {
       type,
       message: payload.message,
       space: payload.space ?? (payload.message as Record<string, unknown> | undefined)?.space,
-      user: payload.user ?? body.commonEventObject ? (body.authorizationEventObject as Record<string, unknown> | undefined) : undefined,
+      // An add-on event carries the sender at `chat.user`, not inside the
+      // payload. Getting this wrong means every sender looks unidentified and
+      // nothing runs, so both positions are tried before giving up.
+      user: payload.user ?? chat.user,
     } as unknown as ChatEvent,
     isAddOn: true,
   };
@@ -283,7 +284,7 @@ async function deliver(opts: {
 // Handlers
 // ---------------------------------------------------------------------------
 
-async function handleMessage(event: ChatEvent): Promise<NextResponse> {
+async function handleMessage(event: ChatEvent, asAddOn: boolean): Promise<NextResponse> {
   const sender = event.message?.sender;
   // Ignore the app's own messages, and anything else Chat labels non-human.
   if (sender?.type === 'BOT') return new NextResponse(null, { status: 200 });
@@ -291,16 +292,16 @@ async function handleMessage(event: ChatEvent): Promise<NextResponse> {
   const spaceName = event.space?.name;
   if (!spaceName) return new NextResponse(null, { status: 200 });
 
-  if (!sender?.email) return jsonText(NO_EMAIL_REPLY);
+  if (!sender?.email) return jsonText(NO_EMAIL_REPLY, asAddOn);
 
   const user = await resolveUser(sender);
-  if (!user) return jsonText(UNLINKED_REPLY);
+  if (!user) return jsonText(UNLINKED_REPLY, asAddOn);
 
   await upsertLink({ chatUser: sender, user, space: event.space });
 
   const audience = audienceOf(event.space);
   const userText = extractUserText(event.message);
-  if (!userText) return jsonText(EMPTY_MESSAGE_REPLY);
+  if (!userText) return jsonText(EMPTY_MESSAGE_REPLY, asAddOn);
 
   const slash = detectSlashCommand(event.message);
   const directive = slash ? SLASH_DIRECTIVES[slash] : '';
@@ -339,10 +340,10 @@ async function handleMessage(event: ChatEvent): Promise<NextResponse> {
     }
   });
 
-  return jsonText(ACK_TEXT);
+  return jsonText(ACK_TEXT, asAddOn);
 }
 
-async function handleAddedToSpace(event: ChatEvent): Promise<NextResponse> {
+async function handleAddedToSpace(event: ChatEvent, asAddOn: boolean): Promise<NextResponse> {
   const audience = audienceOf(event.space);
   const chatUser = event.user;
   if (chatUser?.email) {
@@ -351,7 +352,7 @@ async function handleAddedToSpace(event: ChatEvent): Promise<NextResponse> {
     // proactively before they have ever written to it.
     if (user) await upsertLink({ chatUser, user, space: event.space });
   }
-  return jsonText(audience === 'dm' ? DM_GREETING : SPACE_GREETING);
+  return jsonText(audience === 'dm' ? DM_GREETING : SPACE_GREETING, asAddOn);
 }
 
 // ---------------------------------------------------------------------------
@@ -433,11 +434,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   let event: ChatEvent;
+  // Threaded through every reply rather than held in module state: a warm
+  // serverless instance serves overlapping requests, and one add-on event would
+  // otherwise decide the envelope for a plain Chat event handled beside it.
+  let asAddOn = false;
   try {
     const body = (await req.json()) as Record<string, unknown>;
     const unwrapped = unwrapChatEvent(body);
     event = unwrapped.event;
-    respondAsAddOn = unwrapped.isAddOn;
+    asAddOn = unwrapped.isAddOn;
     logger.info('google-chat: event received', {
       type: event.type,
       addOn: unwrapped.isAddOn,
@@ -450,10 +455,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     switch (event.type) {
       case 'MESSAGE':
-        return await handleMessage(event);
+        return await handleMessage(event, asAddOn);
 
       case 'ADDED_TO_SPACE':
-        return await handleAddedToSpace(event);
+        return await handleAddedToSpace(event, asAddOn);
 
       case 'REMOVED_FROM_SPACE':
         await clearDmSpace(event.user?.name, event.space?.name);
@@ -462,7 +467,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case 'CARD_CLICKED':
         // Zippy posts text, not cards. If a card ever arrives, say something
         // sensible rather than failing silently.
-        return jsonText('That button is from an older message — just ask me again here. ⚡');
+        return jsonText('That button is from an older message — just ask me again here. ⚡', asAddOn);
 
       default:
         return new NextResponse(null, { status: 200 });
@@ -474,7 +479,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
     // A 200 with an apology beats a 500: Chat retries 5xx, and retrying an
     // agent turn is how you get the same answer posted three times.
-    return jsonText('Something went wrong on my side — try me again in a moment.');
+    return jsonText('Something went wrong on my side — try me again in a moment.', asAddOn);
   }
 }
 

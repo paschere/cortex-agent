@@ -68,7 +68,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   apollo: {
     name: 'Apollo',
     blurb:
-      'The prospecting database — find people by role and company, and get verified work emails and firmographics.',
+      'The prospecting database — find people by role and company, get verified work emails and firmographics, and see who is hiring or in the news.',
     tone: 'amber',
     icon: 'Rocket',
   },

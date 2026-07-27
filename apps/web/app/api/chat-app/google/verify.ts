@@ -30,8 +30,25 @@ import { logger } from '@zipdev/core';
  */
 
 const CHAT_ISSUER = 'chat@system.gserviceaccount.com';
-const CERTS_URL =
+const CHAT_CERTS_URL =
   'https://www.googleapis.com/service_accounts/v1/metadata/x509/chat@system.gserviceaccount.com';
+
+/**
+ * A Chat app published as a Google Workspace add-on is called with a DIFFERENT
+ * token: a standard Google OIDC id_token issued by accounts.google.com and
+ * signed with Google's general OAuth keys, not with the Chat service account's.
+ * Both shapes reach this endpoint depending on how the app is configured, so
+ * the signing key is looked up from the source that matches the issuer.
+ *
+ * The audience alone does NOT authenticate the OIDC form: anyone can mint an
+ * id_token with our URL as its audience. What identifies the caller is the
+ * `email` claim — the add-on's own service account, published by
+ * `gcloud workspace-add-ons get-authorization`. That claim is checked below and
+ * is the reason this path is not an open door.
+ */
+const GOOGLE_OIDC_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
+const GOOGLE_OIDC_CERTS_URL = 'https://www.googleapis.com/oauth2/v1/certs';
+
 const CERT_TTL_MS = 60 * 60_000;
 /** Tolerated clock skew between Google and us, in seconds. */
 const CLOCK_SKEW_S = 60;
@@ -41,6 +58,8 @@ export interface ChatJwtClaims {
   aud: string;
   exp: number;
   iat?: number;
+  /** Present on the add-on (OIDC) form: the service account that called us. */
+  email?: string;
 }
 
 export type ChatAuthResult =
@@ -63,6 +82,8 @@ export interface ChatAuthFailureDetail {
   /** What GOOGLE_CHAT_AUDIENCE expects on this environment. */
   expectedAudiences: string[];
   issuer?: string;
+  /** The `email` claim on the add-on (OIDC) form: which account called us. */
+  signer?: string;
   kid?: string;
 }
 
@@ -70,47 +91,73 @@ export interface ChatAuthFailureDetail {
 // Certificate cache
 // ---------------------------------------------------------------------------
 
-let certCache: { at: number; certs: Record<string, string> } | null = null;
-let inFlight: Promise<Record<string, string>> | null = null;
+// Keyed by source URL — the two issuers publish separate key sets that rotate
+// independently, so one cache entry per source.
+const certCaches = new Map<string, { at: number; certs: Record<string, string> }>();
+const inFlightByUrl = new Map<string, Promise<Record<string, string>>>();
 
-async function fetchCerts(): Promise<Record<string, string>> {
-  const res = await fetch(CERTS_URL, { cache: 'no-store' });
+async function fetchCerts(url: string): Promise<Record<string, string>> {
+  const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) throw new Error(`certs ${res.status}`);
   const body = (await res.json()) as Record<string, string>;
   if (!body || typeof body !== 'object') throw new Error('certs payload malformed');
   return body;
 }
 
-async function getCerts(force = false): Promise<Record<string, string>> {
-  if (!force && certCache && Date.now() - certCache.at < CERT_TTL_MS) return certCache.certs;
+async function getCerts(url: string, force = false): Promise<Record<string, string>> {
+  const cached = certCaches.get(url);
+  if (!force && cached && Date.now() - cached.at < CERT_TTL_MS) return cached.certs;
   // Collapse concurrent refreshes — a burst of Chat events must not fan out
   // into a burst of cert fetches.
-  if (!inFlight) {
-    inFlight = fetchCerts()
+  let pending = inFlightByUrl.get(url);
+  if (!pending) {
+    pending = fetchCerts(url)
       .then((certs) => {
-        certCache = { at: Date.now(), certs };
+        certCaches.set(url, { at: Date.now(), certs });
         return certs;
       })
       .finally(() => {
-        inFlight = null;
+        inFlightByUrl.delete(url);
       });
+    inFlightByUrl.set(url, pending);
   }
   try {
-    return await inFlight;
+    return await pending;
   } catch (err) {
     logger.error('google-chat: could not fetch signing certificates', {
       error: (err as Error).message,
+      source: url,
     });
     // A stale cache beats rejecting every request during a transient outage —
     // the certificates are long-lived and the signature check is unchanged.
-    if (certCache) return certCache.certs;
+    if (cached) return cached.certs;
     throw err;
   }
 }
 
+/**
+ * Which service accounts may call us over the OIDC (add-on) path. Defaults to
+ * the add-on service account Google provisions per project, which is what
+ * `gcloud workspace-add-ons get-authorization` reports.
+ */
+function allowedSigners(): string[] {
+  const configured = (process.env.GOOGLE_CHAT_SIGNER_EMAILS ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (configured.length > 0) return configured;
+  const projectNumber = (process.env.GOOGLE_CHAT_AUDIENCE ?? '')
+    .split(',')
+    .map((a) => a.trim())
+    .find((a) => /^\d+$/.test(a));
+  return projectNumber
+    ? [`service-${projectNumber}@gcp-sa-gsuiteaddons.iam.gserviceaccount.com`]
+    : [];
+}
+
 /** Exposed for tests / warm-up; never required by the request path. */
 export function resetChatCertCache(): void {
-  certCache = null;
+  certCaches.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -186,15 +233,24 @@ export async function verifyGoogleChatRequest(
   detail.tokenAudience = claims.aud;
   detail.issuer = claims.iss;
   detail.kid = header.kid;
+  detail.signer = claims.email;
 
   if (header.alg !== 'RS256')
     return { ok: false, reason: `unsupported alg ${header.alg ?? '?'}`, detail };
   const kid = header.kid;
   if (!kid) return { ok: false, reason: 'token has no kid', detail };
 
+  // The issuer decides which key set can possibly have signed this, so it is
+  // settled before the signature rather than after.
+  const isAddOnToken = GOOGLE_OIDC_ISSUERS.has(claims.iss);
+  if (claims.iss !== CHAT_ISSUER && !isAddOnToken) {
+    return { ok: false, reason: `unexpected issuer ${claims.iss}`, detail };
+  }
+  const certsUrl = isAddOnToken ? GOOGLE_OIDC_CERTS_URL : CHAT_CERTS_URL;
+
   let certs: Record<string, string>;
   try {
-    certs = await getCerts();
+    certs = await getCerts(certsUrl);
   } catch {
     return { ok: false, reason: 'certificates unavailable', detail };
   }
@@ -202,7 +258,7 @@ export async function verifyGoogleChatRequest(
   if (!pem) {
     // Unknown kid == key rotation. Refetch once before giving up.
     try {
-      certs = await getCerts(true);
+      certs = await getCerts(certsUrl, true);
     } catch {
       return { ok: false, reason: 'certificates unavailable', detail };
     }
@@ -223,8 +279,23 @@ export async function verifyGoogleChatRequest(
   }
   if (!signatureValid) return { ok: false, reason: 'bad signature', detail };
 
-  if (claims.iss !== CHAT_ISSUER)
-    return { ok: false, reason: `unexpected issuer ${claims.iss}`, detail };
+  if (isAddOnToken) {
+    // Google signs an id_token for anyone who asks, so a valid signature and a
+    // matching audience prove only that SOMEBODY at Google minted a token
+    // naming our endpoint. The `email` claim is what says it was our add-on.
+    const signer = claims.email?.trim().toLowerCase() ?? '';
+    const allowed = allowedSigners();
+    if (allowed.length === 0) {
+      return { ok: false, reason: 'no add-on signer configured', detail };
+    }
+    if (!signer || !allowed.includes(signer)) {
+      return {
+        ok: false,
+        reason: `unexpected signer "${claims.email ?? '(none)'}", expected one of [${allowed.join(', ')}]`,
+        detail,
+      };
+    }
+  }
   if (!audiences.includes(claims.aud)) {
     // The signature already proved this token came from Google Chat; only the
     // audience disagrees, and that value depends on a console setting
