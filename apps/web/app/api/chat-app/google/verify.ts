@@ -45,7 +45,26 @@ export interface ChatJwtClaims {
 
 export type ChatAuthResult =
   | { ok: true; claims: ChatJwtClaims | null; bypassed: boolean }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; detail?: ChatAuthFailureDetail };
+
+/**
+ * What the caller may record about a rejection. Google Chat surfaces nothing
+ * useful to the person in the chat window ("didn't respond or its response was
+ * invalid"), so a rejection is only debuggable if we keep the few claims that
+ * decide it. All of these come from a token whose signature has already been
+ * checked against Google's certificates, or are shape facts about the request —
+ * none is a secret, and the token itself is never stored.
+ */
+export interface ChatAuthFailureDetail {
+  /** Whether an `Authorization: Bearer …` header was present at all. */
+  hasBearer: boolean;
+  /** The `aud` claim Google actually sent, i.e. how the console is configured. */
+  tokenAudience?: string;
+  /** What GOOGLE_CHAT_AUDIENCE expects on this environment. */
+  expectedAudiences: string[];
+  issuer?: string;
+  kid?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Certificate cache
@@ -138,10 +157,22 @@ export async function verifyGoogleChatRequest(
 
   const match = /^Bearer\s+(.+)$/i.exec((authorization ?? '').trim());
   const token = match?.[1]?.trim();
-  if (!token) return { ok: false, reason: 'missing bearer token' };
+  // Carried through every rejection below so a failure is diagnosable from the
+  // record alone, without a second round-trip through the Chat console.
+  const detail: ChatAuthFailureDetail = {
+    hasBearer: Boolean(token),
+    expectedAudiences: audiences,
+  };
+  if (!token) {
+    return {
+      ok: false,
+      reason: `missing bearer token (authorization header ${authorization ? 'present but not Bearer' : 'absent'})`,
+      detail,
+    };
+  }
 
   const parts = token.split('.');
-  if (parts.length !== 3) return { ok: false, reason: 'malformed token' };
+  if (parts.length !== 3) return { ok: false, reason: 'malformed token', detail };
   const [headerB64, payloadB64, signatureB64] = parts as [string, string, string];
 
   let header: { alg?: string; kid?: string };
@@ -150,18 +181,22 @@ export async function verifyGoogleChatRequest(
     header = decodeSegment(headerB64) as { alg?: string; kid?: string };
     claims = decodeSegment(payloadB64) as ChatJwtClaims;
   } catch {
-    return { ok: false, reason: 'undecodable token' };
+    return { ok: false, reason: 'undecodable token', detail };
   }
+  detail.tokenAudience = claims.aud;
+  detail.issuer = claims.iss;
+  detail.kid = header.kid;
 
-  if (header.alg !== 'RS256') return { ok: false, reason: `unsupported alg ${header.alg ?? '?'}` };
+  if (header.alg !== 'RS256')
+    return { ok: false, reason: `unsupported alg ${header.alg ?? '?'}`, detail };
   const kid = header.kid;
-  if (!kid) return { ok: false, reason: 'token has no kid' };
+  if (!kid) return { ok: false, reason: 'token has no kid', detail };
 
   let certs: Record<string, string>;
   try {
     certs = await getCerts();
   } catch {
-    return { ok: false, reason: 'certificates unavailable' };
+    return { ok: false, reason: 'certificates unavailable', detail };
   }
   let pem = certs[kid];
   if (!pem) {
@@ -169,11 +204,11 @@ export async function verifyGoogleChatRequest(
     try {
       certs = await getCerts(true);
     } catch {
-      return { ok: false, reason: 'certificates unavailable' };
+      return { ok: false, reason: 'certificates unavailable', detail };
     }
     pem = certs[kid];
   }
-  if (!pem) return { ok: false, reason: `unknown signing key ${kid}` };
+  if (!pem) return { ok: false, reason: `unknown signing key ${kid}`, detail };
 
   let signatureValid = false;
   try {
@@ -184,11 +219,12 @@ export async function verifyGoogleChatRequest(
     signatureValid = verifier.verify(publicKey, Buffer.from(signatureB64, 'base64url'));
   } catch (err) {
     logger.error('google-chat: signature verification threw', { error: (err as Error).message });
-    return { ok: false, reason: 'signature check failed' };
+    return { ok: false, reason: 'signature check failed', detail };
   }
-  if (!signatureValid) return { ok: false, reason: 'bad signature' };
+  if (!signatureValid) return { ok: false, reason: 'bad signature', detail };
 
-  if (claims.iss !== CHAT_ISSUER) return { ok: false, reason: `unexpected issuer ${claims.iss}` };
+  if (claims.iss !== CHAT_ISSUER)
+    return { ok: false, reason: `unexpected issuer ${claims.iss}`, detail };
   if (!audiences.includes(claims.aud)) {
     // The signature already proved this token came from Google Chat; only the
     // audience disagrees, and that value depends on a console setting
@@ -198,15 +234,16 @@ export async function verifyGoogleChatRequest(
     return {
       ok: false,
       reason: `audience mismatch: token aud="${claims.aud}", configured=[${audiences.join(', ')}]`,
+      detail,
     };
   }
 
   const now = Math.floor(Date.now() / 1000);
   if (typeof claims.exp !== 'number' || claims.exp + CLOCK_SKEW_S < now) {
-    return { ok: false, reason: 'token expired' };
+    return { ok: false, reason: 'token expired', detail };
   }
   if (typeof claims.iat === 'number' && claims.iat - CLOCK_SKEW_S > now) {
-    return { ok: false, reason: 'token issued in the future' };
+    return { ok: false, reason: 'token issued in the future', detail };
   }
 
   return { ok: true, claims, bypassed: false };

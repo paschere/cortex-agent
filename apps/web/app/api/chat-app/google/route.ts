@@ -14,7 +14,7 @@ import {
   extractUserText,
 } from './events';
 import { runChatTurn } from './turn';
-import { verifyGoogleChatRequest } from './verify';
+import { type ChatAuthFailureDetail, verifyGoogleChatRequest } from './verify';
 
 /**
  * The Zippy Google Chat app — inbound webhook.
@@ -358,10 +358,41 @@ async function handleAddedToSpace(event: ChatEvent): Promise<NextResponse> {
 // HTTP
 // ---------------------------------------------------------------------------
 
+/**
+ * Persist why an inbound Chat request was turned away. Best-effort in the
+ * strictest sense: it must never delay or fail the 401 it accompanies.
+ */
+async function recordRejection(
+  reason: string,
+  detail: ChatAuthFailureDetail | undefined,
+): Promise<void> {
+  try {
+    await getSupabaseServiceClient()
+      .from('security_events')
+      .insert({
+        tool_id: 'chat.inbound',
+        surface: 'google-chat',
+        risk_level: 'low',
+        decision: 'block',
+        reason,
+        signals: detail ?? {},
+      });
+  } catch (err) {
+    logger.error('google-chat: could not record the rejection', {
+      error: (err as Error).message,
+    });
+  }
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const auth = await verifyGoogleChatRequest(req.headers.get('authorization'));
   if (!auth.ok) {
     logger.warn('google-chat: rejected an unverified request', { reason: auth.reason });
+    // Also recorded, not just logged. Google shows the person nothing but
+    // "Zippy isn't responding", and platform logs are awkward to reach from
+    // where this gets debugged — a row in security_events makes a misconfigured
+    // Chat app answerable with one query instead of a guessing game.
+    void recordRejection(auth.reason, auth.detail);
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
