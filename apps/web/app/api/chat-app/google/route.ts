@@ -67,8 +67,69 @@ interface LinkedUser {
   name: string | null;
 }
 
+/**
+ * Google Chat accepts two different response envelopes, and which one it wants
+ * depends on how the app is configured in the console:
+ *
+ *   • "Chat app" (interaction events)  → { text: "…" }
+ *   • "Workspace add-on" (Chat actions) → the reply must be wrapped in
+ *     hostAppDataAction.chatDataAction.createMessageAction.message
+ *
+ * Sending the wrong shape fails with "Can't handle the app's response"
+ * (code 3) — the reply never reaches the user even though everything else
+ * worked. Rather than depend on a console checkbox staying a particular way,
+ * we detect the add-on invocation from the request body and answer in kind.
+ */
+let respondAsAddOn = false;
+
 function jsonText(text: string): NextResponse {
+  if (respondAsAddOn) {
+    return NextResponse.json({
+      hostAppDataAction: {
+        chatDataAction: { createMessageAction: { message: { text } } },
+      },
+    });
+  }
   return NextResponse.json({ text });
+}
+
+/**
+ * Add-on invocations wrap the Chat event under `chat` (e.g.
+ * `{ chat: { messagePayload: { message, space, user } } }`) instead of sending
+ * it at the top level. Unwrap it so the rest of the handler sees one shape.
+ */
+function unwrapChatEvent(body: Record<string, unknown>): {
+  event: ChatEvent;
+  isAddOn: boolean;
+} {
+  const chat = body.chat as Record<string, unknown> | undefined;
+  if (!chat) return { event: body as ChatEvent, isAddOn: false };
+
+  const payload = (chat.messagePayload ??
+    chat.addedToSpacePayload ??
+    chat.removedFromSpacePayload ??
+    chat.buttonClickedPayload ??
+    {}) as Record<string, unknown>;
+
+  const type = chat.messagePayload
+    ? 'MESSAGE'
+    : chat.addedToSpacePayload
+      ? 'ADDED_TO_SPACE'
+      : chat.removedFromSpacePayload
+        ? 'REMOVED_FROM_SPACE'
+        : chat.buttonClickedPayload
+          ? 'CARD_CLICKED'
+          : 'MESSAGE';
+
+  return {
+    event: {
+      type,
+      message: payload.message,
+      space: payload.space ?? (payload.message as Record<string, unknown> | undefined)?.space,
+      user: payload.user ?? body.commonEventObject ? (body.authorizationEventObject as Record<string, unknown> | undefined) : undefined,
+    } as unknown as ChatEvent,
+    isAddOn: true,
+  };
 }
 
 /** Escapes PostgREST `ilike` wildcards so an address can't turn into a pattern. */
@@ -306,7 +367,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   let event: ChatEvent;
   try {
-    event = (await req.json()) as ChatEvent;
+    const body = (await req.json()) as Record<string, unknown>;
+    const unwrapped = unwrapChatEvent(body);
+    event = unwrapped.event;
+    respondAsAddOn = unwrapped.isAddOn;
+    logger.info('google-chat: event received', {
+      type: event.type,
+      addOn: unwrapped.isAddOn,
+      space: (event.space as { name?: string } | undefined)?.name,
+    });
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
