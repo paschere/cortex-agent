@@ -4,6 +4,7 @@ import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { google } from '@ai-sdk/google';
 import { filterTools, getTool, runTool } from '@zipdev/agent-tools';
+import { logger } from '@zipdev/core';
 import { type CoreTool, generateText, tool } from 'ai';
 
 const MAX_OUTPUT_CHARS = 8000;
@@ -23,6 +24,8 @@ interface JobRow {
   notify_conversation: boolean;
   notify_email: boolean;
   conversation_id: string | null;
+  recipients: string[];
+  is_global: boolean;
   user_email: string | null;
 }
 
@@ -34,6 +37,33 @@ interface ExecResult {
 
 function truncate(s: string): string {
   return s.length > MAX_OUTPUT_CHARS ? `${s.slice(0, MAX_OUTPUT_CHARS)}\n… (truncated)` : s;
+}
+
+/**
+ * Plain-text result email: what ran, how it went, when, the output, and a way
+ * back into the app. Kept as text (no HTML) so it renders anywhere.
+ */
+function buildEmailBody(job: JobRow, result: ExecResult): string {
+  const base = (process.env.APP_BASE_URL ?? '').replace(/\/+$/, '');
+  const ranAt = `${new Date().toLocaleString('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC',
+  })} UTC`;
+
+  const lines = [
+    `Routine: ${job.name}`,
+    `Status: ${result.ok ? 'Completed' : 'Failed'}`,
+    `Ran at: ${ranAt}`,
+    '',
+    '---',
+    '',
+    result.ok
+      ? result.output || '(no output)'
+      : `The routine failed:\n\n${result.error ?? 'Unknown error'}`,
+  ];
+  if (base) lines.push('', '---', '', `View this routine in Zippy: ${base}/schedules`);
+  return lines.join('\n');
 }
 
 /** Run the job's fixed tool call. Never throws — errors become the result. */
@@ -139,7 +169,7 @@ export const scheduleRun = inngest.createFunction(
       const { data, error } = await db
         .from('scheduled_jobs')
         .select(
-          'id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id',
+          'id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id, recipients, is_global',
         )
         .eq('id', jobId)
         .maybeSingle();
@@ -150,7 +180,12 @@ export const scheduleRun = inngest.createFunction(
         .select('email')
         .eq('id', data.user_id as string)
         .maybeSingle();
-      return { ...data, user_email: (user?.email as string | null) ?? null } as JobRow;
+      return {
+        ...data,
+        recipients: ((data.recipients as string[] | null) ?? []).filter(Boolean),
+        is_global: (data.is_global as boolean | null) ?? false,
+        user_email: (user?.email as string | null) ?? null,
+      } as JobRow;
     });
 
     // Cancelled/paused between dispatch and execution — do nothing.
@@ -209,14 +244,27 @@ export const scheduleRun = inngest.createFunction(
       });
     }
 
-    if (job.notify_email && job.user_email) {
-      await step.run('deliver-email', async () =>
-        sendEmail({
-          to: job.user_email as string,
-          subject: `[Zippy] ${job.name} — ${result.ok ? 'done' : 'failed'}`,
-          text: result.ok ? result.output : `The scheduled job failed:\n\n${result.error}`,
-        }),
-      );
+    // Explicit recipient list wins; otherwise fall back to the job owner.
+    const emailTo =
+      job.recipients.length > 0 ? job.recipients : job.user_email ? [job.user_email] : [];
+
+    if (job.notify_email && emailTo.length > 0) {
+      await step.run('deliver-email', async () => {
+        // Delivery is best-effort: a mail failure must never fail the run.
+        try {
+          return await sendEmail({
+            to: emailTo,
+            subject: `[Zippy] ${job.name} — ${result.ok ? 'done' : 'failed'}`,
+            text: buildEmailBody(job, result),
+          });
+        } catch (err) {
+          logger.error('schedule-run: email delivery failed', {
+            jobId: job.id,
+            error: (err as Error).message,
+          });
+          return { sent: false, reason: (err as Error).message.slice(0, 300) };
+        }
+      });
     }
 
     await step.run('finalize', async () => {

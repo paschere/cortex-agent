@@ -7,13 +7,22 @@ import { logger } from '@zipdev/core';
  * throwing, so callers (e.g. scheduled-job delivery) degrade gracefully.
  */
 export async function sendEmail(opts: {
-  to: string;
+  /** A single address or an explicit recipient list (all get one email). */
+  to: string | string[];
   subject: string;
   text: string;
 }): Promise<{ sent: boolean; reason?: string }> {
+  const to = (Array.isArray(opts.to) ? opts.to : [opts.to])
+    .map((addr) => addr.trim())
+    .filter((addr) => addr.length > 0);
+  if (to.length === 0) {
+    logger.warn('sendEmail skipped: no recipients');
+    return { sent: false, reason: 'no recipients' };
+  }
+
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    logger.warn('sendEmail skipped: RESEND_API_KEY not configured', { to: opts.to });
+    logger.warn('sendEmail skipped: RESEND_API_KEY not configured', { to });
     return { sent: false, reason: 'RESEND_API_KEY not configured' };
   }
   const from = process.env.EMAIL_FROM ?? 'Zippy <onboarding@resend.dev>';
@@ -21,7 +30,7 @@ export async function sendEmail(opts: {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to: [opts.to], subject: opts.subject, text: opts.text }),
+    body: JSON.stringify({ from, to, subject: opts.subject, text: opts.text }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');

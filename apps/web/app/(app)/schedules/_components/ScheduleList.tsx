@@ -5,6 +5,8 @@ import {
   AlarmClock,
   Bot,
   ChevronDown,
+  Globe,
+  Loader2,
   MessageSquare,
   Pause,
   Play,
@@ -42,6 +44,10 @@ export interface ScheduledJob {
   allowUnattendedWrites: boolean;
   notifyEmail: boolean;
   conversationId: string | null;
+  /** Explicit email recipients; empty means the results go to the owner. */
+  recipients: string[];
+  /** Owned by the workspace: visible to — and runnable by — the whole team. */
+  isGlobal: boolean;
   runs: JobRun[];
 }
 
@@ -83,6 +89,18 @@ function fmt(ts: string | null): string {
   });
 }
 
+/** How long a finished run took, e.g. "12.4s". Null while still running. */
+function runDuration(startedAt: string, finishedAt: string | null): string | null {
+  if (!finishedAt) return null;
+  const ms = new Date(finishedAt).getTime() - new Date(startedAt).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  if (ms < 1000) return `${ms}ms`;
+  const secs = ms / 1000;
+  if (secs < 60) return `${secs.toFixed(1)}s`;
+  const mins = Math.floor(secs / 60);
+  return `${mins}m ${Math.round(secs % 60)}s`;
+}
+
 function untilNext(ts: string | null): string | null {
   if (!ts) return null;
   const ms = new Date(ts).getTime() - Date.now();
@@ -98,7 +116,31 @@ export function ScheduleList({ jobs }: { jobs: ScheduledJob[] }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Fire the routine now. The run happens in the background, so we hold the
+   * "Running…" state briefly and then refresh to pick up the new run row.
+   */
+  async function runNow(jobId: string) {
+    setRunning(jobId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/schedules/${jobId}/run`, { method: 'POST' });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? `Request failed (${res.status})`);
+      }
+      setTimeout(() => {
+        setRunning(null);
+        router.refresh();
+      }, 2000);
+    } catch (err) {
+      setError((err as Error).message);
+      setRunning(null);
+    }
+  }
 
   async function act(jobId: string, action: 'pause' | 'resume' | 'cancel') {
     if (action === 'cancel' && !window.confirm('Cancel this job permanently?')) return;
@@ -178,6 +220,14 @@ export function ScheduleList({ jobs }: { jobs: ScheduledJob[] }) {
                   >
                     {job.status}
                   </span>
+                  {job.isGlobal && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary"
+                      title="Team routine — runs for the whole workspace"
+                    >
+                      <Globe className="h-3 w-3" /> global
+                    </span>
+                  )}
                   {job.allowUnattendedWrites && (
                     <span
                       className="inline-flex items-center gap-1 rounded-pill bg-amber-soft px-2 py-0.5 text-[10.5px] font-bold text-amber"
@@ -220,9 +270,39 @@ export function ScheduleList({ jobs }: { jobs: ScheduledJob[] }) {
                     </span>
                   )}
                 </div>
+                {job.recipients.length > 0 && (
+                  <div
+                    className="mt-1 flex items-center gap-1 truncate text-[11.5px] text-ink-faint"
+                    title={job.recipients.join(', ')}
+                  >
+                    <Mail className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Emails: {job.recipients.join(', ')}</span>
+                  </div>
+                )}
               </button>
 
               <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  disabled={running === job.id || job.status !== 'active'}
+                  onClick={() => runNow(job.id)}
+                  className="inline-flex items-center gap-1.5 rounded-[10px] bg-primary px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition hover:bg-primary-strong disabled:opacity-50"
+                  title={
+                    job.status === 'active'
+                      ? 'Run this routine now'
+                      : `Only active routines can be run (this one is ${job.status})`
+                  }
+                >
+                  {running === job.id ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3.5 w-3.5" /> Run now
+                    </>
+                  )}
+                </button>
                 {job.conversationId && (
                   <Link
                     href={`/chat/${job.conversationId}`}
@@ -296,30 +376,41 @@ export function ScheduleList({ jobs }: { jobs: ScheduledJob[] }) {
                     <p className="text-[12.5px] text-ink-faint">No runs yet.</p>
                   ) : (
                     <ul className="space-y-1.5">
-                      {job.runs.map((run) => (
-                        <li key={run.id} className="rounded-[10px] border border-border bg-surface px-3 py-2 text-[12px]">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={clsx(
-                                'rounded-pill px-1.5 py-0.5 text-[10px] font-bold uppercase',
-                                run.status === 'ok'
-                                  ? 'bg-emerald-soft text-emerald'
-                                  : run.status === 'error'
-                                    ? 'bg-rose-soft text-rose'
-                                    : 'bg-surface-2 text-ink-faint',
+                      {job.runs.map((run) => {
+                        const took = runDuration(run.started_at, run.finished_at);
+                        return (
+                          <li
+                            key={run.id}
+                            className="rounded-[10px] border border-border bg-surface px-3 py-2 text-[12px]"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={clsx(
+                                  'rounded-pill px-1.5 py-0.5 text-[10px] font-bold uppercase',
+                                  run.status === 'ok'
+                                    ? 'bg-emerald-soft text-emerald'
+                                    : run.status === 'error'
+                                      ? 'bg-rose-soft text-rose'
+                                      : 'bg-surface-2 text-ink-faint',
+                                )}
+                              >
+                                {run.status}
+                              </span>
+                              <span className="text-ink-faint">{fmt(run.started_at)}</span>
+                              {took && (
+                                <span className="text-ink-faint" title="Run duration">
+                                  · took {took}
+                                </span>
                               )}
-                            >
-                              {run.status}
-                            </span>
-                            <span className="text-ink-faint">{fmt(run.started_at)}</span>
-                          </div>
-                          {(run.error ?? run.output) && (
-                            <pre className="scroll-slim mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed text-ink-muted">
-                              {run.error ?? run.output}
-                            </pre>
-                          )}
-                        </li>
-                      ))}
+                            </div>
+                            {(run.error ?? run.output) && (
+                              <pre className="scroll-slim mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-ink-muted">
+                                {run.error ?? run.output}
+                              </pre>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </div>

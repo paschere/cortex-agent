@@ -11,9 +11,10 @@ export default async function SchedulesPage() {
   const { data: rows } = await db
     .from('scheduled_jobs')
     .select(
-      'id, name, kind, tool_id, instruction, schedule_kind, cron, timezone, run_at, status, next_run_at, last_run_at, allow_unattended_writes, notify_email, conversation_id, scheduled_job_runs(id, status, started_at, finished_at, output, error)',
+      'id, name, kind, tool_id, instruction, schedule_kind, cron, timezone, run_at, status, next_run_at, last_run_at, allow_unattended_writes, notify_email, conversation_id, recipients, is_global, scheduled_job_runs(id, status, started_at, finished_at, output, error)',
     )
-    .eq('user_id', user.id)
+    // Own routines + every global (team-wide) routine.
+    .or(`user_id.eq.${user.id},is_global.eq.true`)
     .order('created_at', { ascending: false })
     .order('started_at', { referencedTable: 'scheduled_job_runs', ascending: false })
     .limit(10, { foreignTable: 'scheduled_job_runs' });
@@ -34,6 +35,8 @@ export default async function SchedulesPage() {
     allowUnattendedWrites: r.allow_unattended_writes as boolean,
     notifyEmail: r.notify_email as boolean,
     conversationId: (r.conversation_id as string | null) ?? null,
+    recipients: ((r.recipients as string[] | null) ?? []).filter(Boolean),
+    isGlobal: (r.is_global as boolean | null) ?? false,
     runs: ((r.scheduled_job_runs as unknown as ScheduledJob['runs']) ?? []).slice(0, 10),
   }));
 
@@ -41,7 +44,7 @@ export default async function SchedulesPage() {
     <>
       <PageHeader
         title="Routines"
-        subtitle="Unattended jobs Zippy runs on schedule — created from any chat in plain words"
+        subtitle="Unattended jobs Zippy runs on schedule — created from any chat in plain words. Global routines run for the whole team and email their results."
         icon={<AlarmClock className="h-5 w-5" />}
       />
       <ScheduleList jobs={jobs} />
