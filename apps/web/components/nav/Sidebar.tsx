@@ -25,7 +25,6 @@ import {
   PanelLeftOpen,
   X,
   Trash2,
-  Sparkles,
   Workflow,
   Wrench,
 } from 'lucide-react';
@@ -127,13 +126,15 @@ function NavLink({ item, collapsed, pathname }: { item: NavItem; collapsed: bool
 function Brand({ collapsed }: { collapsed: boolean }) {
   return (
     <div className={clsx('flex items-center gap-2.5', collapsed && 'justify-center')}>
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
-        <Sparkles className="h-[18px] w-[18px]" />
-      </span>
+      {/* App icon (Next metadata route) — same mark as the browser tab. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/icon.png" alt="Zippy" className="h-9 w-9 shrink-0" />
       {!collapsed && (
         <div className="leading-tight">
-          <div className="text-sm font-extrabold tracking-tight text-ink">Zipdev</div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">Agent OS</div>
+          <div className="text-sm font-extrabold tracking-tight text-ink">Zippy</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+            by Zipdev
+          </div>
         </div>
       )}
     </div>
