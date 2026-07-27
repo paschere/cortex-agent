@@ -10,7 +10,17 @@ export async function sendEmail(opts: {
   /** A single address or an explicit recipient list (all get one email). */
   to: string | string[];
   subject: string;
+  /**
+   * Plain-text body. Required even when `html` is supplied: it is the part
+   * text-only clients, notification previews and corporate gateways show, so
+   * it has to read well on its own — never a stub like "view in HTML".
+   */
   text: string;
+  /**
+   * Optional HTML body (see `lib/email-templates`). Sent as a multipart
+   * alternative alongside `text`; every client picks exactly one.
+   */
+  html?: string;
 }): Promise<{ sent: boolean; reason?: string }> {
   const to = (Array.isArray(opts.to) ? opts.to : [opts.to])
     .map((addr) => addr.trim())
@@ -30,7 +40,13 @@ export async function sendEmail(opts: {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to, subject: opts.subject, text: opts.text }),
+    body: JSON.stringify({
+      from,
+      to,
+      subject: opts.subject,
+      text: opts.text,
+      ...(opts.html ? { html: opts.html } : {}),
+    }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');

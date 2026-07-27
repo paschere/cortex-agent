@@ -14,6 +14,12 @@ import { isPrivateUrl } from '../external-mcp';
  * we POST to, which is an SSRF-adjacent surface: whatever string we accept, we
  * will send content to. So the guard here is an ALLOW-LIST, not a block-list —
  * `https://chat.googleapis.com/v1/spaces/...` and nothing else.
+ *
+ * The OTHER Chat path lives in `./service-account.ts` + `./send-dm.ts`: posting
+ * as the Zippy Chat app to someone's private DM thread. `flattenMarkdownForChat`
+ * below is shared by both — Chat's markdown subset does not care how the message
+ * was authenticated. That module is itself a deliberate copy of
+ * `apps/web/lib/google-chat.ts`; see its header for why.
  */
 
 /** The only host we will ever POST a webhook message to. */

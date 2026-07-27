@@ -119,7 +119,14 @@ describe('rowToPreferences', () => {
     const p = rowToPreferences('u1', null);
     expect(p.enabled).toBe(false);
     expect(p.deliverChat).toBe(false);
+    expect(p.deliverChatDm).toBe(false);
     expect(p.chatWebhookUrl).toBeNull();
+  });
+
+  it('reads the Chat DM opt-in only when it is literally true', () => {
+    expect(rowToPreferences('u1', { deliver_chat_dm: true }).deliverChatDm).toBe(true);
+    expect(rowToPreferences('u1', { deliver_chat_dm: 'true' }).deliverChatDm).toBe(false);
+    expect(rowToPreferences('u1', { deliver_chat_dm: null }).deliverChatDm).toBe(false);
   });
 
   it('reads an opted-in row', () => {

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { writeAuditEvent } from '../audit';
+import { chatSendDm } from '../chat/send-dm';
 import { chatSendMessage } from '../chat/send-message';
 import { isGoogleChatWebhookUrl } from '../chat/webhook';
 import { registerTool, runTool } from '../index';
@@ -21,8 +22,8 @@ import { DELIVERY_TOOL_ID, hasDigestToday } from './window';
  *     reason, not an error, because "this person did not ask for it" is the
  *     expected outcome for most of the roster, not a failure.
  *  2. It only ever delivers to that same person, at destinations they entered
- *     themselves (their account email, their own Chat webhook). There is no
- *     recipient parameter.
+ *     themselves (their account email, their own Chat webhook, their own DM
+ *     thread with the Zippy Chat app). There is no recipient parameter.
  *  3. It returns counts and destinations — never the digest text. So a routine
  *     fanning this out across the company reports "delivered to 6 people" and
  *     has read nobody's mail.
@@ -33,12 +34,38 @@ import { DELIVERY_TOOL_ID, hasDigestToday } from './window';
  * and lands in that person's own inbox.
  */
 
+/**
+ * Every channel the digest can go out on. `google_chat` is the shared SPACE
+ * (webhook); `google_chat_dm` is the private 1:1 with the Zippy Chat app.
+ */
+type DeliveryChannel = 'email' | 'google_chat' | 'google_chat_dm';
+
 interface DeliveryOutcome {
-  channel: 'email' | 'google_chat';
+  channel: DeliveryChannel;
   sent: boolean;
   destination: string;
   reason?: string;
 }
+
+/**
+ * Per-channel verdict, so a routine's summary can be honest about what actually
+ * went out: 'skipped' means the person did not ask for that channel, 'failed'
+ * means they did and it did not work. Collapsing those two into "not sent" is
+ * how a digest quietly stops arriving for weeks without anyone noticing.
+ */
+type ChannelStatus = 'sent' | 'skipped' | 'failed';
+
+function statusOf(channels: DeliveryOutcome[], channel: DeliveryChannel): ChannelStatus {
+  const outcome = channels.find((c) => c.channel === channel);
+  if (!outcome) return 'skipped';
+  return outcome.sent ? 'sent' : 'failed';
+}
+
+const CHANNEL_LABELS: Record<DeliveryChannel, string> = {
+  email: 'email',
+  google_chat: 'Google Chat space',
+  google_chat_dm: 'Google Chat direct message',
+};
 
 /** A tool context bound to the person the digest is for. */
 function contextFor(ctx: ToolContext, userId: string): ToolContext {
@@ -60,7 +87,7 @@ async function userEmail(ctx: ToolContext, userId: string): Promise<string | nul
 export const inboxDeliverDigest = registerTool({
   id: DELIVERY_TOOL_ID,
   description:
-    "Build a person's daily inbox digest and deliver it the way they asked for it in their own settings — by email, to their Google Chat space, or both. Use this for the scheduled daily digest. It only runs for people who turned the digest on themselves; for anyone who has not, it stops and reports the reason instead of failing, and it will not send the same person two digests in one day. It reports how many conversations needed attention and where the digest was delivered — never the contents, which stay between Zippy and the mailbox's owner. Pass userId only when running the digest on someone else's behalf from a scheduled routine; leave it out to run it for yourself.",
+    "Build a person's daily inbox digest and deliver it the way they asked for it in their own settings — by email, into their Google Chat space, as a private Google Chat direct message from Zippy, or any combination. Use this for the scheduled daily digest. It only runs for people who turned the digest on themselves; for anyone who has not, it stops and reports the reason instead of failing, and it will not send the same person two digests in one day. It reports how many conversations needed attention and where the digest was delivered — never the contents, which stay between Zippy and the mailbox's owner. Pass userId only when running the digest on someone else's behalf from a scheduled routine; leave it out to run it for yourself.",
   inputSchema: z.object({
     userId: z
       .string()
@@ -82,12 +109,18 @@ export const inboxDeliverDigest = registerTool({
     reason: z.string().nullable(),
     channels: z.array(
       z.object({
-        channel: z.enum(['email', 'google_chat']),
+        channel: z.enum(['email', 'google_chat', 'google_chat_dm']),
         sent: z.boolean(),
         destination: z.string(),
         reason: z.string().optional(),
       }),
     ),
+    /** One verdict per channel — 'skipped' = not requested, 'failed' = tried and did not work. */
+    delivery: z.object({
+      email: z.enum(['sent', 'skipped', 'failed']),
+      chatSpace: z.enum(['sent', 'skipped', 'failed']),
+      chatDm: z.enum(['sent', 'skipped', 'failed']),
+    }),
     needsYouCount: z.number(),
     waitingOnOthersCount: z.number(),
     scanned: z.number(),
@@ -110,6 +143,11 @@ export const inboxDeliverDigest = registerTool({
       skipped: true,
       reason,
       channels: [] as DeliveryOutcome[],
+      delivery: {
+        email: 'skipped' as ChannelStatus,
+        chatSpace: 'skipped' as ChannelStatus,
+        chatDm: 'skipped' as ChannelStatus,
+      },
       needsYouCount: 0,
       waitingOnOthersCount: 0,
       scanned: 0,
@@ -122,9 +160,10 @@ export const inboxDeliverDigest = registerTool({
     }
     const wantsEmail = prefs.deliverEmail;
     const wantsChat = prefs.deliverChat && !!prefs.chatWebhookUrl;
-    if (!wantsEmail && !wantsChat) {
+    const wantsChatDm = prefs.deliverChatDm;
+    if (!wantsEmail && !wantsChat && !wantsChatDm) {
       return skip(
-        'the digest is on but no delivery channel is set up — no email and no Google Chat webhook',
+        'the digest is on but no delivery channel is set up — no email, no Google Chat webhook and no Chat direct message',
       );
     }
     if (!input.force && (await hasDigestToday(ctx.db, targetId, prefs.timezone))) {
@@ -198,7 +237,52 @@ export const inboxDeliverDigest = registerTool({
       }
     }
 
+    if (wantsChatDm) {
+      try {
+        // Same reasoning as the space above: the opt-in in Settings is the
+        // confirmation, and the message goes to the person themselves. Composed
+        // from the digest MARKDOWN, never the email HTML — Chat renders neither
+        // HTML nor markdown headings, and `chat.send_dm` flattens what it gets.
+        const dm = await runTool(
+          chatSendDm,
+          {
+            userId: targetId,
+            text: digest.markdown,
+            threadKey: `inbox-digest-${targetId}`,
+          },
+          target,
+          { confirmed: true },
+        );
+        // "not linked" is the one failure a person can fix themselves, so it
+        // says what to do rather than leaving a two-word verdict in the report.
+        const reason =
+          dm.reason === 'not linked'
+            ? 'not linked — they have never messaged Zippy in Google Chat, so there is no direct-message thread'
+            : dm.reason;
+        channels.push({
+          channel: 'google_chat_dm',
+          sent: dm.sent,
+          destination: dm.space ?? 'Zippy direct message',
+          ...(reason ? { reason } : {}),
+        });
+      } catch (err) {
+        // chat.send_dm itself never throws; this catches the layers around it
+        // (rate limit, confirmation) so the other channels still count.
+        channels.push({
+          channel: 'google_chat_dm',
+          sent: false,
+          destination: 'Zippy direct message',
+          reason: (err as Error).message.slice(0, 200),
+        });
+      }
+    }
+
     const delivered = channels.some((c) => c.sent);
+    const delivery = {
+      email: statusOf(channels, 'email'),
+      chatSpace: statusOf(channels, 'google_chat'),
+      chatDm: statusOf(channels, 'google_chat_dm'),
+    };
 
     // Written under the TARGET's user id so the "already sent today" check and
     // the person's own audit trail both see it, even when a routine owned by
@@ -223,11 +307,11 @@ export const inboxDeliverDigest = registerTool({
 
     const where = channels
       .filter((c) => c.sent)
-      .map((c) =>
-        c.channel === 'email' ? `email (${c.destination})` : `Google Chat (${c.destination})`,
-      )
+      .map((c) => `${CHANNEL_LABELS[c.channel]} (${c.destination})`)
       .join(' and ');
-    const failures = channels.filter((c) => !c.sent).map((c) => `${c.channel}: ${c.reason}`);
+    const failures = channels
+      .filter((c) => !c.sent)
+      .map((c) => `${CHANNEL_LABELS[c.channel]}: ${c.reason ?? 'unknown reason'}`);
 
     return {
       userId: targetId,
@@ -235,6 +319,7 @@ export const inboxDeliverDigest = registerTool({
       skipped: false,
       reason: delivered ? null : failures.join('; ') || 'nothing could be delivered',
       channels,
+      delivery,
       needsYouCount: digest.needsYouCount,
       waitingOnOthersCount: digest.waitingOnOthersCount,
       scanned: digest.scanned,

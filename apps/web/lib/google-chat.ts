@@ -20,6 +20,17 @@ import { logger } from '@zipdev/core';
  * scheduled run, or a chat turn. Callers get `{ sent: false, reason }`; nothing
  * throws.
  *
+ * ── DELIBERATE DUPLICATION ────────────────────────────────────────────────
+ * `packages/agent-tools/src/chat/service-account.ts` is this file's twin inside
+ * the tools package (it backs the `chat.send_dm` tool and the digest's DM
+ * channel). The JWT → token → POST flow is copied rather than shared because
+ * `packages/**` must never import from `apps/web/**`: the tools package also
+ * runs under the MCP server and the scheduler, neither of which has a Next.js
+ * runtime, `server-only`, or the `@/` alias. This file additionally owns the
+ * INBOUND side (/api/chat-app/google) and its own Supabase client. Keep the two
+ * in sync when the auth flow or Chat's limits change.
+ * ──────────────────────────────────────────────────────────────────────────
+ *
  * Required env:
  *   GOOGLE_CHAT_SERVICE_ACCOUNT_JSON  service-account key, raw JSON or base64
  *   APP_BASE_URL                      used for the "full report" fallback link

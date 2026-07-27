@@ -1,6 +1,7 @@
 import 'server-only';
 import { confirmationReason } from '@/lib/confirmation-notes';
 import { sendEmail } from '@/lib/email';
+import { renderApprovalRequestEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@zipdev/core';
@@ -71,26 +72,20 @@ export async function sendApprovalRequestEmail(opts: {
             ? 'Google Chat'
             : 'Zipdev OS';
 
-    const text = [
-      `${user?.name ? `${String(user.name).split(' ')[0]}, ` : ''}Zippy needs your approval before it does this.`,
-      '',
-      `What: ${humanizeToolId(opts.toolId)}`,
-      `Where it came from: ${where}`,
-      '',
-      `Why it needs approval: ${confirmationReason(opts.toolId)}`,
-      '',
-      'Exactly what will run:',
+    const mail = renderApprovalRequestEmail({
+      toolLabel: humanizeToolId(opts.toolId),
+      origin: where,
+      reason: confirmationReason(opts.toolId),
       payload,
-      '',
-      base ? `Approve or decline: ${base}/approvals` : 'Approve or decline it in Zipdev OS.',
-      '',
-      'Nothing has happened yet — it only runs if you approve. The request expires in 15 minutes.',
-    ].join('\n');
+      firstName: user?.name ? String(user.name).split(' ')[0] : null,
+      expiresInMinutes: 15,
+    });
 
     const result = await sendEmail({
       to,
-      subject: `[Zippy] Approval needed: ${humanizeToolId(opts.toolId)}`,
-      text,
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
     });
     if (!result.sent) {
       logger.warn('approval email not sent', { reason: result.reason, toolId: opts.toolId });

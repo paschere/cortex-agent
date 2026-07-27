@@ -1,10 +1,22 @@
 'use client';
 
-import { type PreferencesView, TIMEZONES } from '@/app/api/settings/preferences/schema';
+import {
+  type ChatDmStatus,
+  type PreferencesView,
+  TIMEZONES,
+} from '@/app/api/settings/preferences/schema';
 import { Button } from '@/components/ui/button';
 import { Eyebrow, Panel } from '@/components/ui/panel';
 import { clsx } from 'clsx';
-import { Check, Loader2, Mail, MessageCircle, ShieldCheck, TriangleAlert } from 'lucide-react';
+import {
+  Check,
+  Loader2,
+  Mail,
+  MessageCircle,
+  Send,
+  ShieldCheck,
+  TriangleAlert,
+} from 'lucide-react';
 import { useState } from 'react';
 
 type Status =
@@ -60,10 +72,18 @@ function Toggle({
   );
 }
 
-export function SettingsForm({ initial }: { initial: PreferencesView }) {
+export function SettingsForm({
+  initial,
+  chatDm,
+}: {
+  initial: PreferencesView;
+  /** Resolved on the server from `google_chat_links` — see the page component. */
+  chatDm: ChatDmStatus;
+}) {
   const [prefs, setPrefs] = useState<PreferencesView>(initial);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [testStatus, setTestStatus] = useState<Status>({ kind: 'idle' });
+  const [testDmStatus, setTestDmStatus] = useState<Status>({ kind: 'idle' });
 
   const set = <K extends keyof PreferencesView>(key: K, value: PreferencesView[K]) => {
     setPrefs((p) => ({ ...p, [key]: value }));
@@ -83,6 +103,7 @@ export function SettingsForm({ initial }: { initial: PreferencesView }) {
           deliverEmail: prefs.deliverEmail,
           deliverChat: prefs.deliverChat,
           chatWebhookUrl: prefs.chatWebhookUrl,
+          deliverChatDm: prefs.deliverChatDm,
           digestFocus: prefs.digestFocus,
         }),
       });
@@ -117,7 +138,24 @@ export function SettingsForm({ initial }: { initial: PreferencesView }) {
     }
   }
 
+  /** No body: the route resolves the caller's own DM thread server-side. */
+  async function sendTestDm() {
+    setTestDmStatus({ kind: 'saving' });
+    try {
+      const res = await fetch('/api/settings/test-chat-dm', { method: 'POST' });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      setTestDmStatus(
+        res.ok
+          ? { kind: 'saved' }
+          : { kind: 'error', message: json.error ?? 'The test message did not go through.' },
+      );
+    } catch {
+      setTestDmStatus({ kind: 'error', message: 'Could not reach the server.' });
+    }
+  }
+
   const on = prefs.inboxDigestEnabled;
+  const dmReady = chatDm.configured && chatDm.linked;
 
   return (
     <div className="space-y-4">
@@ -150,8 +188,9 @@ export function SettingsForm({ initial }: { initial: PreferencesView }) {
             </li>
             <li>
               <strong className="text-ink">Delivered only to you.</strong> The digest goes to your
-              own email address and, if you set one up, your own Google Chat space. It is never
-              shared with your team, your manager or anyone else.
+              own email address, to a Google Chat space you set up yourself, or as a direct message
+              from Zippy that only you can see. It is never shared with your team, your manager or
+              anyone else.
             </li>
             <li>
               <strong className="text-ink">Newsletters are filtered out</strong> before anything is
@@ -230,8 +269,8 @@ export function SettingsForm({ initial }: { initial: PreferencesView }) {
               checked={prefs.deliverChat}
               disabled={!on}
               onChange={(v) => set('deliverChat', v)}
-              label="Google Chat"
-              description="Posted into a space you choose, through a webhook you create yourself."
+              label="Google Chat — a space"
+              description="Posted into a space you choose, through a webhook you create yourself. Everyone in that space can read it."
             />
 
             <div className="mt-3">
@@ -286,7 +325,7 @@ export function SettingsForm({ initial }: { initial: PreferencesView }) {
                   ) : (
                     <MessageCircle className="h-3.5 w-3.5" />
                   )}
-                  Send test message
+                  Send test message to the space
                 </Button>
                 {testStatus.kind === 'saved' && (
                   <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald">
@@ -301,6 +340,94 @@ export function SettingsForm({ initial }: { initial: PreferencesView }) {
                   </span>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* ---- Google Chat, privately ------------------------------------ */}
+          <div className="rounded-[12px] border border-border p-4">
+            <Toggle
+              checked={prefs.deliverChatDm}
+              disabled={!on || !chatDm.configured}
+              onChange={(v) => {
+                set('deliverChatDm', v);
+                setTestDmStatus({ kind: 'idle' });
+              }}
+              label="Google Chat — direct message"
+              description="Zippy sends the digest straight to you in Google Chat. Nobody else is in that conversation — and the routines you own arrive there too."
+            />
+
+            <div className="mt-3">
+              {/* The link status is the whole point of this block: without it,
+                  the toggle is a checkbox that can silently do nothing. */}
+              {!chatDm.configured ? (
+                <div className="flex items-start gap-2 rounded-[10px] border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    The Zippy Chat app is not set up on this environment yet, so direct messages
+                    cannot be sent. Ask the Zipdev team to enable it.
+                  </span>
+                </div>
+              ) : dmReady ? (
+                <div className="flex items-start gap-2 rounded-[10px] border border-border bg-emerald-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-emerald">
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Connected as{' '}
+                    <strong className="font-semibold">{chatDm.displayName ?? prefs.email}</strong> —
+                    messages will arrive in your Zippy chat.
+                  </span>
+                </div>
+              ) : (
+                <div className="rounded-[10px] border border-border bg-amber-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+                  <div className="flex items-start gap-2 font-medium text-amber">
+                    <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>Not connected yet — nothing can be delivered here.</span>
+                  </div>
+                  <p className="mt-1.5 pl-[22px]">
+                    Zippy can only write in a conversation you started. Open Google Chat, search for{' '}
+                    <strong className="text-ink">Zippy</strong>, say hi — then refresh this page.
+                  </p>
+                </div>
+              )}
+
+              <p className="mt-2 text-[12px] text-ink-faint">
+                This is the private option: unlike the space above, the digest goes only to you.
+              </p>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!on || !dmReady || testDmStatus.kind === 'saving'}
+                  onClick={sendTestDm}
+                >
+                  {testDmStatus.kind === 'saving' ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                  Send test DM
+                </Button>
+                {testDmStatus.kind === 'saved' && (
+                  <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald">
+                    <Check className="h-3.5 w-3.5" />
+                    Sent — check your Zippy chat.
+                  </span>
+                )}
+                {testDmStatus.kind === 'error' && (
+                  <span className="flex items-start gap-1.5 text-[12.5px] text-rose">
+                    <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {testDmStatus.message}
+                  </span>
+                )}
+              </div>
+
+              {prefs.deliverChatDm && chatDm.configured && !chatDm.linked && (
+                <p className="mt-2.5 flex items-start gap-1.5 text-[12px] leading-relaxed text-amber">
+                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  You can save this now, but the digest will not reach Google Chat until you have
+                  said hi to Zippy there.
+                </p>
+              )}
             </div>
           </div>
         </div>

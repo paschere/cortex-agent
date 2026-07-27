@@ -57,9 +57,18 @@ export const PreferencesBody = z
     inboxDigestTime: z.string().regex(HHMM, 'Use a 24-hour time like 07:30'),
     timezone: z.enum(TIMEZONE_VALUES),
     deliverEmail: z.boolean(),
+    /** Post into a Google Chat SPACE through the webhook below. */
     deliverChat: z.boolean(),
     // Empty string clears the stored webhook.
     chatWebhookUrl: z.string().trim().max(1000).default(''),
+    /**
+     * Private direct message from the Zippy Chat app. Deliberately NOT gated
+     * here on the person having a DM thread: the link is discovered server-side
+     * (they may say hi to Zippy in the same minute they tick this box), and the
+     * delivery path already degrades to "not linked" instead of failing. The
+     * form warns; the schema does not block.
+     */
+    deliverChatDm: z.boolean(),
     digestFocus: z.string().trim().max(600).default(''),
   })
   .partial()
@@ -83,7 +92,21 @@ export interface PreferencesView {
   deliverEmail: boolean;
   deliverChat: boolean;
   chatWebhookUrl: string;
+  deliverChatDm: boolean;
   digestFocus: string;
   /** The address the email digest would go to — shown, never edited here. */
   email: string;
+}
+
+/**
+ * Whether Zippy can actually DM this person right now. Resolved on the server
+ * from `google_chat_links`; the form uses it to explain, not to guess.
+ */
+export interface ChatDmStatus {
+  /** The Chat app has service-account credentials on this environment. */
+  configured: boolean;
+  /** This person has a DM thread with the app — i.e. they have messaged it. */
+  linked: boolean;
+  /** How Google knows them, shown back so they recognise the account. */
+  displayName: string | null;
 }

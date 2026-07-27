@@ -29,6 +29,7 @@ function toView(
     deliverEmail: p.deliverEmail,
     deliverChat: p.deliverChat,
     chatWebhookUrl: p.chatWebhookUrl ?? '',
+    deliverChatDm: p.deliverChatDm,
     digestFocus: p.digestFocus ?? '',
     email,
   };
@@ -81,6 +82,7 @@ async function upsert(req: NextRequest) {
   if (p.deliverEmail !== undefined) patch.deliver_email = p.deliverEmail;
   if (p.deliverChat !== undefined) patch.deliver_chat = p.deliverChat;
   if (p.chatWebhookUrl !== undefined) patch.chat_webhook_url = p.chatWebhookUrl || null;
+  if (p.deliverChatDm !== undefined) patch.deliver_chat_dm = p.deliverChatDm;
   if (p.digestFocus !== undefined) patch.digest_focus = p.digestFocus || null;
 
   const db = getSupabaseServiceClient();

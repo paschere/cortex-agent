@@ -1,5 +1,6 @@
 import { buildToolContext } from '@/lib/agent';
 import { sendEmail } from '@/lib/email';
+import { renderRoutineResultEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
@@ -28,43 +29,21 @@ interface JobRow {
   recipients: string[];
   is_global: boolean;
   user_email: string | null;
+  timezone: string | null;
+  /** Already advanced to the following occurrence by the dispatcher. */
+  next_run_at: string | null;
 }
 
 interface ExecResult {
   ok: boolean;
   output: string;
   error?: string;
+  /** Wall-clock time the run itself took, for the result email. */
+  durationMs?: number;
 }
 
 function truncate(s: string): string {
   return s.length > MAX_OUTPUT_CHARS ? `${s.slice(0, MAX_OUTPUT_CHARS)}\n… (truncated)` : s;
-}
-
-/**
- * Plain-text result email: what ran, how it went, when, the output, and a way
- * back into the app. Kept as text (no HTML) so it renders anywhere.
- */
-function buildEmailBody(job: JobRow, result: ExecResult): string {
-  const base = (process.env.APP_BASE_URL ?? '').replace(/\/+$/, '');
-  const ranAt = `${new Date().toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  })} UTC`;
-
-  const lines = [
-    `Routine: ${job.name}`,
-    `Status: ${result.ok ? 'Completed' : 'Failed'}`,
-    `Ran at: ${ranAt}`,
-    '',
-    '---',
-    '',
-    result.ok
-      ? result.output || '(no output)'
-      : `The routine failed:\n\n${result.error ?? 'Unknown error'}`,
-  ];
-  if (base) lines.push('', '---', '', `View this routine in Zippy: ${base}/schedules`);
-  return lines.join('\n');
 }
 
 /**
@@ -223,7 +202,7 @@ export const scheduleRun = inngest.createFunction(
       const { data, error } = await db
         .from('scheduled_jobs')
         .select(
-          'id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id, recipients, is_global',
+          'id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id, recipients, is_global, timezone, next_run_at',
         )
         .eq('id', jobId)
         .maybeSingle();
@@ -239,6 +218,8 @@ export const scheduleRun = inngest.createFunction(
         recipients: ((data.recipients as string[] | null) ?? []).filter(Boolean),
         is_global: (data.is_global as boolean | null) ?? false,
         user_email: (user?.email as string | null) ?? null,
+        timezone: (data.timezone as string | null) ?? null,
+        next_run_at: (data.next_run_at as string | null) ?? null,
       } as JobRow;
     });
 
@@ -259,11 +240,11 @@ export const scheduleRun = inngest.createFunction(
 
     // Execution never throws: failures are captured in the result so Inngest
     // does not retry (and possibly double-execute) side-effectful work.
-    const result = await step.run(
-      'execute',
-      async (): Promise<ExecResult> =>
-        job.kind === 'tool' ? executeToolJob(job) : executeAgentJob(job),
-    );
+    const result = await step.run('execute', async (): Promise<ExecResult> => {
+      const startedAt = Date.now();
+      const exec = job.kind === 'tool' ? await executeToolJob(job) : await executeAgentJob(job);
+      return { ...exec, durationMs: Date.now() - startedAt };
+    });
 
     if (job.notify_conversation) {
       await step.run('deliver-conversation', async () => {
@@ -306,10 +287,22 @@ export const scheduleRun = inngest.createFunction(
       await step.run('deliver-email', async () => {
         // Delivery is best-effort: a mail failure must never fail the run.
         try {
+          const mail = renderRoutineResultEmail({
+            jobId: job.id,
+            jobName: job.name,
+            ok: result.ok,
+            outputMarkdown: result.output,
+            errorMessage: result.error ?? null,
+            ranAt: new Date(),
+            durationMs: result.durationMs ?? null,
+            nextRunAt: job.next_run_at ? new Date(job.next_run_at) : null,
+            timeZone: job.timezone,
+          });
           return await sendEmail({
             to: emailTo,
-            subject: `[Zippy] ${job.name} — ${result.ok ? 'done' : 'failed'}`,
-            text: buildEmailBody(job, result),
+            subject: mail.subject,
+            text: mail.text,
+            html: mail.html,
           });
         } catch (err) {
           logger.error('schedule-run: email delivery failed', {
