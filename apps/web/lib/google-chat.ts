@@ -51,6 +51,19 @@ export interface ChatSendResult {
   messageName?: string;
 }
 
+/**
+ * One entry of a message's `cardsV2`.
+ *
+ * Deliberately untyped inside `card`: Chat's card schema is large, versioned by
+ * Google, and we only ever build it in one place (lib/approval-card.ts). Typing
+ * the whole widget tree here would be a second, always-stale copy of Google's
+ * reference. `cardId` is ours and must be stable per logical card.
+ */
+export interface ChatCardV2 {
+  cardId: string;
+  card: Record<string, unknown>;
+}
+
 // ---------------------------------------------------------------------------
 // Service-account credentials
 // ---------------------------------------------------------------------------
@@ -202,9 +215,13 @@ export async function sendChatMessage(opts: {
   text: string;
   threadKey?: string;
   threadName?: string;
+  /** Interactive card(s). `text` then only anchors the notification preview. */
+  cards?: ChatCardV2[];
 }): Promise<ChatSendResult> {
   const text = opts.text?.trim() ?? '';
-  if (!text) return { sent: false, reason: 'empty message' };
+  const cards = opts.cards ?? [];
+  // A card-only message is valid to Chat; an empty one is not.
+  if (!text && cards.length === 0) return { sent: false, reason: 'empty message' };
 
   const space = normalizeSpace(opts.space ?? '');
   if (!space) return { sent: false, reason: 'invalid space' };
@@ -215,7 +232,9 @@ export async function sendChatMessage(opts: {
   }
 
   const url = new URL(`${CHAT_API_BASE}/${space}/messages`);
-  const body: Record<string, unknown> = { text: text.slice(0, CHAT_TEXT_LIMIT) };
+  const body: Record<string, unknown> = {};
+  if (text) body.text = text.slice(0, CHAT_TEXT_LIMIT);
+  if (cards.length > 0) body.cardsV2 = cards;
   if (opts.threadName) {
     body.thread = { name: opts.threadName };
   } else if (opts.threadKey) {
@@ -264,9 +283,16 @@ export async function sendChatMessage(opts: {
 export async function updateChatMessage(opts: {
   messageName: string;
   text: string;
+  /**
+   * Replacement card(s). Pass `[]` explicitly to STRIP the cards off a message
+   * — that is how an answered approval loses its buttons. Omitting the field
+   * leaves whatever cards the message already has, because `cardsV2` then stays
+   * out of the update mask.
+   */
+  cards?: ChatCardV2[];
 }): Promise<ChatSendResult> {
   const text = opts.text?.trim() ?? '';
-  if (!text) return { sent: false, reason: 'empty message' };
+  if (!text && !opts.cards) return { sent: false, reason: 'empty message' };
   if (!/^spaces\/[A-Za-z0-9_-]+\/messages\/[A-Za-z0-9_.-]+$/.test(opts.messageName)) {
     return { sent: false, reason: 'invalid message name' };
   }
@@ -276,14 +302,20 @@ export async function updateChatMessage(opts: {
     return { sent: false, reason: 'GOOGLE_CHAT_SERVICE_ACCOUNT_JSON not configured' };
   }
 
+  // The mask decides what is REPLACED. A card left out of it survives the
+  // update, so an approval that has been decided must name cardsV2 explicitly.
+  const mask = ['text', ...(opts.cards ? ['cardsV2'] : [])].join(',');
   const url = new URL(`${CHAT_API_BASE}/${opts.messageName}`);
-  url.searchParams.set('updateMask', 'text');
+  url.searchParams.set('updateMask', mask);
+
+  const body: Record<string, unknown> = { text: text.slice(0, CHAT_TEXT_LIMIT) };
+  if (opts.cards) body.cardsV2 = opts.cards;
 
   try {
     const res = await fetch(url.toString(), {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text.slice(0, CHAT_TEXT_LIMIT) }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const errBody = await res.text().catch(() => '');
@@ -357,6 +389,8 @@ export async function sendChatDm(opts: {
   userId: string;
   text: string;
   threadKey?: string;
+  /** Interactive card(s) — see sendChatMessage. */
+  cards?: ChatCardV2[];
 }): Promise<ChatSendResult> {
   if (!opts.userId) return { sent: false, reason: 'not linked' };
   try {
@@ -390,6 +424,7 @@ export async function sendChatDm(opts: {
 
     const payload: Parameters<typeof sendChatMessage>[0] = { space, text: opts.text };
     if (opts.threadKey) payload.threadKey = opts.threadKey;
+    if (opts.cards) payload.cards = opts.cards;
     return await sendChatMessage(payload);
   } catch (err) {
     logger.error('google-chat: DM lookup failed', {
