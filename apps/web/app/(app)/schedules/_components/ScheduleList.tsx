@@ -1,123 +1,121 @@
 'use client';
 
 import { clsx } from 'clsx';
-import {
-  AlarmClock,
-  Bot,
-  ChevronDown,
-  Globe,
-  Loader2,
-  MessageSquare,
-  Pause,
-  Play,
-  Wrench,
-  X,
-  Mail,
-  ShieldAlert,
-} from 'lucide-react';
+import { AlarmClock, Globe, Search, SearchX, User, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { EditRoutineDialog } from './EditRoutineDialog';
+import { RoutineCard } from './RoutineCard';
+import { RunDetailDialog } from './RunDetailDialog';
+import type { JobRun, JobStatus, RoutinePatch, ScheduledJob } from './types';
 
-export interface JobRun {
-  id: string;
-  status: 'running' | 'ok' | 'error';
-  started_at: string;
-  finished_at: string | null;
-  output: string | null;
-  error: string | null;
+export type { JobRun, ScheduledJob } from './types';
+
+type Filter = 'all' | 'global' | 'mine' | 'paused';
+
+const FILTERS: Array<{ id: Filter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'global', label: 'Global' },
+  { id: 'mine', label: 'Mine' },
+  { id: 'paused', label: 'Paused' },
+];
+
+function matchesFilter(job: ScheduledJob, filter: Filter, userId: string): boolean {
+  if (filter === 'global') return job.isGlobal;
+  if (filter === 'mine') return job.ownerId === userId;
+  if (filter === 'paused') return job.status === 'paused';
+  return true;
 }
 
-export interface ScheduledJob {
-  id: string;
-  name: string;
-  kind: 'tool' | 'agent';
-  toolId: string | null;
-  instruction: string | null;
-  scheduleKind: 'once' | 'cron';
-  cron: string | null;
-  timezone: string;
-  runAt: string | null;
-  status: 'active' | 'paused' | 'completed' | 'cancelled';
-  nextRunAt: string | null;
-  lastRunAt: string | null;
-  allowUnattendedWrites: boolean;
-  notifyEmail: boolean;
-  conversationId: string | null;
-  /** Explicit email recipients; empty means the results go to the owner. */
-  recipients: string[];
-  /** Owned by the workspace: visible to — and runnable by — the whole team. */
-  isGlobal: boolean;
-  runs: JobRun[];
+/** Ticking clock, `null` until mount — keeps relative times hydration-safe. */
+function useNow(intervalMs = 30_000): number | null {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
 }
 
-const STATUS_STYLES: Record<ScheduledJob['status'], string> = {
-  active: 'bg-emerald-soft text-emerald',
-  paused: 'bg-amber-soft text-amber',
-  completed: 'bg-surface-2 text-ink-faint',
-  cancelled: 'bg-rose-soft text-rose',
-};
-
-const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-/** Humanize the common cron shapes; fall back to the raw expression. */
-export function humanizeCron(cron: string | null, tz: string): string {
-  if (!cron) return '—';
-  const m = cron.trim().split(/\s+/);
-  if (m.length !== 5) return `${cron} (${tz})`;
-  const [min, hour, dom, , dow] = m as [string, string, string, string, string];
-  const time =
-    /^\d+$/.test(hour) && /^\d+$/.test(min)
-      ? `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`
-      : null;
-
-  if (min.startsWith('*/') && hour === '*') return `Every ${min.slice(2)} min`;
-  if (time && dom === '*' && dow === '*') return `Daily at ${time}`;
-  if (time && dom === '*' && dow === '1-5') return `Weekdays at ${time}`;
-  if (time && dom === '*' && /^\d$/.test(dow)) return `${DOW[Number(dow)]}s at ${time}`;
-  if (time && /^\d+$/.test(dom) && dow === '*') return `Monthly on day ${dom} at ${time}`;
-  return `${cron} (${tz})`;
-}
-
-function fmt(ts: string | null): string {
-  if (!ts) return '—';
-  return new Date(ts).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-/** How long a finished run took, e.g. "12.4s". Null while still running. */
-function runDuration(startedAt: string, finishedAt: string | null): string | null {
-  if (!finishedAt) return null;
-  const ms = new Date(finishedAt).getTime() - new Date(startedAt).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return null;
-  if (ms < 1000) return `${ms}ms`;
-  const secs = ms / 1000;
-  if (secs < 60) return `${secs.toFixed(1)}s`;
-  const mins = Math.floor(secs / 60);
-  return `${mins}m ${Math.round(secs % 60)}s`;
-}
-
-function untilNext(ts: string | null): string | null {
-  if (!ts) return null;
-  const ms = new Date(ts).getTime() - Date.now();
-  if (ms <= 0) return 'due now';
-  const mins = Math.round(ms / 60_000);
-  if (mins < 60) return `in ${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 48) return `in ${hours}h ${mins % 60}m`;
-  return `in ${Math.round(hours / 24)}d`;
-}
-
-export function ScheduleList({ jobs }: { jobs: ScheduledJob[] }) {
+export function ScheduleList({
+  jobs,
+  currentUserId,
+}: {
+  jobs: ScheduledJob[];
+  currentUserId: string;
+}) {
   const router = useRouter();
+  const now = useNow();
+
   const [expanded, setExpanded] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
+  const [highlightRunId, setHighlightRunId] = useState<string | null>(null);
+  const [openRun, setOpenRun] = useState<{ run: JobRun; job: ScheduledJob } | null>(null);
+  const [editing, setEditing] = useState<ScheduledJob | null>(null);
+
+  /**
+   * Optimistic layers over the server data: status flips land instantly and are
+   * dropped as soon as a fresh `jobs` array arrives from the server render.
+   */
+  const [statusOverride, setStatusOverride] = useState<Record<string, JobStatus>>({});
+  const [patchOverride, setPatchOverride] = useState<Record<string, RoutinePatch>>({});
+  const [snapshot, setSnapshot] = useState(jobs);
+  if (snapshot !== jobs) {
+    // Fresh server data landed — the optimistic layers have served their turn.
+    setSnapshot(jobs);
+    setStatusOverride({});
+    setPatchOverride({});
+  }
+
+  const merged = useMemo(
+    () =>
+      jobs.map((job) => {
+        const patch = patchOverride[job.id];
+        return {
+          ...job,
+          ...(patch?.name !== undefined ? { name: patch.name } : null),
+          ...(patch?.cron !== undefined ? { cron: patch.cron } : null),
+          ...(patch?.timezone !== undefined ? { timezone: patch.timezone } : null),
+          ...(patch?.notifyEmail !== undefined ? { notifyEmail: patch.notifyEmail } : null),
+          ...(patch?.recipients !== undefined ? { recipients: patch.recipients } : null),
+          status: statusOverride[job.id] ?? job.status,
+        } satisfies ScheduledJob;
+      }),
+    [jobs, statusOverride, patchOverride],
+  );
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return merged.filter((job) => {
+      if (!matchesFilter(job, filter, currentUserId)) return false;
+      if (!q) return true;
+      return (
+        job.name.toLowerCase().includes(q) ||
+        (job.instruction ?? '').toLowerCase().includes(q) ||
+        (job.toolId ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [merged, filter, query, currentUserId]);
+
+  const counts = useMemo(
+    () => ({
+      all: merged.length,
+      global: merged.filter((j) => j.isGlobal).length,
+      mine: merged.filter((j) => j.ownerId === currentUserId).length,
+      paused: merged.filter((j) => j.status === 'paused').length,
+    }),
+    [merged, currentUserId],
+  );
+
+  const globals = visible.filter((j) => j.isGlobal);
+  const personal = visible.filter((j) => !j.isGlobal);
+  const grouped = globals.length > 0 && personal.length > 0;
 
   /**
    * Fire the routine now. The run happens in the background, so we hold the
@@ -143,7 +141,10 @@ export function ScheduleList({ jobs }: { jobs: ScheduledJob[] }) {
   }
 
   async function act(jobId: string, action: 'pause' | 'resume' | 'cancel') {
-    if (action === 'cancel' && !window.confirm('Cancel this job permanently?')) return;
+    if (action === 'cancel' && !window.confirm('Cancel this routine permanently?')) return;
+    const optimistic: JobStatus =
+      action === 'pause' ? 'paused' : action === 'resume' ? 'active' : 'cancelled';
+    setStatusOverride((prev) => ({ ...prev, [jobId]: optimistic }));
     setBusy(jobId);
     setError(null);
     try {
@@ -159,9 +160,46 @@ export function ScheduleList({ jobs }: { jobs: ScheduledJob[] }) {
       router.refresh();
     } catch (err) {
       setError((err as Error).message);
+      setStatusOverride((prev) => {
+        const next = { ...prev };
+        delete next[jobId];
+        return next;
+      });
     } finally {
       setBusy(null);
     }
+  }
+
+  /** Clicking a dot: open the card and bring that run into view. */
+  function selectRun(job: ScheduledJob, run: JobRun) {
+    setExpanded(job.id);
+    setHighlightRunId(run.id);
+    setTimeout(() => {
+      document
+        .getElementById(`run-${run.id}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 80);
+  }
+
+  function renderCard(job: ScheduledJob) {
+    return (
+      <RoutineCard
+        key={job.id}
+        job={job}
+        now={now}
+        expanded={expanded === job.id}
+        busy={busy === job.id}
+        running={running === job.id}
+        canEdit={job.ownerId === currentUserId || job.isGlobal}
+        highlightRunId={expanded === job.id ? highlightRunId : null}
+        onToggle={() => setExpanded(expanded === job.id ? null : job.id)}
+        onRunNow={() => runNow(job.id)}
+        onAction={(action) => act(job.id, action)}
+        onEdit={() => setEditing(job)}
+        onOpenRun={(run) => setOpenRun({ run, job })}
+        onSelectRun={(run) => selectRun(job, run)}
+      />
+    );
   }
 
   if (jobs.length === 0) {
@@ -174,7 +212,10 @@ export function ScheduleList({ jobs }: { jobs: ScheduledJob[] }) {
           <Link href="/chat" className="font-semibold text-primary hover:text-primary-strong">
             chat
           </Link>
-          : <em>&ldquo;Every Friday at 4pm, send each client their active-candidates report.&rdquo;</em>
+          :{' '}
+          <em>
+            &ldquo;Every Friday at 4pm, send each client their active-candidates report.&rdquo;
+          </em>
         </p>
       </section>
     );
@@ -182,243 +223,141 @@ export function ScheduleList({ jobs }: { jobs: ScheduledJob[] }) {
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1 rounded-[12px] bg-surface-2 p-1">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              aria-pressed={filter === f.id}
+              className={clsx(
+                'inline-flex items-center gap-1.5 rounded-[9px] px-2.5 py-1.5 text-[12px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                filter === f.id
+                  ? 'bg-surface text-ink shadow-card'
+                  : 'text-ink-faint hover:text-ink',
+              )}
+            >
+              {f.label}
+              <span
+                className={clsx(
+                  'rounded-pill px-1.5 text-[10.5px] font-bold',
+                  filter === f.id ? 'bg-primary-soft text-primary' : 'text-ink-faint',
+                )}
+              >
+                {counts[f.id]}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <label className="relative ml-auto min-w-[10rem] flex-1 sm:max-w-[18rem]">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name or instruction…"
+            aria-label="Search routines"
+            className="w-full rounded-[10px] border border-border bg-surface py-1.5 pl-8 pr-7 text-[12.5px] text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary-soft"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear search"
+              className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-pill text-ink-faint transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </label>
+      </div>
+
       {error && (
         <div className="rounded-[12px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
           {error}
         </div>
       )}
-      {jobs.map((job) => {
-        const isOpen = expanded === job.id;
-        const next = untilNext(job.nextRunAt);
-        return (
-          <section
-            key={job.id}
-            className="overflow-hidden rounded-card border border-border bg-surface shadow-card"
+
+      {visible.length === 0 ? (
+        <section className="rounded-card border border-border bg-surface p-8 text-center text-[13px] text-ink-faint shadow-card">
+          <SearchX className="mx-auto mb-2.5 h-7 w-7 text-ink-faint" />
+          <p className="mb-1 font-semibold text-ink">Nothing matches</p>
+          <p className="mb-3">No routine fits this filter and search.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setFilter('all');
+              setQuery('');
+            }}
+            className="rounded-[10px] bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            <div className="flex items-start gap-3 p-4">
-              <span
-                className={clsx(
-                  'grid h-10 w-10 shrink-0 place-items-center rounded-[12px]',
-                  job.status === 'active' ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-faint',
-                )}
-              >
-                {job.kind === 'tool' ? <Wrench className="h-4.5 w-4.5" style={{ height: 18, width: 18 }} /> : <Bot style={{ height: 18, width: 18 }} />}
-              </span>
+            Clear filters
+          </button>
+        </section>
+      ) : grouped ? (
+        <div className="space-y-5">
+          <Group
+            icon={<Globe className="h-3.5 w-3.5" />}
+            label="Global routines"
+            count={globals.length}
+          >
+            {globals.map(renderCard)}
+          </Group>
+          <Group
+            icon={<User className="h-3.5 w-3.5" />}
+            label="My routines"
+            count={personal.length}
+          >
+            {personal.map(renderCard)}
+          </Group>
+        </div>
+      ) : (
+        <div className="space-y-3">{visible.map(renderCard)}</div>
+      )}
 
-              <button
-                type="button"
-                className="min-w-0 flex-1 text-left"
-                onClick={() => setExpanded(isOpen ? null : job.id)}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[13.5px] font-bold text-ink">{job.name}</span>
-                  <span
-                    className={clsx(
-                      'rounded-pill px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide',
-                      STATUS_STYLES[job.status],
-                    )}
-                  >
-                    {job.status}
-                  </span>
-                  {job.isGlobal && (
-                    <span
-                      className="inline-flex items-center gap-1 rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary"
-                      title="Team routine — runs for the whole workspace"
-                    >
-                      <Globe className="h-3 w-3" /> global
-                    </span>
-                  )}
-                  {job.allowUnattendedWrites && (
-                    <span
-                      className="inline-flex items-center gap-1 rounded-pill bg-amber-soft px-2 py-0.5 text-[10.5px] font-bold text-amber"
-                      title="This job may execute write tools without a human confirming each one"
-                    >
-                      <ShieldAlert className="h-3 w-3" /> unattended writes
-                    </span>
-                  )}
-                  {job.notifyEmail && (
-                    <span className="inline-flex items-center gap-1 text-[10.5px] text-ink-faint" title="Emails results">
-                      <Mail className="h-3 w-3" />
-                    </span>
-                  )}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11.5px] text-ink-faint">
-                  <span className="inline-flex items-center gap-1 font-semibold text-ink-muted">
-                    <AlarmClock className="h-3.5 w-3.5 text-primary" />
-                    {job.scheduleKind === 'once'
-                      ? `Once at ${fmt(job.runAt)}`
-                      : humanizeCron(job.cron, job.timezone)}
-                  </span>
-                  {next && job.status === 'active' && (
-                    <span className="rounded-pill bg-primary-soft px-2 py-px font-semibold text-primary">
-                      next {next}
-                    </span>
-                  )}
-                  <span>last: {fmt(job.lastRunAt)}</span>
-                  {/* run history dots, newest first */}
-                  {job.runs.length > 0 && (
-                    <span className="inline-flex items-center gap-1" title={`${job.runs.length} recent runs`}>
-                      {job.runs.slice(0, 10).map((r) => (
-                        <span
-                          key={r.id}
-                          className={clsx(
-                            'h-2 w-2 rounded-full',
-                            r.status === 'ok' ? 'bg-emerald' : r.status === 'error' ? 'bg-rose' : 'bg-ink-faint',
-                          )}
-                        />
-                      ))}
-                    </span>
-                  )}
-                </div>
-                {job.recipients.length > 0 && (
-                  <div
-                    className="mt-1 flex items-center gap-1 truncate text-[11.5px] text-ink-faint"
-                    title={job.recipients.join(', ')}
-                  >
-                    <Mail className="h-3 w-3 shrink-0" />
-                    <span className="truncate">Emails: {job.recipients.join(', ')}</span>
-                  </div>
-                )}
-              </button>
+      <RunDetailDialog
+        run={openRun?.run ?? null}
+        jobName={openRun?.job.name ?? ''}
+        conversationId={openRun?.job.conversationId ?? null}
+        now={now}
+        onClose={() => setOpenRun(null)}
+      />
 
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  disabled={running === job.id || job.status !== 'active'}
-                  onClick={() => runNow(job.id)}
-                  className="inline-flex items-center gap-1.5 rounded-[10px] bg-primary px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition hover:bg-primary-strong disabled:opacity-50"
-                  title={
-                    job.status === 'active'
-                      ? 'Run this routine now'
-                      : `Only active routines can be run (this one is ${job.status})`
-                  }
-                >
-                  {running === job.id ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-3.5 w-3.5" /> Run now
-                    </>
-                  )}
-                </button>
-                {job.conversationId && (
-                  <Link
-                    href={`/chat/${job.conversationId}`}
-                    className="rounded-[10px] p-1.5 text-ink-faint hover:bg-surface-2 hover:text-ink"
-                    title="Open results conversation"
-                  >
-                    <MessageSquare className="h-4 w-4" />
-                  </Link>
-                )}
-                {job.status === 'active' && (
-                  <button
-                    type="button"
-                    disabled={busy === job.id}
-                    onClick={() => act(job.id, 'pause')}
-                    className="rounded-[10px] p-1.5 text-ink-faint hover:bg-surface-2 hover:text-ink disabled:opacity-50"
-                    title="Pause"
-                  >
-                    <Pause className="h-4 w-4" />
-                  </button>
-                )}
-                {job.status === 'paused' && (
-                  <button
-                    type="button"
-                    disabled={busy === job.id}
-                    onClick={() => act(job.id, 'resume')}
-                    className="rounded-[10px] p-1.5 text-emerald hover:bg-emerald-soft disabled:opacity-50"
-                    title="Resume"
-                  >
-                    <Play className="h-4 w-4" />
-                  </button>
-                )}
-                {(job.status === 'active' || job.status === 'paused') && (
-                  <button
-                    type="button"
-                    disabled={busy === job.id}
-                    onClick={() => act(job.id, 'cancel')}
-                    className="rounded-[10px] p-1.5 text-rose hover:bg-rose-soft disabled:opacity-50"
-                    title="Cancel permanently"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setExpanded(isOpen ? null : job.id)}
-                  className="rounded-[10px] p-1.5 text-ink-faint hover:bg-surface-2 hover:text-ink"
-                  aria-label={isOpen ? 'Collapse' : 'Expand'}
-                >
-                  <ChevronDown className={clsx('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
-                </button>
-              </div>
-            </div>
-
-            {isOpen && (
-              <div className="space-y-3 border-t border-border bg-canvas/50 px-4 py-3.5">
-                {(job.instruction ?? job.toolId) && (
-                  <div>
-                    <h3 className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                      {job.kind === 'agent' ? 'Instruction' : 'Tool'}
-                    </h3>
-                    <p className="whitespace-pre-wrap rounded-[10px] bg-surface-2 px-3 py-2 text-[12.5px] leading-relaxed text-ink-muted">
-                      {job.instruction ?? job.toolId}
-                    </p>
-                  </div>
-                )}
-                <div>
-                  <h3 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                    Recent runs
-                  </h3>
-                  {job.runs.length === 0 ? (
-                    <p className="text-[12.5px] text-ink-faint">No runs yet.</p>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {job.runs.map((run) => {
-                        const took = runDuration(run.started_at, run.finished_at);
-                        return (
-                          <li
-                            key={run.id}
-                            className="rounded-[10px] border border-border bg-surface px-3 py-2 text-[12px]"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={clsx(
-                                  'rounded-pill px-1.5 py-0.5 text-[10px] font-bold uppercase',
-                                  run.status === 'ok'
-                                    ? 'bg-emerald-soft text-emerald'
-                                    : run.status === 'error'
-                                      ? 'bg-rose-soft text-rose'
-                                      : 'bg-surface-2 text-ink-faint',
-                                )}
-                              >
-                                {run.status}
-                              </span>
-                              <span className="text-ink-faint">{fmt(run.started_at)}</span>
-                              {took && (
-                                <span className="text-ink-faint" title="Run duration">
-                                  · took {took}
-                                </span>
-                              )}
-                            </div>
-                            {(run.error ?? run.output) && (
-                              <pre className="scroll-slim mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap font-sans text-[11px] leading-relaxed text-ink-muted">
-                                {run.error ?? run.output}
-                              </pre>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-        );
-      })}
+      <EditRoutineDialog
+        job={editing}
+        onClose={() => setEditing(null)}
+        onSaved={(patch) => {
+          if (editing) setPatchOverride((prev) => ({ ...prev, [editing.id]: patch }));
+          setEditing(null);
+          router.refresh();
+        }}
+      />
     </div>
+  );
+}
+
+function Group({
+  icon,
+  label,
+  count,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h2 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+        {icon}
+        {label}
+        <span className="rounded-pill bg-surface-2 px-1.5 text-[10.5px] font-bold normal-case tracking-normal">
+          {count}
+        </span>
+      </h2>
+      <div className="space-y-3">{children}</div>
+    </section>
   );
 }
