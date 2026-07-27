@@ -10,7 +10,7 @@ import {
   Brain,
   Building2,
   CircleCheck,
-  Github,
+  GitBranch,
   Globe,
   ListTodo,
   Mail,
@@ -226,7 +226,7 @@ export default async function IntegrationsPage({
     {
       key: 'github',
       name: 'GitHub',
-      icon: Github,
+      icon: GitBranch,
       families: ['github'],
       state: mine.github ? 'user' : 'disconnected',
       unlocks: 'Repositories, issues, pull requests and engineering activity metrics.',
