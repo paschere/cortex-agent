@@ -44,9 +44,20 @@ interface SessionPayload {
 // (prefixed with `__Secure-` when served over https).
 const SESSION_COOKIE_RE = /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=/;
 
+/**
+ * A public path matches itself and anything nested under it — but only at a
+ * SEGMENT boundary. Plain `startsWith` made `/mcp` swallow `/mcp-tokens`, which
+ * then skipped the session check entirely and rendered the authenticated layout
+ * with no user: a 500 for signed-out visitors instead of a redirect to /login.
+ * Any future `/mcp…` or `/login…` route would have inherited the same hole.
+ */
+function isPublic(pathname: string): boolean {
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  if (isPublic(pathname)) {
     return NextResponse.next();
   }
 
