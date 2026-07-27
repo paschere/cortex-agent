@@ -128,6 +128,7 @@ export default async function IntegrationsPage({
   const brainOn = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const webOn = !!process.env.TAVILY_API_KEY;
   const slackOn = !!process.env.SLACK_BOT_TOKEN;
+  const apolloOn = !!process.env.APOLLO_API_KEY;
 
   const providers: ProviderCard[] = [
     {
@@ -251,14 +252,12 @@ export default async function IntegrationsPage({
       key: 'apollo',
       name: 'Apollo',
       icon: Rocket,
-      families: [],
-      // Explicitly not connected: there is no Apollo credential anywhere in the
-      // stack, and showing it as "coming soon" read as if it were half-wired.
-      state: 'disconnected',
+      families: ['apollo'],
+      state: apolloOn ? 'workspace' : 'disconnected',
       unlocks:
-        'Prospecting and contact enrichment for outbound — finding who to email at a target company.',
+        'Prospecting and contact enrichment for outbound — who works where, their verified work email, and firmographics on the companies worth targeting.',
       offline: 'Growth signals stop at the company: Zippy cannot identify the person to contact.',
-      owner: 'Not set up — no Apollo account is wired to Zippy',
+      owner: opsOwner(apolloOn, 'no Apollo API key on this environment'),
     },
   ];
 

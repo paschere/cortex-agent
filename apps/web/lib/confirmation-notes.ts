@@ -32,6 +32,8 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
   'pipeline.create':
     'Saves a reusable playbook that anyone on the team can run from any surface — errors in its design get repeated on every run.',
   'pipeline.update': 'Changes a shared playbook for everyone who uses it, effective on the next run.',
+  'apollo.enrich_people':
+    "Pulls up to ten people's verified work emails out of Apollo in one go, and spends one Apollo credit for every person found. Looking people up costs the company real money, so a batch is always somebody's decision.",
   'recruit.generate_presentation':
     'Generates a client-facing candidate presentation document that may be shared externally.',
 };
@@ -48,6 +50,7 @@ const FAMILY_SYSTEM: Record<string, string> = {
   schedule: 'the unattended job scheduler',
   pipeline: 'the shared pipeline library',
   recruit: 'the recruiting system',
+  apollo: 'the Apollo prospecting database',
   kb: 'the shared Knowledge Base',
 };
 

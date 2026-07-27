@@ -105,6 +105,10 @@ const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   workable: 'pii',
   people: 'pii',
   gmail: 'pii',
+  // Apollo hands back named individuals' work emails and phone numbers. It is
+  // bought-in data rather than Zipdev's own, but it is still personal data
+  // about identifiable people, so it is classified like any other PII source.
+  apollo: 'pii',
   hubspot: 'client',
   growth: 'client',
   sales: 'client',
@@ -189,6 +193,14 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // figures, so they stay ordinary sensitive reads. Only the per-person roster
   // dump counts as bulk.
   'payroll.team_assignments': { sensitivity: 'pii', alwaysBulk: true },
+
+  // --- Apollo: searching is free, pulling contact details is not ------------
+  // A batch lookup pulls up to ten people's verified emails out of a bought
+  // data set in one call — the export shape this policy exists to watch. Its
+  // batch size (10) sits far below BULK_THRESHOLD, so it is declared bulk here
+  // rather than being inferred from the payload: with a human present it asks
+  // first, and on a schedule it is refused outright.
+  'apollo.enrich_people': { sensitivity: 'pii', alwaysBulk: true },
 
   // --- rate tools carry pay/bill rates but are calculators, not payroll ------
   'rate.estimate': { sensitivity: 'financial', blastRadius: 'read' },

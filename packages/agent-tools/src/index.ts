@@ -30,6 +30,7 @@ export * from './presentations';
 export * from './slack';
 export * from './people';
 export * from './growth';
+export * from './apollo';
 export * from './workable';
 export * from './pipeline';
 export * from './meetings';
