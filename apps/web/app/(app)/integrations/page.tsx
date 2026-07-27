@@ -1,52 +1,65 @@
-import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import Link from 'next/link';
-import { clsx } from 'clsx';
-import {
-  Plug,
-  Mail,
-  Calendar,
-  Table2,
-  FolderOpen,
-  Building2,
-  Users,
-  Brain,
-  Globe,
-  MessageSquare,
-  Github,
-  ListTodo,
-  Rocket,
-  Sparkles,
-  Wrench,
-} from 'lucide-react';
-import { listTools } from '@zipdev/agent-tools';
+import { DirectionPair } from '@/components/connect/DirectionPair';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { requireSession } from '@/lib/session';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { listTools } from '@zipdev/agent-tools';
+import { clsx } from 'clsx';
+import {
+  Boxes,
+  Brain,
+  Building2,
+  CircleCheck,
+  Github,
+  Globe,
+  ListTodo,
+  Mail,
+  MessageSquare,
+  Plug,
+  Rocket,
+  Server,
+  Sparkles,
+  TriangleAlert,
+  Users,
+  Wallet,
+  Wrench,
+} from 'lucide-react';
+import Link from 'next/link';
 import { AddMcpServerForm } from './_components/AddMcpServerForm';
-import { McpServerList, type McpServer } from './_components/McpServerList';
+import { type McpServer, McpServerList } from './_components/McpServerList';
 
 const MAX_MCP_SERVERS = 5;
 const MAX_MCP_TOOLS = 50;
 
-type ConnState = 'workspace' | 'user' | 'disconnected' | 'coming-soon';
+/** Connected for the whole team, connected by this person, or not at all. */
+type ConnState = 'workspace' | 'user' | 'disconnected';
 
 interface ProviderCard {
   key: string;
   name: string;
-  description: string;
   icon: typeof Mail;
+  /** Tool families this system backs — drives the live tool count. */
   families: string[];
   state: ConnState;
-  detail?: string;
+  /** Plain language: what Zippy can do because this is connected. */
+  unlocks: string;
+  /** Plain language: what stops working while it is disconnected. */
+  offline: string;
+  /** Who turned it on — or who would have to. */
+  owner: string;
   connectHref?: string;
 }
 
 const STATE_PILL: Record<ConnState, { label: string; cls: string }> = {
-  workspace: { label: 'Connected · workspace', cls: 'bg-emerald-soft text-emerald' },
+  workspace: { label: 'Connected · team', cls: 'bg-emerald-soft text-emerald' },
   user: { label: 'Connected · you', cls: 'bg-emerald-soft text-emerald' },
   disconnected: { label: 'Not connected', cls: 'bg-surface-2 text-ink-faint' },
-  'coming-soon': { label: 'Coming soon', cls: 'bg-amber-soft text-amber' },
 };
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 export default async function IntegrationsPage({
   searchParams,
@@ -56,12 +69,46 @@ export default async function IntegrationsPage({
   const user = await requireSession();
   const sp = await searchParams;
   const db = getSupabaseServiceClient();
-  const { data: rows } = await db
-    .from('integrations')
-    .select('provider, scopes, expires_at, updated_at')
-    .eq('user_id', user.id);
 
-  const byProvider = Object.fromEntries((rows ?? []).map((r) => [r.provider, r]));
+  // Every OAuth row, not just this user's: "who connected it" is part of the
+  // answer, and a team-sized table makes this a cheap read.
+  const { data: integrationRows } = await db
+    .from('integrations')
+    .select('provider, scopes, updated_at, user_id')
+    .limit(1000);
+
+  const rows = (integrationRows ?? []) as Array<{
+    provider: string;
+    scopes: string[] | null;
+    updated_at: string | null;
+    user_id: string;
+  }>;
+
+  const mine: Record<string, (typeof rows)[number]> = {};
+  const teammates: Record<string, number> = {};
+  for (const r of rows) {
+    if (r.user_id === user.id) mine[r.provider] = r;
+    else teammates[r.provider] = (teammates[r.provider] ?? 0) + 1;
+  }
+
+  /** Owner line for a per-user OAuth provider. */
+  function personalOwner(provider: string): string {
+    const own = mine[provider];
+    if (own) {
+      const when = fmtDate(own.updated_at);
+      return when ? `Connected by you · ${when}` : 'Connected by you';
+    }
+    const n = teammates[provider] ?? 0;
+    if (n > 0) {
+      return `${n} teammate${n === 1 ? '' : 's'} connected it — your account has not`;
+    }
+    return 'Nobody has connected this yet';
+  }
+
+  /** Owner line for a workspace credential provisioned by ops. */
+  function opsOwner(connected: boolean, what: string): string {
+    return connected ? 'Set up by ops · shared by the whole team' : `Waiting on ops — ${what}`;
+  }
 
   // Tool counts per family, straight from the live registry.
   const toolsByFamily: Record<string, number> = {};
@@ -73,104 +120,145 @@ export default async function IntegrationsPage({
   const famCount = (families: string[]) =>
     families.reduce((sum, f) => sum + (toolsByFamily[f] ?? 0), 0);
 
-  const googleScopes = ((byProvider.google?.scopes as string[] | undefined) ?? []).length;
+  const googleScopes = (mine.google?.scopes ?? []).length;
+  const hubspotWorkspace = !!process.env.HUBSPOT_PRIVATE_APP_TOKEN;
+  const workableOn = !!process.env.WORKABLE_API_TOKEN;
+  const matcherOn = !!process.env.ZIPDEV_MATCHER_URL;
+  const payrollOn = !!process.env.PAYROLL_API_URL;
+  const brainOn = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const webOn = !!process.env.TAVILY_API_KEY;
+  const slackOn = !!process.env.SLACK_BOT_TOKEN;
 
   const providers: ProviderCard[] = [
     {
       key: 'google',
       name: 'Google Workspace',
-      description: 'Gmail, Calendar, Sheets, Drive — granted automatically when you sign in.',
       icon: Mail,
-      families: ['gmail', 'gcal', 'gsheets', 'gdrive'],
-      state: byProvider.google ? 'user' : 'disconnected',
-      detail: byProvider.google ? `${googleScopes} scopes granted` : 'Sign out and back in, or connect below',
-      connectHref: byProvider.google ? undefined : '/api/integrations/google?preset=all',
+      families: ['gmail', 'gcal', 'gsheets', 'gdrive', 'meetings', 'chat'],
+      state: mine.google ? 'user' : 'disconnected',
+      unlocks:
+        'Read and draft your email, see and create calendar events, open Docs, Sheets and Drive files, and pull meeting transcripts.',
+      offline:
+        'No inbox, no calendar, no Drive and no meeting notes — Zippy cannot see your day at all.',
+      owner: mine.google
+        ? `Connected by you${googleScopes ? ` · ${googleScopes} scopes granted` : ''}`
+        : 'Granted when you sign in — connect below if it was skipped',
+      connectHref: mine.google ? undefined : '/api/integrations/google?preset=all',
     },
     {
       key: 'hubspot',
       name: 'HubSpot',
-      description: 'Deals, companies, contacts, pipeline and activity — the sales system of record.',
       icon: Building2,
       families: ['hubspot'],
-      state: process.env.HUBSPOT_PRIVATE_APP_TOKEN
-        ? 'workspace'
-        : byProvider.hubspot
-          ? 'user'
-          : 'disconnected',
-      detail: process.env.HUBSPOT_PRIVATE_APP_TOKEN ? 'Private app for the whole team' : undefined,
-      connectHref:
-        !process.env.HUBSPOT_PRIVATE_APP_TOKEN && !byProvider.hubspot
-          ? '/api/integrations/hubspot'
-          : undefined,
+      state: hubspotWorkspace ? 'workspace' : mine.hubspot ? 'user' : 'disconnected',
+      unlocks:
+        'Deals, companies, contacts, pipeline health and recent activity — the sales system of record.',
+      offline: 'No deal, pipeline or contact answers — the whole sales side goes dark.',
+      owner: hubspotWorkspace
+        ? 'Set up by ops · one private app for the whole team'
+        : personalOwner('hubspot'),
+      connectHref: !hubspotWorkspace && !mine.hubspot ? '/api/integrations/hubspot' : undefined,
     },
     {
       key: 'workable',
       name: 'Workable',
-      description: 'The ATS ground truth: jobs, candidates, stages, questions, recent activity.',
       icon: Users,
       families: ['workable'],
-      state: process.env.WORKABLE_API_TOKEN ? 'workspace' : 'disconnected',
-      detail: process.env.WORKABLE_API_TOKEN ? 'Service account for the whole team' : undefined,
+      state: workableOn ? 'workspace' : 'disconnected',
+      unlocks:
+        'The ATS ground truth: jobs, candidates, stages, screening answers and recent activity.',
+      offline: 'Zippy cannot see any real job or candidate — it would be guessing about pipeline.',
+      owner: opsOwner(workableOn, 'no Workable service token on this environment'),
     },
     {
       key: 'matcher',
       name: 'Zipdev Talent Pool',
-      description: 'Candidate matching, scoring, comparisons, presentations, and rate estimates.',
       icon: Sparkles,
-      families: ['recruit', 'people', 'rate', 'sales'],
-      state: process.env.ZIPDEV_MATCHER_URL ? 'workspace' : 'disconnected',
+      families: ['recruit', 'people', 'rate', 'presentations', 'sales'],
+      state: matcherOn ? 'workspace' : 'disconnected',
+      unlocks:
+        'Candidate matching and scoring, side-by-side comparisons, client presentations and rate estimates.',
+      offline: 'No matching, no scoring, no presentations and no rate estimates.',
+      owner: opsOwner(matcherOn, 'the matcher service URL is not configured'),
+    },
+    {
+      key: 'payroll',
+      name: 'Payroll',
+      icon: Wallet,
+      families: ['payroll'],
+      state: payrollOn ? 'workspace' : 'disconnected',
+      unlocks:
+        'Who is assigned to which client, payroll and expense reports, and forward-looking cost projections.',
+      offline: 'No team cost, assignment or expense answers.',
+      owner: opsOwner(payrollOn, 'no payroll API URL on this environment'),
     },
     {
       key: 'brain',
       name: 'Zippy Brain',
-      description: 'Knowledge Base search & memory, plus server-side processing with Zippy’s own model.',
       icon: Brain,
-      families: ['kb', 'zippy', 'pipeline', 'schedule'],
-      state: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'workspace' : 'disconnected',
+      families: ['kb', 'pipeline', 'schedule', 'inbox', 'security'],
+      state: brainOn ? 'workspace' : 'disconnected',
+      unlocks:
+        'Knowledge Base search and memory, pipelines, routines and the inbox digest — Zippy’s own reasoning.',
+      offline: 'The core stops: no Knowledge Base, no pipelines, no routines.',
+      owner: opsOwner(brainOn, 'the model API key is missing'),
     },
     {
       key: 'web',
       name: 'Web Research',
-      description: 'Live web search and page reading for prospect research and growth signals.',
       icon: Globe,
       families: ['web', 'growth'],
-      state: process.env.TAVILY_API_KEY ? 'workspace' : 'disconnected',
+      state: webOn ? 'workspace' : 'disconnected',
+      unlocks: 'Live web search and page reading for prospect research and growth signals.',
+      offline: 'Zippy is limited to what it already knows — no fresh research on companies.',
+      owner: opsOwner(webOn, 'no search API key on this environment'),
     },
     {
       key: 'slack',
       name: 'Slack',
-      description: 'Post updates and reports to team channels.',
       icon: MessageSquare,
       families: ['slack'],
-      state: process.env.SLACK_BOT_TOKEN ? 'workspace' : 'disconnected',
-      detail: process.env.SLACK_BOT_TOKEN ? undefined : 'Bot token not provisioned yet',
+      state: slackOn ? 'workspace' : 'disconnected',
+      unlocks: 'Post updates, reports and routine results straight into team channels.',
+      offline: 'Results stay in the app and in email — nothing reaches Slack.',
+      owner: opsOwner(slackOn, 'the bot token is not provisioned yet'),
     },
     {
       key: 'github',
       name: 'GitHub',
-      description: 'Repositories, issues, pull requests, and engineering activity metrics.',
       icon: Github,
       families: ['github'],
-      state: byProvider.github ? 'user' : 'disconnected',
-      detail: byProvider.github ? undefined : 'Provisioned by ops per user',
+      state: mine.github ? 'user' : 'disconnected',
+      unlocks: 'Repositories, issues, pull requests and engineering activity metrics.',
+      offline: 'No repo, issue or PR visibility — engineering questions go unanswered.',
+      owner: mine.github
+        ? personalOwner('github')
+        : `${personalOwner('github')} · ops provisions it`,
     },
     {
       key: 'linear',
       name: 'Linear',
-      description: 'Projects, cycles, issues, and team workload for roadmap visibility.',
       icon: ListTodo,
       families: ['linear'],
-      state: byProvider.linear ? 'user' : 'disconnected',
-      detail: byProvider.linear ? undefined : 'Provisioned by ops per user',
+      state: mine.linear ? 'user' : 'disconnected',
+      unlocks: 'Projects, cycles, issues and team workload for roadmap visibility.',
+      offline: 'No roadmap or workload answers — Zippy cannot see what the team is building.',
+      owner: mine.linear
+        ? personalOwner('linear')
+        : `${personalOwner('linear')} · ops provisions it`,
     },
     {
       key: 'apollo',
       name: 'Apollo',
-      description: 'Prospecting and contact enrichment for outbound — the growth pilot’s next source.',
       icon: Rocket,
       families: [],
-      state: 'coming-soon',
-      detail: 'Planned as the contact-identification source',
+      // Explicitly not connected: there is no Apollo credential anywhere in the
+      // stack, and showing it as "coming soon" read as if it were half-wired.
+      state: 'disconnected',
+      unlocks:
+        'Prospecting and contact enrichment for outbound — finding who to email at a target company.',
+      offline: 'Growth signals stop at the company: Zippy cannot identify the person to contact.',
+      owner: 'Not set up — no Apollo account is wired to Zippy',
     },
   ];
 
@@ -197,6 +285,7 @@ export default async function IntegrationsPage({
       tool_count: (row.tool_count as number) ?? 0,
       last_checked_at: (row.last_checked_at as string | null) ?? null,
       last_error: (row.last_error as string | null) ?? null,
+      // Never the secret itself — only whether one is stored.
       authConfigured: !!row.auth_value_encrypted,
       tools: row.user_mcp_tools ?? [],
     };
@@ -206,57 +295,142 @@ export default async function IntegrationsPage({
   const totalMcpTools = mcpServers.reduce((sum, s) => sum + s.tool_count, 0);
   const atToolCapacity = totalMcpTools >= MAX_MCP_TOOLS;
 
-  const connectedCount = providers.filter((p) => p.state === 'workspace' || p.state === 'user').length;
+  const connected = providers.filter((p) => p.state !== 'disconnected');
+  const missing = providers.filter((p) => p.state === 'disconnected');
   const totalToolCount = Object.values(toolsByFamily).reduce((a, b) => a + b, 0);
+
+  const stats = [
+    {
+      label: 'Systems connected',
+      value: `${connected.length}/${providers.length}`,
+      sub: 'Zippy can act in these',
+      icon: CircleCheck,
+      tone: 'emerald' as const,
+    },
+    {
+      label: 'Not connected',
+      value: String(missing.length),
+      sub: missing.length > 0 ? missing.map((p) => p.name).join(', ') : 'nothing missing',
+      icon: TriangleAlert,
+      tone: missing.length > 0 ? ('amber' as const) : ('emerald' as const),
+    },
+    {
+      label: 'Built-in tools',
+      value: String(totalToolCount),
+      sub: 'available to Zippy',
+      icon: Wrench,
+      tone: 'primary' as const,
+    },
+    {
+      label: 'Tools you plugged in',
+      value: String(totalMcpTools),
+      sub: `${mcpServers.length} external MCP server${mcpServers.length === 1 ? '' : 's'}`,
+      icon: Boxes,
+      tone: 'primary' as const,
+    },
+  ];
+
+  const TONE: Record<'primary' | 'emerald' | 'amber', string> = {
+    primary: 'bg-primary-soft text-primary',
+    emerald: 'bg-emerald-soft text-emerald',
+    amber: 'bg-amber-soft text-amber',
+  };
 
   return (
     <>
       <PageHeader
         title="Integrations"
-        subtitle={`${connectedCount} of ${providers.length} systems connected · ${totalToolCount} tools available to Zippy`}
+        subtitle="What Zippy is connected to — the systems it can read and act in on your behalf."
         icon={<Plug className="h-5 w-5" />}
       />
 
+      <DirectionPair active="outbound" />
+
       {sp.connected && (
-        <div className="mb-4 rounded-[12px] border border-emerald/30 bg-emerald-soft px-3 py-2 text-[12.5px] text-emerald">
+        <div className="mb-4 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-[12.5px] text-emerald">
           Connected {sp.connected}.
         </div>
       )}
       {sp.error && (
-        <div className="mb-4 rounded-[12px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+        <div className="mb-4 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
           Error: {sp.error}
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {stats.map((s) => (
+          <Panel key={s.label} className="flex items-center gap-3 p-3.5">
+            <span
+              className={clsx(
+                'grid h-9 w-9 shrink-0 place-items-center rounded-[10px]',
+                TONE[s.tone],
+              )}
+            >
+              <s.icon className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-[15px] font-extrabold leading-tight text-ink">
+                {s.value}
+              </div>
+              <div className="truncate text-[10.5px] text-ink-faint">{s.label}</div>
+              <div className="truncate text-[10.5px] text-ink-faint" title={s.sub}>
+                {s.sub}
+              </div>
+            </div>
+          </Panel>
+        ))}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {providers.map((p) => {
           const pill = STATE_PILL[p.state];
           const tools = famCount(p.families);
-          const connected = p.state === 'workspace' || p.state === 'user';
+          const isOn = p.state !== 'disconnected';
           return (
-            <Panel key={p.key} className={clsx('flex h-full flex-col gap-3 p-4', !connected && 'opacity-90')}>
+            <Panel key={p.key} className="flex h-full flex-col gap-3 p-4">
               <div className="flex items-start justify-between gap-2">
                 <span
                   className={clsx(
                     'grid h-10 w-10 shrink-0 place-items-center rounded-[12px]',
-                    connected ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-faint',
+                    isOn ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-faint',
                   )}
                 >
                   <p.icon className="h-5 w-5" />
                 </span>
-                <span className={clsx('rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', pill.cls)}>
+                <span
+                  className={clsx(
+                    'rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                    pill.cls,
+                  )}
+                >
                   {pill.label}
                 </span>
               </div>
+
               <div>
                 <div className="text-[13.5px] font-bold text-ink">{p.name}</div>
-                <p className="mt-0.5 text-[12px] leading-snug text-ink-muted">{p.description}</p>
-                {p.detail && <p className="mt-1 text-[11px] text-ink-faint">{p.detail}</p>}
+                <p className="mt-0.5 text-[12px] leading-snug text-ink-muted">{p.unlocks}</p>
               </div>
-              <div className="mt-auto flex items-center justify-between border-t border-border pt-2.5">
+
+              <p className="flex items-start gap-1.5 text-[11px] leading-snug text-ink-faint">
+                <Users className="mt-px h-3 w-3 shrink-0" />
+                {p.owner}
+              </p>
+
+              {!isOn && (
+                <p className="flex items-start gap-1.5 rounded-[10px] bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
+                  <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+                  <span>
+                    <span className="font-semibold">While it is off: </span>
+                    {p.offline}
+                  </span>
+                </p>
+              )}
+
+              <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2.5">
                 <span className="inline-flex items-center gap-1 text-[11px] text-ink-faint">
                   <Wrench className="h-3 w-3" />
-                  {tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : '—'}
+                  {tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : 'no tools yet'}
                 </span>
                 {p.connectHref && (
                   <Link
@@ -266,47 +440,64 @@ export default async function IntegrationsPage({
                     Connect
                   </Link>
                 )}
-                {p.state === 'coming-soon' && (
-                  <span className="rounded-pill bg-surface-2 px-3 py-1 text-[11.5px] font-semibold text-ink-faint">
-                    Not available yet
-                  </span>
-                )}
               </div>
             </Panel>
           );
         })}
       </div>
 
+      {/* Advanced: external MCP servers are just another inbound source of
+          tools — same direction as an integration, so they live here. */}
       <Panel className="mt-5 p-5">
-        <header className="mb-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-            External MCP servers
+        <div className="flex flex-wrap items-start gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-surface-2 text-ink-muted">
+            <Server className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              Advanced
+            </div>
+            <h2 className="mt-0.5 text-[15px] font-bold tracking-tight text-ink">
+              Extra tools you plug into Zippy
+            </h2>
+            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+              Point Zippy at your own Model Context Protocol server — Notion, a vendor’s hosted
+              server, something you self-host — and its tools join the list above for your account
+              only. Most people never need this.
+            </p>
+            <p className="mt-1 text-[11.5px] text-ink-faint">
+              Up to {MAX_MCP_SERVERS} servers and {MAX_MCP_TOOLS} tools in total. Looking for how to
+              use Zippy <em>from</em> Claude instead?{' '}
+              <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
+                That is the other page
+              </Link>
+              .
+            </p>
           </div>
-          <p className="mt-1 text-[12.5px] text-ink-muted">
-            Connect your own Model Context Protocol servers (Notion, self-hosted, …). Their tools
-            become available to Zippy. Max {MAX_MCP_SERVERS} servers, {MAX_MCP_TOOLS} tools total.
-          </p>
-        </header>
+        </div>
 
-        <McpServerList servers={mcpServers} />
+        <div className="mt-4 border-t border-border pt-4">
+          <McpServerList servers={mcpServers} />
 
-        {atServerCapacity && (
-          <p className="mt-4 rounded-[12px] border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
-            Max {MAX_MCP_SERVERS} servers reached. Delete one to add another.
-          </p>
-        )}
-        {atToolCapacity && (
-          <p className="mt-2 rounded-[12px] border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
-            50-tool total limit reached. New tools will not be synced until you remove some.
-          </p>
-        )}
+          {atServerCapacity && (
+            <p className="mt-4 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
+              Max {MAX_MCP_SERVERS} servers reached. Delete one to add another.
+            </p>
+          )}
+          {atToolCapacity && (
+            <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
+              {MAX_MCP_TOOLS}-tool total limit reached. New tools will not be synced until you
+              remove some.
+            </p>
+          )}
 
-        {!atServerCapacity && (
-          <div className="mt-4 border-t border-border pt-4">
-            <h3 className="text-[12.5px] font-semibold text-ink">Add a server</h3>
-            <AddMcpServerForm disabled={atServerCapacity} />
-          </div>
-        )}
+          {!atServerCapacity && (
+            <div className="mt-4 border-t border-border pt-4">
+              <h3 className="text-[12.5px] font-semibold text-ink">Add a server</h3>
+              <AddMcpServerForm disabled={atServerCapacity} />
+            </div>
+          )}
+        </div>
       </Panel>
     </>
   );

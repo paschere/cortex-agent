@@ -1,5 +1,9 @@
-import Link from 'next/link';
-import { headers } from 'next/headers';
+import { CopyButton } from '@/components/connect/ConnectZippy';
+import { Panel } from '@/components/ui/panel';
+import { getMcpUrl } from '@/lib/mcp-url';
+import { relativeTime } from '@/lib/relative-time';
+import { requireSession } from '@/lib/session';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -16,11 +20,7 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { Panel } from '@/components/ui/panel';
-import { relativeTime } from '@/lib/relative-time';
-import { ConnectZippy } from './_components/ConnectZippy';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,10 +59,7 @@ export default async function DashboardPage() {
         .select('id', { count: 'exact', head: true })
         .neq('tool_id', '__agent_turn')
         .gte('created_at', todayStart.toISOString()),
-      sb
-        .from('growth_signals')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'new'),
+      sb.from('growth_signals').select('id', { count: 'exact', head: true }).eq('status', 'new'),
       sb
         .from('mcp_pending_actions')
         .select('id', { count: 'exact', head: true })
@@ -99,16 +96,7 @@ export default async function DashboardPage() {
   const firstName = (user.name?.trim() || user.email.split('@')[0] || 'hola').split(/\s+/)[0];
   const needsYou = pendingApprovals + newSignals;
 
-  // Connector URL — env first, then the incoming request host, so it is correct
-  // in local dev, previews and production without any hardcoding.
-  const configuredOrigin = process.env.APP_BASE_URL ?? process.env.BETTER_AUTH_URL ?? '';
-  let origin = configuredOrigin;
-  if (!origin) {
-    const h = await headers();
-    const host = h.get('host');
-    origin = host ? `https://${host}` : '';
-  }
-  const mcpUrl = `${origin.replace(/\/+$/, '')}/mcp`;
+  const mcpUrl = await getMcpUrl();
   const isAdmin = user.role === 'org_admin';
 
   return (
@@ -169,9 +157,12 @@ export default async function DashboardPage() {
             <span className="font-semibold text-ink">Zippy needs you</span>
             <span className="text-ink-muted">
               {' '}
-              — {pendingApprovals > 0 && `${pendingApprovals} action${pendingApprovals === 1 ? '' : 's'} awaiting your OK`}
+              —{' '}
+              {pendingApprovals > 0 &&
+                `${pendingApprovals} action${pendingApprovals === 1 ? '' : 's'} awaiting your OK`}
               {pendingApprovals > 0 && newSignals > 0 && ' · '}
-              {newSignals > 0 && `${newSignals} growth signal${newSignals === 1 ? '' : 's'} to review`}
+              {newSignals > 0 &&
+                `${newSignals} growth signal${newSignals === 1 ? '' : 's'} to review`}
             </span>
           </div>
           <ArrowRight className="h-4 w-4 shrink-0 text-amber transition-transform group-hover:translate-x-0.5" />
@@ -193,9 +184,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
           {runs.length === 0 ? (
-            <EmptyHint>
-              No routine has run yet. Ask Zippy for one in the chat.
-            </EmptyHint>
+            <EmptyHint>No routine has run yet. Ask Zippy for one in the chat.</EmptyHint>
           ) : (
             <ul className="divide-y divide-border">
               {runs.map((r) => {
@@ -279,11 +268,7 @@ export default async function DashboardPage() {
           Quick actions
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <QuickAction
-            href="/chat"
-            icon={<Sparkles className="h-4 w-4" />}
-            label="New chat"
-          />
+          <QuickAction href="/chat" icon={<Sparkles className="h-4 w-4" />} label="New chat" />
           <QuickAction
             href="/pipelines"
             icon={<Workflow className="h-4 w-4" />}
@@ -302,25 +287,53 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Connect Zippy anywhere */}
+      {/* Connect Zippy anywhere — the connector URL lives here because it is the
+          one thing people come back for; the per-client walkthrough lives on
+          /mcp-tokens so the two surfaces cannot drift apart. */}
       <Panel className="mt-4 p-5">
-        <div className="flex items-start gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-primary-soft text-primary">
-            <Plug className="h-4 w-4" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-[15px] font-bold tracking-tight text-ink">
-              Connect Zippy anywhere
-            </h2>
-            <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-              The same brain — every tool, the Knowledge Base, pipelines and routines — inside any
-              MCP-capable assistant. It runs with your own permissions and every action stays
-              audited.
-            </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-primary-soft text-primary">
+              <Plug className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-bold tracking-tight text-ink">
+                Connect Zippy anywhere
+              </h2>
+              <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+                The same brain — every tool, the Knowledge Base, pipelines and routines — inside
+                Claude, Claude Code, ChatGPT or any MCP client. It runs with your own permissions
+                and every action stays audited.
+              </p>
+            </div>
           </div>
+          <Link
+            href="/mcp-tokens"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3.5 py-2 text-[12.5px] font-bold text-white shadow-pop transition-colors hover:bg-primary-strong"
+          >
+            Set up a client
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
 
-        <ConnectZippy url={mcpUrl} />
+        <div className="mt-4">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+            Connector URL
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5">
+            <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[13px] font-semibold text-ink">
+              {mcpUrl}
+            </code>
+            <CopyButton text={mcpUrl} label="Copy URL" />
+          </div>
+          <p className="mt-2 text-[11.5px] text-ink-faint">
+            Claude signs you in with your Google account — there is no token to paste.{' '}
+            <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
+              Step-by-step for Claude, ChatGPT and Claude Code
+            </Link>
+            .
+          </p>
+        </div>
 
         {/* Trust strip */}
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-[11.5px]">
@@ -363,9 +376,7 @@ function TrustItem({
     </>
   );
   if (!href) {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-ink-muted">{body}</span>
-    );
+    return <span className="inline-flex items-center gap-1.5 text-ink-muted">{body}</span>;
   }
   return (
     <Link

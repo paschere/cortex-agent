@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 type AuthType = 'none' | 'bearer' | 'api_key';
+
+const FIELD =
+  'mt-1 w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-50';
 
 export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
   const router = useRouter();
@@ -64,6 +68,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
       }
 
       setResult({ toolCount, lastError });
+      // The secret is never echoed back by the API — clear it here too.
       setName('');
       setUrl('');
       setAuthType('none');
@@ -77,10 +82,10 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-4 space-y-3">
+    <form onSubmit={onSubmit} className="mt-3 space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
-          <span className="text-neutral-600 dark:text-neutral-400">Name</span>
+        <label className="block">
+          <span className="text-xs font-medium text-ink-muted">Name</span>
           <input
             type="text"
             value={name}
@@ -89,11 +94,11 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
             maxLength={60}
             disabled={disabled}
             placeholder="My Notion MCP"
-            className="mt-1 w-full rounded border px-2 py-1.5 text-sm disabled:opacity-50 dark:bg-neutral-900"
+            className={FIELD}
           />
         </label>
-        <label className="block text-sm">
-          <span className="text-neutral-600 dark:text-neutral-400">Server URL (SSE)</span>
+        <label className="block">
+          <span className="text-xs font-medium text-ink-muted">Server URL (SSE)</span>
           <input
             type="url"
             value={url}
@@ -102,16 +107,16 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
             maxLength={512}
             disabled={disabled}
             placeholder="https://mcp.example.com/sse"
-            className="mt-1 w-full rounded border px-2 py-1.5 text-sm disabled:opacity-50 dark:bg-neutral-900"
+            className={FIELD}
           />
         </label>
       </div>
 
-      <fieldset className="text-sm">
-        <legend className="text-neutral-600 dark:text-neutral-400">Authentication</legend>
-        <div className="mt-1 flex flex-wrap gap-4">
+      <fieldset>
+        <legend className="text-xs font-medium text-ink-muted">Authentication</legend>
+        <div className="mt-1.5 flex flex-wrap gap-4">
           {(['none', 'bearer', 'api_key'] as AuthType[]).map((t) => (
-            <label key={t} className="flex items-center gap-1.5">
+            <label key={t} className="flex items-center gap-1.5 text-[13px] text-ink">
               <input
                 type="radio"
                 name="authType"
@@ -119,16 +124,17 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
                 checked={authType === t}
                 onChange={() => setAuthType(t)}
                 disabled={disabled}
+                className="accent-primary"
               />
-              <span>{t === 'api_key' ? 'API Key' : t === 'bearer' ? 'Bearer' : 'None'}</span>
+              <span>{t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer token' : 'None'}</span>
             </label>
           ))}
         </div>
       </fieldset>
 
       {authType !== 'none' && (
-        <label className="block text-sm">
-          <span className="text-neutral-600 dark:text-neutral-400">
+        <label className="block">
+          <span className="text-xs font-medium text-ink-muted">
             {authType === 'bearer' ? 'Bearer token' : 'API key'}
           </span>
           <input
@@ -138,26 +144,29 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
             required
             disabled={disabled}
             placeholder="••••••••••••"
-            className="mt-1 w-full rounded border px-2 py-1.5 text-sm disabled:opacity-50 dark:bg-neutral-900"
+            className={FIELD}
           />
+          <span className="mt-1 block text-[11px] text-ink-faint">
+            Stored encrypted and never shown again — re-add the server to change it.
+          </span>
         </label>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+          {error}
+        </p>
+      )}
       {result && (
-        <p className="text-sm text-green-700">
+        <p className="rounded-[10px] border border-emerald/30 bg-emerald-soft px-3 py-2 text-[12.5px] text-emerald">
           Server added — {result.toolCount} tool{result.toolCount === 1 ? '' : 's'} discovered.
           {result.lastError ? ` (warning: ${result.lastError})` : ''}
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={disabled || submitting}
-        className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-      >
+      <Button type="submit" disabled={disabled || submitting}>
         {submitting ? 'Adding…' : 'Add server'}
-      </button>
+      </Button>
     </form>
   );
 }

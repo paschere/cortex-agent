@@ -1,36 +1,36 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Dialog from '@radix-ui/react-dialog';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { Role } from '@zipdev/core';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
+  BarChart3,
+  BookOpen,
+  Bot,
+  Cable,
+  Calculator,
   Inbox,
   LayoutDashboard,
   MessageSquare,
   MessagesSquare,
-  BookOpen,
-  Plug,
-  KeyRound,
-  Bot,
-  Calculator,
-  Users,
-  UsersRound,
-  ScrollText,
-  ShieldCheck,
-  BarChart3,
   PanelLeftClose,
   PanelLeftOpen,
-  X,
+  Plug,
+  ScrollText,
+  Settings,
+  ShieldCheck,
   Trash2,
+  Users,
+  UsersRound,
   Workflow,
   Wrench,
-  Settings,
+  X,
 } from 'lucide-react';
-import type { Role } from '@zipdev/core';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useMobileSidebar } from './MobileSidebarContext';
 
 interface NavItem {
@@ -63,10 +63,18 @@ const SECTIONS: NavSection[] = [
       { href: '/pipelines', label: 'Pipelines', icon: Workflow },
       { href: '/tools', label: 'Tools', icon: Wrench },
       { href: '/agents', label: 'Agents', icon: Bot },
-      { href: '/integrations', label: 'Integrations', icon: Plug },
       { href: '/schedules', label: 'Scheduled Jobs', icon: AlarmClock },
-      { href: '/mcp-tokens', label: 'MCP Servers', icon: KeyRound },
       { href: '/chat?tool=rate', label: 'Rate Calculator', icon: Calculator },
+    ],
+  },
+  {
+    // A pair, deliberately adjacent: one page is Zippy reaching out to other
+    // systems, the other is an AI client reaching in. They used to read as
+    // duplicates when they sat in different groups under similar names.
+    label: 'Connections',
+    items: [
+      { href: '/integrations', label: 'Integrations', icon: Plug },
+      { href: '/mcp-tokens', label: 'Connect Claude', icon: Cable },
     ],
   },
   {
@@ -103,7 +111,11 @@ function isActive(pathname: string, href: string): boolean {
   return pathname === base || pathname.startsWith(`${base}/`);
 }
 
-function NavLink({ item, collapsed, pathname }: { item: NavItem; collapsed: boolean; pathname: string }) {
+function NavLink({
+  item,
+  collapsed,
+  pathname,
+}: { item: NavItem; collapsed: boolean; pathname: string }) {
   const Icon = item.icon;
   const active = isActive(pathname, item.href);
   return (
@@ -121,7 +133,12 @@ function NavLink({ item, collapsed, pathname }: { item: NavItem; collapsed: bool
       {active && !collapsed && (
         <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
       )}
-      <Icon className={clsx('h-[18px] w-[18px] shrink-0', active ? 'text-primary' : 'text-ink-faint group-hover:text-ink-muted')} />
+      <Icon
+        className={clsx(
+          'h-[18px] w-[18px] shrink-0',
+          active ? 'text-primary' : 'text-ink-faint group-hover:text-ink-muted',
+        )}
+      />
       {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
   );
@@ -184,7 +201,11 @@ function SidebarContent({
   }
 
   return (
-    <nav className="scroll-slim flex h-full flex-col gap-1 overflow-y-auto px-3 pb-4" onClick={onNavigate}>
+    // biome-ignore lint/a11y/useKeyWithClickEvents: delegated close for the mobile drawer — keyboard activation of the links inside already dispatches a click.
+    <nav
+      className="scroll-slim flex h-full flex-col gap-1 overflow-y-auto px-3 pb-4"
+      onClick={onNavigate}
+    >
       {SECTIONS.filter((s) => !s.adminOnly || role === 'org_admin').map((section) => (
         <div key={section.label} className="mt-3">
           {!collapsed && (
@@ -268,7 +289,12 @@ export function Sidebar({ role }: { role?: Role }) {
           collapsed ? 'w-[68px]' : 'w-64',
         )}
       >
-        <div className={clsx('flex items-center justify-between px-3 py-4', collapsed && 'px-0 justify-center')}>
+        <div
+          className={clsx(
+            'flex items-center justify-between px-3 py-4',
+            collapsed && 'px-0 justify-center',
+          )}
+        >
           <Brand collapsed={collapsed} />
           {!collapsed && (
             <button

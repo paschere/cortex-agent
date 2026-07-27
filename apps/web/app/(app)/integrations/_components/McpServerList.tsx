@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { clsx } from 'clsx';
+import { RefreshCw, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 export interface McpServer {
   id: string;
@@ -13,25 +15,30 @@ export interface McpServer {
   tool_count: number;
   last_checked_at: string | null;
   last_error: string | null;
+  /** Whether a secret is stored — never the secret itself. */
   authConfigured: boolean;
   tools: Array<{ tool_name: string; tool_description: string | null }>;
 }
 
 function authBadge(t: McpServer['auth_type']): string {
-  return t === 'api_key' ? 'API Key' : t === 'bearer' ? 'Bearer' : 'No auth';
+  return t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer' : 'No auth';
 }
+
+const SMALL_BUTTON =
+  'inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-50';
 
 export function McpServerList({ servers }: { servers: McpServer[] }) {
   if (servers.length === 0) {
     return (
-      <p className="mt-4 text-sm text-neutral-500">
-        No external MCP servers yet. Add one below to expose its tools to the agent.
+      <p className="text-[12.5px] text-ink-faint">
+        No external servers plugged in. Zippy runs on the integrations above — add one below only if
+        you have an MCP server of your own.
       </p>
     );
   }
 
   return (
-    <ul className="mt-4 space-y-3">
+    <ul className="space-y-3">
       {servers.map((s) => (
         <McpServerRow key={s.id} server={s} />
       ))}
@@ -87,6 +94,7 @@ function McpServerRow({ server }: { server: McpServer }) {
 
   async function remove() {
     if (busy) return;
+    if (!confirm(`Remove "${server.name}"? Its tools disappear from Zippy immediately.`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -104,42 +112,53 @@ function McpServerRow({ server }: { server: McpServer }) {
   }
 
   return (
-    <li className="rounded-xl border p-4">
+    <li className="rounded-card border border-border bg-surface-2 p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{server.name}</span>
-            <span className="rounded border px-1.5 py-0.5 text-xs text-neutral-500">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13.5px] font-bold text-ink">{server.name}</span>
+            <span className="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-faint">
               {authBadge(server.auth_type)}
+              {server.authConfigured ? ' · stored' : ''}
             </span>
-            <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+            <span className="rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-semibold text-primary">
               {server.tool_count} tool{server.tool_count === 1 ? '' : 's'}
             </span>
+            {!server.enabled && (
+              <span className="rounded-pill bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-faint">
+                Paused
+              </span>
+            )}
           </div>
-          <p className="mt-0.5 max-w-md truncate text-xs text-neutral-500" title={server.url}>
+          <p
+            className="mt-0.5 max-w-md truncate font-mono text-[11px] text-ink-faint"
+            title={server.url}
+          >
             {server.url}
           </p>
         </div>
 
-        <div className="flex items-center gap-3 text-sm">
-          <label className="flex items-center gap-1.5">
+        <div className="flex items-center gap-3 text-[12.5px] text-ink-muted">
+          <label className="flex items-center gap-1.5" title="Expose this server's tools to Zippy">
             <input
               type="checkbox"
               checked={server.enabled}
               disabled={busy}
               onChange={(e) => patch({ enabled: e.target.checked })}
+              className="accent-primary"
             />
             <span>Enabled</span>
           </label>
           <label
             className="flex items-center gap-1.5"
-            title="Allows Claude to call this server without confirmation"
+            title="Let Zippy call this server without asking for confirmation"
           >
             <input
               type="checkbox"
               checked={server.trusted}
               disabled={busy}
               onChange={(e) => patch({ trusted: e.target.checked })}
+              className="accent-primary"
             />
             <span>Trusted</span>
           </label>
@@ -147,44 +166,46 @@ function McpServerRow({ server }: { server: McpServer }) {
       </div>
 
       {server.last_error && (
-        <p className="mt-2 rounded bg-red-50 px-2 py-1 text-xs text-red-700 dark:bg-red-900/20">
+        <p className="mt-2 rounded-[10px] border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
           Last error: {server.last_error}
         </p>
       )}
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-[11.5px] text-rose">{error}</p>}
 
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-        <button
-          onClick={refresh}
-          disabled={busy}
-          className="rounded border px-2 py-1 text-xs hover:bg-neutral-100 disabled:opacity-50 dark:hover:bg-neutral-800"
-        >
-          Refresh
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" onClick={refresh} disabled={busy} className={SMALL_BUTTON}>
+          <RefreshCw className={clsx('h-3 w-3', busy && 'animate-spin')} />
+          Refresh tools
         </button>
         <button
+          type="button"
           onClick={remove}
           disabled={busy}
-          className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-900/20"
+          className="inline-flex items-center gap-1.5 rounded-pill border border-rose/30 bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-rose transition-colors hover:bg-rose-soft disabled:opacity-50"
         >
-          Delete
+          <Trash2 className="h-3 w-3" />
+          Remove
         </button>
         {server.tools.length > 0 && (
           <button
+            type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="text-xs text-neutral-500 underline-offset-2 hover:underline"
+            className="text-[11.5px] font-semibold text-primary hover:underline"
           >
-            {expanded ? 'Hide tools' : `Show ${server.tools.length} tool${server.tools.length === 1 ? '' : 's'}`}
+            {expanded
+              ? 'Hide tools'
+              : `Show ${server.tools.length} tool${server.tools.length === 1 ? '' : 's'}`}
           </button>
         )}
       </div>
 
       {expanded && server.tools.length > 0 && (
-        <ul className="mt-2 space-y-1 border-t pt-2 text-xs">
+        <ul className="mt-3 space-y-1 border-t border-border pt-2.5 text-[11.5px]">
           {server.tools.map((t) => (
             <li key={t.tool_name}>
-              <span className="font-mono">{t.tool_name}</span>
+              <span className="font-mono text-ink">{t.tool_name}</span>
               {t.tool_description ? (
-                <span className="text-neutral-500"> — {t.tool_description}</span>
+                <span className="text-ink-faint"> — {t.tool_description}</span>
               ) : null}
             </li>
           ))}

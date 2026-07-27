@@ -56,8 +56,13 @@ function Step({ text }: { text: string }) {
   );
 }
 
-/** Copies `text` and flips to a Check + "Copied" label for ~2s. */
-function CopyButton({
+/**
+ * Copies `text` and flips to a Check + "Copied" label for ~2s.
+ *
+ * Exported because the dashboard and the connect page both need it; it is the
+ * only client-side bit of an otherwise server-rendered surface.
+ */
+export function CopyButton({
   text,
   label = 'Copy',
   className,
@@ -109,6 +114,7 @@ function CodeLine({ text }: { text: string }) {
   );
 }
 
+/** The connector URL, plus per-client setup steps. Single source of truth. */
 export function ConnectZippy({ url }: { url: string }) {
   const [active, setActive] = useState<TargetId>('claude');
 
