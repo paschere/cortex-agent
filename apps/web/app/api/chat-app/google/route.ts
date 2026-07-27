@@ -387,7 +387,12 @@ async function recordRejection(
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const auth = await verifyGoogleChatRequest(req.headers.get('authorization'));
   if (!auth.ok) {
-    logger.warn('google-chat: rejected an unverified request', { reason: auth.reason });
+    // The reason goes in the MESSAGE, not in a context object: the platform log
+    // drain only carries `msg`, so anything passed as structured context is
+    // invisible exactly when it is needed.
+    logger.warn(
+      `google-chat: rejected an unverified request — ${auth.reason} ${JSON.stringify(auth.detail ?? {})}`,
+    );
     // Also recorded, not just logged. Google shows the person nothing but
     // "Zippy isn't responding", and platform logs are awkward to reach from
     // where this gets debugged — a row in security_events makes a misconfigured
