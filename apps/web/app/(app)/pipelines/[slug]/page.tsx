@@ -2,22 +2,12 @@ import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, Hash, Play, UserCheck, Wrench, MessageSquare, CheckCircle2, XCircle, CircleDashed } from 'lucide-react';
+import { ArrowLeft, Archive, Hash, Play, UserCheck, Wrench, CheckCircle2, XCircle, CircleDashed } from 'lucide-react';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
-
-interface ParamDef {
-  name: string;
-  description?: string;
-  required?: boolean;
-}
-
-interface StepDef {
-  title: string;
-  detail: string;
-  tools?: string[];
-  checkpoint?: boolean;
-}
+import { PipelineHeaderActions } from '../_components/PipelineHeaderActions';
+import { RunItPanel } from '../_components/RunItPanel';
+import type { ParamDef, StepDef } from '../_lib/playbook';
 
 interface RunRow {
   id: string;
@@ -41,7 +31,9 @@ export default async function PipelineDetailPage({
 
   const { data: p } = await sb
     .from('pipelines')
-    .select('id, slug, name, description, emoji, intro, steps, params, times_run, last_run_at, created_at')
+    .select(
+      'id, slug, name, description, emoji, intro, steps, params, times_run, last_run_at, created_at, archived',
+    )
     .eq('slug', slug)
     .maybeSingle();
   if (!p) notFound();
@@ -57,11 +49,7 @@ export default async function PipelineDetailPage({
   const pipelineParams = (p.params ?? []) as ParamDef[];
   const runs = (runsData ?? []) as unknown as RunRow[];
 
-  const exampleArgs = pipelineParams
-    .filter((x) => x.required !== false)
-    .map((x) => `${x.name}: …`)
-    .join(', ');
-  const runCommand = `Run the "${p.slug}" pipeline${exampleArgs ? ` with ${exampleArgs}` : ''}`;
+  const archived = Boolean(p.archived);
 
   return (
     <>
@@ -80,7 +68,14 @@ export default async function PipelineDetailPage({
           {(p.emoji as string) || '⚡'}
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-extrabold tracking-tight text-ink">{p.name as string}</h1>
+          <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold tracking-tight text-ink">
+            {p.name as string}
+            {archived && (
+              <span className="inline-flex items-center gap-1 rounded-pill bg-surface-2 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ink-faint">
+                <Archive className="h-3 w-3" /> Archived
+              </span>
+            )}
+          </h1>
           <p className="mt-0.5 text-[13px] text-ink-muted">{(p.description as string) || 'No description'}</p>
           <div className="mt-2 flex flex-wrap items-center gap-3 text-[11.5px] text-ink-faint">
             <span className="font-mono">{p.slug as string}</span>
@@ -90,6 +85,7 @@ export default async function PipelineDetailPage({
             {p.last_run_at ? <span>last {relativeTime(p.last_run_at as string)}</span> : null}
           </div>
         </div>
+        <PipelineHeaderActions slug={p.slug as string} archived={archived} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -105,7 +101,14 @@ export default async function PipelineDetailPage({
           )}
           {steps.length === 0 ? (
             <p className="text-[13px] text-ink-faint">
-              Legacy pipeline (free-form instruction). Ask Zippy to update it with structured steps.
+              Legacy pipeline (free-form instruction).{' '}
+              <Link
+                href={`/pipelines/${p.slug as string}/edit`}
+                className="font-semibold text-primary hover:text-primary-strong"
+              >
+                Rebuild it with structured steps
+              </Link>
+              .
             </p>
           ) : (
             <ol className="relative space-y-0">
@@ -158,22 +161,7 @@ export default async function PipelineDetailPage({
 
         <div className="space-y-4">
           {/* How to run */}
-          <Panel className="p-4">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Run it
-            </div>
-            <p className="mb-2.5 text-[12px] text-ink-muted">
-              Say this to Zippy — in the{' '}
-              <Link href="/chat" className="font-semibold text-primary hover:text-primary-strong">
-                web chat
-              </Link>
-              , Claude, or a scheduled routine:
-            </p>
-            <div className="flex items-start gap-2 rounded-[12px] bg-surface-2 px-3 py-2.5">
-              <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              <code className="text-[12px] leading-relaxed text-ink">{runCommand}</code>
-            </div>
-          </Panel>
+          <RunItPanel slug={p.slug as string} params={pipelineParams} />
 
           {/* Params */}
           {pipelineParams.length > 0 && (

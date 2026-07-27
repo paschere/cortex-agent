@@ -1,10 +1,11 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import Link from 'next/link';
-import { Workflow, Play, Hash, Clock, UserCheck } from 'lucide-react';
+import { Workflow, Play, Hash, Clock, UserCheck, Plus, Archive, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { PipelineCardMenu } from './_components/PipelineCardMenu';
 
 interface ParamDef {
   name: string;
@@ -27,6 +28,7 @@ interface PipelineRow {
   steps: StepDef[];
   times_run: number;
   last_run_at: string | null;
+  archived: boolean;
 }
 
 export const dynamic = 'force-dynamic';
@@ -36,18 +38,27 @@ export default async function PipelinesPage() {
   const sb = getSupabaseServiceClient();
   const { data } = await sb
     .from('pipelines')
-    .select('id, slug, name, description, emoji, params, steps, times_run, last_run_at')
-    .eq('archived', false)
+    .select('id, slug, name, description, emoji, params, steps, times_run, last_run_at, archived')
     .order('times_run', { ascending: false });
 
-  const pipelines = (data ?? []) as unknown as PipelineRow[];
+  const all = (data ?? []) as unknown as PipelineRow[];
+  const pipelines = all.filter((p) => !p.archived);
+  const archived = all.filter((p) => p.archived);
 
   return (
     <>
       <PageHeader
         title="Pipelines"
-        subtitle="Reusable playbooks — define once in chat, run anywhere: web, Claude, or on a schedule"
+        subtitle="Reusable playbooks — build one here or in chat, run it anywhere: web, Claude, or on a schedule"
         icon={<Workflow className="h-5 w-5" />}
+        actions={
+          <Link
+            href="/pipelines/new"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong"
+          >
+            <Plus className="h-4 w-4" /> New pipeline
+          </Link>
+        }
       />
 
       {pipelines.length === 0 ? (
@@ -55,7 +66,14 @@ export default async function PipelinesPage() {
           <Workflow className="mx-auto mb-3 h-8 w-8 text-primary" />
           <p className="mb-1 font-semibold text-ink">No pipelines yet</p>
           <p className="mx-auto max-w-md">
-            Ask Zippy to create one in{' '}
+            Draw one step by step in the{' '}
+            <Link
+              href="/pipelines/new"
+              className="font-semibold text-primary hover:text-primary-strong"
+            >
+              visual builder
+            </Link>
+            , or ask Zippy in{' '}
             <Link href="/chat" className="font-semibold text-primary hover:text-primary-strong">
               chat
             </Link>
@@ -65,80 +83,118 @@ export default async function PipelinesPage() {
         </Panel>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {pipelines.map((p) => {
-            const steps = p.steps ?? [];
-            return (
-              <Link key={p.id} href={`/pipelines/${p.slug}`} className="group block">
-                <Panel className="flex h-full flex-col gap-3 p-4 transition-all group-hover:-translate-y-0.5 group-hover:shadow-pop">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-[14px] font-bold text-ink">{p.name}</div>
-                      <div className="truncate font-mono text-[11px] text-ink-faint">{p.slug}</div>
-                    </div>
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-primary-soft text-[19px]">
-                      {p.emoji || '⚡'}
-                    </span>
-                  </div>
-
-                  {p.description && (
-                    <p className="line-clamp-2 text-[12.5px] leading-snug text-ink-muted">
-                      {p.description}
-                    </p>
-                  )}
-
-                  {/* Step track: one dot per step, amber = human checkpoint */}
-                  {steps.length > 0 && (
-                    <div className="flex items-center gap-1" title={steps.map((s, i) => `${i + 1}. ${s.title}`).join('\n')}>
-                      {steps.map((s, i) => (
-                        <span key={`${p.id}-${i}`} className="flex items-center gap-1">
-                          {i > 0 && <span className="h-px w-2.5 bg-border" />}
-                          <span
-                            className={
-                              s.checkpoint
-                                ? 'grid h-4.5 w-4.5 place-items-center rounded-full bg-amber-soft'
-                                : 'h-2 w-2 rounded-full bg-primary'
-                            }
-                            style={s.checkpoint ? { height: 18, width: 18 } : undefined}
-                          >
-                            {s.checkpoint && <UserCheck className="h-2.5 w-2.5 text-amber" />}
-                          </span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {(p.params ?? []).length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {p.params.map((param) => (
-                        <span
-                          key={param.name}
-                          title={param.description}
-                          className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 font-mono text-[10.5px] text-ink-muted"
-                        >
-                          <Hash className="h-3 w-3" />
-                          {param.name}
-                          {param.required !== false && <span className="text-rose">*</span>}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-auto flex items-center justify-between border-t border-border pt-2.5 text-[11.5px] text-ink-faint">
-                    <span className="inline-flex items-center gap-1">
-                      <Play className="h-3.5 w-3.5" />
-                      {p.times_run} run{p.times_run === 1 ? '' : 's'}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" />
-                      {p.last_run_at ? `last ${relativeTime(p.last_run_at)}` : 'never run'}
-                    </span>
-                  </div>
-                </Panel>
-              </Link>
-            );
-          })}
+          {pipelines.map((p) => (
+            <PipelineCard key={p.id} p={p} />
+          ))}
         </div>
       )}
+
+      {archived.length > 0 && (
+        <details className="group mt-6">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint transition-colors hover:text-ink">
+            <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+            <Archive className="h-3.5 w-3.5" />
+            Archived ({archived.length})
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {archived.map((p) => (
+              <PipelineCard key={p.id} p={p} />
+            ))}
+          </div>
+        </details>
+      )}
     </>
+  );
+}
+
+function PipelineCard({ p }: { p: PipelineRow }) {
+  const steps = p.steps ?? [];
+  return (
+    <div className="relative">
+      <Link href={`/pipelines/${p.slug}`} className="group block h-full">
+        <Panel
+          className={`flex h-full flex-col gap-3 p-4 transition-all group-hover:-translate-y-0.5 group-hover:shadow-pop ${
+            p.archived ? 'opacity-70' : ''
+          }`}
+        >
+          <div className="flex items-start gap-2.5 pr-9">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-primary-soft text-[19px]">
+              {p.emoji || '⚡'}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-[14px] font-bold text-ink">{p.name}</div>
+              <div className="truncate font-mono text-[11px] text-ink-faint">{p.slug}</div>
+            </div>
+          </div>
+
+          {p.description && (
+            <p className="line-clamp-2 text-[12.5px] leading-snug text-ink-muted">{p.description}</p>
+          )}
+
+          {/* Step track: one dot per step, amber = human checkpoint */}
+          {steps.length > 0 && (
+            <div
+              className="flex items-center gap-1"
+              title={steps.map((s, i) => `${i + 1}. ${s.title}`).join('\n')}
+            >
+              {steps.map((s, i) => (
+                <span key={`${p.id}-${i}`} className="flex items-center gap-1">
+                  {i > 0 && <span className="h-px w-2.5 bg-border" />}
+                  <span
+                    className={
+                      s.checkpoint
+                        ? 'grid h-4.5 w-4.5 place-items-center rounded-full bg-amber-soft'
+                        : 'h-2 w-2 rounded-full bg-primary'
+                    }
+                    style={s.checkpoint ? { height: 18, width: 18 } : undefined}
+                  >
+                    {s.checkpoint && <UserCheck className="h-2.5 w-2.5 text-amber" />}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {(p.params ?? []).length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {p.params.map((param) => (
+                <span
+                  key={param.name}
+                  title={param.description}
+                  className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 font-mono text-[10.5px] text-ink-muted"
+                >
+                  <Hash className="h-3 w-3" />
+                  {param.name}
+                  {param.required !== false && <span className="text-rose">*</span>}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-auto flex items-center justify-between border-t border-border pt-2.5 text-[11.5px] text-ink-faint">
+            <span className="inline-flex items-center gap-1">
+              <Play className="h-3.5 w-3.5" />
+              {p.times_run} run{p.times_run === 1 ? '' : 's'}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              {p.archived ? (
+                <>
+                  <Archive className="h-3.5 w-3.5" /> archived
+                </>
+              ) : (
+                <>
+                  <Clock className="h-3.5 w-3.5" />
+                  {p.last_run_at ? `last ${relativeTime(p.last_run_at)}` : 'never run'}
+                </>
+              )}
+            </span>
+          </div>
+        </Panel>
+      </Link>
+
+      <div className="absolute right-3 top-3 z-10">
+        <PipelineCardMenu slug={p.slug} archived={p.archived} />
+      </div>
+    </div>
   );
 }
