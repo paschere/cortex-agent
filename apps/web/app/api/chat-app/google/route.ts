@@ -359,6 +359,37 @@ async function handleAddedToSpace(event: ChatEvent): Promise<NextResponse> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Read back the recent rejections.
+ *
+ * Google Chat only ever POSTs here, so GET is free for diagnostics — and this
+ * path is in `middleware.ts`'s PUBLIC_PATHS (Chat has no session cookie), which
+ * is precisely why it is gated on a shared secret instead of a session. Without
+ * `CHAT_DIAGNOSTICS_KEY` set the route does not exist at all, so the default
+ * deployment exposes nothing.
+ *
+ * An EMPTY list is itself the answer to the most common question: it means no
+ * request from Google is arriving, i.e. the endpoint URL in the Chat console is
+ * wrong — as opposed to arriving and failing verification.
+ */
+async function recentRejections(): Promise<NextResponse> {
+  const { data, error } = await getSupabaseServiceClient()
+    .from('security_events')
+    .select('created_at, reason, signals')
+    .eq('tool_id', 'chat.inbound')
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({
+    audienceConfigured: (process.env.GOOGLE_CHAT_AUDIENCE ?? '')
+      .split(',')
+      .map((a) => a.trim())
+      .filter(Boolean),
+    rejections: data ?? [],
+  });
+}
+
+/**
  * Persist why an inbound Chat request was turned away. Best-effort in the
  * strictest sense: it must never delay or fail the 401 it accompanies.
  */
@@ -447,8 +478,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-/** Chat only ever POSTs. A GET is a human poking the URL. */
-export function GET(): NextResponse {
+/** Chat only ever POSTs. A GET is a human poking the URL — or asking why. */
+export function GET(req: NextRequest): NextResponse | Promise<NextResponse> {
+  const expected = process.env.CHAT_DIAGNOSTICS_KEY;
+  if (expected && req.nextUrl.searchParams.get('key') === expected) {
+    return recentRejections();
+  }
   return NextResponse.json(
     { error: 'This endpoint only accepts Google Chat events (POST).' },
     { status: 405 },
