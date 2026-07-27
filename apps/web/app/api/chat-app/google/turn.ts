@@ -476,7 +476,12 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
         .then(undefined, () => undefined);
     }
   } catch (err) {
-    logger.error('google-chat: turn failed', { error: (err as Error).message });
+    // In the message, not in a context object: the platform log drain carries
+    // only `msg`, so anything passed as structured context is invisible exactly
+    // when a turn has failed and the reason is the only thing worth having.
+    logger.error(
+      `google-chat: turn failed — ${(err as Error).name}: ${(err as Error).message}\n${(err as Error).stack ?? ''}`,
+    );
     answer = "I couldn't finish that one — something broke on my side. Try again in a moment.";
   }
 

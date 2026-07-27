@@ -253,6 +253,54 @@ export async function sendChatMessage(opts: {
 }
 
 /**
+ * Rewrite a message we already posted.
+ *
+ * This is what lets the "on it" placeholder become the answer instead of
+ * sitting above it forever: Chat gives us the message name on creation, and a
+ * turn that takes twenty seconds ends as ONE message rather than two. Failure
+ * is non-exceptional — the caller falls back to posting a new message, which
+ * is worse-looking but never silent.
+ */
+export async function updateChatMessage(opts: {
+  messageName: string;
+  text: string;
+}): Promise<ChatSendResult> {
+  const text = opts.text?.trim() ?? '';
+  if (!text) return { sent: false, reason: 'empty message' };
+  if (!/^spaces\/[A-Za-z0-9_-]+\/messages\/[A-Za-z0-9_.-]+$/.test(opts.messageName)) {
+    return { sent: false, reason: 'invalid message name' };
+  }
+
+  const token = await getAccessToken();
+  if (!token) {
+    return { sent: false, reason: 'GOOGLE_CHAT_SERVICE_ACCOUNT_JSON not configured' };
+  }
+
+  const url = new URL(`${CHAT_API_BASE}/${opts.messageName}`);
+  url.searchParams.set('updateMask', 'text');
+
+  try {
+    const res = await fetch(url.toString(), {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text.slice(0, CHAT_TEXT_LIMIT) }),
+    });
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      logger.error('google-chat: message update failed', {
+        status: res.status,
+        body: errBody.slice(0, 300),
+      });
+      return { sent: false, reason: `chat ${res.status}` };
+    }
+    return { sent: true, messageName: opts.messageName };
+  } catch (err) {
+    logger.error('google-chat: message update threw', { error: (err as Error).message });
+    return { sent: false, reason: 'network error' };
+  }
+}
+
+/**
  * DM a Zipdev user in Google Chat.
  *
  * The DM space is discovered passively: it is recorded the first time the

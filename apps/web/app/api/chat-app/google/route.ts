@@ -1,5 +1,5 @@
 import { sendEmail } from '@/lib/email';
-import { sendChatDm, sendChatMessage, toChatText } from '@/lib/google-chat';
+import { sendChatDm, sendChatMessage, toChatText, updateChatMessage } from '@/lib/google-chat';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@zipdev/core';
 import { type NextRequest, NextResponse, after } from 'next/server';
@@ -37,11 +37,12 @@ import { type ChatAuthFailureDetail, verifyGoogleChatRequest } from './verify';
  *
  * So the endpoint uses an ACK-THEN-ANSWER pattern:
  *
- *   1. Resolve who is asking and reply IMMEDIATELY with a short "on it ⚡".
- *      That synchronous body is what Chat posts into the thread.
+ *   1. Answer the HTTP request immediately with nothing to say, and post a
+ *      short "on it ⚡" placeholder through the Chat REST API instead. Posting
+ *      it ourselves is what yields its message id.
  *   2. Run the actual turn in `after()`, which keeps the serverless invocation
- *      alive past the response, and post the finished answer back through the
- *      Chat REST API into the SAME thread.
+ *      alive past the response, then REWRITE that placeholder with the finished
+ *      answer, so a slow turn ends as one message rather than two.
  *
  * Everything that can fail in step 2 fails soft and is logged: a broken turn
  * must never leave the user staring at an un-answered mention, so the failure
@@ -249,13 +250,20 @@ async function deliver(opts: {
   user: LinkedUser;
   publicText: string;
   privateText: string | null;
+  /** The "on it" placeholder to rewrite, when one was posted. */
+  placeholder?: string | undefined;
 }): Promise<void> {
   if (opts.publicText) {
-    const res = await sendChatMessage({
-      space: opts.space,
-      text: opts.publicText,
-      ...(opts.threadName ? { threadName: opts.threadName } : {}),
-    });
+    const rewritten = opts.placeholder
+      ? await updateChatMessage({ messageName: opts.placeholder, text: opts.publicText })
+      : { sent: false, reason: 'no placeholder' };
+    const res = rewritten.sent
+      ? rewritten
+      : await sendChatMessage({
+          space: opts.space,
+          text: opts.publicText,
+          ...(opts.threadName ? { threadName: opts.threadName } : {}),
+        });
     if (!res.sent) {
       logger.error('google-chat: could not post the answer', {
         space: opts.space,
@@ -309,7 +317,17 @@ async function handleMessage(event: ChatEvent, asAddOn: boolean): Promise<NextRe
   const key = conversationKey(spaceName, audience, threadName);
 
   // Ack now, answer later — see the 5-second note at the top of this file.
+  // The placeholder is posted through the REST API rather than returned as the
+  // HTTP body, because that is the only way to learn its id and therefore the
+  // only way to REPLACE it with the answer. Returning it inline would leave
+  // "On it" stranded above every reply forever.
   after(async () => {
+    const ack = await sendChatMessage({
+      space: spaceName,
+      text: ACK_TEXT,
+      ...(threadName ? { threadName } : {}),
+    }).catch(() => ({ sent: false }) as Awaited<ReturnType<typeof sendChatMessage>>);
+    const placeholder = ack.sent ? ack.messageName : undefined;
     try {
       const delivery = await runChatTurn({
         userId: user.userId,
@@ -328,19 +346,33 @@ async function handleMessage(event: ChatEvent, asAddOn: boolean): Promise<NextRe
         user,
         publicText: delivery.publicText,
         privateText: delivery.privateText,
+        placeholder,
       });
     } catch (err) {
-      logger.error('google-chat: async turn failed', { error: (err as Error).message });
-      // Never leave a mention hanging.
-      await sendChatMessage({
-        space: spaceName,
-        text: 'That one broke on my side before I could finish it — try me again in a moment. ⚡',
-        ...(threadName ? { threadName } : {}),
-      }).catch(() => undefined);
+      logger.error(
+        `google-chat: async turn failed — ${(err as Error).name}: ${(err as Error).message}`,
+      );
+      // Never leave a mention hanging — and never leave "On it" as the last
+      // word, which reads as Zippy still working when it has already given up.
+      const apology =
+        'That one broke on my side before I could finish it — try me again in a moment. ⚡';
+      const rewritten = placeholder
+        ? await updateChatMessage({ messageName: placeholder, text: apology }).catch(() => ({
+            sent: false,
+          }))
+        : { sent: false };
+      if (!rewritten.sent) {
+        await sendChatMessage({
+          space: spaceName,
+          text: apology,
+          ...(threadName ? { threadName } : {}),
+        }).catch(() => undefined);
+      }
     }
   });
 
-  return jsonText(ACK_TEXT, asAddOn);
+  // Nothing to say synchronously: the placeholder is already in the thread.
+  return NextResponse.json({});
 }
 
 async function handleAddedToSpace(event: ChatEvent, asAddOn: boolean): Promise<NextResponse> {
