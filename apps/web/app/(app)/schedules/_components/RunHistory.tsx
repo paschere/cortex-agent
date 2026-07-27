@@ -3,9 +3,9 @@
 import { clsx } from 'clsx';
 import { Check, ChevronDown, Copy, History } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { fmtLong, runDuration } from './format';
 import { LiveRelative } from './LiveRelative';
 import { RunOutput } from './RunMarkdown';
+import { fmtLong, runDuration } from './format';
 import type { JobRun } from './types';
 
 const PILL: Record<JobRun['status'], string> = {

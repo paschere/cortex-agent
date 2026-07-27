@@ -5,8 +5,8 @@ import { clsx } from 'clsx';
 import { Check, Copy, MessageSquare, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { fmtLong, relative, runDuration } from './format';
 import { RunOutput } from './RunMarkdown';
+import { fmtLong, relative, runDuration } from './format';
 import type { JobRun } from './types';
 
 const RUN_STATUS_STYLES: Record<JobRun['status'], string> = {

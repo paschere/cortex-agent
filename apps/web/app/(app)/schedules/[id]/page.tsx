@@ -135,8 +135,7 @@ export default async function RoutineDetailPage({
   const lastSuccess = runs.find((r) => r.status === 'ok' && r.output);
   const summary = lastSuccess?.output ? stripMarkdown(lastSuccess.output).slice(0, 420) : null;
   const avg = averageDuration(runs);
-  const failing =
-    runs.length >= 2 && runs[0]?.status === 'error' && runs[1]?.status === 'error';
+  const failing = runs.length >= 2 && runs[0]?.status === 'error' && runs[1]?.status === 'error';
 
   return (
     <>
@@ -282,9 +281,7 @@ export default async function RoutineDetailPage({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className={SECTION}>Runs</div>
               <span className="text-[11px] text-ink-faint">
-                {runs.length === 0
-                  ? 'none yet'
-                  : `showing the last ${runs.length}${runs.length === RUN_LIMIT ? ` of ${okCount + failedCount}+` : ''}`}
+                {runs.length === 0 ? 'none yet' : `showing the last ${runs.length}`}
               </span>
             </div>
             <RunHistory runs={runs} />
