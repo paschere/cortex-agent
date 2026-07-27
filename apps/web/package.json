@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "1.0.10",
+    "@anthropic-ai/sdk": "^0.115.0",
     "@opentelemetry/api": "1.9.0",
     "@radix-ui/react-dialog": "1.1.4",
     "@radix-ui/react-dropdown-menu": "2.1.4",
@@ -22,6 +23,7 @@
     "@sentry/nextjs": "8.45.1",
     "@supabase/supabase-js": "2.46.2",
     "@tanstack/react-query": "5.62.7",
+    "@vercel/sandbox": "^2.9.0",
     "@zipdev/agent-tools": "workspace:*",
     "@zipdev/agents": "workspace:*",
     "@zipdev/core": "workspace:*",

@@ -39,3 +39,5 @@ export { renderRoutineResultEmail } from './routine-result';
 export type { RoutineResultEmailInput } from './routine-result';
 export { renderApprovalRequestEmail } from './approval-request';
 export type { ApprovalRequestEmailInput } from './approval-request';
+export { renderDevTaskEmail } from './dev-task-result';
+export type { DevTaskEmailCheck, DevTaskEmailInput } from './dev-task-result';

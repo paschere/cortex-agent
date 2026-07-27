@@ -54,3 +54,7 @@ export type {
 // Side-effect import: registers the sales.draft_proposal composite tool.
 // Placed last so the registry + all primitive tools are initialized first.
 export { salesDraftProposal } from './composite/sales-draft-proposal';
+
+// The dev-task executor's pure core. Registers no tools — it is a library for
+// the Inngest worker that turns a Linear issue into a pull request.
+export * from './dev';

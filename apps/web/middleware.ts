@@ -24,6 +24,11 @@ const PUBLIC_PATHS = [
   // chat@system.gserviceaccount.com — no session cookie exists. The route
   // verifies that signature itself and rejects anything unsigned.
   '/api/chat-app',
+  // Linear POSTs issue events here signed with an HMAC-SHA256
+  // `Linear-Signature` header — no session cookie exists. The route verifies
+  // that signature against the raw body itself and rejects anything unsigned,
+  // stale or unconfigured.
+  '/api/webhooks',
   // Brand assets fetched by external services that have no session: Google
   // Chat renders the app avatar from /icon.png, and link unfurls hit these
   // too. They are public images by nature.
