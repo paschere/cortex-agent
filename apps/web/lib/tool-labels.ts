@@ -48,6 +48,30 @@ export function toolLabel(toolId: string): { label: string; icon: string } {
 }
 
 /**
+ * `Family · Action` rendering of a tool id, for surfaces that have no curated
+ * label to fall back on (approval emails, Chat DMs, archived transcripts).
+ *
+ * Ids reach us in two shapes: dotted as declared (`hubspot.update_deal`) and
+ * underscored as the AI SDK / MCP persist them (`hubspot_update_deal`). Both
+ * normalize to the same output.
+ */
+export function humanizeToolId(toolId: string): string {
+  const [family = '', ...rest] = toolId.replace(/\./g, '_').split('_');
+  const cap = (w: string) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w);
+  const action = rest.map(cap).join(' ');
+  return action ? `${cap(family)} · ${action}` : cap(family);
+}
+
+/**
+ * The name a human should see for a tool. Curated label when we have one,
+ * otherwise the `Family · Action` form — never the raw id.
+ */
+export function toolDisplayName(toolId: string): string {
+  const key = toolId.replace(/\./g, '_');
+  return TOOL_LABELS[key]?.label ?? humanizeToolId(toolId);
+}
+
+/**
  * Produces a plain-English summary of a confirmation-gated tool action so the
  * user can understand what will happen without reading raw JSON.
  */

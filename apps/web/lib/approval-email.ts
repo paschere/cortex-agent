@@ -4,6 +4,7 @@ import { sendEmail } from '@/lib/email';
 import { renderApprovalRequestEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { humanizeToolId } from '@/lib/tool-labels';
 import { logger } from '@zipdev/core';
 
 /**
@@ -25,17 +26,6 @@ import { logger } from '@zipdev/core';
  */
 
 const MAX_PAYLOAD_CHARS = 1500;
-
-function humanizeToolId(toolId: string): string {
-  const [family = '', ...rest] = toolId.split('.');
-  const action = rest
-    .join('.')
-    .split('_')
-    .map((w) => (w ? w[0]!.toUpperCase() + w.slice(1) : w))
-    .join(' ');
-  const familyTitle = family ? family[0]!.toUpperCase() + family.slice(1) : family;
-  return action ? `${familyTitle} · ${action}` : familyTitle;
-}
 
 export async function sendApprovalRequestEmail(opts: {
   userId: string;

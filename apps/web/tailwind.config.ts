@@ -4,6 +4,14 @@ const rgb = (v: string) => `rgb(var(${v}) / <alpha-value>)`;
 
 const config: Config = {
   content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
+  // The palette in globals.css is light-only — one token set, `color-scheme:
+  // light`, no dark counterpart. Tailwind's default is `darkMode: 'media'`, so
+  // any stray `dark:` variant fired off the visitor's OS setting and repainted
+  // a surface dark while the text kept inheriting the light-mode ink: black on
+  // black, which is how the conversation transcript became unreadable on
+  // Windows. Pinning it to `class` means those variants can only apply when
+  // something deliberately sets `.dark`, which nothing does yet.
+  darkMode: ['class'],
   theme: {
     extend: {
       colors: {

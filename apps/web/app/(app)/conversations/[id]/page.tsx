@@ -1,15 +1,15 @@
+import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/ui/page-header';
+import { Panel } from '@/components/ui/panel';
+import { conversationSurface } from '@/lib/conversation-surface';
+import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { notFound } from 'next/navigation';
+import { ArrowLeft, MessagesSquare, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-
-interface MessageRow {
-  id: string;
-  role: string;
-  content: string;
-  created_at: string;
-}
+import { notFound } from 'next/navigation';
+import { SurfaceBadge } from '../_components/SurfaceBadge';
+import { TranscriptMessage, type TranscriptMessageRow } from './_components/TranscriptMessage';
 
 interface ConversationRow {
   id: string;
@@ -17,9 +17,18 @@ interface ConversationRow {
   user_id: string;
   agent_id: string;
   surface: string;
+  external_key: string | null;
   created_at: string;
-  agents: { name: string }[] | null;
+  updated_at: string;
+  agents: { name: string } | { name: string }[] | null;
 }
+
+/** Supabase returns a to-one embed as an object; older joins hand back an array. */
+function relName(rel: { name: string } | { name: string }[] | null): string | undefined {
+  return Array.isArray(rel) ? rel[0]?.name : rel?.name;
+}
+
+export const dynamic = 'force-dynamic';
 
 export default async function ConversationDetailPage({
   params,
@@ -32,53 +41,75 @@ export default async function ConversationDetailPage({
 
   const { data: convData } = await sb
     .from('conversations')
-    .select('id, title, user_id, agent_id, surface, created_at, agents(name)')
+    .select(
+      'id, title, user_id, agent_id, surface, external_key, created_at, updated_at, agents(name)',
+    )
     .eq('id', id)
     .single();
 
   const conv = convData as unknown as ConversationRow | null;
-  if (!conv || conv.user_id !== user.id) notFound();
+  // Ownership stays exactly as strict as it was. Org admins are the one
+  // exception, and only because that role already gates /admin (see
+  // app/(app)/admin/layout.tsx) — they can already read this from the audit log.
+  const isOwner = !!conv && conv.user_id === user.id;
+  const asAdmin = !!conv && !isOwner && user.role === 'org_admin';
+  if (!conv || (!isOwner && !asAdmin)) notFound();
 
   const { data: msgData } = await sb
     .from('messages')
-    .select('id, role, content, created_at')
+    .select('id, role, content, tool_calls, tool_results, created_at')
     .eq('conversation_id', id)
     .order('created_at', { ascending: true });
 
-  const messages = (msgData ?? []) as unknown as MessageRow[];
+  const messages = (msgData ?? []) as unknown as TranscriptMessageRow[];
+  const agentName = relName(conv.agents) ?? 'Zippy';
+  const surface = conversationSurface(conv);
+  const title = conv.title?.trim() || 'Untitled conversation';
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {conv.title ?? 'Untitled conversation'}
-          </h1>
-          <div className="text-sm text-neutral-500 mt-1">
-            {conv.agents?.[0]?.name ?? 'Agent'} &middot; {conv.surface} &middot;{' '}
-            {new Date(conv.created_at).toLocaleString()}
-          </div>
+    <>
+      <Link
+        href="/conversations"
+        className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:text-ink"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        All conversations
+      </Link>
+
+      <PageHeader
+        title={title}
+        subtitle={`${agentName} · ${messages.length} message${messages.length === 1 ? '' : 's'} · started ${relativeTime(conv.created_at)}`}
+        icon={<MessagesSquare className="h-5 w-5" />}
+        actions={
+          <>
+            <SurfaceBadge surface={surface} size="md" />
+            <Link href={`/chat/${conv.id}`}>
+              <Button>Resume in chat</Button>
+            </Link>
+          </>
+        }
+      />
+
+      {asAdmin && (
+        <Panel className="mb-4 flex items-center gap-2 border-amber/30 bg-amber-soft px-4 py-2.5 text-[12.5px] font-semibold text-amber">
+          <ShieldCheck className="h-4 w-4 shrink-0" />
+          You are viewing someone else&apos;s conversation as an org admin.
+        </Panel>
+      )}
+
+      {messages.length === 0 ? (
+        <Panel className="p-10 text-center text-[13px] text-ink-faint">
+          <MessagesSquare className="mx-auto mb-3 h-8 w-8 text-primary" />
+          <p className="font-semibold text-ink">Nothing was said here yet.</p>
+          <p className="mt-1">This conversation has no messages.</p>
+        </Panel>
+      ) : (
+        <div className="space-y-3">
+          {messages.map((m) => (
+            <TranscriptMessage key={m.id} message={m} agentName={agentName} />
+          ))}
         </div>
-        <Link href={`/chat/${id}`}>
-          <Button>Resume in chat</Button>
-        </Link>
-      </div>
-      <div className="rounded-2xl border bg-white dark:bg-neutral-900 divide-y">
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`p-4 text-sm ${m.role === 'user' ? 'bg-neutral-50 dark:bg-neutral-800/50' : ''}`}
-          >
-            <div className="text-xs text-neutral-500 uppercase mb-1">
-              {m.role} &middot; {new Date(m.created_at).toLocaleString()}
-            </div>
-            <div className="whitespace-pre-wrap">{m.content}</div>
-          </div>
-        ))}
-        {messages.length === 0 && (
-          <div className="p-6 text-sm text-neutral-500">No messages in this conversation.</div>
-        )}
-      </div>
-    </div>
+      )}
+    </>
   );
 }

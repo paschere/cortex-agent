@@ -1,15 +1,12 @@
 'use client';
 
 import type { Message, ToolInvocation } from 'ai';
-import { clsx } from 'clsx';
-import { Copy, RotateCw, Sparkles, Check } from 'lucide-react';
+import { Check, Copy, RotateCw, Sparkles } from 'lucide-react';
 import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import { ToolCallCard } from './ToolCallCard';
+import { ChatMarkdown } from './ChatMarkdown';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
 import { ProposalCard, type ProposalResult } from './ProposalCard';
+import { ToolCallCard } from './ToolCallCard';
 
 interface MessageBubbleProps {
   message: Message;
@@ -51,6 +48,7 @@ function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
+      type="button"
       onClick={() => {
         navigator.clipboard.writeText(text);
         setDone(true);
@@ -100,25 +98,7 @@ export function MessageBubble({
       </span>
 
       <div className="min-w-0 flex-1">
-        {content && (
-          <div
-            className={clsx(
-              'prose prose-sm max-w-none text-ink',
-              'prose-headings:mt-3 prose-headings:font-bold prose-headings:text-ink',
-              'prose-p:my-1.5 prose-p:leading-relaxed prose-li:my-0.5',
-              'prose-strong:text-ink prose-strong:font-semibold',
-              'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
-              'prose-code:rounded prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-medium prose-code:text-primary-ink prose-code:before:content-[""] prose-code:after:content-[""]',
-              'prose-pre:rounded-[12px] prose-pre:border prose-pre:border-border',
-              'prose-table:text-[13px] prose-th:text-ink prose-td:text-ink-muted',
-              isStreaming && 'after:ml-0.5 after:animate-pulse after:text-primary after:content-["▋"]',
-            )}
-          >
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-              {content}
-            </ReactMarkdown>
-          </div>
-        )}
+        {content && <ChatMarkdown content={content} isStreaming={isStreaming} />}
 
         {toolInvocations && toolInvocations.length > 0 && (
           <div className="mt-2 space-y-1.5">
@@ -152,6 +132,7 @@ export function MessageBubble({
             <CopyButton text={content} />
             {onRegenerate && (
               <button
+                type="button"
                 onClick={onRegenerate}
                 className="rounded-[8px] p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
                 aria-label="Regenerate response"

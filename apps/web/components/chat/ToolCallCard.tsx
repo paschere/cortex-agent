@@ -1,15 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, CheckCircle2, AlertCircle, ChevronDown } from 'lucide-react';
-import { clsx } from 'clsx';
-import { toolLabel } from '@/lib/tool-labels';
+import { toolDisplayName } from '@/lib/tool-labels';
 import type { ToolInvocation } from 'ai';
+import { clsx } from 'clsx';
+import { AnimatePresence, motion } from 'framer-motion';
+import { AlertCircle, CheckCircle2, ChevronDown, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 
 export function ToolCallCard({ invocation }: { invocation: ToolInvocation }) {
   const [open, setOpen] = useState(false);
-  const { label } = toolLabel(invocation.toolName);
+  const label = toolDisplayName(invocation.toolName);
   const isRunning = invocation.state === 'call' || invocation.state === 'partial-call';
   const result = invocation.state === 'result' ? invocation.result : undefined;
   const isError =
@@ -39,7 +39,9 @@ export function ToolCallCard({ invocation }: { invocation: ToolInvocation }) {
           <CheckCircle2 className="h-3.5 w-3.5 text-emerald" />
         )}
         <span className="flex-1 font-semibold text-ink">{label}</span>
-        <ChevronDown className={clsx('h-3.5 w-3.5 text-ink-faint transition-transform', open && 'rotate-180')} />
+        <ChevronDown
+          className={clsx('h-3.5 w-3.5 text-ink-faint transition-transform', open && 'rotate-180')}
+        />
       </button>
       <AnimatePresence initial={false}>
         {open && (

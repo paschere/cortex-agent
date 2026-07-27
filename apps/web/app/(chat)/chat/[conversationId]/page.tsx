@@ -1,31 +1,9 @@
 import { ChatRoot } from '@/components/chat/ChatRoot';
-import { listAgents } from '@zipdev/agents';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import type { Message, ToolInvocation } from 'ai';
-
-// Convert DB-persisted tool_calls / tool_results into AI SDK toolInvocations
-// so resumed conversations render ToolCallCards instead of dropping them.
-function buildToolInvocations(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  toolCalls: any[],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  toolResults: any[],
-): ToolInvocation[] | undefined {
-  if (!toolCalls?.length) return undefined;
-  const resultMap = new Map(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (toolResults ?? []).map((r: any) => [r.toolCallId, r.result]),
-  );
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return toolCalls.map((tc: any) => ({
-    toolCallId: tc.toolCallId,
-    toolName: tc.toolName,
-    args: tc.args,
-    state: resultMap.has(tc.toolCallId) ? ('result' as const) : ('call' as const),
-    result: resultMap.get(tc.toolCallId),
-  })) as ToolInvocation[];
-}
+import { toToolInvocations } from '@/lib/tool-invocations';
+import { listAgents } from '@zipdev/agents';
+import type { Message } from 'ai';
 
 export default async function ResumeChatPage({
   params,
@@ -67,13 +45,7 @@ export default async function ResumeChatPage({
   const initialMessages: Message[] = (msgs ?? [])
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .map((m) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const toolCalls = (m.tool_calls as any[]) ?? [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const toolResults = (m.tool_results as any[]) ?? [];
-      const toolInvocations = toolCalls.length
-        ? buildToolInvocations(toolCalls, toolResults)
-        : undefined;
+      const toolInvocations = toToolInvocations(m.tool_calls, m.tool_results);
       return {
         id: m.id as string,
         role: m.role as 'user' | 'assistant',
