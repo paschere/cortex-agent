@@ -1,5 +1,6 @@
 import { buildToolContext } from '@/lib/agent';
 import { sendEmail } from '@/lib/email';
+import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { google } from '@ai-sdk/google';
@@ -64,6 +65,59 @@ function buildEmailBody(job: JobRow, result: ExecResult): string {
   ];
   if (base) lines.push('', '---', '', `View this routine in Zippy: ${base}/schedules`);
   return lines.join('\n');
+}
+
+/**
+ * The same result, shaped for a Google Chat DM: markdown flattened into Chat's
+ * small formatting subset and capped at Chat's 4096-character limit, with a
+ * link back to the full run in Zipdev OS.
+ */
+function buildChatBody(job: JobRow, result: ExecResult): string {
+  const base = (process.env.APP_BASE_URL ?? '').replace(/\/+$/, '');
+  const body = [
+    `**${result.ok ? '✅' : '⚠️'} ${job.name}**`,
+    '',
+    result.ok
+      ? result.output || '(no output)'
+      : `The routine failed:\n\n${result.error ?? 'Unknown error'}`,
+    base ? `\n[View this routine in Zipdev OS](${base}/schedules)` : '',
+  ].join('\n');
+  return toChatText(body, base ? { moreUrl: `${base}/schedules` } : {});
+}
+
+/**
+ * Who should get this run as a Chat DM.
+ *
+ * Delivery is opt-in per person (`user_preferences.deliver_chat_dm`) and
+ * ADDITIVE — it never replaces the email. An explicit recipient list wins and
+ * is matched back to Zipdev users by address; otherwise it is the job's owner.
+ * Anyone without the preference on, without a Zipdev account, or without a DM
+ * space with the Chat app is simply skipped.
+ */
+async function chatDmUserIds(job: JobRow): Promise<string[]> {
+  const db = getSupabaseServiceClient();
+  let candidates: string[];
+
+  if (job.recipients.length > 0) {
+    const { data } = await db
+      .from('users')
+      .select('id')
+      .in(
+        'email',
+        job.recipients.map((r) => r.trim().toLowerCase()),
+      );
+    candidates = ((data ?? []) as Array<{ id: string }>).map((u) => u.id);
+  } else {
+    candidates = [job.user_id];
+  }
+  if (candidates.length === 0) return [];
+
+  const { data: prefs } = await db
+    .from('user_preferences')
+    .select('user_id')
+    .in('user_id', candidates)
+    .eq('deliver_chat_dm', true);
+  return ((prefs ?? []) as Array<{ user_id: string }>).map((p) => p.user_id);
 }
 
 /** Run the job's fixed tool call. Never throws — errors become the result. */
@@ -266,6 +320,35 @@ export const scheduleRun = inngest.createFunction(
         }
       });
     }
+
+    // Google Chat DM — in ADDITION to the email, for people who opted in.
+    // Wrapped whole so neither the preference lookup nor a Chat outage can
+    // fail the run: the routine already did its work.
+    await step.run('deliver-chat-dm', async () => {
+      try {
+        const userIds = await chatDmUserIds(job);
+        if (userIds.length === 0) return { sent: 0 };
+        const text = buildChatBody(job, result);
+        const outcomes = await Promise.all(
+          userIds.map((userId) => sendChatDm({ userId, text, threadKey: `job-${job.id}` })),
+        );
+        const sent = outcomes.filter((o) => o.sent).length;
+        if (sent < userIds.length) {
+          logger.warn('schedule-run: some Chat DMs were not delivered', {
+            jobId: job.id,
+            wanted: userIds.length,
+            sent,
+          });
+        }
+        return { sent };
+      } catch (err) {
+        logger.error('schedule-run: Chat DM delivery failed', {
+          jobId: job.id,
+          error: (err as Error).message,
+        });
+        return { sent: 0 };
+      }
+    });
 
     await step.run('finalize', async () => {
       const db = getSupabaseServiceClient();

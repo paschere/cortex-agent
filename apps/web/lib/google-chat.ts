@@ -1,7 +1,7 @@
 import 'server-only';
 import { createSign } from 'node:crypto';
-import { logger } from '@zipdev/core';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { logger } from '@zipdev/core';
 
 /**
  * Outbound Google Chat — posting messages AS the Zippy Chat app.
@@ -316,10 +316,7 @@ export async function getChatDmSpace(userId: string): Promise<string | null> {
  * and a markdown table becomes a wall of pipes. Zippy writes ordinary markdown,
  * so everything it says is flattened through here before it reaches Chat.
  */
-export function toChatText(
-  markdown: string,
-  opts?: { limit?: number; moreUrl?: string },
-): string {
+export function toChatText(markdown: string, opts?: { limit?: number; moreUrl?: string }): string {
   const limit = opts?.limit ?? CHAT_TEXT_LIMIT;
   const source = (markdown ?? '').replace(/\r\n/g, '\n');
   const lines = source.split('\n');

@@ -1,6 +1,10 @@
+import { buildToolContext } from '@/lib/agent';
+import { sendApprovalRequestEmail } from '@/lib/approval-email';
+import { confirmationReason } from '@/lib/confirmation-notes';
+import { toChatText } from '@/lib/google-chat';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { google } from '@ai-sdk/google';
-import { type CoreMessage, type CoreTool, generateText, tool } from 'ai';
-import { loadAgent } from '@zipdev/agents';
 import {
   type RiskLevel,
   classify,
@@ -10,13 +14,9 @@ import {
   maxLevel,
   runTool,
 } from '@zipdev/agent-tools';
+import { loadAgent } from '@zipdev/agents';
 import { ConfirmationRequiredError, logger } from '@zipdev/core';
-import { buildToolContext } from '@/lib/agent';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
-import { confirmationReason } from '@/lib/confirmation-notes';
-import { sendApprovalRequestEmail } from '@/lib/approval-email';
-import { toChatText } from '@/lib/google-chat';
+import { type CoreMessage, type CoreTool, generateText, tool } from 'ai';
 import type { ChatAudience } from './events';
 
 /**
@@ -118,7 +118,10 @@ function toToolErrorMessage(err: unknown): string {
   const brace = msg.indexOf('{');
   if (brace !== -1) {
     try {
-      const parsed = JSON.parse(msg.slice(brace)) as { error?: { message?: string }; message?: string };
+      const parsed = JSON.parse(msg.slice(brace)) as {
+        error?: { message?: string };
+        message?: string;
+      };
       const inner = parsed?.error?.message ?? parsed?.message;
       if (typeof inner === 'string' && inner.length > 0) msg = inner;
     } catch {
@@ -315,7 +318,9 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
 
   const confirmations: StagedConfirmation[] = [];
   const familiesUsed = new Set<string>();
-  let highestRisk: RiskLevel = 'low';
+  // Held in an object rather than a `let`: it is only ever written from inside
+  // the tool closures, and TypeScript would otherwise narrow it to 'low'.
+  const risk: { highest: RiskLevel } = { highest: 'low' };
 
   const aiTools: Record<string, CoreTool> = Object.fromEntries(
     allowed.map((t) => [
@@ -333,13 +338,21 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
               input: args,
               surface: 'web',
             });
-            highestRisk = maxLevel(highestRisk, classification.riskLevel);
+            risk.highest = maxLevel(risk.highest, classification.riskLevel);
           } catch {
             // classification is advisory here; runTool enforces for real.
           }
 
           try {
-            return await runTool(t, args, { ...ctx, signal: abortSignal });
+            const out = await runTool(t, args, { ...ctx, signal: abortSignal });
+            // `runTool` attaches `_security` to any call the enforcement layer
+            // treats as an incident. That verdict is the authoritative one —
+            // it saw the real policy and the trailing-hour frequency signal —
+            // so it overrides the pure pre-flight classification above.
+            const flagged = (out as { _security?: { riskLevel?: RiskLevel } } | null | undefined)
+              ?._security?.riskLevel;
+            if (flagged) risk.highest = maxLevel(risk.highest, flagged);
+            return out;
           } catch (err) {
             if (err instanceof ConfirmationRequiredError) {
               // NEVER execute. Stage it, notify the requester privately (email
@@ -404,8 +417,8 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
   // --- system prompt --------------------------------------------------------
   const surfaceNote =
     req.audience === 'space'
-      ? `You are answering in a Google Chat SPACE — a group room where everyone present reads your reply. People reach you by @mentioning you. Keep answers short and chat-shaped (a few lines, no headings, no tables). Anything involving compensation, payroll or personal data is delivered to the person privately instead of being posted here; do not restate such details in your reply.`
-      : `You are answering in a 1:1 Google Chat DM. Keep answers short and chat-shaped (a few lines, no headings, no tables) unless the person asks for detail.`;
+      ? 'You are answering in a Google Chat SPACE — a group room where everyone present reads your reply. People reach you by @mentioning you. Keep answers short and chat-shaped (a few lines, no headings, no tables). Anything involving compensation, payroll or personal data is delivered to the person privately instead of being posted here; do not restate such details in your reply.'
+      : 'You are answering in a 1:1 Google Chat DM. Keep answers short and chat-shaped (a few lines, no headings, no tables) unless the person asks for detail.';
 
   const system = [
     agent.systemPrompt,
@@ -474,7 +487,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
   if (req.audience === 'space') {
     const hitFinancial = [...familiesUsed].some((f) => FINANCIAL_FAMILIES.has(f));
     const hitPii = [...familiesUsed].some((f) => PII_FAMILIES.has(f));
-    const hitRisk = highestRisk === 'high' || highestRisk === 'critical';
+    const hitRisk = risk.highest === 'high' || risk.highest === 'critical';
     if (hitFinancial) withheldReason = 'financial';
     else if (hitPii) withheldReason = 'pii';
     else if (hitRisk) withheldReason = 'risk';

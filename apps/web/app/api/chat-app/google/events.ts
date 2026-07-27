@@ -1,4 +1,4 @@
-/**
+﻿/**
  * The shapes Google Chat POSTs to an HTTP-endpoint app, plus the pure helpers
  * that turn one into something we can act on.
  *
@@ -186,5 +186,10 @@ export function extractUserText(message: ChatMessageBody | undefined): string {
 }
 
 function collapse(s: string): string {
-  return s.replace(/ /g, ' ').replace(/[ \t]{2,}/g, ' ').trim();
+  // Chat pads mentions with non-breaking spaces; deleting the mention leaves
+  // them behind as invisible junk at the front of the prompt.
+  return s
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }

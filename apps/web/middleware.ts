@@ -20,6 +20,20 @@ const PUBLIC_PATHS = [
   // Inngest Cloud calls this to sync/invoke functions; it authenticates with
   // the INNGEST_SIGNING_KEY, not a session cookie.
   '/api/inngest',
+  // Google Chat posts events here signed with a Bearer JWT from
+  // chat@system.gserviceaccount.com — no session cookie exists. The route
+  // verifies that signature itself and rejects anything unsigned.
+  '/api/chat-app',
+  // Brand assets fetched by external services that have no session: Google
+  // Chat renders the app avatar from /icon.png, and link unfurls hit these
+  // too. They are public images by nature.
+  '/icon.png',
+  '/apple-icon.png',
+  '/zipdev-logo.png',
+  // Presentation PDFs are authorized by their own unguessable, expiring token
+  // (the link is opened from Claude/email where no cookie exists — see the
+  // route's header comment for the trade-off).
+  '/api/files/presentation',
 ];
 
 interface SessionPayload {
