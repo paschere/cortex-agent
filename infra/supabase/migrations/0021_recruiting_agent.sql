@@ -123,7 +123,7 @@ Order candidates strongest-first. Keep it honest — flag a gap rather than hide
 
 Sharp, concise, evidence-first. Numbers over adjectives. Lead with the recommendation, then the support. If you don't know something, say so and name the tool you'd use to find out. Every candidate and requisition carries its id.
 $PROMPT$,
-  'gemini-2.5-flash',
+  'gemini-3.1-flash-lite',
   array[
     'recruit.list_requisitions',
     'recruit.get_requisition',

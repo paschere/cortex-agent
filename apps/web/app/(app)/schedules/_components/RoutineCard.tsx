@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { fmt, humanizeCron, relative, runDuration, untilNext } from './format';
+import { fmt, humanizeCron, relative, runDuration, stripMarkdown, untilNext } from './format';
 import type { JobRun, JobStatus, ScheduledJob } from './types';
 
 const STATUS_STYLES: Record<JobStatus, string> = {
@@ -80,11 +80,22 @@ export function RoutineCard({
   const next = untilNext(job.nextRunAt, now);
   const lastRun = job.runs[0];
   const failing = isFailing(job.runs);
-  const preview = lastRun?.error ?? lastRun?.output ?? null;
+  // Errors are plain text; outputs are agent markdown — flatten them to prose.
+  const preview = lastRun?.error ?? (lastRun?.output ? stripMarkdown(lastRun.output) : null);
 
   return (
-    <section className="overflow-hidden rounded-card border border-border bg-surface shadow-card transition hover:border-border-strong">
-      <div className="flex flex-wrap items-start gap-3 p-4">
+    <section className="group overflow-hidden rounded-card border border-border bg-surface shadow-card transition hover:border-border-strong">
+      <div className="relative flex flex-wrap items-start gap-3 p-4">
+        {/*
+         * Card-wide link, same trick the pipelines gallery uses: an absolutely
+         * positioned overlay carries the navigation, and every control that has
+         * to stay clickable is lifted above it with `relative z-10`.
+         */}
+        <Link
+          href={`/schedules/${job.id}`}
+          aria-label={`Open ${job.name}`}
+          className="absolute inset-0 z-0 rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        />
         <span
           className={clsx(
             'grid h-10 w-10 shrink-0 place-items-center rounded-[12px]',
@@ -101,56 +112,51 @@ export function RoutineCard({
         </span>
 
         <div className="min-w-0 flex-1 basis-[15rem]">
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={expanded}
-            className="block w-full rounded-[8px] text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="text-[13.5px] font-bold text-ink">{job.name}</span>
-              <span
-                className={clsx(
-                  'rounded-pill px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide',
-                  STATUS_STYLES[job.status],
-                )}
-              >
-                {job.status}
-              </span>
-              {job.isGlobal && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary"
-                  title="Team routine — runs for the whole workspace"
-                >
-                  <Globe className="h-3 w-3" /> global
-                </span>
-              )}
-              {failing && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-pill bg-rose-soft px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-rose"
-                  title="The last runs failed in a row"
-                >
-                  <TriangleAlert className="h-3 w-3" /> failing
-                </span>
-              )}
-              {job.allowUnattendedWrites && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-pill bg-amber-soft px-2 py-0.5 text-[10.5px] font-bold text-amber"
-                  title="This job may execute write tools without a human confirming each one"
-                >
-                  <ShieldAlert className="h-3 w-3" /> unattended writes
-                </span>
-              )}
-              {job.notifyEmail && (
-                <span
-                  className="inline-flex items-center gap-1 text-[10.5px] text-ink-faint"
-                  title="Emails results"
-                >
-                  <Mail className="h-3 w-3" />
-                </span>
-              )}
+          <h3 className="flex flex-wrap items-center gap-2">
+            <span className="text-[13.5px] font-bold text-ink transition-colors group-hover:text-primary">
+              {job.name}
             </span>
-          </button>
+            <span
+              className={clsx(
+                'rounded-pill px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide',
+                STATUS_STYLES[job.status],
+              )}
+            >
+              {job.status}
+            </span>
+            {job.isGlobal && (
+              <span
+                className="inline-flex items-center gap-1 rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary"
+                title="Team routine — runs for the whole workspace"
+              >
+                <Globe className="h-3 w-3" /> global
+              </span>
+            )}
+            {failing && (
+              <span
+                className="inline-flex items-center gap-1 rounded-pill bg-rose-soft px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-rose"
+                title="The last runs failed in a row"
+              >
+                <TriangleAlert className="h-3 w-3" /> failing
+              </span>
+            )}
+            {job.allowUnattendedWrites && (
+              <span
+                className="inline-flex items-center gap-1 rounded-pill bg-amber-soft px-2 py-0.5 text-[10.5px] font-bold text-amber"
+                title="This job may execute write tools without a human confirming each one"
+              >
+                <ShieldAlert className="h-3 w-3" /> unattended writes
+              </span>
+            )}
+            {job.notifyEmail && (
+              <span
+                className="inline-flex items-center gap-1 text-[10.5px] text-ink-faint"
+                title="Emails results"
+              >
+                <Mail className="h-3 w-3" />
+              </span>
+            )}
+          </h3>
 
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-faint">
             <span className="inline-flex items-center gap-1 font-semibold text-ink-muted">
@@ -168,7 +174,7 @@ export function RoutineCard({
 
             {/* Run strip — newest first, hoverable, click to jump to the run. */}
             {job.runs.length > 0 && (
-              <span className="inline-flex items-center gap-1">
+              <span className="relative z-10 inline-flex items-center gap-1">
                 {job.runs.slice(0, 10).map((r) => {
                   const when = relative(r.started_at, now);
                   const took = runDuration(r.started_at, r.finished_at);
@@ -213,7 +219,8 @@ export function RoutineCard({
               <button
                 type="button"
                 onClick={() => onOpenRun(lastRun)}
-                className="mt-2 block w-full rounded-[10px] bg-surface-2 px-3 py-2 text-left transition hover:bg-canvas focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                title="Open the full result"
+                className="relative z-10 mt-2 block w-full rounded-[10px] bg-surface-2 px-3 py-2 text-left transition hover:bg-canvas focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span
                   className={clsx(
@@ -230,7 +237,7 @@ export function RoutineCard({
           )}
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-1">
+        <div className="relative z-10 flex shrink-0 flex-wrap items-center gap-1">
           <button
             type="button"
             disabled={running || job.status !== 'active'}
@@ -384,7 +391,7 @@ export function RoutineCard({
                               run.error ? 'text-rose' : 'text-ink-muted',
                             )}
                           >
-                            {run.error ?? run.output}
+                            {run.error ?? stripMarkdown(run.output ?? '')}
                           </span>
                         )}
                       </button>

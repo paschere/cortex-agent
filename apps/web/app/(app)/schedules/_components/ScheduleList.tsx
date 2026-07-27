@@ -4,11 +4,12 @@ import { clsx } from 'clsx';
 import { AlarmClock, Globe, Search, SearchX, User, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { EditRoutineDialog } from './EditRoutineDialog';
 import { RoutineCard } from './RoutineCard';
 import { RunDetailDialog } from './RunDetailDialog';
 import type { JobRun, JobStatus, RoutinePatch, ScheduledJob } from './types';
+import { useNow } from './useNow';
 
 export type { JobRun, ScheduledJob } from './types';
 
@@ -26,17 +27,6 @@ function matchesFilter(job: ScheduledJob, filter: Filter, userId: string): boole
   if (filter === 'mine') return job.ownerId === userId;
   if (filter === 'paused') return job.status === 'paused';
   return true;
-}
-
-/** Ticking clock, `null` until mount — keeps relative times hydration-safe. */
-function useNow(intervalMs = 30_000): number | null {
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(t);
-  }, [intervalMs]);
-  return now;
 }
 
 export function ScheduleList({

@@ -82,7 +82,13 @@ describe('payroll.team_overview', () => {
     const ctx = makeCtx();
     const result = await runTool(payrollTeamOverview, {}, ctx);
 
-    expect(result).toEqual(mockOverview);
+    // toMatchObject, not toEqual: runTool attaches a `_security` notice to
+    // results the guardrails flagged (payroll data is sensitive), and that
+    // notice is deliberately part of what reaches the model.
+    expect(result).toMatchObject(mockOverview);
+    expect((result as unknown as { _security: { riskLevel: string } })._security.riskLevel).toBe(
+      'medium',
+    );
     expect(fetch).toHaveBeenCalledWith(
       'https://payroll.internal/api/internal/team-overview',
       expect.objectContaining({

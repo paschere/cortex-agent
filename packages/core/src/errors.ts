@@ -29,3 +29,20 @@ export class ConfirmationRequiredError extends ZipdevError {
     super(`Tool ${toolId} requires confirmation`, 'CONFIRMATION_REQUIRED');
   }
 }
+/**
+ * Thrown by the security enforcement layer when a tool call is refused outright.
+ *
+ * The message is deliberately written as plain language for an end user: the
+ * model relays it verbatim. It must say WHAT was blocked, WHY, and what the
+ * human can do instead — never a stack trace, a policy key or a threshold.
+ */
+export class SecurityBlockedError extends ZipdevError {
+  constructor(
+    message: string,
+    public readonly toolId: string,
+    public readonly riskLevel: string,
+    public readonly signals: string[] = [],
+  ) {
+    super(message, 'SECURITY_BLOCKED');
+  }
+}

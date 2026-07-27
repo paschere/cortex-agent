@@ -6,6 +6,7 @@ import { Check, Copy, MessageSquare, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { fmtLong, relative, runDuration } from './format';
+import { RunOutput } from './RunMarkdown';
 import type { JobRun } from './types';
 
 const RUN_STATUS_STYLES: Record<JobRun['status'], string> = {
@@ -114,9 +115,7 @@ export function RunDetailDialog({
               Output
             </div>
             {body ? (
-              <div className="whitespace-pre-wrap rounded-[12px] bg-surface-2 px-3.5 py-3 text-[13.5px] leading-[1.7] text-ink-muted">
-                {body}
-              </div>
+              <RunOutput text={body} className="rounded-[12px] bg-surface-2 px-3.5 py-3" />
             ) : (
               <p className="rounded-[12px] bg-surface-2 px-3.5 py-3 text-[13px] text-ink-faint">
                 {run.status === 'running'

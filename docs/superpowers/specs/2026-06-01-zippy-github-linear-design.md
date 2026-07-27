@@ -11,6 +11,7 @@ capability so generated documentation can be persisted, and a new agent
 **Zippy Developer** that uses these tools.
 
 Zippy's capabilities (from the request):
+
 - Read GitHub comments (issues/PRs).
 - Generate Markdown documentation of the repos it can access and save it to the
   Knowledge Base.
@@ -70,6 +71,7 @@ Zippy's capabilities (from the request):
 ## 1. Integrations (OAuth)
 
 ### 1.1 Core + DB
+
 - `packages/core/src/types.ts`: extend `IntegrationProvider` to
   `'google' | 'hubspot' | 'github' | 'linear'`.
 - New migration `infra/supabase/migrations/00XX_github_linear_providers.sql`:
@@ -88,6 +90,7 @@ Zippy's capabilities (from the request):
   `expires_at` is null, so no refresher path is hit.
 
 ### 1.2 OAuth routes
+
 - GitHub:
   - `apps/web/app/api/integrations/github/route.ts` — redirect to
     `https://github.com/login/oauth/authorize` with scope `repo read:org`.
@@ -105,6 +108,7 @@ Zippy's capabilities (from the request):
   `LINEAR_CLIENT_SECRET`. Document in `apps/web/.env.example` / `apps/mcp/.dev.vars`.
 
 ### 1.3 Security note
+
 GitHub `repo` scope grants broad read/write to the user's private repos. It is
 required to read private-repo comments/contents (for documentation) and to
 create issues/comments. Surfaced and accepted as a deliberate decision for an
@@ -118,6 +122,7 @@ Namespace = `provider.action`. One file per tool, barrel `index.ts`, re-exported
 from `packages/agent-tools/src/index.ts`.
 
 ### 2.1 GitHub (`packages/agent-tools/src/github/`)
+
 - `client.ts`: `githubFetch<T>(ctx, path, { method, body })` — REST against
   `https://api.github.com`, `Authorization: Bearer <token>`,
   `Accept: application/vnd.github+json`, maps 401/4xx to `IntegrationError`,
@@ -138,6 +143,7 @@ from `packages/agent-tools/src/index.ts`.
   - `github.create_issue_comment`
 
 ### 2.2 Linear (`packages/agent-tools/src/linear/`)
+
 - `client.ts`: `linearFetch<T>(ctx, query, variables)` — POST GraphQL to
   `https://api.linear.app/graphql`, `Authorization: Bearer <token>`. Includes a
   pagination helper (cursor-based `pageInfo`) for stats tools. Token via
@@ -157,6 +163,7 @@ from `packages/agent-tools/src/index.ts`.
   - `linear.create_comment`
 
 ### 2.3 Rate limits
+
 Each tool sets a `rateLimit.perMinute` consistent with existing tools (reads
 ~30–60, writes ~20). Stats tools that paginate use a lower limit (~6–10) and cap
 total pages fetched, logging when results are truncated.
@@ -167,7 +174,7 @@ total pages fetched, logging when results are truncated.
 
 - New tool `kb.create_document`:
   - Input: `{ title, markdown, scope: 'global'|'team'|'user'|'conversation',
-    teamId? }`.
+teamId? }`.
   - Resolves the target collection for the scope (creating a user/conversation
     collection if none exists; team/global require appropriate authority, mirrored
     from `apps/web/app/api/kb/documents/route.ts`).
@@ -185,6 +192,7 @@ total pages fetched, logging when results are truncated.
     download. The existing async pipeline is untouched and still serves uploads.
 
 ### Rationale for inline ingestion
+
 The async pipeline exists to keep large user **uploads** off the request thread
 and is wired through Next-only Inngest. Agent-generated docs are (a) already in
 memory, (b) bounded to one repo's worth of Markdown, and (c) produced by tools
@@ -194,6 +202,7 @@ is a few embedding batches, well within `maxDuration = 300`, and keeps the tool
 runtime-agnostic with no new coupling.
 
 ### Doc generation is agent-driven, not a composite tool
+
 Zippy reads the repo via `github.*` tools, **writes the Markdown itself** (LLM
 synthesis), then calls `kb.create_document` to persist. No
 `sales.draft_proposal`-style template composite — simpler and more flexible.
@@ -205,18 +214,20 @@ synthesis), then calls `kb.create_document` to persist. No
 - `packages/agents/src/zippy/index.ts`:
   ```ts
   export const zippyDeveloperAgent: AgentDefinition = {
-    id: 'zippy',
-    name: 'Zippy Developer',
-    team: 'engineering',
-    defaultModel: 'gemini-2.5-flash',
+    id: "zippy",
+    name: "Zippy Developer",
+    team: "engineering",
+    defaultModel: "gemini-3.1-flash-lite",
     systemPrompt, // from system-prompt.md
     allowedTools: [
       // github.* (read, stats, write)
       // linear.* (read, stats, write)
-      'kb.search', 'kb.create_document', 'web.search',
+      "kb.search",
+      "kb.create_document",
+      "web.search",
     ],
-    kbScopes: ['global', 'team:engineering', 'user', 'conversation'],
-    greeting: '¡Hola! Soy Zippy, tu co-pilot de desarrollo. ¿Qué miramos hoy?',
+    kbScopes: ["global", "team:engineering", "user", "conversation"],
+    greeting: "¡Hola! Soy Zippy, tu co-pilot de desarrollo. ¿Qué miramos hoy?",
   };
   ```
 - `packages/agents/src/zippy/system-prompt.md`: role, how to document repos (read

@@ -33,7 +33,7 @@ Behavioral rules:
 5. **Respond in the user's language.** Spanish in → Spanish out. English in → English out.
 
 Be sharp, concise, and evidence-first. Numbers over adjectives. Lead with the answer, then the support.$PROMPT$,
-    'gemini-2.5-flash',
+    'gemini-3.1-flash-lite',
     array[
       'github.list_repositories','github.get_repository','github.get_issue','github.list_issue_comments','github.list_pull_requests','github.get_repo_contents','github.repo_activity','github.pr_metrics','github.create_issue','github.create_issue_comment',
       'linear.list_teams','linear.list_projects','linear.get_project','linear.list_issues','linear.get_issue','linear.list_comments','linear.cycle_stats','linear.workload_stats','linear.create_issue','linear.create_comment',

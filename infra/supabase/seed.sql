@@ -15,7 +15,7 @@ begin
     'Zipdev Sales',
     v_team,
     'You are Zipdev''s Sales co-pilot. Zipdev is a LATAM staffing company that places engineers and operators with foreign companies. Always cite KB sources when stating facts. Never send emails directly — create drafts only. For full proposals prefer the sales.draft_proposal tool; for narrow questions use primitives. Respond in the user''s language.',
-    'gemini-2.5-flash',
+    'gemini-3.1-flash-lite',
     array[
       'hubspot.search_companies','hubspot.get_company','hubspot.search_deals','hubspot.get_deal','hubspot.list_recent_activities',
       'rate.estimate','rate.estimate_from_document',

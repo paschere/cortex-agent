@@ -81,6 +81,31 @@ export function relative(ts: string | null, now: number | null): string | null {
   return diff >= 0 ? `in ${spell(diff)}` : `${spell(-diff)} ago`;
 }
 
+/**
+ * Flatten markdown into plain prose for one- or two-line previews, so a report
+ * reads as "Weekly payroll summary — 14 people…" instead of "## Weekly payroll".
+ * Deliberately naive (and dependency-free): it only has to survive a clamp.
+ */
+export function stripMarkdown(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, ' ') // fenced code blocks
+    .replace(/`([^`]*)`/g, '$1') // inline code
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ') // images
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // links → their label
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '') // headings
+    .replace(/^\s{0,3}>\s?/gm, '') // block quotes
+    .replace(/^\s*([-*_]\s*){3,}$/gm, ' ') // horizontal rules
+    .replace(/^\s*\|?[\s:|-]{3,}\|?\s*$/gm, ' ') // table separator rows
+    .replace(/^\s*[-*+]\s+/gm, '') // bullets
+    .replace(/^\s*\d+\.\s+/gm, '') // ordered list markers
+    .replace(/\|/g, ' · ') // remaining table pipes
+    .replace(/(\*\*|__)(.*?)\1/g, '$2') // bold
+    .replace(/(\*|_)(.*?)\1/g, '$2') // italics
+    .replace(/~~(.*?)~~/g, '$1') // strikethrough
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Same as `relative`, but past timestamps read as "due now". */
 export function untilNext(ts: string | null, now: number | null): string | null {
   if (!ts || now === null) return null;

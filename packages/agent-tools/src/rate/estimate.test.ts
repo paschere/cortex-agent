@@ -92,7 +92,9 @@ describe('rate.estimate', () => {
     const ctx = makeCtx();
     const result = await runTool(rateEstimate, validInput, ctx);
 
-    expect(result).toEqual(mockEstimatorResponse);
+    // toMatchObject, not toEqual: rate data is compensation-adjacent, so
+    // runTool attaches a `_security` notice alongside the result.
+    expect(result).toMatchObject(mockEstimatorResponse);
     expect(fetch).toHaveBeenCalledWith(
       'https://estimator.internal/api/internal/estimate',
       expect.objectContaining({

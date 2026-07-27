@@ -7,10 +7,18 @@ export interface IntegrationsClient {
   hasScopes(provider: IntegrationProvider, scopes: string[]): Promise<boolean>;
 }
 
+/**
+ * Where the tool call came from. Drives the security layer's `unattended`
+ * signal: a 'schedule' call has no human in the loop, so nothing can be
+ * confirmed interactively. Defaults to 'web' when absent.
+ */
+export type ToolSurface = 'web' | 'mcp' | 'schedule';
+
 export interface ToolContext {
   userId: UUID;
   agentId: UUID;
   conversationId?: UUID;
+  surface?: ToolSurface;
   db: SupabaseClient;
   integrations: IntegrationsClient;
   logger: Logger;

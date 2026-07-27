@@ -1,10 +1,10 @@
 export type UUID = string;
 
-export type Role = 'member' | 'team_admin' | 'org_admin';
-export type CollectionScope = 'global' | 'team' | 'user' | 'conversation';
-export type Surface = 'web' | 'desktop' | 'mcp';
-export type IntegrationProvider = 'google' | 'hubspot' | 'github' | 'linear';
-export type DocumentStatus = 'pending' | 'ingesting' | 'ready' | 'failed';
+export type Role = "member" | "team_admin" | "org_admin";
+export type CollectionScope = "global" | "team" | "user" | "conversation";
+export type Surface = "web" | "desktop" | "mcp";
+export type IntegrationProvider = "google" | "hubspot" | "github" | "linear";
+export type DocumentStatus = "pending" | "ingesting" | "ready" | "failed";
 
 export interface User {
   id: UUID;
@@ -24,10 +24,10 @@ export interface AgentDefinition {
   id: string;
   name: string;
   team: string;
-  defaultModel: 'gemini-2.5-flash' | 'gemini-2.5-pro';
+  defaultModel: "gemini-3.1-flash-lite" | "gemini-2.5-pro";
   systemPrompt: string;
   allowedTools: string[];
-  kbScopes: Array<'global' | `team:${string}` | 'user' | 'conversation'>;
+  kbScopes: Array<"global" | `team:${string}` | "user" | "conversation">;
   greeting: string;
 }
 

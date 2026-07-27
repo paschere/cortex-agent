@@ -1,0 +1,176 @@
+'use client';
+
+import { clsx } from 'clsx';
+import { Check, ChevronDown, Copy, History } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { fmtLong, runDuration } from './format';
+import { LiveRelative } from './LiveRelative';
+import { RunOutput } from './RunMarkdown';
+import type { JobRun } from './types';
+
+const PILL: Record<JobRun['status'], string> = {
+  ok: 'bg-emerald-soft text-emerald',
+  error: 'bg-rose-soft text-rose',
+  running: 'bg-surface-2 text-ink-faint',
+};
+
+const LABEL: Record<JobRun['status'], string> = {
+  ok: 'succeeded',
+  error: 'failed',
+  running: 'running',
+};
+
+/**
+ * The routine's whole run history, expandable in place. Outputs are agent
+ * reports, so they render as markdown; errors are stack-ish text and stay
+ * preformatted in rose.
+ */
+export function RunHistory({ runs }: { runs: JobRun[] }) {
+  // The newest run is what people came for — open it by default.
+  const [open, setOpen] = useState<Record<string, boolean>>(() =>
+    runs[0] ? { [runs[0].id]: true } : {},
+  );
+
+  if (runs.length === 0) {
+    return (
+      <div className="rounded-[12px] border border-dashed border-border px-4 py-8 text-center">
+        <History className="mx-auto mb-2 h-6 w-6 text-ink-faint" />
+        <p className="text-[13px] font-semibold text-ink">No runs yet</p>
+        <p className="mt-0.5 text-[12px] text-ink-faint">
+          Hit <span className="font-semibold text-ink-muted">Run now</span> to see what this routine
+          produces.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ul className="space-y-2">
+      {runs.map((run) => {
+        const expanded = open[run.id] ?? false;
+        const took = runDuration(run.started_at, run.finished_at);
+        return (
+          <li
+            key={run.id}
+            id={`run-${run.id}`}
+            className="overflow-hidden rounded-[12px] border border-border bg-surface"
+          >
+            <button
+              type="button"
+              onClick={() => setOpen((prev) => ({ ...prev, [run.id]: !expanded }))}
+              aria-expanded={expanded}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <span
+                className={clsx(
+                  'rounded-pill px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                  PILL[run.status],
+                )}
+              >
+                {LABEL[run.status]}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[12px] text-ink-muted">
+                {fmtLong(run.started_at)}
+                <span className="text-ink-faint">
+                  {' · '}
+                  <LiveRelative ts={run.started_at} fallback="" />
+                </span>
+              </span>
+              <span className="shrink-0 text-[11.5px] text-ink-faint" title="Run duration">
+                {took ?? (run.status === 'running' ? 'in flight' : '—')}
+              </span>
+              <ChevronDown
+                className={clsx(
+                  'h-4 w-4 shrink-0 text-ink-faint transition-transform',
+                  expanded && 'rotate-180',
+                )}
+              />
+            </button>
+
+            {expanded && (
+              <div className="border-t border-border bg-canvas/50 px-3 py-3">
+                <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-faint">
+                    <span>
+                      <span className="font-semibold uppercase tracking-[0.14em]">Started</span>{' '}
+                      {fmtLong(run.started_at)}
+                    </span>
+                    <span>
+                      <span className="font-semibold uppercase tracking-[0.14em]">Finished</span>{' '}
+                      {run.finished_at ? fmtLong(run.finished_at) : 'still running'}
+                    </span>
+                    <span>
+                      <span className="font-semibold uppercase tracking-[0.14em]">Duration</span>{' '}
+                      {took ?? '—'}
+                    </span>
+                  </div>
+                  <CopyRaw text={run.error ?? run.output ?? ''} />
+                </div>
+
+                {run.error && (
+                  <div className="mb-3">
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+                      Error
+                    </div>
+                    <pre className="scroll-slim overflow-x-auto whitespace-pre-wrap rounded-[12px] border border-rose/30 bg-rose-soft px-3.5 py-2.5 text-[12.5px] leading-[1.6] text-rose">
+                      {run.error}
+                    </pre>
+                  </div>
+                )}
+
+                {run.output ? (
+                  <RunOutput text={run.output} className="rounded-[12px] bg-surface px-3.5 py-3" />
+                ) : (
+                  !run.error && (
+                    <p className="rounded-[12px] bg-surface px-3.5 py-3 text-[12.5px] text-ink-faint">
+                      {run.status === 'running'
+                        ? 'This run is still in flight — results land here when it finishes.'
+                        : 'This run produced no output.'}
+                    </p>
+                  )
+                )}
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function CopyRaw({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  return (
+    <button
+      type="button"
+      disabled={!text}
+      // Deliberately the raw markdown, not the rendered text — people paste it on.
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+        } catch {
+          setCopied(false);
+        }
+      }}
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border border-border bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+    >
+      {copied ? (
+        <>
+          <Check className="h-3.5 w-3.5 text-emerald" /> Copied
+        </>
+      ) : (
+        <>
+          <Copy className="h-3.5 w-3.5" /> Copy raw
+        </>
+      )}
+    </button>
+  );
+}

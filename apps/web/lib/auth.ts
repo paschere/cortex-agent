@@ -84,6 +84,11 @@ const GOOGLE_TOOL_SCOPES = [
   'https://www.googleapis.com/auth/drive.readonly',
   'https://www.googleapis.com/auth/contacts.readonly',
   'https://www.googleapis.com/auth/directory.readonly',
+  // Google Meet REST API v2 — conference records, participants, transcripts and
+  // transcript entries (meetings.*). Read-only covers all four; the narrower
+  // meetings.space.created only reaches spaces our own app created, which would
+  // exclude every meeting booked from Google Calendar, so it is not requested.
+  'https://www.googleapis.com/auth/meetings.space.readonly',
 ];
 
 /**

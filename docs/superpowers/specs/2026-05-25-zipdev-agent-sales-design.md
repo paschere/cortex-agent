@@ -15,6 +15,7 @@ The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one j
 ## 2. Goals and non-goals
 
 ### Goals
+
 - One internal agent platform with a single shared tool layer that powers multiple agents and multiple surfaces.
 - A working Sales agent that demonstrably saves time on proposals (target: ~30 min → ~5 min).
 - A 3-tier KB (global, team/per-agent, per-user) with optional **per-conversation ephemeral KB**, configurable via an admin UI.
@@ -22,6 +23,7 @@ The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one j
 - Architecture that scales cleanly to future agents (HR, Recruiters) without re-platforming.
 
 ### Non-goals (v2+)
+
 - Proactive alerts / event watchers
 - HubSpot write tools
 - Voice I/O, Slack/Teams surfaces, mobile app
@@ -35,6 +37,7 @@ The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one j
 - **Auth domain:** restricted to `@zipdev.com` Google Workspace via Supabase Auth
 
 ### MVP success metrics (instrumented from day one)
+
 - Weekly active users / 5 pilot users
 - Proposals drafted via `sales.draft_proposal` per week
 - Time from "open chat" → "draft visible in Gmail" (target < 5 min; baseline ~30 min)
@@ -43,7 +46,7 @@ The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one j
 
 ## 4. Architecture overview
 
-**Pattern:** *Shared Tools Library + Two Brains.*
+**Pattern:** _Shared Tools Library + Two Brains._
 
 - **Tools** (HubSpot, Rate Estimator, Gmail, Google Calendar, Google Sheets, KB search/index) live in **one shared package**, used by both the backend agent and the MCP server.
 - **Claude surface:** Claude itself is the brain via the MCP connector. The MCP server exposes the shared tools.
@@ -146,6 +149,7 @@ audit_events        (id, user_id, agent_id, tool_id, input_hash, status,
 ```
 
 ### RLS rules (summary)
+
 - `kb_collections` visible if `scope='global'` OR `scope='team' AND user IN team_members(scope_id)` OR `scope='user' AND scope_id=auth.uid()` OR `scope='conversation' AND scope_id IN user's conversations`.
 - `conversations` / `messages` visible only to their owner.
 - `integrations.access_token_enc` never returned to client; tools read via service role.
@@ -153,6 +157,7 @@ audit_events        (id, user_id, agent_id, tool_id, input_hash, status,
 ## 7. RAG retrieval
 
 At query time:
+
 1. Resolve visible collections for `{user, agent, conversationId?}`.
 2. Filter to collections with `agent_id = current` OR `agent_id IS NULL`.
 3. Hybrid search: pgvector cosine + Postgres full-text on `content`.
@@ -160,6 +165,7 @@ At query time:
 5. Inject into prompt as `<context>` with citations (doc title + chunk_index).
 
 ### Ingestion pipeline
+
 ```
 Upload (PDF | DOCX | TXT | MD | URL)
   → parse (pdf-parse, mammoth — reused from rate-estimator)
@@ -170,6 +176,7 @@ Upload (PDF | DOCX | TXT | MD | URL)
 ```
 
 ### Google Drive sync
+
 - Per-collection `gdrive_folder_id` (set via Google Picker in admin UI).
 - Background job (Vercel Cron, every 10 min; later: Drive push notifications) lists changed files since `page_token`, ingests new/updated, deletes chunks for removed files, persists new `page_token`.
 - Scope required: `drive.readonly`.
@@ -195,7 +202,7 @@ export interface ToolContext {
   agentId: string;
   conversationId?: string;
   db: SupabaseClient;
-  integrations: IntegrationsClient;   // resolves per-user OAuth tokens
+  integrations: IntegrationsClient; // resolves per-user OAuth tokens
   logger: Logger;
 }
 ```
@@ -203,6 +210,7 @@ export interface ToolContext {
 ### MVP tool inventory
 
 **HubSpot (read-only, per-user OAuth):**
+
 - `hubspot.search_companies({ query, limit })`
 - `hubspot.get_company({ id })`
 - `hubspot.search_deals({ filters })`
@@ -210,10 +218,12 @@ export interface ToolContext {
 - `hubspot.list_recent_activities({ companyId, days })`
 
 **Rate Estimator:**
+
 - `rate.estimate({ role, seniority, techStack, country?, hours? })`
 - `rate.estimate_from_document({ fileRef })`
 
 **Google Workspace (per-user OAuth):**
+
 - `gmail.search({ query, max })`
 - `gmail.read_thread({ threadId })`
 - `gmail.draft({ to, subject, body, inReplyTo? })`
@@ -223,13 +233,16 @@ export interface ToolContext {
 - `gsheets.append_row({ spreadsheetId, range, values })` **← confirmation required**
 
 **KB:**
+
 - `kb.search({ query, scopes?, limit })`
 - `kb.list_collections()`
 
 **Composite:**
+
 - `sales.draft_proposal({ companyId, roles[], notes? })` — orchestrates HubSpot + rate + KB lookups and produces a structured proposal (JSON + Markdown). Primitives remain available for narrower asks.
 
 ### Safety rails
+
 - **Confirmation required** only for the "dangerous" writes: `gcal.create_event` and `gsheets.append_row`. `gmail.draft` is already a draft and runs without confirmation. Reads run freely.
 - **Per-user scope:** every tool resolves OAuth tokens from `integrations` for the calling user.
 - **Audit log:** every tool call writes an `audit_events` row (input hash, status, latency, token usage).
@@ -241,17 +254,22 @@ Each agent is a plain config:
 
 ```ts
 export const salesAgent: AgentDefinition = {
-  id: 'sales',
-  name: 'Zipdev Sales',
-  team: 'sales',
-  defaultModel: 'gemini-2.5-flash',
+  id: "sales",
+  name: "Zipdev Sales",
+  team: "sales",
+  defaultModel: "gemini-3.1-flash-lite",
   systemPrompt: `You are Zipdev's Sales co-pilot...`,
   allowedTools: [
-    'hubspot.*', 'rate.*', 'gmail.*', 'gcal.*',
-    'gsheets.read_range', 'kb.*', 'sales.draft_proposal',
+    "hubspot.*",
+    "rate.*",
+    "gmail.*",
+    "gcal.*",
+    "gsheets.read_range",
+    "kb.*",
+    "sales.draft_proposal",
   ],
-  kbScopes: ['global', 'team:sales', 'user'],
-  greeting: '¡Hola! Soy tu Sales co-pilot. ¿En qué cliente trabajamos hoy?',
+  kbScopes: ["global", "team:sales", "user"],
+  greeting: "¡Hola! Soy tu Sales co-pilot. ¿En qué cliente trabajamos hoy?",
 };
 ```
 
@@ -269,7 +287,7 @@ POST /api/chat
   → load conversation history
   → prepend RAG context (kb.search top 5 on the current message)
   → streamText({
-       model: google('gemini-2.5-flash'),
+       model: google('gemini-3.1-flash-lite'),
        system: agent.systemPrompt,
        messages,
        tools: filterTools(agent.allowedTools, ctx),
@@ -280,6 +298,7 @@ POST /api/chat
 ```
 
 Behaviors:
+
 - Tool execution server-side; client never sees credentials.
 - Confirmation: destructive tools emit `requires_confirmation`; client surfaces Allow/Cancel; `/api/chat/confirm` resumes.
 - Step cap: 8 tool-call rounds per turn.
@@ -306,11 +325,13 @@ Cloudflare Worker exposing the shared tools to Claude.
 ## 13. Authentication and OAuth
 
 ### SSO (login)
+
 - Supabase Auth with Google provider, restricted to `@zipdev.com` (Workspace `hd` claim).
 - First login creates a `users` row and assigns to a default team (admin-editable).
 - Roles: `member`, `team_admin`, `org_admin`.
 
 ### Per-user integration OAuth (separate from SSO)
+
 - Granted from the admin UI's `/integrations` page; incremental scope grants per tool family.
 - Google scopes (granted as needed):
   - `gmail.readonly`, `gmail.compose` (draft only)
@@ -356,6 +377,7 @@ Cloudflare Worker exposing the shared tools to Claude.
 ```
 
 Components:
+
 - Streaming message list with markdown + code blocks.
 - Inline tool-call cards ("Searching HubSpot…") expandable to show input/output.
 - Confirmation prompts for `gcal.create_event` / `gsheets.append_row` inline (Allow / Cancel).
@@ -367,7 +389,7 @@ Components:
 
 ## 16. Day-one Sales flow (concrete walkthrough)
 
-Salesperson in Claude Desktop: *"Acme Corp is asking for 2 Senior React devs and 1 SRE. Draft me a proposal."*
+Salesperson in Claude Desktop: _"Acme Corp is asking for 2 Senior React devs and 1 SRE. Draft me a proposal."_
 
 ```
 1. Claude (with zipdev-mcp connected) calls sales.draft_proposal.
@@ -391,14 +413,14 @@ Same flow runs in the desktop app, where Gemini 2.5 Flash drives the loop server
 
 ## 17. Deployments
 
-| Component | Host | Notes |
-|---|---|---|
-| `apps/web` | Vercel | Prod + Preview per PR |
-| `apps/mcp` | Cloudflare Workers | Edge-deployed |
-| `apps/desktop` | GitHub Releases | Tauri updater + signed builds |
-| Postgres / pgvector / Auth / Storage | Supabase | One project, RLS on |
-| Rate Estimator endpoint | Existing Vercel project | One new endpoint |
-| Background jobs (KB ingest, Drive sync) | Vercel Cron + Inngest | Inngest chosen for retries/observability |
+| Component                               | Host                    | Notes                                    |
+| --------------------------------------- | ----------------------- | ---------------------------------------- |
+| `apps/web`                              | Vercel                  | Prod + Preview per PR                    |
+| `apps/mcp`                              | Cloudflare Workers      | Edge-deployed                            |
+| `apps/desktop`                          | GitHub Releases         | Tauri updater + signed builds            |
+| Postgres / pgvector / Auth / Storage    | Supabase                | One project, RLS on                      |
+| Rate Estimator endpoint                 | Existing Vercel project | One new endpoint                         |
+| Background jobs (KB ingest, Drive sync) | Vercel Cron + Inngest   | Inngest chosen for retries/observability |
 
 **Environments:** `dev` (local + Supabase branch), `staging` (Vercel preview + staging Supabase project), `prod`.
 
@@ -431,13 +453,13 @@ Same flow runs in the desktop app, where Gemini 2.5 Flash drives the loop server
 
 ## 21. Risks and mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Gemini hallucinates rates or HubSpot data | KB citations required; `sales.draft_proposal` outputs only data returned by tools, never inferred numbers |
-| OAuth token leakage | Encrypted at rest in Supabase Vault, service-role-only access, RLS prevents client reads |
-| MCP token misuse | Per-user, revocable, scoped to that user's data; rate-limited |
-| Drive sync running away on huge folders | Per-collection caps: 500 docs, 10 MB per file; warn in UI |
-| LLM cost overrun | Per-user daily token cap; `/admin/usage` dashboard; alert at 80% |
+| Risk                                        | Mitigation                                                                                                                                                             |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gemini hallucinates rates or HubSpot data   | KB citations required; `sales.draft_proposal` outputs only data returned by tools, never inferred numbers                                                              |
+| OAuth token leakage                         | Encrypted at rest in Supabase Vault, service-role-only access, RLS prevents client reads                                                                               |
+| MCP token misuse                            | Per-user, revocable, scoped to that user's data; rate-limited                                                                                                          |
+| Drive sync running away on huge folders     | Per-collection caps: 500 docs, 10 MB per file; warn in UI                                                                                                              |
+| LLM cost overrun                            | Per-user daily token cap; `/admin/usage` dashboard; alert at 80%                                                                                                       |
 | Vendor lock-in (Supabase / Vercel / Gemini) | Tools depend on interfaces (`SupabaseClient`, `ai`'s `LanguageModelV1`, pgvector — all swappable). Vector store can move to Pinecone without changing tool interfaces. |
 
 ## 22. Open questions for implementation phase
