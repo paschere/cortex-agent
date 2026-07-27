@@ -4,12 +4,16 @@ import './team-assignments';
 import './employee-profile';
 import './expenses-report';
 import './payroll-stats';
+import './client-report';
+import './cost-projection';
 
 export { payrollTeamOverview } from './team-overview';
 export { payrollTeamAssignments } from './team-assignments';
 export { payrollEmployeeProfile } from './employee-profile';
 export { payrollExpensesReport } from './expenses-report';
 export { payrollStats } from './payroll-stats';
+export { payrollClientReport } from './client-report';
+export { payrollCostProjection } from './cost-projection';
 
 export { COMP_SENSITIVITY_NOTE } from './sensitive';
 
