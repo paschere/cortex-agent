@@ -26,6 +26,7 @@ export * from './payroll';
 export * from './web';
 export * from './format';
 export * from './recruit';
+export * from './presentations';
 export * from './slack';
 export * from './people';
 export * from './growth';
@@ -34,6 +35,8 @@ export * from './pipeline';
 export * from './meetings';
 export * from './zippy';
 export * from './security';
+export * from './chat';
+export * from './inbox';
 export {
   isPrivateUrl,
   fetchExternalToolManifest,

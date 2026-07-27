@@ -37,6 +37,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildToolContext } from '@/lib/agent';
 import { sha256, issuer } from '@/lib/oauth';
 import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confirm';
+import { sendApprovalRequestEmail } from '@/lib/approval-email';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { filterTools, getTool, runTool, type AnyTool } from '@zipdev/agent-tools';
 import { ConfirmationRequiredError } from '@zipdev/core';
@@ -610,6 +611,17 @@ async function confirmationRequiredResult(
     };
   }
   const confirmationId = pending.id as string;
+
+  // The request may land while nobody is watching this conversation, so it
+  // also goes out by email pointing at /approvals. Fire-and-forget: the tool
+  // response must not wait on (or fail because of) mail delivery.
+  void sendApprovalRequestEmail({
+    userId: auth.userId,
+    toolId: err.toolId,
+    input: err.input,
+    surface: 'mcp',
+  });
+
   const text = [
     `⏸️ CONFIRMATION REQUIRED — \`${toolTitle(err.toolId)}\` (\`${err.toolId}\`) was NOT executed.`,
     '',

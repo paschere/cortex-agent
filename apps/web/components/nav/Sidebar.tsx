@@ -28,6 +28,7 @@ import {
   Trash2,
   Workflow,
   Wrench,
+  Settings,
 } from 'lucide-react';
 import type { Role } from '@zipdev/core';
 import { useMobileSidebar } from './MobileSidebarContext';
@@ -53,6 +54,7 @@ const SECTIONS: NavSection[] = [
       { href: '/approvals', label: 'Approvals', icon: Inbox },
       { href: '/conversations', label: 'Conversations', icon: MessagesSquare },
       { href: '/kb', label: 'Knowledge Base', icon: BookOpen },
+      { href: '/settings', label: 'Settings', icon: Settings },
     ],
   },
   {

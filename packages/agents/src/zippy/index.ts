@@ -44,6 +44,7 @@ export const zippyAgent: AgentDefinition = {
   allowedTools: [
     'hubspot.*',
     'recruit.*',
+    'presentations.*',
     'rate.*',
     'sales.*',
     'payroll.*',
@@ -64,6 +65,10 @@ export const zippyAgent: AgentDefinition = {
     'meetings.*',
     'zippy.*',
     'security.*',
+    // Personal inbox digest + Google Chat delivery. `inbox.*` reads only the
+    // caller's own mailbox and only for people who opted in from Settings.
+    'inbox.*',
+    'chat.*',
   ],
   kbScopes: ['global', 'team:sales', 'user', 'conversation'],
   greeting: 'Hey — I’m Zippy. Sales, recruiting, HR, or clients: what are we tackling?',
