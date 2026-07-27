@@ -11,7 +11,7 @@ const Id = z.string().uuid();
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // Growth signals are team-wide: any signed-in user may triage them.
-  await requireSession();
+  const user = await requireSession();
 
   const { id: rawId } = await params;
   const idParsed = Id.safeParse(rawId);
@@ -32,9 +32,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const db = getSupabaseServiceClient();
+  // Attributed like every other triage decision — /prospects shows "Qualified by
+  // Ana", and a signal moved from this queue must name a person there too.
+  const now = new Date().toISOString();
   const { data, error } = await db
     .from('growth_signals')
-    .update({ status: parsed.data.status, updated_at: new Date().toISOString() })
+    .update({
+      status: parsed.data.status,
+      updated_at: now,
+      reviewed_by: user.id,
+      reviewed_at: now,
+    })
     .eq('id', idParsed.data)
     .select('id')
     .maybeSingle();

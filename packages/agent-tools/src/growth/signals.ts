@@ -88,8 +88,16 @@ export const growthUpdateSignal = registerTool({
   }),
   outputSchema: z.object({ signal: SignalRow }),
   handler: async (input, ctx) => {
-    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (input.status) patch.status = input.status;
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = { updated_at: now };
+    if (input.status) {
+      patch.status = input.status;
+      // A status change is a judgement, so it is attributed. Filling in only a
+      // contact is not, which is why this sits inside the status branch: the
+      // review page shows "Qualified by <name>", and that must stay true.
+      patch.reviewed_by = ctx.userId;
+      patch.reviewed_at = now;
+    }
     if (input.contactName !== undefined) patch.contact_name = input.contactName;
     if (input.contactTitle !== undefined) patch.contact_title = input.contactTitle;
     if (input.contactPath !== undefined) patch.contact_path = input.contactPath;

@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  Radar,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -57,6 +58,7 @@ interface NavGroup {
 const PRIMARY: NavItem[] = [
   { href: '/chat', label: 'Chat', icon: MessageSquare },
   { href: '/approvals', label: 'Approvals', icon: Inbox, signal: 'approvals' },
+  { href: '/prospects', label: 'Prospects', icon: Radar },
   { href: '/conversations', label: 'Conversations', icon: MessagesSquare },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 ];
