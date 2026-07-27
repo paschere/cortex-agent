@@ -190,9 +190,12 @@ async function upsertLink(opts: {
       display_name: opts.chatUser.displayName ?? opts.user.name ?? null,
       last_seen_at: new Date().toISOString(),
     };
-    // Only a DM yields a usable dm_space. Omitting the column in the space case
-    // leaves any previously-learned DM space untouched.
-    if (audienceOf(opts.space) === 'dm' && opts.space?.name) row.dm_space = opts.space.name;
+    // Only the PRIVATE 1:1 yields a usable dm_space. `audienceOf` is too loose
+    // for this: Google labels group direct messages `DIRECT_MESSAGE` too, and
+    // storing one of those here sent every private digest and approval into a
+    // conversation with another person in it. `singleUserBotDm` is the only
+    // claim that means "just this person and the app".
+    if (opts.space?.singleUserBotDm === true && opts.space.name) row.dm_space = opts.space.name;
     await db.from('google_chat_links').upsert(row, { onConflict: 'chat_user_name' });
   } catch (err) {
     logger.error('google-chat: link upsert failed', { error: (err as Error).message });

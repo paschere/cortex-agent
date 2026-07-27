@@ -301,6 +301,51 @@ export async function updateChatMessage(opts: {
 }
 
 /**
+ * Is this space the private 1:1 between one person and the app?
+ *
+ * `spaceType: DIRECT_MESSAGE` is NOT enough — Google uses it for group direct
+ * messages too, which have other humans in them. `singleUserBotDm` is the only
+ * claim that means what we need, so a space that does not assert it is treated
+ * as not private. Chat outages resolve to `false`: withholding a private
+ * message is recoverable, posting it to the wrong audience is not.
+ *
+ * Cached briefly — a routine fans out to the same handful of people.
+ */
+const dmCheckCache = new Map<string, { at: number; ok: boolean }>();
+const DM_CHECK_TTL_MS = 10 * 60_000;
+
+async function isPrivateBotDm(space: string): Promise<boolean> {
+  const cached = dmCheckCache.get(space);
+  if (cached && Date.now() - cached.at < DM_CHECK_TTL_MS) return cached.ok;
+
+  const token = await getAccessToken();
+  if (!token) return false;
+  try {
+    const res = await fetch(`${CHAT_API_BASE}/${space}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as {
+      singleUserBotDm?: boolean;
+      spaceType?: string;
+      membershipCount?: { joinedDirectHumanUserCount?: number };
+    };
+    const ok =
+      body.singleUserBotDm === true ||
+      (body.spaceType === 'DIRECT_MESSAGE' &&
+        body.membershipCount?.joinedDirectHumanUserCount === 1);
+    dmCheckCache.set(space, { at: Date.now(), ok });
+    return ok;
+  } catch (err) {
+    logger.error('google-chat: could not confirm the space is a private DM', {
+      space,
+      error: (err as Error).message,
+    });
+    return false;
+  }
+}
+
+/**
  * DM a Zipdev user in Google Chat.
  *
  * The DM space is discovered passively: it is recorded the first time the
@@ -326,6 +371,23 @@ export async function sendChatDm(opts: {
       .maybeSingle();
     const space = (data?.dm_space as string | null | undefined) ?? null;
     if (!space) return { sent: false, reason: 'not linked' };
+
+    // Confirm with Chat that this really is the 1:1 with the app before saying
+    // anything private into it. Google labels a GROUP direct message
+    // `spaceType: DIRECT_MESSAGE` as well, so a space learned from a two-person
+    // DM used to be stored here and every digest, routine result and approval
+    // went to a conversation with someone else in it. A wrong space is cleared
+    // rather than kept, so the next 1:1 message relearns the right one.
+    if (!(await isPrivateBotDm(space))) {
+      logger.warn('google-chat: stored DM space is not a private 1:1 — clearing it', { space });
+      await db
+        .from('google_chat_links')
+        .update({ dm_space: null })
+        .eq('user_id', opts.userId)
+        .eq('dm_space', space);
+      return { sent: false, reason: 'not linked' };
+    }
+
     const payload: Parameters<typeof sendChatMessage>[0] = { space, text: opts.text };
     if (opts.threadKey) payload.threadKey = opts.threadKey;
     return await sendChatMessage(payload);
