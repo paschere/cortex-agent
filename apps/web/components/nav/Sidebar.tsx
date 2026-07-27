@@ -20,6 +20,7 @@ import {
   Users,
   UsersRound,
   ScrollText,
+  ShieldCheck,
   BarChart3,
   PanelLeftClose,
   PanelLeftOpen,
@@ -74,6 +75,7 @@ const SECTIONS: NavSection[] = [
       { href: '/admin/teams', label: 'Teams', icon: UsersRound },
       { href: '/admin/usage', label: 'Analytics', icon: BarChart3 },
       { href: '/admin/audit', label: 'Audit Logs', icon: ScrollText },
+      { href: '/admin/security', label: 'Security', icon: ShieldCheck },
     ],
   },
 ];

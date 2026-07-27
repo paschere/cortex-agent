@@ -1,0 +1,137 @@
+'use client';
+
+import { clsx } from 'clsx';
+import Link from 'next/link';
+import { useState } from 'react';
+import { toolLabel } from '@/lib/tool-labels';
+import { relativeTime } from '@/lib/relative-time';
+import type { AuditEventRow } from '@/app/api/admin/_lib/audit-filters';
+import { DecisionPill, RiskPill, StatusPill, SurfacePill } from './pills';
+import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from './format';
+import { AuditDetailDrawer } from './AuditDetailDrawer';
+
+const HEADERS = ['When', 'Who', 'Tool', 'Surface', 'Status', 'Risk', 'Decision', 'Latency', 'Detail'];
+
+/**
+ * The audit table. Rows are rendered from server-fetched data; the only client
+ * state is which row has its detail drawer open.
+ */
+export function AuditTable({
+  rows,
+  userNames,
+  userHrefs,
+}: {
+  rows: AuditEventRow[];
+  userNames: Record<string, string>;
+  userHrefs: Record<string, string>;
+}) {
+  const [selected, setSelected] = useState<AuditEventRow | null>(null);
+
+  const nameOf = (id: string) => userNames[id] ?? (id ? `${id.slice(0, 8)}…` : 'unknown');
+
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px]">
+          <thead className="border-b border-border bg-surface-2/60">
+            <tr className="text-left text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
+              {HEADERS.map((h) => (
+                <th
+                  key={h}
+                  className={clsx('px-3 py-2.5 font-semibold', h === 'Latency' && 'text-right')}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((e) => {
+              const detail = eventDetail(e);
+              const risky = e.risk_level === 'critical' || e.decision === 'blocked';
+              return (
+                <tr
+                  key={e.id}
+                  tabIndex={0}
+                  onClick={() => setSelected(e)}
+                  onKeyDown={(ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                      ev.preventDefault();
+                      setSelected(e);
+                    }
+                  }}
+                  className={clsx(
+                    'cursor-pointer border-t border-border align-top hover:bg-surface-2/60',
+                    risky && 'bg-rose-soft/40',
+                  )}
+                >
+                  <td
+                    className="whitespace-nowrap px-3 py-2 text-ink-faint"
+                    title={absoluteTime(e.created_at)}
+                  >
+                    {relativeTime(e.created_at)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <Link
+                      href={userHrefs[e.user_id] ?? '/admin/audit'}
+                      onClick={(ev) => ev.stopPropagation()}
+                      className="font-semibold text-ink hover:text-primary"
+                    >
+                      {nameOf(e.user_id)}
+                    </Link>
+                  </td>
+                  <td className="max-w-[210px] px-3 py-2">
+                    <div className="truncate font-semibold text-ink">
+                      {isAgentTurn(e.tool_id) ? 'Chat turn' : toolLabel(e.tool_id).label}
+                    </div>
+                    {!isAgentTurn(e.tool_id) && (
+                      <div className="truncate font-mono text-[10.5px] text-ink-faint">
+                        {e.tool_id}
+                      </div>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <SurfacePill surface={e.surface} />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <StatusPill status={e.status} />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    {e.risk_level ? (
+                      <RiskPill level={e.risk_level} />
+                    ) : (
+                      <span className="text-ink-faint">—</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    {e.decision && e.decision !== 'allowed' ? (
+                      <DecisionPill decision={e.decision} />
+                    ) : (
+                      <span className="text-[10.5px] text-ink-faint">{e.decision ?? '—'}</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right text-ink-faint">
+                    {formatLatency(e.latency_ms)}
+                  </td>
+                  <td className="max-w-[300px] px-3 py-2 text-ink-muted">
+                    {detail ? (
+                      <span className="line-clamp-2">{detail}</span>
+                    ) : (
+                      <span className="text-ink-faint">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <AuditDetailDrawer
+        event={selected}
+        userName={selected ? nameOf(selected.user_id) : ''}
+        onClose={() => setSelected(null)}
+      />
+    </>
+  );
+}
