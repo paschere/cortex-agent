@@ -190,7 +190,15 @@ export async function verifyGoogleChatRequest(
 
   if (claims.iss !== CHAT_ISSUER) return { ok: false, reason: `unexpected issuer ${claims.iss}` };
   if (!audiences.includes(claims.aud)) {
-    return { ok: false, reason: 'audience mismatch' };
+    // The signature already proved this token came from Google Chat; only the
+    // audience disagrees, and that value depends on a console setting
+    // ("Authentication Audience": project number vs endpoint URL). Name what we
+    // got so a mismatch is a 30-second fix instead of a guessing game — this is
+    // Google's own public claim, not a secret.
+    return {
+      ok: false,
+      reason: `audience mismatch: token aud="${claims.aud}", configured=[${audiences.join(', ')}]`,
+    };
   }
 
   const now = Math.floor(Date.now() / 1000);
