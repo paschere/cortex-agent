@@ -53,6 +53,22 @@ export interface ChatMessageBody {
   slashCommand?: { commandId?: string };
 }
 
+/**
+ * The newer shape of an interaction payload: `commonEventObject` on a Workspace
+ * add-on, `common` on a plain Chat app. Parameters arrive as a plain map.
+ */
+export interface ChatCommonEvent {
+  /** The `onClick.action.function` name from the button that was pressed. */
+  invokedFunction?: string;
+  parameters?: Record<string, unknown>;
+}
+
+/** The older shape, still sent alongside the newer one. Parameters are a list. */
+export interface ChatActionEvent {
+  actionMethodName?: string;
+  parameters?: Array<{ key?: string; value?: string }>;
+}
+
 export interface ChatEvent {
   type?: ChatEventType;
   eventTime?: string;
@@ -60,6 +76,38 @@ export interface ChatEvent {
   message?: ChatMessageBody;
   /** The acting user — the adder on ADDED_TO_SPACE, the clicker on CARD_CLICKED. */
   user?: ChatUser;
+  common?: ChatCommonEvent;
+  action?: ChatActionEvent;
+}
+
+/**
+ * The parameters a clicked button carried.
+ *
+ * Google sends these in two places at once and has been migrating between them
+ * for years: `action.parameters` (a list of {key, value}) is the original, and
+ * `common.parameters` / `commonEventObject.parameters` (a map) is what add-on
+ * invocations use. Which one is populated depends on the envelope, so both are
+ * read and the map wins — an approval button that silently loses its id is a
+ * button that does nothing, with no error anywhere.
+ *
+ * Values are forced to strings and nothing is trusted: the id read out of here
+ * is only ever a lookup key, never an authorisation.
+ */
+export function readActionParameters(event: ChatEvent): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const entry of event.action?.parameters ?? []) {
+    if (entry?.key && typeof entry.value === 'string') out[entry.key] = entry.value;
+  }
+  for (const [key, value] of Object.entries(event.common?.parameters ?? {})) {
+    if (typeof value === 'string') out[key] = value;
+    else if (typeof value === 'number' || typeof value === 'boolean') out[key] = String(value);
+  }
+  return out;
+}
+
+/** Which button's handler was invoked, whichever field carries it. */
+export function invokedFunctionOf(event: ChatEvent): string {
+  return event.common?.invokedFunction ?? event.action?.actionMethodName ?? '';
 }
 
 /**

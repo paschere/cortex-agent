@@ -38,6 +38,7 @@ import { buildToolContext } from '@/lib/agent';
 import { sha256, issuer } from '@/lib/oauth';
 import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confirm';
 import { sendApprovalRequestEmail } from '@/lib/approval-email';
+import { decideApproval } from '@/lib/approvals/decide';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { filterTools, getTool, runTool, type AnyTool } from '@zipdev/agent-tools';
 import { ConfirmationRequiredError } from '@zipdev/core';
@@ -505,20 +506,34 @@ async function handleConfirmAction(
 
   const confirmationId = typeof args.confirmation_id === 'string' ? args.confirmation_id : '';
   if (confirmationId) {
-    // Consume (delete + return) so the id is single-use even under retries.
-    const db = getSupabaseServiceClient();
-    const { data: row } = await db
-      .from('mcp_pending_actions')
-      .delete()
-      .eq('id', confirmationId)
-      .eq('user_id', auth.userId)
-      .select('tool_id, agent_id, input, expires_at')
-      .maybeSingle();
-    if (row && new Date(row.expires_at as string).getTime() > Date.now()) {
+    // The SAME claim the /approvals page and the Google Chat buttons use — one
+    // atomic conditional update, so an id already answered in Chat cannot be
+    // spent again here, and a retry cannot execute the action twice.
+    const claim = await decideApproval({
+      approvalId: confirmationId,
+      userId: auth.userId,
+      decision: 'approved',
+      via: 'mcp',
+    });
+    if (claim.status === 'claimed') {
       payload = {
-        toolId: row.tool_id as string,
-        agentId: row.agent_id as string,
-        input: row.input,
+        toolId: claim.action.toolId,
+        agentId: claim.action.agentId,
+        input: claim.action.input,
+      };
+    } else if (claim.status === 'already_decided') {
+      // Worth being specific: the model must not "try again", it must tell the
+      // person the decision was already made somewhere else.
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `That request was already ${claim.decision} by the user${
+              claim.decidedVia === 'google_chat' ? ' in Google Chat' : ''
+            }. Do NOT re-stage or retry it — tell them it is already handled.`,
+          },
+        ],
+        isError: true,
       };
     }
   } else {
@@ -592,6 +607,7 @@ async function confirmationRequiredResult(
   // short single-use id. (The old HMAC token embedded the whole payload and
   // got truncated by the model on large inputs.)
   const db = getSupabaseServiceClient();
+  const expiresAt = new Date(Date.now() + PENDING_ACTION_TTL_MS);
   const { data: pending, error } = await db
     .from('mcp_pending_actions')
     .insert({
@@ -599,7 +615,7 @@ async function confirmationRequiredResult(
       agent_id: agentId,
       tool_id: err.toolId,
       input: err.input,
-      expires_at: new Date(Date.now() + PENDING_ACTION_TTL_MS).toISOString(),
+      expires_at: expiresAt.toISOString(),
     })
     .select('id')
     .single();
@@ -612,14 +628,17 @@ async function confirmationRequiredResult(
   }
   const confirmationId = pending.id as string;
 
-  // The request may land while nobody is watching this conversation, so it
-  // also goes out by email pointing at /approvals. Fire-and-forget: the tool
-  // response must not wait on (or fail because of) mail delivery.
+  // The request may land while nobody is watching this conversation, so it also
+  // goes out by email and — carrying this id — as an Approve/Decline card in
+  // Google Chat. Fire-and-forget: the tool response must not wait on (or fail
+  // because of) either delivery.
   void sendApprovalRequestEmail({
     userId: auth.userId,
     toolId: err.toolId,
     input: err.input,
     surface: 'mcp',
+    pendingActionId: confirmationId,
+    expiresAt,
   });
 
   const text = [

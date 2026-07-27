@@ -188,6 +188,7 @@ async function stageConfirmation(opts: {
   agentId: string;
   toolId: string;
   input: unknown;
+  expiresAt: Date;
 }): Promise<string | null> {
   try {
     const db = getSupabaseServiceClient();
@@ -198,7 +199,7 @@ async function stageConfirmation(opts: {
         agent_id: opts.agentId,
         tool_id: opts.toolId,
         input: opts.input,
-        expires_at: new Date(Date.now() + PENDING_ACTION_TTL_MS).toISOString(),
+        expires_at: opts.expiresAt.toISOString(),
       })
       .select('id')
       .single();
@@ -209,39 +210,42 @@ async function stageConfirmation(opts: {
   }
 }
 
-const MAX_CONFIRM_PAYLOAD_CHARS = 700;
-
+/**
+ * The note that goes with a staged approval.
+ *
+ * It used to repeat the whole payload here and end in "open /approvals". The
+ * payload now lives on the Approve/Decline CARD that `sendApprovalRequestEmail`
+ * DMs the person (and in the email), so repeating it would put the same JSON on
+ * screen twice and bury the buttons. What stays is the one thing the card can't
+ * say: which of them, and that nothing has happened yet.
+ */
 function buildConfirmationBlock(confirmations: StagedConfirmation[]): string {
   if (confirmations.length === 0) return '';
   const base = appBase();
-  const blocks = confirmations.map((c) => {
-    let payload = JSON.stringify(c.input, null, 2);
-    if (payload.length > MAX_CONFIRM_PAYLOAD_CHARS) {
-      payload = `${payload.slice(0, MAX_CONFIRM_PAYLOAD_CHARS)}\n… (truncated)`;
-    }
-    return [
-      `**Needs your approval — ${humanizeToolId(c.toolId)}**`,
-      '',
-      `Why: ${confirmationReason(c.toolId)}`,
-      '',
-      'Exactly what will run:',
-      '```',
-      payload,
-      '```',
-    ].join('\n');
-  });
-  const footer = base
-    ? `Approve or decline: [${base}/approvals](${base}/approvals)`
-    : 'Approve or decline it in Zipdev OS.';
-  return [
-    '⏸️ Nothing has run yet.',
-    '',
-    blocks.join('\n\n'),
-    '',
-    footer,
-    '',
-    'The request expires in 15 minutes.',
-  ].join('\n');
+  const staged = confirmations.filter((c) => c.id);
+  const failed = confirmations.filter((c) => !c.id);
+
+  const lines: string[] = ['⏸️ Nothing has run yet.', ''];
+  for (const c of staged) {
+    lines.push(`• **${humanizeToolId(c.toolId)}** — ${confirmationReason(c.toolId)}`);
+  }
+  for (const c of failed) {
+    // No row means there is nothing to approve anywhere — say so instead of
+    // pointing at a queue that will be empty.
+    lines.push(
+      `• **${humanizeToolId(c.toolId)}** — I couldn't even set that one up for approval. Ask me again in a moment.`,
+    );
+  }
+
+  if (staged.length > 0) {
+    lines.push('');
+    lines.push(
+      base
+        ? `Approve or Decline right on the card I sent you — or from [Zipdev OS](${base}/approvals). It expires in 15 minutes.`
+        : 'Approve or Decline right on the card I sent you. It expires in 15 minutes.',
+    );
+  }
+  return lines.join('\n');
 }
 
 const WITHHELD_NOTE: Record<'financial' | 'pii' | 'risk', string> = {
@@ -357,18 +361,24 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
             if (err instanceof ConfirmationRequiredError) {
               // NEVER execute. Stage it, notify the requester privately (email
               // + DM via approval-email), and tell the model to stop here.
+              const expiresAt = new Date(Date.now() + PENDING_ACTION_TTL_MS);
               const id = await stageConfirmation({
                 userId: req.userId,
                 agentId: agent.id,
                 toolId: err.toolId,
                 input: err.input,
+                expiresAt,
               });
               confirmations.push({ id, toolId: err.toolId, input: err.input });
+              // Carries the id, so the DM arrives as a card with Approve /
+              // Decline buttons instead of a link out of Chat.
               void sendApprovalRequestEmail({
                 userId: req.userId,
                 toolId: err.toolId,
                 input: err.input,
                 surface: 'chat',
+                ...(id ? { pendingActionId: id } : {}),
+                expiresAt,
               });
               return {
                 __requires_confirmation: true,

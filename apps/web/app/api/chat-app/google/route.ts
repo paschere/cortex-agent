@@ -1,6 +1,21 @@
+import {
+  APPROVAL_ACTION,
+  APPROVAL_DECISION_PARAM,
+  APPROVAL_ID_PARAM,
+  buildResolvedCard,
+  formatClock,
+} from '@/lib/approval-card';
+import { approvalTimeZone, decideApproval, runApprovedAction } from '@/lib/approvals/decide';
 import { sendEmail } from '@/lib/email';
-import { sendChatDm, sendChatMessage, toChatText, updateChatMessage } from '@/lib/google-chat';
+import {
+  type ChatCardV2,
+  sendChatDm,
+  sendChatMessage,
+  toChatText,
+  updateChatMessage,
+} from '@/lib/google-chat';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { toolDisplayName } from '@/lib/tool-labels';
 import { logger } from '@zipdev/core';
 import { type NextRequest, NextResponse, after } from 'next/server';
 import {
@@ -12,6 +27,8 @@ import {
   conversationKey,
   detectSlashCommand,
   extractUserText,
+  invokedFunctionOf,
+  readActionParameters,
 } from './events';
 import { runChatTurn } from './turn';
 import { type ChatAuthFailureDetail, verifyGoogleChatRequest } from './verify';
@@ -129,6 +146,11 @@ function unwrapChatEvent(body: Record<string, unknown>): {
       // payload. Getting this wrong means every sender looks unidentified and
       // nothing runs, so both positions are tried before giving up.
       user: payload.user ?? chat.user,
+      // A button press puts its parameters in `commonEventObject` at the TOP
+      // level of the add-on envelope, outside `chat` entirely. Miss this and an
+      // approval click arrives with no id and looks like a stale button.
+      common: body.commonEventObject ?? body.common,
+      action: payload.action,
     } as unknown as ChatEvent,
     isAddOn: true,
   };
@@ -378,6 +400,213 @@ async function handleMessage(event: ChatEvent, asAddOn: boolean): Promise<NextRe
   return NextResponse.json({});
 }
 
+// ---------------------------------------------------------------------------
+// Approval buttons
+// ---------------------------------------------------------------------------
+
+const STALE_BUTTON_REPLY = toChatText(
+  "That button is from an older message and doesn't do anything any more — ask me again here and I'll set it up fresh. ⚡",
+);
+
+const NOT_YOURS_REPLY = toChatText(
+  "That approval isn't yours to give — only the person who asked for it can approve or decline it. I've left it untouched.",
+);
+
+const GONE_REPLY = toChatText(
+  "I can't find that request any more, so I haven't done anything. Ask me again and I'll stage it fresh — it only takes a second. ⚡",
+);
+
+/**
+ * Turn the approval card into a statement of what happened, in place.
+ *
+ * `cards: [card]` (never omitted) is what strips the Approve/Decline buttons:
+ * a card that has been answered and still shows its buttons is an invitation to
+ * press one and watch nothing happen. Falls back to a new message in the space
+ * so a failed edit is never a silent one.
+ */
+async function rewriteApprovalCard(opts: {
+  messageName: string | undefined;
+  space: string | undefined;
+  text: string;
+  card: ChatCardV2;
+}): Promise<{ shown: boolean; messageName?: string }> {
+  if (opts.messageName) {
+    const updated = await updateChatMessage({
+      messageName: opts.messageName,
+      text: opts.text,
+      cards: [opts.card],
+    }).catch(() => ({ sent: false }) as Awaited<ReturnType<typeof updateChatMessage>>);
+    if (updated.sent) return { shown: true, messageName: opts.messageName };
+  }
+  if (!opts.space) return { shown: false };
+  const posted = await sendChatMessage({
+    space: opts.space,
+    text: opts.text,
+    cards: [opts.card],
+  }).catch(() => ({ sent: false }) as Awaited<ReturnType<typeof sendChatMessage>>);
+  // The fallback message's own id, so a second rewrite edits THAT rather than
+  // stacking a third card underneath it.
+  return posted.sent
+    ? { shown: true, ...(posted.messageName ? { messageName: posted.messageName } : {}) }
+    : { shown: false };
+}
+
+/**
+ * Someone pressed Approve or Decline on an approval card.
+ *
+ * Identity comes from Google Chat's verified event (`event.user`), resolved by
+ * email against `users` — never from the button, which carries only a lookup id
+ * and the word approve/decline. `decideApproval` then refuses anyone who is not
+ * the approval's owner, refuses a second decision, and refuses an expired one,
+ * all inside a single conditional update. Nothing here decides anything itself;
+ * it only says out loud what the claim decided.
+ */
+async function handleCardClicked(event: ChatEvent, asAddOn: boolean): Promise<NextResponse> {
+  const params = readActionParameters(event);
+  const approvalId = params[APPROVAL_ID_PARAM] ?? '';
+  const raw = params[APPROVAL_DECISION_PARAM] ?? '';
+  const decision = raw === 'approve' ? 'approved' : raw === 'decline' ? 'declined' : null;
+
+  if (invokedFunctionOf(event) !== APPROVAL_ACTION || !approvalId || !decision) {
+    return jsonText(STALE_BUTTON_REPLY, asAddOn);
+  }
+
+  const clicker = event.user;
+  if (!clicker?.email) return jsonText(NO_EMAIL_REPLY, asAddOn);
+  const user = await resolveUser(clicker);
+  if (!user) return jsonText(UNLINKED_REPLY, asAddOn);
+
+  const messageName = event.message?.name;
+  const spaceName = event.space?.name;
+
+  const outcome = await decideApproval({
+    approvalId,
+    userId: user.userId,
+    decision,
+    via: 'google_chat',
+  });
+
+  // The card belongs to somebody else and is still open: leave it exactly as it
+  // is. Rewriting it would tell its owner their approval had been answered.
+  if (outcome.status === 'not_yours') return jsonText(NOT_YOURS_REPLY, asAddOn);
+  if (outcome.status === 'unknown') return jsonText(GONE_REPLY, asAddOn);
+
+  const zone = await approvalTimeZone(user.userId);
+  const now = new Date();
+
+  if (outcome.status === 'expired') {
+    const shown = await rewriteApprovalCard({
+      messageName,
+      space: spaceName,
+      text: `⌛ Expired — ${toolDisplayName(outcome.toolId)}`,
+      card: buildResolvedCard({
+        approvalId,
+        toolId: outcome.toolId,
+        title: 'Expired',
+        headline: 'This one timed out before anyone decided.',
+        detail: "Nothing ran. Ask me again and I'll set it up fresh — it only takes a second.",
+      }),
+    });
+    return shown.shown
+      ? NextResponse.json({})
+      : jsonText(
+          toChatText(
+            "That request timed out before anyone decided, so nothing ran. Ask me again and I'll set it up fresh. ⚡",
+          ),
+          asAddOn,
+        );
+  }
+
+  if (outcome.status === 'already_decided') {
+    const where =
+      outcome.decidedVia === 'web'
+        ? ' in Zipdev OS'
+        : outcome.decidedVia === 'mcp'
+          ? ' from your Claude conversation'
+          : '';
+    const at = outcome.decidedAt ? ` · ${formatClock(new Date(outcome.decidedAt), zone)}` : '';
+    const shown = await rewriteApprovalCard({
+      messageName,
+      space: spaceName,
+      text: `${outcome.decision === 'approved' ? '✅ Approved' : '✋ Declined'} — ${toolDisplayName(outcome.toolId)}`,
+      card: buildResolvedCard({
+        approvalId,
+        toolId: outcome.toolId,
+        title: 'Already handled',
+        headline: `You already ${outcome.decision} this${where}${at}.`,
+        detail:
+          outcome.decision === 'approved'
+            ? "I ran it once and only once — this button can't run it again."
+            : 'Nothing ran.',
+      }),
+    });
+    return shown.shown
+      ? NextResponse.json({})
+      : jsonText(
+          toChatText(`You already ${outcome.decision} this one${where} — nothing has changed.`),
+          asAddOn,
+        );
+  }
+
+  const action = outcome.action;
+  const label = toolDisplayName(action.toolId);
+  const clock = formatClock(now, zone);
+
+  if (decision === 'declined') {
+    const shown = await rewriteApprovalCard({
+      messageName,
+      space: spaceName,
+      text: `✋ Declined — ${label}`,
+      card: buildResolvedCard({
+        approvalId,
+        toolId: action.toolId,
+        title: 'Declined',
+        headline: `Declined by you · ${clock}`,
+        detail: "Nothing ran. Tell me what to change and I'll propose it again.",
+      }),
+    });
+    return shown.shown
+      ? NextResponse.json({})
+      : jsonText(toChatText(`Declined — I haven't run ${label}. ⚡`), asAddOn);
+  }
+
+  // Approved. The decision is already recorded and can never be spent twice, so
+  // the work can safely outlive the HTTP response — which it has to: Chat gives
+  // up after about five seconds and a real write takes longer than that.
+  const acknowledged = await rewriteApprovalCard({
+    messageName,
+    space: spaceName,
+    text: `✅ Approved — ${label}`,
+    card: buildResolvedCard({
+      approvalId,
+      toolId: action.toolId,
+      title: 'Approved',
+      headline: `Approved by you · ${clock}`,
+      detail: 'Running it now…',
+    }),
+  });
+
+  after(async () => {
+    const run = await runApprovedAction(action);
+    await rewriteApprovalCard({
+      messageName: acknowledged.messageName ?? messageName,
+      space: spaceName,
+      text: `${run.ok ? '✅ Done' : '⚠️ Didn’t go through'} — ${label}`,
+      card: buildResolvedCard({
+        approvalId,
+        toolId: action.toolId,
+        title: run.ok ? 'Approved' : 'Approved, but it failed',
+        headline: `Approved by you · ${clock}`,
+        detail: run.ok
+          ? `Done ⚡ — it went through at ${formatClock(new Date(), zone)}.`
+          : `${run.message}\n\nNothing was left half-done that I can see, but ask me to try again rather than pressing this card.`,
+      }),
+    });
+  });
+
+  return NextResponse.json({});
+}
+
 async function handleAddedToSpace(event: ChatEvent, asAddOn: boolean): Promise<NextResponse> {
   const audience = audienceOf(event.space);
   const chatUser = event.user;
@@ -500,9 +729,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         return new NextResponse(null, { status: 200 });
 
       case 'CARD_CLICKED':
-        // Zippy posts text, not cards. If a card ever arrives, say something
-        // sensible rather than failing silently.
-        return jsonText('That button is from an older message — just ask me again here. ⚡', asAddOn);
+        return await handleCardClicked(event, asAddOn);
 
       default:
         return new NextResponse(null, { status: 200 });

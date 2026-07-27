@@ -184,6 +184,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       .from('mcp_pending_actions')
       .select('id, tool_id, expires_at')
       .eq('user_id', id)
+      // Still waiting on them — a row answered from a Chat card is not pending.
+      .is('decision', null)
       .order('expires_at', { ascending: true })
       .limit(20),
     sb

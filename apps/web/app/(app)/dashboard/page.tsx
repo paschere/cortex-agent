@@ -57,13 +57,16 @@ export default async function DashboardPage() {
       sb
         .from('audit_events')
         .select('id', { count: 'exact', head: true })
-        .neq('tool_id', '__agent_turn')
+        // Both are bookkeeping rows, not tool calls: counting them would make
+        // approving something look like running two things.
+        .not('tool_id', 'in', '("__agent_turn","__approval_decision")')
         .gte('created_at', todayStart.toISOString()),
       sb.from('growth_signals').select('id', { count: 'exact', head: true }).eq('status', 'new'),
       sb
         .from('mcp_pending_actions')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
+        .is('decision', null)
         .gt('expires_at', nowIso),
       sb
         .from('scheduled_jobs')

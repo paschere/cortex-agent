@@ -11,7 +11,21 @@ interface PendingActionCardProps {
   toolId: string;
   input: unknown;
   expiresAt: string;
+  /**
+   * Set when this was already answered — including from an Approve/Decline
+   * button in Google Chat. The card then states the decision instead of
+   * offering a second, conflicting one.
+   */
+  decision?: 'approved' | 'declined' | null;
+  decidedAt?: string | null;
+  decidedVia?: string | null;
 }
+
+const CHANNEL_LABEL: Record<string, string> = {
+  google_chat: 'in Google Chat',
+  mcp: 'from your Claude conversation',
+  web: 'here',
+};
 
 type Status = 'pending' | 'running' | 'done' | 'declining' | 'declined' | 'error';
 
@@ -39,7 +53,15 @@ function timeLeft(expiresAt: string): string {
   return `${Math.floor(hr / 24)}d left`;
 }
 
-export function PendingActionCard({ id, toolId, input, expiresAt }: PendingActionCardProps) {
+export function PendingActionCard({
+  id,
+  toolId,
+  input,
+  expiresAt,
+  decision,
+  decidedAt,
+  decidedVia,
+}: PendingActionCardProps) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>('pending');
   const [errorMessage, setErrorMessage] = useState('');
@@ -83,6 +105,33 @@ export function PendingActionCard({ id, toolId, input, expiresAt }: PendingActio
   }
 
   const title = humanizeToolId(toolId);
+
+  // ---- Already answered somewhere else (Chat card, Claude, another tab) ----
+  // Rendered before any local state so a decision made elsewhere can never be
+  // overridden by this tab still showing buttons.
+  if (decision) {
+    const when = decidedAt
+      ? new Date(decidedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+      : null;
+    const where = decidedVia ? (CHANNEL_LABEL[decidedVia] ?? '') : '';
+    const detail = [where, when].filter(Boolean).join(' · ');
+    return (
+      <div
+        className={clsx(
+          'flex items-center gap-2 rounded-[14px] border px-4 py-3 text-[13px]',
+          decision === 'approved'
+            ? 'border-emerald/30 bg-emerald-soft text-emerald'
+            : 'border-border bg-surface-2 text-ink-faint',
+        )}
+      >
+        {decision === 'approved' ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+        <span className="font-semibold">
+          {decision === 'approved' ? 'Approved' : 'Declined'} — {title}
+        </span>
+        {detail && <span className="text-ink-faint">{detail}</span>}
+      </div>
+    );
+  }
 
   // ---- Resolved states (compact pills) ----
   if (status === 'done') {

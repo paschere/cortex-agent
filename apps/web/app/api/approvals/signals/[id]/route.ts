@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const Body = z.object({
   status: z.enum(['qualified', 'rejected']),
@@ -9,10 +9,7 @@ const Body = z.object({
 
 const Id = z.string().uuid();
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // Growth signals are team-wide: any signed-in user may triage them.
   await requireSession();
 

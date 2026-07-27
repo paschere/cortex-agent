@@ -1,4 +1,10 @@
 import 'server-only';
+import {
+  type ApprovalOrigin,
+  approvalNotificationText,
+  buildApprovalCard,
+} from '@/lib/approval-card';
+import { approvalTimeZone } from '@/lib/approvals/decide';
 import { confirmationReason } from '@/lib/confirmation-notes';
 import { sendEmail } from '@/lib/email';
 import { renderApprovalRequestEmail } from '@/lib/email-templates';
@@ -17,9 +23,19 @@ import { logger } from '@zipdev/core';
  * /approvals where it can be approved or declined.
  *
  * When the person has linked Google Chat (they have DMed the Zippy Chat app at
- * least once) the same request is ALSO delivered as a Chat DM — same content,
- * Chat-formatted. Approvals expire in 15 minutes, so reaching the surface the
- * person actually has open matters more than tidiness.
+ * least once) the same request is ALSO delivered as a Chat DM. Approvals expire
+ * in 15 minutes, so reaching the surface the person actually has open matters
+ * more than tidiness.
+ *
+ * That Chat DM is a CARD with Approve/Decline buttons whenever we know the
+ * pending action's id — the decision then happens in Chat, in one tap, instead
+ * of "go to the app and find it". Without an id (staging failed) it degrades to
+ * the old text DM pointing at /approvals, which is worse but never silent.
+ *
+ * The email always goes out either way: whoever lives in email must still be
+ * able to act, and whichever surface answers first wins — the claim in
+ * lib/approvals/claim.ts makes the other one say "already decided" rather than
+ * offering a second decision.
  *
  * Best-effort by design: neither a mail failure nor a Chat failure may break
  * the tool call that triggered it.
@@ -27,12 +43,19 @@ import { logger } from '@zipdev/core';
 
 const MAX_PAYLOAD_CHARS = 1500;
 
+/** Same window the staging code uses; only ever displayed, never enforced here. */
+const APPROVAL_TTL_MS = 15 * 60_000;
+
 export async function sendApprovalRequestEmail(opts: {
   userId: string;
   toolId: string;
   input: unknown;
   /** Where the request came from, for the subject line. */
-  surface?: 'mcp' | 'schedule' | 'web' | 'chat';
+  surface?: ApprovalOrigin;
+  /** The `mcp_pending_actions` row. Present ⇒ the Chat DM can carry buttons. */
+  pendingActionId?: string;
+  /** When the staged action stops being valid. Defaults to 15 minutes out. */
+  expiresAt?: Date;
 }): Promise<void> {
   try {
     const db = getSupabaseServiceClient();
@@ -85,6 +108,31 @@ export async function sendApprovalRequestEmail(opts: {
     // have to notice an email inside a 15-minute window. `sendChatDm` returns
     // `{ sent: false, reason: 'not linked' }` for anyone without a DM space, so
     // this is a no-op for people who have never used the Chat app.
+    if (opts.pendingActionId) {
+      const card = buildApprovalCard({
+        approvalId: opts.pendingActionId,
+        toolId: opts.toolId,
+        input: opts.input,
+        expiresAt: opts.expiresAt ?? new Date(Date.now() + APPROVAL_TTL_MS),
+        origin: opts.surface ?? 'web',
+        timeZone: await approvalTimeZone(opts.userId),
+        ...(base ? { appBaseUrl: base } : {}),
+      });
+      const carded = await sendChatDm({
+        userId: opts.userId,
+        text: approvalNotificationText(opts.toolId),
+        cards: [card],
+      });
+      if (carded.sent) return;
+      if (carded.reason !== 'not linked') {
+        // The card was rejected (a malformed widget, a Chat outage). Fall
+        // through to the text DM rather than leaving Chat with nothing.
+        logger.warn('approval Chat card not sent', { reason: carded.reason, toolId: opts.toolId });
+      } else {
+        return;
+      }
+    }
+
     const chatText = toChatText(
       [
         `⏸️ **Approval needed — ${humanizeToolId(opts.toolId)}**`,

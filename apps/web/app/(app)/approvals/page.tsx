@@ -14,7 +14,20 @@ interface PendingActionRow {
   input: unknown;
   created_at: string;
   expires_at: string;
+  decision: 'approved' | 'declined' | null;
+  decided_at: string | null;
+  decided_via: string | null;
 }
+
+/**
+ * How long an already-answered approval keeps a place in the queue.
+ *
+ * It is here for one reason: the same approval can now be answered from a
+ * button in Google Chat, and the email that went out points at this page. Someone
+ * who approves in Chat and then opens the link must see "you already approved
+ * this" — not an empty queue, and certainly not a second Approve button.
+ */
+const RECENTLY_DECIDED_MS = 60 * 60_000;
 
 interface SignalRow {
   id: string;
@@ -68,12 +81,15 @@ export default async function ApprovalsPage() {
   const user = await requireSession();
   const db = getSupabaseServiceClient();
 
+  const nowIso = new Date().toISOString();
+  const decidedSince = new Date(Date.now() - RECENTLY_DECIDED_MS).toISOString();
+
   const [pendingRes, signalsRes, jobsRes] = await Promise.all([
     db
       .from('mcp_pending_actions')
-      .select('id, tool_id, input, created_at, expires_at')
+      .select('id, tool_id, input, created_at, expires_at, decision, decided_at, decided_via')
       .eq('user_id', user.id)
-      .gt('expires_at', new Date().toISOString())
+      .or(`and(decision.is.null,expires_at.gt.${nowIso}),decided_at.gt.${decidedSince}`)
       .order('created_at', { ascending: false }),
     db
       .from('growth_signals')
@@ -88,13 +104,16 @@ export default async function ApprovalsPage() {
       .limit(1, { foreignTable: 'scheduled_job_runs' }),
   ]);
 
-  const pending = (pendingRes.data ?? []) as unknown as PendingActionRow[];
+  const approvalRows = (pendingRes.data ?? []) as unknown as PendingActionRow[];
+  // Answered ones stay visible but are never actionable — see RECENTLY_DECIDED_MS.
+  const pending = approvalRows.filter((r) => !r.decision);
+  const decided = approvalRows.filter((r) => r.decision);
   const signals = (signalsRes.data ?? []) as unknown as SignalRow[];
   const failing = ((jobsRes.data ?? []) as unknown as JobRow[])
     .map((j) => ({ id: j.id, name: j.name, lastRun: j.scheduled_job_runs?.[0] }))
     .filter((j): j is { id: string; name: string; lastRun: JobRunRow } => j.lastRun?.status === 'error');
 
-  const nothingPending = pending.length === 0 && signals.length === 0 && failing.length === 0;
+  const nothingPending = approvalRows.length === 0 && signals.length === 0 && failing.length === 0;
 
   return (
     <>
@@ -116,7 +135,7 @@ export default async function ApprovalsPage() {
       ) : (
         <div className="space-y-8">
           {/* Pending confirmations: amber = requires a human decision */}
-          {pending.length > 0 && (
+          {approvalRows.length > 0 && (
             <section>
               <SectionLabel
                 icon={<ShieldAlert className="h-3.5 w-3.5 text-amber" />}
@@ -126,13 +145,16 @@ export default async function ApprovalsPage() {
                 Pending confirmations
               </SectionLabel>
               <div className="space-y-3">
-                {pending.map((p) => (
+                {[...pending, ...decided].map((p) => (
                   <PendingActionCard
                     key={p.id}
                     id={p.id}
                     toolId={p.tool_id}
                     input={p.input}
                     expiresAt={p.expires_at}
+                    decision={p.decision}
+                    decidedAt={p.decided_at}
+                    decidedVia={p.decided_via}
                   />
                 ))}
               </div>
