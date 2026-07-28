@@ -43,10 +43,10 @@ async function fetchBrowse(parentId: string, q: string, pageToken?: string): Pro
 }
 
 export function DriveDocumentBrowser({
-  collectionId,
+  spaceId,
   onClose,
 }: {
-  collectionId: string;
+  spaceId: string;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
@@ -78,7 +78,7 @@ export function DriveDocumentBrowser({
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['drive-folders', collectionId, parentId, debouncedSearch],
+    queryKey: ['drive-folders', spaceId, parentId, debouncedSearch],
     queryFn: ({ pageParam }) => fetchBrowse(parentId, debouncedSearch, pageParam),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextPageToken ?? undefined,
@@ -112,8 +112,8 @@ export function DriveDocumentBrowser({
   }
 
   function invalidateAndClose() {
-    qc.invalidateQueries({ queryKey: ['kb-docs', collectionId] });
-    qc.invalidateQueries({ queryKey: ['drive-sync', collectionId] });
+    qc.invalidateQueries({ queryKey: ['kb-docs', spaceId] });
+    qc.invalidateQueries({ queryKey: ['drive-sync', spaceId] });
     onClose();
   }
 
@@ -126,7 +126,7 @@ export function DriveDocumentBrowser({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          collectionId,
+          spaceId,
           files: Array.from(selected.values()).map((f) => ({
             id: f.id,
             name: f.name,
@@ -156,7 +156,7 @@ export function DriveDocumentBrowser({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          collectionId,
+          spaceId,
           folderId: current.id,
           folderName: current.name,
         }),

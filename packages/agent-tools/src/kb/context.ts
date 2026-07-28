@@ -18,6 +18,8 @@ const SourceSchema = z.object({
   ref: z.number().int(),
   documentId: z.string(),
   documentTitle: z.string(),
+  space: z.string(),
+  spaceKind: z.enum(['global', 'personal']),
   bestScore: z.number(),
   excerpts: z.array(z.string()),
 });
@@ -34,7 +36,9 @@ export const kbContext = registerTool({
       .array(z.string().min(3).max(200))
       .max(4)
       .default([])
-      .describe('Optional related sub-questions to broaden retrieval, e.g. ["pricing", "past objections"]'),
+      .describe(
+        'Optional related sub-questions to broaden retrieval, e.g. ["pricing", "past objections"]',
+      ),
     perQueryLimit: z.number().int().min(1).max(10).default(5),
     maxExcerptChars: z.number().int().min(200).max(2000).default(700),
   }),
@@ -52,6 +56,8 @@ export const kbContext = registerTool({
     interface Hit {
       documentId: string;
       documentTitle: string;
+      space: string;
+      spaceKind: 'global' | 'personal';
       chunkIndex: number;
       content: string;
       score: number;
@@ -59,11 +65,7 @@ export const kbContext = registerTool({
     // Dedupe by document+chunk, keeping the best score across queries.
     const byChunk = new Map<string, Hit>();
     for (const q of queries) {
-      const res = await runTool(
-        kbSearch,
-        { query: q, limit: input.perQueryLimit ?? 5 },
-        ctx,
-      );
+      const res = await runTool(kbSearch, { query: q, limit: input.perQueryLimit ?? 5 }, ctx);
       for (const h of res.hits as Hit[]) {
         if (h.score < MIN_SCORE) continue;
         const key = `${h.documentId}#${h.chunkIndex}`;
@@ -73,9 +75,18 @@ export const kbContext = registerTool({
     }
 
     // Group per document, best-scoring document first.
-    const byDoc = new Map<string, { title: string; best: number; hits: Hit[] }>();
+    const byDoc = new Map<
+      string,
+      { title: string; space: string; spaceKind: 'global' | 'personal'; best: number; hits: Hit[] }
+    >();
     for (const h of byChunk.values()) {
-      const entry = byDoc.get(h.documentId) ?? { title: h.documentTitle, best: 0, hits: [] };
+      const entry = byDoc.get(h.documentId) ?? {
+        title: h.documentTitle,
+        space: h.space,
+        spaceKind: h.spaceKind,
+        best: 0,
+        hits: [],
+      };
       entry.hits.push(h);
       entry.best = Math.max(entry.best, h.score);
       byDoc.set(h.documentId, entry);
@@ -88,10 +99,14 @@ export const kbContext = registerTool({
         ref: i + 1,
         documentId,
         documentTitle: entry.title,
+        space: entry.space,
+        spaceKind: entry.spaceKind,
         bestScore: Number(entry.best.toFixed(3)),
         excerpts: entry.hits
           .sort((a, b) => a.chunkIndex - b.chunkIndex)
-          .map((h) => (h.content.length > maxChars ? `${h.content.slice(0, maxChars)}…` : h.content)),
+          .map((h) =>
+            h.content.length > maxChars ? `${h.content.slice(0, maxChars)}…` : h.content,
+          ),
       }));
 
     const contextBlock =
@@ -101,9 +116,13 @@ export const kbContext = registerTool({
             `Knowledge Base context for: ${input.topic}`,
             '',
             ...sources.map((s) =>
-              [`[${s.ref}] ${s.documentTitle}`, ...s.excerpts.map((e) => `    ${e.replace(/\s+/g, ' ')}`)].join(
-                '\n',
-              ),
+              [
+                // The space is part of the citation because it changes what the
+                // finding is worth: a company-wide space is what Zipdev has
+                // agreed on, a personal one is one person's working note.
+                `[${s.ref}] ${s.documentTitle} — ${s.space}${s.spaceKind === 'personal' ? ' (your own notes)' : ''}`,
+                ...s.excerpts.map((e) => `    ${e.replace(/\s+/g, ' ')}`),
+              ].join('\n'),
             ),
             '',
             'Cite these as [1], [2], … when you use them. Anything not covered above is NOT in the Knowledge Base.',

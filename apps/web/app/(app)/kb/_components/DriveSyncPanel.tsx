@@ -14,8 +14,8 @@ interface DriveStatus {
   gdriveDocCount: number;
 }
 
-async function fetchStatus(collectionId: string): Promise<DriveStatus> {
-  const r = await fetch(`/api/kb/drive/status?collectionId=${collectionId}`);
+async function fetchStatus(spaceId: string): Promise<DriveStatus> {
+  const r = await fetch(`/api/kb/drive/status?spaceId=${spaceId}`);
   const j = (await r.json()) as Partial<DriveStatus>;
   return {
     connected: j.connected ?? false,
@@ -25,12 +25,12 @@ async function fetchStatus(collectionId: string): Promise<DriveStatus> {
   };
 }
 
-export function DriveSyncPanel({ collectionId }: { collectionId: string }) {
+export function DriveSyncPanel({ spaceId }: { spaceId: string }) {
   const [open, setOpen] = useState(false);
 
   const { data } = useQuery({
-    queryKey: ['drive-sync', collectionId],
-    queryFn: () => fetchStatus(collectionId),
+    queryKey: ['drive-sync', spaceId],
+    queryFn: () => fetchStatus(spaceId),
     // Poll while a folder is linked but the first sync hasn't landed yet.
     refetchInterval: (query) => {
       const s = query.state.data;
@@ -129,7 +129,7 @@ export function DriveSyncPanel({ collectionId }: { collectionId: string }) {
         )}
       </div>
 
-      <DriveBrowserModal collectionId={collectionId} open={open} onOpenChange={setOpen} />
+      <DriveBrowserModal spaceId={spaceId} open={open} onOpenChange={setOpen} />
     </Panel>
   );
 }

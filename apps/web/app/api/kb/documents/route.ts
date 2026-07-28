@@ -1,8 +1,10 @@
-import { NextResponse, type NextRequest } from 'next/server';
 import { createHash, randomUUID } from 'node:crypto';
+import { inngest } from '@/lib/inngest';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { inngest } from '@/lib/inngest';
+import { assertCanWriteToSpace, ensurePersonalSpace, getVisibleSpace } from '@zipdev/agent-tools';
+import { ForbiddenError, NotFoundError } from '@zipdev/core';
+import { type NextRequest, NextResponse } from 'next/server';
 
 const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
@@ -13,20 +15,33 @@ const ALLOWED_MIME_TYPES = new Set([
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+/**
+ * List the documents in one space. Polled while an upload is being indexed, so
+ * it stays a REST route rather than a server action.
+ */
 export async function GET(req: NextRequest) {
-  await requireSession();
+  const session = await requireSession();
   const sb = getSupabaseServiceClient();
   const url = new URL(req.url);
-  const collectionId = url.searchParams.get('collectionId');
+  const spaceId = url.searchParams.get('spaceId');
 
-  if (!collectionId) {
-    return NextResponse.json({ error: 'Missing collectionId query param' }, { status: 400 });
+  if (!spaceId) {
+    return NextResponse.json({ error: 'Missing spaceId query param' }, { status: 400 });
+  }
+
+  // The space id comes off the query string, so it has to be checked. Without
+  // this the titles of every private document in the workspace are one guessed
+  // uuid away.
+  try {
+    await getVisibleSpace(sb, session.id, spaceId);
+  } catch {
+    return NextResponse.json({ error: 'Space not found' }, { status: 404 });
   }
 
   const { data, error } = await sb
     .from('kb_documents')
     .select('id, title, mime, status, error_message, source, created_at')
-    .eq('collection_id', collectionId)
+    .eq('collection_id', spaceId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -48,21 +63,15 @@ export async function POST(req: NextRequest) {
   }
 
   const file = formData.get('file');
-  const collectionId = formData.get('collection_id') ?? formData.get('collectionId');
+  const requestedSpace = formData.get('space_id') ?? formData.get('spaceId');
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'Missing file field' }, { status: 422 });
   }
-  if (!collectionId || typeof collectionId !== 'string') {
-    return NextResponse.json({ error: 'Missing collection_id field' }, { status: 422 });
-  }
 
   const mime = file.type || 'application/octet-stream';
   if (!ALLOWED_MIME_TYPES.has(mime)) {
-    return NextResponse.json(
-      { error: `Unsupported file type: ${mime}` },
-      { status: 422 },
-    );
+    return NextResponse.json({ error: `Unsupported file type: ${mime}` }, { status: 422 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -70,45 +79,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'File exceeds 10MB limit' }, { status: 422 });
   }
 
-  // Verify collection exists
-  const { data: collection, error: colErr } = await sb
-    .from('kb_collections')
-    .select('id, scope, scope_id')
-    .eq('id', collectionId)
-    .single();
-  if (colErr || !collection) {
-    return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
-  }
-
-  // Enforce scope write authority — mirror RLS policy logic
-  const userId = session.id;
-  let hasWriteAccess = false;
-
-  if (collection.scope === 'global') {
-    hasWriteAccess = session.role === 'org_admin';
-  } else if (collection.scope === 'team') {
-    // user must be team_admin on that team (or org_admin)
-    const { data: membership } = await sb
-      .from('team_members')
-      .select('role')
-      .eq('team_id', collection.scope_id as string)
-      .eq('user_id', userId)
-      .maybeSingle();
-    hasWriteAccess = membership?.role === 'team_admin' || session.role === 'org_admin';
-  } else if (collection.scope === 'user') {
-    hasWriteAccess = collection.scope_id === userId;
-  } else if (collection.scope === 'conversation') {
-    // user must own the conversation
-    const { data: conv } = await sb
-      .from('conversations')
-      .select('user_id')
-      .eq('id', collection.scope_id as string)
-      .maybeSingle();
-    hasWriteAccess = conv?.user_id === userId;
-  }
-
-  if (!hasWriteAccess) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  // No space named means "mine": a file dropped into a chat belongs to the
+  // person who dropped it until they decide otherwise.
+  let spaceId: string;
+  try {
+    if (typeof requestedSpace === 'string' && requestedSpace) {
+      await assertCanWriteToSpace(sb, session.id, requestedSpace);
+      spaceId = requestedSpace;
+    } else {
+      spaceId = (await ensurePersonalSpace(sb, session.id)).id;
+    }
+  } catch (err) {
+    if (err instanceof NotFoundError) {
+      return NextResponse.json({ error: 'Space not found' }, { status: 404 });
+    }
+    if (err instanceof ForbiddenError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
+    throw err;
   }
 
   const sha256 = createHash('sha256').update(buffer).digest('hex');
@@ -116,13 +104,9 @@ export async function POST(req: NextRequest) {
   const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `${session.id}/${documentId}/${safeFileName}`;
 
-  // Upload to Supabase storage
   const { error: uploadError } = await sb.storage
     .from('kb-uploads')
-    .upload(storagePath, buffer, {
-      contentType: mime,
-      upsert: false,
-    });
+    .upload(storagePath, buffer, { contentType: mime, upsert: false });
   if (uploadError) {
     return NextResponse.json(
       { error: `Storage upload failed: ${uploadError.message}` },
@@ -130,12 +114,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Insert kb_documents row
   const { data: doc, error: insertError } = await sb
     .from('kb_documents')
     .insert({
       id: documentId,
-      collection_id: collectionId,
+      collection_id: spaceId,
       source: 'upload',
       source_ref: storagePath,
       title: file.name,
@@ -156,11 +139,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Emit ingest event to Inngest
-  await inngest.send({
-    name: 'kb/document.ingest',
-    data: { documentId },
-  });
+  await inngest.send({ name: 'kb/document.ingest', data: { documentId } });
 
   return NextResponse.json({ document: doc }, { status: 201 });
 }

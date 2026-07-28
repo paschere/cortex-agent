@@ -1,7 +1,12 @@
 import 'server-only';
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { type ToolContext, createIntegrationsClient, driveGet } from '@zipdev/agent-tools';
+import {
+  type ToolContext,
+  assertCanWriteToSpace,
+  createIntegrationsClient,
+  driveGet,
+} from '@zipdev/agent-tools';
 import { NotFoundError, type SessionUser, logger } from '@zipdev/core';
 
 type Db = ReturnType<typeof getSupabaseServiceClient>;
@@ -34,51 +39,27 @@ export async function getDriveContext(
 }
 
 /**
- * Enforce the same scope write-authority as the document upload route:
- *   global       -> caller must be org_admin
- *   team         -> caller must be team_admin on that team (or org_admin)
- *   user         -> caller must own the collection (scope_id === userId)
- *   conversation -> caller must own the conversation
- * Throws {@link NotFoundError} when the collection does not exist. Returns a
- * boolean for the access decision so callers can map allowed/denied to 200/403.
+ * Who may point a Drive folder at a space, which is the same question as who
+ * may add documents to it: its owner for a personal space, an org admin for a
+ * company-wide one. Delegates to the shared boundary so Drive sync cannot
+ * develop its own opinion about visibility.
+ *
+ * Returns a boolean so callers can map allowed/denied to 200/403; throws
+ * {@link NotFoundError} when the space does not exist OR is someone else's,
+ * which are deliberately indistinguishable.
  */
 export async function requireCollectionWriteAccess(
   db: Db,
   session: SessionUser,
   collectionId: string,
 ): Promise<boolean> {
-  const { data: collection, error } = await db
-    .from('kb_collections')
-    .select('id, scope, scope_id')
-    .eq('id', collectionId)
-    .single();
-  if (error || !collection) throw new NotFoundError('Collection not found');
-
-  const userId = session.id;
-  if (collection.scope === 'global') {
-    return session.role === 'org_admin';
+  try {
+    await assertCanWriteToSpace(db, session.id, collectionId);
+    return true;
+  } catch (err) {
+    if (err instanceof NotFoundError) throw err;
+    return false;
   }
-  if (collection.scope === 'team') {
-    const { data: membership } = await db
-      .from('team_members')
-      .select('role')
-      .eq('team_id', collection.scope_id as string)
-      .eq('user_id', userId)
-      .maybeSingle();
-    return membership?.role === 'team_admin' || session.role === 'org_admin';
-  }
-  if (collection.scope === 'user') {
-    return collection.scope_id === userId;
-  }
-  if (collection.scope === 'conversation') {
-    const { data: conv } = await db
-      .from('conversations')
-      .select('user_id')
-      .eq('id', collection.scope_id as string)
-      .maybeSingle();
-    return conv?.user_id === userId;
-  }
-  return false;
 }
 
 export interface DriveFile {

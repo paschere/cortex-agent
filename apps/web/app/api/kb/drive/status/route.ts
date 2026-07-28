@@ -1,7 +1,7 @@
 import { DRIVE_READONLY } from '@/app/api/kb/drive/_lib';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { createIntegrationsClient } from '@zipdev/agent-tools';
+import { createIntegrationsClient, getVisibleSpace } from '@zipdev/agent-tools';
 import { logger } from '@zipdev/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -9,9 +9,18 @@ export async function GET(req: NextRequest) {
   const session = await requireSession();
   const sb = getSupabaseServiceClient();
 
-  const collectionId = new URL(req.url).searchParams.get('collectionId');
+  const collectionId = new URL(req.url).searchParams.get('spaceId');
   if (!collectionId) {
-    return NextResponse.json({ error: 'Missing collectionId query param' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing spaceId query param' }, { status: 400 });
+  }
+
+  // Sync state is metadata about a space, so it needs the same visibility gate
+  // as the space itself — otherwise an id is enough to learn that someone has a
+  // private space wired to a Drive folder, and how much is in it.
+  try {
+    await getVisibleSpace(sb, session.id, collectionId);
+  } catch {
+    return NextResponse.json({ error: 'Space not found' }, { status: 404 });
   }
 
   const { data: collection, error: colErr } = await sb
@@ -20,7 +29,7 @@ export async function GET(req: NextRequest) {
     .eq('id', collectionId)
     .single();
   if (colErr || !collection) {
-    return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Space not found' }, { status: 404 });
   }
 
   const integrations = createIntegrationsClient(sb, session.id, logger);

@@ -5,11 +5,11 @@ import { FolderSearch, X } from 'lucide-react';
 import { DriveDocumentBrowser } from './DriveDocumentBrowser';
 
 export function DriveBrowserModal({
-  collectionId,
+  spaceId,
   open,
   onOpenChange,
 }: {
-  collectionId: string;
+  spaceId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -41,7 +41,7 @@ export function DriveBrowserModal({
           </div>
 
           <div className="min-h-0 flex-1">
-            <DriveDocumentBrowser collectionId={collectionId} onClose={() => onOpenChange(false)} />
+            <DriveDocumentBrowser spaceId={spaceId} onClose={() => onOpenChange(false)} />
           </div>
         </Dialog.Content>
       </Dialog.Portal>

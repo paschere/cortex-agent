@@ -1,29 +1,41 @@
-import { NextResponse, type NextRequest } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { assertCanWriteToSpace, getVisibleDocument } from '@zipdev/agent-tools';
+import { NotFoundError } from '@zipdev/core';
+import { type NextRequest, NextResponse } from 'next/server';
 
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
   const { id } = await params;
   const sb = getSupabaseServiceClient();
 
-  // Fetch document to verify ownership / existence
-  const { data: doc, error: fetchErr } = await sb
-    .from('kb_documents')
-    .select('id, uploaded_by, collection_id')
-    .eq('id', id)
-    .single();
-
-  if (fetchErr || !doc) {
+  // Visibility first: a document in someone else's personal space must read as
+  // missing, not as forbidden.
+  let doc: Awaited<ReturnType<typeof getVisibleDocument>>;
+  try {
+    doc = await getVisibleDocument(sb, session.id, id);
+  } catch {
     return NextResponse.json({ error: 'Document not found' }, { status: 404 });
   }
 
-  // Only the uploader or an org_admin may delete
-  if (doc.uploaded_by !== session.id && session.role !== 'org_admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  // Then authority: whoever put it there can take it back, and anyone who can
+  // add to the space can tidy it.
+  let canDelete = doc.uploadedBy === session.id;
+  if (!canDelete) {
+    try {
+      await assertCanWriteToSpace(sb, session.id, doc.space.id);
+      canDelete = true;
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      }
+    }
+  }
+  if (!canDelete) {
+    return NextResponse.json(
+      { error: 'Only the person who added this, or an org admin, can remove it.' },
+      { status: 403 },
+    );
   }
 
   const { error } = await sb.from('kb_documents').delete().eq('id', id);

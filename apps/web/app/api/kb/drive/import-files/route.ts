@@ -17,7 +17,7 @@ interface ImportFile {
 }
 
 interface ImportFilesBody {
-  collectionId?: unknown;
+  spaceId?: unknown;
   files?: unknown;
 }
 
@@ -51,9 +51,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Expected a JSON body' }, { status: 400 });
   }
 
-  const { collectionId } = body;
+  const { spaceId: collectionId } = body;
   if (!collectionId || typeof collectionId !== 'string') {
-    return NextResponse.json({ error: 'Missing collectionId' }, { status: 422 });
+    return NextResponse.json({ error: 'Missing spaceId' }, { status: 422 });
   }
 
   const files = parseFiles(body.files);
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     if (err instanceof NotFoundError) {
-      return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Space not found' }, { status: 404 });
     }
     throw err;
   }

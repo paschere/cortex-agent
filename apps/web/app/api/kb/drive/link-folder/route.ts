@@ -13,7 +13,7 @@ import {
 } from '../_lib';
 
 const LinkFolderBody = z.object({
-  collectionId: z.string().uuid(),
+  spaceId: z.string().uuid(),
   folderId: z.string().min(1),
   folderName: z.string().min(1),
 });
@@ -37,15 +37,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { collectionId, folderId } = parsed.data;
+  const { spaceId: collectionId, folderId } = parsed.data;
 
-  // Authorize: 404 when the collection is missing, 403 when access is denied.
+  // Authorize: 404 when the space is missing or not the caller's, 403 when it
+  // exists for them but they may not add to it.
   let canWrite: boolean;
   try {
     canWrite = await requireCollectionWriteAccess(sb, session, collectionId);
   } catch (err) {
     if (err instanceof NotFoundError) {
-      return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Space not found' }, { status: 404 });
     }
     throw err;
   }
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
     .eq('id', collectionId)
     .single();
   if (colErr || !collection) {
-    return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Space not found' }, { status: 404 });
   }
   const priorFolderId = (collection.gdrive_folder_id as string | null) ?? null;
 

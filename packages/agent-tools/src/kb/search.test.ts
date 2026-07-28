@@ -1,126 +1,206 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ValidationError } from '@zipdev/core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runTool } from '../index';
 import type { ToolContext, ToolDef } from '../types';
 import type { kbSearch as KbSearchType } from './search';
 
+/**
+ * These tests exist for one claim: a personal space belongs to one person and
+ * nobody else's retrieval can reach it.
+ *
+ * That claim is enforced in two places — `kb_search_scoped` in Postgres, and
+ * the helpers in spaces.ts — so the fake database below is not a stub that
+ * returns canned rows. It IMPLEMENTS the visibility rule the migration
+ * implements, over a fixture with two people's spaces in it, and the RPC mock
+ * intersects `p_space_ids` with what `p_user_id` may see exactly as the SQL
+ * does. If either side of the boundary is bypassed, these fail.
+ */
+
 // ---------------------------------------------------------------------------
-// Helpers
+// Fixture: one company space, one personal space each for Ana and Ben
 // ---------------------------------------------------------------------------
 
-function makeEmbedding(): number[] {
-  return Array.from({ length: 768 }, () => 0.1);
+const ANA = 'aaaaaaaa-0000-0000-0000-000000000001';
+const BEN = 'bbbbbbbb-0000-0000-0000-000000000002';
+
+const SPACE_GENERAL = '11111111-0000-0000-0000-000000000001';
+const SPACE_ANA = '22222222-0000-0000-0000-000000000002';
+const SPACE_BEN = '33333333-0000-0000-0000-000000000003';
+
+interface SpaceRow {
+  id: string;
+  name: string;
+  scope: 'global' | 'user';
+  scope_id: string | null;
+  description: string | null;
+  created_by: string | null;
+  created_at: string;
 }
 
-type CollectionStub = { id: string; scope_id?: string };
-type RpcRow = {
-  document_id: string;
-  document_title: string;
-  chunk_index: number;
+const SPACES: SpaceRow[] = [
+  {
+    id: SPACE_GENERAL,
+    name: 'General',
+    scope: 'global',
+    scope_id: null,
+    description: null,
+    created_by: null,
+    created_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: SPACE_ANA,
+    name: 'Ana notes',
+    scope: 'user',
+    scope_id: ANA,
+    description: null,
+    created_by: ANA,
+    created_at: '2026-01-02T00:00:00Z',
+  },
+  {
+    id: SPACE_BEN,
+    name: 'Ben notes',
+    scope: 'user',
+    scope_id: BEN,
+    description: null,
+    created_by: BEN,
+    created_at: '2026-01-03T00:00:00Z',
+  },
+];
+
+interface ChunkRow {
+  space: string;
+  documentId: string;
+  documentTitle: string;
+  chunkIndex: number;
   content: string;
   score: number;
-};
+}
 
-/** Build a minimal ToolContext whose db is table-aware. */
-function makeCtx(overrides: {
-  teamMembers?: Array<{ team_id: string }>;
-  collections?: Record<string, CollectionStub[]>;
-  rpcRows?: RpcRow[];
-} = {}): ToolContext {
-  const { teamMembers = [], collections = {}, rpcRows = [] } = overrides;
+const CHUNKS: ChunkRow[] = [
+  {
+    space: SPACE_GENERAL,
+    documentId: '99999999-0000-0000-0000-00000000000a',
+    documentTitle: 'Rate card',
+    chunkIndex: 0,
+    content: 'Senior React developers are quoted at 8,500 USD per month.',
+    score: 0.9,
+  },
+  {
+    space: SPACE_ANA,
+    documentId: '99999999-0000-0000-0000-00000000000b',
+    documentTitle: "Ana's private salary notes",
+    chunkIndex: 0,
+    content: 'Ana thinks we could push the React rate to 9,200 for this client.',
+    score: 0.95,
+  },
+  {
+    space: SPACE_BEN,
+    documentId: '99999999-0000-0000-0000-00000000000c',
+    documentTitle: "Ben's private client notes",
+    chunkIndex: 0,
+    content: 'Ben promised this client a React discount he has not told anyone about.',
+    score: 0.99,
+  },
+];
 
-  // Audit insert stub
-  const auditInsert = vi.fn().mockResolvedValue({ data: null, error: null });
+/** The rule, once: every global space plus the caller's own personal ones. */
+function visibleSpaceIds(userId: string | null): string[] {
+  if (!userId) return [];
+  return SPACES.filter((s) => s.scope === 'global' || s.scope_id === userId).map((s) => s.id);
+}
 
-  // Rate-limit: select chain → maybeSingle returns null (no existing bucket → full tokens)
-  const rateLimitMaybySingle = vi.fn().mockResolvedValue({ data: null, error: null });
-  const rateLimitEq2 = { maybeSingle: rateLimitMaybySingle };
-  const rateLimitEq1 = { eq: vi.fn().mockReturnValue(rateLimitEq2) };
-  const rateLimitSelect = { eq: vi.fn().mockReturnValue(rateLimitEq1) };
-  const rateLimitUpsert = vi.fn().mockResolvedValue({ data: null, error: null });
+// ---------------------------------------------------------------------------
+// A db double that enforces the rule the way Postgres does
+// ---------------------------------------------------------------------------
 
-  /**
-   * Builds a chainable promise-like builder for kb_collections queries.
-   * Supports: .select(fields).eq(col, val).eq(col, val) | .in(col, vals)
-   * and resolves to { data, error }.
-   */
-  interface CollectionsBuilder {
-    eq(col: string, val: string): CollectionsBuilder;
-    in(col: string, vals: string[]): CollectionsBuilder;
-    then(resolve: (v: { data: unknown[]; error: null }) => void): void;
-  }
+interface ScopedSearchArgs {
+  p_user_id: string | null;
+  p_query_text: string;
+  p_limit: number;
+  p_space_ids: string[] | null;
+}
 
-  function makeCollectionsBuilder(): { select: (fields: string) => CollectionsBuilder } {
-    return {
-      select: (fields: string) => {
-        const isFullDetail = fields.includes('kb_documents');
-        let _scope: string | undefined;
-        let _scopeId: string | undefined;
-        let _inScopeIds: string[] | undefined;
-        let _inIds: string[] | undefined;
+/**
+ * A chainable stand-in for a PostgREST query that is a real Promise, so the
+ * `.order(...).order(...)` chain resolves the same way supabase-js does.
+ */
+function resolvingTo<T>(rows: T[]) {
+  const settled = Promise.resolve({ data: rows, error: null });
+  return Object.assign(settled, {
+    order: () => resolvingTo(rows),
+    limit: () => resolvingTo(rows),
+  });
+}
 
-        const builder: CollectionsBuilder = {
-          eq(col: string, val: string): CollectionsBuilder {
-            if (col === 'scope') _scope = val;
-            else if (col === 'scope_id') _scopeId = val;
-            return builder;
+function makeCtx(userId: string) {
+  const rpc = vi.fn(async (fn: string, args: ScopedSearchArgs) => {
+    if (fn !== 'kb_search_scoped') return { data: null, error: null };
+
+    // Mirrors kb_search_scoped: the visible set is derived from p_user_id, and
+    // p_space_ids can only narrow it.
+    const visible = visibleSpaceIds(args.p_user_id);
+    const requested = args.p_space_ids;
+    const targets = requested ? visible.filter((id) => requested.includes(id)) : visible;
+
+    const rows = CHUNKS.filter((c) => targets.includes(c.space))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, args.p_limit ?? 8)
+      .flatMap((c) => {
+        const space = SPACES.find((s) => s.id === c.space);
+        if (!space) return [];
+        return [
+          {
+            document_id: c.documentId,
+            document_title: c.documentTitle,
+            space_id: space.id,
+            space_name: space.name,
+            space_scope: space.scope,
+            chunk_index: c.chunkIndex,
+            content: c.content,
+            score: c.score,
           },
-          in(col: string, vals: string[]): CollectionsBuilder {
-            if (col === 'scope_id') _inScopeIds = vals;
-            else if (col === 'id') _inIds = vals;
-            return builder;
-          },
-          then(resolve: (v: { data: unknown[]; error: null }) => void): void {
-            let rows: unknown[];
-            if (isFullDetail) {
-              const allCols = [
-                { id: 'col-1', scope: 'global', name: 'Global KB', scope_id: null, kb_documents: [{ count: 3 }] },
-                { id: 'col-2', scope: 'user', name: 'My KB', scope_id: 'user-1', kb_documents: [{ count: 1 }] },
-              ];
-              rows = _inIds ? allCols.filter((c) => _inIds!.includes(c.id)) : allCols;
-            } else {
-              const scopeRows: CollectionStub[] = collections[_scope ?? ''] ?? [];
-              rows = scopeRows
-                .filter((c) => {
-                  if (_scopeId !== undefined && c.scope_id !== _scopeId) return false;
-                  if (_inScopeIds !== undefined) {
-                    if (c.scope_id === undefined || !_inScopeIds.includes(c.scope_id)) return false;
-                  }
-                  return true;
-                })
-                .map((c) => ({ id: c.id }));
-            }
-            resolve({ data: rows, error: null });
-          },
-        };
-        return builder;
-      },
-    };
-  }
+        ];
+      });
+    return { data: rows, error: null };
+  });
 
-  function makeTeamMembersBuilder(): { select: (fields: string) => unknown } {
-    return {
-      select: (_fields: string) => {
-        const builder = {
-          eq: (_col: string, _val: string) => builder,
-          then: (resolve: (v: { data: Array<{ team_id: string }>; error: null }) => void) => {
-            resolve({ data: teamMembers, error: null });
-          },
-        };
-        return builder;
-      },
-    };
-  }
-
-  const rpcMock = vi.fn().mockResolvedValue({ data: rpcRows, error: null });
+  const spacesQuery = (orFilter?: string) => {
+    // listVisibleSpaces builds `scope.eq.global,and(scope.eq.user,scope_id.eq.X)`
+    const owner = orFilter?.match(/scope_id\.eq\.([0-9a-f-]+)/i)?.[1] ?? null;
+    return SPACES.filter((s) => s.scope === 'global' || s.scope_id === owner);
+  };
 
   const db = {
     from: vi.fn((table: string) => {
-      if (table === 'kb_collections') return makeCollectionsBuilder();
-      if (table === 'team_members') return makeTeamMembersBuilder();
-      if (table === 'audit_events') return { insert: auditInsert };
-      if (table === 'rate_limit_buckets') return { select: () => rateLimitSelect, upsert: rateLimitUpsert };
-      // Fallback
+      if (table === 'kb_collections') {
+        let byId: string | undefined;
+        const builder = {
+          select: () => builder,
+          eq: (col: string, val: string) => {
+            if (col === 'id') byId = val;
+            return builder;
+          },
+          or: (f: string) => resolvingTo(spacesQuery(f)),
+          order: () => builder,
+          limit: () => builder,
+          maybeSingle: async () => ({
+            data: SPACES.find((s) => s.id === byId) ?? null,
+            error: null,
+          }),
+        };
+        return builder;
+      }
+      if (table === 'audit_events') {
+        return { insert: vi.fn().mockResolvedValue({ data: null, error: null }) };
+      }
+      if (table === 'rate_limit_buckets') {
+        const eq2 = { maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) };
+        const eq1 = { eq: vi.fn().mockReturnValue(eq2) };
+        return {
+          select: () => ({ eq: vi.fn().mockReturnValue(eq1) }),
+          upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
+        };
+      }
       return {
         insert: vi.fn().mockResolvedValue({ data: null, error: null }),
         select: vi.fn().mockReturnValue({
@@ -133,12 +213,7 @@ function makeCtx(overrides: {
         }),
       };
     }),
-    rpc: rpcMock,
-  };
-
-  const integrations = {
-    getAccessToken: vi.fn(),
-    hasScopes: vi.fn().mockResolvedValue(true),
+    rpc,
   };
 
   const logger = {
@@ -151,115 +226,170 @@ function makeCtx(overrides: {
   };
 
   return {
-    userId: 'user-1',
+    userId,
     agentId: 'agent-1',
-    conversationId: 'conv-1',
     db: db as unknown as ToolContext['db'],
-    integrations: integrations as unknown as ToolContext['integrations'],
+    integrations: {
+      getAccessToken: vi.fn(),
+      hasScopes: vi.fn().mockResolvedValue(true),
+    } as unknown as ToolContext['integrations'],
     logger: logger as unknown as ToolContext['logger'],
-  };
+  } satisfies ToolContext;
+}
+
+type SearchTool = ToolDef<
+  { query: string; space?: string; limit?: number },
+  {
+    hits: Array<{
+      documentId: string;
+      documentTitle: string;
+      space: string;
+      spaceKind: 'global' | 'personal';
+      chunkIndex: number;
+      content: string;
+      score: number;
+    }>;
+  }
+>;
+
+function stubEmbedding() {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        embeddings: [{ values: Array.from({ length: 768 }, () => 0.1) }],
+      }),
+      text: async () => '',
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
-describe('kb.search', () => {
-  // Use the type from the named export so TypeScript knows the shape
+describe('kb.search space scoping', () => {
   let kbSearch: typeof KbSearchType;
 
   beforeEach(async () => {
-    const mod = await import('./search');
-    kbSearch = mod.kbSearch;
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-key';
+    stubEmbedding();
+    kbSearch = (await import('./search')).kbSearch;
   });
 
-  it('happy path: returns hits sorted by score from RPC', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ embeddings: [{ values: makeEmbedding() }] }),
-        text: async () => '',
-      }),
+  it("never returns another person's personal space", async () => {
+    const ana = await runTool(
+      kbSearch as unknown as SearchTool,
+      { query: 'React rate' },
+      makeCtx(ANA),
     );
 
-    const rpcRows: RpcRow[] = [
-      {
-        document_id: '00000000-0000-0000-0000-000000000011',
-        document_title: 'Sales Playbook',
-        chunk_index: 0,
-        content: 'Our sales process starts with discovery.',
-        score: 0.92,
-      },
-      {
-        document_id: '00000000-0000-0000-0000-000000000022',
-        document_title: 'Pricing Guide',
-        chunk_index: 1,
-        content: 'Enterprise pricing tiers are negotiable.',
-        score: 0.75,
-      },
-    ];
+    const titles = ana.hits.map((h) => h.documentTitle);
+    expect(titles).toContain('Rate card');
+    expect(titles).toContain("Ana's private salary notes");
+    // The whole point.
+    expect(titles).not.toContain("Ben's private client notes");
+    expect(ana.hits.every((h) => h.space !== 'Ben notes')).toBe(true);
 
-    const ctx = makeCtx({
-      collections: {
-        global: [{ id: 'col-1' }],
-        team: [],
-        user: [{ id: 'col-2', scope_id: 'user-1' }],
-        conversation: [],
-      },
-      rpcRows,
-    });
+    const ben = await runTool(
+      kbSearch as unknown as SearchTool,
+      { query: 'React rate' },
+      makeCtx(BEN),
+    );
+    const benTitles = ben.hits.map((h) => h.documentTitle);
+    expect(benTitles).toContain("Ben's private client notes");
+    expect(benTitles).not.toContain("Ana's private salary notes");
+  });
 
-    process.env['GOOGLE_GENERATIVE_AI_API_KEY'] = 'test-key';
+  it("cannot be aimed at another person's space by name", async () => {
+    // Ben's space exists, but it is not among the names Ana can resolve, so the
+    // narrowing filter can never be pointed at it.
+    await expect(
+      runTool(
+        kbSearch as unknown as SearchTool,
+        { query: 'discount', space: 'Ben notes' },
+        makeCtx(ANA),
+      ),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
 
-    // runTool is generic — cast the tool so TypeScript infers the output type
-    type SearchTool = ToolDef<
-      { query: string; scopes?: ('global' | 'team' | 'user' | 'conversation')[]; teamId?: string; conversationId?: string; limit?: number },
-      { hits: Array<{ documentId: string; documentTitle: string; chunkIndex: number; content: string; score: number }> }
-    >;
-    const result = await runTool(kbSearch as unknown as SearchTool, { query: 'sales process' }, ctx);
+  it('hands the database the user, never a caller-chosen list of spaces', async () => {
+    const ctx = makeCtx(ANA);
+    await runTool(kbSearch as unknown as SearchTool, { query: 'rates' }, ctx);
 
-    expect(result.hits).toHaveLength(2);
-    expect(result.hits[0]!.score).toBeGreaterThan(result.hits[1]!.score);
-    expect(result.hits[0]!.documentTitle).toBe('Sales Playbook');
-    expect(result.hits[1]!.documentTitle).toBe('Pricing Guide');
+    const rpc = (ctx.db as unknown as { rpc: ReturnType<typeof vi.fn> }).rpc;
+    const call = rpc.mock.calls.find((c) => c[0] === 'kb_search_scoped');
+    expect(call).toBeDefined();
+    expect((call?.[1] as ScopedSearchArgs | undefined)?.p_user_id).toBe(ANA);
+    // Unscoped search no longer exists — nothing may reach for it.
+    expect(rpc.mock.calls.some((c) => c[0] === 'kb_hybrid_search')).toBe(false);
+  });
 
-    vi.unstubAllGlobals();
-    delete process.env['GOOGLE_GENERATIVE_AI_API_KEY'];
+  it('narrows to one space when asked, and only within what is visible', async () => {
+    const res = await runTool(
+      kbSearch as unknown as SearchTool,
+      { query: 'rate', space: 'General' },
+      makeCtx(ANA),
+    );
+    expect(res.hits).toHaveLength(1);
+    expect(res.hits[0]?.space).toBe('General');
+    expect(res.hits[0]?.spaceKind).toBe('global');
   });
 
   it('empty query → ValidationError', async () => {
-    const ctx = makeCtx();
-    await expect(runTool(kbSearch, { query: '' }, ctx)).rejects.toBeInstanceOf(ValidationError);
+    await expect(runTool(kbSearch, { query: '' }, makeCtx(ANA))).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+  });
+});
+
+describe('searchSpaces boundary', () => {
+  it('returns nothing when the caller has no user id, rather than everything', async () => {
+    const { searchSpaces } = await import('./spaces');
+    const ctx = makeCtx(ANA);
+    const hits = await searchSpaces(ctx.db, { userId: '', query: 'rate' });
+    expect(hits).toEqual([]);
+    // It must fail closed before it ever reaches the database.
+    const rpc = (ctx.db as unknown as { rpc: ReturnType<typeof vi.fn> }).rpc;
+    expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('no collections visible → empty hits (no RPC call)', async () => {
-    const ctx = makeCtx({
-      teamMembers: [],
-      collections: {
-        global: [],
-        team: [],
-        user: [],
-        conversation: [],
-      },
-      rpcRows: [],
+  it('drops space ids the caller cannot see instead of honouring them', async () => {
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-key';
+    stubEmbedding();
+    const { searchSpaces } = await import('./spaces');
+
+    // Ana asks, explicitly, for Ben's space id — the shape of the old
+    // `collection_ids` bypass. The intersection makes it yield nothing.
+    const hits = await searchSpaces(makeCtx(ANA).db, {
+      userId: ANA,
+      query: 'discount',
+      spaceIds: [SPACE_BEN],
     });
+    expect(hits).toEqual([]);
+  });
 
-    process.env['GOOGLE_GENERATIVE_AI_API_KEY'] = 'test-key';
+  it('an explicitly empty space list means nothing, not everything', async () => {
+    const { searchSpaces } = await import('./spaces');
+    const hits = await searchSpaces(makeCtx(ANA).db, {
+      userId: ANA,
+      query: 'rate',
+      spaceIds: [],
+    });
+    expect(hits).toEqual([]);
+  });
+});
 
-    type SearchTool = ToolDef<
-      { query: string; scopes?: ('global' | 'team' | 'user' | 'conversation')[]; teamId?: string; conversationId?: string; limit?: number },
-      { hits: Array<{ documentId: string; documentTitle: string; chunkIndex: number; content: string; score: number }> }
-    >;
-    const result = await runTool(kbSearch as unknown as SearchTool, { query: 'anything' }, ctx);
-    expect(result.hits).toEqual([]);
-
-    // The hybrid-search RPC should not have been called since no collections were found.
-    // (db.rpc may still be called by the atomic rate limiter via 'consume_rate_limit_token'.)
-    const dbMock = ctx.db as unknown as { rpc: ReturnType<typeof vi.fn> };
-    const hybridSearchCalls = dbMock.rpc.mock.calls.filter((c) => c[0] === 'kb_hybrid_search');
-    expect(hybridSearchCalls).toHaveLength(0);
-
-    delete process.env['GOOGLE_GENERATIVE_AI_API_KEY'];
+describe('getVisibleSpace / getVisibleDocument', () => {
+  it("reports another person's space as missing, not as forbidden", async () => {
+    const { getVisibleSpace } = await import('./spaces');
+    // Indistinguishable from a bad id on purpose: a "forbidden" would confirm
+    // that Ben has a space with that id.
+    await expect(getVisibleSpace(makeCtx(ANA).db, ANA, SPACE_BEN)).rejects.toThrow(
+      /no longer exists/i,
+    );
+    await expect(getVisibleSpace(makeCtx(ANA).db, ANA, SPACE_GENERAL)).resolves.toMatchObject({
+      name: 'General',
+      kind: 'global',
+    });
   });
 });

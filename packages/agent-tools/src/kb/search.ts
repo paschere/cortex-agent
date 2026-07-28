@@ -1,26 +1,38 @@
+import { ValidationError } from '@zipdev/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { embed } from './embedder';
-
-const Scope = z.enum(['global', 'team', 'user', 'conversation']);
+import { listVisibleSpaces, resolveSpaceByName, searchSpaces } from './spaces';
 
 const HitSchema = z.object({
   documentId: z.string().uuid(),
   documentTitle: z.string(),
+  space: z.string(),
+  spaceKind: z.enum(['global', 'personal']),
   chunkIndex: z.number().int(),
   content: z.string(),
   score: z.number(),
 });
 
+/**
+ * The tool no longer takes "which scopes to search". It used to, and that was
+ * the bug: the model chose the breadth of its own retrieval, and one of the
+ * choices ('conversation') reached across users. What is searchable is now a
+ * fact about who is asking, decided in Postgres from `ctx.userId`. The only
+ * thing the caller can express is a NARROWING, by name, to a space it can
+ * already see.
+ */
 export const kbSearch = registerTool({
   id: 'kb.search',
   description:
-    'Semantic + keyword hybrid search over visible KB collections. Returns top chunks with document titles for citation.',
+    "Search Zipdev's Knowledge Base — client notes, playbooks, rates, past proposals, anything saved to it. Searches every company-wide space plus the asker's own personal spaces, and nobody else's. Pass `space` with a space name to look in just one. Each result says which space it came from, so you can tell the person whether what you found is company knowledge or their own note.",
   inputSchema: z.object({
     query: z.string().min(1),
-    scopes: z.array(Scope).optional(),
-    teamId: z.string().uuid().optional(),
-    conversationId: z.string().uuid().optional(),
+    space: z
+      .string()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe('Name of a single space to search in, e.g. "Rates" — omit to search everything'),
     limit: z.number().int().min(1).max(20).default(5),
   }),
   outputSchema: z.object({
@@ -28,94 +40,37 @@ export const kbSearch = registerTool({
   }),
   rateLimit: { perMinute: 60 },
   handler: async (input, ctx) => {
-    const scopes = input.scopes ?? ['global', 'team', 'user', 'conversation'];
-    const collectionIds: string[] = [];
+    let spaceIds: string[] | undefined;
 
-    // Resolve global collections
-    if (scopes.includes('global')) {
-      const { data, error } = await ctx.db
-        .from('kb_collections')
-        .select('id')
-        .eq('scope', 'global');
-      if (error) throw error;
-      for (const c of data ?? []) collectionIds.push(c.id as string);
-    }
-
-    // Resolve team collections — need user's teams first
-    if (scopes.includes('team')) {
-      const { data: memberships, error: memErr } = await ctx.db
-        .from('team_members')
-        .select('team_id')
-        .eq('user_id', ctx.userId);
-      if (memErr) throw memErr;
-
-      const teamIds = (memberships ?? []).map((m) => m.team_id as string);
-      // Narrow to a specific team if provided and the user is a member
-      const effectiveTeamIds =
-        input.teamId && teamIds.includes(input.teamId) ? [input.teamId] : teamIds;
-
-      if (effectiveTeamIds.length > 0) {
-        const { data, error } = await ctx.db
-          .from('kb_collections')
-          .select('id')
-          .eq('scope', 'team')
-          .in('scope_id', effectiveTeamIds);
-        if (error) throw error;
-        for (const c of data ?? []) collectionIds.push(c.id as string);
+    if (input.space) {
+      const space = await resolveSpaceByName(ctx.db, ctx.userId, input.space);
+      if (!space) {
+        const names = (await listVisibleSpaces(ctx.db, ctx.userId)).map((s) => s.name);
+        throw new ValidationError(
+          names.length > 0
+            ? `There is no space called "${input.space}". You can search: ${names.join(', ')}.`
+            : `There is no space called "${input.space}", and nothing has been shared with you yet.`,
+        );
       }
+      spaceIds = [space.id];
     }
 
-    // Resolve user-scoped collections
-    if (scopes.includes('user')) {
-      const { data, error } = await ctx.db
-        .from('kb_collections')
-        .select('id')
-        .eq('scope', 'user')
-        .eq('scope_id', ctx.userId);
-      if (error) throw error;
-      for (const c of data ?? []) collectionIds.push(c.id as string);
-    }
-
-    // Resolve conversation-scoped collections
-    if (scopes.includes('conversation')) {
-      const effectiveConvId = input.conversationId ?? ctx.conversationId;
-      if (effectiveConvId) {
-        const { data, error } = await ctx.db
-          .from('kb_collections')
-          .select('id')
-          .eq('scope', 'conversation')
-          .eq('scope_id', effectiveConvId);
-        if (error) throw error;
-        for (const c of data ?? []) collectionIds.push(c.id as string);
-      }
-    }
-
-    if (collectionIds.length === 0) return { hits: [] };
-
-    const [embedding] = await embed([input.query]);
-    const { data: rows, error: rpcErr } = await ctx.db.rpc('kb_hybrid_search', {
-      p_collection_ids: collectionIds,
-      p_query_embedding: embedding,
-      p_query_text: input.query,
-      p_limit: input.limit,
+    const hits = await searchSpaces(ctx.db, {
+      userId: ctx.userId,
+      query: input.query,
+      ...(spaceIds ? { spaceIds } : {}),
+      limit: input.limit,
     });
-    if (rpcErr) throw rpcErr;
-
-    type Row = {
-      document_id: string;
-      document_title: string;
-      chunk_index: number;
-      content: string;
-      score: number;
-    };
 
     return {
-      hits: ((rows as Row[]) ?? []).map((r) => ({
-        documentId: r.document_id,
-        documentTitle: r.document_title,
-        chunkIndex: r.chunk_index,
-        content: r.content,
-        score: Number(r.score),
+      hits: hits.map((h) => ({
+        documentId: h.documentId,
+        documentTitle: h.documentTitle,
+        space: h.spaceName,
+        spaceKind: h.spaceKind,
+        chunkIndex: h.chunkIndex,
+        content: h.content,
+        score: h.score,
       })),
     };
   },
