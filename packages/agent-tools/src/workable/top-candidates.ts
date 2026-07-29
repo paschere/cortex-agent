@@ -34,9 +34,9 @@ import { fetchCandidatePages } from './tools-extra';
  * round trip. If the LLM is unavailable the tool degrades to the evidence
  * ranking and says so, rather than failing.
  *
- * Call budget (worst case ~35 ATS requests + 1 LLM call):
+ * Call budget (worst case ~111 ATS requests + 1 LLM call, ~7 req/s paced):
  *   1        job detail
- *   1–3      candidate list pages (100/page)
+ *   1–10     candidate list pages (100/page — the WHOLE pipeline up to 1,000)
  *   ≤ maxProfiles  full profiles, fetched 3-at-a-time with spacing so the
  *                  burst stays around ~7 req/s of the 10 req/s global cap,
  *                  with a one-shot backoff retry on 429.
@@ -45,7 +45,11 @@ import { fetchCandidatePages } from './tools-extra';
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 10;
 const DEFAULT_PROFILES = 25;
-const MAX_PROFILES = 50;
+const MAX_PROFILES = 100;
+/** Full-pipeline scan: 10 pages × 100 covers reqs far past the old 300 cap.
+ *  List pages are cheap (1 call each); the expensive part stays bounded by
+ *  maxProfiles. */
+const MAX_LIST_PAGES = 10;
 /** Detail-fetch pool: 3 workers with a small gap ≈ 7 req/s peak. */
 const HYDRATE_CONCURRENCY = 3;
 const HYDRATE_GAP_MS = 120;
@@ -121,7 +125,7 @@ async function rankWithLlm(
 export const workableTopCandidates = registerTool({
   id: 'workable.top_candidates',
   description:
-    'Top N candidates for a Workable job with AI insights, computed LIVE from the ATS in one call — answers "who are the top 5 for this job and why" without a matching run and without any database dependency. Give it the job shortcode (from workable.list_jobs); it fetches the job posting, pages through the real pipeline, loads full profiles for the strongest subset (bounded, rate-limit-safe), then a SINGLE batched LLM evaluation compares them against the job and returns, per candidate: score, verdict (strong_match/good_match/possible/weak), why they rank, strengths, concerns — plus deterministic `evidence` (skills found in the posting, role fit, experience years, stage) and a `poolInsight` about the pipeline overall. Present the why/strengths/concerns as the answer. ' +
+    'Top N candidates for a Workable job with AI insights, computed LIVE from the ATS in one call — answers "who are the top 5 for this job and why" without a matching run and without any database dependency. Give it the job shortcode (from workable.list_jobs); it fetches the job posting, pages through the ENTIRE pipeline (up to 1,000 candidates), loads full profiles for the strongest subset (maxProfiles, up to 100, rate-limit-safe), then a SINGLE batched LLM evaluation compares them against the job and returns, per candidate: score, verdict (strong_match/good_match/possible/weak), why they rank, strengths, concerns — plus deterministic `evidence` (skills found in the posting, role fit, experience years, stage) and a `poolInsight` about the pipeline overall. Present the why/strengths/concerns as the answer. ' +
     'Pass mustHaveSkills (e.g. ["React","Node.js","AWS"]) when the user names what matters — both the evidence pass and the LLM weigh coverage of that list. ' +
     'LIMITS to disclose: only `profilesLoaded` of `poolSize` candidates get a deep look (prioritized by stage + recency; meta says if others were left out). If the LLM is unavailable the tool still answers using the deterministic evidence ranking and meta.dataQuality says so. recruit.find_matches remains the tool for a full per-candidate deep evaluation that also attaches recommendations to the job. ' +
     "HOW TO PHRASE IT: plain human terms, no tool names or shortcodes. Lead with names and why ('María va primera: cubre React, Node y AWS, ≈9 años de experiencia, y su riesgo es que no muestra proyectos con Kubernetes').",
@@ -180,12 +184,19 @@ export const workableTopCandidates = registerTool({
     );
     const jobCtx = buildJobContext(job, input.shortcode);
 
-    // 2. The live pipeline (100/page, up to 3 pages = 300 candidates).
+    // 2. The live pipeline — the WHOLE of it, up to 10 pages (1,000 people).
+    //    A 300-cap here once made "top 5" silently mean "top 5 of the first
+    //    300 of a bigger pipeline"; list pages cost one cheap call each, so
+    //    scan wide and keep only the hydration bounded.
     const params = new URLSearchParams({ shortcode: input.shortcode, limit: '100' });
     if (input.stage) params.set('stage', input.stage);
-    const pool: Raw[] = await fetchCandidatePages(`/candidates?${params}`, 3, ctx.signal);
+    const pool: Raw[] = await fetchCandidatePages(
+      `/candidates?${params}`,
+      MAX_LIST_PAGES,
+      ctx.signal,
+    );
     apiCalls += Math.max(1, Math.ceil(pool.length / 100));
-    const scannedAll = pool.length < 300;
+    const scannedAll = pool.length < MAX_LIST_PAGES * 100;
 
     // 3. Cheap prioritization BEFORE spending detail calls: active only,
     //    furthest stage first, then most recent activity.
@@ -277,7 +288,7 @@ export const workableTopCandidates = registerTool({
     const dataQuality: string[] = [];
     if (!scannedAll) {
       dataQuality.push(
-        'The pipeline has more than 300 candidates; only the first 300 were scanned. Narrow with the stage filter to cover a specific slice completely.',
+        `The pipeline has more than ${MAX_LIST_PAGES * 100} candidates; only the first ${MAX_LIST_PAGES * 100} were scanned. Narrow with the stage filter to cover a specific slice completely.`,
       );
     }
     if (active.length > toHydrate.length) {
