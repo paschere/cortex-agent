@@ -1,6 +1,7 @@
-import { IntegrationError, ValidationError } from "@zipdev/core";
-import { z } from "zod";
-import { registerTool } from "../index";
+import { IntegrationError, ValidationError } from '@zipdev/core';
+import { z } from 'zod';
+import { registerTool } from '../index';
+import { getVisibleDocument } from '../kb/spaces';
 
 /**
  * zippy.process — server-side delegation to Zippy's own LLM (Gemini).
@@ -12,11 +13,11 @@ import { registerTool } from "../index";
  * source material consumes never leave Zippy.
  */
 
-const GEMINI_MODEL = "gemini-3.1-flash-lite";
+const GEMINI_MODEL = 'gemini-3.1-flash-lite';
 const MAX_SOURCE_CHARS = 400_000;
 
 export const zippyProcess = registerTool({
-  id: "zippy.process",
+  id: 'zippy.process',
   description:
     "Delegate heavy text processing to Zippy's own server-side LLM instead of doing it yourself: summarize, extract structured data, classify, translate, or answer questions about a large source WITHOUT loading it into your context. Provide either documentId (a Knowledge Base document — Zippy reads all its chunks server-side) or content (raw text). Returns only the distilled result. Use this whenever the source material is large and you only need the analysis.",
   inputSchema: z.object({
@@ -31,12 +32,12 @@ export const zippyProcess = registerTool({
       .string()
       .uuid()
       .optional()
-      .describe("KB document id — Zippy loads its full text server-side"),
+      .describe('KB document id — Zippy loads its full text server-side'),
     content: z
       .string()
       .max(MAX_SOURCE_CHARS)
       .optional()
-      .describe("Raw text to process (alternative to documentId)"),
+      .describe('Raw text to process (alternative to documentId)'),
     maxOutputChars: z.number().int().min(100).max(20000).default(4000),
   }),
   outputSchema: z.object({
@@ -48,50 +49,42 @@ export const zippyProcess = registerTool({
   rateLimit: { perMinute: 6 },
   handler: async (input, ctx) => {
     const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!key)
-      throw new IntegrationError(
-        "GOOGLE_GENERATIVE_AI_API_KEY not configured",
-        "gemini",
-      );
+    if (!key) throw new IntegrationError('GOOGLE_GENERATIVE_AI_API_KEY not configured', 'gemini');
 
-    let source = input.content ?? "";
+    let source = input.content ?? '';
     let documentTitle: string | null = null;
 
     if (input.documentId) {
-      const { data: doc } = await ctx.db
-        .from("kb_documents")
-        .select("title")
-        .eq("id", input.documentId)
-        .maybeSingle();
-      if (!doc)
-        throw new ValidationError(`KB document not found: ${input.documentId}`);
-      documentTitle = doc.title as string;
+      // This is a second door into the Knowledge Base: it reads a document's
+      // ENTIRE text from an id, without going through search. Search hits hand
+      // out document ids, so without this check an id seen once would be enough
+      // to read a document out of a space the caller cannot see. getVisibleDocument
+      // reports someone else's document as missing rather than as forbidden.
+      const doc = await getVisibleDocument(ctx.db, ctx.userId, input.documentId);
+      documentTitle = doc.title;
 
       const { data: chunks, error } = await ctx.db
-        .from("kb_chunks")
-        .select("content, chunk_index")
-        .eq("document_id", input.documentId)
-        .order("chunk_index", { ascending: true });
+        .from('kb_chunks')
+        .select('content, chunk_index')
+        .eq('document_id', input.documentId)
+        .order('chunk_index', { ascending: true });
       if (error) throw new Error(`Failed to load chunks: ${error.message}`);
-      source = (chunks ?? []).map((c) => c.content as string).join("\n\n");
+      source = (chunks ?? []).map((c) => c.content as string).join('\n\n');
     }
 
     if (!source.trim()) {
-      throw new ValidationError("Provide documentId or non-empty content.");
+      throw new ValidationError('Provide documentId or non-empty content.');
     }
-    if (source.length > MAX_SOURCE_CHARS)
-      source = source.slice(0, MAX_SOURCE_CHARS);
+    if (source.length > MAX_SOURCE_CHARS) source = source.slice(0, MAX_SOURCE_CHARS);
 
-    const prompt =
-      `You are Zippy, Zipdev's internal processing engine. Follow the instruction precisely and answer with ONLY the requested output — no preamble.\n\n` +
-      `INSTRUCTION:\n${input.instruction}\n\n` +
-      `SOURCE${documentTitle ? ` (document: "${documentTitle}")` : ""}:\n${source}`;
+    const sourceLabel = documentTitle ? ` (document: "${documentTitle}")` : '';
+    const prompt = `You are Zippy, Zipdev's internal processing engine. Follow the instruction precisely and answer with ONLY the requested output — no preamble.\n\nINSTRUCTION:\n${input.instruction}\n\nSOURCE${sourceLabel}:\n${source}`;
 
     const r = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.2 },
@@ -100,10 +93,7 @@ export const zippyProcess = registerTool({
       },
     );
     if (!r.ok)
-      throw new IntegrationError(
-        `Gemini ${r.status}: ${(await r.text()).slice(0, 300)}`,
-        "gemini",
-      );
+      throw new IntegrationError(`Gemini ${r.status}: ${(await r.text()).slice(0, 300)}`, 'gemini');
 
     type GenerateResponse = {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
@@ -111,11 +101,10 @@ export const zippyProcess = registerTool({
     const data = (await r.json()) as GenerateResponse;
     const text = (data.candidates ?? [])
       .flatMap((c) => c.content?.parts ?? [])
-      .map((p) => p.text ?? "")
-      .join("")
+      .map((p) => p.text ?? '')
+      .join('')
       .trim();
-    if (!text)
-      throw new IntegrationError("Gemini returned an empty response", "gemini");
+    if (!text) throw new IntegrationError('Gemini returned an empty response', 'gemini');
 
     const max = input.maxOutputChars ?? 4000;
     return {

@@ -40,7 +40,13 @@ import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confir
 import { sendApprovalRequestEmail } from '@/lib/approval-email';
 import { decideApproval } from '@/lib/approvals/decide';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
-import { filterTools, getTool, runTool, type AnyTool } from '@zipdev/agent-tools';
+import {
+  filterTools,
+  getTool,
+  listVisibleSpaces,
+  runTool,
+  type AnyTool,
+} from '@zipdev/agent-tools';
 import { ConfirmationRequiredError } from '@zipdev/core';
 
 export const runtime = 'nodejs';
@@ -464,12 +470,11 @@ async function handleOverview(auth: AuthResult): Promise<unknown> {
   const agents = await loadAllAgents();
   const catalog = await buildCatalog(auth.userId);
 
-  const [integrationsRes, collectionsRes] = await Promise.all([
+  const [integrationsRes, spaces] = await Promise.all([
     db.from('integrations').select('provider, scopes').eq('user_id', auth.userId),
-    db
-      .from('kb_collections')
-      .select('id, name, scope')
-      .or(`scope.eq.global,and(scope.eq.user,scope_id.eq.${auth.userId})`),
+    // Shared helper rather than an inline filter: the overview must describe
+    // exactly the spaces kb_search would actually reach.
+    listVisibleSpaces(db, auth.userId),
   ]);
 
   return {
@@ -485,11 +490,7 @@ async function handleOverview(auth: AuthResult): Promise<unknown> {
       scopes: (i.scopes as string[] | null) ?? [],
     })),
     knowledgeBase: {
-      collections: (collectionsRes.data ?? []).map((c) => ({
-        id: c.id as string,
-        name: c.name as string,
-        scope: c.scope as string,
-      })),
+      spaces: spaces.map((s) => ({ id: s.id, name: s.name, kind: s.kind })),
       searchTool: 'kb_search',
     },
     confirmationProtocol:
@@ -741,7 +742,11 @@ async function listResources(): Promise<Array<{ uri: string; name: string; mimeT
     })),
     // Back-compat alias for the original single-agent resource.
     { uri: 'zipdev://agent/system-prompt', name: 'Sales agent system prompt', mimeType: 'text/markdown' },
-    { uri: 'zipdev://kb/collections', name: 'Visible KB collections', mimeType: 'application/json' },
+    {
+      uri: 'zipdev://kb/spaces',
+      name: 'Knowledge Base spaces you can see',
+      mimeType: 'application/json',
+    },
     { uri: 'zipdev://integrations/status', name: 'Connected integrations', mimeType: 'application/json' },
   ];
 }
@@ -758,13 +763,16 @@ async function readResource(uri: string, auth: AuthResult): Promise<JsonRpcRespo
     return { contents: [{ uri, mimeType: 'text/markdown', text: agent.system_prompt }] };
   }
 
-  if (uri === 'zipdev://kb/collections') {
-    const { data: collections } = await db
-      .from('kb_collections')
-      .select('id, scope, scope_id, name')
-      .or(`scope.eq.global,and(scope.eq.user,scope_id.eq.${auth.userId})`);
+  if (uri === 'zipdev://kb/spaces') {
+    const spaces = await listVisibleSpaces(db, auth.userId);
     return {
-      contents: [{ uri, mimeType: 'application/json', text: JSON.stringify(collections ?? []) }],
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(spaces.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))),
+        },
+      ],
     };
   }
 

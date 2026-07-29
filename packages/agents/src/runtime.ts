@@ -22,7 +22,6 @@ export async function loadAgent(
       | "gemini-2.5-pro",
     systemPrompt: data.system_prompt as string,
     allowedTools: data.allowed_tool_ids as string[],
-    kbScopes: ["global", "team:sales", "user", "conversation"],
     greeting: "How can I help today?",
   };
   if (agent.systemPrompt.length < 200) {

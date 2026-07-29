@@ -27,10 +27,15 @@ export interface AgentDefinition {
   defaultModel: "gemini-3.1-flash-lite" | "gemini-2.5-pro";
   systemPrompt: string;
   allowedTools: string[];
-  kbScopes: Array<"global" | `team:${string}` | "user" | "conversation">;
   greeting: string;
 }
 
+/**
+ * A Knowledge Base space. `scope` is the visibility: 'global' (everyone) or
+ * 'user' (one person, named by scope_id). The 'team' and 'conversation' values
+ * of CollectionScope are retired — migration 0049 converted the last rows and
+ * added a check constraint refusing new ones.
+ */
 export interface KbCollection {
   id: UUID;
   scope: CollectionScope;

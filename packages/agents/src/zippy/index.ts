@@ -70,6 +70,5 @@ export const zippyAgent: AgentDefinition = {
     'inbox.*',
     'chat.*',
   ],
-  kbScopes: ['global', 'team:sales', 'user', 'conversation'],
   greeting: 'Hey — I’m Zippy. Sales, recruiting, HR, or clients: what are we tackling?',
 };

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { listVisibleSpaces } from '@zipdev/agent-tools';
 import { loadAgent } from '@zipdev/agents';
 import type { BridgeContext } from './bridge';
 
@@ -9,8 +10,8 @@ export const RESOURCES = [
     mimeType: 'text/markdown',
   },
   {
-    uri: 'zipdev://kb/collections',
-    name: 'Visible KB collections',
+    uri: 'zipdev://kb/spaces',
+    name: 'Knowledge Base spaces you can see',
     mimeType: 'application/json',
   },
 ];
@@ -27,14 +28,17 @@ export async function readResource(ctx: BridgeContext, uri: string) {
     };
   }
 
-  if (uri === 'zipdev://kb/collections') {
-    const { data: collections } = await sb
-      .from('kb_collections')
-      .select('id, scope, scope_id, name')
-      .or(`scope.eq.global,and(scope.eq.user,scope_id.eq.${ctx.userId})`);
+  if (uri === 'zipdev://kb/spaces') {
+    // Same helper the tools use, so this surface cannot drift into showing a
+    // space that retrieval would refuse to search.
+    const spaces = await listVisibleSpaces(sb, ctx.userId);
     return {
       contents: [
-        { uri, mimeType: 'application/json', text: JSON.stringify(collections ?? []) },
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(spaces.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))),
+        },
       ],
     };
   }

@@ -176,7 +176,7 @@ const TOOL_GROUPS: ToolGroup[] = [
     icon: BookOpen,
     tools: [
       { id: "kb.search" },
-      { id: "kb.list_collections" },
+      { id: "kb.list_spaces" },
       { id: "kb.create_document", write: true },
     ],
   },

@@ -22,7 +22,7 @@ begin
       'gmail.search','gmail.read_thread','gmail.draft',
       'gcal.list_events','gcal.create_event',
       'gsheets.read_range',
-      'kb.search','kb.list_collections',
+      'kb.search','kb.list_spaces',
       'sales.draft_proposal'
     ]
   )
