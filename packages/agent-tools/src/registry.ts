@@ -36,6 +36,13 @@ export function filterTools(allowed: string[]): AnyTool[] {
 }
 
 function matchPattern(pat: string, id: string): boolean {
+  // A bare '*' means every family, including ones that do not exist yet. An
+  // agent listing families one by one silently loses access to each new
+  // integration until somebody remembers to add it — which is exactly how the
+  // Apollo tools shipped, deployed, and stayed invisible for a day. '*' is the
+  // grant that keeps meaning what it said. Narrowing still happens where it
+  // belongs: team deny-lists and the security gate both run downstream of this.
+  if (pat === '*') return !id.startsWith('test.');
   if (pat.endsWith('.*')) return id.startsWith(pat.slice(0, -1));
   return pat === id;
 }
