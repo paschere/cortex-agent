@@ -15,6 +15,7 @@ export const recruitingAgent: AgentDefinition = {
     "recruit.list_candidates",
     "recruit.get_candidate",
     "recruit.find_matches",
+    "workable.top_candidates",
     "recruit.score_candidate",
     "recruit.compare_candidates",
     "recruit.generate_presentation",
@@ -33,7 +34,6 @@ export const recruitingAgent: AgentDefinition = {
     "kb.search",
     "slack.post_message",
   ],
-  kbScopes: ["global", "team:recruiting", "user", "conversation"],
   greeting:
     "¡Hola! Soy tu co-pilot de Recruiting. ¿Qué requisición trabajamos hoy? Puedo buscar y rankear candidatos, armar shortlists y presentaciones para el cliente.",
 };

@@ -46,7 +46,7 @@ function toCandidateHit(c: any): z.infer<typeof CandidateHit> {
  * Workable paginates with a full `paging.next` URL. Convert it back to a
  * path relative to /spi/v3 so it can be replayed through workableFetch.
  */
-function nextPagePath(nextUrl: string | undefined | null): string | null {
+export function nextPagePath(nextUrl: string | undefined | null): string | null {
   if (!nextUrl) return null;
   const marker = '/spi/v3';
   const i = nextUrl.indexOf(marker);
@@ -54,7 +54,7 @@ function nextPagePath(nextUrl: string | undefined | null): string | null {
 }
 
 /** Fetch /candidates pages following paging.next, capped at maxPages. */
-async function fetchCandidatePages(
+export async function fetchCandidatePages(
   firstPath: string,
   maxPages: number,
   signal?: AbortSignal,

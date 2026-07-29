@@ -12,3 +12,4 @@ export {
   workableListJobQuestions,
   workableListRecentActivity,
 } from './tools-extra';
+export { workableTopCandidates } from './top-candidates';
