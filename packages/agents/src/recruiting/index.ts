@@ -16,6 +16,7 @@ export const recruitingAgent: AgentDefinition = {
     "recruit.get_candidate",
     "recruit.find_matches",
     "workable.top_candidates",
+    "workable.compare_candidates",
     "recruit.score_candidate",
     "recruit.compare_candidates",
     "recruit.generate_presentation",

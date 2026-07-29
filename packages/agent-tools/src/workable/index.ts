@@ -13,3 +13,4 @@ export {
   workableListRecentActivity,
 } from './tools-extra';
 export { workableTopCandidates } from './top-candidates';
+export { workableCompareCandidates } from './compare-candidates';
