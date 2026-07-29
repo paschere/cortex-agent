@@ -50,7 +50,7 @@ const PENDING_ACTION_TTL_MS = 15 * 60_000;
  * So in a SPACE (never in a DM) an answer is withheld from the room and
  * delivered to the sender privately when the turn touched:
  *
- *   - a financial family — payroll.*, rate.*                → compensation
+ *   - a financial family — payroll.*, rate.*, bamboo.*       → compensation
  *   - a PII-heavy family — recruit.*, workable.*, people.*,
  *     gmail.*                                               → personal data
  *   - anything the security classifier rates high/critical  → everything else
@@ -58,10 +58,21 @@ const PENDING_ACTION_TTL_MS = 15 * 60_000;
  * Aggregates and ordinary answers (CRM, Linear, GitHub, the KB, the web) post
  * normally: the guard exists to stop leaks, not to make the bot useless.
  *
+ * `bamboo` is listed as FINANCIAL at the family level, not tool by tool, and
+ * that is deliberate. BambooHR is the HR system of record: every active
+ * employee's pay rate and bill rate live there, and the family's own tool
+ * classification distinguishes a headcount from a salary. This guard cannot
+ * rely on that distinction, because a single turn mixes tools — Zippy answers
+ * "how big is the team on Acme, and what do they cost?" with a headcount call
+ * AND a compensation call, and only the coarse family signal is available by
+ * the time the answer is assembled. Withholding a "who is out this week"
+ * answer into a DM is a mild annoyance; answering "what does María earn?" out
+ * loud to seven colleagues is not recoverable. The blunt rule is the right one.
+ *
  * If this list ever loosens, loosen it deliberately — this rule is the
  * difference between a useful team bot and a data-leak vector.
  */
-const FINANCIAL_FAMILIES = new Set(['payroll', 'rate']);
+const FINANCIAL_FAMILIES = new Set(['payroll', 'rate', 'bamboo']);
 const PII_FAMILIES = new Set(['recruit', 'workable', 'people', 'gmail']);
 
 export interface ChatTurnRequest {

@@ -10,6 +10,7 @@ import {
   Brain,
   Building2,
   CircleCheck,
+  Contact,
   GitBranch,
   Globe,
   ListTodo,
@@ -129,6 +130,7 @@ export default async function IntegrationsPage({
   const webOn = !!process.env.TAVILY_API_KEY;
   const slackOn = !!process.env.SLACK_BOT_TOKEN;
   const apolloOn = !!process.env.APOLLO_API_KEY;
+  const bambooOn = !!process.env.BAMBOOHR_API;
 
   const providers: ProviderCard[] = [
     {
@@ -181,6 +183,18 @@ export default async function IntegrationsPage({
         'Candidate matching and scoring, side-by-side comparisons, client presentations and rate estimates.',
       offline: 'No matching, no scoring, no presentations and no rate estimates.',
       owner: opsOwner(matcherOn, 'the matcher service URL is not configured'),
+    },
+    {
+      key: 'bamboo',
+      name: 'BambooHR',
+      icon: Contact,
+      families: ['bamboo'],
+      state: bambooOn ? 'workspace' : 'disconnected',
+      unlocks:
+        'The HR system of record: the roster, job and employment history, time off, hours logged, documents on file, and both the pay rate Zipdev pays and the bill rate it charges the client.',
+      offline:
+        'Zippy cannot see who actually works here — no roster, no time off, no tenure and no rates.',
+      owner: opsOwner(bambooOn, 'no BambooHR API key on this environment'),
     },
     {
       key: 'payroll',

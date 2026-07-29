@@ -101,6 +101,13 @@ export const WORK_HOURS = { start: 6, end: 22 };
 const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   payroll: 'financial',
   rate: 'financial',
+  // BambooHR is the HR system of record: the roster, employment status,
+  // documents and — for every active person — both the pay rate Zipdev pays
+  // and the bill rate it charges. The family default is `pii` because most of
+  // the family is roster and time-off data about identifiable employees; every
+  // tool that actually carries a rate is pinned to `financial` in
+  // TOOL_OVERRIDES below rather than being left to inherit.
+  bamboo: 'pii',
   recruit: 'pii',
   workable: 'pii',
   people: 'pii',
@@ -210,6 +217,30 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   'apollo.company_news': { sensitivity: 'public', blastRadius: 'read' },
   // Our own consumption counters: no data about anyone at all.
   'apollo.remaining_lookups': { sensitivity: 'internal', blastRadius: 'read' },
+
+  // --- BambooHR: compensation is the most sensitive data in the company ------
+  // Anything carrying a pay rate or a bill rate is financial, whatever else it
+  // also returns. `get_employee` looks like an ordinary profile lookup and is
+  // not: it hands over what one named person costs and what the client is
+  // charged for them.
+  'bamboo.get_employee': { sensitivity: 'financial', blastRadius: 'read' },
+  'bamboo.compensation_history': { sensitivity: 'financial', blastRadius: 'read' },
+  // THE export. Pay and bill rates for a whole client, a whole division or the
+  // entire roster in one call. Its default limit (400) sits above
+  // BULK_THRESHOLD anyway, but declaring it here means it is bulk even when
+  // someone asks for a narrow slice — the shape is the risk, not the row count.
+  // Consequence, by design: with a human present it asks first; on a schedule
+  // it is refused outright.
+  'bamboo.compensation_report': { sensitivity: 'financial', alwaysBulk: true },
+  // Aggregates are the SAFE way to look at the whole company — the same
+  // reasoning as payroll's rollups. Counts by client, division or tenure carry
+  // no per-person figure and no rate, so a headcount question costs nobody a
+  // confirmation and does not spend the sensitive-read budget.
+  'bamboo.headcount': { sensitivity: 'internal', blastRadius: 'read' },
+  // Catalogue and policy metadata: no data about any individual at all.
+  'bamboo.describe_fields': { sensitivity: 'internal', blastRadius: 'read' },
+  'bamboo.time_off_types': { sensitivity: 'internal', blastRadius: 'read' },
+  'bamboo.employee_projects': { sensitivity: 'internal', blastRadius: 'read' },
 
   // --- rate tools carry pay/bill rates but are calculators, not payroll ------
   'rate.estimate': { sensitivity: 'financial', blastRadius: 'read' },

@@ -23,6 +23,7 @@ export * from './kb';
 export * from './schedule';
 export * from './gdrive';
 export * from './payroll';
+export * from './bamboo';
 export * from './web';
 export * from './format';
 export * from './recruit';

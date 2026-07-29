@@ -78,6 +78,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'amber',
     icon: 'Handshake',
   },
+  bamboo: {
+    name: 'BambooHR',
+    blurb:
+      'The HR system of record — the roster, employment and job history, time off, hours logged, documents on file, and both the pay rate Zipdev pays and the bill rate it charges.',
+    tone: 'rose',
+    icon: 'Contact',
+  },
   payroll: {
     name: 'Payroll',
     blurb: 'Team assignments, cost projections, expenses and client billing reports.',
