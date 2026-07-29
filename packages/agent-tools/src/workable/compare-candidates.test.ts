@@ -24,6 +24,7 @@ function candidateDetail(id: string, extra: Record<string, any> = {}) {
     candidate: {
       id,
       name: `Cand ${id}`,
+      email: `${id}@test.com`,
       headline: 'Software Developer',
       stage: 'Applied',
       skills: [],
@@ -35,10 +36,28 @@ function candidateDetail(id: string, extra: Record<string, any> = {}) {
   };
 }
 
+const TG_RESULTS = {
+  results: {
+    'maria@test.com': {
+      tests: 2,
+      completed: 2,
+      avgScore: 81.5,
+      results: [
+        { testName: 'React', score: 88, completed: true },
+        { testName: 'Node.js', score: 75, completed: true },
+      ],
+      lastUpdatedAt: '2026-07-10T00:00:00Z',
+    },
+  },
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mockWorkable(details: Record<string, any>) {
   return vi.fn(async (url: string | URL | Request) => {
     const href = String(url);
+    if (href.includes('/api/internal/recruit/testgorilla')) {
+      return new Response(JSON.stringify(TG_RESULTS), { status: 200 });
+    }
     if (href.includes('/jobs/REACT1')) {
       return new Response(JSON.stringify(JOB), { status: 200 });
     }
@@ -122,8 +141,8 @@ describe('workable.compare_candidates', () => {
 
     expect(workableCompareCandidates.outputSchema.safeParse(out).success).toBe(true);
     expect(generateObjectMock).toHaveBeenCalledTimes(1);
-    // 1 job + 2 candidate details = 3 ATS calls.
-    expect(fetchMock.mock.calls.length).toBe(3);
+    // 1 job + 2 candidate details (ATS) + 1 TestGorilla batch (matcher) = 4 fetches.
+    expect(fetchMock.mock.calls.length).toBe(4);
 
     expect(out.winner?.candidateId).toBe('maria');
     expect(out.winner?.name).toBe('Cand maria');
@@ -138,6 +157,18 @@ describe('workable.compare_candidates', () => {
     expect(out.markdown).toContain('**Winner:** Cand maria (clear margin)');
     expect(out.markdown).toContain('Recommendation:');
     expect(out.markdown).toContain('| Cand maria |');
+
+    // TestGorilla (matcher DB, keyed by email) reaches evidence, LLM card and table.
+    expect(out.candidates[0].testGorilla?.avgScore).toBe(81.5);
+    expect(out.candidates[0].evidence.join(' ')).toContain(
+      'TestGorilla: avg 81.5 across 2 test(s)',
+    );
+    expect(out.candidates[1].testGorilla).toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const llmArgs = generateObjectMock.mock.calls[0]?.[0] as any;
+    expect(llmArgs.prompt).toContain('testgorilla (verified assessment): React: 88');
+    expect(llmArgs.system).toContain('TestGorilla lines are verified assessment results');
+    expect(out.markdown).toContain('| 81.5 (2) |');
   });
 
   it('degrades to evidence comparison when the LLM fails, deriving the margin from the gap', async () => {

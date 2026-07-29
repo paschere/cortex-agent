@@ -1,3 +1,4 @@
+import { internalFetch } from '../recruit/client';
 import { workableFetch } from './client';
 
 /**
@@ -9,6 +10,13 @@ import { workableFetch } from './client';
  * dated work history, and stage-progress weighting. The LLM layers on top of
  * this in each tool; these helpers guarantee the evidence the model cites is
  * verifiable in the profile.
+ *
+ * One deliberate exception to "Workable only": TestGorilla. Those results
+ * live in the matcher DB but arrive through the TestGorilla integration
+ * itself (keyed by email), NOT through the stale/partial Workable sync — so
+ * they are trustworthy regardless of sync state and are batched in as the
+ * verified-assessment signal. If the matcher endpoint is unreachable the
+ * tools proceed without it and say so.
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -172,13 +180,54 @@ export async function fetchCandidateDetail(
   }
 }
 
+export interface TestGorillaSignal {
+  tests: number;
+  completed: number;
+  avgScore: number | null;
+  results: { testName: string | null; score: number | null; completed: boolean }[];
+  lastUpdatedAt: string | null;
+}
+
+/**
+ * Batch TestGorilla lookup by email against the matcher's lean endpoint.
+ * Never throws: assessment signal is an enhancement, not a dependency — on
+ * any failure the ranking proceeds without it and `note` explains the gap.
+ */
+export async function fetchTestGorillaSignals(
+  emails: string[],
+): Promise<{ byEmail: Map<string, TestGorillaSignal>; note: string | null }> {
+  const cleaned = [
+    ...new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => e.includes('@'))),
+  ];
+  if (!cleaned.length) return { byEmail: new Map(), note: null };
+  try {
+    const res = await internalFetch<{ results: Record<string, TestGorillaSignal> }>(
+      `/api/internal/recruit/testgorilla?emails=${encodeURIComponent(cleaned.join(','))}`,
+    );
+    if (!res.available) {
+      return {
+        byEmail: new Map(),
+        note: `TestGorilla scores could not be included (${res.reason}) — ranking proceeds on profile evidence only.`,
+      };
+    }
+    return { byEmail: new Map(Object.entries(res.data.results ?? {})), note: null };
+  } catch (err) {
+    return {
+      byEmail: new Map(),
+      note: `TestGorilla scores could not be included (${err instanceof Error ? err.message : String(err)}) — ranking proceeds on profile evidence only.`,
+    };
+  }
+}
+
 export interface EvidenceCandidate {
   id: string;
   name: string;
+  email: string | null;
   headline: string | null;
   stage: string | null;
   updatedAt: string | null;
   profileUrl: string | null;
+  testGorilla: TestGorillaSignal | null;
   preScore: number;
   breakdown: { skills: number; roleFit: number; experience: number; stageProgress: number };
   matchedSkills: string[];
@@ -194,6 +243,7 @@ export function buildEvidence(
   listRow: Raw,
   jobCtx: JobContext,
   mustHaves: string[],
+  testGorilla: TestGorillaSignal | null = null,
 ): EvidenceCandidate {
   const skills: string[] = [
     ...new Set(
@@ -278,6 +328,19 @@ export function buildEvidence(
   const answers: Raw[] = Array.isArray(detail?.answers) ? detail.answers : [];
   if (answers.length > 0) evidence.push(`Answered ${answers.length} screening question(s)`);
 
+  // --- TestGorilla (verified assessment — reported as evidence and weighed
+  //     by the LLM; it does not move the deterministic pre-score) ---
+  if (testGorilla && testGorilla.tests > 0) {
+    const names = testGorilla.results
+      .map((r) => r.testName)
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(', ');
+    evidence.push(
+      `TestGorilla: ${testGorilla.avgScore != null ? `avg ${testGorilla.avgScore}` : 'no numeric score'} across ${testGorilla.tests} test(s)${names ? ` (${names})` : ''} — verified assessment`,
+    );
+  }
+
   const preScore =
     Math.round((skillsScore * 0.5 + roleFit * 0.2 + expScore * 0.15 + stageScore * 0.15) * 10) / 10;
 
@@ -297,6 +360,16 @@ export function buildEvidence(
         `Q: ${stripHtml(String(a?.question ?? ''), 120)} → A: ${stripHtml(String(a?.answer ?? ''), 180)}`,
     )
     .join(' | ');
+  const tgLine =
+    testGorilla && testGorilla.tests > 0
+      ? `testgorilla (verified assessment): ${testGorilla.results
+          .slice(0, 4)
+          .map(
+            (r) =>
+              `${r.testName ?? 'test'}: ${r.score != null ? r.score : 'n/a'}${r.completed ? '' : ' (incomplete)'}`,
+          )
+          .join('; ')}${testGorilla.avgScore != null ? ` | avg ${testGorilla.avgScore}` : ''}`
+      : null;
   const card = [
     `id: ${String(detail?.id ?? listRow?.id ?? '')}`,
     `name: ${detail?.name ?? listRow?.name ?? '?'}`,
@@ -307,6 +380,7 @@ export function buildEvidence(
     recentRoles ? `recent roles: ${recentRoles}` : null,
     detail?.summary ? `profile summary: ${stripHtml(detail.summary, 500)}` : null,
     answerLines ? `screening answers: ${answerLines}` : null,
+    tgLine,
     `deterministic evidence: ${evidence.join(' | ')}`,
   ]
     .filter(Boolean)
@@ -318,10 +392,12 @@ export function buildEvidence(
       detail?.name ??
       listRow?.name ??
       [detail?.firstname, detail?.lastname].filter(Boolean).join(' '),
+    email: detail?.email ?? listRow?.email ?? null,
     headline,
     stage,
     updatedAt: listRow?.updated_at ?? detail?.updated_at ?? null,
     profileUrl: detail?.profile_url ?? listRow?.profile_url ?? null,
+    testGorilla: testGorilla && testGorilla.tests > 0 ? testGorilla : null,
     preScore,
     breakdown: {
       skills: Math.round(skillsScore),

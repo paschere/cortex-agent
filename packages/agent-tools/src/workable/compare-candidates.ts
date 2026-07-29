@@ -11,6 +11,7 @@ import {
   buildEvidence,
   buildJobContext,
   fetchCandidateDetail,
+  fetchTestGorillaSignals,
 } from './evaluate';
 
 /**
@@ -74,6 +75,7 @@ async function compareWithLlm(
     '- Use ONLY the candidate cards and job description provided. Never invent skills, employers, dates, or outcomes.',
     '- Every strength, concern and trade-off must be traceable to the provided data; missing/unclear data is itself a valid concern.',
     "- Scores are relative to THIS job's requirements.",
+    '- TestGorilla lines are verified assessment results — weigh them above self-reported skills; a missing TestGorilla is not a negative, but a low completed score is.',
     '- Judge only professional signal. Ignore and never mention name origin, gender, age, or photos.',
     '- Declare margin "toss_up" when the evidence genuinely does not separate them — do not force a winner.',
     'Return every candidate exactly once in `perCandidate`.',
@@ -105,7 +107,7 @@ async function compareWithLlm(
 export const workableCompareCandidates = registerTool({
   id: 'workable.compare_candidates',
   description:
-    'Head-to-head comparison of 2-5 specific Workable candidates for one job, LIVE from the ATS — use when the user asks "who is better between X and Y (for this role)?", "compare the finalists", or must pick who advances. Fetches the job posting and each full profile fresh (a handful of ATS calls), builds deterministic evidence per person (skills in the posting, role fit, experience years, stage), then a SINGLE batched LLM evaluation judges them against each other: per-candidate score/verdict/strengths/concerns, a winner with margin (clear/narrow/toss_up — a toss-up is a legitimate answer), the concrete trade-offs between them, and a next-step recommendation. ' +
+    'Head-to-head comparison of 2-5 specific Workable candidates for one job, LIVE from the ATS — use when the user asks "who is better between X and Y (for this role)?", "compare the finalists", or must pick who advances. Fetches the job posting and each full profile fresh (a handful of ATS calls), builds deterministic evidence per person (skills in the posting, role fit, experience years, stage, and TestGorilla verified-assessment scores batched in from the matcher by email), then a SINGLE batched LLM evaluation judges them against each other: per-candidate score/verdict/strengths/concerns, a winner with margin (clear/narrow/toss_up — a toss-up is a legitimate answer), the concrete trade-offs between them, and a next-step recommendation. ' +
     'Candidate ids come from workable.top_candidates, workable.list_candidates or workable.search_candidates. Pass mustHaveSkills when the user names what matters. ' +
     'If the LLM is unavailable it degrades to the deterministic evidence comparison and meta.dataQuality says so. Note: recruit.compare_candidates compares matcher-DB records instead (interviews, TestGorilla, stored AI scores) — prefer THIS tool for live ATS truth, that one when the deep enriched history matters. ' +
     "HOW TO PHRASE IT: plain human terms, no tool names or ids. Lead with the verdict and the trade-off ('Entre los dos, María: cubre AWS que Juan no muestra; Juan solo gana en años totales — y va empatado en etapa').",
@@ -168,19 +170,32 @@ export const workableCompareCandidates = registerTool({
     const jobCtx = buildJobContext(job, input.shortcode);
 
     // 2. Each profile, fresh — sequential with spacing (≤5 calls, trivial load).
-    const loaded: EvidenceCandidate[] = [];
+    const details: Raw[] = [];
     const loadErrors: string[] = [];
     for (const id of ids) {
       if (ctx.signal?.aborted) break;
       try {
         apiCalls++;
-        const detail = await fetchCandidateDetail(id, ctx.signal);
-        loaded.push(buildEvidence(detail, detail, jobCtx, mustHaves));
+        details.push(await fetchCandidateDetail(id, ctx.signal));
       } catch (err) {
         loadErrors.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
       }
       await new Promise((r) => setTimeout(r, FETCH_GAP_MS));
     }
+
+    // 2.5 TestGorilla in one batch — fed by its own integration into the
+    //     matcher DB (keyed by email), trustworthy even when the Workable
+    //     sync is stale. Optional: on failure the comparison proceeds.
+    const tg = await fetchTestGorillaSignals(details.map((d) => String(d?.email ?? '')));
+    const loaded: EvidenceCandidate[] = details.map((detail) =>
+      buildEvidence(
+        detail,
+        detail,
+        jobCtx,
+        mustHaves,
+        tg.byEmail.get(String(detail?.email ?? '').toLowerCase()) ?? null,
+      ),
+    );
 
     if (loaded.length < 2) {
       throw new Error(
@@ -273,6 +288,9 @@ export const workableCompareCandidates = registerTool({
         `${loadErrors.length} candidate(s) could not be loaded and are missing from the comparison: ${loadErrors.join('; ')}`,
       );
     }
+    if (tg.note) {
+      dataQuality.push(tg.note);
+    }
     if (llmError) {
       dataQuality.push(
         'AI comparison unavailable for this call (the evaluation model failed) — ranking and margin come from the deterministic evidence only; verdicts, trade-offs and the recommendation are missing, not zero.',
@@ -308,11 +326,11 @@ export const workableCompareCandidates = registerTool({
       `**Comparison for "${jobCtx.title}"** — ${loaded.length} candidates, live from Workable${llm ? ', AI-evaluated in one pass' : ''}`,
     );
     lines.push('');
-    lines.push('| Candidate | Score | Verdict | Exp | Skills matched | Stage |');
-    lines.push('| --- | --- | --- | --- | --- | --- |');
+    lines.push('| Candidate | Score | Verdict | Exp | Skills matched | TestGorilla | Stage |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- |');
     for (const c of candidates) {
       lines.push(
-        `| ${c.name} | ${Math.round(c.score)}/100 | ${c.verdict ? (VERDICT_LABEL[c.verdict] ?? c.verdict) : '—'} | ${c.experienceYears != null ? `≈${c.experienceYears}y` : '—'} | ${c.matchedSkills.length} | ${c.stage ?? '—'} |`,
+        `| ${c.name} | ${Math.round(c.score)}/100 | ${c.verdict ? (VERDICT_LABEL[c.verdict] ?? c.verdict) : '—'} | ${c.experienceYears != null ? `≈${c.experienceYears}y` : '—'} | ${c.matchedSkills.length} | ${c.testGorilla?.avgScore != null ? `${c.testGorilla.avgScore} (${c.testGorilla.tests})` : '—'} | ${c.stage ?? '—'} |`,
       );
     }
     lines.push('');

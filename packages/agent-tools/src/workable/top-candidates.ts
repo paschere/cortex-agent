@@ -11,6 +11,7 @@ import {
   buildEvidence,
   buildJobContext,
   fetchCandidateDetail,
+  fetchTestGorillaSignals,
   stageProgress,
 } from './evaluate';
 import { fetchCandidatePages } from './tools-extra';
@@ -95,6 +96,7 @@ async function rankWithLlm(
     '- Use ONLY the candidate cards and job description provided. Never invent skills, employers, dates, or outcomes.',
     '- Every strength and concern must be traceable to the provided data; missing/unclear data is itself a valid concern.',
     "- Scores are relative to THIS job's requirements, not to each other.",
+    '- TestGorilla lines are verified assessment results — weigh them above self-reported skills; a missing TestGorilla is not a negative, but a low completed score is.',
     '- Judge only professional signal. Ignore and never mention name origin, gender, age, or photos.',
     'Return every candidate you were given exactly once in `ranking`, best first.',
   ].join('\n');
@@ -125,7 +127,7 @@ async function rankWithLlm(
 export const workableTopCandidates = registerTool({
   id: 'workable.top_candidates',
   description:
-    'Top N candidates for a Workable job with AI insights, computed LIVE from the ATS in one call — answers "who are the top 5 for this job and why" without a matching run and without any database dependency. Give it the job shortcode (from workable.list_jobs); it fetches the job posting, pages through the ENTIRE pipeline (up to 1,000 candidates), loads full profiles for the strongest subset (maxProfiles, up to 100, rate-limit-safe), then a SINGLE batched LLM evaluation compares them against the job and returns, per candidate: score, verdict (strong_match/good_match/possible/weak), why they rank, strengths, concerns — plus deterministic `evidence` (skills found in the posting, role fit, experience years, stage) and a `poolInsight` about the pipeline overall. Present the why/strengths/concerns as the answer. ' +
+    'Top N candidates for a Workable job with AI insights, computed LIVE from the ATS in one call — answers "who are the top 5 for this job and why" without a matching run and without any database dependency. Give it the job shortcode (from workable.list_jobs); it fetches the job posting, pages through the ENTIRE pipeline (up to 1,000 candidates), loads full profiles for the strongest subset (maxProfiles, up to 100, rate-limit-safe), then a SINGLE batched LLM evaluation compares them against the job and returns, per candidate: score, verdict (strong_match/good_match/possible/weak), why they rank, strengths, concerns — plus deterministic `evidence` (skills found in the posting, role fit, experience years, stage, and TestGorilla verified-assessment scores batched in from the matcher by email) and a `poolInsight` about the pipeline overall. Present the why/strengths/concerns as the answer. ' +
     'Pass mustHaveSkills (e.g. ["React","Node.js","AWS"]) when the user names what matters — both the evidence pass and the LLM weigh coverage of that list. ' +
     'LIMITS to disclose: only `profilesLoaded` of `poolSize` candidates get a deep look (prioritized by stage + recency; meta says if others were left out). If the LLM is unavailable the tool still answers using the deterministic evidence ranking and meta.dataQuality says so. recruit.find_matches remains the tool for a full per-candidate deep evaluation that also attaches recommendations to the job. ' +
     "HOW TO PHRASE IT: plain human terms, no tool names or shortcodes. Lead with names and why ('María va primera: cubre React, Node y AWS, ≈9 años de experiencia, y su riesgo es que no muestra proyectos con Kubernetes').",
@@ -211,7 +213,7 @@ export const workableTopCandidates = registerTool({
 
     // 4. Hydrate full profiles under a self-imposed throttle so this tool can
     //    never eat Workable's 10 req/s global budget on its own.
-    const hydrated: EvidenceCandidate[] = [];
+    const collected: { detail: Raw; row: Raw }[] = [];
     let profileErrors = 0;
     let cursor = 0;
     const workers = Array.from({ length: HYDRATE_CONCURRENCY }, async () => {
@@ -221,7 +223,7 @@ export const workableTopCandidates = registerTool({
         try {
           apiCalls++;
           const detail = await fetchCandidateDetail(String(row.id), ctx.signal);
-          hydrated.push(buildEvidence(detail, row, jobCtx, mustHaves));
+          collected.push({ detail, row });
         } catch {
           profileErrors++;
         }
@@ -229,6 +231,23 @@ export const workableTopCandidates = registerTool({
       }
     });
     await Promise.all(workers);
+
+    // 4.5 TestGorilla in one batch — the matcher's testgorilla_results table
+    //     is fed by the TestGorilla integration itself (keyed by email), so
+    //     it is trustworthy even when the Workable sync is stale. Optional:
+    //     on failure the ranking proceeds and the gap is disclosed.
+    const tg = await fetchTestGorillaSignals(
+      collected.map(({ detail, row }) => String(detail?.email ?? row?.email ?? '')),
+    );
+    const hydrated: EvidenceCandidate[] = collected.map(({ detail, row }) =>
+      buildEvidence(
+        detail,
+        row,
+        jobCtx,
+        mustHaves,
+        tg.byEmail.get(String(detail?.email ?? row?.email ?? '').toLowerCase()) ?? null,
+      ),
+    );
 
     // 5. Evidence pre-rank chooses who goes into the single batched LLM call.
     const preRanked = [...hydrated].sort((a, b) => b.preScore - a.preScore);
@@ -298,6 +317,9 @@ export const workableTopCandidates = registerTool({
     }
     if (profileErrors > 0) {
       dataQuality.push(`${profileErrors} profile(s) failed to load and were left out.`);
+    }
+    if (tg.note) {
+      dataQuality.push(tg.note);
     }
     if (hydrated.length > llmPool.length) {
       dataQuality.push(
