@@ -6,6 +6,8 @@ export interface EstimateInput {
   seniority: 'junior' | 'mid' | 'senior' | 'lead';
   region: 'mx' | 'latam' | 'br' | 'ar' | 'co' | 'cl' | 'pe';
   yearsExperience: number;
+  /** Percentage. Omitted lets the estimator apply Zipdev's standard margin. */
+  margin?: number;
 }
 
 export interface EstimateOutput {

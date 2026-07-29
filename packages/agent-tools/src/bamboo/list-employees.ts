@@ -4,6 +4,7 @@ import { fetchReport } from './roster';
 import {
   DATASET,
   OK_STATUS,
+  PAYROLL_BOUNDARY_NOTE,
   ROSTER_FIELDS,
   type ReportRow,
   adaptEmployee,
@@ -35,8 +36,11 @@ function matches(value: string | null, wanted: string | undefined): boolean {
 
 export const bambooListEmployees = registerTool({
   id: 'bamboo.list_employees',
-  description:
-    "List the people in BambooHR — Zipdev's HR system of record — with their job title, client, division, location, employment type, hire date and who they report to. Filterable by any of those, and by name. Carries NO pay or bill rates; ask for compensation separately if that is what you need. Note the BambooHR convention at Zipdev: 'department' holds the CLIENT or project someone is placed with, and 'division' is the internal grouping (Tech, Non-tech, Internal, LatAm Staff).",
+  description: [
+    "List the people in BambooHR — Zipdev's HR system of record — with their job title, client, division, location, employment type, hire date and who they report to. Filterable by any of those, and by name. This is the everyday \"who works here\" answer and the default for \"who is on <client>\". Carries NO pay or bill rates; ask for compensation separately if that is what you need. Note the BambooHR convention at Zipdev: 'department' holds the CLIENT or project someone is placed with, and 'division' is the internal grouping (Tech, Non-tech, Internal, LatAm Staff).",
+    "Related but different: payroll.team_assignments lists the same kind of people from the payroll service and adds what each costs per month; people.search finds a colleague's email in the Google directory and knows nothing about placements.",
+    PAYROLL_BOUNDARY_NOTE,
+  ].join(' '),
   inputSchema: z.object({
     status: z
       .enum(['active', 'inactive', 'any'])

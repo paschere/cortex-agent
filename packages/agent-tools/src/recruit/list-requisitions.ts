@@ -45,6 +45,7 @@ export const listRequisitions = registerTool({
   description:
     'START HERE for any question about open roles/requisitions — it is the cheap call. Returns one compact row per requisition: title, client, pipeline status, days open, candidate count with stage breakdown, candidates presented to the client, last activity date, assigned recruiter/sourcer, and a one-line summary of the role. ' +
     'It never returns full job descriptions — use recruit.get_requisition for those, and only when the exact wording matters. ' +
+    'This reads the Zipdev matcher, which syncs FROM Workable and can therefore lag it. workable.list_jobs is the same roles straight from the ATS, with less detail; go there when the question is what Workable says right now, or when another workable.* tool needs a shortcode. If the two disagree about a role, report both and name the sync time — do not reconcile them yourself. ' +
     'Capped at 50 per call (default 15): check meta.truncated and meta.totalAvailable and page with offset rather than assuming you saw everything. ' +
     'Filters: status ("open", "closed", or an exact pipeline status such as OPEN / ON_HOLD / KOC / CLOSED_WON), companyId, ownerId (recruiter or sourcer), search (title/location/client), includeArchived. ' +
     'PROVENANCE: every row carries `source` (Workable ATS vs Zipdev matcher DB, with syncedAt/lastUpdatedAt) and `links` to the matcher and to Workable. When you report findings, cite the system and the freshness ("from Workable, synced 2 hours ago") and never present AI-derived scores as ATS data. ' +

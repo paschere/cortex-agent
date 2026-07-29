@@ -5,6 +5,7 @@ import {
   DATASET,
   FIELD,
   OK_STATUS,
+  PAYROLL_BOUNDARY_NOTE,
   RATE_GLOSSARY,
   adaptEmployee,
   compensationSchema,
@@ -61,8 +62,11 @@ export const PROFILE_FIELDS = [
 
 export const bambooGetEmployee = registerTool({
   id: 'bamboo.get_employee',
-  description:
-    "Look up one person's full record in BambooHR by name or work email: job title, the client they are placed with, division, location, employment type, hire date and tenure, who they report to internally, their contact on the client side, and their compensation — both the pay rate Zipdev pays them and the bill rate Zipdev charges the client. Because it carries compensation, prefer the roster tool when someone only wants to know who does what.",
+  description: [
+    "Look up one person's full record in BambooHR by name or work email: job title, the client they are placed with, division, location, employment type, hire date and tenure, who they report to internally, their contact on the client side, and their compensation — both the pay rate Zipdev pays them and the bill rate Zipdev charges the client. Because it carries compensation, use bamboo.list_employees instead when someone only wants to know who does what.",
+    'This is the only place the bill rate and the margin for one person live. payroll.employee_profile covers the same person from the payroll service and adds what they were actually paid period by period, plus their expenses — but has no bill rate.',
+    PAYROLL_BOUNDARY_NOTE,
+  ].join(' '),
   inputSchema: z
     .object({
       name: z.string().max(120).optional().describe('Full or partial name, e.g. "Emmanuel Castro"'),

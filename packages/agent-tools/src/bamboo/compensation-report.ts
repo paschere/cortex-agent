@@ -5,6 +5,7 @@ import {
   DATASET,
   FIELD,
   OK_STATUS,
+  PAYROLL_BOUNDARY_NOTE,
   RATE_GLOSSARY,
   type ReportRow,
   computeMargin,
@@ -65,8 +66,10 @@ const REPORT_FIELDS = [
 
 export const bambooCompensationReport = registerTool({
   id: 'bamboo.compensation_report',
-  description:
-    'Pull pay rates AND bill rates for a whole group of people at once from BambooHR — everyone on a client, everyone in a division, or the entire active roster — with the margin between the two worked out per person and in total. This is a bulk compensation export: it needs a person to approve it before it runs, and it will not run unattended on a schedule. For one individual, use the employee lookup instead.',
+  description: [
+    'Pull pay rates AND bill rates for a whole group of people at once from BambooHR — everyone on a client, everyone in a division, or the entire active roster — with the margin between the two worked out per person and in total. This is the only tool that answers "what is our margin on this account". It is a bulk compensation export: it needs a person to approve it before it runs, and it will not run unattended on a schedule. For one individual, use bamboo.get_employee instead; for the cost side of a client with expenses and trend, use payroll.client_report.',
+    PAYROLL_BOUNDARY_NOTE,
+  ].join(' '),
   inputSchema: z.object({
     client: z
       .string()

@@ -5,7 +5,8 @@ import { gmailFetch } from './client';
 export const gmailListThreads = registerTool({
   id: 'gmail.list_threads',
   description:
-    'List recent Gmail threads for a contact or a Gmail query string. Provide contactEmail (filters to/from that address) and/or query (raw Gmail search syntax). Returns subject, from, to, date, and snippet per thread.',
+    'List recent Gmail threads for a contact or a Gmail query string. Provide contactEmail (filters to/from that address) and/or query (raw Gmail search syntax). Returns subject, from, to, date, and snippet per thread. ' +
+    'This is the same underlying Gmail search as gmail.search, with the To: header included and a shortcut for "everything with this person" — so there is no reason to call both.',
   inputSchema: z
     .object({
       contactEmail: z.string().email().optional(),

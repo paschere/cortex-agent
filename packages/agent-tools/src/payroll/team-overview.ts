@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { fetchTeamOverview } from './client';
+import { BAMBOO_BOUNDARY_NOTE } from './sensitive';
 
 const ClientCount = z.object({ client: z.string(), count: z.number() });
 const DivisionCount = z.object({ division: z.string(), count: z.number() });
@@ -8,8 +9,11 @@ const CurrencyCount = z.object({ currency: z.string(), count: z.number() });
 
 export const payrollTeamOverview = registerTool({
   id: 'payroll.team_overview',
-  description:
-    'Get a live overview of Zipdev team members from the payroll database: total active members, how many are assigned to clients, internal staff, new hires, plus breakdowns by division (Tech/Non-tech/Internal), by client, and by currency. Use this to answer "how many assigned team members are there", headcount, and staffing-distribution questions.',
+  description: [
+    'Counts only, no names and no money: total active members, how many are assigned to clients, internal staff, new hires, plus breakdowns by division (Tech/Non-tech/Internal), by client, and by currency. Use it for "how many assigned team members are there" and staffing-distribution questions.',
+    'Takes no filters — for a headcount narrowed to one client, division, location or job title, bamboo.headcount does that; for the list of who those people actually are, use payroll.team_assignments.',
+    BAMBOO_BOUNDARY_NOTE,
+  ].join(' '),
   inputSchema: z.object({}),
   outputSchema: z.object({
     asOf: z.string(),

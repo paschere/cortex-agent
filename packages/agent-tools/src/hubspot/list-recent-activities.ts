@@ -12,7 +12,9 @@ const ActivityOut = z.object({
 
 export const listRecentActivities = registerTool({
   id: 'hubspot.list_recent_activities',
-  description: 'List recent engagements (emails, calls, notes, meetings, tasks) for a HubSpot company, newest first.',
+  description:
+    'List recent engagements (emails, calls, notes, meetings, tasks) logged against a HubSpot COMPANY, newest first — everything anyone at Zipdev did with that account, whoever they spoke to. ' +
+    'For one named person rather than the whole account, use hubspot.get_contact_timeline; it is the same kind of history keyed to a contact. Calling both for the same account duplicates most rows.',
   inputSchema: z.object({
     companyId: z.string(),
     days: z.number().int().min(1).max(365).default(30),

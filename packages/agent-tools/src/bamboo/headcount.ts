@@ -4,6 +4,7 @@ import { fetchReport } from './roster';
 import {
   DATASET,
   OK_STATUS,
+  PAYROLL_BOUNDARY_NOTE,
   type ReportRow,
   failureStatus,
   monthsBetween,
@@ -38,8 +39,11 @@ const TENURE_BANDS: Array<[string, (m: number) => boolean]> = [
 
 export const bambooHeadcount = registerTool({
   id: 'bamboo.headcount',
-  description:
+  description: [
     'Count people in BambooHR, grouped however you need: by client or project, by division, by location, by employment type (full-time, contractor, bench) or by job title, plus a breakdown of how long people have been with Zipdev. Returns counts only — no names, no pay, no bill rates — so it is the right tool for "how big is the team on X?", "how many people are on the bench?" or "how many are in Mexico?".',
+    'payroll.team_overview answers the same shape of question from the payroll service, but only company-wide and without filters; this one is the one that can be narrowed.',
+    PAYROLL_BOUNDARY_NOTE,
+  ].join(' '),
   inputSchema: z.object({
     groupBy: z
       .enum(GROUPINGS)

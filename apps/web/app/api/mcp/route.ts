@@ -39,6 +39,7 @@ import { sha256, issuer } from '@/lib/oauth';
 import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confirm';
 import { sendApprovalRequestEmail } from '@/lib/approval-email';
 import { decideApproval } from '@/lib/approvals/decide';
+import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import {
   filterTools,
@@ -815,10 +816,29 @@ async function dispatch(
       } catch {
         // DB hiccup: serve the static instructions alone.
       }
+
+      // `instructions` is as close as MCP gets to a system prompt, so it is
+      // where this surface's memories go — through the same builder the web
+      // chat and Google Chat use. Unlike those two it is composed once per
+      // session rather than per turn, which is a staleness the person controls:
+      // a memory added mid-session takes effect on the next reconnect.
+      // Audience is 'private': an MCP session is one person's client.
+      let instructions = INSTRUCTIONS + playbook;
+      try {
+        instructions = (
+          await buildSystemPrompt({
+            userId: auth.userId,
+            basePrompt: instructions,
+          })
+        ).system;
+      } catch {
+        // Same posture as the playbook above: never fail initialize over this.
+      }
+
       return rpcOk(id, {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {}, prompts: {}, resources: {} },
-        instructions: INSTRUCTIONS + playbook,
+        instructions,
         serverInfo: {
           name: SERVER_NAME,
           title: 'Zippy',

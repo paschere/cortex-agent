@@ -21,7 +21,8 @@ interface SearchResponse {
 export const peopleSearch = registerTool({
   id: 'people.search',
   description:
-    "Resolve a person's name to their email address and role. Searches the Zipdev Google Workspace directory (internal @zipdev.com colleagues) and the user's personal Google contacts. Call this when the user mentions someone by name and you need their email — e.g. before gmail.draft or gcal.create_event. Returns up to `limit` matches; if more than one matches, ask the user which one.",
+    "Resolve a person's name to their EMAIL ADDRESS. Searches the Zipdev Google Workspace directory (internal @zipdev.com colleagues) and the user's personal Google contacts — which includes people outside Zipdev. Call this when the user mentions someone by name and you need an address to write to or invite — e.g. before gmail.draft or gcal.create_event. Returns up to `limit` matches; if more than one matches, ask the user which one. " +
+    'It returns a name, an email and whatever job title Google holds, and nothing else — no client placement, no manager, no hire date, no pay. Those questions are about a different population and a different system: bamboo.list_employees for who works at Zipdev and where they are placed, recruit.list_candidates or workable.search_candidates for job applicants, who are not colleagues at all.',
   inputSchema: z.object({
     query: z.string().min(1).describe('Full or partial name (or email) to look up'),
     limit: z.number().int().min(1).max(10).default(5),

@@ -5,6 +5,7 @@ import { resolveEmployee } from './roster';
 import {
   DATASET,
   OK_STATUS,
+  PAYROLL_BOUNDARY_NOTE,
   RATE_GLOSSARY,
   TABLE,
   computeMargin,
@@ -61,8 +62,10 @@ const changeSchema = z.object({
 
 export const bambooCompensationHistory = registerTool({
   id: 'bamboo.compensation_history',
-  description:
-    "Show one person's rate history from BambooHR: every change to the pay rate Zipdev pays them and every change to the bill rate Zipdev charges the client for them, in date order, with the reason recorded for each and the size of each change. Use it for questions like when someone last had a raise, how their rate has moved over time, or whether a pay rise was matched by a client reprice. One person at a time.",
+  description: [
+    "Show one person's rate history from BambooHR: every change to the pay rate Zipdev pays them and every change to the bill rate Zipdev charges the client for them, in date order, with the reason recorded for each and the size of each change. Use it for questions like when someone last had a raise, how their rate has moved over time, or whether a pay rise was matched by a client reprice. One person at a time. This is the AGREED rate over time; payroll.employee_profile shows what was actually paid out each period, which is a different question and a different system.",
+    PAYROLL_BOUNDARY_NOTE,
+  ].join(' '),
   inputSchema: z
     .object({
       name: z.string().max(120).optional(),

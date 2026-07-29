@@ -34,7 +34,8 @@ function toJobSummary(j: any): z.infer<typeof JobSummary> {
 export const workableListJobs = registerTool({
   id: 'workable.list_jobs',
   description:
-    'List jobs (reqs) in Workable, the ground-truth ATS. Filter by state: published (open), draft, closed, or archived. Returns shortcodes used by the other workable.* tools.',
+    'List jobs (reqs) in Workable, the ground-truth ATS. Filter by state: published (open), draft, closed, or archived. Returns shortcodes used by the other workable.* tools. ' +
+    'recruit.list_requisitions lists the same roles as the Zipdev matcher holds them — richer (client, days open, stage breakdown, assigned recruiter) but a synced copy that can lag. Use this one when the question is what Workable says right now, or when you need a shortcode; use that one for reporting on the pipeline. If the two disagree about a role, Workable is the source of truth and the matcher copy is stale — say so rather than picking quietly.',
   inputSchema: z.object({
     state: z.enum(['published', 'draft', 'closed', 'archived']).optional(),
     limit: z.number().int().min(1).max(100).default(50),
@@ -53,7 +54,7 @@ export const workableListJobs = registerTool({
 export const workableGetJob = registerTool({
   id: 'workable.get_job',
   description:
-    'Get full details for one Workable job by shortcode: description, requirements, benefits, hiring team, and creation date. Use for req-status synthesis alongside workable.list_candidates.',
+    'Get full details for one Workable job by shortcode: description, requirements, benefits, hiring team, and creation date. This is the tool for the wording of the posting itself. For how the role is DOING, use workable.job_candidates_summary; for the equivalent record in the Zipdev matcher with client, seats, budget and top candidates, use recruit.get_requisition.',
   inputSchema: z.object({ shortcode: z.string().min(1) }),
   outputSchema: z.object({
     job: z.object({
@@ -119,7 +120,8 @@ function toCandidate(c: any): z.infer<typeof CandidateSummary> {
 export const workableListCandidates = registerTool({
   id: 'workable.list_candidates',
   description:
-    'List candidates in Workable, optionally filtered by job shortcode and/or stage name. Use to synthesize req status: counts per stage, who is where, and how fresh the activity is (updatedAt).',
+    'A flat list of candidates in Workable, optionally filtered by job shortcode and/or stage name — name, current stage, and how fresh the activity is (updatedAt). Use it when you want the raw names, or a single stage of one job. ' +
+    'Do NOT use it to work out how a req is doing by counting rows yourself: workable.job_candidates_summary already returns the per-stage counts, the disqualifications and the newest activity for a job in one call, and workable.top_candidates ranks them with reasons.',
   inputSchema: z.object({
     shortcode: z.string().optional().describe('Job shortcode from workable.list_jobs'),
     stage: z.string().optional().describe('Stage slug/name, e.g. "phone screen"'),
@@ -142,7 +144,8 @@ export const workableListCandidates = registerTool({
 export const workableGetCandidate = registerTool({
   id: 'workable.get_candidate',
   description:
-    'Get one Workable candidate by id: profile, current stage, job, contact info, and source. Ground answers about a candidate in this data.',
+    'Get one Workable candidate by id: profile, current stage, job, contact info, and source — exactly what the ATS holds, nothing added. ' +
+    'recruit.get_candidate covers the same person in the Zipdev matcher and adds AI scores, interview and assessment signals and every job they applied to; those are Zipdev-derived, not ATS facts. Use this tool when the question is what Workable actually says.',
   inputSchema: z.object({ candidateId: z.string().min(1) }),
   outputSchema: z.object({
     candidate: CandidateSummary.extend({

@@ -363,3 +363,15 @@ export function computeMargin(
  */
 export const RATE_GLOSSARY =
   'Pay rate is what Zipdev pays the person (a cost). Bill rate is what Zipdev charges the client for them (revenue). They are different fields in BambooHR — never quote one as the other.';
+
+/**
+ * BambooHR and the payroll service are two systems, not one system read twice.
+ *
+ * They cover overlapping ground — who works here, who they are placed with,
+ * what they are paid — and they are maintained by different people, so they can
+ * genuinely disagree about the same person. That disagreement is worth knowing
+ * about, so no tool here is allowed to quietly resolve it: the model is told to
+ * report both figures and name the source rather than average them or pick one.
+ */
+export const PAYROLL_BOUNDARY_NOTE =
+  'SOURCE: BambooHR. The payroll service (payroll.*) is a separate system covering the same people, and holds what was actually paid out plus expenses. The two can hold different figures for the same person. If you have numbers from both and they disagree, give both and say which came from where — never average them or silently pick one.';

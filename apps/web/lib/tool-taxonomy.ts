@@ -49,7 +49,8 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   },
   people: {
     name: 'People Directory',
-    blurb: 'Who works at Zipdev, what they do and how to reach them.',
+    blurb:
+      'Name to email address, from the Google Workspace directory and personal contacts. Who works where is BambooHR.',
     tone: 'primary',
     icon: 'Users',
   },
@@ -87,13 +88,15 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   },
   payroll: {
     name: 'Payroll',
-    blurb: 'Team assignments, cost projections, expenses and client billing reports.',
+    blurb:
+      'The separate payroll service: what people were actually paid, expenses, cost per client and cost projections.',
     tone: 'rose',
     icon: 'Wallet',
   },
   rate: {
     name: 'Rates',
-    blurb: 'Pay and bill rate estimates for a role, a seniority band or a job description.',
+    blurb:
+      'What to quote for a role that does not exist yet. Rates actually being charged live in BambooHR.',
     tone: 'rose',
     icon: 'Calculator',
   },

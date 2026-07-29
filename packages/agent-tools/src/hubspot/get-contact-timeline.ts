@@ -65,7 +65,8 @@ const KINDS: Array<{
 export const getContactTimeline = registerTool({
   id: 'hubspot.get_contact_timeline',
   description:
-    'Get the full interaction history (calls, notes, meetings, tasks, emails) for a HubSpot contact over the last `days`, merged and sorted newest-first.',
+    'Get the full interaction history (calls, notes, meetings, tasks, emails) for one HubSpot CONTACT over the last `days`, merged and sorted newest-first. ' +
+    'For the whole account rather than one person, use hubspot.list_recent_activities, which is keyed to the company.',
   inputSchema: z.object({
     contactId: z.string(),
     days: z.number().int().min(1).max(365).default(90),

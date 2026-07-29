@@ -12,6 +12,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { buildToolContext } from "@/lib/agent";
+import { buildSystemPrompt } from "@/lib/system-prompt";
 import { deniedToolPatterns, isToolDenied } from "@/lib/tool-access";
 import { loadAgent } from "@zipdev/agents";
 import {
@@ -381,9 +382,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Shared with Google Chat and MCP so a person's standing instructions cannot
+  // apply on one surface and silently not on another. See lib/system-prompt.ts.
+  const { system } = await buildSystemPrompt({
+    userId: user.id,
+    basePrompt: agent.systemPrompt,
+    sections: [ragBlock],
+  });
+
   const result = streamText({
     model: google(agent.defaultModel),
-    system: agent.systemPrompt + (ragBlock ? `\n\n${ragBlock}` : ""),
+    system,
     messages: coreMessages,
     tools: aiTools,
     toolChoice: "auto",

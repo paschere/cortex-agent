@@ -35,7 +35,8 @@ const SignalSchema = z.object({
 export const growthFindSignals = registerTool({
   id: 'growth.find_signals',
   description:
-    'Sweep public job boards (Greenhouse, Lever, Ashby, Workable, SmartRecruiters) for live job posts matching roles Zipdev fills (e.g. "senior fullstack engineer", "QA engineer") at companies hiring remote. Deduplicates against previously found signals (by posting URL) and stores the new ones with status "new" for review. Returns the new signals plus counts. Run weekly (via schedule.create) for the growth pilot.',
+    'Sweep public job boards (Greenhouse, Lever, Ashby, Workable, SmartRecruiters) for live job posts matching roles Zipdev fills (e.g. "senior fullstack engineer", "QA engineer") at companies hiring remote. Deduplicates against previously found signals (by posting URL) and stores the new ones with status "new" for review. Returns the new signals plus counts. Run weekly (via schedule.create) for the growth pilot. ' +
+    'This DISCOVERS companies from a role — you do not name the company. If you already know which company you are asking about, apollo.company_job_postings lists everything that one company is advertising, including on career pages these five boards never see (it costs Apollo credits and stores nothing).',
   inputSchema: z.object({
     roles: z
       .array(z.string().min(2))

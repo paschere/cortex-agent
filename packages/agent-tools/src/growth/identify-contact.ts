@@ -12,7 +12,8 @@ import { webSearch } from '../web';
 export const growthIdentifyContact = registerTool({
   id: 'growth.identify_contact',
   description:
-    'Research the likely hiring decision-maker at a company (for a growth signal): runs targeted web searches for engineering/talent leadership and the company\'s public email pattern. Returns raw evidence snippets with source URLs — synthesize a contact recommendation from them and mark it "found" (name+path seen publicly) or "inferred" (pattern-derived). Then record it with growth.update_signal.',
+    'Research the likely hiring decision-maker at a company (for a growth signal): runs targeted web searches for engineering/talent leadership and the company\'s public email pattern. Returns raw evidence snippets with source URLs — synthesize a contact recommendation from them and mark it "found" (name+path seen publicly) or "inferred" (pattern-derived). Then record it with growth.update_signal. ' +
+    'Try apollo.find_people first when the company is likely to be in Apollo: it returns actual names and job titles rather than snippets to read, and costs nothing until you ask for an email. Use this one when Apollo has no coverage of the company, or to corroborate what Apollo returned with something public.',
   inputSchema: z.object({
     company: z.string().min(2),
     roleTitle: z

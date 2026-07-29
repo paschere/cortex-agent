@@ -24,7 +24,8 @@ const HitSchema = z.object({
 export const kbSearch = registerTool({
   id: 'kb.search',
   description:
-    "Search Zipdev's Knowledge Base — client notes, playbooks, rates, past proposals, anything saved to it. Searches every company-wide space plus the asker's own personal spaces, and nobody else's. Pass `space` with a space name to look in just one. Each result says which space it came from, so you can tell the person whether what you found is company knowledge or their own note.",
+    "Search Zipdev's Knowledge Base — client notes, playbooks, rates, past proposals, anything saved to it. ONE query in, raw matching excerpts out. Searches every company-wide space plus the asker's own personal spaces, and nobody else's. Pass `space` with a space name to look in just one. Each result says which space it came from, so you can tell the person whether what you found is company knowledge or their own note. " +
+    'Use this to look one specific thing up. When you are about to WRITE something that should reflect what Zipdev knows — a proposal, a client email, a rate answer — use kb.context instead: it runs several angles at once and hands back grouped, citable sources. Do not call this three times in a row to do that by hand.',
   inputSchema: z.object({
     query: z.string().min(1),
     space: z

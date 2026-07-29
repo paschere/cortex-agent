@@ -7,7 +7,9 @@ const MonthlyRateRange = z.object({ min: z.number(), max: z.number() });
 export const rateEstimate = registerTool({
   id: 'rate.estimate',
   description:
-    'Estimate monthly USD rate for a LATAM staffing role. Returns a min/max range with notes. Uses the Zipdev 2026-Q1 pricing table.',
+    'Estimate the monthly USD rate to quote for a LATAM staffing role that does not exist yet — pick the role, seniority, region and years, get a min/max range with notes. Uses the Zipdev 2026-Q1 pricing table. ' +
+    'Quotes at Zipdev standard 33% margin unless a different one is asked for — say which margin the number carries, and that it can be changed. ' +
+    'This is a PRICE GUIDE, not a record of anything: it does not know what Zipdev actually charges any client today. For the real bill rate on a person Zipdev already staffs, use bamboo.get_employee; for a whole client or division, bamboo.compensation_report. Never present an estimate from here as what a client is being charged.',
   inputSchema: z.object({
     role: z.enum([
       'frontend',
@@ -28,6 +30,14 @@ export const rateEstimate = registerTool({
     seniority: z.enum(['junior', 'mid', 'senior', 'lead']),
     region: z.enum(['mx', 'latam', 'br', 'ar', 'co', 'cl', 'pe']),
     yearsExperience: z.number().int().min(0).max(40),
+    margin: z
+      .number()
+      .min(0)
+      .max(95)
+      .optional()
+      .describe(
+        'Margin to quote at, as a percentage. Leave it out to use Zipdev standard 33%.',
+      ),
   }),
   outputSchema: z.object({
     monthlyRateUsd: MonthlyRateRange,

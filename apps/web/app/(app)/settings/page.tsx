@@ -1,10 +1,12 @@
 import type { ChatDmStatus, PreferencesView } from '@/app/api/settings/preferences/schema';
 import { PageHeader } from '@/components/ui/page-header';
+import { Panel } from '@/components/ui/panel';
 import { isChatOutboundConfigured } from '@/lib/google-chat';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { PREFERENCE_COLUMNS, rowToPreferences } from '@zipdev/agent-tools';
-import { Settings as SettingsIcon } from 'lucide-react';
+import { PREFERENCE_COLUMNS, listMemories, rowToPreferences } from '@zipdev/agent-tools';
+import { Brain, ChevronRight, Settings as SettingsIcon } from 'lucide-react';
+import Link from 'next/link';
 import { SettingsForm } from './SettingsForm';
 
 export const dynamic = 'force-dynamic';
@@ -17,8 +19,9 @@ export default async function SettingsPage() {
   const user = await requireSession();
   const db = getSupabaseServiceClient();
 
-  // Preferences and the Chat link are independent reads; neither blocks the other.
-  const [{ data }, link] = await Promise.all([
+  // Preferences, the Chat link and the memory counts are independent reads;
+  // none blocks the others.
+  const [{ data }, link, memories] = await Promise.all([
     db.from('user_preferences').select(PREFERENCE_COLUMNS).eq('user_id', user.id).maybeSingle(),
     // The DM thread is discovered, not created: this row only exists once the
     // person has messaged the Zippy app in Google Chat. Reading it here is what
@@ -32,7 +35,13 @@ export default async function SettingsPage() {
       .order('last_seen_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // Never throws the page: a memory read that fails should cost the link's
+    // counts, not the settings form.
+    listMemories(db, user.id).catch(() => []),
   ]);
+
+  const activeMemories = memories.filter((m) => m.status === 'active').length;
+  const pendingMemories = memories.filter((m) => m.status === 'suggested').length;
 
   const p = rowToPreferences(user.id, (data as Record<string, unknown> | null) ?? null);
   const initial: PreferencesView = {
@@ -61,6 +70,34 @@ export default async function SettingsPage() {
         icon={<SettingsIcon className="h-5 w-5" />}
       />
       <SettingsForm initial={initial} chatDm={chatDm} />
+
+      {/* Its own page, linked from here: the list is acted on rather than filled
+          in, and it has to be findable from the one place people look for
+          "things this product holds about me". */}
+      <Panel className="mt-5">
+        <Link
+          href="/settings/memory"
+          className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-surface-2"
+        >
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
+              <Brain className="h-4 w-4" />
+            </span>
+            <div>
+              <div className="text-[13px] font-semibold text-ink">
+                What Zippy remembers about you
+              </div>
+              <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+                {activeMemories === 0
+                  ? 'Nothing yet — Zippy starts picking things up as you work together.'
+                  : `${activeMemories} ${activeMemories === 1 ? 'thing' : 'things'} it carries into every conversation.`}
+                {pendingMemories > 0 && ` ${pendingMemories} waiting for you to keep or drop.`}
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-ink-faint" />
+        </Link>
+      </Panel>
     </>
   );
 }

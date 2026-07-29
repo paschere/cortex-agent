@@ -3,6 +3,7 @@ import { sendApprovalRequestEmail } from '@/lib/approval-email';
 import { confirmationReason } from '@/lib/confirmation-notes';
 import { toChatText } from '@/lib/google-chat';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { google } from '@ai-sdk/google';
 import {
@@ -10,6 +11,7 @@ import {
   classify,
   familyOf,
   filterTools,
+  findMemoryEcho,
   kbSearch,
   maxLevel,
   runTool,
@@ -58,6 +60,16 @@ const PENDING_ACTION_TTL_MS = 15 * 60_000;
  * Aggregates and ordinary answers (CRM, Linear, GitHub, the KB, the web) post
  * normally: the guard exists to stop leaks, not to make the bot useless.
  *
+ * A FOURTH REASON, added with user memories (migration 0051): the answer
+ * REPEATS one of the asker's own memories. Memories are personal notes that
+ * shape every turn, including this one — Zippy still honours "always quote in
+ * USD" in a room of eight people, and should. What must never happen is the
+ * note itself surfacing: nobody else in the space can see it, nobody consented
+ * to it being read out, and "why does the bot know that about me" is the exact
+ * shape of leak this guard exists to prevent. The system prompt asks the model
+ * not to; `findMemoryEcho` checks the finished text and redirects it if it did,
+ * because asking is not a guarantee.
+ *
  * `bamboo` is listed as FINANCIAL at the family level, not tool by tool, and
  * that is deliberate. BambooHR is the HR system of record: every active
  * employee's pay rate and bill rate live there, and the family's own tool
@@ -100,8 +112,10 @@ export interface ChatTurnDelivery {
   privateText: string | null;
   conversationId: string | null;
   /** Set when the answer itself was redirected out of the space. */
-  withheldReason: 'financial' | 'pii' | 'risk' | null;
+  withheldReason: WithheldReason | null;
 }
+
+type WithheldReason = 'financial' | 'pii' | 'risk' | 'memory';
 
 interface StagedConfirmation {
   id: string | null;
@@ -259,10 +273,14 @@ function buildConfirmationBlock(confirmations: StagedConfirmation[]): string {
   return lines.join('\n');
 }
 
-const WITHHELD_NOTE: Record<'financial' | 'pii' | 'risk', string> = {
+const WITHHELD_NOTE: Record<WithheldReason, string> = {
   financial: 'That one carries compensation data, so I sent it to you directly ⚡',
   pii: 'That one carries personal data, so I sent it to you directly ⚡',
   risk: 'That answer is too sensitive for a group space, so I sent it to you directly ⚡',
+  // Says nothing about what the note contains — the note is the thing being
+  // protected, and "I know something private about you" is already more than
+  // the room needs.
+  memory: 'That one got personal, so I sent it to you directly ⚡',
 };
 
 const APPROVAL_IN_SPACE_NOTE =
@@ -441,16 +459,15 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
       ? 'You are answering in a Google Chat SPACE — a group room where everyone present reads your reply. People reach you by @mentioning you. Keep answers short and chat-shaped (a few lines, no headings, no tables). Anything involving compensation, payroll or personal data is delivered to the person privately instead of being posted here; do not restate such details in your reply.'
       : 'You are answering in a 1:1 Google Chat DM. Keep answers short and chat-shaped (a few lines, no headings, no tables) unless the person asks for detail.';
 
-  const system = [
-    agent.systemPrompt,
-    '',
-    '---',
-    surfaceNote,
-    req.directive ? `\n${req.directive}` : '',
-    ragBlock ? `\n${ragBlock}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  // The same builder the web chat and MCP use, so a person's memories reach
+  // every surface or none. `audience: 'group'` adds the do-not-repeat rule to
+  // the prompt; the enforcement is below, on the finished text.
+  const { system, memories } = await buildSystemPrompt({
+    userId: req.userId,
+    basePrompt: agent.systemPrompt,
+    audience: req.audience === 'space' ? 'group' : 'private',
+    sections: [`---\n${surfaceNote}`, req.directive, ragBlock],
+  });
 
   let answer = '';
   try {
@@ -514,9 +531,21 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
     const hitFinancial = [...familiesUsed].some((f) => FINANCIAL_FAMILIES.has(f));
     const hitPii = [...familiesUsed].some((f) => PII_FAMILIES.has(f));
     const hitRisk = risk.highest === 'high' || risk.highest === 'critical';
+    // Deterministic, on the finished text: no tool has to have been called for
+    // a memory to end up quoted, so the family signals above cannot see this.
+    const echoed = findMemoryEcho(answer, memories);
     if (hitFinancial) withheldReason = 'financial';
     else if (hitPii) withheldReason = 'pii';
     else if (hitRisk) withheldReason = 'risk';
+    else if (echoed) {
+      withheldReason = 'memory';
+      // The id only — logging the content would move the note into the log
+      // drain, which is one of the places memories are not supposed to reach.
+      logger.warn('google-chat: answer repeated a personal memory, redirected to DM', {
+        space: req.space,
+        memoryId: echoed,
+      });
+    }
   }
 
   const confirmBlock = buildConfirmationBlock(confirmations);
