@@ -23,7 +23,7 @@ const NOTHING: RepoSelectionInput = {
 };
 
 const ALLOWLIST = [
-  repo('zipdev-agent', { linear_team_keys: ['ENG'] }),
+  repo('cortex-agent', { linear_team_keys: ['ENG'] }),
   repo('zipdev-matcher', { linear_project_ids: ['project-matcher'] }),
   repo('payroll', { allow_pull_requests: false }),
 ];
@@ -33,7 +33,7 @@ describe('pickRepository', () => {
     const result = pickRepository(ALLOWLIST, {
       ...NOTHING,
       directiveKey: 'payroll',
-      labelKey: 'zipdev-agent',
+      labelKey: 'cortex-agent',
       teamKey: 'ENG',
       projectId: 'project-matcher',
     });
@@ -49,7 +49,7 @@ describe('pickRepository', () => {
 
   it('prefers a project mapping over a team mapping', () => {
     const rows = [
-      repo('zipdev-agent', { linear_team_keys: ['ENG'] }),
+      repo('cortex-agent', { linear_team_keys: ['ENG'] }),
       repo('zipdev-matcher', { linear_project_ids: ['p1'], linear_team_keys: ['ENG'] }),
     ];
     const result = pickRepository(rows, { ...NOTHING, projectId: 'p1', teamKey: 'ENG' });
@@ -60,7 +60,7 @@ describe('pickRepository', () => {
   it('falls back to the team mapping, case-insensitively', () => {
     const result = pickRepository(ALLOWLIST, { ...NOTHING, teamKey: 'eng' });
     expect(result).toMatchObject({ ok: true, via: 'team' });
-    if (result.ok) expect(result.repository.key).toBe('zipdev-agent');
+    if (result.ok) expect(result.repository.key).toBe('cortex-agent');
   });
 
   it('carries allow_pull_requests through, so the executor cannot decide it', () => {
@@ -73,7 +73,7 @@ describe('pickRepository', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toMatch(/does not say which repository/);
-      expect(result.available).toEqual(['payroll', 'zipdev-agent', 'zipdev-matcher']);
+      expect(result.available).toEqual(['cortex-agent', 'payroll', 'zipdev-matcher']);
     }
   });
 
@@ -103,7 +103,7 @@ describe('pickRepository', () => {
 
   it('REJECTS an ambiguous team mapping instead of choosing', () => {
     const rows = [
-      repo('zipdev-agent', { linear_team_keys: ['ENG'] }),
+      repo('cortex-agent', { linear_team_keys: ['ENG'] }),
       repo('zipdev-matcher', { linear_team_keys: ['ENG'] }),
     ];
     const result = pickRepository(rows, { ...NOTHING, teamKey: 'ENG' });
@@ -113,7 +113,7 @@ describe('pickRepository', () => {
 
   it('ignores inactive rows when a team mapping is applied', () => {
     const rows = [
-      repo('zipdev-agent', { linear_team_keys: ['ENG'], is_active: false }),
+      repo('cortex-agent', { linear_team_keys: ['ENG'], is_active: false }),
       repo('zipdev-matcher', { linear_team_keys: ['ENG'] }),
     ];
     const result = pickRepository(rows, { ...NOTHING, teamKey: 'ENG' });

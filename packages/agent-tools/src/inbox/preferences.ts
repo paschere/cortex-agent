@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 /**
  * The `user_preferences` row (migration 0043) that governs the daily digest.
  *
- * Every field that could cause Zippy to read a mailbox or send something
+ * Every field that could cause Cortex to read a mailbox or send something
  * defaults to OFF. A missing row means "this person never opted in" — never
  * "use sensible defaults and go".
  */
@@ -20,7 +20,7 @@ export interface DigestPreferences {
   deliverChat: boolean;
   chatWebhookUrl: string | null;
   /**
-   * Direct-message the person as the Zippy Chat app (migration 0045). Private
+   * Direct-message the person as the Cortex Chat app (migration 0045). Private
    * to them, and only possible once they have messaged the app — the DM space
    * is discovered then, not created by us.
    */

@@ -1,4 +1,4 @@
-import { NotFoundError, ValidationError } from '@zipdev/core';
+import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { computeNextRun } from './recurrence';

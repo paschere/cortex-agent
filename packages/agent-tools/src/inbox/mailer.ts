@@ -29,7 +29,7 @@ export async function sendToolEmail(opts: {
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { sent: false, reason: 'email sending is not configured' };
-  const from = process.env.EMAIL_FROM ?? 'Zippy <onboarding@resend.dev>';
+  const from = process.env.EMAIL_FROM ?? 'Cortex <onboarding@resend.dev>';
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',

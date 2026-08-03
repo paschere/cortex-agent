@@ -1,6 +1,6 @@
 import 'server-only';
 import type { Sandbox } from '@vercel/sandbox';
-import { type CheckOutcome, type CheckPlan, buildCheckPlan } from '@zipdev/agent-tools';
+import { type CheckOutcome, type CheckPlan, buildCheckPlan } from '@cortex/agent-tools';
 import { REPO_ROOT, run, truncateOutput } from './sandbox';
 
 /**
@@ -18,7 +18,7 @@ import { REPO_ROOT, run, truncateOutput } from './sandbox';
  * and an inconclusive plan can never be reported as "verified".
  */
 
-const STATE_DIR = `${REPO_ROOT}/.zippy`;
+const STATE_DIR = `${REPO_ROOT}/.cortex`;
 const RESULT_DIR = `${STATE_DIR}/checks`;
 const SCRIPT_PATH = `${STATE_DIR}/run-checks.sh`;
 

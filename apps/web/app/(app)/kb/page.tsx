@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { listVisibleSpaces } from '@zipdev/agent-tools';
+import { listVisibleSpaces } from '@cortex/agent-tools';
 import { BookOpen } from 'lucide-react';
 import { KnowledgeBase } from './_components/KnowledgeBase';
 import type { SpaceSummary } from './_components/types';
@@ -13,7 +13,7 @@ export default async function KnowledgeBasePage() {
   const db = getSupabaseServiceClient();
 
   // One rule for "what can this person see", shared with retrieval. The page
-  // cannot show a space Zippy would refuse to search, or vice versa.
+  // cannot show a space Cortex would refuse to search, or vice versa.
   const spaces = await listVisibleSpaces(db, user.id);
 
   const counts = new Map<
@@ -82,7 +82,7 @@ export default async function KnowledgeBasePage() {
     <>
       <PageHeader
         title="Knowledge Base"
-        subtitle="What Zippy knows. Company spaces answer everyone's questions; your own spaces answer only yours."
+        subtitle="What Cortex knows. Company spaces answer everyone's questions; your own spaces answer only yours."
         icon={<BookOpen className="h-5 w-5" />}
       />
       <KnowledgeBase spaces={summaries} isAdmin={isAdmin} viewerName={user.name ?? user.email} />

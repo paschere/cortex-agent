@@ -1,5 +1,5 @@
 [package]
-name = "zipdev-agent-desktop"
+name = "cortex-agent-desktop"
 version = "0.1.0"
 edition = "2021"
 

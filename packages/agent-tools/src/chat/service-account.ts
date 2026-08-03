@@ -1,9 +1,9 @@
 import { createSign } from 'node:crypto';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 import { CHAT_TEXT_LIMIT } from './webhook';
 
 /**
- * Outbound Google Chat as the ZIPPY CHAT APP — service-account credentials, no
+ * Outbound Google Chat as the CORTEX CHAT APP — service-account credentials, no
  * webhook anywhere.
  *
  * Two Google Chat paths exist side by side and must not be confused:

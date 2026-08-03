@@ -24,7 +24,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { decryptToken, logger } from '@zipdev/core';
+import { decryptToken, logger } from '@cortex/core';
 import { consumeToken } from './rate-limit';
 
 // ---------------------------------------------------------------------------
@@ -322,7 +322,7 @@ async function mcpHandshake(
   await rpcOverSse(conn, headers, 'initialize', {
     protocolVersion: '2024-11-05',
     capabilities: {},
-    clientInfo: { name: 'zipdev-agent-external-mcp', version: '1.0.0' },
+    clientInfo: { name: 'cortex-agent-external-mcp', version: '1.0.0' },
   }, signal);
   await notifyOverSse(conn, headers, 'notifications/initialized', signal);
 }

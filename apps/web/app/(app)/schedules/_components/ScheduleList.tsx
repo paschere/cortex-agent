@@ -198,7 +198,7 @@ export function ScheduleList({
         <AlarmClock className="mx-auto mb-3 h-8 w-8 text-primary" />
         <p className="mb-1 font-semibold text-ink">No routines yet</p>
         <p>
-          Ask Zippy in{' '}
+          Ask Cortex in{' '}
           <Link href="/chat" className="font-semibold text-primary hover:text-primary-strong">
             chat
           </Link>

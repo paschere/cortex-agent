@@ -9,7 +9,7 @@
 --   scope = 'global'  -> a global space. Everyone in the org sees it. Only an
 --                        org admin can create one.
 --   scope = 'user'    -> a personal space. Exactly one person sees it, and only
---                        their own Zippy turns retrieve from it.
+--                        their own Cortex turns retrieve from it.
 --
 -- The other two scopes go away as product concepts (see the folding below).
 -- No second table, no `space_id` alongside `collection_id`: one concept, one
@@ -147,7 +147,7 @@ update public.kb_collections set created_by = scope_id where scope = 'user' and 
 -- global bucket, so "upload a document" always has a sensible default target.
 insert into public.kb_collections (scope, scope_id, name, description)
 select 'global'::kb_scope, null, 'General',
-       'Everything the whole company should be able to ask Zippy about.'
+       'Everything the whole company should be able to ask Cortex about.'
 where not exists (
   select 1 from public.kb_collections where scope = 'global' and lower(name) = 'general'
 );
@@ -339,7 +339,7 @@ grant execute on function public.kb_search_scoped(uuid, vector, text, int, uuid[
 -- ---------------------------------------------------------------------------
 -- 8. The tool is called kb.list_spaces now
 -- ---------------------------------------------------------------------------
--- Tool ids show up in the /tools catalogue and in Zippy's own reasoning, and
+-- Tool ids show up in the /tools catalogue and in Cortex's own reasoning, and
 -- "collections" is a word this product no longer uses anywhere a person can
 -- see. Agents pin their tools by id, so the rename has to follow the rows.
 update public.agents

@@ -64,7 +64,7 @@ export function KnowledgeBase({
           {/* --------------------------------------------------- company spaces */}
           <SpaceGroup
             title="Company spaces"
-            blurb="Everyone can read these, and everyone's Zippy answers from them. Only an org admin can add one."
+            blurb="Everyone can read these, and everyone's Cortex answers from them. Only an org admin can add one."
             icon={Building2}
             spaces={company}
             onOpen={setSelectedId}
@@ -79,12 +79,12 @@ export function KnowledgeBase({
           {/* ------------------------------------------------------- your spaces */}
           <SpaceGroup
             title="Your spaces"
-            blurb="Only you can read these, and only your own Zippy answers from them. Nobody else's search will ever reach them."
+            blurb="Only you can read these, and only your own Cortex answers from them. Nobody else's search will ever reach them."
             icon={Lock}
             spaces={mine}
             onOpen={setSelectedId}
             action={{ label: 'New personal space', onClick: () => setCreating('personal') }}
-            emptyText="Somewhere to keep your own working notes — a client's quirks, a draft you want Zippy to remember."
+            emptyText="Somewhere to keep your own working notes — a client's quirks, a draft you want Cortex to remember."
           />
         </>
       )}
@@ -183,7 +183,7 @@ function AskPanel({
           {results.length === 0 ? (
             <p className="text-[12.5px] leading-relaxed text-ink-muted">
               Nothing on that{scopeName ? ` in ${scopeName}` : ''} yet. The Knowledge Base only
-              knows what has been put into it — add a document to a space and Zippy can answer from
+              knows what has been put into it — add a document to a space and Cortex can answer from
               it a minute later.
             </p>
           ) : (
@@ -218,7 +218,7 @@ function AskPanel({
 
       {results === null && !error && (
         <p className="mt-3 text-[11.5px] text-ink-faint">
-          The same search Zippy runs before it answers you — so if it is not here, Zippy does not
+          The same search Cortex runs before it answers you — so if it is not here, Cortex does not
           know it either.
         </p>
       )}
@@ -369,9 +369,9 @@ function FirstRun({ isAdmin, onCreate }: { isAdmin: boolean; onCreate: () => voi
       </span>
       <p className="mb-1 text-[15px] font-bold text-ink">Nothing in here yet</p>
       <p className="mx-auto max-w-lg text-[13px] leading-relaxed text-ink-muted">
-        The Knowledge Base is where Zippy remembers things: how a client likes to be pitched, what
+        The Knowledge Base is where Cortex remembers things: how a client likes to be pitched, what
         we charge for a senior back-end developer, the proposal that won last quarter. Put a
-        document in, and Zippy can answer from it the next time anyone asks — with the document
+        document in, and Cortex can answer from it the next time anyone asks — with the document
         named, so you can check.
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">

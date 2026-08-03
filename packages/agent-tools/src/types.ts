@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { IntegrationProvider, Logger, UUID } from '@zipdev/core';
+import type { IntegrationProvider, Logger, UUID } from '@cortex/core';
 import type { z } from 'zod';
 
 export interface IntegrationsClient {

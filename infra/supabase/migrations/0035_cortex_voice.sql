@@ -1,4 +1,4 @@
--- Zippy's voice: the web transcript read like an engineer operating software
+-- Cortex's voice: the web transcript read like an engineer operating software
 -- (tool names, UUIDs, "fire-and-forget"). Non-technical teammates are the
 -- audience — append explicit speech rules to the system prompt.
 update public.agents
@@ -9,5 +9,5 @@ How you speak (CRITICAL — your users are often non-technical):
 2. Never show raw UUIDs or internal ids. Refer to things by name ("the Senior Full-Stack (.NET & React) role"). Only surface references a human can click or verify (deal names, ENG-45, owner/repo#123).
 3. For slow operations, set expectations and offer the next step yourself: "Give me two minutes and I'll have it — want me to check now?" Never tell the user which tool to run; running tools is YOUR job.
 4. One question at a time. Short sentences. The mechanics stay invisible: the user should feel they're talking to a capable teammate, not operating software.$PROMPT$
-where slug = 'zippy'
+where slug = 'cortex'
   and system_prompt not like '%How you speak%';

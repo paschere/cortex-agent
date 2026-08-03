@@ -1,25 +1,25 @@
-import { IntegrationError, ValidationError } from '@zipdev/core';
+import { IntegrationError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { getVisibleDocument } from '../kb/spaces';
 
 /**
- * zippy.process — server-side delegation to Zippy's own LLM (Gemini).
+ * cortex.process — server-side delegation to Cortex's own LLM (Gemini).
  *
  * Context offloading: instead of pulling a large document (or blob of text)
  * into the CALLING model's context, the heavy content is processed here — on
  * Zipdev's side, with Zipdev's model and keys — and only the distilled result
  * travels back. From Claude's perspective it is one tool call; the tokens the
- * source material consumes never leave Zippy.
+ * source material consumes never leave Cortex.
  */
 
 const GEMINI_MODEL = 'gemini-3.1-flash-lite';
 const MAX_SOURCE_CHARS = 400_000;
 
-export const zippyProcess = registerTool({
-  id: 'zippy.process',
+export const cortexProcess = registerTool({
+  id: 'cortex.process',
   description:
-    "Delegate heavy text processing to Zippy's own server-side LLM instead of doing it yourself: summarize, extract structured data, classify, translate, or answer questions about a large source WITHOUT loading it into your context. Provide either documentId (a Knowledge Base document — Zippy reads all its chunks server-side) or content (raw text). Returns only the distilled result. Use this whenever the source material is large and you only need the analysis.",
+    "Delegate heavy text processing to Cortex's own server-side LLM instead of doing it yourself: summarize, extract structured data, classify, translate, or answer questions about a large source WITHOUT loading it into your context. Provide either documentId (a Knowledge Base document — Cortex reads all its chunks server-side) or content (raw text). Returns only the distilled result. Use this whenever the source material is large and you only need the analysis.",
   inputSchema: z.object({
     instruction: z
       .string()
@@ -32,7 +32,7 @@ export const zippyProcess = registerTool({
       .string()
       .uuid()
       .optional()
-      .describe('KB document id — Zippy loads its full text server-side'),
+      .describe('KB document id — Cortex loads its full text server-side'),
     content: z
       .string()
       .max(MAX_SOURCE_CHARS)
@@ -78,7 +78,7 @@ export const zippyProcess = registerTool({
     if (source.length > MAX_SOURCE_CHARS) source = source.slice(0, MAX_SOURCE_CHARS);
 
     const sourceLabel = documentTitle ? ` (document: "${documentTitle}")` : '';
-    const prompt = `You are Zippy, Zipdev's internal processing engine. Follow the instruction precisely and answer with ONLY the requested output — no preamble.\n\nINSTRUCTION:\n${input.instruction}\n\nSOURCE${sourceLabel}:\n${source}`;
+    const prompt = `You are Cortex, Zipdev's internal processing engine. Follow the instruction precisely and answer with ONLY the requested output — no preamble.\n\nINSTRUCTION:\n${input.instruction}\n\nSOURCE${sourceLabel}:\n${source}`;
 
     const r = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,

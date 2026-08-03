@@ -1,20 +1,20 @@
 import { createHash } from 'node:crypto';
 
 /**
- * What counts as "Zippy, take this one".
+ * What counts as "Cortex, take this one".
  *
  * Linear fires a webhook for every keystroke-level change on an issue. Almost
  * all of it is noise, and the cost of a false positive here is not a wasted
  * request — it is an autonomous agent cloning a repository and opening a pull
  * request nobody asked for. So the trigger is deliberately narrow and, for
  * updates, EDGE-TRIGGERED: the assignment (or label) must have just changed in
- * this very event. An issue that has been assigned to Zippy for a week does not
+ * this very event. An issue that has been assigned to Cortex for a week does not
  * re-fire every time somebody edits its description.
  *
  * Which signal fires it is configurable — `LINEAR_TRIGGER_MODE`:
  *
- *   assignee  (default)  the issue is assigned to Zippy's own Linear account
- *   label                the issue carries `LINEAR_TRIGGER_LABEL` (default "zippy")
+ *   assignee  (default)  the issue is assigned to Cortex's own Linear account
+ *   label                the issue carries `LINEAR_TRIGGER_LABEL` (default "cortex")
  *   either               whichever happens first
  *
  * The default is `assignee`, and that is the recommended setting. Assignment is
@@ -23,7 +23,7 @@ import { createHash } from 'node:crypto';
  * the issue header where a human cannot miss it. Labels get sprayed on in bulk,
  * applied by Linear automations and templates, and copied when an issue is
  * duplicated — every one of those is a way to start unattended work by
- * accident. Label mode exists for teams that want Zippy to work an issue that
+ * accident. Label mode exists for teams that want Cortex to work an issue that
  * stays assigned to a human, which is a real workflow, just not the safe
  * default.
  */
@@ -32,23 +32,23 @@ export type TriggerMode = 'assignee' | 'label' | 'either';
 
 export interface TriggerConfig {
   mode: TriggerMode;
-  /** Linear user UUID of Zippy's own account. */
-  zippyUserId: string | null;
+  /** Linear user UUID of Cortex's own account. */
+  cortexUserId: string | null;
   /** Fallback identity check when only the email is known. */
-  zippyUserEmail: string | null;
+  cortexUserEmail: string | null;
   /** Lowercased label name that fires the trigger in label/either mode. */
   label: string;
 }
 
-export const DEFAULT_TRIGGER_LABEL = 'zippy';
+export const DEFAULT_TRIGGER_LABEL = 'cortex';
 
 export function triggerConfigFromEnv(env: NodeJS.ProcessEnv = process.env): TriggerConfig {
   const raw = (env.LINEAR_TRIGGER_MODE ?? 'assignee').trim().toLowerCase();
   const mode: TriggerMode = raw === 'label' || raw === 'either' ? raw : 'assignee';
   return {
     mode,
-    zippyUserId: env.LINEAR_ZIPPY_USER_ID?.trim() || null,
-    zippyUserEmail: env.LINEAR_ZIPPY_USER_EMAIL?.trim().toLowerCase() || null,
+    cortexUserId: env.LINEAR_CORTEX_USER_ID?.trim() || null,
+    cortexUserEmail: env.LINEAR_CORTEX_USER_EMAIL?.trim().toLowerCase() || null,
     label: (env.LINEAR_TRIGGER_LABEL ?? DEFAULT_TRIGGER_LABEL).trim().toLowerCase(),
   };
 }
@@ -129,13 +129,13 @@ function labelNames(data: LinearIssueData): string[] {
 }
 
 function assigneeMatches(data: LinearIssueData, config: TriggerConfig): boolean {
-  if (config.zippyUserId) {
+  if (config.cortexUserId) {
     const id = data.assigneeId ?? data.assignee?.id ?? null;
-    if (id && id === config.zippyUserId) return true;
+    if (id && id === config.cortexUserId) return true;
   }
-  if (config.zippyUserEmail) {
+  if (config.cortexUserEmail) {
     const email = data.assignee?.email?.trim().toLowerCase();
-    if (email && email === config.zippyUserEmail) return true;
+    if (email && email === config.cortexUserEmail) return true;
   }
   return false;
 }
@@ -176,12 +176,12 @@ export function evaluateTrigger(body: LinearWebhookBody, config: TriggerConfig):
 
   if (
     wantsAssignee &&
-    !config.zippyUserId &&
-    !config.zippyUserEmail &&
+    !config.cortexUserId &&
+    !config.cortexUserEmail &&
     config.mode === 'assignee'
   ) {
     // Refusing to fire beats guessing. With no configured identity, "assigned to
-    // Zippy" has no meaning and every assignment would look like a match.
+    // Cortex" has no meaning and every assignment would look like a match.
     return { accepted: false, reason: 'assignee trigger is not configured' };
   }
 
@@ -204,7 +204,7 @@ export function evaluateTrigger(body: LinearWebhookBody, config: TriggerConfig):
  * which codebase an issue belongs to, because a human typed it on purpose.
  *
  * Accepts the shapes people actually write in Linear: `Repo: payroll`,
- * `**Repo:** payroll`, `- repo = payroll`, `Repository: zipdev-agent`. Only the
+ * `**Repo:** payroll`, `- repo = payroll`, `Repository: cortex-agent`. Only the
  * FIRST match counts; a second line disagreeing with the first is ambiguity,
  * and ambiguity is resolved by asking, not by picking.
  */

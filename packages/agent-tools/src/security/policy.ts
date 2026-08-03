@@ -7,7 +7,7 @@
  * to consult it. Keeping the classifier pure also makes the whole matrix
  * unit-testable without a database.
  *
- * POSTURE: flag first, block almost never. Zippy has to stay useful, so the
+ * POSTURE: flag first, block almost never. Cortex has to stay useful, so the
  * guardrail's job is to make risk visible and reviewable — not to stop people
  * working. Ordinary reads, writes and drafts pass with no friction at all.
  * The category actually worth watching is EXPORT: pulling a body of data out
@@ -128,7 +128,7 @@ const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   slack: 'internal',
   schedule: 'internal',
   pipeline: 'internal',
-  zippy: 'internal',
+  cortex: 'internal',
   security: 'internal',
   web: 'public',
 };

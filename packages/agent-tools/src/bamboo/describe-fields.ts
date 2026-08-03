@@ -17,7 +17,7 @@ import {
  * Zipdev's instance carries ~294 fields and 33 historical tables, most of them
  * custom and invisible from the outside. Without this, the only way to find out
  * whether something is recorded — a visa expiry, an equity grant, a bill rate —
- * is to ask a person. With it, Zippy can answer "do we track X?" honestly, and
+ * is to ask a person. With it, Cortex can answer "do we track X?" honestly, and
  * say no when the answer is no.
  *
  * Names and types only. Numeric field ids are internal plumbing and are never
@@ -37,7 +37,7 @@ interface RawTable {
 }
 
 // Fields BambooHR exposes that carry identity or bank details. They are named
-// so Zippy can say the category exists, but this family provides no tool that
+// so Cortex can say the category exists, but this family provides no tool that
 // reads their values — see the security policy's PERSONAL_ID_RE for why.
 const RESTRICTED_RE =
   /ssn|social security|passport|bank|clabe|iban|swift|account number|visa #|driver license|national id|birth date|date of birth/i;

@@ -14,7 +14,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { buildToolContext } from "@/lib/agent";
 import { buildSystemPrompt } from "@/lib/system-prompt";
 import { deniedToolPatterns, isToolDenied } from "@/lib/tool-access";
-import { loadAgent } from "@zipdev/agents";
+import { loadAgent } from "@cortex/agents";
 import {
   filterTools,
   runTool,
@@ -22,8 +22,8 @@ import {
   fetchEnabledExternalTools,
   callExternalTool,
   type ExternalServerRow,
-} from "@zipdev/agent-tools";
-import { ConfirmationRequiredError } from "@zipdev/core";
+} from "@cortex/agent-tools";
+import { ConfirmationRequiredError } from "@cortex/core";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -51,7 +51,7 @@ const CORE_FAMILIES = new Set([
   "web",
   "pipeline",
   "schedule",
-  "zippy",
+  "cortex",
   "format",
 ]);
 
@@ -133,7 +133,7 @@ const MessageSchema = z.object({
 });
 
 const Body = z.object({
-  agentSlug: z.string().default("zippy"),
+  agentSlug: z.string().default("cortex"),
   conversationId: z.string().uuid().optional(),
   messages: z.array(MessageSchema).min(1),
 });

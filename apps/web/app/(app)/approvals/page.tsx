@@ -126,9 +126,9 @@ export default async function ApprovalsPage() {
       {nothingPending ? (
         <Panel className="p-10 text-center text-[13px] text-ink-faint">
           <Inbox className="mx-auto mb-3 h-8 w-8 text-primary" />
-          <p className="mb-1 font-semibold text-ink">All clear — Zippy keeps working ⚡</p>
+          <p className="mb-1 font-semibold text-ink">All clear — Cortex keeps working ⚡</p>
           <p className="mx-auto max-w-md">
-            When Zippy needs your sign-off — a gated action, a fresh growth signal, or a routine
+            When Cortex needs your sign-off — a gated action, a fresh growth signal, or a routine
             that hit an error — it shows up here.
           </p>
         </Panel>

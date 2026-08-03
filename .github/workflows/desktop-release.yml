@@ -7,7 +7,7 @@
 # Required GitHub Secrets (configure in Settings → Secrets → Actions):
 # ─────────────────────────────────────────────────────────────────────
 # Tauri updater signing (REQUIRED for update delivery; generate once with
-#   `pnpm --filter @zipdev/desktop tauri signer generate`):
+#   `pnpm --filter @cortex/desktop tauri signer generate`):
 #   TAURI_SIGNING_PRIVATE_KEY          – base64-encoded private key file
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD – passphrase for that key
 #

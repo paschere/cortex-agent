@@ -1,4 +1,4 @@
-# Design: GitHub + Linear integrations and the Zippy Developer agent
+# Design: GitHub + Linear integrations and the Cortex Developer agent
 
 **Date:** 2026-06-01
 **Status:** Approved (design), pending implementation plan
@@ -8,9 +8,9 @@
 Add two native OAuth integrations (GitHub, Linear) following the existing
 Google/HubSpot pattern, a set of read/write/stats tools for each, a KB-write
 capability so generated documentation can be persisted, and a new agent
-**Zippy Developer** that uses these tools.
+**Cortex Developer** that uses these tools.
 
-Zippy's capabilities (from the request):
+Cortex's capabilities (from the request):
 
 - Read GitHub comments (issues/PRs).
 - Generate Markdown documentation of the repos it can access and save it to the
@@ -203,19 +203,19 @@ runtime-agnostic with no new coupling.
 
 ### Doc generation is agent-driven, not a composite tool
 
-Zippy reads the repo via `github.*` tools, **writes the Markdown itself** (LLM
+Cortex reads the repo via `github.*` tools, **writes the Markdown itself** (LLM
 synthesis), then calls `kb.create_document` to persist. No
 `sales.draft_proposal`-style template composite — simpler and more flexible.
 
 ---
 
-## 4. Agent: Zippy Developer
+## 4. Agent: Cortex Developer
 
-- `packages/agents/src/zippy/index.ts`:
+- `packages/agents/src/cortex/index.ts`:
   ```ts
-  export const zippyDeveloperAgent: AgentDefinition = {
-    id: "zippy",
-    name: "Zippy Developer",
+  export const cortexDeveloperAgent: AgentDefinition = {
+    id: "cortex",
+    name: "Cortex Developer",
     team: "engineering",
     defaultModel: "gemini-3.1-flash-lite",
     systemPrompt, // from system-prompt.md
@@ -227,14 +227,14 @@ synthesis), then calls `kb.create_document` to persist. No
       "web.search",
     ],
     kbScopes: ["global", "team:engineering", "user", "conversation"],
-    greeting: "¡Hola! Soy Zippy, tu co-pilot de desarrollo. ¿Qué miramos hoy?",
+    greeting: "¡Hola! Soy Cortex, tu co-pilot de desarrollo. ¿Qué miramos hoy?",
   };
   ```
-- `packages/agents/src/zippy/system-prompt.md`: role, how to document repos (read
+- `packages/agents/src/cortex/system-prompt.md`: role, how to document repos (read
   → synthesize Markdown → `kb.create_document`), how to explain roadmaps and
   report stats, and the confirmation discipline for writes.
 - Register in `packages/agents/src/index.ts` (`REGISTRY.set(...)` + export).
-- Seed migration: ensure an `Engineering` team exists, then insert the `zippy`
+- Seed migration: ensure an `Engineering` team exists, then insert the `cortex`
   agent row (slug, name, team_id, system_prompt, default_model,
   allowed_tool_ids), `on conflict (slug) do nothing`.
 
@@ -247,7 +247,7 @@ synthesis), then calls `kb.create_document` to persist. No
 - `apps/web/lib/tool-labels.ts`: labels + icons for all new tools
   (`github_*`, `linear_*`, `kb_create_document`).
 - `apps/web/app/(app)/agents/[slug]/page.tsx`: add "GitHub" and "Linear" tool
-  groups to the picker. The agents list shows Zippy automatically from the DB.
+  groups to the picker. The agents list shows Cortex automatically from the DB.
 
 ---
 
@@ -255,11 +255,11 @@ synthesis), then calls `kb.create_document` to persist. No
 
 1. **Phase A — Core read path:** providers (core type + enum migration),
    `IntegrationsClient` widening, OAuth routes (both), `githubFetch`/`linearFetch`
-   clients, all read tools, Zippy agent definition + seed, integrations UI cards,
-   tool labels. Outcome: connect both, Zippy reads issues/comments/PRs/projects
+   clients, all read tools, Cortex agent definition + seed, integrations UI cards,
+   tool labels. Outcome: connect both, Cortex reads issues/comments/PRs/projects
    end-to-end.
 2. **Phase B — Documentation:** `ingestMarkdown` helper + `kb.create_document`
-   tool; Zippy system prompt doc-gen workflow.
+   tool; Cortex system prompt doc-gen workflow.
 3. **Phase C — Writes:** `github.create_issue`, `github.create_issue_comment`,
    `linear.create_issue`, `linear.create_comment` (confirmation-gated).
 4. **Phase D — Statistics:** `github.repo_activity`, `github.pr_metrics`,
@@ -272,9 +272,9 @@ synthesis), then calls `kb.create_document` to persist. No
   collection resolution + authority checks for `kb.create_document`.
 - Integration: OAuth callback upsert (long-lived token, null refresh/expiry);
   `getAccessToken` returns stored token without hitting a refresher.
-- E2E (manual, per phase): connect GitHub/Linear; Zippy reads a repo's comments;
-  Zippy documents a repo and the doc is searchable via `kb.search`; Zippy creates
-  an issue after confirmation; Zippy reports cycle stats.
+- E2E (manual, per phase): connect GitHub/Linear; Cortex reads a repo's comments;
+  Cortex documents a repo and the doc is searchable via `kb.search`; Cortex creates
+  an issue after confirmation; Cortex reports cycle stats.
 
 ## 8. Out of scope (YAGNI / follow-ons)
 

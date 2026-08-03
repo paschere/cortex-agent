@@ -2,7 +2,7 @@ import { claimDelivery, supabaseDeliveryLedger } from '@/lib/dev-tasks/claim';
 import { type DevTaskIntakeEvent, EVENT_TASK_INTAKE } from '@/lib/dev-tasks/contract';
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 import {
   type LinearWebhookBody,
@@ -15,10 +15,10 @@ import {
 import { verifyLinearRequest } from './verify';
 
 /**
- * Linear → Zippy: how an issue becomes a queued unit of development work.
+ * Linear → Cortex: how an issue becomes a queued unit of development work.
  *
  * Linear POSTs every issue change here. This endpoint decides, in a few
- * milliseconds, whether the change is "a human handed Zippy this ticket" — and
+ * milliseconds, whether the change is "a human handed Cortex this ticket" — and
  * if so, claims the delivery and hands it to the queue. It does NOT resolve
  * repositories, create task rows, comment on Linear, or clone anything: all of
  * that happens in `dev-task-intake` (apps/web/inngest/functions), because a
@@ -37,9 +37,9 @@ import { verifyLinearRequest } from './verify';
  *   5. ENQUEUE and return 202. If the enqueue fails the claim is released, so
  *      Linear's retry can succeed rather than being swallowed as a duplicate.
  *
- * Configuration lives in env (see docs/operations/zippy-dev-tasks.md):
- * LINEAR_WEBHOOK_SECRET, LINEAR_TRIGGER_MODE, LINEAR_ZIPPY_USER_ID,
- * LINEAR_ZIPPY_USER_EMAIL, LINEAR_TRIGGER_LABEL.
+ * Configuration lives in env (see docs/operations/cortex-dev-tasks.md):
+ * LINEAR_WEBHOOK_SECRET, LINEAR_TRIGGER_MODE, LINEAR_CORTEX_USER_ID,
+ * LINEAR_CORTEX_USER_EMAIL, LINEAR_TRIGGER_LABEL.
  */
 
 export const runtime = 'nodejs';

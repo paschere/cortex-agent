@@ -14,7 +14,7 @@ In claude.ai go to **Settings → Connectors → Add custom connector** and past
 MCP endpoint URL, which is `<issuer>/api/mcp`:
 
 ```
-https://zippy-zipdev.vercel.app/api/mcp
+https://cortex-zipdev.vercel.app/api/mcp
 ```
 
 (Replace `app.zipdev.com` with whatever public origin `BETTER_AUTH_URL` /
@@ -25,12 +25,12 @@ That is the only URL you paste. Everything else is auto-discovered.
 ## Claude Code
 
 The repo ships a project-scoped `.mcp.json` pointing at
-`https://zippy-zipdev.vercel.app/mcp`, so anyone opening this repo in Claude Code gets
+`https://cortex-zipdev.vercel.app/mcp`, so anyone opening this repo in Claude Code gets
 the Zipdev tools after approving the server (Claude Code runs the same OAuth
 flow in the browser). To use it in any other project or globally:
 
 ```bash
-claude mcp add --transport http zipdev https://zippy-zipdev.vercel.app/mcp
+claude mcp add --transport http zipdev https://cortex-zipdev.vercel.app/mcp
 ```
 
 ## What happens after you paste the URL
@@ -68,7 +68,7 @@ The end user only ever sees: paste URL → Google SSO → "Authorize" → done.
 ## Production requirements
 
 - **`BETTER_AUTH_URL` must be the public https origin** (e.g.
-  `https://zippy-zipdev.vercel.app`), never `localhost`. The OAuth issuer advertised in
+  `https://cortex-zipdev.vercel.app`), never `localhost`. The OAuth issuer advertised in
   the `/.well-known` metadata derives from this origin, and the `issuer` string
   must be byte-identical to the origin claude.ai used to fetch the metadata, or
   claude.ai rejects the connector. Keep `APP_BASE_URL` aligned to the same
@@ -86,7 +86,7 @@ The end user only ever sees: paste URL → Google SSO → "Authorize" → done.
 
 1. Start the local Supabase stack and apply migrations (the local DB listens on
    `127.0.0.1:54322`).
-2. Run the web app (`pnpm --filter @zipdev/web dev`) on `http://localhost:3000`.
+2. Run the web app (`pnpm --filter @cortex/web dev`) on `http://localhost:3000`.
 3. The local connector URL is:
 
    ```

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ValidationError } from '@zipdev/core';
+import { ValidationError } from '@cortex/core';
 import { runTool } from '../index';
 import { gmailSearch } from './search';
 import type { ToolContext } from '../types';

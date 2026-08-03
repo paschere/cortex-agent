@@ -1,4 +1,4 @@
-import { ValidationError } from '@zipdev/core';
+import { ValidationError } from '@cortex/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runTool } from '../index';
 import type { ToolContext, ToolDef } from '../types';

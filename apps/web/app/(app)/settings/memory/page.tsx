@@ -2,14 +2,14 @@ import { toMemoryView } from '@/app/api/settings/memories/schema';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { listMemories } from '@zipdev/agent-tools';
+import { listMemories } from '@cortex/agent-tools';
 import { Brain } from 'lucide-react';
 import { MemoryList } from './MemoryList';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * /settings/memory — everything Zippy has learned about this person, in the
+ * /settings/memory — everything Cortex has learned about this person, in the
  * sentences it actually uses.
  *
  * Its own page rather than a panel on /settings because the list is long-lived
@@ -30,8 +30,8 @@ export default async function MemoryPage() {
   return (
     <>
       <PageHeader
-        title="What Zippy remembers"
-        subtitle="Everything Zippy has picked up about how you work — visible, editable, and yours to delete"
+        title="What Cortex remembers"
+        subtitle="Everything Cortex has picked up about how you work — visible, editable, and yours to delete"
         icon={<Brain className="h-5 w-5" />}
       />
       <MemoryList initial={memories} />

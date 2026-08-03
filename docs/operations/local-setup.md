@@ -1,6 +1,6 @@
 # Local Setup Runbook
 
-First-time setup guide for the `zipdev-agent` monorepo.
+First-time setup guide for the `cortex-agent` monorepo.
 
 ## Prerequisites
 
@@ -16,8 +16,8 @@ First-time setup guide for the `zipdev-agent` monorepo.
 ## 1. Clone and install
 
 ```bash
-git clone <repo-url> zipdev-agent
-cd zipdev-agent
+git clone <repo-url> cortex-agent
+cd cortex-agent
 nvm use          # pins Node 20.17.0 from .nvmrc
 corepack enable  # activates pnpm@9.12.0 from package.json#packageManager
 pnpm install     # installs all workspace dependencies
@@ -121,7 +121,7 @@ Sign-in is restricted to `@zipdev.com` accounts. The domain is enforced by `ALLO
 ## 7. Run the web app
 
 ```bash
-pnpm --filter @zipdev/web dev
+pnpm --filter @cortex/web dev
 ```
 
 Visit [http://localhost:3000](http://localhost:3000). You should be redirected to `/login`. Sign in with a `@zipdev.com` Google account. On success you will land at `/chat`.
@@ -153,7 +153,7 @@ For end-to-end tests:
 pnpm test:e2e
 ```
 
-Requires `apps/web` to be built first (`pnpm --filter @zipdev/web build`).
+Requires `apps/web` to be built first (`pnpm --filter @cortex/web build`).
 
 ---
 
@@ -177,7 +177,7 @@ Builds all packages and apps in dependency order via Turborepo. Output goes to `
 | `0011_better_auth` migration error | Migration already partially applied | Run `pnpm exec supabase --workdir infra db reset` to wipe and reapply all |
 | Build fails on `apps/web` with missing modules | Installed deps in wrong workspace | Run `pnpm install` from the **repo root**, not from inside `apps/web` |
 | `BETTER_AUTH_SECRET` error on startup | Variable not set or empty | Generate with `openssl rand -base64 32` and add to `.env.local` |
-| Wrangler errors when running `pnpm dev` | MCP app requires Cloudflare login | Use `pnpm --filter @zipdev/web dev` to run only the web app |
+| Wrangler errors when running `pnpm dev` | MCP app requires Cloudflare login | Use `pnpm --filter @cortex/web dev` to run only the web app |
 
 ---
 

@@ -41,7 +41,7 @@ const C = {
 
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
 const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',Courier,monospace";
-const ZIPPY_ICON_URL = 'https://zippy-zipdev.vercel.app/icon.png';
+const CORTEX_ICON_URL = 'https://cortex-zipdev.vercel.app/icon.png';
 
 const S = {
   h2: `margin:26px 0 10px;font-family:${FONT};font-size:19px;line-height:1.3;font-weight:700;color:${C.ink};letter-spacing:-.01em;`,
@@ -445,7 +445,7 @@ const PREHEADER_PADDING = '&#847;&zwnj;&nbsp;'.repeat(60);
 
 /**
  * The digest as a complete, self-contained email document — same shell,
- * palette and components as every other automated Zippy email.
+ * palette and components as every other automated Cortex email.
  */
 export function renderDigestHtml(input: DigestRenderInput): string {
   const title = `Your inbox digest — ${input.dateLabel}`;
@@ -486,7 +486,7 @@ export function renderDigestHtml(input: DigestRenderInput): string {
     .filter(Boolean)
     .join('');
 
-  const footerNote = `Built by Zippy from your own mailbox — ${input.scanned} recent conversation${
+  const footerNote = `Built by Cortex from your own mailbox — ${input.scanned} recent conversation${
     input.scanned === 1 ? '' : 's'
   } read and summarized on Zipdev's side. ${input.excludedNote} You asked for this digest in Settings and can turn it off there at any time.`;
 
@@ -508,8 +508,8 @@ export function renderDigestHtml(input: DigestRenderInput): string {
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;border-collapse:collapse;">
 <tr><td style="padding:0 4px 14px;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td width="32" style="width:32px;padding-right:9px;vertical-align:middle;"><img src="${ZIPPY_ICON_URL}" width="32" height="32" alt="Zippy" style="display:block;width:32px;height:32px;border:0;border-radius:8px;" /></td>
-<td style="vertical-align:middle;font-family:${FONT};font-size:16px;font-weight:700;letter-spacing:-.01em;color:${C.primary};">Zippy</td>
+<td width="32" style="width:32px;padding-right:9px;vertical-align:middle;"><img src="${CORTEX_ICON_URL}" width="32" height="32" alt="Cortex" style="display:block;width:32px;height:32px;border:0;border-radius:8px;" /></td>
+<td style="vertical-align:middle;font-family:${FONT};font-size:16px;font-weight:700;letter-spacing:-.01em;color:${C.primary};">Cortex</td>
 </tr></table>
 </td></tr>
 <tr><td style="padding:26px 26px 24px;background-color:${C.card};border:1px solid ${C.border};border-radius:16px;">

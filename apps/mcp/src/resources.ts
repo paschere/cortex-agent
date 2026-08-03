@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { listVisibleSpaces } from '@zipdev/agent-tools';
-import { loadAgent } from '@zipdev/agents';
+import { listVisibleSpaces } from '@cortex/agent-tools';
+import { loadAgent } from '@cortex/agents';
 import type { BridgeContext } from './bridge';
 
 export const RESOURCES = [

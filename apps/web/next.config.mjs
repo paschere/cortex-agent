@@ -4,7 +4,7 @@ import { withSentryConfig } from '@sentry/nextjs';
 const config = {
   reactStrictMode: true,
   experimental: { serverActions: { bodySizeLimit: '12mb' } },
-  transpilePackages: ['@zipdev/core', '@zipdev/agent-tools', '@zipdev/agents'],
+  transpilePackages: ['@cortex/core', '@cortex/agent-tools', '@cortex/agents'],
   serverExternalPackages: ['inngest'],
   webpack(webpackConfig) {
     // Allow webpack to resolve .js imports as .ts for ESM workspace packages

@@ -12,9 +12,9 @@ import {
   buildTaskMessage,
   formatCheckSummary,
   resolveRepoPath,
-} from '@zipdev/agent-tools';
-import type { DevRepository, DevTask } from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+} from '@cortex/agent-tools';
+import type { DevRepository, DevTask } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { REPO_ROOT, readTranscript, run, truncateOutput, writeTranscript } from './sandbox';
 
 /**
@@ -282,7 +282,7 @@ export async function applyCheckResults(
   return { passed };
 }
 
-const PENDING_PATH = `${REPO_ROOT}/.zippy/pending.json`;
+const PENDING_PATH = `${REPO_ROOT}/.cortex/pending.json`;
 
 async function writePending(sandbox: Sandbox, pending: PendingTurn): Promise<void> {
   await sandbox.writeFiles([{ path: PENDING_PATH, content: JSON.stringify(pending) }]);

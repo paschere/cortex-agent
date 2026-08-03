@@ -1,5 +1,5 @@
 /**
- * Zippy's autonomous development runs — the shape the oversight layer reads.
+ * Cortex's autonomous development runs — the shape the oversight layer reads.
  *
  * ── ASSUMED SCHEMA ────────────────────────────────────────────────────────
  * When this was written, `dev_tasks` and `dev_repositories` did not exist in
@@ -256,7 +256,7 @@ export function isStopping(task: Pick<DevTask, 'status' | 'cancelRequestedAt'>):
   return Boolean(task.cancelRequestedAt) && isStoppable(task);
 }
 
-/** In-flight: counts toward "Zippy is busy", excluded from history totals. */
+/** In-flight: counts toward "Cortex is busy", excluded from history totals. */
 export function isLive(task: Pick<DevTask, 'status'>): boolean {
   return task.status === 'queued' || task.status === 'running';
 }
@@ -282,7 +282,7 @@ export function describeStatus(
   if (isStopping(task)) {
     return {
       label: 'Stopping',
-      blurb: 'Someone asked Zippy to stop. It finishes the step it is on, then stands down.',
+      blurb: 'Someone asked Cortex to stop. It finishes the step it is on, then stands down.',
       tone: 'rose',
       chip: DEV_TONE_CHIP.rose,
     };
@@ -295,12 +295,12 @@ export function describeStatus(
     },
     running: {
       label: 'Working',
-      blurb: 'Zippy is on it right now — reading the code and making changes.',
+      blurb: 'Cortex is on it right now — reading the code and making changes.',
       tone: 'primary',
     },
     needs_review: {
       label: 'Needs you',
-      blurb: 'Zippy has done its part and is waiting on a person before anything else happens.',
+      blurb: 'Cortex has done its part and is waiting on a person before anything else happens.',
       tone: 'amber',
     },
     done: {
@@ -310,7 +310,7 @@ export function describeStatus(
     },
     failed: {
       label: 'Failed',
-      blurb: 'Zippy could not finish this one.',
+      blurb: 'Cortex could not finish this one.',
       tone: 'rose',
     },
     cancelled: {
@@ -357,7 +357,7 @@ export function formatCost(usd: number | null): string | null {
   return usd < 1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(usd < 100 ? 2 : 0)}`;
 }
 
-/** "zipdev/zipdev-agent" if we have it, otherwise the bare name. */
+/** "zipdev/cortex-agent" if we have it, otherwise the bare name. */
 export function repoLabel(repo: DevRepository | undefined | null): string | null {
   if (!repo) return null;
   return repo.fullName ?? repo.name;

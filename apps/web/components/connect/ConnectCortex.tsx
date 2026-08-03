@@ -115,7 +115,7 @@ function CodeLine({ text }: { text: string }) {
 }
 
 /** The connector URL, plus per-client setup steps. Single source of truth. */
-export function ConnectZippy({ url }: { url: string }) {
+export function ConnectCortex({ url }: { url: string }) {
   const [active, setActive] = useState<TargetId>('claude');
 
   const targets: Record<TargetId, Target> = {
@@ -130,7 +130,7 @@ export function ConnectZippy({ url }: { url: string }) {
         'Paste the connector URL above.',
         'Sign in with your **@zipdev.com** Google account and hit **Approve**.',
       ],
-      note: 'Inside a chat, enable the connector from the tools menu so Zippy can use it.',
+      note: 'Inside a chat, enable the connector from the tools menu so Cortex can use it.',
     },
     chatgpt: {
       id: 'chatgpt',
@@ -150,11 +150,11 @@ export function ConnectZippy({ url }: { url: string }) {
       icon: <Terminal className="h-3.5 w-3.5" />,
       caption: 'The CLI, in any terminal',
       steps: [
-        'Run the command below once — it registers Zippy for your user.',
+        'Run the command below once — it registers Cortex for your user.',
         'Authorize in the browser window it opens.',
       ],
-      snippet: `claude mcp add --transport http zippy ${url}`,
-      note: 'Working inside the zipdev-agent repo? It is picked up automatically from .mcp.json — no setup needed.',
+      snippet: `claude mcp add --transport http cortex ${url}`,
+      note: 'Working inside the cortex-agent repo? It is picked up automatically from .mcp.json — no setup needed.',
     },
     other: {
       id: 'other',

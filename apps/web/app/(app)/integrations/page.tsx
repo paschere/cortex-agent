@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { listTools } from '@zipdev/agent-tools';
+import { listTools } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
   Boxes,
@@ -42,7 +42,7 @@ interface ProviderCard {
   /** Tool families this system backs — drives the live tool count. */
   families: string[];
   state: ConnState;
-  /** Plain language: what Zippy can do because this is connected. */
+  /** Plain language: what Cortex can do because this is connected. */
   unlocks: string;
   /** Plain language: what stops working while it is disconnected. */
   offline: string;
@@ -142,7 +142,7 @@ export default async function IntegrationsPage({
       unlocks:
         'Read and draft your email, see and create calendar events, open Docs, Sheets and Drive files, and pull meeting transcripts.',
       offline:
-        'No inbox, no calendar, no Drive and no meeting notes — Zippy cannot see your day at all.',
+        'No inbox, no calendar, no Drive and no meeting notes — Cortex cannot see your day at all.',
       owner: mine.google
         ? `Connected by you${googleScopes ? ` · ${googleScopes} scopes granted` : ''}`
         : 'Granted when you sign in — connect below if it was skipped',
@@ -170,7 +170,7 @@ export default async function IntegrationsPage({
       state: workableOn ? 'workspace' : 'disconnected',
       unlocks:
         'The ATS ground truth: jobs, candidates, stages, screening answers and recent activity.',
-      offline: 'Zippy cannot see any real job or candidate — it would be guessing about pipeline.',
+      offline: 'Cortex cannot see any real job or candidate — it would be guessing about pipeline.',
       owner: opsOwner(workableOn, 'no Workable service token on this environment'),
     },
     {
@@ -193,7 +193,7 @@ export default async function IntegrationsPage({
       unlocks:
         'The HR system of record: the roster, job and employment history, time off, hours logged, documents on file, and both the pay rate Zipdev pays and the bill rate it charges the client.',
       offline:
-        'Zippy cannot see who actually works here — no roster, no time off, no tenure and no rates.',
+        'Cortex cannot see who actually works here — no roster, no time off, no tenure and no rates.',
       owner: opsOwner(bambooOn, 'no BambooHR API key on this environment'),
     },
     {
@@ -209,12 +209,12 @@ export default async function IntegrationsPage({
     },
     {
       key: 'brain',
-      name: 'Zippy Brain',
+      name: 'Cortex Brain',
       icon: Brain,
       families: ['kb', 'pipeline', 'schedule', 'inbox', 'security'],
       state: brainOn ? 'workspace' : 'disconnected',
       unlocks:
-        'Knowledge Base search and memory, pipelines, routines and the inbox digest — Zippy’s own reasoning.',
+        'Knowledge Base search and memory, pipelines, routines and the inbox digest — Cortex’s own reasoning.',
       offline: 'The core stops: no Knowledge Base, no pipelines, no routines.',
       owner: opsOwner(brainOn, 'the model API key is missing'),
     },
@@ -225,7 +225,7 @@ export default async function IntegrationsPage({
       families: ['web', 'growth'],
       state: webOn ? 'workspace' : 'disconnected',
       unlocks: 'Live web search and page reading for prospect research and growth signals.',
-      offline: 'Zippy is limited to what it already knows — no fresh research on companies.',
+      offline: 'Cortex is limited to what it already knows — no fresh research on companies.',
       owner: opsOwner(webOn, 'no search API key on this environment'),
     },
     {
@@ -257,7 +257,7 @@ export default async function IntegrationsPage({
       families: ['linear'],
       state: mine.linear ? 'user' : 'disconnected',
       unlocks: 'Projects, cycles, issues and team workload for roadmap visibility.',
-      offline: 'No roadmap or workload answers — Zippy cannot see what the team is building.',
+      offline: 'No roadmap or workload answers — Cortex cannot see what the team is building.',
       owner: mine.linear
         ? personalOwner('linear')
         : `${personalOwner('linear')} · ops provisions it`,
@@ -270,7 +270,7 @@ export default async function IntegrationsPage({
       state: apolloOn ? 'workspace' : 'disconnected',
       unlocks:
         'Prospecting and contact enrichment for outbound — who works where, their verified work email, and firmographics on the companies worth targeting.',
-      offline: 'Growth signals stop at the company: Zippy cannot identify the person to contact.',
+      offline: 'Growth signals stop at the company: Cortex cannot identify the person to contact.',
       owner: opsOwner(apolloOn, 'no Apollo API key on this environment'),
     },
   ];
@@ -316,7 +316,7 @@ export default async function IntegrationsPage({
     {
       label: 'Systems connected',
       value: `${connected.length}/${providers.length}`,
-      sub: 'Zippy can act in these',
+      sub: 'Cortex can act in these',
       icon: CircleCheck,
       tone: 'emerald' as const,
     },
@@ -330,7 +330,7 @@ export default async function IntegrationsPage({
     {
       label: 'Built-in tools',
       value: String(totalToolCount),
-      sub: 'available to Zippy',
+      sub: 'available to Cortex',
       icon: Wrench,
       tone: 'primary' as const,
     },
@@ -353,7 +353,7 @@ export default async function IntegrationsPage({
     <>
       <PageHeader
         title="Integrations"
-        subtitle="What Zippy is connected to — the systems it can read and act in on your behalf."
+        subtitle="What Cortex is connected to — the systems it can read and act in on your behalf."
         icon={<Plug className="h-5 w-5" />}
       />
 
@@ -471,16 +471,16 @@ export default async function IntegrationsPage({
               Advanced
             </div>
             <h2 className="mt-0.5 text-[15px] font-bold tracking-tight text-ink">
-              Extra tools you plug into Zippy
+              Extra tools you plug into Cortex
             </h2>
             <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-              Point Zippy at your own Model Context Protocol server — Notion, a vendor’s hosted
+              Point Cortex at your own Model Context Protocol server — Notion, a vendor’s hosted
               server, something you self-host — and its tools join the list above for your account
               only. Most people never need this.
             </p>
             <p className="mt-1 text-[11.5px] text-ink-faint">
               Up to {MAX_MCP_SERVERS} servers and {MAX_MCP_TOOLS} tools in total. Looking for how to
-              use Zippy <em>from</em> Claude instead?{' '}
+              use Cortex <em>from</em> Claude instead?{' '}
               <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
                 That is the other page
               </Link>

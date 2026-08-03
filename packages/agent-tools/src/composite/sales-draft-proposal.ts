@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 import { registerTool, getTool, runTool } from '../index';
 import type { ToolContext } from '../types.js';
 

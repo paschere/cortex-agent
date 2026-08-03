@@ -1,4 +1,4 @@
-import { ValidationError } from '@zipdev/core';
+import { ValidationError } from '@cortex/core';
 import { describe, expect, it, vi } from 'vitest';
 import type { ToolContext } from '../types';
 import { scheduleCreate } from './create';

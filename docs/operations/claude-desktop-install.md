@@ -20,12 +20,12 @@ If the file does not exist, create it.
 
 ## Step 3: Add the zipdev MCP server entry
 
-Open the config file and add the `zipdev-agent` entry under `mcpServers`:
+Open the config file and add the `cortex-agent` entry under `mcpServers`:
 
 ```json
 {
   "mcpServers": {
-    "zipdev-agent": {
+    "cortex-agent": {
       "url": "https://mcp.zipdev.com/sse",
       "headers": {
         "Authorization": "Bearer YOUR_TOKEN_HERE"

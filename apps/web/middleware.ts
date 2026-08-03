@@ -2,6 +2,12 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_PATHS = [
   '/login',
+  // SaaS auth surface: signup, password recovery and the post-password 2FA
+  // challenge all run without a full session cookie.
+  '/signup',
+  '/forgot-password',
+  '/reset-password',
+  '/two-factor',
   '/api/auth',
   '/_next',
   '/favicon.ico',

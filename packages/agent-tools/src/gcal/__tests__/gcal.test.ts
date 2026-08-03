@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { gcalListEvents } from '../list-events';
 import { gcalCreateEvent } from '../create-event';
 import { runTool } from '../../index';
-import { ConfirmationRequiredError, IntegrationError } from '@zipdev/core';
+import { ConfirmationRequiredError, IntegrationError } from '@cortex/core';
 import type { ToolContext } from '../../types';
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {

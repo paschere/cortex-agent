@@ -23,7 +23,7 @@ import { DELIVERY_TOOL_ID, hasDigestToday } from './window';
  *     expected outcome for most of the roster, not a failure.
  *  2. It only ever delivers to that same person, at destinations they entered
  *     themselves (their account email, their own Chat webhook, their own DM
- *     thread with the Zippy Chat app). There is no recipient parameter.
+ *     thread with the Cortex Chat app). There is no recipient parameter.
  *  3. It returns counts and destinations — never the digest text. So a routine
  *     fanning this out across the company reports "delivered to 6 people" and
  *     has read nobody's mail.
@@ -36,7 +36,7 @@ import { DELIVERY_TOOL_ID, hasDigestToday } from './window';
 
 /**
  * Every channel the digest can go out on. `google_chat` is the shared SPACE
- * (webhook); `google_chat_dm` is the private 1:1 with the Zippy Chat app.
+ * (webhook); `google_chat_dm` is the private 1:1 with the Cortex Chat app.
  */
 type DeliveryChannel = 'email' | 'google_chat' | 'google_chat_dm';
 
@@ -87,7 +87,7 @@ async function userEmail(ctx: ToolContext, userId: string): Promise<string | nul
 export const inboxDeliverDigest = registerTool({
   id: DELIVERY_TOOL_ID,
   description:
-    "Build a person's daily inbox digest and deliver it the way they asked for it in their own settings — by email, into their Google Chat space, as a private Google Chat direct message from Zippy, or any combination. Use this for the scheduled daily digest. It only runs for people who turned the digest on themselves; for anyone who has not, it stops and reports the reason instead of failing, and it will not send the same person two digests in one day. It reports how many conversations needed attention and where the digest was delivered — never the contents, which stay between Zippy and the mailbox's owner. Pass userId only when running the digest on someone else's behalf from a scheduled routine; leave it out to run it for yourself.",
+    "Build a person's daily inbox digest and deliver it the way they asked for it in their own settings — by email, into their Google Chat space, as a private Google Chat direct message from Cortex, or any combination. Use this for the scheduled daily digest. It only runs for people who turned the digest on themselves; for anyone who has not, it stops and reports the reason instead of failing, and it will not send the same person two digests in one day. It reports how many conversations needed attention and where the digest was delivered — never the contents, which stay between Cortex and the mailbox's owner. Pass userId only when running the digest on someone else's behalf from a scheduled routine; leave it out to run it for yourself.",
   inputSchema: z.object({
     userId: z
       .string()
@@ -257,12 +257,12 @@ export const inboxDeliverDigest = registerTool({
         // says what to do rather than leaving a two-word verdict in the report.
         const reason =
           dm.reason === 'not linked'
-            ? 'not linked — they have never messaged Zippy in Google Chat, so there is no direct-message thread'
+            ? 'not linked — they have never messaged Cortex in Google Chat, so there is no direct-message thread'
             : dm.reason;
         channels.push({
           channel: 'google_chat_dm',
           sent: dm.sent,
-          destination: dm.space ?? 'Zippy direct message',
+          destination: dm.space ?? 'Cortex direct message',
           ...(reason ? { reason } : {}),
         });
       } catch (err) {
@@ -271,7 +271,7 @@ export const inboxDeliverDigest = registerTool({
         channels.push({
           channel: 'google_chat_dm',
           sent: false,
-          destination: 'Zippy direct message',
+          destination: 'Cortex direct message',
           reason: (err as Error).message.slice(0, 200),
         });
       }

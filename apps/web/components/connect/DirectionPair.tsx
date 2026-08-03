@@ -21,15 +21,15 @@ const CARDS: Record<Direction, Card> = {
   outbound: {
     href: '/integrations',
     icon: ArrowUpRight,
-    title: 'Zippy → your systems',
-    body: 'What Zippy is connected to: Google Workspace, HubSpot, Workable, the talent pool, payroll — plus any extra MCP server you plug in.',
+    title: 'Cortex → your systems',
+    body: 'What Cortex is connected to: Google Workspace, HubSpot, Workable, the talent pool, payroll — plus any extra MCP server you plug in.',
     cta: 'Integrations',
   },
   inbound: {
     href: '/mcp-tokens',
     icon: ArrowDownLeft,
-    title: 'Your AI client → Zippy',
-    body: 'The reverse: reach Zippy from Claude, Claude Code, ChatGPT or any MCP client, running with your own permissions.',
+    title: 'Your AI client → Cortex',
+    body: 'The reverse: reach Cortex from Claude, Claude Code, ChatGPT or any MCP client, running with your own permissions.',
     cta: 'Connect Claude',
   },
 };

@@ -209,7 +209,7 @@ export function ProspectBoard({
         </div>
 
         <p className="mt-3 text-[11.5px] leading-relaxed text-ink-faint">
-          Zippy sweeps the job boards weekly and drops what it finds into <b>New</b>. From there it
+          Cortex sweeps the job boards weekly and drops what it finds into <b>New</b>. From there it
           only ever moves — a rejected company keeps its place under Rejected so nobody spends an
           afternoon researching it a second time.
         </p>
@@ -335,7 +335,7 @@ function NothingFoundYet() {
       </span>
       <p className="mb-1 text-[15px] font-bold text-ink">No prospects yet</p>
       <p className="mx-auto max-w-lg text-[13px] leading-relaxed text-ink-muted">
-        Zippy sweeps the public job boards once a week looking for companies hiring the kind of
+        Cortex sweeps the public job boards once a week looking for companies hiring the kind of
         engineers Zipdev places, and everything it finds lands here.
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -343,7 +343,7 @@ function NothingFoundYet() {
           href="/chat"
           className="rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong"
         >
-          Ask Zippy to sweep now
+          Ask Cortex to sweep now
         </Link>
         <Link
           href="/schedules"
@@ -373,7 +373,7 @@ function NothingMatches({
   const message = filtersActive
     ? 'No company matches those filters. They are still on file — widen the search.'
     : status === 'new'
-      ? 'Nothing new to review. Everything Zippy has found has been dealt with — the next sweep will bring more.'
+      ? 'Nothing new to review. Everything Cortex has found has been dealt with — the next sweep will bring more.'
       : status === 'qualified'
         ? 'Nothing qualified yet. Work through the new ones and keep the companies worth approaching.'
         : status === 'contacted'

@@ -11,7 +11,7 @@
  * adapted to ToolContext + ctx.integrations.getAccessToken('google').
  */
 
-import { IntegrationError } from '@zipdev/core';
+import { IntegrationError } from '@cortex/core';
 import type { ToolContext } from '../types';
 
 const MEET_API = 'https://meet.googleapis.com/v2';

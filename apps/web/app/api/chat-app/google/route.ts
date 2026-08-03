@@ -16,7 +16,7 @@ import {
 } from '@/lib/google-chat';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { toolDisplayName } from '@/lib/tool-labels';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse, after } from 'next/server';
 import {
   type ChatEvent,
@@ -34,9 +34,9 @@ import { runChatTurn } from './turn';
 import { type ChatAuthFailureDetail, verifyGoogleChatRequest } from './verify';
 
 /**
- * The Zippy Google Chat app — inbound webhook.
+ * The Cortex Google Chat app — inbound webhook.
  *
- * Google Chat POSTs every interaction here: someone DMs Zippy, someone
+ * Google Chat POSTs every interaction here: someone DMs Cortex, someone
  * @mentions it in a space, someone adds or removes it. It answers with the same
  * brain as the web chat (see ./turn.ts) and can also message people
  * proactively (see @/lib/google-chat).
@@ -49,7 +49,7 @@ import { type ChatAuthFailureDetail, verifyGoogleChatRequest } from './verify';
  *
  * ── The 5-second problem ──────────────────────────────────────────────────
  * Google Chat waits about 5 seconds for the HTTP response and shows
- * "Zippy isn't responding" if it doesn't get one. A real Zippy turn — retrieval
+ * "Cortex isn't responding" if it doesn't get one. A real Cortex turn — retrieval
  * plus up to twelve tool steps — routinely takes longer than that.
  *
  * So the endpoint uses an ACK-THEN-ANSWER pattern:
@@ -243,11 +243,11 @@ async function clearDmSpace(chatUserName: string | undefined, space: string | un
 // ---------------------------------------------------------------------------
 
 const DM_GREETING = toChatText(
-  "Hi — I'm Zippy ⚡, Zipdev's agent. Ask me anything here and I'll work it the same way I do inside Zipdev OS: the Knowledge Base, HubSpot, the ATS and talent pool, rates, GitHub and Linear, your Google Workspace. Everything I do runs with **your own** permissions and integrations, and it all shows up in your conversation history and the audit log. Anything that writes to a real system waits for your explicit approval first.",
+  "Hi — I'm Cortex ⚡, Zipdev's agent. Ask me anything here and I'll work it the same way I do inside Zipdev OS: the Knowledge Base, HubSpot, the ATS and talent pool, rates, GitHub and Linear, your Google Workspace. Everything I do runs with **your own** permissions and integrations, and it all shows up in your conversation history and the audit log. Anything that writes to a real system waits for your explicit approval first.",
 );
 
 const SPACE_GREETING = toChatText(
-  "Hi everyone — I'm Zippy ⚡, Zipdev's agent. **@mention me** in a thread and I'll answer there: pipeline and deal questions, candidates and requisitions, rates, tickets, whatever the Knowledge Base knows. I answer with the permissions of **whoever asks**, not the room's — so two people can get different answers, and that's on purpose. Anything involving compensation or personal data I send to you privately instead of posting here.",
+  "Hi everyone — I'm Cortex ⚡, Zipdev's agent. **@mention me** in a thread and I'll answer there: pipeline and deal questions, candidates and requisitions, rates, tickets, whatever the Knowledge Base knows. I answer with the permissions of **whoever asks**, not the room's — so two people can get different answers, and that's on purpose. Anything involving compensation or personal data I send to you privately instead of posting here.",
 );
 
 const UNLINKED_REPLY = toChatText(
@@ -308,7 +308,7 @@ async function deliver(opts: {
   logger.warn('google-chat: private delivery fell back to email', { reason: dm.reason });
   await sendEmail({
     to: opts.user.email,
-    subject: '[Zippy] Your answer from Google Chat',
+    subject: '[Cortex] Your answer from Google Chat',
     text: `${opts.privateText}\n\n(You asked me this in a Google Chat space. It was too sensitive to post there, and you have no direct message open with me yet — send me a DM in Chat and I'll use that next time.)`,
   }).catch(() => undefined);
 }
@@ -378,7 +378,7 @@ async function handleMessage(event: ChatEvent, asAddOn: boolean): Promise<NextRe
         `google-chat: async turn failed — ${(err as Error).name}: ${(err as Error).message}`,
       );
       // Never leave a mention hanging — and never leave "On it" as the last
-      // word, which reads as Zippy still working when it has already given up.
+      // word, which reads as Cortex still working when it has already given up.
       const apology =
         'That one broke on my side before I could finish it — try me again in a moment. ⚡';
       const rewritten = placeholder
@@ -612,7 +612,7 @@ async function handleAddedToSpace(event: ChatEvent, asAddOn: boolean): Promise<N
   const chatUser = event.user;
   if (chatUser?.email) {
     const user = await resolveUser(chatUser);
-    // Capturing the DM space here is what lets Zippy message someone
+    // Capturing the DM space here is what lets Cortex message someone
     // proactively before they have ever written to it.
     if (user) await upsertLink({ chatUser, user, space: event.space });
   }
@@ -690,7 +690,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       `google-chat: rejected an unverified request — ${auth.reason} ${JSON.stringify(auth.detail ?? {})}`,
     );
     // Also recorded, not just logged. Google shows the person nothing but
-    // "Zippy isn't responding", and platform logs are awkward to reach from
+    // "Cortex isn't responding", and platform logs are awkward to reach from
     // where this gets debugged — a row in security_events makes a misconfigured
     // Chat app answerable with one query instead of a guessing game.
     void recordRejection(auth.reason, auth.detail);

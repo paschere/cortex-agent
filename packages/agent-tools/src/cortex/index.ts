@@ -1,0 +1,1 @@
+export { cortexProcess } from './process';

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { encryptToken, getEnv, IntegrationError } from '@zipdev/core';
+import { encryptToken, getEnv, IntegrationError } from '@cortex/core';
 
 export async function GET(req: NextRequest) {
   const user = await requireSession();

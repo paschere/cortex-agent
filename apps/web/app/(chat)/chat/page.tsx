@@ -1,5 +1,5 @@
 import { ChatRoot } from '@/components/chat/ChatRoot';
-import { listAgents } from '@zipdev/agents';
+import { listAgents } from '@cortex/agents';
 
 export default function NewChatPage() {
   const agents = listAgents().map((a) => ({

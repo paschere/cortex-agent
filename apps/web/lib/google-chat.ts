@@ -1,10 +1,10 @@
 import 'server-only';
 import { createSign } from 'node:crypto';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 
 /**
- * Outbound Google Chat — posting messages AS the Zippy Chat app.
+ * Outbound Google Chat — posting messages AS the Cortex Chat app.
  *
  * Two different Google Chat integrations exist in this codebase and they must
  * not be confused:
@@ -469,7 +469,7 @@ export async function getChatDmSpace(userId: string): Promise<string | null> {
  *   *bold*   _italic_   ~strike~   `code`   ```block```   <url|label>
  *
  * and nothing else. Double asterisks render literally, `##` renders literally,
- * and a markdown table becomes a wall of pipes. Zippy writes ordinary markdown,
+ * and a markdown table becomes a wall of pipes. Cortex writes ordinary markdown,
  * so everything it says is flattened through here before it reaches Chat.
  */
 export function toChatText(markdown: string, opts?: { limit?: number; moreUrl?: string }): string {

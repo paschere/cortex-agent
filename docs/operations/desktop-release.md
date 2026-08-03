@@ -9,7 +9,7 @@ How to cut a new release of the Zipdev Agent desktop app.
 Run this once on a developer machine (not in CI):
 
 ```bash
-pnpm --filter @zipdev/desktop tauri signer generate -w ~/.tauri/zipdev-agent.key
+pnpm --filter @cortex/desktop tauri signer generate -w ~/.tauri/cortex-agent.key
 ```
 
 The command prints a **public key** — paste it into
@@ -18,7 +18,7 @@ The command prints a **public key** — paste it into
 
 Save the private key file as the GitHub secret
 `TAURI_SIGNING_PRIVATE_KEY` (base64-encode it first:
-`base64 -i ~/.tauri/zipdev-agent.key`) and the passphrase as
+`base64 -i ~/.tauri/cortex-agent.key`) and the passphrase as
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 
 > **Note**: `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
@@ -106,7 +106,7 @@ Once the first release exists, verify the updater endpoint in
 `tauri.conf.json` resolves correctly:
 
 ```
-https://github.com/zipdev/zipdev-agent/releases/latest/download/latest.json
+https://github.com/zipdev/cortex-agent/releases/latest/download/latest.json
 ```
 
 If the GitHub org/repo path differs, update

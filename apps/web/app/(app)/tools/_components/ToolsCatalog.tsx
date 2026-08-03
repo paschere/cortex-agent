@@ -60,7 +60,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 
 /**
  * Plain serialisable shape resolved by the server page. Nothing here may be
- * derived from `@zipdev/agent-tools` on the client — importing the registry
+ * derived from `@cortex/agent-tools` on the client — importing the registry
  * into a client module breaks the production build.
  */
 export interface CatalogTool {

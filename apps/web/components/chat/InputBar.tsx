@@ -50,7 +50,7 @@ export function InputBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
-  // Zippy is the only agent: an existing conversation is pinned to its agent,
+  // Cortex is the only agent: an existing conversation is pinned to its agent,
   // and with a single agent there is nothing to switch to.
   const pillDisabled = !!conversationId || agents.length <= 1;
 

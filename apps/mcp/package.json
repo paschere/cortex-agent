@@ -1,5 +1,5 @@
 {
-  "name": "@zipdev/mcp",
+  "name": "@cortex/mcp",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,9 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@zipdev/core": "workspace:*",
-    "@zipdev/agent-tools": "workspace:*",
-    "@zipdev/agents": "workspace:*",
+    "@cortex/core": "workspace:*",
+    "@cortex/agent-tools": "workspace:*",
+    "@cortex/agents": "workspace:*",
     "@supabase/supabase-js": "2.46.2",
     "@modelcontextprotocol/sdk": "1.0.4",
     "hono": "4.6.14",

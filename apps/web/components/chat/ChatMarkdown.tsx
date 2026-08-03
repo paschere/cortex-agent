@@ -6,7 +6,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 
 /**
- * The single markdown renderer for anything Zippy says — live chat and
+ * The single markdown renderer for anything Cortex says — live chat and
  * archived transcripts alike. Kept in one place so a transcript can never
  * drift into looking like a different product.
  */

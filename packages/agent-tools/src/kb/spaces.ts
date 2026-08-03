@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { ForbiddenError, NotFoundError } from '@zipdev/core';
+import { ForbiddenError, NotFoundError } from '@cortex/core';
 import { embed } from './embedder';
 
 /**
@@ -116,7 +116,7 @@ export async function getVisibleSpace(
 /**
  * Who may put a document into a space, and who may rename or delete it.
  * Personal: its owner. Global: an org admin, because a global space is what
- * everybody's Zippy answers from.
+ * everybody's Cortex answers from.
  */
 export async function assertCanWriteToSpace(
   db: SupabaseClient,
@@ -143,7 +143,7 @@ export async function isOrgAdmin(db: SupabaseClient, userId: string): Promise<bo
 }
 
 /**
- * The person's own default space, created on first use. Everything Zippy saves
+ * The person's own default space, created on first use. Everything Cortex saves
  * without being told where lands here, so the default is the private one: a
  * note that should have been company-wide is a one-click move, a note that
  * should have been private and wasn't cannot be un-published.
@@ -174,7 +174,7 @@ export async function ensurePersonalSpace(
 }
 
 /**
- * Resolve a space the way a person refers to it — by name. Zippy is never
+ * Resolve a space the way a person refers to it — by name. Cortex is never
  * given an id to repeat back, so the tools take names and this turns a name
  * into a space the caller can actually write to. Personal spaces win ties: if
  * someone has their own "Rates" and the company has a "Rates", "save it to

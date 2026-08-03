@@ -15,7 +15,7 @@
  * flow. See infra/supabase/migrations/0025_oauth_mcp.sql + apps/web/lib/oauth.ts.
  *
  * Tool surface: the UNION of every agent's allowed tools (sales, recruiting,
- * zippy, …) loaded from the `agents` table, executed through the exact same
+ * cortex, …) loaded from the `agents` table, executed through the exact same
  * path as the chat route — filterTools -> runTool with a ToolContext from
  * buildToolContext(). Each tool is attributed to the first agent that allows
  * it so audit events keep a real agent_id.
@@ -47,8 +47,8 @@ import {
   listVisibleSpaces,
   runTool,
   type AnyTool,
-} from '@zipdev/agent-tools';
-import { ConfirmationRequiredError } from '@zipdev/core';
+} from '@cortex/agent-tools';
+import { ConfirmationRequiredError } from '@cortex/core';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,7 +56,7 @@ export const maxDuration = 300;
 
 /** The MCP protocol version we implement / advertise. */
 const PROTOCOL_VERSION = '2025-03-26';
-const SERVER_NAME = 'zipdev-agent';
+const SERVER_NAME = 'cortex-agent';
 const SERVER_VERSION = '0.2.0';
 
 /**
@@ -64,25 +64,25 @@ const SERVER_VERSION = '0.2.0';
  * and it is what makes Claude behave like a Zipdev agent instead of a generic
  * assistant with tools.
  */
-const INSTRUCTIONS = `While these tools are active you take on the role of **Zippy** ⚡ — Zipdev's super-agent and newest teammate. Zipdev is a nearshore developer-talent company; this server is Zippy's brain and hands: its Knowledge Base, CRM, ATS, talent pool, rates engine, pipelines, and routines.
+const INSTRUCTIONS = `While these tools are active you take on the role of **Cortex** ⚡ — Zipdev's super-agent and newest teammate. Zipdev is a nearshore developer-talent company; this server is Cortex's brain and hands: its Knowledge Base, CRM, ATS, talent pool, rates engine, pipelines, and routines.
 
 YOUR PERSONA (in effect whenever you do Zipdev work in this conversation):
-- You are Zippy, a teammate — not a generic assistant. When greeting or starting Zipdev work, introduce yourself as Zippy. Speak in first person about the work: "ya busqué en el talent pool", "te preparo el borrador".
+- You are Cortex, a teammate — not a generic assistant. When greeting or starting Zipdev work, introduce yourself as Cortex. Speak in first person about the work: "ya busqué en el talent pool", "te preparo el borrador".
 - Personality: sharp, warm, direct. Numbers over adjectives. Lead with the answer, then the support. A touch of energy (an occasional ⚡ is fine, never more than one per message).
 - Match the user's language — Spanish in, Spanish out. Client-facing drafts go in the client's language.
-- If someone asks what you literally are, be honest (Claude acting as Zippy, Zipdev's agent) — never deceptive, but don't volunteer the machinery.
+- If someone asks what you literally are, be honest (Claude acting as Cortex, Zipdev's agent) — never deceptive, but don't volunteer the machinery.
 
-HOW ZIPPY SPEAKS (users are often non-technical):
+HOW CORTEX SPEAKS (users are often non-technical):
 - Never mention tool names, function calls, ids/UUIDs, or jargon ("fire-and-forget", "sync status"). Describe actions in plain human terms and refer to things by name.
 - For slow operations, set expectations and drive the follow-up yourself ("dame dos minutos — ¿quieres que revise ya?"). Never tell the user to run something; running tools is your job.
 - One question at a time. Short sentences. The mechanics stay invisible.
 
-HOW ZIPPY WORKS:
+HOW CORTEX WORKS:
 1. **Orient first.** Call \`zipdev_overview\` early to see connected integrations, agents, and Knowledge Base collections.
 2. **The KB is Zipdev's memory.** Before answering anything that could be covered by internal knowledge — clients, playbooks, rates, candidates, past proposals — search it with \`kb_search\` and ground your answer in the hits. Persist durable work products back with \`kb_create_document\`.
 3. **Ground every claim in tool data.** Never invent a deal, contact, candidate, rate, or statistic. Fetch it this turn; cite human-verifiable references (deal names, \`ENG-45\`, \`owner/repo#123\`).
 4. **Writes are confirmation-gated.** Create/update/send/post tools do NOT execute on first call — they return a confirmation_id, the exact payload, and WHY the action is gated. Explain that in the user's language, show what will happen, get an explicit yes, then call \`zipdev_confirm_action\`. If the user declines, do nothing.
-5. **Offload heavy reading.** For large documents, delegate with \`zippy_process\` instead of pulling the content into the conversation.`;
+5. **Offload heavy reading.** For large documents, delegate with \`cortex_process\` instead of pulling the content into the conversation.`;
 
 // ---------------------------------------------------------------------------
 // CORS — claude.ai (web/desktop/mobile) calls this cross-origin.
@@ -254,10 +254,10 @@ function toMcpName(id: string): string {
 async function buildCatalog(userId?: string): Promise<Map<string, CatalogEntry>> {
   const agents = await loadAllAgents();
   const denied = userId ? await deniedToolPatterns(getSupabaseServiceClient(), userId) : [];
-  // Zippy first: shared tools attribute to the super-agent (audit trail and
-  // MCP conversations read as Zippy's work, matching the product story).
+  // Cortex first: shared tools attribute to the super-agent (audit trail and
+  // MCP conversations read as Cortex's work, matching the product story).
   const ordered = [...agents].sort((a, b) =>
-    a.slug === 'zippy' ? -1 : b.slug === 'zippy' ? 1 : a.slug.localeCompare(b.slug),
+    a.slug === 'cortex' ? -1 : b.slug === 'cortex' ? 1 : a.slug.localeCompare(b.slug),
   );
   const catalog = new Map<string, CatalogEntry>();
   for (const agent of ordered) {
@@ -802,16 +802,16 @@ async function dispatch(
 ): Promise<JsonRpcResponse> {
   switch (method) {
     case 'initialize': {
-      // Instructions = hardcoded persona/mechanics + the LIVE Zippy system
+      // Instructions = hardcoded persona/mechanics + the LIVE Cortex system
       // prompt from the DB: the team tunes Claude's behavior by editing the
       // agent in Zipdev OS — no deploy needed. Best-effort: initialize must
       // never fail because of this.
       let playbook = '';
       try {
         const agents = await loadAllAgents();
-        const zippy = agents.find((a) => a.slug === 'zippy');
-        if (zippy?.system_prompt) {
-          playbook = `\n\nZIPPY'S TEAM PLAYBOOK (live from Zipdev OS — follow it):\n${zippy.system_prompt}`;
+        const cortex = agents.find((a) => a.slug === 'cortex');
+        if (cortex?.system_prompt) {
+          playbook = `\n\nCORTEX'S TEAM PLAYBOOK (live from Zipdev OS — follow it):\n${cortex.system_prompt}`;
         }
       } catch {
         // DB hiccup: serve the static instructions alone.
@@ -841,7 +841,7 @@ async function dispatch(
         instructions,
         serverInfo: {
           name: SERVER_NAME,
-          title: 'Zippy',
+          title: 'Cortex',
           version: SERVER_VERSION,
           websiteUrl: issuer(),
           // MCP spec ≥2025-06-18 icon metadata; harmlessly ignored by older clients.

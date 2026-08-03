@@ -1,4 +1,4 @@
-import { ValidationError } from '@zipdev/core';
+import { ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { ingestMarkdown } from './ingest';
@@ -12,7 +12,7 @@ import {
 export const kbCreateDocument = registerTool({
   id: 'kb.create_document',
   description:
-    "Save Markdown into Zipdev's Knowledge Base so it can be found later. Pass `space` with the name of the space it belongs in; leave it out and it goes into the person's own notes, which only they can see. Saving into a company-wide space needs org admin rights, because everyone's Zippy will answer from it. Tell the person which space it landed in.",
+    "Save Markdown into Zipdev's Knowledge Base so it can be found later. Pass `space` with the name of the space it belongs in; leave it out and it goes into the person's own notes, which only they can see. Saving into a company-wide space needs org admin rights, because everyone's Cortex will answer from it. Tell the person which space it landed in.",
   inputSchema: z.object({
     title: z.string().min(1),
     markdown: z.string().min(1),

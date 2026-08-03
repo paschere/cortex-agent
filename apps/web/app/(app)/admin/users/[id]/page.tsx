@@ -27,7 +27,7 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import { listTools } from '@zipdev/agent-tools';
+import { listTools } from '@cortex/agent-tools';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
@@ -131,7 +131,7 @@ function firstEmbed<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
-/** Same matching rules as matchPattern in @zipdev/agent-tools. */
+/** Same matching rules as matchPattern in @cortex/agent-tools. */
 function matchPattern(pattern: string, toolId: string): boolean {
   return pattern.endsWith('.*') ? toolId.startsWith(pattern.slice(0, -1)) : pattern === toolId;
 }
@@ -294,7 +294,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     <>
       <PageHeader
         title={displayName}
-        subtitle={`Everything this teammate has done with Zippy — last ${WINDOW_DAYS} days`}
+        subtitle={`Everything this teammate has done with Cortex — last ${WINDOW_DAYS} days`}
         icon={<UserIcon className="h-5 w-5" />}
         actions={
           <>
@@ -448,7 +448,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           </div>
         </Panel>
 
-        {/* ---------------------------------------------------- zippy usage */}
+        {/* ---------------------------------------------------- cortex usage */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <StatTile
             label="Tool calls · 7d"

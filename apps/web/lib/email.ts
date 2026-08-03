@@ -1,5 +1,5 @@
 import 'server-only';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 
 /**
  * Minimal outbound email via the Resend HTTP API. Deliberately optional: when
@@ -35,7 +35,7 @@ export async function sendEmail(opts: {
     logger.warn('sendEmail skipped: RESEND_API_KEY not configured', { to });
     return { sent: false, reason: 'RESEND_API_KEY not configured' };
   }
-  const from = process.env.EMAIL_FROM ?? 'Zippy <onboarding@resend.dev>';
+  const from = process.env.EMAIL_FROM ?? 'Cortex <onboarding@resend.dev>';
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',

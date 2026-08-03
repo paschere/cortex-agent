@@ -1,8 +1,8 @@
 import { type DriveContext, crawlSubtree, normalizeGdriveMime } from '@/app/api/kb/drive/_lib';
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { type ToolContext, createIntegrationsClient, driveGet } from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+import { type ToolContext, createIntegrationsClient, driveGet } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 
 const GDRIVE_FOLDER_MIME = 'application/vnd.google-apps.folder';
 

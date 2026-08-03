@@ -1,2 +1,2 @@
-import type { AgentDefinition } from '@zipdev/core';
+import type { AgentDefinition } from '@cortex/core';
 export type { AgentDefinition };

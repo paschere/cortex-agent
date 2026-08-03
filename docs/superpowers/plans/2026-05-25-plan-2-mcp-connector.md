@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 >
-> **Depends on Plan 1.** Plan 1 must be deployed (or at least merged) before this plan executes — we reuse `@zipdev/agent-tools`, `@zipdev/agents`, `@zipdev/core`, and the Supabase data model.
+> **Depends on Plan 1.** Plan 1 must be deployed (or at least merged) before this plan executes — we reuse `@cortex/agent-tools`, `@cortex/agents`, `@cortex/core`, and the Supabase data model.
 
 **Goal:** Expose the Sales agent's tools to Claude Desktop via an MCP server, so a Zipdev salesperson can run the same prospect-to-proposal flow from Claude with their own credentials.
 
-**Architecture:** Standalone Cloudflare Worker that imports `@zipdev/agent-tools` and `@zipdev/agents`, authenticates each MCP request with a per-user bearer token issued from the admin UI, and exposes each registered tool over the MCP protocol. The Worker connects to the same Supabase database with the service-role key for tool execution, scoped by the resolved user id.
+**Architecture:** Standalone Cloudflare Worker that imports `@cortex/agent-tools` and `@cortex/agents`, authenticates each MCP request with a per-user bearer token issued from the admin UI, and exposes each registered tool over the MCP protocol. The Worker connects to the same Supabase database with the service-role key for tool execution, scoped by the resolved user id.
 
 **Tech Stack:** TypeScript, Cloudflare Workers, Wrangler 3, `@modelcontextprotocol/sdk` 1.x, Hono (for the bearer-token bridge HTTP endpoint), Vitest, `miniflare` for tests.
 
@@ -231,7 +231,7 @@ git commit -m "feat(mcp-tokens): admin UI for issuing + revoking per-user MCP be
 
 ```json
 {
-  "name": "@zipdev/mcp",
+  "name": "@cortex/mcp",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -243,9 +243,9 @@ git commit -m "feat(mcp-tokens): admin UI for issuing + revoking per-user MCP be
     "test": "vitest run"
   },
   "dependencies": {
-    "@zipdev/core": "workspace:*",
-    "@zipdev/agent-tools": "workspace:*",
-    "@zipdev/agents": "workspace:*",
+    "@cortex/core": "workspace:*",
+    "@cortex/agent-tools": "workspace:*",
+    "@cortex/agents": "workspace:*",
     "@supabase/supabase-js": "2.46.2",
     "@modelcontextprotocol/sdk": "1.0.4",
     "hono": "4.6.13"
@@ -292,7 +292,7 @@ APP_NAME = "zipdev-mcp"
 
 ```bash
 git add apps/mcp/package.json apps/mcp/tsconfig.json apps/mcp/wrangler.toml
-git commit -m "chore(mcp): scaffold @zipdev/mcp Worker package"
+git commit -m "chore(mcp): scaffold @cortex/mcp Worker package"
 pnpm install
 ```
 
@@ -353,13 +353,13 @@ git commit -m "feat(mcp): bearer-token auth backed by mcp_tokens table"
 - [ ] **Step 1: Write the bridge**
 
 ```ts
-import { createIntegrationsClient, listTools, runTool, type AnyTool } from '@zipdev/agent-tools';
-import { ConfirmationRequiredError, logger } from '@zipdev/core';
+import { createIntegrationsClient, listTools, runTool, type AnyTool } from '@cortex/agent-tools';
+import { ConfirmationRequiredError, logger } from '@cortex/core';
 import { svcClient, type AuthEnv } from './auth';
-import { salesAgent } from '@zipdev/agents';
+import { salesAgent } from '@cortex/agents';
 
 // Force tool registration via side-effect imports
-import '@zipdev/agent-tools';  // hubspot/rate/gmail/gcal/gsheets/kb/composite
+import '@cortex/agent-tools';  // hubspot/rate/gmail/gcal/gsheets/kb/composite
 
 export function exposedTools(): AnyTool[] {
   // Currently all registered tools are exposed; future per-agent filtering can use salesAgent.allowedTools
@@ -399,7 +399,7 @@ export async function execMcpTool(args: BridgeArgs): Promise<{ ok: true; result:
 
 ```bash
 git add apps/mcp/src/tool-bridge.ts
-git commit -m "feat(mcp): tool bridge that delegates to @zipdev/agent-tools runTool"
+git commit -m "feat(mcp): tool bridge that delegates to @cortex/agent-tools runTool"
 ```
 
 ---
@@ -413,13 +413,13 @@ git commit -m "feat(mcp): tool bridge that delegates to @zipdev/agent-tools runT
 ```ts
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { CallToolRequestSchema, ListPromptsRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, GetPromptRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { salesAgent } from '@zipdev/agents';
+import { salesAgent } from '@cortex/agents';
 import { execMcpTool, exposedTools } from './tool-bridge';
 import { svcClient, type AuthEnv } from './auth';
 
 export function buildServer(env: AuthEnv & Record<string, string>, userId: string): Server {
   const server = new Server(
-    { name: 'zipdev-agent', version: '1.0.0' },
+    { name: 'cortex-agent', version: '1.0.0' },
     { capabilities: { tools: {}, prompts: {}, resources: {} } },
   );
 
@@ -540,13 +540,13 @@ app.all('/mcp', async (c) => {
 export default app;
 ```
 
-(Note: the MCP TypeScript SDK 1.x's SSE transport API surface evolves; if `transport.response` isn't the right accessor in the installed version, adapt to the SDK's current pattern — the goal is: per-request, build an MCP `Server`, attach the SSE/HTTP transport, return the response. Run `pnpm --filter @zipdev/mcp dev` and verify with `wrangler tail`.)
+(Note: the MCP TypeScript SDK 1.x's SSE transport API surface evolves; if `transport.response` isn't the right accessor in the installed version, adapt to the SDK's current pattern — the goal is: per-request, build an MCP `Server`, attach the SSE/HTTP transport, return the response. Run `pnpm --filter @cortex/mcp dev` and verify with `wrangler tail`.)
 
 - [ ] **Step 2: Local dev smoke**
 
 ```bash
 cp .env.local .env.local.mcp                 # copy values; alternatively use wrangler secrets locally
-pnpm --filter @zipdev/mcp dev
+pnpm --filter @cortex/mcp dev
 # in another shell:
 curl -i http://127.0.0.1:8787/healthz       # expect "ok"
 curl -i -H "Authorization: Bearer wrong" http://127.0.0.1:8787/mcp   # expect 401
@@ -590,7 +590,7 @@ describe.skipIf(!TOKEN)('mcp smoke (live)', () => {
 
 ```bash
 # Issue a token via the admin UI, then:
-MCP_TOKEN=zd_xxx MCP_BASE=http://127.0.0.1:8787 pnpm --filter @zipdev/mcp test
+MCP_TOKEN=zd_xxx MCP_BASE=http://127.0.0.1:8787 pnpm --filter @cortex/mcp test
 ```
 
 Expected: passes when a real token is provided; skips otherwise.
@@ -620,7 +620,7 @@ Cloudflare Worker exposing Zipdev's shared tools to Claude Desktop via MCP.
 ## Deploy
 
 ```bash
-pnpm --filter @zipdev/mcp deploy
+pnpm --filter @cortex/mcp deploy
 # First time only: set secrets
 wrangler secret put NEXT_PUBLIC_SUPABASE_URL
 wrangler secret put SUPABASE_SERVICE_ROLE_KEY
@@ -638,7 +638,7 @@ The Worker should be deployed at a stable URL (e.g., `https://mcp.zipdev.app`); 
 
 ## Install in Claude Desktop
 
-1. Sign in to `https://zipdev-agent.vercel.app` and go to **Setup → Connect Claude Desktop**.
+1. Sign in to `https://cortex-agent.vercel.app` and go to **Setup → Connect Claude Desktop**.
 2. Click **Generate token** with a name (e.g., "Work laptop"). Copy the displayed JSON snippet — the token is shown only once.
 3. Open Claude Desktop → Settings → Developer → **Edit Config**, paste the snippet under `mcpServers`, save.
 4. Restart Claude Desktop. The Zipdev tools should appear (`kb_search`, `hubspot_*`, `gmail_*`, …).
@@ -648,7 +648,7 @@ The Worker should be deployed at a stable URL (e.g., `https://mcp.zipdev.app`); 
 - [ ] **Step 2: Deploy & verify**
 
 ```bash
-pnpm --filter @zipdev/mcp deploy
+pnpm --filter @cortex/mcp deploy
 curl https://mcp.zipdev.app/healthz   # expect "ok"
 ```
 

@@ -58,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     case 'expired':
       return NextResponse.json(
-        { error: 'This confirmation has expired. Ask Zippy to stage the action again.' },
+        { error: 'This confirmation has expired. Ask Cortex to stage the action again.' },
         { status: 410 },
       );
 
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const run = await runApprovedAction(outcome.action);
   if (!run.ok) {
     // The approval stays spent on purpose — see the note in decide.ts. Retrying
-    // a half-executed write is worse than asking Zippy to stage it again.
+    // a half-executed write is worse than asking Cortex to stage it again.
     return NextResponse.json(
       { error: run.message },
       { status: run.reason === 'failed' ? 500 : 400 },

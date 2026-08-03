@@ -13,7 +13,7 @@ alter table public.growth_signals
   add column if not exists reviewed_at timestamptz;
 
 comment on column public.growth_signals.reviewed_by is
-  'The person whose decision put the signal in its current status. Written by growth.update_signal, from whoever the call is attributed to — the web page and Zippy both go through it.';
+  'The person whose decision put the signal in its current status. Written by growth.update_signal, from whoever the call is attributed to — the web page and Cortex both go through it.';
 comment on column public.growth_signals.reviewed_at is
   'When that status was set. Distinct from updated_at, which also moves when only the contact is filled in.';
 

@@ -1,7 +1,7 @@
 /**
  * Plain shapes shared by the server page and the client components.
  *
- * Deliberately free of any `@zipdev/agent-tools` import: client components pull
+ * Deliberately free of any `@cortex/agent-tools` import: client components pull
  * these in, and that package drags `node:crypto`/`node:dns` into the browser
  * bundle (see app/api/settings/preferences/schema.ts for the build break it
  * caused). Tools are resolved in actions.ts, which is server-only.

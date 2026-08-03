@@ -9,13 +9,13 @@ import { MEMORY_MAX_CHARS } from './types';
  * is read only when a question happens to look like it. So the bar for what
  * gets in is much higher than "is it true".
  *
- * This screen runs on every write path — the `zippy.remember` tool, accepting a
+ * This screen runs on every write path — the `cortex.remember` tool, accepting a
  * nightly suggestion, and the nightly job's own candidates — because the risk is
  * in the storage, not in who asked for it.
  *
  * It is deliberately a REFUSAL, not a redaction. Silently stripping the number
  * out of "Ana earns 4,500 USD" leaves "Ana earns", which is worse than useless:
- * the person believes Zippy learned something and cannot see what. Saying no,
+ * the person believes Cortex learned something and cannot see what. Saying no,
  * with a reason and a place to put it instead, is the honest failure.
  */
 
@@ -30,7 +30,7 @@ export type MemoryRejection =
 export interface MemoryScreenResult {
   ok: boolean;
   reason?: MemoryRejection;
-  /** What to tell the person, in Zippy's voice. Present iff ok is false. */
+  /** What to tell the person, in Cortex's voice. Present iff ok is false. */
   message?: string;
 }
 

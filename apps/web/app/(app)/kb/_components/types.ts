@@ -1,7 +1,7 @@
 /**
  * Plain shapes shared between the server page and the client components.
  *
- * Nothing in here may import `@zipdev/agent-tools`: a client component that
+ * Nothing in here may import `@cortex/agent-tools`: a client component that
  * pulls that package in drags node:crypto, node:dns and pdf-parse's fs access
  * into the browser bundle and breaks the production build. The server resolves
  * everything and hands down these props.

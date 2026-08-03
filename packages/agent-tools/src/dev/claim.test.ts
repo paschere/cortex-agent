@@ -11,7 +11,7 @@ function makeTask(overrides: Partial<DevTask> = {}): DevTask {
     title: 'Do the thing',
     description: null,
     repository_id: 'repo-1',
-    repository_key: 'zipdev-agent',
+    repository_key: 'cortex-agent',
     requester_name: null,
     requester_email: null,
     status: 'queued',

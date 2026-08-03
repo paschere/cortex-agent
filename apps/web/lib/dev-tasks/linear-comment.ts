@@ -1,7 +1,7 @@
 import { buildToolContext } from '@/lib/agent';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { getTool, runTool } from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+import { getTool, runTool } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 
 /**
  * Talking back to the human on the Linear issue.
@@ -14,7 +14,7 @@ import { logger } from '@zipdev/core';
  * ── Whose token ───────────────────────────────────────────────────────────
  * Linear access is per-user OAuth (packages/agent-tools/src/integrations.ts),
  * and a webhook has no signed-in user. So the comment is posted as a designated
- * ACTOR: the Zipdev account named by `ZIPPY_LINEAR_ACTOR_EMAIL`, falling back to
+ * ACTOR: the Zipdev account named by `CORTEX_LINEAR_ACTOR_EMAIL`, falling back to
  * whichever account connected Linear first. That fallback keeps a fresh
  * environment working, but it is worth setting the variable — the audit trail
  * attributes these comments to whoever it picks.
@@ -37,14 +37,14 @@ async function resolveActor(): Promise<Actor | null> {
   if (cachedActor) return cachedActor;
   const db = getSupabaseServiceClient();
 
-  const { data: agent } = await db.from('agents').select('id').eq('slug', 'zippy').maybeSingle();
+  const { data: agent } = await db.from('agents').select('id').eq('slug', 'cortex').maybeSingle();
   const agentId = agent?.id as string | undefined;
   if (!agentId) {
-    logger.error('dev-tasks: no "zippy" agent row — cannot post to Linear');
+    logger.error('dev-tasks: no "cortex" agent row — cannot post to Linear');
     return null;
   }
 
-  const configured = process.env.ZIPPY_LINEAR_ACTOR_EMAIL?.trim().toLowerCase();
+  const configured = process.env.CORTEX_LINEAR_ACTOR_EMAIL?.trim().toLowerCase();
   if (configured) {
     const { data: user } = await db
       .from('users')
@@ -58,7 +58,7 @@ async function resolveActor(): Promise<Actor | null> {
       cachedActor = { userId: user.id as string, agentId };
       return cachedActor;
     }
-    logger.warn(`dev-tasks: ZIPPY_LINEAR_ACTOR_EMAIL "${configured}" matches no Zipdev user`);
+    logger.warn(`dev-tasks: CORTEX_LINEAR_ACTOR_EMAIL "${configured}" matches no Zipdev user`);
   }
 
   const { data: integration } = await db

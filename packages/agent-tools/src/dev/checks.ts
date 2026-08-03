@@ -1,7 +1,7 @@
 /**
  * "Run the repo's own checks" — discovered, not hardcoded.
  *
- * The executor must work against zipdev-agent, zipdev-matcher and payroll,
+ * The executor must work against cortex-agent, zipdev-matcher and payroll,
  * which do not share a script vocabulary. So instead of assuming
  * `pnpm typecheck`, we read the target repo's package.json and build a plan
  * from the scripts it actually declares, in the order a human would run them

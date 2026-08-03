@@ -30,7 +30,7 @@ export function ChatRoot({
   initialMessages,
   initialAgentSlug,
 }: ChatRootProps) {
-  const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'zippy');
+  const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [draft, setDraft] = useState('');

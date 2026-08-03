@@ -11,14 +11,14 @@ import {
 describe('buildBranchName', () => {
   it('derives a branch from the Linear identifier and title', () => {
     expect(buildBranchName('ENG-142', 'Add rate limiting to the chat route')).toBe(
-      'zippy/eng-142-add-rate-limiting-to-the-chat-route',
+      'cortex/eng-142-add-rate-limiting-to-the-chat-route',
     );
   });
 
   it('truncates a long title on a word boundary', () => {
     expect(
       buildBranchName('ENG-143', 'Add rate limiting to the chat route and the tools route'),
-    ).toBe('zippy/eng-143-add-rate-limiting-to-the-chat-route-and-the');
+    ).toBe('cortex/eng-143-add-rate-limiting-to-the-chat-route-and-the');
   });
 
   it('always produces a valid, non-protected, namespaced branch', () => {
@@ -39,11 +39,11 @@ describe('buildBranchName', () => {
   });
 
   it('strips accents rather than dropping the letters they sit on', () => {
-    expect(buildBranchName('ENG-8', 'Añadir')).toBe('zippy/eng-8-anadir');
+    expect(buildBranchName('ENG-8', 'Añadir')).toBe('cortex/eng-8-anadir');
   });
 
   it('falls back to the identifier alone when the title slugs to nothing', () => {
-    expect(buildBranchName('ENG-11', '???')).toBe('zippy/eng-11');
+    expect(buildBranchName('ENG-11', '???')).toBe('cortex/eng-11');
   });
 
   it('refuses an identifier that cannot produce a slug', () => {
@@ -53,27 +53,27 @@ describe('buildBranchName', () => {
 
 describe('isValidBranchName', () => {
   it.each([
-    ['zippy/eng-1-ok', true],
+    ['cortex/eng-1-ok', true],
     ['', false],
-    ['zippy/eng-1..bad', false],
-    ['zippy/eng-1 bad', false],
-    ['zippy//eng-1', false],
-    ['zippy/eng-1.lock', false],
-    ['zippy/eng-1@{0}', false],
-    ['zippy/eng-1~1', false],
-    ['zippy/eng-1^', false],
-    ['zippy/eng:1', false],
-    ['zippy/eng?1', false],
-    ['zippy/eng*1', false],
-    ['zippy/eng[1', false],
-    ['zippy/eng\\1', false],
-    ['-zippy/eng-1', false],
-    ['.zippy/eng-1', false],
-    ['zippy/eng-1/', false],
-    ['zippy/eng-1 ', false],
-    [String.raw`zippy/eng-1` + String.fromCharCode(9), false],
-    [String.raw`zippy/eng-1` + String.fromCharCode(7), false],
-    [String.raw`zippy/eng-1` + String.fromCharCode(127), false],
+    ['cortex/eng-1..bad', false],
+    ['cortex/eng-1 bad', false],
+    ['cortex//eng-1', false],
+    ['cortex/eng-1.lock', false],
+    ['cortex/eng-1@{0}', false],
+    ['cortex/eng-1~1', false],
+    ['cortex/eng-1^', false],
+    ['cortex/eng:1', false],
+    ['cortex/eng?1', false],
+    ['cortex/eng*1', false],
+    ['cortex/eng[1', false],
+    ['cortex/eng\\1', false],
+    ['-cortex/eng-1', false],
+    ['.cortex/eng-1', false],
+    ['cortex/eng-1/', false],
+    ['cortex/eng-1 ', false],
+    [String.raw`cortex/eng-1` + String.fromCharCode(9), false],
+    [String.raw`cortex/eng-1` + String.fromCharCode(7), false],
+    [String.raw`cortex/eng-1` + String.fromCharCode(127), false],
   ])('validates %s as %s', (branch, expected) => {
     expect(isValidBranchName(branch)).toBe(expected);
   });
@@ -93,7 +93,7 @@ describe('isProtectedBranch', () => {
   });
 
   it('allows an ordinary feature branch', () => {
-    expect(isProtectedBranch('zippy/eng-1-thing', 'main')).toBe(false);
+    expect(isProtectedBranch('cortex/eng-1-thing', 'main')).toBe(false);
   });
 
   it('treats an empty branch name as protected', () => {
@@ -103,16 +103,16 @@ describe('isProtectedBranch', () => {
 
 describe('assertPushable', () => {
   it('returns a plain fast-forward push argv for a valid feature branch', () => {
-    expect(assertPushable({ branch: 'zippy/eng-1-thing', defaultBranch: 'main' })).toEqual([
+    expect(assertPushable({ branch: 'cortex/eng-1-thing', defaultBranch: 'main' })).toEqual([
       'push',
       '--set-upstream',
       'origin',
-      'zippy/eng-1-thing:refs/heads/zippy/eng-1-thing',
+      'cortex/eng-1-thing:refs/heads/cortex/eng-1-thing',
     ]);
   });
 
   it('never emits a force flag', () => {
-    const argv = assertPushable({ branch: 'zippy/eng-1-thing', defaultBranch: 'main' });
+    const argv = assertPushable({ branch: 'cortex/eng-1-thing', defaultBranch: 'main' });
     expect(argv.join(' ')).not.toMatch(/--force|-f\b/);
   });
 
@@ -135,15 +135,15 @@ describe('assertPushable', () => {
     },
   );
 
-  it('refuses a branch outside the zippy/ namespace', () => {
+  it('refuses a branch outside the cortex/ namespace', () => {
     expect(() => assertPushable({ branch: 'feature/whatever', defaultBranch: 'main' })).toThrow(
-      /not under the "zippy\/" namespace/,
+      /not under the "cortex\/" namespace/,
     );
   });
 
   it('refuses a refspec smuggled into the branch name', () => {
     expect(() =>
-      assertPushable({ branch: 'zippy/x:refs/heads/main', defaultBranch: 'main' }),
+      assertPushable({ branch: 'cortex/x:refs/heads/main', defaultBranch: 'main' }),
     ).toThrow(/not a valid git branch name/);
   });
 

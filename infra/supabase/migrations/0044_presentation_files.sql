@@ -76,9 +76,9 @@ begin
   end if;
 end $$;
 
--- Zippy gains the new family. Wildcard, so later presentations.* tools need no
+-- Cortex gains the new family. Wildcard, so later presentations.* tools need no
 -- migration (filterTools() in packages/agent-tools/src/registry.ts expands it).
 update public.agents
 set allowed_tool_ids = array_append(allowed_tool_ids, 'presentations.*')
-where slug = 'zippy'
+where slug = 'cortex'
   and not ('presentations.*' = any(allowed_tool_ids));

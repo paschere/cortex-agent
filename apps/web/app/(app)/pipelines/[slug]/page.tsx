@@ -89,7 +89,7 @@ export default async function PipelineDetailPage({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        {/* Flow timeline — the deck's language: purple nodes = Zippy works, YOU = you decide */}
+        {/* Flow timeline — the deck's language: purple nodes = Cortex works, YOU = you decide */}
         <Panel className="p-5">
           <div className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
             The flow

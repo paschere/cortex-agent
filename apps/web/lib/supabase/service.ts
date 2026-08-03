@@ -1,6 +1,6 @@
 import 'server-only';
 import { createClient } from '@supabase/supabase-js';
-import { getEnv } from '@zipdev/core';
+import { getEnv } from '@cortex/core';
 
 let _service: ReturnType<typeof createClient> | null = null;
 

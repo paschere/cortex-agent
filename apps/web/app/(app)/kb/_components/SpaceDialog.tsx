@@ -9,7 +9,7 @@ import { createSpace } from '../actions';
 /**
  * Creating a personal space and creating a company-wide one are the same form
  * with different weight. The global variant says out loud who ends up reading
- * it, because "everyone's Zippy will answer from this" is the whole difference
+ * it, because "everyone's Cortex will answer from this" is the whole difference
  * and it is not visible anywhere afterwards.
  */
 export function SpaceDialog({
@@ -81,7 +81,7 @@ export function SpaceDialog({
           <div className="scroll-slim min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
             {isGlobal && (
               <p className="rounded-[10px] border border-amber/30 bg-amber-soft px-3 py-2.5 text-[12px] leading-relaxed text-ink">
-                Everything you put in a company space becomes an answer. When anyone asks Zippy
+                Everything you put in a company space becomes an answer. When anyone asks Cortex
                 about this subject — in chat, in Google Chat, anywhere — it will read from here and
                 quote it back as what Zipdev knows. Keep drafts and half-formed notes in a personal
                 space until they are true.

@@ -10,7 +10,7 @@ import {
 import { CHAT_TEXT_LIMIT, flattenMarkdownForChat } from './webhook';
 
 /**
- * `chat.send_dm` — direct-message a Zipdev user as the Zippy Chat app.
+ * `chat.send_dm` — direct-message a Zipdev user as the Cortex Chat app.
  *
  * The sibling tool `chat.send_message` posts into a SPACE through a webhook the
  * person pasted into settings. This one posts into the 1:1 conversation between
@@ -19,7 +19,7 @@ import { CHAT_TEXT_LIMIT, flattenMarkdownForChat } from './webhook';
  * The DM space cannot be created on demand — Google only hands it to us once
  * the person has messaged the app. `google_chat_links.dm_space` is written the
  * first time that happens (see /api/chat-app/google). So "this person never
- * said hi to Zippy" is a NORMAL outcome, not an error: it reports
+ * said hi to Cortex" is a NORMAL outcome, not an error: it reports
  * `{ sent: false, reason: 'not linked' }` and explains what to do. Nothing here
  * throws — a digest with three channels must not lose the other two because
  * Chat is unreachable.
@@ -73,13 +73,13 @@ export async function findChatDmLink(
  */
 export function notLinkedExplanation(subject: 'you' | 'they' = 'they'): string {
   const have = subject === 'you' ? "you haven't" : "they haven't";
-  return `${have} messaged Zippy in Google Chat yet, so there's no direct-message thread to post into. Open Google Chat, search for the Zippy app and say hi — that creates the thread, and Zippy can write there from then on.`;
+  return `${have} messaged Cortex in Google Chat yet, so there's no direct-message thread to post into. Open Google Chat, search for the Cortex app and say hi — that creates the thread, and Cortex can write there from then on.`;
 }
 
 export const chatSendDm = registerTool({
   id: 'chat.send_dm',
   description:
-    'Send a private direct message to a Zipdev teammate through the Zippy app in Google Chat. Only that person sees it — use it for anything personal (their own digest, a reminder, a heads-up) instead of posting into a shared space. Markdown is accepted and converted automatically to what Google Chat renders; do not format for Chat yourself. It only works for people who have messaged the Zippy app at least once, because that is what creates the direct-message thread; for anyone else it reports back that they are not linked instead of failing, and you should tell them to say hi to Zippy in Google Chat. Leave userId out to message the person you are working for.',
+    'Send a private direct message to a Zipdev teammate through the Cortex app in Google Chat. Only that person sees it — use it for anything personal (their own digest, a reminder, a heads-up) instead of posting into a shared space. Markdown is accepted and converted automatically to what Google Chat renders; do not format for Chat yourself. It only works for people who have messaged the Cortex app at least once, because that is what creates the direct-message thread; for anyone else it reports back that they are not linked instead of failing, and you should tell them to say hi to Cortex in Google Chat. Leave userId out to message the person you are working for.',
   inputSchema: z.object({
     userId: z
       .string()
@@ -132,7 +132,7 @@ export const chatSendDm = registerTool({
     if (!isChatAppConfigured()) {
       return fail(
         'chat app not configured',
-        'The Zippy Google Chat app is not set up on this environment, so direct messages cannot be sent. Nothing was delivered.',
+        'The Cortex Google Chat app is not set up on this environment, so direct messages cannot be sent. Nothing was delivered.',
       );
     }
 

@@ -17,7 +17,7 @@ interface Entry {
 
 const NAVIGATION: Entry[] = [
   { href: '/dashboard', label: 'Dashboard', keywords: 'home overview' },
-  { href: '/chat', label: 'New Chat', keywords: 'zippy ask' },
+  { href: '/chat', label: 'New Chat', keywords: 'cortex ask' },
   { href: '/conversations', label: 'Conversations', keywords: 'history threads' },
   { href: '/approvals', label: 'Approvals', keywords: 'pending confirm' },
   { href: '/kb', label: 'Knowledge Base', keywords: 'kb docs brain search' },
@@ -29,12 +29,12 @@ const NAVIGATION: Entry[] = [
 const CONNECTIONS: Entry[] = [
   {
     href: '/integrations',
-    label: 'Integrations — what Zippy is connected to',
+    label: 'Integrations — what Cortex is connected to',
     keywords: 'google hubspot workable slack github linear apollo payroll mcp servers',
   },
   {
     href: '/mcp-tokens',
-    label: 'Connect Claude — use Zippy from an AI client',
+    label: 'Connect Claude — use Cortex from an AI client',
     keywords: 'claude code chatgpt mcp connector url token oauth',
   },
 ];

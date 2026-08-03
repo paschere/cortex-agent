@@ -73,7 +73,7 @@ export default async function PipelinesPage() {
             >
               visual builder
             </Link>
-            , or ask Zippy in{' '}
+            , or ask Cortex in{' '}
             <Link href="/chat" className="font-semibold text-primary hover:text-primary-strong">
               chat
             </Link>

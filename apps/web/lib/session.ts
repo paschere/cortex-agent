@@ -2,7 +2,7 @@ import 'server-only';
 import { headers } from 'next/headers';
 import { auth } from './auth';
 import { getSupabaseServiceClient } from './supabase/service';
-import { UnauthorizedError, type Role, type SessionUser } from '@zipdev/core';
+import { UnauthorizedError, type Role, type SessionUser } from '@cortex/core';
 
 export async function requireSession(): Promise<SessionUser> {
   const session = await auth.api.getSession({ headers: await headers() });

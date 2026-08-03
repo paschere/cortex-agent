@@ -144,7 +144,7 @@ export default async function DevWorkPage() {
       : {
           label: 'Repositories',
           value: String(enabledRepos),
-          sub: `Zippy may edit ${enabledRepos === 1 ? 'one repo' : `${enabledRepos} repos`}`,
+          sub: `Cortex may edit ${enabledRepos === 1 ? 'one repo' : `${enabledRepos} repos`}`,
           icon: FolderGit2,
           chip: 'bg-surface-2 text-ink-muted',
         },
@@ -154,7 +154,7 @@ export default async function DevWorkPage() {
     <>
       <PageHeader
         title="Dev Work"
-        subtitle="Every change Zippy is making to Zipdev's own software, on its own. Watch it here — and stop it here."
+        subtitle="Every change Cortex is making to Zipdev's own software, on its own. Watch it here — and stop it here."
         icon={<Hammer className="h-5 w-5" />}
         actions={
           <>
@@ -174,7 +174,7 @@ export default async function DevWorkPage() {
           <Hammer className="mx-auto mb-3 h-8 w-8 text-primary" />
           <p className="mb-1 font-semibold text-ink">Not switched on in this environment yet</p>
           <p className="mx-auto max-w-md">
-            Zippy cannot pick up its own development work here — the groundwork for it has not been
+            Cortex cannot pick up its own development work here — the groundwork for it has not been
             installed. Once it is, every run shows up on this page as it happens.
           </p>
         </Panel>
@@ -209,9 +209,9 @@ export default async function DevWorkPage() {
           {tasks.length === 0 ? (
             <Panel className="p-10 text-center text-[13px] text-ink-faint">
               <Hammer className="mx-auto mb-3 h-8 w-8 text-primary" />
-              <p className="mb-1 font-semibold text-ink">Zippy has not been asked for anything</p>
+              <p className="mb-1 font-semibold text-ink">Cortex has not been asked for anything</p>
               <p className="mx-auto max-w-md">
-                Assign a Linear issue to Zippy and it turns up here — you will see it pick the work
+                Assign a Linear issue to Cortex and it turns up here — you will see it pick the work
                 up, and you can stop it at any point.
               </p>
             </Panel>

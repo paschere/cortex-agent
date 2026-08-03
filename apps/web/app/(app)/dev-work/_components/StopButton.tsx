@@ -41,7 +41,7 @@ export function StopButton({
           'inline-flex items-center rounded-[10px] border border-rose/30 bg-rose-soft font-semibold text-rose',
           shape,
         )}
-        title="A person asked Zippy to stop. It stands down after the step it is on."
+        title="A person asked Cortex to stop. It stands down after the step it is on."
       >
         <Loader2 className="h-3.5 w-3.5 animate-spin" /> Stopping
       </span>
@@ -51,7 +51,7 @@ export function StopButton({
   async function stop() {
     if (
       !window.confirm(
-        `Stop Zippy working on “${title}”?\n\nIt stops after the step it is on. Any work already pushed stays on its branch — nothing is merged.`,
+        `Stop Cortex working on “${title}”?\n\nIt stops after the step it is on. Any work already pushed stays on its branch — nothing is merged.`,
       )
     ) {
       return;

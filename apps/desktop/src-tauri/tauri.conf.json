@@ -34,13 +34,13 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/zipdev/zipdev-agent/releases/latest/download/latest.json"
+        "https://github.com/zipdev/cortex-agent/releases/latest/download/latest.json"
       ],
       "pubkey": "REPLACE_AT_TASK_6"
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["zipdev-agent"]
+        "schemes": ["cortex-agent"]
       }
     }
   },

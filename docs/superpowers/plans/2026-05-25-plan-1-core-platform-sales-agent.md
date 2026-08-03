@@ -13,7 +13,7 @@
 ## File structure (locked at planning time)
 
 ```
-zipdev-agent/
+cortex-agent/
 ├── package.json                       # Workspaces root
 ├── pnpm-workspace.yaml
 ├── turbo.json
@@ -225,7 +225,7 @@ Pre-flight expected at start of every task: assume `pnpm install` has been run a
 
 ```json
 {
-  "name": "zipdev-agent",
+  "name": "cortex-agent",
   "private": true,
   "version": "0.0.0",
   "packageManager": "pnpm@9.12.0",
@@ -374,7 +374,7 @@ SUPABASE_DB_URL=postgresql://postgres:postgres@localhost:54322/postgres
 
 # App
 APP_BASE_URL=http://localhost:3000
-SESSION_COOKIE_NAME=zipdev_session
+SESSION_COOKIE_NAME=cortex_session
 ALLOWED_EMAIL_DOMAIN=zipdev.com
 
 # Google OAuth (per-user integrations, separate from Supabase SSO config)
@@ -411,7 +411,7 @@ OTEL_EXPORTER_OTLP_HEADERS=
 - [ ] **Step 9: Write `README.md`**
 
 ```markdown
-# zipdev-agent
+# cortex-agent
 
 Internal AI agent platform. v1 = Sales agent (web).
 
@@ -457,7 +457,7 @@ git commit -m "chore: scaffold monorepo with pnpm + turborepo + biome"
 
 ```json
 {
-  "name": "@zipdev/core",
+  "name": "@cortex/core",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -608,7 +608,7 @@ export class ConfirmationRequiredError extends ZipdevError {
 import pino from "pino";
 export const logger = pino({
   level: process.env.LOG_LEVEL ?? "info",
-  base: { service: "zipdev-agent" },
+  base: { service: "cortex-agent" },
   redact: {
     paths: [
       "access_token",
@@ -634,7 +634,7 @@ const schema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_DB_URL: z.string().url(),
   APP_BASE_URL: z.string().url(),
-  SESSION_COOKIE_NAME: z.string().default("zipdev_session"),
+  SESSION_COOKIE_NAME: z.string().default("cortex_session"),
   ALLOWED_EMAIL_DOMAIN: z.string().default("zipdev.com"),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
@@ -727,7 +727,7 @@ describe("getEnv", () => {
 
 - [ ] **Step 8: Run test, see it fail then pass**
 
-Run: `pnpm --filter @zipdev/core test`
+Run: `pnpm --filter @cortex/core test`
 Expected first: PASS (the file exists, both cases should pass with the implementation above). If the second case fails because of module caching, simplify by removing the cache (set `cached = null` at the top of the function for test mode) — or just accept it tests the schema directly.
 
 Replace the test's second case with a direct schema test instead:
@@ -788,7 +788,7 @@ describe("envSchema", () => {
 });
 ```
 
-Run: `pnpm --filter @zipdev/core test`
+Run: `pnpm --filter @cortex/core test`
 Expected: 2 passed.
 
 - [ ] **Step 9: Write `packages/core/src/crypto.ts`** (AES-256-GCM for token encryption)
@@ -890,10 +890,10 @@ export * from "./session";
 
 - [ ] **Step 13: Run tests, typecheck**
 
-Run: `pnpm --filter @zipdev/core test`
+Run: `pnpm --filter @cortex/core test`
 Expected: 4 passing.
 
-Run: `pnpm --filter @zipdev/core typecheck`
+Run: `pnpm --filter @cortex/core typecheck`
 Expected: exit 0.
 
 - [ ] **Step 14: Commit**
@@ -920,7 +920,7 @@ Expected: creates `infra/supabase/config.toml`.
 Edit `infra/supabase/config.toml` and ensure these are set (other defaults are fine):
 
 ```toml
-project_id = "zipdev-agent"
+project_id = "cortex-agent"
 [api]
 port = 54321
 [db]
@@ -1377,7 +1377,7 @@ git commit -m "feat(db): initial schema, RLS, seed Sales agent"
 
 ```json
 {
-  "name": "@zipdev/web",
+  "name": "@cortex/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -1391,9 +1391,9 @@ git commit -m "feat(db): initial schema, RLS, seed Sales agent"
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@zipdev/core": "workspace:*",
-    "@zipdev/agent-tools": "workspace:*",
-    "@zipdev/agents": "workspace:*",
+    "@cortex/core": "workspace:*",
+    "@cortex/agent-tools": "workspace:*",
+    "@cortex/agents": "workspace:*",
     "@supabase/ssr": "0.5.2",
     "@supabase/supabase-js": "2.46.2",
     "next": "15.0.4",
@@ -1440,7 +1440,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 const config = {
   reactStrictMode: true,
   experimental: { serverActions: { bodySizeLimit: "12mb" } },
-  transpilePackages: ["@zipdev/core", "@zipdev/agent-tools", "@zipdev/agents"],
+  transpilePackages: ["@cortex/core", "@cortex/agent-tools", "@cortex/agents"],
   async headers() {
     return [
       {
@@ -1519,7 +1519,7 @@ body {
 ```ts
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { getEnv } from "@zipdev/core";
+import { getEnv } from "@cortex/core";
 
 export async function getSupabaseServerClient() {
   const env = getEnv();
@@ -1549,7 +1549,7 @@ export async function getSupabaseServerClient() {
 ```ts
 "use client";
 import { createBrowserClient } from "@supabase/ssr";
-import { getEnv } from "@zipdev/core";
+import { getEnv } from "@cortex/core";
 
 let _client: ReturnType<typeof createBrowserClient> | null = null;
 export function getSupabaseBrowserClient() {
@@ -1568,7 +1568,7 @@ export function getSupabaseBrowserClient() {
 ```ts
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
-import { getEnv } from "@zipdev/core";
+import { getEnv } from "@cortex/core";
 
 let _service: ReturnType<typeof createClient> | null = null;
 export function getSupabaseServiceClient() {
@@ -1589,7 +1589,7 @@ export function getSupabaseServiceClient() {
 
 ```ts
 import { getSupabaseServerClient } from "./supabase/server";
-import { UnauthorizedError, type SessionUser, type Role } from "@zipdev/core";
+import { UnauthorizedError, type SessionUser, type Role } from "@cortex/core";
 
 export async function requireSession(): Promise<SessionUser> {
   const sb = await getSupabaseServerClient();
@@ -1755,7 +1755,7 @@ export default function LoginPage() {
 ```ts
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getEnv } from "@zipdev/core";
+import { getEnv } from "@cortex/core";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -1784,7 +1784,7 @@ export async function GET(req: NextRequest) {
 
 - [ ] **Step 15: Run dev server and verify login redirect**
 
-Run: `pnpm --filter @zipdev/web dev`
+Run: `pnpm --filter @cortex/web dev`
 Expected: starts on http://localhost:3000.
 
 Visit http://localhost:3000 → expect redirect to `/login`.
@@ -1801,7 +1801,7 @@ git commit -m "feat(web): Next.js scaffold + Google SSO with @zipdev.com restric
 
 ---
 
-## Task 5: `@zipdev/agent-tools` framework (types, registry, audit, rate-limit, integrations client)
+## Task 5: `@cortex/agent-tools` framework (types, registry, audit, rate-limit, integrations client)
 
 **Files:**
 
@@ -1813,7 +1813,7 @@ git commit -m "feat(web): Next.js scaffold + Google SSO with @zipdev.com restric
 
 ```json
 {
-  "name": "@zipdev/agent-tools",
+  "name": "@cortex/agent-tools",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -1825,7 +1825,7 @@ git commit -m "feat(web): Next.js scaffold + Google SSO with @zipdev.com restric
     "test": "vitest run"
   },
   "dependencies": {
-    "@zipdev/core": "workspace:*",
+    "@cortex/core": "workspace:*",
     "@supabase/supabase-js": "2.46.2",
     "zod": "3.23.8"
   },
@@ -1852,7 +1852,7 @@ git commit -m "feat(web): Next.js scaffold + Google SSO with @zipdev.com restric
 
 ```ts
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Logger, UUID } from "@zipdev/core";
+import type { Logger, UUID } from "@cortex/core";
 import type { z } from "zod";
 
 export interface ToolContext {
@@ -1893,7 +1893,7 @@ export type AnyTool = ToolDef<unknown, unknown>;
 ```ts
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { UUID } from "@zipdev/core";
+import type { UUID } from "@cortex/core";
 
 export type AuditStatus =
   | "ok"
@@ -1961,7 +1961,7 @@ describe("hashInput", () => {
 
 ```ts
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { RateLimitError, type UUID } from "@zipdev/core";
+import { RateLimitError, type UUID } from "@cortex/core";
 
 /**
  * Token bucket per (user_id, tool_id): `perMinute` tokens that refill once per minute.
@@ -2013,7 +2013,7 @@ import {
   IntegrationError,
   type Logger,
   type UUID,
-} from "@zipdev/core";
+} from "@cortex/core";
 
 interface RefreshFn {
   (
@@ -2155,7 +2155,7 @@ export function createIntegrationsClient(
 - [ ] **Step 8: Write `packages/agent-tools/src/index.ts`** (registry + filter helper)
 
 ```ts
-import { ConfirmationRequiredError, ValidationError } from "@zipdev/core";
+import { ConfirmationRequiredError, ValidationError } from "@cortex/core";
 import { writeAuditEvent } from "./audit";
 import { consumeToken } from "./rate-limit";
 import type { AnyTool, ToolContext, ToolDef } from "./types";
@@ -2292,10 +2292,10 @@ export { createIntegrationsClient } from "./integrations";
 
 - [ ] **Step 9: Run tests**
 
-Run: `pnpm --filter @zipdev/agent-tools test`
+Run: `pnpm --filter @cortex/agent-tools test`
 Expected: 3 passed (hashInput).
 
-Run: `pnpm --filter @zipdev/agent-tools typecheck`
+Run: `pnpm --filter @cortex/agent-tools typecheck`
 Expected: exit 0.
 
 - [ ] **Step 10: Commit**
@@ -2339,7 +2339,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
 ```tsx
 import Link from "next/link";
-import type { Role } from "@zipdev/core";
+import type { Role } from "@cortex/core";
 
 export function Sidebar({ role }: { role: Role }) {
   return (
@@ -2437,7 +2437,7 @@ export function Sidebar({ role }: { role: Role }) {
 import { NextResponse, type NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
 import { requireSession } from "@/lib/session";
-import { getEnv } from "@zipdev/core";
+import { getEnv } from "@cortex/core";
 import { cookies } from "next/headers";
 
 const SCOPE_PRESETS: Record<string, string[]> = {
@@ -2492,7 +2492,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { requireSession } from "@/lib/session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { encryptToken, getEnv, IntegrationError } from "@zipdev/core";
+import { encryptToken, getEnv, IntegrationError } from "@cortex/core";
 
 export async function GET(req: NextRequest) {
   const user = await requireSession();
@@ -2694,7 +2694,7 @@ export default async function Dashboard() {
 - [ ] **Step 7: Manual smoke test**
 
 Set env values in `.env.local` (Google OAuth client must be created in Google Cloud Console; runbook in Task 28).
-Run: `pnpm --filter @zipdev/web dev`
+Run: `pnpm --filter @cortex/web dev`
 Visit `/integrations`, click **Connect**, complete Google consent, verify redirect lands at `/integrations?connected=google` and the "Connected · N scopes" badge appears.
 
 Run: `psql $SUPABASE_DB_URL -c "select provider, array_length(scopes,1) from public.integrations where user_id = '<your-uuid>'"`
@@ -2723,7 +2723,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { requireSession } from "@/lib/session";
-import { getEnv } from "@zipdev/core";
+import { getEnv } from "@cortex/core";
 
 const SCOPES = [
   "crm.objects.companies.read",
@@ -2761,7 +2761,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { requireSession } from "@/lib/session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { encryptToken, getEnv, IntegrationError } from "@zipdev/core";
+import { encryptToken, getEnv, IntegrationError } from "@cortex/core";
 
 export async function GET(req: NextRequest) {
   const user = await requireSession();
@@ -2850,7 +2850,7 @@ git commit -m "feat(integrations): HubSpot per-user OAuth (read-only)"
 - [ ] **Step 1: Write `packages/agent-tools/src/hubspot/client.ts`**
 
 ```ts
-import { IntegrationError } from "@zipdev/core";
+import { IntegrationError } from "@cortex/core";
 import type { ToolContext } from "../types";
 
 const BASE = "https://api.hubapi.com";
@@ -3457,7 +3457,7 @@ describe("HubSpot tools", () => {
 
 - [ ] **Step 9: Run tests**
 
-Run: `pnpm --filter @zipdev/agent-tools test`
+Run: `pnpm --filter @cortex/agent-tools test`
 Expected: 7 passed (3 audit + 4 hubspot).
 
 - [ ] **Step 10: Commit**
@@ -3514,19 +3514,19 @@ export async function POST(req: NextRequest) {
 
 If `estimateRate` is named differently in the existing `lib/estimator.ts`, adapt the import (the file is in the existing repo's `lib/`).
 
-Add `INTERNAL_SERVICE_TOKEN` to that repo's `.env.example` and `.env.local` (must match `RATE_ESTIMATOR_SERVICE_TOKEN` used by `zipdev-agent`).
+Add `INTERNAL_SERVICE_TOKEN` to that repo's `.env.example` and `.env.local` (must match `RATE_ESTIMATOR_SERVICE_TOKEN` used by `cortex-agent`).
 
 In the rate-estimator repo:
 
 ```bash
 git add app/api/internal/estimate/route.ts .env.example
-git commit -m "feat: internal estimate endpoint for zipdev-agent"
+git commit -m "feat: internal estimate endpoint for cortex-agent"
 ```
 
 - [ ] **Step 2: Write `packages/agent-tools/src/rate/client.ts`**
 
 ```ts
-import { IntegrationError } from "@zipdev/core";
+import { IntegrationError } from "@cortex/core";
 import type { ToolContext } from "../types";
 
 export interface EstimateInput {
@@ -3745,7 +3745,7 @@ describe("rate.estimate", () => {
 
 - [ ] **Step 7: Run tests, commit**
 
-Run: `pnpm --filter @zipdev/agent-tools test`
+Run: `pnpm --filter @cortex/agent-tools test`
 Expected: 9 passed.
 
 ```bash
@@ -3766,7 +3766,7 @@ git commit -m "feat(tools): rate estimator (estimate, estimate_from_document)"
 - [ ] **Step 1: Write `packages/agent-tools/src/gmail/client.ts`**
 
 ```ts
-import { IntegrationError } from "@zipdev/core";
+import { IntegrationError } from "@cortex/core";
 import type { ToolContext } from "../types";
 
 const BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -4115,7 +4115,7 @@ describe("gmail tools", () => {
 
 - [ ] **Step 7: Run tests, commit**
 
-Run: `pnpm --filter @zipdev/agent-tools test`
+Run: `pnpm --filter @cortex/agent-tools test`
 Expected: 11 passed.
 
 ```bash
@@ -4137,7 +4137,7 @@ git commit -m "feat(tools): Gmail search, read_thread, draft"
 - [ ] **Step 1: `packages/agent-tools/src/gcal/client.ts`**
 
 ```ts
-import { IntegrationError } from "@zipdev/core";
+import { IntegrationError } from "@cortex/core";
 import type { ToolContext } from "../types";
 const BASE = "https://www.googleapis.com/calendar/v3";
 export async function gcalFetch<T>(
@@ -4278,7 +4278,7 @@ export const gcalCreateEvent = registerTool({
 - [ ] **Step 4: `packages/agent-tools/src/gsheets/client.ts`**
 
 ```ts
-import { IntegrationError } from "@zipdev/core";
+import { IntegrationError } from "@cortex/core";
 import type { ToolContext } from "../types";
 const BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 export async function sheetsFetch<T>(
@@ -4402,7 +4402,7 @@ import { http, HttpResponse } from "msw";
 import { gcalListEvents } from "../list-events";
 import { gcalCreateEvent } from "../create-event";
 import { runTool } from "../../index";
-import { ConfirmationRequiredError } from "@zipdev/core";
+import { ConfirmationRequiredError } from "@cortex/core";
 import type { ToolContext } from "../../types";
 
 const ctx: ToolContext = {
@@ -4502,7 +4502,7 @@ import { http, HttpResponse } from "msw";
 import { sheetsReadRange } from "../read-range";
 import { sheetsAppendRow } from "../append-row";
 import { runTool } from "../../index";
-import { ConfirmationRequiredError } from "@zipdev/core";
+import { ConfirmationRequiredError } from "@cortex/core";
 import type { ToolContext } from "../../types";
 
 const ctx: ToolContext = {
@@ -4582,7 +4582,7 @@ describe("gsheets", () => {
 
 - [ ] **Step 9: Run tests, commit**
 
-Run: `pnpm --filter @zipdev/agent-tools test`
+Run: `pnpm --filter @cortex/agent-tools test`
 Expected: 17 passed.
 
 ```bash
@@ -4604,7 +4604,7 @@ git commit -m "feat(tools): Calendar + Sheets, with confirmation gate on writes"
 ```ts
 import mammoth from "mammoth";
 import pdf from "pdf-parse";
-import { ValidationError } from "@zipdev/core";
+import { ValidationError } from "@cortex/core";
 
 export async function parseToText(
   buffer: Buffer,
@@ -4695,7 +4695,7 @@ export function chunkText(
 - [ ] **Step 3: `packages/agent-tools/src/kb/embedder.ts`** (Gemini text-embedding-004)
 
 ```ts
-import { ValidationError } from "@zipdev/core";
+import { ValidationError } from "@cortex/core";
 
 const ENDPOINT =
   "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents";
@@ -4854,7 +4854,7 @@ describe("parseToText", () => {
 
 - [ ] **Step 6: Run tests, commit**
 
-Run: `pnpm --filter @zipdev/agent-tools test`
+Run: `pnpm --filter @cortex/agent-tools test`
 Expected: 22 passed.
 
 ```bash
@@ -5085,7 +5085,7 @@ Run: `pnpm db:reset`
 
 ```json
 {
-  "name": "@zipdev/inngest",
+  "name": "@cortex/inngest",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -5093,8 +5093,8 @@ Run: `pnpm db:reset`
   "types": "./src/index.ts",
   "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run" },
   "dependencies": {
-    "@zipdev/core": "workspace:*",
-    "@zipdev/agent-tools": "workspace:*",
+    "@cortex/core": "workspace:*",
+    "@cortex/agent-tools": "workspace:*",
     "@supabase/supabase-js": "2.46.2",
     "inngest": "3.27.4"
   },
@@ -5116,14 +5116,14 @@ Run: `pnpm db:reset`
 
 ```ts
 import { Inngest } from "inngest";
-export const inngest = new Inngest({ id: "zipdev-agent" });
+export const inngest = new Inngest({ id: "cortex-agent" });
 ```
 
 - [ ] **Step 5: `apps/inngest/src/functions/ingest-document.ts`**
 
 ```ts
 import { createClient } from "@supabase/supabase-js";
-import { ingestDocument } from "@zipdev/agent-tools/kb/ingest";
+import { ingestDocument } from "@cortex/agent-tools/kb/ingest";
 import { inngest } from "../client";
 
 export const ingestDocumentFn = inngest.createFunction(
@@ -5173,8 +5173,8 @@ export const ingestDocumentFn = inngest.createFunction(
 
 ```ts
 import { createClient } from "@supabase/supabase-js";
-import { createIntegrationsClient, ingestDocument } from "@zipdev/agent-tools";
-import { logger } from "@zipdev/core";
+import { createIntegrationsClient, ingestDocument } from "@cortex/agent-tools";
+import { logger } from "@cortex/core";
 import { inngest } from "../client";
 
 const MAX_DOCS = 500;
@@ -5393,18 +5393,18 @@ export const functions = [ingestDocumentFn, driveSyncCron];
 
 ```ts
 import { Inngest } from "inngest";
-export const inngest = new Inngest({ id: "zipdev-agent" });
+export const inngest = new Inngest({ id: "cortex-agent" });
 ```
 
 `apps/web/app/api/inngest/route.ts`:
 
 ```ts
 import { serve } from "inngest/next";
-import { inngest, functions } from "@zipdev/inngest";
+import { inngest, functions } from "@cortex/inngest";
 export const { GET, POST, PUT } = serve({ client: inngest, functions });
 ```
 
-Modify `apps/web/package.json` dependencies — add: `"@zipdev/inngest": "workspace:*"`.
+Modify `apps/web/package.json` dependencies — add: `"@cortex/inngest": "workspace:*"`.
 
 - [ ] **Step 9: KB collection CRUD API — `apps/web/app/api/kb/collections/route.ts`**
 
@@ -5608,7 +5608,7 @@ export async function DELETE(
 }
 ```
 
-- [ ] **Step 11: Update `apps/web/package.json` to depend on `@zipdev/inngest`** and re-run `pnpm install`.
+- [ ] **Step 11: Update `apps/web/package.json` to depend on `@cortex/inngest`** and re-run `pnpm install`.
 
 - [ ] **Step 12: Manual smoke**
 
@@ -6074,10 +6074,10 @@ export async function PATCH(
 import { NextResponse, type NextRequest } from "next/server";
 import { requireSession } from "@/lib/session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { createIntegrationsClient } from "@zipdev/agent-tools";
-import { logger } from "@zipdev/core";
-import { kbSearch } from "@zipdev/agent-tools/kb/search";
-import { runTool } from "@zipdev/agent-tools";
+import { createIntegrationsClient } from "@cortex/agent-tools";
+import { logger } from "@cortex/core";
+import { kbSearch } from "@cortex/agent-tools/kb/search";
+import { runTool } from "@cortex/agent-tools";
 import { z } from "zod";
 
 const Body = z.object({
@@ -6175,7 +6175,7 @@ git commit -m "feat(kb-ui): collections + upload + Drive connect + test search"
 
 ---
 
-## Task 16: `@zipdev/agents` package + Sales agent + composite sales.draft_proposal tool
+## Task 16: `@cortex/agents` package + Sales agent + composite sales.draft_proposal tool
 
 **Files:**
 
@@ -6189,7 +6189,7 @@ git commit -m "feat(kb-ui): collections + upload + Drive connect + test search"
 
 ```json
 {
-  "name": "@zipdev/agents",
+  "name": "@cortex/agents",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -6201,8 +6201,8 @@ git commit -m "feat(kb-ui): collections + upload + Drive connect + test search"
     "test": "vitest run"
   },
   "dependencies": {
-    "@zipdev/core": "workspace:*",
-    "@zipdev/agent-tools": "workspace:*"
+    "@cortex/core": "workspace:*",
+    "@cortex/agent-tools": "workspace:*"
   },
   "devDependencies": { "typescript": "5.7.2", "vitest": "2.1.8" }
 }
@@ -6221,15 +6221,15 @@ git commit -m "feat(kb-ui): collections + upload + Drive connect + test search"
 - [ ] **Step 2: `packages/agents/src/types.ts`**
 
 ```ts
-import type { AgentDefinition } from "@zipdev/core";
+import type { AgentDefinition } from "@cortex/core";
 export type { AgentDefinition };
 ```
 
 - [ ] **Step 3: `packages/agents/src/runtime.ts`**
 
 ```ts
-import { filterTools, type AnyTool } from "@zipdev/agent-tools";
-import type { AgentDefinition } from "@zipdev/core";
+import { filterTools, type AnyTool } from "@cortex/agent-tools";
+import type { AgentDefinition } from "@cortex/core";
 
 export function getAgentTools(agent: AgentDefinition): AnyTool[] {
   return filterTools(agent.allowedTools);
@@ -6569,15 +6569,15 @@ import "./composite/sales-draft-proposal";
 - [ ] **Step 9: Run typecheck**
 
 ```bash
-pnpm --filter @zipdev/agents typecheck
-pnpm --filter @zipdev/agent-tools typecheck
+pnpm --filter @cortex/agents typecheck
+pnpm --filter @cortex/agent-tools typecheck
 ```
 
 - [ ] **Step 10: Commit**
 
 ```bash
 git add packages/agents packages/agent-tools
-git commit -m "feat(agents): @zipdev/agents package + Sales agent + sales.draft_proposal composite"
+git commit -m "feat(agents): @cortex/agents package + Sales agent + sales.draft_proposal composite"
 ```
 
 ---
@@ -6597,9 +6597,9 @@ git commit -m "feat(agents): @zipdev/agents package + Sales agent + sales.draft_
 ```ts
 import "server-only";
 import { getSupabaseServiceClient } from "./supabase/service";
-import { createIntegrationsClient } from "@zipdev/agent-tools";
-import { logger, type UUID } from "@zipdev/core";
-import type { ToolContext } from "@zipdev/agent-tools";
+import { createIntegrationsClient } from "@cortex/agent-tools";
+import { logger, type UUID } from "@cortex/core";
+import type { ToolContext } from "@cortex/agent-tools";
 
 export function buildToolContext(opts: {
   userId: UUID;
@@ -6630,10 +6630,10 @@ import { z } from "zod";
 import { requireSession } from "@/lib/session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { buildToolContext } from "@/lib/agent";
-import { getAgent } from "@zipdev/agents";
-import { filterTools, runTool } from "@zipdev/agent-tools";
-import { ConfirmationRequiredError } from "@zipdev/core";
-import { kbSearch } from "@zipdev/agent-tools/kb/search";
+import { getAgent } from "@cortex/agents";
+import { filterTools, runTool } from "@cortex/agent-tools";
+import { ConfirmationRequiredError } from "@cortex/core";
+import { kbSearch } from "@cortex/agent-tools/kb/search";
 
 const Body = z.object({
   agentSlug: z.string().default("sales"),
@@ -6794,7 +6794,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireSession } from "@/lib/session";
 import { buildToolContext } from "@/lib/agent";
-import { getTool, runTool } from "@zipdev/agent-tools";
+import { getTool, runTool } from "@cortex/agent-tools";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 const Body = z.object({
@@ -6930,7 +6930,7 @@ export default function ChatLayout({ children }: { children: ReactNode }) {
 
 ```tsx
 import { ChatRoot } from "@/components/chat/ChatRoot";
-import { listAgents } from "@zipdev/agents";
+import { listAgents } from "@cortex/agents";
 export default function NewChat() {
   const agents = listAgents().map((a) => ({
     slug: a.id,
@@ -6945,7 +6945,7 @@ export default function NewChat() {
 
 ```tsx
 import { ChatRoot } from "@/components/chat/ChatRoot";
-import { listAgents } from "@zipdev/agents";
+import { listAgents } from "@cortex/agents";
 
 export default async function ResumeChat({
   params,
@@ -7400,7 +7400,7 @@ git commit -m "feat(chat-ui): streaming chat with tool cards, confirmations, eph
 - [ ] **Step 1: `apps/web/app/(app)/agents/page.tsx`**
 
 ```tsx
-import { listAgents } from "@zipdev/agents";
+import { listAgents } from "@cortex/agents";
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
 
@@ -7429,7 +7429,7 @@ export default function AgentsPage() {
 - [ ] **Step 2: `apps/web/app/(app)/agents/[slug]/page.tsx`**
 
 ```tsx
-import { getAgent, listAgents } from "@zipdev/agents";
+import { getAgent, listAgents } from "@cortex/agents";
 import { Card } from "@/components/ui/card";
 import { requireSession } from "@/lib/session";
 import { notFound } from "next/navigation";
@@ -7612,7 +7612,7 @@ git commit -m "feat(conversations): history list + detail"
 import { NextResponse, type NextRequest } from "next/server";
 import { requireSession } from "@/lib/session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { ForbiddenError } from "@zipdev/core";
+import { ForbiddenError } from "@cortex/core";
 import { z } from "zod";
 
 export async function GET() {
@@ -7729,7 +7729,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireSession } from "@/lib/session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { ForbiddenError } from "@zipdev/core";
+import { ForbiddenError } from "@cortex/core";
 
 export async function GET() {
   const user = await requireSession();
@@ -7830,7 +7830,7 @@ export default function Teams() {
 import { NextResponse, type NextRequest } from "next/server";
 import { requireSession } from "@/lib/session";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { ForbiddenError } from "@zipdev/core";
+import { ForbiddenError } from "@cortex/core";
 
 export async function GET(req: NextRequest) {
   const user = await requireSession();
@@ -7925,7 +7925,7 @@ export default function Audit() {
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/session";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { ForbiddenError } from "@zipdev/core";
+import { ForbiddenError } from "@cortex/core";
 
 export async function GET() {
   const user = await requireSession();
@@ -8085,7 +8085,7 @@ if (process.env.SENTRY_DSN)
 
 ```ts
 import { trace } from "@opentelemetry/api";
-const tracer = trace.getTracer("zipdev-agent-tools");
+const tracer = trace.getTracer("cortex-agent-tools");
 
 // inside runTool, replace the existing handler call with:
 const span = tracer.startSpan(`tool.${tool.id}`, {
@@ -8191,7 +8191,7 @@ jobs:
         with: { version: 9 }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm --filter @zipdev/web test:e2e
+      - run: pnpm --filter @cortex/web test:e2e
 ```
 
 - [ ] **Step 3: `vercel.json`** (build target = apps/web)
@@ -8199,7 +8199,7 @@ jobs:
 ```json
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm turbo build --filter=@zipdev/web",
+  "buildCommand": "pnpm turbo build --filter=@cortex/web",
   "installCommand": "pnpm install --frozen-lockfile",
   "framework": "nextjs",
   "outputDirectory": "apps/web/.next"
@@ -8372,7 +8372,7 @@ test("canonical Sales proposal flow", async ({ page, request }) => {
 - [ ] **Step 5: Run E2E locally (after `pnpm dev` + Supabase started)**
 
 ```bash
-pnpm --filter @zipdev/web test:e2e
+pnpm --filter @cortex/web test:e2e
 ```
 
 - [ ] **Step 6: Commit**

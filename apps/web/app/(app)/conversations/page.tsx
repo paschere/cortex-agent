@@ -146,7 +146,7 @@ export default async function ConversationsPage({
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
                         <SurfaceBadge surface={c.derived} />
-                        <span className="truncate">{relName(c.agents) ?? 'Zippy'}</span>
+                        <span className="truncate">{relName(c.agents) ?? 'Cortex'}</span>
                         {count !== undefined && (
                           <>
                             <span aria-hidden>·</span>

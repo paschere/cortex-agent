@@ -1,5 +1,5 @@
 /**
- * Zippy's email design system.
+ * Cortex's email design system.
  *
  * Every automated email the product sends (routine results, approval requests,
  * anything added later) is assembled from these pieces so they all look like

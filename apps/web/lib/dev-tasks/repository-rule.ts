@@ -25,7 +25,7 @@ import type { DevTaskRepository } from './contract';
  * A key that is not on the allowlist, or whose row is inactive, is a REJECTION —
  * not a fallback to a lower tier. If a human said "payroll" and payroll is not
  * registered, the answer is "payroll is not on the list", not "here, have
- * zipdev-agent".
+ * cortex-agent".
  *
  * The rule lives apart from the database access in ./repository.ts so it stays
  * a pure function over the allowlist.

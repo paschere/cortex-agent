@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Seed the four GLOBAL monitoring routines (Zippy's standing watch).
+ * Seed the four GLOBAL monitoring routines (Cortex's standing watch).
  *
  * Each routine is two rows:
  *   1. a `pipelines` row — the reusable playbook a human can also run by hand
  *      from /pipelines, with structured steps that name the real tool ids;
  *   2. a `scheduled_jobs` row (kind='agent', is_global=true) — the weekly cron
- *      that makes Zippy run that playbook unattended and mail the written
+ *      that makes Cortex run that playbook unattended and mail the written
  *      report to the recipients.
  *
  * These routines only READ and REPORT: no checkpoints, no external writes,
@@ -398,8 +398,8 @@ try {
   if (ownerRes.rows.length === 0) throw new Error('No users found — cannot own the routines.');
   const owner = ownerRes.rows[0];
 
-  const agentRes = await client.query(`select id, name from public.agents where slug = 'zippy' limit 1`);
-  if (agentRes.rows.length === 0) throw new Error("No agent with slug 'zippy' — cannot schedule.");
+  const agentRes = await client.query(`select id, name from public.agents where slug = 'cortex' limit 1`);
+  if (agentRes.rows.length === 0) throw new Error("No agent with slug 'cortex' — cannot schedule.");
   const agent = agentRes.rows[0];
 
   console.log(`Owner : ${owner.email} (${owner.role})`);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { IntegrationError, ValidationError } from '@zipdev/core';
+import { IntegrationError, ValidationError } from '@cortex/core';
 import { runTool } from '../index';
 import { rateEstimate } from './estimate';
 import { rateEstimateFromDocument } from './estimate-from-document';

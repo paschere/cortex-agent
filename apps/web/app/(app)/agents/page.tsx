@@ -40,7 +40,7 @@ export default async function AgentsPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {agents.map((a) => {
-            const isZippy = a.slug === 'zippy';
+            const isCortex = a.slug === 'cortex';
             return (
               <Link key={a.id} href={`/agents/${a.slug}`} className="group block">
                 <Panel className="flex h-full flex-col gap-3 p-4 transition-all group-hover:-translate-y-0.5 group-hover:shadow-pop">
@@ -48,7 +48,7 @@ export default async function AgentsPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-[14px] font-bold text-ink">{a.name}</span>
-                        {isZippy && (
+                        {isCortex && (
                           <span className="shrink-0 rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-bold uppercase text-primary-ink">
                             Super-agent
                           </span>
@@ -58,7 +58,7 @@ export default async function AgentsPage() {
                         <span className="font-mono">{a.slug}</span> · {a.teams?.[0]?.name ?? 'No team'}
                       </div>
                     </div>
-                    {isZippy ? (
+                    {isCortex ? (
                       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
                         <Sparkles className="h-5 w-5" />
                       </span>

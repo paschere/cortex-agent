@@ -122,13 +122,13 @@ export function resolveRepoPath(repoRoot: string, requested: string): string {
 
   if (segments.length === 0) return repoRoot;
 
-  // `.zippy/` is how the run survives between invocations (transcript, parked
+  // `.cortex/` is how the run survives between invocations (transcript, parked
   // tool results, check output) and `.git/` is the repository plumbing the
   // orchestrator drives. Refusing git as an executable would be theatre if the
   // model could rewrite .git/config or drop a hook instead.
   const top = segments[0];
-  if (top === '.zippy') {
-    throw new UnsafeCommandError("`.zippy/` holds the runner's own state and is off limits.");
+  if (top === '.cortex') {
+    throw new UnsafeCommandError("`.cortex/` holds the runner's own state and is off limits.");
   }
   if (top === '.git') {
     throw new UnsafeCommandError(

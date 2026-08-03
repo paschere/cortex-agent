@@ -165,17 +165,17 @@ export function SettingsForm({
           checked={on}
           onChange={(v) => set('inboxDigestEnabled', v)}
           label="Daily inbox digest"
-          description="Once a day, Zippy reads your recent email and sends you a short summary: what is waiting on your reply, what you are waiting on from other people, and what is just worth knowing."
+          description="Once a day, Cortex reads your recent email and sends you a short summary: what is waiting on your reply, what you are waiting on from other people, and what is just worth knowing."
         />
 
         <div className="mt-4 rounded-[12px] border border-border bg-surface-2 p-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            <Eyebrow>What Zippy reads, and what it does not</Eyebrow>
+            <Eyebrow>What Cortex reads, and what it does not</Eyebrow>
           </div>
           <ul className="mt-2.5 space-y-1.5 text-[12.5px] leading-relaxed text-ink-muted">
             <li>
-              <strong className="text-ink">Only your mailbox.</strong> Zippy reads the recent
+              <strong className="text-ink">Only your mailbox.</strong> Cortex reads the recent
               conversations in your own inbox — who wrote, when, the subject and the message content
               — using the Google access you already granted when you signed in. Nobody else&apos;s
               mail is ever involved.
@@ -189,7 +189,7 @@ export function SettingsForm({
             <li>
               <strong className="text-ink">Delivered only to you.</strong> The digest goes to your
               own email address, to a Google Chat space you set up yourself, or as a direct message
-              from Zippy that only you can see. It is never shared with your team, your manager or
+              from Cortex that only you can see. It is never shared with your team, your manager or
               anyone else.
             </li>
             <li>
@@ -197,7 +197,7 @@ export function SettingsForm({
               read closely, and each digest tells you what it left out and why.
             </li>
             <li>
-              <strong className="text-ink">Off is off.</strong> Turn this switch off and Zippy stops
+              <strong className="text-ink">Off is off.</strong> Turn this switch off and Cortex stops
               reading your mail on a schedule, immediately.
             </li>
           </ul>
@@ -241,7 +241,7 @@ export function SettingsForm({
           </div>
         </div>
         <p className="mt-2 text-[12px] text-ink-faint">
-          Zippy checks every half hour, so the digest lands within 30 minutes of the time you pick.
+          Cortex checks every half hour, so the digest lands within 30 minutes of the time you pick.
         </p>
       </Panel>
 
@@ -304,7 +304,7 @@ export function SettingsForm({
                 </li>
                 <li>
                   3. Choose <strong className="text-ink">Webhooks</strong> →{' '}
-                  <strong className="text-ink">Add webhook</strong>, name it &ldquo;Zippy&rdquo;.
+                  <strong className="text-ink">Add webhook</strong>, name it &ldquo;Cortex&rdquo;.
                 </li>
                 <li>4. Copy the whole URL it gives you and paste it above.</li>
               </ol>
@@ -353,7 +353,7 @@ export function SettingsForm({
                 setTestDmStatus({ kind: 'idle' });
               }}
               label="Google Chat — direct message"
-              description="Zippy sends the digest straight to you in Google Chat. Nobody else is in that conversation — and the routines you own arrive there too."
+              description="Cortex sends the digest straight to you in Google Chat. Nobody else is in that conversation — and the routines you own arrive there too."
             />
 
             <div className="mt-3">
@@ -363,7 +363,7 @@ export function SettingsForm({
                 <div className="flex items-start gap-2 rounded-[10px] border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
-                    The Zippy Chat app is not set up on this environment yet, so direct messages
+                    The Cortex Chat app is not set up on this environment yet, so direct messages
                     cannot be sent. Ask the Zipdev team to enable it.
                   </span>
                 </div>
@@ -373,7 +373,7 @@ export function SettingsForm({
                   <span>
                     Connected as{' '}
                     <strong className="font-semibold">{chatDm.displayName ?? prefs.email}</strong> —
-                    messages will arrive in your Zippy chat.
+                    messages will arrive in your Cortex chat.
                   </span>
                 </div>
               ) : (
@@ -383,8 +383,8 @@ export function SettingsForm({
                     <span>Not connected yet — nothing can be delivered here.</span>
                   </div>
                   <p className="mt-1.5 pl-[22px]">
-                    Zippy can only write in a conversation you started. Open Google Chat, search for{' '}
-                    <strong className="text-ink">Zippy</strong>, say hi — then refresh this page.
+                    Cortex can only write in a conversation you started. Open Google Chat, search for{' '}
+                    <strong className="text-ink">Cortex</strong>, say hi — then refresh this page.
                   </p>
                 </div>
               )}
@@ -410,7 +410,7 @@ export function SettingsForm({
                 {testDmStatus.kind === 'saved' && (
                   <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald">
                     <Check className="h-3.5 w-3.5" />
-                    Sent — check your Zippy chat.
+                    Sent — check your Cortex chat.
                   </span>
                 )}
                 {testDmStatus.kind === 'error' && (
@@ -425,7 +425,7 @@ export function SettingsForm({
                 <p className="mt-2.5 flex items-start gap-1.5 text-[12px] leading-relaxed text-amber">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   You can save this now, but the digest will not reach Google Chat until you have
-                  said hi to Zippy there.
+                  said hi to Cortex there.
                 </p>
               )}
             </div>
@@ -437,7 +437,7 @@ export function SettingsForm({
       <Panel className={clsx('p-5 transition-opacity', !on && 'opacity-55')}>
         <Eyebrow>What matters to me</Eyebrow>
         <p className="mt-1.5 text-[12.5px] text-ink-muted">
-          Tell Zippy how to rank your morning. Written in your own words — it is used to order the
+          Tell Cortex how to rank your morning. Written in your own words — it is used to order the
           digest, not to decide what gets read.
         </p>
         <textarea

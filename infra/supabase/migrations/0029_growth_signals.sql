@@ -1,4 +1,4 @@
--- Growth pilot (Zippy evaluation tests 5-7): persistent store for job-post
+-- Growth pilot (Cortex evaluation tests 5-7): persistent store for job-post
 -- signals so weekly sweeps dedupe against history and Mikey reviews a stable
 -- queue instead of a chat scrollback. Wired to the growth.* tools.
 create table if not exists public.growth_signals (
@@ -26,8 +26,8 @@ create index if not exists growth_signals_status_idx on public.growth_signals(st
 alter table public.growth_signals enable row level security;
 -- Service-role only (RLS deny-all), same pattern as the rest of the schema.
 
--- Zippy picks up the new tool family.
+-- Cortex picks up the new tool family.
 update public.agents
 set allowed_tool_ids = array_append(allowed_tool_ids, 'growth.*')
-where slug = 'zippy'
+where slug = 'cortex'
   and not ('growth.*' = any(allowed_tool_ids));

@@ -1,4 +1,4 @@
-import { IntegrationError } from '@zipdev/core';
+import { IntegrationError } from '@cortex/core';
 import type { ToolContext } from '../types';
 
 const ENDPOINT = 'https://api.linear.app/graphql';

@@ -82,8 +82,8 @@ describe('resolveRepoPath', () => {
   );
 
   it("refuses to let the model rewrite the runner's own state", () => {
-    expect(() => resolveRepoPath(ROOT, '.zippy/transcript.json')).toThrow(/off limits/);
-    expect(() => resolveRepoPath(ROOT, 'src/../.zippy/transcript.json')).toThrow(/off limits/);
+    expect(() => resolveRepoPath(ROOT, '.cortex/transcript.json')).toThrow(/off limits/);
+    expect(() => resolveRepoPath(ROOT, 'src/../.cortex/transcript.json')).toThrow(/off limits/);
   });
 
   it('refuses .git, so banning the git executable is not just theatre', () => {

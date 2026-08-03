@@ -67,9 +67,9 @@ export function SpaceDetail({
             <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
               {space.description ??
                 (space.kind === 'global'
-                  ? 'Everyone can read this, and everyone’s Zippy answers from it.'
+                  ? 'Everyone can read this, and everyone’s Cortex answers from it.'
                   : space.isMine
-                    ? 'Only you can read this. Nobody else’s Zippy will ever retrieve from it.'
+                    ? 'Only you can read this. Nobody else’s Cortex will ever retrieve from it.'
                     : `${space.ownerName ?? 'Someone'}’s own notes.`)}
             </p>
             <p className="mt-2 text-[11.5px] text-ink-faint">
@@ -106,7 +106,7 @@ export function SpaceDetail({
                   {space.documentCount === 1
                     ? 'the document in it'
                     : `all ${space.documentCount} documents in it`}{' '}
-                  and everything Zippy learned from them.{' '}
+                  and everything Cortex learned from them.{' '}
                   {space.kind === 'global'
                     ? 'Everyone loses these answers, not just you.'
                     : 'This cannot be undone.'}
@@ -162,7 +162,7 @@ export function SpaceDetail({
         </>
       ) : (
         <Panel className="px-5 py-4 text-[12.5px] leading-relaxed text-ink-faint">
-          You can read everything here and Zippy answers from it, but only an org admin can add or
+          You can read everything here and Cortex answers from it, but only an org admin can add or
           remove documents. To keep your own version, save it to one of your spaces instead.
         </Panel>
       )}

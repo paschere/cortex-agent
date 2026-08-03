@@ -48,13 +48,13 @@ importers:
       '@supabase/supabase-js':
         specifier: 2.46.2
         version: 2.46.2
-      '@zipdev/agent-tools':
+      '@cortex/agent-tools':
         specifier: workspace:*
         version: link:../../packages/agent-tools
-      '@zipdev/agents':
+      '@cortex/agents':
         specifier: workspace:*
         version: link:../../packages/agents
-      '@zipdev/core':
+      '@cortex/core':
         specifier: workspace:*
         version: link:../../packages/core
       hono:
@@ -115,13 +115,13 @@ importers:
       '@vercel/sandbox':
         specifier: ^2.9.0
         version: 2.9.0
-      '@zipdev/agent-tools':
+      '@cortex/agent-tools':
         specifier: workspace:*
         version: link:../../packages/agent-tools
-      '@zipdev/agents':
+      '@cortex/agents':
         specifier: workspace:*
         version: link:../../packages/agents
-      '@zipdev/core':
+      '@cortex/core':
         specifier: workspace:*
         version: link:../../packages/core
       ai:
@@ -233,7 +233,7 @@ importers:
       '@supabase/supabase-js':
         specifier: 2.46.2
         version: 2.46.2
-      '@zipdev/core':
+      '@cortex/core':
         specifier: workspace:*
         version: link:../core
       ai:
@@ -273,10 +273,10 @@ importers:
       '@supabase/supabase-js':
         specifier: 2.46.2
         version: 2.46.2
-      '@zipdev/agent-tools':
+      '@cortex/agent-tools':
         specifier: workspace:*
         version: link:../agent-tools
-      '@zipdev/core':
+      '@cortex/core':
         specifier: workspace:*
         version: link:../core
       zod:

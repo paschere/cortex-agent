@@ -1,7 +1,7 @@
 import 'server-only';
 import { Sandbox } from '@vercel/sandbox';
-import { type CheckStep, assertPushable } from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+import { type CheckStep, assertPushable } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { type RepoRef, redact } from './github-token';
 
 /**
@@ -13,7 +13,7 @@ import { type RepoRef, redact } from './github-token';
  * it OUTLIVES the invocation that created it. Every later step re-attaches with
  * `Sandbox.get({ name })` using a name derived from the task id, and reads the
  * run's transcript back off the sandbox filesystem. That is why the transcript
- * lives at `.zippy/transcript.json` in the VM rather than in step output — it
+ * lives at `.cortex/transcript.json` in the VM rather than in step output — it
  * keeps the durable state next to the checkout it describes, and keeps
  * megabytes of conversation out of the orchestrator's step payloads.
  */
@@ -25,7 +25,7 @@ import { type RepoRef, redact } from './github-token';
  */
 export const REPO_ROOT = '/vercel/sandbox';
 /** Run state the model is not allowed to touch (see `resolveRepoPath`). */
-const STATE_DIR = `${REPO_ROOT}/.zippy`;
+const STATE_DIR = `${REPO_ROOT}/.cortex`;
 const TRANSCRIPT_PATH = `${STATE_DIR}/transcript.json`;
 
 /** Cap on any single blob of command output we feed back to the model. */
@@ -34,7 +34,7 @@ const MAX_OUTPUT_CHARS = 20_000;
 export function sandboxNameForTask(taskId: string): string {
   // Deterministic, so a replayed Inngest step re-attaches instead of leaking a
   // second VM. Sandbox names are per-project, and task ids are uuids.
-  return `zippy-dev-${taskId}`;
+  return `cortex-dev-${taskId}`;
 }
 
 export function truncateOutput(text: string): string {
@@ -114,7 +114,7 @@ export async function createRunSandbox(params: {
   // is a real file with existing content in most repos.
   await run(sandbox, {
     cmd: 'bash',
-    args: ['-lc', `printf '\\n.zippy/\\n' >> ${REPO_ROOT}/.git/info/exclude`],
+    args: ['-lc', `printf '\\n.cortex/\\n' >> ${REPO_ROOT}/.git/info/exclude`],
     cwd: REPO_ROOT,
   });
 
@@ -130,10 +130,10 @@ async function configureGit(
   // never be pushed should never be created either.
   assertPushable({ branch, defaultBranch });
 
-  await run(sandbox, { cmd: 'git', args: ['config', 'user.name', 'Zippy'], cwd: REPO_ROOT });
+  await run(sandbox, { cmd: 'git', args: ['config', 'user.name', 'Cortex'], cwd: REPO_ROOT });
   await run(sandbox, {
     cmd: 'git',
-    args: ['config', 'user.email', 'zippy@zipdev.com'],
+    args: ['config', 'user.email', 'cortex@zipdev.com'],
     cwd: REPO_ROOT,
   });
   const created = await run(sandbox, {

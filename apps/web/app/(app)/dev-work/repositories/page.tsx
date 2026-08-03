@@ -21,8 +21,8 @@ export const dynamic = 'force-dynamic';
 /**
  * The blast radius.
  *
- * This list is the whole answer to "what can Zippy break". A repository that is
- * not on it, or is on it switched off, is a repository Zippy cannot open a pull
+ * This list is the whole answer to "what can Cortex break". A repository that is
+ * not on it, or is on it switched off, is a repository Cortex cannot open a pull
  * request against — so the page is written to be read by whoever is
  * accountable, not only by whoever writes the code.
  *
@@ -117,8 +117,8 @@ export default async function DevRepositoriesPage() {
       </div>
 
       <PageHeader
-        title="Where Zippy may work"
-        subtitle="The complete list of repositories Zippy is allowed to change. Anything not on this list is out of reach."
+        title="Where Cortex may work"
+        subtitle="The complete list of repositories Cortex is allowed to change. Anything not on this list is out of reach."
         icon={<ShieldCheck className="h-5 w-5" />}
       />
 
@@ -127,7 +127,7 @@ export default async function DevRepositoriesPage() {
           <FolderGit2 className="mx-auto mb-3 h-8 w-8 text-primary" />
           <p className="mb-1 font-semibold text-ink">Not switched on in this environment yet</p>
           <p className="mx-auto max-w-md">
-            Zippy has no repositories of its own here, and cannot get any until the groundwork is
+            Cortex has no repositories of its own here, and cannot get any until the groundwork is
             installed.
           </p>
         </Panel>
@@ -140,12 +140,12 @@ export default async function DevRepositoriesPage() {
             <p className="min-w-0 flex-1 text-[12.5px] text-ink-muted">
               {enabled.length === 0 ? (
                 <>
-                  Zippy currently cannot change <span className="font-semibold text-ink">any</span>{' '}
+                  Cortex currently cannot change <span className="font-semibold text-ink">any</span>{' '}
                   code. Nothing here is switched on.
                 </>
               ) : (
                 <>
-                  Zippy can open pull requests in{' '}
+                  Cortex can open pull requests in{' '}
                   <span className="font-semibold text-ink">
                     {enabled.length === 1 ? 'one repository' : `${enabled.length} repositories`}
                   </span>
@@ -159,7 +159,7 @@ export default async function DevRepositoriesPage() {
             <Panel className="p-5">
               <Eyebrow>Allow a new repository</Eyebrow>
               <p className="mt-1.5 text-[12.5px] text-ink-muted">
-                Adding one widens what Zippy can change. Only add repositories you are willing to
+                Adding one widens what Cortex can change. Only add repositories you are willing to
                 have it open pull requests against.
               </p>
               <form action={addRepository} className="mt-3 flex flex-wrap items-center gap-2">
@@ -167,7 +167,7 @@ export default async function DevRepositoriesPage() {
                   name="fullName"
                   required
                   pattern="[\w.\-]+/[\w.\-]+"
-                  placeholder="zipdev/zipdev-agent"
+                  placeholder="zipdev/cortex-agent"
                   title="owner/repository, exactly as it appears on GitHub"
                   className="min-w-[220px] flex-1 rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                 />
@@ -193,7 +193,7 @@ export default async function DevRepositoriesPage() {
 
           {repos.length === 0 ? (
             <Panel className="p-8 text-center text-[13px] text-ink-faint">
-              No repositories yet — Zippy cannot change any code.
+              No repositories yet — Cortex cannot change any code.
             </Panel>
           ) : (
             <div className="space-y-3">
@@ -224,7 +224,7 @@ export default async function DevRepositoriesPage() {
                                 : 'bg-surface-2 text-ink-faint'
                             }`}
                           >
-                            {repo.enabled ? 'Zippy may edit' : 'Switched off'}
+                            {repo.enabled ? 'Cortex may edit' : 'Switched off'}
                           </span>
                         </div>
                         {repo.description && (
@@ -261,8 +261,8 @@ export default async function DevRepositoriesPage() {
                               }`}
                               title={
                                 repo.enabled
-                                  ? 'Zippy stops picking up work here. History is kept.'
-                                  : 'Let Zippy work here again.'
+                                  ? 'Cortex stops picking up work here. History is kept.'
+                                  : 'Let Cortex work here again.'
                               }
                             >
                               <Power className="h-3.5 w-3.5" />

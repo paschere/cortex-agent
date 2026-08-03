@@ -1,10 +1,10 @@
 import 'server-only';
-import { ProtectedBranchError, isProtectedBranch } from '@zipdev/agent-tools';
+import { ProtectedBranchError, isProtectedBranch } from '@cortex/agent-tools';
 import type { RepoRef } from './github-token';
 
 /**
  * Opening the pull request. Deliberately the only GitHub write this executor
- * performs — Zippy proposes, a human merges.
+ * performs — Cortex proposes, a human merges.
  */
 
 export interface OpenedPullRequest {
@@ -23,7 +23,7 @@ export async function openPullRequest(params: {
   const { repo, token, head, base, title, body } = params;
 
   // The last gate before the write. `base` is the branch the PR would MERGE
-  // INTO — it is supposed to be the default branch — while `head` is Zippy's
+  // INTO — it is supposed to be the default branch — while `head` is Cortex's
   // work. Swapping them would be a request to merge main into a feature
   // branch, or worse; refusing a protected `head` catches that.
   if (isProtectedBranch(head, base)) {

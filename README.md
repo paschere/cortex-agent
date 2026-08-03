@@ -1,13 +1,15 @@
-# zipdev-agent
+# Cortex
 
-Internal AI agent platform for [Zipdev](https://zipdev.com), a LATAM tech-staffing company. The v1 pilot is a Sales agent that gives the sales team AI-assisted access to HubSpot CRM, Google Workspace, and internal knowledge base from a web chat interface, Claude Desktop, and a native desktop app.
+**Cortex** is a multi-tenant AI agent SaaS platform (formerly Zippy, Zipdev's internal agent). Teams sign up, create a workspace (organization), invite members, and get an AI super-agent with access to HubSpot CRM, Google Workspace, and a shared knowledge base — from a web chat interface, Claude Desktop (MCP), and a native desktop app.
+
+Accounts are powered by [better-auth](https://better-auth.com): email + password (with verification and reset), Google SSO, multi-tenant organizations with role-based membership and email invitations, a platform admin layer (ban / impersonate / session management), and TOTP two-factor with backup codes.
 
 ---
 
 ## Architecture at a glance
 
 ```
-zipdev-agent/
+cortex-agent/
 ├── apps/
 │   ├── web        Next.js 15 (App Router) — chat UI, admin, Inngest background functions
 │   ├── mcp        Cloudflare Worker — MCP connector for Claude Desktop
@@ -35,7 +37,7 @@ zipdev-agent/
 | Web framework | Next.js 15 (App Router) |
 | UI | React 19, Tailwind CSS, shadcn/ui (Radix UI), Framer Motion |
 | AI / LLM | Vercel AI SDK 4, Gemini 2.5 Flash / Pro |
-| Auth | better-auth (Google SSO, `@zipdev.com` domain only) |
+| Auth | better-auth — email/password + Google SSO, organizations (multi-tenant), admin, 2FA |
 | Database | Supabase — Postgres 15 + pgvector + Auth + Storage |
 | Background jobs | Inngest |
 | MCP connector | Cloudflare Workers + Hono |
@@ -64,8 +66,8 @@ pnpm db:start
 pnpm db:reset
 
 # 5. Start the web app
-pnpm --filter @zipdev/web dev
-# Visit http://localhost:3000 → sign in with @zipdev.com Google account → /chat
+pnpm --filter @cortex/web dev
+# Visit http://localhost:3000 → create an account (or Google SSO) → /chat
 ```
 
 `pnpm dev` (without filter) runs the full Turborepo pipeline — all apps in parallel. Use the filtered form above if you do not have the Rust toolchain (Tauri) or a Cloudflare login (wrangler) set up.
@@ -93,7 +95,7 @@ pnpm --filter @zipdev/web dev
 ## Project structure
 
 ```
-zipdev-agent/
+cortex-agent/
 ├── apps/
 │   ├── web/            Next.js 15 web app (chat UI, admin, API routes, Inngest functions)
 │   ├── mcp/            Cloudflare Worker MCP connector (Claude Desktop integration)

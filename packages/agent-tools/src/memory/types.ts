@@ -1,5 +1,5 @@
 /**
- * What Zippy remembers about one person.
+ * What Cortex remembers about one person.
  *
  * These rows are NOT retrieved. Every active one is injected whole into the
  * system prompt of every turn, on every surface — see ./prompt.ts for why, and

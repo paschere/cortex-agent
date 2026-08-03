@@ -1,4 +1,4 @@
-import { CopyButton } from '@/components/connect/ConnectZippy';
+import { CopyButton } from '@/components/connect/ConnectCortex';
 import { Panel } from '@/components/ui/panel';
 import { getMcpUrl } from '@/lib/mcp-url';
 import { relativeTime } from '@/lib/relative-time';
@@ -157,7 +157,7 @@ export default async function DashboardPage() {
             <BadgeCheck className="h-4 w-4" />
           </span>
           <div className="min-w-0 flex-1 text-[13px]">
-            <span className="font-semibold text-ink">Zippy needs you</span>
+            <span className="font-semibold text-ink">Cortex needs you</span>
             <span className="text-ink-muted">
               {' '}
               —{' '}
@@ -187,7 +187,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
           {runs.length === 0 ? (
-            <EmptyHint>No routine has run yet. Ask Zippy for one in the chat.</EmptyHint>
+            <EmptyHint>No routine has run yet. Ask Cortex for one in the chat.</EmptyHint>
           ) : (
             <ul className="divide-y divide-border">
               {runs.map((r) => {
@@ -234,7 +234,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
           {conversations.length === 0 ? (
-            <EmptyHint>No conversations yet. Start one with Zippy.</EmptyHint>
+            <EmptyHint>No conversations yet. Start one with Cortex.</EmptyHint>
           ) : (
             <ul className="divide-y divide-border">
               {conversations.map((c) => (
@@ -251,7 +251,7 @@ export default async function DashboardPage() {
                         {c.title?.trim() || 'Untitled conversation'}
                       </div>
                       <div className="truncate text-xs text-ink-faint">
-                        {relName(c.agents) ?? 'Zippy'}
+                        {relName(c.agents) ?? 'Cortex'}
                       </div>
                     </div>
                     <span className="shrink-0 text-xs text-ink-faint">
@@ -290,7 +290,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Connect Zippy anywhere — the connector URL lives here because it is the
+      {/* Connect Cortex anywhere — the connector URL lives here because it is the
           one thing people come back for; the per-client walkthrough lives on
           /mcp-tokens so the two surfaces cannot drift apart. */}
       <Panel className="mt-4 p-5">
@@ -301,7 +301,7 @@ export default async function DashboardPage() {
             </span>
             <div className="min-w-0">
               <h2 className="text-[15px] font-bold tracking-tight text-ink">
-                Connect Zippy anywhere
+                Connect Cortex anywhere
               </h2>
               <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
                 The same brain — every tool, the Knowledge Base, pipelines and routines — inside

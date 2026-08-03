@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { cookies } from 'next/headers';
 import { requireSession } from '@/lib/session';
-import { getEnv } from '@zipdev/core';
+import { getEnv } from '@cortex/core';
 
 const SCOPES = [
   'crm.objects.companies.read',

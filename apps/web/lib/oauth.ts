@@ -1,6 +1,6 @@
 import 'server-only';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { getEnv } from '@zipdev/core';
+import { getEnv } from '@cortex/core';
 import { getSupabaseServiceClient } from './supabase/service';
 
 /**

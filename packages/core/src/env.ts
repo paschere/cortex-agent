@@ -6,7 +6,7 @@ const schema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   SUPABASE_DB_URL: z.string().url(),
   APP_BASE_URL: z.string().url(),
-  SESSION_COOKIE_NAME: z.string().default('zipdev_session'),
+  SESSION_COOKIE_NAME: z.string().default('cortex_session'),
   ALLOWED_EMAIL_DOMAIN: z.string().default('zipdev.com'),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),

@@ -57,7 +57,7 @@ export const SURFACE_META: Record<ConversationSurface, SurfaceMeta> = {
   },
   google_chat: {
     label: 'Google Chat',
-    description: 'A thread with the Zippy Chat app',
+    description: 'A thread with the Cortex Chat app',
     icon: MessageSquareText,
     chip: 'bg-emerald-soft text-emerald',
   },

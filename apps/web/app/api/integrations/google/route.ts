@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { requireSession } from '@/lib/session';
-import { getEnv } from '@zipdev/core';
+import { getEnv } from '@cortex/core';
 import { cookies } from 'next/headers';
 
 const ALL_SCOPES = [

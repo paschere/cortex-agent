@@ -1,30 +1,49 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { ShieldCheck, Workflow, BrainCircuit, Zap } from 'lucide-react';
 import { authClient } from '@/lib/auth-client';
 
 const HIGHLIGHTS = [
-  { icon: BrainCircuit, text: 'Every system Zipdev runs, in one brain' },
+  { icon: BrainCircuit, text: 'Every system your company runs, in one brain' },
   { icon: Workflow, text: 'Reusable playbooks and unattended routines' },
   { icon: ShieldCheck, text: 'You approve every write — everything is audited' },
 ];
 
 export default function LoginPage() {
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState<'google' | 'email' | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  async function signIn() {
-    setLoading(true);
+  function nextUrl() {
+    return new URLSearchParams(window.location.search).get('next') ?? '/';
+  }
+
+  async function signInGoogle() {
+    setLoading('google');
     setErr(null);
     try {
-      await authClient.signIn.social({
-        provider: 'google',
-        callbackURL: new URLSearchParams(window.location.search).get('next') ?? '/',
-      });
+      await authClient.signIn.social({ provider: 'google', callbackURL: nextUrl() });
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Sign in failed');
-      setLoading(false);
+      setLoading(null);
+    }
+  }
+
+  async function signInEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading('email');
+    setErr(null);
+    const { error } = await authClient.signIn.email({
+      email,
+      password,
+      callbackURL: nextUrl(),
+    });
+    if (error) {
+      setErr(error.message ?? 'Sign in failed');
+      setLoading(null);
     }
   }
 
@@ -36,9 +55,9 @@ export default function LoginPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icon.png" alt="" className="h-9 w-9" />
         </span>
-        <h1 className="mt-5 text-3xl font-extrabold tracking-tight">Zippy</h1>
+        <h1 className="mt-5 text-3xl font-extrabold tracking-tight">Cortex</h1>
         <p className="mt-1 text-[13px] font-medium text-white/80">
-          Zipdev&apos;s super-agent. It sells, recruits, runs HR, and never sleeps.
+          The AI super-agent for your whole company. It sells, recruits, runs ops, and never sleeps.
         </p>
       </div>
 
@@ -54,13 +73,45 @@ export default function LoginPage() {
           ))}
         </ul>
 
+        <form onSubmit={signInEmail} className="space-y-3">
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full rounded-[10px] border border-border bg-transparent px-3 py-2.5 text-[13px] outline-none focus:border-primary"
+          />
+          <input
+            type="password"
+            required
+            autoComplete="current-password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-[10px] border border-border bg-transparent px-3 py-2.5 text-[13px] outline-none focus:border-primary"
+          />
+          <button
+            type="submit"
+            disabled={loading !== null}
+            className="w-full rounded-pill bg-primary py-2.5 font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
+          >
+            {loading === 'email' ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+
+        <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-faint">
+          <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+        </div>
+
         <button
           type="button"
-          onClick={signIn}
-          disabled={loading}
-          className="flex w-full items-center justify-center gap-2 rounded-pill bg-primary py-2.5 font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
+          onClick={signInGoogle}
+          disabled={loading !== null}
+          className="flex w-full items-center justify-center gap-2 rounded-pill border border-border py-2.5 font-semibold text-ink transition-colors hover:bg-primary-soft disabled:opacity-50"
         >
-          {loading ? (
+          {loading === 'google' ? (
             'Redirecting…'
           ) : (
             <>
@@ -68,9 +119,16 @@ export default function LoginPage() {
             </>
           )}
         </button>
-        <p className="mt-3 text-center text-[11.5px] text-ink-faint">
-          Use your <span className="font-semibold text-ink-muted">@zipdev.com</span> account
-        </p>
+
+        <div className="mt-4 flex items-center justify-between text-[11.5px] text-ink-faint">
+          <Link href="/forgot-password" className="hover:text-ink-muted">
+            Forgot password?
+          </Link>
+          <Link href="/signup" className="font-semibold text-primary hover:underline">
+            Create an account
+          </Link>
+        </div>
+
         {err && (
           <p className="mt-4 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
             {err}

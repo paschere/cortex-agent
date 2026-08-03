@@ -8,19 +8,19 @@ import {
   listMemories,
   rememberMemory,
   usableCandidates,
-} from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+} from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { generateText } from 'ai';
 
 /**
- * The derived path: overnight, Zippy looks at how each person actually worked
+ * The derived path: overnight, Cortex looks at how each person actually worked
  * and proposes things it could remember about them.
  *
  * NOTHING HERE IS WRITTEN AS FACT. Every candidate lands as a `suggested` row
  * the person accepts or rejects at /settings/memory. That approval step is the
  * point, not friction to be optimised away later: a wrongly-learned belief is
  * nearly impossible for a user to debug from outside — the symptom is "why does
- * Zippy keep assuming X?" with no visible cause — while accepting a correct one
+ * Cortex keep assuming X?" with no visible cause — while accepting a correct one
  * costs a single click. Each suggestion carries the conversation it came from,
  * so the decision is informed rather than a coin flip.
  *
@@ -199,7 +199,7 @@ async function loadAuditSignals(userId: string): Promise<AuditSignalRow[]> {
  * those — so a Google Chat space, where several people share a room, still
  * yields one person's turns, because each sender gets their own conversation
  * row keyed to them. Assistant turns are excluded on purpose: learning from
- * Zippy's own output is how a model's assumptions become a person's stored
+ * Cortex's own output is how a model's assumptions become a person's stored
  * "facts".
  */
 async function loadRecentMessages(userId: string, since: string): Promise<RecentMessage[]> {
@@ -232,18 +232,18 @@ async function loadRecentMessages(userId: string, since: string): Promise<Recent
 // The one part that needs a model
 // ---------------------------------------------------------------------------
 
-const EXTRACTION_PROMPT = `You are reading one person's recent messages to Zippy, Zipdev's agent. Propose things Zippy could REMEMBER about this person so it stops needing to be told them again.
+const EXTRACTION_PROMPT = `You are reading one person's recent messages to Cortex, Zipdev's agent. Propose things Cortex could REMEMBER about this person so it stops needing to be told them again.
 
 A good memory is:
 - true beyond the conversation it came from — a standing rule, a preference, what one of their words means, or stable context about them and their work;
 - written as ONE short sentence in the third person, under 200 characters, in the language they use;
-- something that would change how Zippy answers even when the topic is different.
+- something that would change how Cortex answers even when the topic is different.
 
 Do NOT propose:
 - anything about a single task, deal, candidate or day ("wants the Acme proposal by Friday") — that is not durable;
 - company-wide facts everyone already knows or should ("Zipdev is nearshore", "our standard margin is 35%") — those belong in the shared Knowledge Base, not in one person's memory;
 - anything sensitive: passwords, keys, tokens, pay or salary figures, email addresses, phone numbers, ID numbers;
-- anything you inferred from Zippy's own replies rather than from what the person said;
+- anything you inferred from Cortex's own replies rather than from what the person said;
 - guesses. If the messages do not clearly show it, leave it out.
 
 Return STRICT JSON, nothing else:

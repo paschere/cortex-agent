@@ -1,4 +1,4 @@
-import { ValidationError } from '@zipdev/core';
+import { ValidationError } from '@cortex/core';
 import { isPrivateUrl } from '../external-mcp';
 
 /**
@@ -16,7 +16,7 @@ import { isPrivateUrl } from '../external-mcp';
  * `https://chat.googleapis.com/v1/spaces/...` and nothing else.
  *
  * The OTHER Chat path lives in `./service-account.ts` + `./send-dm.ts`: posting
- * as the Zippy Chat app to someone's private DM thread. `flattenMarkdownForChat`
+ * as the Cortex Chat app to someone's private DM thread. `flattenMarkdownForChat`
  * below is shared by both — Chat's markdown subset does not care how the message
  * was authenticated. That module is itself a deliberate copy of
  * `apps/web/lib/google-chat.ts`; see its header for why.
@@ -103,7 +103,7 @@ export function isGoogleChatWebhookUrl(raw: string): boolean {
  * `_italic_`, `~strike~`, `` `code` `` and `<url|label>` links. No headings, no
  * tables, no nested lists, and DOUBLE asterisks render literally.
  *
- * Everything Zippy produces is ordinary markdown, so this flattens it into that
+ * Everything Cortex produces is ordinary markdown, so this flattens it into that
  * subset instead of letting reports arrive full of `##` and pipe characters.
  */
 export function flattenMarkdownForChat(markdown: string, limit = CHAT_TEXT_LIMIT): string {

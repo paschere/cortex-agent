@@ -70,7 +70,7 @@ export function UploadDropzone({ spaceId, spaceName }: { spaceId: string; spaceN
               : `Drop a file into ${spaceName}`}
         </p>
         <p className="mt-0.5 text-[11.5px] text-ink-faint">
-          PDF, Word, text or Markdown, up to 10 MB. Zippy reads it and can answer from it within a
+          PDF, Word, text or Markdown, up to 10 MB. Cortex reads it and can answer from it within a
           minute.
         </p>
       </div>

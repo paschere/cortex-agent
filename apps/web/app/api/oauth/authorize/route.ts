@@ -137,7 +137,7 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Connect ${esc(clientName)} · Zippy</title>
+<title>Connect ${esc(clientName)} · Cortex</title>
 <link rel="icon" href="/icon.png" />
 <style>
   :root {
@@ -169,7 +169,7 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
     display: flex; align-items: center; justify-content: center; gap: 18px;
     margin-bottom: 1.5rem;
   }
-  .logos .zippy {
+  .logos .cortex {
     width: 64px; height: 64px; border-radius: 18px;
     box-shadow: 0 8px 22px -8px rgba(120, 60, 160, .45);
   }
@@ -212,14 +212,14 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
 <body>
   <div class="card">
     <div class="logos">
-      <img class="zippy" src="/icon.png" alt="Zippy" />
+      <img class="cortex" src="/icon.png" alt="Cortex" />
       <span class="link">⇄</span>
       <span class="client" aria-hidden="true">${esc((clientName[0] ?? 'C').toUpperCase())}</span>
     </div>
-    <h1>Connect ${esc(clientName)} to Zippy</h1>
+    <h1>Connect ${esc(clientName)} to Cortex</h1>
     <p class="sub">Signed in as <strong>${esc(userEmail)}</strong></p>
     <div class="grants">
-      Approving lets <b>${esc(clientName)}</b> use Zippy on your behalf:
+      Approving lets <b>${esc(clientName)}</b> use Cortex on your behalf:
       <li>Your access, your permissions — nothing more</li>
       <li>Writes always ask you before executing</li>
       <li>Every action is logged in Zipdev</li>
@@ -233,7 +233,7 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
     </form>
     <div class="foot">
       <img src="/zipdev-logo.png" alt="Zipdev" />
-      <span>· Zippy — Zipdev's super-agent</span>
+      <span>· Cortex — Zipdev's super-agent</span>
     </div>
   </div>
 </body>

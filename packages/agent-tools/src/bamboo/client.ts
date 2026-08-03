@@ -13,7 +13,7 @@ import type { ToolContext } from '../types';
  * Like the Apollo client, this one NEVER THROWS. A missing key, a rotated key
  * or a module the instance does not license are ordinary operating conditions
  * on a third party we do not control; a thrown error would abort the whole
- * Zippy turn. Every call returns a result the tool can turn into a plain
+ * Cortex turn. Every call returns a result the tool can turn into a plain
  * sentence.
  *
  * The key is read from the environment on every call and never logged, never
@@ -43,7 +43,7 @@ function describeHttpFailure(status: number): string {
     return 'BambooHR rejected our key. It has most likely been rotated or switched off — ops needs to refresh it before I can read anything from there.';
   }
   if (status === 403) {
-    return 'BambooHR let us in but will not share that particular information — the account Zippy uses does not have permission for it. An HR admin can widen that access in BambooHR.';
+    return 'BambooHR let us in but will not share that particular information — the account Cortex uses does not have permission for it. An HR admin can widen that access in BambooHR.';
   }
   if (status === 404) {
     return 'BambooHR has nothing at that address. Usually that means the person or record does not exist, or Zipdev does not use that part of BambooHR.';

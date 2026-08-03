@@ -8,7 +8,7 @@
 
 ## 1. Summary
 
-`zipdev-agent` is an internal AI agent platform for Zipdev (a LATAM staffing company). It exposes one or more specialized agents (Sales first; HR / Recruiter to follow) accessible from multiple surfaces — Claude Desktop via an MCP connector, a native desktop app, and (later) a Zipdev web app — all backed by a shared core: a tool layer, a 3-tier RAG knowledge base, agent definitions, and integrations to HubSpot, Google Workspace, and the existing Zipdev Rate Estimator.
+`cortex-agent` is an internal AI agent platform for Zipdev (a LATAM staffing company). It exposes one or more specialized agents (Sales first; HR / Recruiter to follow) accessible from multiple surfaces — Claude Desktop via an MCP connector, a native desktop app, and (later) a Zipdev web app — all backed by a shared core: a tool layer, a 3-tier RAG knowledge base, agent definitions, and integrations to HubSpot, Google Workspace, and the existing Zipdev Rate Estimator.
 
 The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one job-to-be-done: prospect → pull HubSpot context → confirm roles → call the Rate Estimator → draft a proposal email in Gmail.
 
@@ -62,7 +62,7 @@ The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one j
 └─────────────────┘       └──────────┬───────────┘
                                      │
                           ┌──────────▼───────────┐
-                          │  @zipdev/agent-tools │   ← shared package
+                          │  @cortex/agent-tools │   ← shared package
                           │  hubspot · rate ·    │
                           │  gmail · gcal ·      │
                           │  gsheets · kb        │
@@ -82,7 +82,7 @@ The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one j
 Monorepo: **pnpm workspaces + Turborepo**.
 
 ```
-zipdev-agent/
+cortex-agent/
 ├── apps/
 │   ├── web/                    # Next.js on Vercel: admin UI + chat UI + API + agent loop
 │   │   ├── (app)/              # Admin: agents, KB, integrations, users, MCP tokens, audit, usage
@@ -95,10 +95,10 @@ zipdev-agent/
 │   ├── mcp/                    # Cloudflare Worker, exposes shared tools to Claude
 │   └── desktop/                # Tauri shell wrapping the chat UI
 ├── packages/
-│   ├── tools/                  # @zipdev/agent-tools — shared tool layer
-│   ├── agents/                 # @zipdev/agents — agent definitions
-│   ├── core/                   # @zipdev/core — types, auth helpers, db client
-│   └── ui/                     # @zipdev/ui — shared React components
+│   ├── tools/                  # @cortex/agent-tools — shared tool layer
+│   ├── agents/                 # @cortex/agents — agent definitions
+│   ├── core/                   # @cortex/core — types, auth helpers, db client
+│   └── ui/                     # @cortex/ui — shared React components
 ├── infra/
 │   └── supabase/               # SQL migrations
 └── turbo.json
@@ -182,7 +182,7 @@ Upload (PDF | DOCX | TXT | MD | URL)
 - Scope required: `drive.readonly`.
 - Caps: 500 docs per collection, 10 MB per file (warning surfaced in UI).
 
-## 8. Tool layer (`@zipdev/agent-tools`)
+## 8. Tool layer (`@cortex/agent-tools`)
 
 Single interface for every tool, consumed by both the backend agent and the MCP server.
 
@@ -248,7 +248,7 @@ export interface ToolContext {
 - **Audit log:** every tool call writes an `audit_events` row (input hash, status, latency, token usage).
 - **Rate limits:** per-tool, per-user (e.g., `gmail.search` 30/min).
 
-## 9. Agent definitions (`@zipdev/agents`)
+## 9. Agent definitions (`@cortex/agents`)
 
 Each agent is a plain config:
 

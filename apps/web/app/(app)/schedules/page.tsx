@@ -126,7 +126,7 @@ export default async function SchedulesPage() {
     <>
       <PageHeader
         title="Routines"
-        subtitle="Unattended jobs Zippy runs on schedule — created from any chat in plain words. Global routines run for the whole team and email their results."
+        subtitle="Unattended jobs Cortex runs on schedule — created from any chat in plain words. Global routines run for the whole team and email their results."
         icon={<AlarmClock className="h-5 w-5" />}
         actions={<RefreshButton />}
       />

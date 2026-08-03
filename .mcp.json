@@ -2,7 +2,7 @@
   "mcpServers": {
     "zipdev": {
       "type": "http",
-      "url": "https://zippy-zipdev.vercel.app/mcp"
+      "url": "https://cortex-zipdev.vercel.app/mcp"
     }
   }
 }

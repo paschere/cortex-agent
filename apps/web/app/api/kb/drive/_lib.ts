@@ -6,8 +6,8 @@ import {
   assertCanWriteToSpace,
   createIntegrationsClient,
   driveGet,
-} from '@zipdev/agent-tools';
-import { NotFoundError, type SessionUser, logger } from '@zipdev/core';
+} from '@cortex/agent-tools';
+import { NotFoundError, type SessionUser, logger } from '@cortex/core';
 
 type Db = ReturnType<typeof getSupabaseServiceClient>;
 

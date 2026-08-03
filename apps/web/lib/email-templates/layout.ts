@@ -1,14 +1,14 @@
-import { FONT_STACK, ZIPPY_ICON_URL, escapeHtml, palette, safeHref } from './theme';
+import { FONT_STACK, CORTEX_ICON_URL, escapeHtml, palette, safeHref } from './theme';
 
 /**
- * The shell every automated Zippy email is poured into.
+ * The shell every automated Cortex email is poured into.
  *
  * Structure (all tables, all inline styles):
  *
  *   body (surface background)
  *   └ hidden preheader  ← the snippet Gmail shows next to the subject
  *   └ 600px centred table
- *     ├ header band: the Zippy mark + wordmark
+ *     ├ header band: the Cortex mark + wordmark
  *     ├ white card: title, optional eyebrow/pill, body
  *     └ footer: link back to Zipdev OS + why this landed in their inbox
  */
@@ -54,16 +54,16 @@ const PREHEADER_PADDING = '&#847;&zwnj;&nbsp;'.repeat(60);
 
 export function renderEmail(opts: RenderEmailOptions): string {
   const base = appBaseUrl();
-  const home = safeHref(base || 'https://zippy-zipdev.vercel.app');
-  const icon = safeHref(ZIPPY_ICON_URL);
+  const home = safeHref(base || 'https://cortex-zipdev.vercel.app');
+  const icon = safeHref(CORTEX_ICON_URL);
 
   const header = [
     `<tr><td style="padding:0 4px 14px;">`,
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>',
     icon
-      ? `<td width="32" style="width:32px;padding-right:9px;vertical-align:middle;"><img src="${icon}" width="32" height="32" alt="Zippy" style="display:block;width:32px;height:32px;border:0;border-radius:8px;" /></td>`
+      ? `<td width="32" style="width:32px;padding-right:9px;vertical-align:middle;"><img src="${icon}" width="32" height="32" alt="Cortex" style="display:block;width:32px;height:32px;border:0;border-radius:8px;" /></td>`
       : '',
-    `<td style="vertical-align:middle;font-family:${FONT_STACK};font-size:16px;font-weight:700;letter-spacing:-.01em;color:${palette.primary};">Zippy</td>`,
+    `<td style="vertical-align:middle;font-family:${FONT_STACK};font-size:16px;font-weight:700;letter-spacing:-.01em;color:${palette.primary};">Cortex</td>`,
     '</tr></table>',
     '</td></tr>',
   ].join('');
@@ -82,8 +82,8 @@ export function renderEmail(opts: RenderEmailOptions): string {
     `<tr><td style="padding:18px 4px 0;">`,
     `<p style="margin:0 0 6px;font-family:${FONT_STACK};font-size:12.5px;line-height:1.55;color:${palette.faint};">`,
     home
-      ? `Sent by Zippy · <a href="${home}" style="color:${palette.primary};text-decoration:underline;">Open Zipdev OS</a>`
-      : 'Sent by Zippy',
+      ? `Sent by Cortex · <a href="${home}" style="color:${palette.primary};text-decoration:underline;">Open Zipdev OS</a>`
+      : 'Sent by Cortex',
     '</p>',
     opts.footerNote
       ? `<p style="margin:0;font-family:${FONT_STACK};font-size:12.5px;line-height:1.55;color:${palette.faint};">${escapeHtml(opts.footerNote)}</p>`

@@ -7,8 +7,8 @@ import {
   getVisibleDocument,
   getVisibleSpace,
   searchSpaces,
-} from '@zipdev/agent-tools';
-import { ForbiddenError, NotFoundError } from '@zipdev/core';
+} from '@cortex/agent-tools';
+import { ForbiddenError, NotFoundError } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
 import type {
   ActionResult,
@@ -138,7 +138,7 @@ export async function deleteDocument(documentId: string): Promise<SimpleActionRe
 
 /**
  * Search from the page. Goes through exactly the same `searchSpaces` boundary
- * Zippy uses, so what a person can find here and what their own Zippy can
+ * Cortex uses, so what a person can find here and what their own Cortex can
  * retrieve are the same set by construction, not by two rules kept in step.
  */
 export async function searchKnowledge(

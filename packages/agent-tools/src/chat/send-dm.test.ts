@@ -41,7 +41,7 @@ function makeCtx(row: Record<string, unknown> | null): ToolContext {
 
 function withServiceAccount() {
   process.env.GOOGLE_CHAT_SERVICE_ACCOUNT_JSON = JSON.stringify({
-    client_email: 'zippy@example.iam.gserviceaccount.com',
+    client_email: 'cortex@example.iam.gserviceaccount.com',
     private_key: '-----BEGIN PRIVATE KEY-----\\nnot-a-real-key\\n-----END PRIVATE KEY-----',
   });
   resetChatAppCredentials();

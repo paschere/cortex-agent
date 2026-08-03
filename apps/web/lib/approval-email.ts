@@ -11,10 +11,10 @@ import { renderApprovalRequestEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { humanizeToolId } from '@/lib/tool-labels';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 
 /**
- * "Zippy needs your approval" notification.
+ * "Cortex needs your approval" notification.
  *
  * A confirmation is only useful if the person sees it. In the web chat they
  * do — the prompt is right there. Over MCP (Claude, Claude Code), from a
@@ -22,7 +22,7 @@ import { logger } from '@zipdev/core';
  * looking at that surface, so it also goes out by email, pointing at
  * /approvals where it can be approved or declined.
  *
- * When the person has linked Google Chat (they have DMed the Zippy Chat app at
+ * When the person has linked Google Chat (they have DMed the Cortex Chat app at
  * least once) the same request is ALSO delivered as a Chat DM. Approvals expire
  * in 15 minutes, so reaching the surface the person actually has open matters
  * more than tidiness.

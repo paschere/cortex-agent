@@ -1,6 +1,6 @@
 import { trace, type Span } from '@opentelemetry/api';
 
-const tracer = trace.getTracer('zipdev-agent');
+const tracer = trace.getTracer('cortex-agent');
 
 export async function withToolSpan<T>(
   toolId: string,

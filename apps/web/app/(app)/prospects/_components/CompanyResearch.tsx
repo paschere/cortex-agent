@@ -16,7 +16,7 @@ import type { CompanyProfile, NewsItem } from './types';
  * profile returned and so costs one credit instead of two.
  *
  * Results are held for the session and never written back to the signal: the
- * stored row is what Zippy found on a job board, and mixing a paid third-party
+ * stored row is what Cortex found on a job board, and mixing a paid third-party
  * snapshot into it would blur where each fact came from.
  */
 export function CompanyResearch({

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { RateLimitError, type UUID } from '@zipdev/core';
+import { RateLimitError, type UUID } from '@cortex/core';
 
 export async function consumeToken(
   db: SupabaseClient,

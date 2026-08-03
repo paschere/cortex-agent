@@ -13,7 +13,7 @@ import {
 /**
  * Collecting the window of mail the digest reasons over.
  *
- * Everything here stays inside Zippy: the raw headers, snippets and addresses
+ * Everything here stays inside Cortex: the raw headers, snippets and addresses
  * are pulled with the user's own Gmail token, normalized, and handed to the
  * server-side model. Only the distilled digest ever leaves this module.
  */

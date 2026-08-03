@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerTool, runTool } from '@zipdev/agent-tools';
+import { registerTool, runTool } from '@cortex/agent-tools';
 import { z } from 'zod';
-import type { ToolContext } from '@zipdev/agent-tools';
+import type { ToolContext } from '@cortex/agent-tools';
 
 // --- Shared ctx factory (mirrors runtool.test.ts pattern) ---
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
@@ -219,7 +219,7 @@ function registerFakeTools() {
 // Import the composite tool (side-effect registration happens at module load)
 // We need it registered after our fakes, but the composite is registered by agent-tools index
 // So we import it explicitly here:
-import '@zipdev/agent-tools';
+import '@cortex/agent-tools';
 
 describe('sales.draft_proposal composite tool', () => {
   beforeEach(() => {
@@ -227,7 +227,7 @@ describe('sales.draft_proposal composite tool', () => {
   });
 
   it('calls rate.estimate with the correct args', async () => {
-    const { getTool } = await import('@zipdev/agent-tools');
+    const { getTool } = await import('@cortex/agent-tools');
     const tool = getTool('sales.draft_proposal');
     expect(tool).toBeDefined();
 
@@ -248,7 +248,7 @@ describe('sales.draft_proposal composite tool', () => {
   });
 
   it('calls kb.search with a derived query', async () => {
-    const { getTool } = await import('@zipdev/agent-tools');
+    const { getTool } = await import('@cortex/agent-tools');
     const tool = getTool('sales.draft_proposal');
     expect(tool).toBeDefined();
 
@@ -267,7 +267,7 @@ describe('sales.draft_proposal composite tool', () => {
   });
 
   it('does not call hubspot.get_company when companyId is missing', async () => {
-    const { getTool } = await import('@zipdev/agent-tools');
+    const { getTool } = await import('@cortex/agent-tools');
     const tool = getTool('sales.draft_proposal');
     expect(tool).toBeDefined();
 
@@ -286,7 +286,7 @@ describe('sales.draft_proposal composite tool', () => {
   });
 
   it('output markdown contains rate range and citations', async () => {
-    const { getTool } = await import('@zipdev/agent-tools');
+    const { getTool } = await import('@cortex/agent-tools');
     const tool = getTool('sales.draft_proposal');
     expect(tool).toBeDefined();
 
@@ -314,7 +314,7 @@ describe('sales.draft_proposal composite tool', () => {
   });
 
   it('maps staff/principal seniority to lead for rate estimator', async () => {
-    const { getTool } = await import('@zipdev/agent-tools');
+    const { getTool } = await import('@cortex/agent-tools');
     const tool = getTool('sales.draft_proposal');
     expect(tool).toBeDefined();
 

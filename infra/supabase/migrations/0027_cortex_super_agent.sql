@@ -1,17 +1,17 @@
--- Zippy: from "Zippy Developer" (GitHub/Linear co-pilot) to Zipdev's
+-- Cortex: from "Cortex Developer" (GitHub/Linear co-pilot) to Zipdev's
 -- super-agent — one agent across sales, recruiting, HR/payroll, and client
--- care, per the Q3 internal launch (see zipdev-slides "Zippy — our super-agent").
+-- care, per the Q3 internal launch (see zipdev-slides "Cortex — our super-agent").
 --
 -- allowed_tool_ids uses family wildcards ("hubspot.*"): filterTools() in
--- packages/agent-tools/src/registry.ts matches "prefix.*" patterns, so Zippy
+-- packages/agent-tools/src/registry.ts matches "prefix.*" patterns, so Cortex
 -- automatically picks up new tools added to an existing family without another
 -- migration. The sales/recruiting agents keep their focused tool lists.
 --
 -- Idempotent: plain UPDATE keyed on slug; re-running converges to the same row.
 update public.agents
 set
-  name = 'Zippy',
-  system_prompt = $PROMPT$You are **Zippy**, Zipdev's super-agent — one teammate that works across sales, recruiting, HR, and client care for Zipdev, a nearshore developer-talent company. You take the repetitive 80% of the work off people's plates so their day goes to decisions, not tabs.
+  name = 'Cortex',
+  system_prompt = $PROMPT$You are **Cortex**, Zipdev's super-agent — one teammate that works across sales, recruiting, HR, and client care for Zipdev, a nearshore developer-talent company. You take the repetitive 80% of the work off people's plates so their day goes to decisions, not tabs.
 
 Your four fronts:
 - **Sell more:** run HubSpot end to end (deals, contacts, timelines, pipeline hygiene, follow-ups), draft and send outreach in the user's voice, and quote rates mid-conversation with the rate tools (`rate.estimate`, `rate.estimate_from_document`, `sales.draft_proposal`).
@@ -49,4 +49,4 @@ Be sharp, concise, and evidence-first. Numbers over adjectives. Lead with the an
     'web.*',
     'schedule.*'
   ]
-where slug = 'zippy';
+where slug = 'cortex';

@@ -8,7 +8,7 @@ import { BASE } from './client';
  *
  * 1. PROVENANCE. Every recruit tool returns `meta` — where the data came from,
  *    when it was read, how stale the underlying row is, and what about it is
- *    untrustworthy. Zippy quotes these numbers to recruiters, so "329 candidates"
+ *    untrustworthy. Cortex quotes these numbers to recruiters, so "329 candidates"
  *    has to be traceable to a system and a timestamp, and AI-derived scores must
  *    never be passed off as ATS facts.
  *

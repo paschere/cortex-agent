@@ -87,5 +87,5 @@ update public.agents
 set allowed_tool_ids = (
   select array(select distinct unnest(allowed_tool_ids || array['schedule.create','schedule.list','schedule.update']))
 )
-where slug in ('sales', 'zippy', 'recruiting')
+where slug in ('sales', 'cortex', 'recruiting')
   and not allowed_tool_ids @> array['schedule.create'];

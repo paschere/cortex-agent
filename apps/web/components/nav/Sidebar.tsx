@@ -2,7 +2,7 @@
 
 import * as Dialog from '@radix-ui/react-dialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Role } from '@zipdev/core';
+import type { Role } from '@cortex/core';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -78,7 +78,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    // Both are "ask Zippy something it already knows" — the corpus it reads from
+    // Both are "ask Cortex something it already knows" — the corpus it reads from
     // and the pricing model it reasons with.
     id: 'knowledge',
     label: 'Knowledge',
@@ -88,7 +88,7 @@ const GROUPS: NavGroup[] = [
     ],
   },
   {
-    // A pair, deliberately adjacent: one page is Zippy reaching out to other
+    // A pair, deliberately adjacent: one page is Cortex reaching out to other
     // systems, the other is an AI client reaching in. They used to read as
     // duplicates when they sat in different groups under similar names.
     id: 'connections',
@@ -358,10 +358,10 @@ function Brand({ collapsed }: { collapsed: boolean }) {
     <div className={clsx('flex items-center gap-2.5', collapsed && 'justify-center')}>
       {/* App icon (Next metadata route) — same mark as the browser tab. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/icon.png" alt="Zippy" className="h-9 w-9 shrink-0" />
+      <img src="/icon.png" alt="Cortex" className="h-9 w-9 shrink-0" />
       {!collapsed && (
         <div className="leading-tight">
-          <div className="text-[15px] font-extrabold tracking-[-0.02em] text-ink">Zippy</div>
+          <div className="text-[15px] font-extrabold tracking-[-0.02em] text-ink">Cortex</div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
             by Zipdev
           </div>

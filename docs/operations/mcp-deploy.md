@@ -11,7 +11,7 @@
 Install dependencies:
 
 ```bash
-pnpm --filter @zipdev/mcp install
+pnpm --filter @cortex/mcp install
 ```
 
 Set secrets (each command prompts for the value):
@@ -34,7 +34,7 @@ wrangler secret put RATE_ESTIMATOR_SERVICE_TOKEN
 **Production:**
 
 ```bash
-pnpm --filter @zipdev/mcp deploy
+pnpm --filter @cortex/mcp deploy
 ```
 
 **Local development:**

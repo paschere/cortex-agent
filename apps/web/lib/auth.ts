@@ -1,22 +1,30 @@
 import { betterAuth } from 'better-auth';
+import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { Pool } from 'pg';
-import { encryptToken } from '@zipdev/core';
+import { encryptToken } from '@cortex/core';
+import { sendEmail } from './email';
 
 /**
- * Server-side better-auth instance.
+ * Server-side better-auth instance — Cortex SaaS edition.
  *
- * Notes on configuration (against better-auth v1.6.11):
+ * Auth surface:
+ * - Email + password with verification and password reset (open signup —
+ *   optionally restricted via ALLOWED_EMAIL_DOMAIN for private deployments).
+ * - Google SSO (also provisions the Google toolbelt scopes in one shot).
+ * - Organizations: multi-tenant workspaces with roles + email invitations.
+ * - Admin: platform-level user management (ban, impersonate, list sessions).
+ * - Two-factor: TOTP + backup codes.
+ *
+ * Notes on configuration (against better-auth v1.6.x):
  *
  * - `database` accepts a raw `pg.Pool` (or other PostgresPool); better-auth
  *   wraps it in a Kysely `PostgresDialect` internally. There is no top-level
- *   `tablePrefix` — tables are renamed individually via `<model>.modelName`.
+ *   `tablePrefix` — tables are renamed individually via `<model>.modelName`
+ *   (and per-plugin `schema` maps for plugin tables).
  *
- * - `databaseHooks` is at the top level (confirmed against the v1.6.11
- *   `BetterAuthOptions` type).
- *
- * - The user-create `after` hook syncs the better-auth user into
- *   `public.users` (linking by email). The `before` hook enforces the
- *   `ALLOWED_EMAIL_DOMAIN` invariant before the user row is written.
+ * - `databaseHooks` is at the top level. The user-create `after` hook syncs
+ *   the better-auth user into `public.users` (linking by email). The `before`
+ *   hook enforces ALLOWED_EMAIL_DOMAIN only when that env var is set.
  *
  * The Pool is constructed eagerly at module load, but `new Pool()` does NOT
  * open any connections — they're lazily established on first `.query()`.
@@ -68,6 +76,9 @@ if (
 ) {
   throw new Error('BETTER_AUTH_SECRET must be set in production');
 }
+
+const baseURL =
+  process.env.BETTER_AUTH_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000';
 
 /**
  * Every Google scope the agent tools use. Requested at SSO login so one
@@ -146,10 +157,9 @@ async function syncGoogleIntegration(account: {
 }
 
 export const auth = betterAuth({
-  appName: 'Zippy',
+  appName: 'Cortex',
   database: pool,
-  baseURL:
-    process.env.BETTER_AUTH_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000',
+  baseURL,
   // Fallback only used at build/import time when env is unset; real signing
   // requires BETTER_AUTH_SECRET to be set at runtime (enforced above).
   secret: resolvedSecret,
@@ -162,20 +172,94 @@ export const auth = betterAuth({
       scope: GOOGLE_TOOL_SCOPES,
     },
   },
-  emailAndPassword: { enabled: false },
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: 10,
+    // Reset links land in the inbox (Resend) or in the server log when no
+    // email provider is configured (local dev) — see lib/email.ts.
+    sendResetPassword: async ({ user, url }) => {
+      const result = await sendEmail({
+        to: user.email,
+        subject: 'Reset your Cortex password',
+        text: `Hi ${user.name || 'there'},\n\nReset your Cortex password using this link (valid for 1 hour):\n\n${url}\n\nIf you didn't request this, you can safely ignore this email.`,
+      });
+      if (!result.sent) console.info(`[auth:dev] password reset link for ${user.email}: ${url}`);
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      const result = await sendEmail({
+        to: user.email,
+        subject: 'Verify your Cortex account',
+        text: `Hi ${user.name || 'there'},\n\nConfirm your email address to activate your Cortex account:\n\n${url}\n\nIf you didn't sign up, you can safely ignore this email.`,
+      });
+      if (!result.sent) console.info(`[auth:dev] verification link for ${user.email}: ${url}`);
+    },
+  },
+  session: {
+    modelName: 'ba_session',
+    expiresIn: 60 * 60 * 24 * 30, // 30 days
+    updateAge: 60 * 60 * 24, // roll the expiry at most once a day
+    // Short-lived signed cookie cache: cuts a DB round-trip from every
+    // authenticated request without meaningfully extending revocation lag.
+    cookieCache: { enabled: true, maxAge: 5 * 60 },
+  },
+  rateLimit: {
+    // On by default in production; explicit so the limits are documented.
+    window: 60,
+    max: 100,
+  },
   // Map default model names onto our prefixed tables.
   user: { modelName: 'ba_user' },
-  session: { modelName: 'ba_session' },
   account: { modelName: 'ba_account' },
   verification: { modelName: 'ba_verification' },
+  plugins: [
+    // Multi-tenant workspaces: each customer gets an organization; members
+    // carry owner/admin/member roles; invitations go out by email.
+    organization({
+      schema: {
+        organization: { modelName: 'ba_organization' },
+        member: { modelName: 'ba_member' },
+        invitation: { modelName: 'ba_invitation' },
+      },
+      organizationLimit: 5,
+      membershipLimit: 100,
+      invitationExpiresIn: 60 * 60 * 48, // 48 hours
+      sendInvitationEmail: async (data) => {
+        const inviteUrl = `${baseURL}/accept-invitation/${data.id}`;
+        const result = await sendEmail({
+          to: data.email,
+          subject: `You've been invited to ${data.organization.name} on Cortex`,
+          text: `${data.inviter.user.name || data.inviter.user.email} invited you to join "${data.organization.name}" on Cortex.\n\nAccept the invitation:\n\n${inviteUrl}\n\nThis invitation expires in 48 hours.`,
+        });
+        if (!result.sent) console.info(`[auth:dev] invitation link for ${data.email}: ${inviteUrl}`);
+      },
+    }),
+    // Platform-level administration: list/ban users, revoke sessions,
+    // impersonate for support. The first user to sign up is promoted to
+    // platform admin by the user-create hook below.
+    admin({ defaultRole: 'user' }),
+    // TOTP two-factor with backup codes. Enrollment and challenge flows are
+    // driven from the client via authClient.twoFactor.*.
+    twoFactor({
+      issuer: 'Cortex',
+      schema: { twoFactor: { modelName: 'ba_two_factor' } },
+    }),
+  ],
   databaseHooks: {
     user: {
       create: {
         before: async (user) => {
-          const domain = user.email.split('@')[1]?.toLowerCase();
-          const allowed = (process.env.ALLOWED_EMAIL_DOMAIN ?? 'zipdev.com').toLowerCase();
-          if (!domain || domain !== allowed) {
-            throw new Error(`Only @${allowed} accounts are allowed`);
+          // SaaS default: open signup. Setting ALLOWED_EMAIL_DOMAIN turns a
+          // deployment back into a single-company instance.
+          const allowed = (process.env.ALLOWED_EMAIL_DOMAIN ?? '').trim().toLowerCase();
+          if (allowed) {
+            const domain = user.email.split('@')[1]?.toLowerCase();
+            if (!domain || domain !== allowed) {
+              throw new Error(`Only @${allowed} accounts are allowed`);
+            }
           }
           return { data: user };
         },
@@ -196,6 +280,16 @@ export const auth = betterAuth({
              on conflict (email) do update
                set name = coalesce(excluded.name, public.users.name)`,
             [user.email, user.name],
+          );
+          // First account on a fresh deployment becomes the platform admin
+          // (better-auth admin plugin role, distinct from public.users.role).
+          await pool.query(
+            `update public.ba_user set role = 'admin'
+             where id = $1
+               and not exists (
+                 select 1 from public.ba_user where role = 'admin' and id <> $1
+               )`,
+            [user.id],
           );
         },
       },

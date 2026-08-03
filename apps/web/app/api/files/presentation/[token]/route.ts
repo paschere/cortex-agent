@@ -84,7 +84,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 
   if (Date.parse(row.expires_at) <= Date.now()) {
     return problem(
-      'This download link has expired. Ask Zippy to prepare a fresh copy of the presentation.',
+      'This download link has expired. Ask Cortex to prepare a fresh copy of the presentation.',
       410,
     );
   }

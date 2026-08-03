@@ -2,7 +2,7 @@
  * Human-readable taxonomy for the tool registry: family names, what each family
  * is for, and the id → label humanisation shared by the catalogue UI.
  *
- * PURE DATA ONLY — no `@zipdev/agent-tools` import. This module is imported by
+ * PURE DATA ONLY — no `@cortex/agent-tools` import. This module is imported by
  * a CLIENT component, and pulling the registry in would drag `node:crypto`,
  * `node:dns` and pdf-parse's `fs` access into the browser bundle and break the
  * production build (same trap documented in
@@ -108,13 +108,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   },
   meetings: {
     name: 'Meetings',
-    blurb: 'Recorded transcripts and the briefings Zippy prepares before a call.',
+    blurb: 'Recorded transcripts and the briefings Cortex prepares before a call.',
     tone: 'sky',
     icon: 'Mic',
   },
   inbox: {
     name: 'Inbox',
-    blurb: 'The daily priority list and digests Zippy assembles from everything it can see.',
+    blurb: 'The daily priority list and digests Cortex assembles from everything it can see.',
     tone: 'sky',
     icon: 'Inbox',
   },
@@ -162,7 +162,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   },
   chat: {
     name: 'Google Chat',
-    blurb: 'Direct messages and space posts Zippy sends to colleagues.',
+    blurb: 'Direct messages and space posts Cortex sends to colleagues.',
     tone: 'emerald',
     icon: 'MessagesSquare',
   },
@@ -190,8 +190,8 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'rose',
     icon: 'ShieldCheck',
   },
-  zippy: {
-    name: 'Zippy',
+  cortex: {
+    name: 'Cortex',
     blurb: 'Meta tools the agent uses to orient itself inside the workspace.',
     tone: 'primary',
     icon: 'Sparkles',
@@ -261,7 +261,7 @@ export function qualifiedToolLabel(toolId: string): string {
   return action ? `${label} · ${action}` : label;
 }
 
-/** Same rules as matchPattern in @zipdev/agent-tools: 'family.*' or exact id. */
+/** Same rules as matchPattern in @cortex/agent-tools: 'family.*' or exact id. */
 export function matchesPattern(toolId: string, pattern: string): boolean {
   return pattern.endsWith('.*') ? toolId.startsWith(pattern.slice(0, -1)) : pattern === toolId;
 }

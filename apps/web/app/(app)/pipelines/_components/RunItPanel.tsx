@@ -8,7 +8,7 @@ import { type ParamDef, runSentence } from '../_lib/playbook';
 
 /**
  * "Run it": fill the declared parameters, get the exact sentence to say to
- * Zippy, copy it. Chat has no prompt-prefill entry point today, so this stays
+ * Cortex, copy it. Chat has no prompt-prefill entry point today, so this stays
  * copy-to-clipboard rather than deep-linking into /chat.
  */
 export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] }) {
@@ -33,7 +33,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
         Run it
       </div>
       <p className="mb-3 text-[12px] text-ink-muted">
-        Fill in the arguments, then say this to Zippy — in the web chat, in Claude, or from a
+        Fill in the arguments, then say this to Cortex — in the web chat, in Claude, or from a
         scheduled routine.
       </p>
 

@@ -44,7 +44,7 @@ export interface ChatAnnotation {
 export interface ChatMessageBody {
   name?: string;
   sender?: ChatUser;
-  /** Raw text INCLUDING the `@Zippy` mention and any slash command. */
+  /** Raw text INCLUDING the `@Cortex` mention and any slash command. */
   text?: string;
   /** Google's own mention/command-stripped version. Not always present. */
   argumentText?: string;
@@ -179,7 +179,7 @@ export const SLASH_DIRECTIVES: Record<ChatSlashCommand, string> = {
  * The text the model should actually see.
  *
  * In a space, Chat only delivers a MESSAGE event when the app is @mentioned,
- * and `text` then begins with the mention ("@Zippy what's the pipeline?").
+ * and `text` then begins with the mention ("@Cortex what's the pipeline?").
  * Feeding that to the model verbatim wastes tokens and confuses it, and a
  * regex on the display name breaks the moment someone renames the app or
  * another user's name contains it.

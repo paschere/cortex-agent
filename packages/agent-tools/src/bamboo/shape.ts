@@ -6,8 +6,8 @@ import type { BambooFailure } from './client';
  * shape module does.
  *
  * 1. PROVENANCE. Every tool returns `source`, naming which part of BambooHR the
- *    facts came from and when. Compensation quoted by Zippy has to be traceable
- *    to a system and a timestamp, never sound like Zippy's own opinion.
+ *    facts came from and when. Compensation quoted by Cortex has to be traceable
+ *    to a system and a timestamp, never sound like Cortex's own opinion.
  *
  * 2. SIZE. A raw BambooHR employee carries ~294 fields (visa numbers, bank
  *    accounts, dependants, COVID test history); a fortnight of timesheet
@@ -16,7 +16,7 @@ import type { BambooFailure } from './client';
  *    endpoints that return history are bounded before they are asked.
  */
 
-/** Stamped on every result so Zippy can cite where a fact came from. */
+/** Stamped on every result so Cortex can cite where a fact came from. */
 export const sourceSchema = z.object({
   provider: z.literal('BambooHR'),
   dataset: z.string(),
@@ -356,7 +356,7 @@ export function computeMargin(
 }
 
 /**
- * The sentence Zippy should lead with whenever it hands over a bill rate. Both
+ * The sentence Cortex should lead with whenever it hands over a bill rate. Both
  * numbers describe the same person and are trivially confusable; saying which
  * is which every time is cheaper than one client conversation quoting a cost as
  * a price.

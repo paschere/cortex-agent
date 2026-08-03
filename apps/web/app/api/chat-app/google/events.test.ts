@@ -13,19 +13,19 @@ describe('readActionParameters', () => {
     const event = {
       type: 'CARD_CLICKED',
       common: {
-        invokedFunction: 'zippy_approval_decision',
+        invokedFunction: 'cortex_approval_decision',
         parameters: { approvalId: 'abc', decision: 'approve' },
       },
     } as ChatEvent;
     expect(readActionParameters(event)).toEqual({ approvalId: 'abc', decision: 'approve' });
-    expect(invokedFunctionOf(event)).toBe('zippy_approval_decision');
+    expect(invokedFunctionOf(event)).toBe('cortex_approval_decision');
   });
 
   it('reads the list form used by plain Chat app events', () => {
     const event = {
       type: 'CARD_CLICKED',
       action: {
-        actionMethodName: 'zippy_approval_decision',
+        actionMethodName: 'cortex_approval_decision',
         parameters: [
           { key: 'approvalId', value: 'abc' },
           { key: 'decision', value: 'decline' },
@@ -33,7 +33,7 @@ describe('readActionParameters', () => {
       },
     } as ChatEvent;
     expect(readActionParameters(event)).toEqual({ approvalId: 'abc', decision: 'decline' });
-    expect(invokedFunctionOf(event)).toBe('zippy_approval_decision');
+    expect(invokedFunctionOf(event)).toBe('cortex_approval_decision');
   });
 
   it('lets the map win when Google sends both', () => {

@@ -8,14 +8,14 @@ import {
   apolloEnrichCompany,
   growthUpdateSignal,
   runTool,
-} from '@zipdev/agent-tools';
-import type { UUID } from '@zipdev/core';
+} from '@cortex/agent-tools';
+import type { UUID } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
 import type { ActionResult, CompanyProfile, NewsItem, SignalStatus } from './_components/types';
 
 /**
  * Every write on this page goes through `runTool` rather than straight to the
- * table, for one reason: Zippy already moves these signals from chat, and the
+ * table, for one reason: Cortex already moves these signals from chat, and the
  * two surfaces must not drift. Same tool, same validation, same four states,
  * and the same audit row naming the person who did it.
  */
@@ -24,10 +24,10 @@ const PATH = '/prospects';
 
 const STATUSES: SignalStatus[] = ['new', 'qualified', 'rejected', 'contacted'];
 
-/** Zippy is the agent every tool call on this page is attributed to. */
-async function zippyContext(userId: UUID, signal?: AbortSignal) {
+/** Cortex is the agent every tool call on this page is attributed to. */
+async function cortexContext(userId: UUID, signal?: AbortSignal) {
   const db = getSupabaseServiceClient();
-  const { data } = await db.from('agents').select('id').eq('slug', 'zippy').maybeSingle();
+  const { data } = await db.from('agents').select('id').eq('slug', 'cortex').maybeSingle();
   if (!data?.id) return null;
   return buildToolContext({ userId, agentId: data.id as UUID, signal });
 }
@@ -39,7 +39,7 @@ function describe(err: unknown, fallback: string): string {
   return message && message.length < 160 ? message : fallback;
 }
 
-const NO_AGENT = 'Zippy is not set up on this workspace yet, so nothing can be recorded.';
+const NO_AGENT = 'Cortex is not set up on this workspace yet, so nothing can be recorded.';
 
 /**
  * Move a prospect between the four states. The caller updates its own UI first
@@ -52,7 +52,7 @@ export async function setProspectStatus(
   const user = await requireSession();
   if (!STATUSES.includes(status)) return { ok: false, error: 'That is not a valid stage.' };
 
-  const ctx = await zippyContext(user.id);
+  const ctx = await cortexContext(user.id);
   if (!ctx) return { ok: false, error: NO_AGENT };
 
   try {
@@ -95,7 +95,7 @@ export async function lookUpCompany(
     .maybeSingle();
   if (!row?.company) return { ok: false, error: 'That prospect is no longer on file.' };
 
-  const ctx = await zippyContext(user.id);
+  const ctx = await cortexContext(user.id);
   if (!ctx) return { ok: false, error: NO_AGENT };
 
   try {
@@ -146,7 +146,7 @@ export async function lookUpCompanyNews(
   companyApolloId: string,
 ): Promise<ActionResult<{ articles: NewsItem[]; note: string | null }>> {
   const user = await requireSession();
-  const ctx = await zippyContext(user.id);
+  const ctx = await cortexContext(user.id);
   if (!ctx) return { ok: false, error: NO_AGENT };
 
   try {

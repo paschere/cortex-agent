@@ -1,4 +1,4 @@
-import { ConfirmationRequiredError, SecurityBlockedError } from '@zipdev/core';
+import { ConfirmationRequiredError, SecurityBlockedError } from '@cortex/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { runTool } from '../registry';

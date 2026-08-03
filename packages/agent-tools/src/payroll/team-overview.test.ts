@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { IntegrationError } from '@zipdev/core';
+import { IntegrationError } from '@cortex/core';
 import { runTool } from '../index';
 import { payrollTeamOverview } from './team-overview';
 import type { ToolContext } from '../types';

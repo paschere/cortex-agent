@@ -24,5 +24,5 @@ alter table public.pipelines enable row level security;
 
 update public.agents
 set allowed_tool_ids = array_append(allowed_tool_ids, 'pipeline.*')
-where slug = 'zippy'
+where slug = 'cortex'
   and not ('pipeline.*' = any(allowed_tool_ids));

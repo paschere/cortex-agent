@@ -5,9 +5,9 @@ pub fn setup_deep_link<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::R
     let handle = app.clone();
     app.deep_link().on_open_url(move |event| {
         for url in event.urls() {
-            // Accept: zipdev-agent://auth/callback?session=<token>
-            //     or: zipdev-agent://auth?token=<token>
-            if url.scheme() != "zipdev-agent" {
+            // Accept: cortex-agent://auth/callback?session=<token>
+            //     or: cortex-agent://auth?token=<token>
+            if url.scheme() != "cortex-agent" {
                 continue;
             }
             let session = url

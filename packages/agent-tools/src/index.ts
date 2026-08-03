@@ -35,7 +35,7 @@ export * from './apollo';
 export * from './workable';
 export * from './pipeline';
 export * from './meetings';
-export * from './zippy';
+export * from './cortex';
 export * from './memory';
 export * from './security';
 export * from './chat';

@@ -1,4 +1,4 @@
-import { ConnectZippy, CopyButton } from '@/components/connect/ConnectZippy';
+import { ConnectCortex, CopyButton } from '@/components/connect/ConnectCortex';
 import { DirectionPair } from '@/components/connect/DirectionPair';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
@@ -67,7 +67,7 @@ export default async function ConnectClientPage({
     <>
       <PageHeader
         title="Connect Claude"
-        subtitle="Use Zippy from Claude, Claude Code, ChatGPT or any MCP client — same tools, your permissions, every action audited."
+        subtitle="Use Cortex from Claude, Claude Code, ChatGPT or any MCP client — same tools, your permissions, every action audited."
         icon={<Cable className="h-5 w-5" />}
       />
 
@@ -92,7 +92,7 @@ export default async function ConnectClientPage({
             </div>
           </div>
 
-          <ConnectZippy url={mcpUrl} />
+          <ConnectCortex url={mcpUrl} />
         </Panel>
 
         {/* Fallback path: static bearer tokens. */}

@@ -1,5 +1,5 @@
 import { X509Certificate, createVerify } from 'node:crypto';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 
 /**
  * Authenticating Google Chat's calls to our webhook.

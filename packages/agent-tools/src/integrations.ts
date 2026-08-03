@@ -6,7 +6,7 @@ import {
   type IntegrationProvider,
   type Logger,
   type UUID,
-} from '@zipdev/core';
+} from '@cortex/core';
 import type { IntegrationsClient } from './types';
 
 interface RefreshFn {

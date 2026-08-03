@@ -57,7 +57,7 @@ export async function deniedToolPatterns(db: SupabaseClient, userId: string): Pr
 }
 
 /**
- * Same matching rules as matchPattern in @zipdev/agent-tools:
+ * Same matching rules as matchPattern in @cortex/agent-tools:
  * 'family.*' is a prefix match, anything else is an exact tool id.
  */
 export function isToolDenied(toolId: string, patterns: string[]): boolean {

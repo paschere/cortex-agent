@@ -6,12 +6,12 @@ import {
   loadMemoryContext,
   renderMemoryBlock,
   touchMemories,
-} from '@zipdev/agent-tools';
+} from '@cortex/agent-tools';
 
 /**
- * The one place a Zippy system prompt is assembled.
+ * The one place a Cortex system prompt is assembled.
  *
- * WHY IT IS HERE AND NOT IN EACH ROUTE. Zippy answers on three surfaces — the
+ * WHY IT IS HERE AND NOT IN EACH ROUTE. Cortex answers on three surfaces — the
  * web chat (/api/chat), Google Chat (/api/chat-app/google/turn.ts) and MCP
  * (/api/mcp) — and each one used to build its own system prompt string. They
  * already drifted once: the web route scopes tools by conversation topic and
@@ -54,7 +54,7 @@ export interface SystemPromptOptions {
   /**
    * Who will read the answer. 'group' adds the do-not-repeat rule for a room
    * with other people in it; it does NOT withhold the memories themselves,
-   * because they still have to shape how Zippy behaves in that room.
+   * because they still have to shape how Cortex behaves in that room.
    */
   audience?: MemoryAudience;
   /** Surface-specific blocks — the Chat surface note, a slash-command directive, retrieved context. */

@@ -184,7 +184,7 @@ export default async function DevWorkDetailPage({
             <p className="font-semibold text-rose">This run has not stood down yet</p>
             <p className="mt-0.5 text-ink-muted">
               {stoppedBy} asked it to stop {stamp(task.cancelRequestedAt)} and it is still going.
-              Nothing new will be merged, but it is worth telling whoever looks after Zippy.
+              Nothing new will be merged, but it is worth telling whoever looks after Cortex.
             </p>
           </div>
         </Panel>
@@ -221,7 +221,7 @@ export default async function DevWorkDetailPage({
               <div className={`mb-3 ${SECTION}`}>What went wrong</div>
               <p className="rounded-[12px] border border-rose/20 bg-rose-soft px-3.5 py-3 text-[13.5px] leading-relaxed text-ink">
                 {task.failureReason ??
-                  'Zippy stopped before the work was done and did not say why. Nothing was merged.'}
+                  'Cortex stopped before the work was done and did not say why. Nothing was merged.'}
               </p>
               {/* The technical detail is real and sometimes needed — it is just
                   never the first thing a person reads. */}
@@ -245,7 +245,7 @@ export default async function DevWorkDetailPage({
             ) : (
               <p className="text-[12.5px] text-ink-faint">
                 {task.status === 'queued' || task.status === 'running'
-                  ? 'Zippy writes this up when it finishes.'
+                  ? 'Cortex writes this up when it finishes.'
                   : 'No write-up was recorded for this run.'}
               </p>
             )}
@@ -373,8 +373,8 @@ export default async function DevWorkDetailPage({
               <p className="text-[12.5px] leading-relaxed text-ink-muted">
                 {stoppedBy} pulled the brake on {stamp(task.cancelRequestedAt)}.{' '}
                 {task.status === 'cancelled'
-                  ? 'Zippy stood down; nothing further was merged.'
-                  : 'Zippy stands down after the step it is on.'}
+                  ? 'Cortex stood down; nothing further was merged.'
+                  : 'Cortex stands down after the step it is on.'}
               </p>
             </Panel>
           )}

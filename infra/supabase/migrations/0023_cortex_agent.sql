@@ -1,7 +1,7 @@
--- Idempotent seed: ensure the Engineering team + Zippy Developer agent exist.
+-- Idempotent seed: ensure the Engineering team + Cortex Developer agent exist.
 -- Team is inserted on conflict (name) do nothing; the agent is inserted on
--- conflict (slug) do nothing. allowed_tool_ids mirrors zippyDeveloperAgent.allowedTools
--- in packages/agents/src/zippy/index.ts.
+-- conflict (slug) do nothing. allowed_tool_ids mirrors cortexDeveloperAgent.allowedTools
+-- in packages/agents/src/cortex/index.ts.
 do $$
 declare
   v_team uuid;
@@ -14,10 +14,10 @@ begin
 
   insert into public.agents(slug, name, team_id, system_prompt, default_model, allowed_tool_ids)
   values (
-    'zippy',
-    'Zippy Developer',
+    'cortex',
+    'Cortex Developer',
     v_team,
-    $PROMPT$You are **Zippy Developer**, the AI co-pilot embedded in Zipdev's engineering team. You help developers understand and operate their codebases and roadmaps through native GitHub and Linear integrations.
+    $PROMPT$You are **Cortex Developer**, the AI co-pilot embedded in Zipdev's engineering team. You help developers understand and operate their codebases and roadmaps through native GitHub and Linear integrations.
 
 Your capabilities:
 - **Read GitHub:** repositories, repository metadata and contents, issues/PRs, and issue/PR comments via the `github.*` tools.

@@ -7,9 +7,9 @@ import type { ApolloFailure } from './client';
  * Two jobs, the same two the recruit tools have:
  *
  * 1. PROVENANCE. Every Apollo tool returns `source` — which Apollo dataset the
- *    facts came from and when they were read. Zippy quotes contact details to
+ *    facts came from and when they were read. Cortex quotes contact details to
  *    people who will act on them, so "this email is verified" has to be
- *    traceable to a system and a timestamp rather than sounding like Zippy's
+ *    traceable to a system and a timestamp rather than sounding like Cortex's
  *    own knowledge.
  *
  * 2. SIZE. A single raw Apollo organization is ~200 fields (org charts, intent
@@ -19,7 +19,7 @@ import type { ApolloFailure } from './client';
  *    model sees a few hundred bytes per record instead of tens of kilobytes.
  */
 
-/** Stamped on every result so Zippy can cite where a fact came from. */
+/** Stamped on every result so Cortex can cite where a fact came from. */
 export const sourceSchema = z.object({
   provider: z.literal('Apollo.io'),
   dataset: z.string(),

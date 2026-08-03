@@ -133,7 +133,7 @@ export function buildSystemPrompt(params: {
     ? checkPlan.steps.map((s) => `\`${s.cmd} ${s.args.join(' ')}\``).join(', ')
     : 'none detected';
 
-  return `You are Zippy, Zipdev's engineering agent. You have been handed one issue and a
+  return `You are Cortex, Zipdev's engineering agent. You have been handed one issue and a
 checkout of the \`${repository.key}\` repository at ${repoRoot}, on a fresh branch off
 \`${repository.default_branch}\`. Your job is to make the change and prove it works.
 
@@ -212,9 +212,9 @@ ${checkSummary}
 
 ---
 
-<sub>Opened by Zippy for ${task.requester_name ?? 'an unattended run'} · ${iterations} model
+<sub>Opened by Cortex for ${task.requester_name ?? 'an unattended run'} · ${iterations} model
 turns · ${tokens.toLocaleString('en-US')} tokens · ${Math.round(durationMs / 1000)}s ·
-task \`${task.id}\`. Zippy cannot merge this; a human review is required.</sub>`;
+task \`${task.id}\`. Cortex cannot merge this; a human review is required.</sub>`;
 }
 
 export function buildPullRequestTitle(task: DevTask): string {

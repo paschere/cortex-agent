@@ -1,4 +1,4 @@
--- What Zippy learns about a person from working with them.
+-- What Cortex learns about a person from working with them.
 --
 -- WHAT THIS IS, AND WHAT IT IS NOT. This is not a second Knowledge Base. The
 -- personal KB space (migration 0049) already holds a person's DOCUMENTS, and it
@@ -10,7 +10,7 @@
 -- CC'ing and silently fail to load when the question is about anything else —
 -- which is precisely when it still applies. A preference that holds
 -- unpredictably is worse than no preference, because the person cannot reason
--- about when Zippy will honour it.
+-- about when Cortex will honour it.
 --
 -- So these are NOT retrieved. Every active row for a person is injected WHOLE
 -- into the system prompt of every turn, on every surface. That is only
@@ -53,7 +53,7 @@ create type memory_kind as enum (
 );
 
 -- 'suggested' is the whole point of the derived path: a wrongly-learned fact is
--- nearly impossible to debug from the outside — the symptom is "why does Zippy
+-- nearly impossible to debug from the outside — the symptom is "why does Cortex
 -- keep assuming X?" with no visible cause. Approving costs one click;
 -- un-learning a silent wrong belief costs a support conversation.
 --
@@ -94,7 +94,7 @@ create table if not exists public.user_memories (
 );
 
 comment on table public.user_memories is
-  'Small, always-on, per-person context injected whole into every Zippy system prompt. Not retrieved and not a document store — the personal KB space (kb_collections, scope=user) holds documents. Capped and evicted least-recently-useful first; see user_memory_remember().';
+  'Small, always-on, per-person context injected whole into every Cortex system prompt. Not retrieved and not a document store — the personal KB space (kb_collections, scope=user) holds documents. Capped and evicted least-recently-useful first; see user_memory_remember().';
 comment on column public.user_memories.status is
   'active = injected into every prompt. suggested = proposed by the nightly job, waiting for the person. archived = evicted by the cap, still visible and restorable. rejected = the person said no; kept so it is never proposed again.';
 comment on column public.user_memories.source_conversation_id is
@@ -215,7 +215,7 @@ $$;
  * is doing its job; a note from last week that has never been useful is not.
  *
  * Archived, never deleted: the person can see what fell out and put it back.
- * Silently dropping something they explicitly asked Zippy to remember would be
+ * Silently dropping something they explicitly asked Cortex to remember would be
  * exactly the invisible behaviour this whole feature exists to avoid.
  *
  * Defined before user_memory_remember(), which calls it.

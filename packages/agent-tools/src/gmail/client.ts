@@ -1,4 +1,4 @@
-import { IntegrationError } from '@zipdev/core';
+import { IntegrationError } from '@cortex/core';
 import type { ToolContext } from '../types';
 
 const BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';

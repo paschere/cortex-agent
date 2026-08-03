@@ -1,6 +1,6 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { PREFERENCE_COLUMNS, rowToPreferences } from '@zipdev/agent-tools';
+import { PREFERENCE_COLUMNS, rowToPreferences } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 import { PreferencesBody, type PreferencesView } from './schema';
 
@@ -12,7 +12,7 @@ export const runtime = 'nodejs';
  * so one account can only ever change its own row.
  *
  * This is the only way the daily inbox digest gets switched on, which is the
- * point: Zippy reading someone's mailbox has to be granted by that person,
+ * point: Cortex reading someone's mailbox has to be granted by that person,
  * here, and revocable in the same click.
  */
 

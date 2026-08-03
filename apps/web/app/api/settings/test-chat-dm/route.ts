@@ -13,7 +13,7 @@ export const runtime = 'nodejs';
  * message the person calling it.
  *
  * The interesting failure is the boring one: someone ticks the box before ever
- * saying hi to the Zippy app, so no DM thread exists. That gets a plain answer
+ * saying hi to the Cortex app, so no DM thread exists. That gets a plain answer
  * telling them how to create it, not a 500.
  */
 export async function POST() {
@@ -23,7 +23,7 @@ export async function POST() {
     return NextResponse.json(
       {
         error:
-          'The Zippy Google Chat app is not set up on this environment yet, so direct messages cannot be sent.',
+          'The Cortex Google Chat app is not set up on this environment yet, so direct messages cannot be sent.',
       },
       { status: 503 },
     );
@@ -34,7 +34,7 @@ export async function POST() {
     return NextResponse.json(
       {
         error:
-          "You haven't messaged Zippy in Google Chat yet, so there's no direct-message thread to post into. Open Google Chat, search for Zippy, say hi — then refresh this page.",
+          "You haven't messaged Cortex in Google Chat yet, so there's no direct-message thread to post into. Open Google Chat, search for Cortex, say hi — then refresh this page.",
         linked: false,
       },
       { status: 422 },
@@ -44,7 +44,7 @@ export async function POST() {
   const result = await sendChatMessage({
     space,
     text: [
-      '*Zippy test message*',
+      '*Cortex test message*',
       '',
       `Hi ${user.name ?? user.email} — your daily inbox digest will arrive right here, just between us.`,
       'You can turn this off any time in Settings.',

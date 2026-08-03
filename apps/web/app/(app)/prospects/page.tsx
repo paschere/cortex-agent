@@ -8,7 +8,7 @@ import type { ContactConfidence, Prospect, SignalStatus } from './_components/ty
 export const dynamic = 'force-dynamic';
 
 /**
- * The prospecting list: every company Zippy has caught hiring for a role Zipdev
+ * The prospecting list: every company Cortex has caught hiring for a role Zipdev
  * fills. The sweep runs weekly and nothing is ever deleted, so this grows by
  * roughly fifteen rows a week — the whole set is handed to the client, which
  * filters, searches and counts it. That keeps the funnel numbers and the list
@@ -94,7 +94,7 @@ export default async function ProspectsPage() {
     <>
       <PageHeader
         title="Prospects"
-        subtitle="Companies Zippy caught hiring for roles Zipdev fills. Keep the good ones, drop the rest — nothing here is ever deleted."
+        subtitle="Companies Cortex caught hiring for roles Zipdev fills. Keep the good ones, drop the rest — nothing here is ever deleted."
         icon={<Radar className="h-5 w-5" />}
       />
       <ProspectBoard

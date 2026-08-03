@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { filterTools, type AnyTool } from "@zipdev/agent-tools";
-import { logger } from "@zipdev/core";
-import type { AgentDefinition } from "@zipdev/core";
+import { filterTools, type AnyTool } from "@cortex/agent-tools";
+import { logger } from "@cortex/core";
+import type { AgentDefinition } from "@cortex/core";
 
 export async function loadAgent(
   db: SupabaseClient,

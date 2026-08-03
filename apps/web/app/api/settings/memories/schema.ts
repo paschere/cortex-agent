@@ -4,7 +4,7 @@ import { z } from 'zod';
  * Shared contract for the memory page and its API route.
  *
  * Imported by a CLIENT component, so — like the preferences schema next door —
- * it must stay free of `@zipdev/agent-tools`: importing it pulls the whole tool
+ * it must stay free of `@cortex/agent-tools`: importing it pulls the whole tool
  * registry, and with it `node:crypto` and pdf-parse's `fs` access, into the
  * browser bundle. Hence the structural input type below instead of importing
  * `MemoryRecord`.

@@ -49,7 +49,7 @@ apps/desktop/
 
 ```json
 {
-  "name": "@zipdev/desktop",
+  "name": "@cortex/desktop",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -67,7 +67,7 @@ apps/desktop/
 
 ```toml
 [package]
-name = "zipdev-agent-desktop"
+name = "cortex-agent-desktop"
 version = "0.1.0"
 edition = "2021"
 
@@ -105,7 +105,7 @@ fn main() { tauri_build::build() }
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
     "devUrl": "http://localhost:3000/chat",
-    "frontendDist": "https://zipdev-agent.vercel.app/chat"
+    "frontendDist": "https://cortex-agent.vercel.app/chat"
   },
   "app": {
     "windows": [
@@ -131,12 +131,12 @@ fn main() { tauri_build::build() }
   "plugins": {
     "updater": {
       "active": true,
-      "endpoints": ["https://github.com/zipdev/zipdev-agent/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/zipdev/cortex-agent/releases/latest/download/latest.json"],
       "pubkey": "REPLACE_AT_TASK_6"
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["zipdev-agent"]
+        "schemes": ["cortex-agent"]
       }
     }
   },
@@ -224,11 +224,11 @@ pub fn setup<R: tauri::Runtime>(_app: &tauri::AppHandle<R>) -> tauri::Result<()>
 pub fn setup_deep_link<R: tauri::Runtime>(_app: &tauri::AppHandle<R>) -> tauri::Result<()> { Ok(()) }
 ```
 
-Run: `pnpm --filter @zipdev/desktop tauri info`
+Run: `pnpm --filter @cortex/desktop tauri info`
 Expected: prints toolchain info.
 
-Run: `pnpm --filter @zipdev/desktop dev`
-Expected: opens a window pointing at `http://localhost:3000/chat` (run `pnpm --filter @zipdev/web dev` first).
+Run: `pnpm --filter @cortex/desktop dev`
+Expected: opens a window pointing at `http://localhost:3000/chat` (run `pnpm --filter @cortex/web dev` first).
 
 - [ ] **Step 8: Commit**
 
@@ -296,7 +296,7 @@ fn focus_main<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 - [ ] **Step 2: Run and verify**
 
 ```bash
-pnpm --filter @zipdev/desktop dev
+pnpm --filter @cortex/desktop dev
 ```
 Expected: tray icon appears (status bar on macOS, system tray on Windows). Clicking shows the window. "Quit" exits. "New chat" navigates to `/chat`.
 
@@ -344,7 +344,7 @@ pub fn setup<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> 
 - [ ] **Step 2: Run and verify**
 
 ```bash
-pnpm --filter @zipdev/desktop dev
+pnpm --filter @cortex/desktop dev
 ```
 With the app running but window not focused: press `Ctrl+Shift+Z` (or `Cmd+Shift+Z`). The window should focus and navigate to `/chat`.
 
@@ -359,7 +359,7 @@ git commit -m "feat(desktop): global hotkey Cmd/Ctrl+Shift+Z opens chat"
 
 ## Task 4: Google SSO via deep-link callback
 
-The desktop app needs to authenticate against the same Supabase backend. Approach: open the browser to the web app's login page with a `?desktop=1` query, which after successful SSO redirects to a `zipdev-agent://` deep link carrying a one-shot session token. The desktop app receives the deep link, sets cookies via a webview eval, and navigates to chat.
+The desktop app needs to authenticate against the same Supabase backend. Approach: open the browser to the web app's login page with a `?desktop=1` query, which after successful SSO redirects to a `cortex-agent://` deep link carrying a one-shot session token. The desktop app receives the deep link, sets cookies via a webview eval, and navigates to chat.
 
 **Files:**
 - Modify: `apps/desktop/src-tauri/src/auth.rs`
@@ -410,7 +410,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-(For MVP, the simplest reliable approach is: the web app's login completes normally; once a session exists, the desktop opens `https://zipdev-agent.vercel.app/chat` in its webview and the Supabase cookie set during login persists in the webview's cookie jar. The deep link approach is needed only if the SSO must happen in the user's default browser. Choose during implementation: if the simpler in-webview SSO works for `@zipdev.com` accounts, drop the deep-link redemption and ship.)
+(For MVP, the simplest reliable approach is: the web app's login completes normally; once a session exists, the desktop opens `https://cortex-agent.vercel.app/chat` in its webview and the Supabase cookie set during login persists in the webview's cookie jar. The deep link approach is needed only if the SSO must happen in the user's default browser. Choose during implementation: if the simpler in-webview SSO works for `@zipdev.com` accounts, drop the deep-link redemption and ship.)
 
 - [ ] **Step 2: `apps/desktop/src-tauri/src/auth.rs`** — handle the deep link if used
 
@@ -422,8 +422,8 @@ pub fn setup_deep_link<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::R
     let app_handle = app.clone();
     app.deep_link().on_open_url(move |event| {
         for url in event.urls() {
-            // zipdev-agent://auth?token=zdk_...
-            if url.scheme() == "zipdev-agent" && url.host_str() == Some("auth") {
+            // cortex-agent://auth?token=zdk_...
+            if url.scheme() == "cortex-agent" && url.host_str() == Some("auth") {
                 if let Some((_, token)) = url.query_pairs().find(|(k, _)| k == "token") {
                     if let Some(w) = app_handle.get_webview_window("main") {
                         let js = format!(
@@ -442,7 +442,7 @@ pub fn setup_deep_link<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::R
 
 - [ ] **Step 3: Manual test (in-webview SSO path)**
 
-Run `pnpm --filter @zipdev/web dev` and `pnpm --filter @zipdev/desktop dev`. The Tauri window loads `localhost:3000/chat` → redirects to `/login` → click "Continue with Google" → completes Google flow → returns to chat. Verify session cookie persists across launches.
+Run `pnpm --filter @cortex/web dev` and `pnpm --filter @cortex/desktop dev`. The Tauri window loads `localhost:3000/chat` → redirects to `/login` → click "Continue with Google" → completes Google flow → returns to chat. Verify session cookie persists across launches.
 
 - [ ] **Step 4: Commit**
 
@@ -460,7 +460,7 @@ git commit -m "feat(desktop): auth flow via webview SSO; deep-link redemption fa
 - [ ] **Step 1: Update `apps/desktop/README.md`**
 
 ```markdown
-# zipdev-agent-desktop
+# cortex-agent-desktop
 
 Tauri shell around the Zipdev Agent chat UI.
 
@@ -468,14 +468,14 @@ Tauri shell around the Zipdev Agent chat UI.
 
 In two terminals:
 ```bash
-pnpm --filter @zipdev/web dev          # http://localhost:3000
-pnpm --filter @zipdev/desktop dev      # opens window to /chat
+pnpm --filter @cortex/web dev          # http://localhost:3000
+pnpm --filter @cortex/desktop dev      # opens window to /chat
 ```
 
 ## Build
 
 ```bash
-pnpm --filter @zipdev/desktop build
+pnpm --filter @cortex/desktop build
 ```
 
 Set `TAURI_ENV` env var to switch URLs (handled at build time by reading `tauri.conf.json` and Vercel env). For a custom staging URL, edit `src-tauri/tauri.conf.json#build.frontendDist` or pass `--config` overrides.
@@ -499,7 +499,7 @@ git commit -m "docs(desktop): dev + build instructions"
 - [ ] **Step 1: Generate Tauri signing key (once, off-CI; store private key as secret)**
 
 ```bash
-pnpm --filter @zipdev/desktop tauri signer generate -w ~/.tauri/zipdev-agent.key
+pnpm --filter @cortex/desktop tauri signer generate -w ~/.tauri/cortex-agent.key
 ```
 This prints a public key — paste it into `tauri.conf.json#plugins.updater.pubkey`. Save the private key as a GitHub secret `TAURI_SIGNING_PRIVATE_KEY` and the passphrase as `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 

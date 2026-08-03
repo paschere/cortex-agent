@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { sheetsReadRange } from '../read-range';
 import { sheetsAppendRow } from '../append-row';
 import { runTool } from '../../index';
-import { ConfirmationRequiredError } from '@zipdev/core';
+import { ConfirmationRequiredError } from '@cortex/core';
 import type { ToolContext } from '../../types';
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {

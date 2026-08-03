@@ -1,8 +1,8 @@
 import { DRIVE_READONLY } from '@/app/api/kb/drive/_lib';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { createIntegrationsClient, getVisibleSpace } from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+import { createIntegrationsClient, getVisibleSpace } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {

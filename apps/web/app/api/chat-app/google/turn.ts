@@ -15,14 +15,14 @@ import {
   kbSearch,
   maxLevel,
   runTool,
-} from '@zipdev/agent-tools';
-import { loadAgent } from '@zipdev/agents';
-import { ConfirmationRequiredError, logger } from '@zipdev/core';
+} from '@cortex/agent-tools';
+import { loadAgent } from '@cortex/agents';
+import { ConfirmationRequiredError, logger } from '@cortex/core';
 import { type CoreMessage, type CoreTool, generateText, tool } from 'ai';
 import type { ChatAudience } from './events';
 
 /**
- * One Zippy turn, driven from Google Chat.
+ * One Cortex turn, driven from Google Chat.
  *
  * Same brain as the web chat (apps/web/app/api/chat/route.ts): the same agent
  * row, the same system prompt, the same `filterTools` → team deny-list → AI SDK
@@ -62,7 +62,7 @@ const PENDING_ACTION_TTL_MS = 15 * 60_000;
  *
  * A FOURTH REASON, added with user memories (migration 0051): the answer
  * REPEATS one of the asker's own memories. Memories are personal notes that
- * shape every turn, including this one — Zippy still honours "always quote in
+ * shape every turn, including this one — Cortex still honours "always quote in
  * USD" in a room of eight people, and should. What must never happen is the
  * note itself surfacing: nobody else in the space can see it, nobody consented
  * to it being read out, and "why does the bot know that about me" is the exact
@@ -74,7 +74,7 @@ const PENDING_ACTION_TTL_MS = 15 * 60_000;
  * that is deliberate. BambooHR is the HR system of record: every active
  * employee's pay rate and bill rate live there, and the family's own tool
  * classification distinguishes a headcount from a salary. This guard cannot
- * rely on that distinction, because a single turn mixes tools — Zippy answers
+ * rely on that distinction, because a single turn mixes tools — Cortex answers
  * "how big is the team on Acme, and what do they cost?" with a headcount call
  * AND a compensation call, and only the coarse family signal is available by
  * the time the answer is assembled. Withholding a "who is out this week"
@@ -292,7 +292,7 @@ const APPROVAL_IN_SPACE_NOTE =
 
 export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDelivery> {
   const db = getSupabaseServiceClient();
-  const agent = await loadAgent(db, 'zippy');
+  const agent = await loadAgent(db, 'cortex');
 
   const title =
     req.audience === 'dm'

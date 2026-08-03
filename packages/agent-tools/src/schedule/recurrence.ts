@@ -1,4 +1,4 @@
-import { ValidationError } from '@zipdev/core';
+import { ValidationError } from '@cortex/core';
 import { parseExpression } from 'cron-parser';
 
 /**

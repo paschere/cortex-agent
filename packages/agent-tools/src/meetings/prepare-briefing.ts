@@ -789,7 +789,7 @@ export const meetingsPrepareBriefing = registerTool({
             `<li style="margin:0 0 4px;"><strong>${escapeHtml(s.label)}</strong> — ${escapeHtml(s.detail)} · ${escapeHtml(s.freshness)}</li>`,
         )
         .join('')}</ol>`,
-      `<p style="margin:14px 0 0;font-size:11px;color:#9ca3af;">Prepared by Zippy${m.htmlLink ? ` · <a href="${escapeHtml(m.htmlLink)}" style="color:#2563eb;">open the invitation</a>` : ''}</p>`,
+      `<p style="margin:14px 0 0;font-size:11px;color:#9ca3af;">Prepared by Cortex${m.htmlLink ? ` · <a href="${escapeHtml(m.htmlLink)}" style="color:#2563eb;">open the invitation</a>` : ''}</p>`,
       '</div>',
     ]
       .filter(Boolean)

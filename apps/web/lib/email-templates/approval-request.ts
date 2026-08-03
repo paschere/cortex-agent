@@ -2,7 +2,7 @@ import { button, calloutBox, codeBlock, fineprint, keyValueTable, statusPill } f
 import { type RenderedEmail, appBaseUrl, renderEmail } from './layout';
 
 /**
- * "Zippy needs your approval" email.
+ * "Cortex needs your approval" email.
  *
  * Urgent but calm: the reassurance comes first (nothing has run), then exactly
  * what would run, then one obvious action. The 15-minute expiry is stated in
@@ -33,7 +33,7 @@ export function renderApprovalRequestEmail(input: ApprovalRequestEmailInput): Re
     calloutBox({
       tone: 'warn',
       title: 'Nothing has happened yet',
-      text: `${greeting}Zippy stopped before doing this. It only runs if you approve it.`,
+      text: `${greeting}Cortex stopped before doing this. It only runs if you approve it.`,
     }),
     keyValueTable([
       { label: 'What', value: input.toolLabel },
@@ -43,21 +43,21 @@ export function renderApprovalRequestEmail(input: ApprovalRequestEmailInput): Re
     codeBlock(input.payload, { label: 'Exactly what will run' }),
     approvalsUrl ? button({ href: approvalsUrl, label: 'Review and approve' }) : '',
     fineprint(
-      `This request expires ${minutes} minutes after it was created. If it expires, nothing runs — Zippy will ask again the next time it needs to.`,
+      `This request expires ${minutes} minutes after it was created. If it expires, nothing runs — Cortex will ask again the next time it needs to.`,
     ),
   ];
 
   const html = renderEmail({
     title: `Approval needed: ${input.toolLabel}`,
-    preheader: `${input.origin} asked Zippy to run this. Nothing happens until you approve — the request expires in ${minutes} minutes.`,
+    preheader: `${input.origin} asked Cortex to run this. Nothing happens until you approve — the request expires in ${minutes} minutes.`,
     eyebrow: 'Waiting on you',
     pillHtml: statusPill({ label: 'Action required', tone: 'warn' }),
     bodyHtml: body.filter(Boolean).join(''),
-    footerNote: 'You receive approval requests for actions Zippy runs on your behalf.',
+    footerNote: 'You receive approval requests for actions Cortex runs on your behalf.',
   });
 
   const text = [
-    `${greeting}Zippy needs your approval before it does this.`,
+    `${greeting}Cortex needs your approval before it does this.`,
     '',
     `What: ${input.toolLabel}`,
     `Where it came from: ${input.origin}`,

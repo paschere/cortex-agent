@@ -1,5 +1,5 @@
 /**
- * Design tokens for every automated email Zippy sends.
+ * Design tokens for every automated email Cortex sends.
  *
  * Email is not the web: no external stylesheets, no `<style>` you can rely on
  * (Gmail strips it in some clients and always in the mobile apps), no web
@@ -56,8 +56,8 @@ export const FONT_STACK =
 export const MONO_STACK =
   "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',Courier,monospace";
 
-/** The Zippy mark, served from the production app so every client can load it. */
-export const ZIPPY_ICON_URL = 'https://zippy-zipdev.vercel.app/icon.png';
+/** The Cortex mark, served from the production app so every client can load it. */
+export const CORTEX_ICON_URL = 'https://cortex-zipdev.vercel.app/icon.png';
 
 /** Body copy defaults, shared by the layout and the markdown converter. */
 export const BODY_STYLE = `font-family:${FONT_STACK};font-size:15px;line-height:1.6;color:${palette.ink};`;

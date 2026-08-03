@@ -1,4 +1,4 @@
-project_id = "zipdev-agent"
+project_id = "cortex-agent"
 
 [api]
 enabled = true

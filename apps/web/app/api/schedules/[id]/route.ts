@@ -1,6 +1,6 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { computeNextRun } from '@zipdev/agent-tools';
+import { computeNextRun } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 

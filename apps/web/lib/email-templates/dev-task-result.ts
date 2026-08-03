@@ -3,14 +3,14 @@ import { MAX_EMAIL_HTML_CHARS, type RenderedEmail, appBaseUrl, renderEmail } fro
 import { clampMarkdown, markdownToEmailHtml } from './markdown';
 
 /**
- * "Zippy worked on the codebase" email.
+ * "Cortex worked on the codebase" email.
  *
  * Two outcomes only, and one email each:
  *
- *   needs_review  Zippy finished, the pull request is open, a person has to
+ *   needs_review  Cortex finished, the pull request is open, a person has to
  *                 look. This is the ONE message a successful run sends — there
  *                 is no "started", no "branch pushed", no "checks green".
- *   failed        Zippy could not finish. The reason leads as a sentence; the
+ *   failed        Cortex could not finish. The reason leads as a sentence; the
  *                 technical detail sits underneath it, for whoever wants it.
  *
  * The person reading this may not be an engineer. Branch names and check names
@@ -70,7 +70,7 @@ export function renderDevTaskEmail(input: DevTaskEmailInput): RenderedEmail {
   const checkSummary = checkLine(checks);
   const hello = input.firstName ? `${input.firstName}, ` : '';
 
-  const subject = ok ? `Ready for you: ${input.title}` : `Zippy could not finish: ${input.title}`;
+  const subject = ok ? `Ready for you: ${input.title}` : `Cortex could not finish: ${input.title}`;
 
   const facts = keyValueTable(
     [
@@ -88,7 +88,7 @@ export function renderDevTaskEmail(input: DevTaskEmailInput): RenderedEmail {
     ].filter((s) => s.value),
   );
 
-  const reason = (input.failureReason ?? '').trim() || 'Zippy stopped before it finished the work.';
+  const reason = (input.failureReason ?? '').trim() || 'Cortex stopped before it finished the work.';
 
   const build = (budget: number): string => {
     const clamped = clampMarkdown(input.summary ?? '', budget);
@@ -97,7 +97,7 @@ export function renderDevTaskEmail(input: DevTaskEmailInput): RenderedEmail {
           calloutBox({
             tone: 'success',
             title: 'Waiting on you',
-            text: `${hello}Zippy finished this one and opened a pull request. Nothing merges until a person says so.`,
+            text: `${hello}Cortex finished this one and opened a pull request. Nothing merges until a person says so.`,
           }),
           stats,
           facts,
@@ -122,17 +122,17 @@ export function renderDevTaskEmail(input: DevTaskEmailInput): RenderedEmail {
     return renderEmail({
       title: input.title,
       preheader: ok
-        ? `Zippy opened a pull request${input.repository ? ` in ${input.repository}` : ''}. It needs a human review before anything merges.`
+        ? `Cortex opened a pull request${input.repository ? ` in ${input.repository}` : ''}. It needs a human review before anything merges.`
         : `${reason.slice(0, 110)}`,
-      eyebrow: 'Zippy · dev work',
+      eyebrow: 'Cortex · dev work',
       pillHtml: statusPill({
         label: ok ? 'Needs review' : 'Failed',
         tone: ok ? 'warn' : 'danger',
       }),
       bodyHtml: body.filter(Boolean).join(''),
       footerNote: ok
-        ? 'You get this because you asked Zippy for this change. One message per run — no follow-ups unless something changes.'
-        : 'You get this because you asked Zippy for this change. Nothing was merged.',
+        ? 'You get this because you asked Cortex for this change. One message per run — no follow-ups unless something changes.'
+        : 'You get this because you asked Cortex for this change. Nothing was merged.',
     });
   };
 
@@ -144,7 +144,7 @@ export function renderDevTaskEmail(input: DevTaskEmailInput): RenderedEmail {
     ok ? `Ready for you — ${input.title}` : `Could not finish — ${input.title}`,
     '',
     ok
-      ? 'Zippy finished this one and opened a pull request. Nothing merges until a person says so.'
+      ? 'Cortex finished this one and opened a pull request. Nothing merges until a person says so.'
       : reason,
     '',
     input.repository ? `Repository: ${input.repository}` : null,

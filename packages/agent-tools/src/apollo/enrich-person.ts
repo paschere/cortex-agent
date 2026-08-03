@@ -22,7 +22,7 @@ import {
  * Three deliberate limits keep that spend visible and bounded:
  *
  *  - phone and personal-email reveals are not exposed at all. They are the
- *    expensive fields, they need an async webhook Zippy has nowhere to put,
+ *    expensive fields, they need an async webhook Cortex has nowhere to put,
  *    and a work email is what a recruiting or sales conversation actually
  *    needs. Nothing here can silently spend 9 credits on one person.
  *  - nothing fans out over a search result. `find_people` returns candidates

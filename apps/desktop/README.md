@@ -33,14 +33,14 @@ Node >= 20 and pnpm 9.x (matches repo root `packageManager`).
 1. Start the Next.js dev server:
 
    ```bash
-   pnpm --filter @zipdev/web dev
+   pnpm --filter @cortex/web dev
    # → http://localhost:3000
    ```
 
 2. In a second terminal, start Tauri dev:
 
    ```bash
-   pnpm --filter @zipdev/desktop dev
+   pnpm --filter @cortex/desktop dev
    # Tauri opens a native window pointed at http://localhost:3000/chat
    ```
 
@@ -49,7 +49,7 @@ Node >= 20 and pnpm 9.x (matches repo root `packageManager`).
 ## Build workflow
 
 ```bash
-pnpm --filter @zipdev/desktop build
+pnpm --filter @cortex/desktop build
 ```
 
 Produces platform-specific bundles in `src-tauri/target/release/bundle/`.
@@ -63,7 +63,7 @@ Produces platform-specific bundles in `src-tauri/target/release/bundle/`.
 |---|---|---|
 | Dev URL | `src-tauri/tauri.conf.json` → `build.devUrl` | Points at Next.js dev server |
 | Prod URL | `src-tauri/tauri.conf.json` → `build.frontendDist` | Vercel deployment URL |
-| Deep-link scheme | `src-tauri/tauri.conf.json` → `plugins.deep-link` | `zipdev-agent://` |
+| Deep-link scheme | `src-tauri/tauri.conf.json` → `plugins.deep-link` | `cortex-agent://` |
 | Updater public key | `src-tauri/tauri.conf.json` → `plugins.updater.pubkey` | Replace at Task 6 |
 
 ## Environment
@@ -75,13 +75,13 @@ Set `ZIPDEV_WEB_URL` to point the desktop app at a Zipdev Agent web instance:
 The URL is baked in at build time via Vite. To change it, rebuild.
 
 ```bash
-ZIPDEV_WEB_URL=https://app.zipdev.com pnpm --filter @zipdev/desktop build
+ZIPDEV_WEB_URL=https://app.zipdev.com pnpm --filter @cortex/desktop build
 ```
 
 ## Plugins bundled
 
 - `tauri-plugin-shell` — open external URLs
-- `tauri-plugin-deep-link` — `zipdev-agent://` URI scheme
+- `tauri-plugin-deep-link` — `cortex-agent://` URI scheme
 - `tauri-plugin-notification` — desktop notifications
 - `tauri-plugin-store` — persistent key-value store
 - `tauri-plugin-global-shortcut` — system-wide hotkeys

@@ -9,13 +9,13 @@ import {
   triggerConfigFromEnv,
 } from './trigger';
 
-const ZIPPY_ID = '11111111-2222-3333-4444-555555555555';
+const CORTEX_ID = '11111111-2222-3333-4444-555555555555';
 
 const assigneeConfig: TriggerConfig = {
   mode: 'assignee',
-  zippyUserId: ZIPPY_ID,
-  zippyUserEmail: 'zippy@zipdev.com',
-  label: 'zippy',
+  cortexUserId: CORTEX_ID,
+  cortexUserEmail: 'cortex@zipdev.com',
+  label: 'cortex',
 };
 
 function issueEvent(overrides: Partial<LinearWebhookBody> = {}): LinearWebhookBody {
@@ -36,11 +36,11 @@ function issueEvent(overrides: Partial<LinearWebhookBody> = {}): LinearWebhookBo
 }
 
 describe('triggerConfigFromEnv', () => {
-  it('defaults to assignee mode and the "zippy" label', () => {
+  it('defaults to assignee mode and the "cortex" label', () => {
     const config = triggerConfigFromEnv({} as NodeJS.ProcessEnv);
     expect(config.mode).toBe('assignee');
-    expect(config.label).toBe('zippy');
-    expect(config.zippyUserId).toBeNull();
+    expect(config.label).toBe('cortex');
+    expect(config.cortexUserId).toBeNull();
   });
 
   it('falls back to assignee mode when the variable is nonsense', () => {
@@ -51,36 +51,36 @@ describe('triggerConfigFromEnv', () => {
   it('reads label mode and normalises casing', () => {
     const env = {
       LINEAR_TRIGGER_MODE: 'LABEL',
-      LINEAR_TRIGGER_LABEL: 'Zippy-Please',
-      LINEAR_ZIPPY_USER_EMAIL: 'Zippy@Zipdev.com',
+      LINEAR_TRIGGER_LABEL: 'Cortex-Please',
+      LINEAR_CORTEX_USER_EMAIL: 'Cortex@Zipdev.com',
     } as unknown as NodeJS.ProcessEnv;
     const config = triggerConfigFromEnv(env);
     expect(config.mode).toBe('label');
-    expect(config.label).toBe('zippy-please');
-    expect(config.zippyUserEmail).toBe('zippy@zipdev.com');
+    expect(config.label).toBe('cortex-please');
+    expect(config.cortexUserEmail).toBe('cortex@zipdev.com');
   });
 });
 
 describe('evaluateTrigger — assignee mode', () => {
-  it('fires when the issue is assigned to Zippy in this event', () => {
+  it('fires when the issue is assigned to Cortex in this event', () => {
     const event = issueEvent({
-      data: { id: 'issue-uuid', assigneeId: ZIPPY_ID, state: { type: 'unstarted' } },
+      data: { id: 'issue-uuid', assigneeId: CORTEX_ID, state: { type: 'unstarted' } },
       updatedFrom: { assigneeId: null },
     });
     expect(evaluateTrigger(event, assigneeConfig)).toEqual({ accepted: true, via: 'assignee' });
   });
 
-  it('fires on create when the issue is born assigned to Zippy', () => {
+  it('fires on create when the issue is born assigned to Cortex', () => {
     const event = issueEvent({
       action: 'create',
-      data: { id: 'issue-uuid', assignee: { id: ZIPPY_ID }, state: { type: 'backlog' } },
+      data: { id: 'issue-uuid', assignee: { id: CORTEX_ID }, state: { type: 'backlog' } },
     });
     expect(evaluateTrigger(event, assigneeConfig)).toEqual({ accepted: true, via: 'assignee' });
   });
 
   it('does NOT re-fire when an already-assigned issue is edited', () => {
     const event = issueEvent({
-      data: { id: 'issue-uuid', assigneeId: ZIPPY_ID, state: { type: 'started' } },
+      data: { id: 'issue-uuid', assigneeId: CORTEX_ID, state: { type: 'started' } },
       updatedFrom: { description: 'old text' },
     });
     expect(evaluateTrigger(event, assigneeConfig).accepted).toBe(false);
@@ -97,22 +97,22 @@ describe('evaluateTrigger — assignee mode', () => {
   it('ignores an issue that is already completed or cancelled', () => {
     for (const type of ['completed', 'canceled']) {
       const event = issueEvent({
-        data: { id: 'issue-uuid', assigneeId: ZIPPY_ID, state: { type } },
+        data: { id: 'issue-uuid', assigneeId: CORTEX_ID, state: { type } },
         updatedFrom: { assigneeId: null },
       });
       expect(evaluateTrigger(event, assigneeConfig).accepted).toBe(false);
     }
   });
 
-  it('refuses to fire when no Zippy identity is configured', () => {
+  it('refuses to fire when no Cortex identity is configured', () => {
     const event = issueEvent({
-      data: { id: 'issue-uuid', assigneeId: ZIPPY_ID, state: { type: 'unstarted' } },
+      data: { id: 'issue-uuid', assigneeId: CORTEX_ID, state: { type: 'unstarted' } },
       updatedFrom: { assigneeId: null },
     });
     const unconfigured: TriggerConfig = {
       ...assigneeConfig,
-      zippyUserId: null,
-      zippyUserEmail: null,
+      cortexUserId: null,
+      cortexUserEmail: null,
     };
     expect(evaluateTrigger(event, unconfigured)).toEqual({
       accepted: false,
@@ -122,7 +122,7 @@ describe('evaluateTrigger — assignee mode', () => {
 
   it('ignores a label in assignee mode', () => {
     const event = issueEvent({
-      data: { id: 'issue-uuid', labels: [{ name: 'Zippy' }], state: { type: 'unstarted' } },
+      data: { id: 'issue-uuid', labels: [{ name: 'Cortex' }], state: { type: 'unstarted' } },
       updatedFrom: { labelIds: [] },
     });
     expect(evaluateTrigger(event, assigneeConfig).accepted).toBe(false);
@@ -135,7 +135,7 @@ describe('evaluateTrigger — assignee mode', () => {
   ])('ignores %s', (_label, overrides) => {
     const event = issueEvent({
       ...overrides,
-      data: { id: 'issue-uuid', assigneeId: ZIPPY_ID, state: { type: 'unstarted' } },
+      data: { id: 'issue-uuid', assigneeId: CORTEX_ID, state: { type: 'unstarted' } },
       updatedFrom: { assigneeId: null },
     });
     expect(evaluateTrigger(event, assigneeConfig).accepted).toBe(false);
@@ -147,7 +147,7 @@ describe('evaluateTrigger — label and either mode', () => {
 
   it('fires when the trigger label is applied in this event', () => {
     const event = issueEvent({
-      data: { id: 'issue-uuid', labels: [{ name: 'Zippy' }], state: { type: 'unstarted' } },
+      data: { id: 'issue-uuid', labels: [{ name: 'Cortex' }], state: { type: 'unstarted' } },
       updatedFrom: { labelIds: ['old'] },
     });
     expect(evaluateTrigger(event, labelConfig)).toEqual({ accepted: true, via: 'label' });
@@ -155,7 +155,7 @@ describe('evaluateTrigger — label and either mode', () => {
 
   it('does NOT re-fire when an already-labelled issue is edited', () => {
     const event = issueEvent({
-      data: { id: 'issue-uuid', labels: [{ name: 'zippy' }], state: { type: 'started' } },
+      data: { id: 'issue-uuid', labels: [{ name: 'cortex' }], state: { type: 'started' } },
       updatedFrom: { title: 'old' },
     });
     expect(evaluateTrigger(event, labelConfig).accepted).toBe(false);
@@ -163,7 +163,7 @@ describe('evaluateTrigger — label and either mode', () => {
 
   it('ignores an assignment in label mode', () => {
     const event = issueEvent({
-      data: { id: 'issue-uuid', assigneeId: ZIPPY_ID, state: { type: 'unstarted' } },
+      data: { id: 'issue-uuid', assigneeId: CORTEX_ID, state: { type: 'unstarted' } },
       updatedFrom: { assigneeId: null },
     });
     expect(evaluateTrigger(event, labelConfig).accepted).toBe(false);
@@ -172,11 +172,11 @@ describe('evaluateTrigger — label and either mode', () => {
   it('either mode accepts whichever signal arrives', () => {
     const either: TriggerConfig = { ...assigneeConfig, mode: 'either' };
     const byLabel = issueEvent({
-      data: { id: 'issue-uuid', labels: [{ name: 'zippy' }], state: { type: 'unstarted' } },
+      data: { id: 'issue-uuid', labels: [{ name: 'cortex' }], state: { type: 'unstarted' } },
       updatedFrom: { labelIds: [] },
     });
     const byAssignee = issueEvent({
-      data: { id: 'issue-uuid', assigneeId: ZIPPY_ID, state: { type: 'unstarted' } },
+      data: { id: 'issue-uuid', assigneeId: CORTEX_ID, state: { type: 'unstarted' } },
       updatedFrom: { assigneeId: null },
     });
     expect(evaluateTrigger(byLabel, either)).toEqual({ accepted: true, via: 'label' });
@@ -198,7 +198,7 @@ describe('repository hints', () => {
     ['Repo: payroll', 'payroll'],
     ['**Repo:** payroll', 'payroll'],
     ['- repo = zipdev-matcher', 'zipdev-matcher'],
-    ['Repository: ZIPDEV-AGENT', 'zipdev-agent'],
+    ['Repository: CORTEX-AGENT', 'cortex-agent'],
     ['repo: Zipdev-Team/payroll', 'payroll'],
     ['repo: payroll.git', 'payroll'],
   ])('reads %s', (line, expected) => {
@@ -206,7 +206,7 @@ describe('repository hints', () => {
   });
 
   it('takes the first directive when an issue contradicts itself', () => {
-    expect(parseRepoDirective('Repo: payroll\nRepo: zipdev-agent')).toBe('payroll');
+    expect(parseRepoDirective('Repo: payroll\nRepo: cortex-agent')).toBe('payroll');
   });
 
   it.each([

@@ -108,7 +108,7 @@ export function DocumentList({
     return (
       <p className="max-w-lg py-2 text-[12.5px] leading-relaxed text-ink-muted">
         {spaceName} is empty. Drop in a rate card, a client brief, a playbook — anything you would
-        otherwise have to explain twice — and Zippy can answer from it, naming the document it used.
+        otherwise have to explain twice — and Cortex can answer from it, naming the document it used.
       </p>
     );
   }
@@ -187,7 +187,7 @@ export function DocumentList({
             {confirming === d.id && (
               <div className="mt-2 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2.5">
                 <p className="text-[12px] leading-relaxed text-ink">
-                  Removing <b>{d.title}</b> deletes it and everything Zippy learned from it. Answers
+                  Removing <b>{d.title}</b> deletes it and everything Cortex learned from it. Answers
                   that cited it will stop citing it. This cannot be undone.
                 </p>
                 <div className="mt-2 flex items-center gap-2">

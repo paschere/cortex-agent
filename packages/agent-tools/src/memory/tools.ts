@@ -1,4 +1,4 @@
-import { ValidationError } from '@zipdev/core';
+import { ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { screenMemory } from './sensitive';
@@ -7,7 +7,7 @@ import { MEMORY_LIMIT, MEMORY_MAX_CHARS } from './types';
 
 /**
  * The explicit path: the person says "acuérdate de que…" and it is written
- * immediately, no approval step. They just told Zippy; asking them to confirm
+ * immediately, no approval step. They just told Cortex; asking them to confirm
  * what they said one second ago is theatre.
  *
  * The derived path — the nightly job in apps/web/inngest/functions/memory-derive.ts
@@ -15,8 +15,8 @@ import { MEMORY_LIMIT, MEMORY_MAX_CHARS } from './types';
  * person cannot debug from the outside.
  */
 
-export const zippyRemember = registerTool({
-  id: 'zippy.remember',
+export const cortexRemember = registerTool({
+  id: 'cortex.remember',
   description:
     'Remember something about the person you are talking to, so you stop needing to be told it. Use this when they tell you a standing preference, a rule to follow from now on, what one of their words means, or a stable fact about them and their work — and only when it should hold beyond this conversation. Write it as one short sentence in the third person, the way you would want to read it later: "prefers costs in USD", not "the user said USD". This is NOT for storing documents, notes or work products (save those to a Knowledge Base space), NOT for company-wide facts everyone should know (those belong in a company space, or only the person who told you benefits), and NOT for anything sensitive — no passwords or keys, no pay figures, no emails or phone numbers.',
   inputSchema: z.object({
@@ -34,7 +34,7 @@ export const zippyRemember = registerTool({
   }),
   outputSchema: z.object({
     remembered: z.string(),
-    /** How full the always-on set is, so Zippy can say when something fell out. */
+    /** How full the always-on set is, so Cortex can say when something fell out. */
     total: z.number().int(),
     limit: z.number().int(),
     evicted: z.array(z.string()),
@@ -64,7 +64,7 @@ export const zippyRemember = registerTool({
     const after = await listMemories(ctx.db, ctx.userId);
     const active = after.filter((m) => m.status === 'active');
     // Being at the cap is not an error, but it IS something the person needs to
-    // hear: something they asked Zippy to remember has stopped being loaded.
+    // hear: something they asked Cortex to remember has stopped being loaded.
     const evicted = after
       .filter((m) => m.status === 'archived' && activeBefore.has(m.content))
       .map((m) => m.content);
@@ -78,8 +78,8 @@ export const zippyRemember = registerTool({
   },
 });
 
-export const zippyForget = registerTool({
-  id: 'zippy.forget',
+export const cortexForget = registerTool({
+  id: 'cortex.forget',
   description:
     'Forget something you remembered about the person. Use it when they say it is wrong or no longer true. Pass the words that identify it — every memory of theirs containing those words is deleted, and you should say back exactly which ones went so they can tell you if you took the wrong one.',
   inputSchema: z.object({

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { registerTool, runTool } from '../index';
-import { zippyProcess } from '../zippy/process';
+import { cortexProcess } from '../cortex/process';
 import { summarizeExclusions } from './filters';
 import { type DigestThread, gatherThreads } from './gather';
 import { loadDigestPreferences } from './preferences';
@@ -11,7 +11,7 @@ import { humanAge, renderDigestHtml, renderDigestMarkdown } from './render';
  *
  * The point of this tool is what it does NOT do: mail bodies and snippets never
  * reach the model that called it. The window is pulled with the user's own
- * Gmail token, normalized here, and handed to `zippy.process` — Zipdev's
+ * Gmail token, normalized here, and handed to `cortex.process` — Zipdev's
  * server-side model — which returns a written digest. The calling model sees
  * that digest plus thread metadata (subject, who, how long), and nothing else.
  * Same trick as `kb.context`: compose through `runTool` so the audit trail,
@@ -205,7 +205,7 @@ export const inboxPriorities = registerTool({
     } else {
       // The mail goes to Zipdev's own model, not to the caller's context.
       const processed = await runTool(
-        zippyProcess,
+        cortexProcess,
         {
           instruction: buildInstruction(focus, hours),
           content: buildSourceText(gathered.threads),

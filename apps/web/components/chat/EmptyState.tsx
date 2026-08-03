@@ -40,8 +40,8 @@ const SALES_SUGGESTIONS: Suggestion[] = [
 ];
 
 // One suggestion per front (sales, recruiting, rates, HR, clients, routines) —
-// the point of the empty state is to show Zippy's breadth in one glance.
-const ZIPPY_SUGGESTIONS: Suggestion[] = [
+// the point of the empty state is to show Cortex's breadth in one glance.
+const CORTEX_SUGGESTIONS: Suggestion[] = [
   { icon: BarChart2, text: 'Summarize my pipeline and flag stuck deals' },
   { icon: Users, text: 'Find candidates for a senior React role' },
   { icon: Calculator, text: 'What would 2 senior QAs and a DevOps lead cost?' },
@@ -51,11 +51,11 @@ const ZIPPY_SUGGESTIONS: Suggestion[] = [
 ];
 
 const COPY: Record<string, { title: string; subtitle: string; suggestions: Suggestion[] }> = {
-  zippy: {
-    title: 'Zippy — your super-agent',
+  cortex: {
+    title: 'Cortex — your super-agent',
     subtitle:
       'It sells, it recruits, it runs HR, it takes care of clients — grounded in your live CRM, talent pool, and Knowledge Base. One goal in, a whole operation out.',
-    suggestions: ZIPPY_SUGGESTIONS,
+    suggestions: CORTEX_SUGGESTIONS,
   },
   sales: {
     title: 'Zipdev Sales co-pilot',

@@ -1,16 +1,16 @@
 import { isMissingTable } from '@/lib/dev-work';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
 /**
- * Pull the brake on one of Zippy's development runs.
+ * Pull the brake on one of Cortex's development runs.
  *
  * Deliberately open to any signed-in teammate. Adding a repository is an admin
- * decision because it widens what Zippy can touch; stopping a run only ever
+ * decision because it widens what Cortex can touch; stopping a run only ever
  * narrows it, and a safety brake nobody can reach is not a safety brake. Who
  * pressed it is recorded on the row and shown on the page.
  *
@@ -43,7 +43,7 @@ export async function POST(
   if (readError) {
     if (isMissingTable(readError)) {
       return NextResponse.json(
-        { error: "Zippy's development work isn't set up in this environment yet." },
+        { error: "Cortex's development work isn't set up in this environment yet." },
         { status: 503 },
       );
     }

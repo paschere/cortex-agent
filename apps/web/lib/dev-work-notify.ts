@@ -11,10 +11,10 @@ import { sendEmail } from '@/lib/email';
 import { renderDevTaskEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 
 /**
- * "Zippy did some work on our software" notifications.
+ * "Cortex did some work on our software" notifications.
  *
  * The point of the whole oversight surface is that nobody has to sit and watch
  * it, so exactly two things are worth interrupting a person for:
@@ -53,7 +53,7 @@ interface Recipient {
 /**
  * Who hears about it: the person who asked. If the Linear author never mapped
  * to a Zipdev account there is nobody to tell personally, so it falls back to
- * the workspace admins — the people accountable for Zippy touching the code.
+ * the workspace admins — the people accountable for Cortex touching the code.
  */
 async function resolveRecipients(
   db: ReturnType<typeof getSupabaseServiceClient>,

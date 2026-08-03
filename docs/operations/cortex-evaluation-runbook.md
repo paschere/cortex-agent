@@ -1,4 +1,4 @@
-# Zippy Evaluation Runbook (non-engineers)
+# Cortex Evaluation Runbook (non-engineers)
 
 How to run the capability tests from the July 2026 evaluation criteria
 yourself. No terminal, no code — everything happens in claude.ai or in the
@@ -6,25 +6,25 @@ Zipdev OS web app.
 
 ## One-time setup (~2 minutes)
 
-1. Open **https://zippy-zipdev.vercel.app** and sign in with your
+1. Open **https://cortex-zipdev.vercel.app** and sign in with your
    `@zipdev.com` Google account.
 2. In **claude.ai** → Settings → Connectors → **Add custom connector**, paste:
 
    ```
-   https://zippy-zipdev.vercel.app/mcp
+   https://cortex-zipdev.vercel.app/mcp
    ```
 
 3. Approve with the same Google account when the login window opens. Done —
-   every Claude chat can now use Zippy's tools (enable the "zipdev" connector
+   every Claude chat can now use Cortex's tools (enable the "zipdev" connector
    in the chat's tool menu if it isn't on).
 
 You can also run every test in the **Zipdev OS chat** (same brain, same
-tools) at https://zippy-zipdev.vercel.app/chat.
+tools) at https://cortex-zipdev.vercel.app/chat.
 
 ## Running the tests
 
 Type the prompt, wait for the answer, then verify against the ground-truth
-source listed in the criteria. Zippy must cite ids/URLs you can click and
+source listed in the criteria. Cortex must cite ids/URLs you can click and
 check — an answer without sources is a fail even if it sounds right.
 
 ### Test 1 — Client roster pull
@@ -32,7 +32,7 @@ check — an answer without sources is a fail even if it sounds right.
 > List every team member currently assigned to **[client]**. Use the Assigned
 > Team Contact Info sheet and show which sheet/range you read.
 
-Verify against the sheet itself. (Zippy reads it with the Google Sheets tool
+Verify against the sheet itself. (Cortex reads it with the Google Sheets tool
 using your own Google access — if it says it lacks access, connect Google
 under Integrations in Zipdev OS.)
 
@@ -63,7 +63,7 @@ Verify counts and stages against Workable directly.
 > Sweep job boards for new signals: roles "senior fullstack engineer" and
 > "senior QA engineer", remote, US companies. Show me what's new.
 
-Zippy stores every signal it finds and never re-counts an old one. Follow up
+Cortex stores every signal it finds and never re-counts an old one. Follow up
 with "show me this week's signals" any time. Weekly target: 15 qualified
 signals confirmed by Mikey.
 
@@ -72,7 +72,7 @@ signals confirmed by Mikey.
 > For the signal at **[company]**, who is the likely hiring decision-maker
 > and what's the best contact path? Show your evidence.
 
-Zippy returns evidence with source URLs and labels the contact **found**
+Cortex returns evidence with source URLs and labels the contact **found**
 (seen publicly) or **inferred** (derived from a documented email pattern). A
 guess without evidence = fail; "unknown" with honest reasoning = acceptable.
 
@@ -81,13 +81,13 @@ guess without evidence = fail; "unknown" with honest reasoning = acceptable.
 > Draft a cold email to that contact referencing their actual job post, in
 > Zipdev's voice.
 
-Zippy drafts; it does **not** send. Sending is confirmation-gated: it shows
+Cortex drafts; it does **not** send. Sending is confirmation-gated: it shows
 you the exact email and waits for an explicit yes (and during the pilot, all
 sends are human-approved by policy).
 
 ## The audit check (applies to every test)
 
-Everything Zippy touches is recorded. Two places to look:
+Everything Cortex touches is recorded. Two places to look:
 
 - **Zipdev OS → Admin → Audit Logs** — one row per tool call: who asked,
   which tool, when, status, latency. This answers "what did it just access."

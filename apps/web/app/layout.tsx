@@ -13,7 +13,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'Zippy',
+  title: 'Cortex',
   description: 'Zipdev internal AI co-pilot',
 };
 

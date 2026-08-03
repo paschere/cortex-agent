@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * This module is imported by a CLIENT component, so it must stay free of
- * server-only dependencies: importing `@zipdev/agent-tools` here dragged the
+ * server-only dependencies: importing `@cortex/agent-tools` here dragged the
  * whole tool registry — and with it `node:crypto`, `node:dns` and pdf-parse's
  * `fs` access — into the browser bundle and broke the build. The check below
  * mirrors `parseChatWebhookUrl` in packages/agent-tools/src/chat/webhook.ts;
@@ -62,9 +62,9 @@ export const PreferencesBody = z
     // Empty string clears the stored webhook.
     chatWebhookUrl: z.string().trim().max(1000).default(''),
     /**
-     * Private direct message from the Zippy Chat app. Deliberately NOT gated
+     * Private direct message from the Cortex Chat app. Deliberately NOT gated
      * here on the person having a DM thread: the link is discovered server-side
-     * (they may say hi to Zippy in the same minute they tick this box), and the
+     * (they may say hi to Cortex in the same minute they tick this box), and the
      * delivery path already degrades to "not linked" instead of failing. The
      * form warns; the schema does not block.
      */
@@ -99,7 +99,7 @@ export interface PreferencesView {
 }
 
 /**
- * Whether Zippy can actually DM this person right now. Resolved on the server
+ * Whether Cortex can actually DM this person right now. Resolved on the server
  * from `google_chat_links`; the form uses it to explain, not to guess.
  */
 export interface ChatDmStatus {

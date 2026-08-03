@@ -1,7 +1,7 @@
 /**
  * THE DEV-TASK CONTRACT.
  *
- * This file is the interface between the three halves of "Zippy does its own
+ * This file is the interface between the three halves of "Cortex does its own
  * development work":
  *
  *   intake    (this module's owner) Linear webhook → dev_tasks row → queue
@@ -9,7 +9,7 @@
  *   oversight reads dev_tasks / dev_task_events for the UI
  *
  * The executor should import the types from here rather than re-deriving them.
- * Full prose: docs/operations/zippy-dev-tasks.md
+ * Full prose: docs/operations/cortex-dev-tasks.md
  *
  * ── Events ────────────────────────────────────────────────────────────────
  *
@@ -20,7 +20,7 @@
  *
  *   dev/task.queued   THE EXECUTOR'S INPUT. Emitted once a dev_tasks row
  *                     exists, its repository is resolved and allowlisted, and
- *                     Linear has been told Zippy picked the issue up.
+ *                     Linear has been told Cortex picked the issue up.
  *
  *   dev/task.status   THE EXECUTOR'S OUTPUT. Emit this for every state change;
  *                     intake persists it to dev_tasks and posts the matching

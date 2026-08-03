@@ -1,6 +1,6 @@
 import 'server-only';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { getEnv } from '@zipdev/core';
+import { getEnv } from '@cortex/core';
 
 /**
  * Stateless confirmation tokens for the MCP surface.

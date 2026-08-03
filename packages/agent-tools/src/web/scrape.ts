@@ -1,4 +1,4 @@
-import { IntegrationError } from '@zipdev/core';
+import { IntegrationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { assertPublicHost } from '../external-mcp';

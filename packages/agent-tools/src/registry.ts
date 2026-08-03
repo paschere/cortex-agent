@@ -3,7 +3,7 @@ import {
   RateLimitError,
   SecurityBlockedError,
   ValidationError,
-} from '@zipdev/core';
+} from '@cortex/core';
 import { writeAuditEvent } from './audit.js';
 import { consumeToken } from './rate-limit.js';
 import {

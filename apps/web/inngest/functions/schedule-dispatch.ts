@@ -1,7 +1,7 @@
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { computeNextRun } from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+import { computeNextRun } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 
 /**
  * Scheduled-jobs dispatcher. Runs every minute, claims due jobs, and emits one

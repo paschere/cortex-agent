@@ -5,8 +5,8 @@ import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { google } from '@ai-sdk/google';
-import { filterTools, getTool, runTool } from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+import { filterTools, getTool, runTool } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { type CoreTool, generateText, tool } from 'ai';
 
 const MAX_OUTPUT_CHARS = 8000;

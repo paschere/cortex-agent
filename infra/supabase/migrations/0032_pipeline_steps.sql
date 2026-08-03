@@ -1,5 +1,5 @@
 -- Pipelines v2: structured steps (the deck's visual language — purple nodes
--- for Zippy work, YOU nodes for human checkpoints) and a run log.
+-- for Cortex work, YOU nodes for human checkpoints) and a run log.
 --
 -- steps: [{title, detail, tools: [tool ids], checkpoint: bool}]
 --   checkpoint=true → the model must present findings and WAIT for the user's

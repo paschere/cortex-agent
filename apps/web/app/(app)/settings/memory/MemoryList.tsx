@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 /**
- * Memories read as sentences, not as rows of fields — they are things Zippy
+ * Memories read as sentences, not as rows of fields — they are things Cortex
  * would say about you, and seeing them as a table of `kind | source | status`
  * makes it impossible to judge whether one is actually right. The metadata is
  * still there, underneath, in the smallest type on the page.
@@ -29,7 +29,7 @@ const KIND_LABEL: Record<MemoryKindView, string> = {
 };
 
 const SOURCE_LABEL: Record<MemorySourceView, string> = {
-  explicit: 'You told Zippy this',
+  explicit: 'You told Cortex this',
   derived: 'Noticed in your conversations',
   behavioural: 'Counted from what you actually do',
 };
@@ -153,7 +153,7 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
             <span className="text-[12px] text-ink-faint">{suggested.length} to decide</span>
           </div>
           <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
-            Zippy noticed these while you were working. Nothing here is in use yet — it only starts
+            Cortex noticed these while you were working. Nothing here is in use yet — it only starts
             shaping answers once you keep it.
           </p>
           <div className="border-t border-border">
@@ -196,14 +196,14 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
           </span>
         </div>
         <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
-          Zippy carries these into every conversation, on every surface — the app, Google Chat and
+          Cortex carries these into every conversation, on every surface — the app, Google Chat and
           Claude. They are never quoted out loud in a group space, only used.
         </p>
         {active.length === 0 ? (
           <div className="border-t border-border px-5 py-10 text-center">
             <Brain className="mx-auto h-6 w-6 text-ink-faint" />
             <p className="mt-3 text-[13px] text-ink-muted">
-              Nothing yet. Tell Zippy &ldquo;remember that…&rdquo; in a conversation, or wait — it
+              Nothing yet. Tell Cortex &ldquo;remember that…&rdquo; in a conversation, or wait — it
               will start suggesting things once it has worked with you for a few days.
             </p>
           </div>
@@ -248,7 +248,7 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
             <Eyebrow>No longer in use</Eyebrow>
           </div>
           <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
-            You put these aside, or they dropped out when you hit {MEMORY_LIMIT_VIEW}. Zippy does
+            You put these aside, or they dropped out when you hit {MEMORY_LIMIT_VIEW}. Cortex does
             not use them — nothing is deleted behind your back.
           </p>
           <div className="border-t border-border">

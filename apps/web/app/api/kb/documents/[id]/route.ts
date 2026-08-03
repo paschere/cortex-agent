@@ -1,7 +1,7 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { assertCanWriteToSpace, getVisibleDocument } from '@zipdev/agent-tools';
-import { NotFoundError } from '@zipdev/core';
+import { assertCanWriteToSpace, getVisibleDocument } from '@cortex/agent-tools';
+import { NotFoundError } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

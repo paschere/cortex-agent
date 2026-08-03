@@ -1,8 +1,8 @@
 import 'server-only';
 import { getSupabaseServiceClient } from './supabase/service';
-import { createIntegrationsClient } from '@zipdev/agent-tools';
-import { logger, type UUID } from '@zipdev/core';
-import type { ToolContext } from '@zipdev/agent-tools';
+import { createIntegrationsClient } from '@cortex/agent-tools';
+import { logger, type UUID } from '@cortex/core';
+import type { ToolContext } from '@cortex/agent-tools';
 
 export function buildToolContext(opts: {
   userId: UUID;

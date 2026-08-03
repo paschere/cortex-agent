@@ -1,7 +1,7 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { type ToolContext, createIntegrationsClient } from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+import { type ToolContext, createIntegrationsClient } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 import { DRIVE_READONLY, type DriveContext, type DriveFile, driveListChildren } from '../_lib';
 

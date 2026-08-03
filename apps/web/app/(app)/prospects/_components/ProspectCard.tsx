@@ -189,7 +189,7 @@ function Contact({ prospect }: { prospect: Prospect }) {
     return (
       <p className="mt-3 flex items-center gap-1.5 text-[12px] text-ink-faint">
         <UserSearch className="h-3.5 w-3.5" />
-        No contact yet — ask Zippy who is hiring for this role.
+        No contact yet — ask Cortex who is hiring for this role.
       </p>
     );
   }

@@ -10,7 +10,7 @@ import { commentOnIssue } from '@/lib/dev-tasks/linear-comment';
 import { resolveRepository } from '@/lib/dev-tasks/repository';
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 
 /**
  * Intake: a claimed Linear delivery becomes a `dev_tasks` row and a queued job.
@@ -22,7 +22,7 @@ import { logger } from '@zipdev/core';
  * The three ways this ends:
  *
  *   rejected  the issue does not say which repository, or names one that is not
- *             on the allowlist. Zippy comments asking the human to say which,
+ *             on the allowlist. Cortex comments asking the human to say which,
  *             and stops. It never guesses — see @/lib/dev-tasks/repository.
  *   ignored   a task for this issue is already open. The partial unique index
  *             `dev_tasks_one_open_per_issue` is what decides this, so two

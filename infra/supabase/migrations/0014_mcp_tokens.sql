@@ -1,4 +1,4 @@
--- mcp_tokens: per-user bearer tokens for MCP access to the zipdev-agent tool layer
+-- mcp_tokens: per-user bearer tokens for MCP access to the cortex-agent tool layer
 -- (e.g. from Claude Desktop via the HTTP+SSE MCP transport).
 --
 -- Security model:

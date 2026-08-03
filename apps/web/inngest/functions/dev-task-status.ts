@@ -8,7 +8,7 @@ import {
 import { commentOnIssue } from '@/lib/dev-tasks/linear-comment';
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 
 /**
  * The executor's write-back path.

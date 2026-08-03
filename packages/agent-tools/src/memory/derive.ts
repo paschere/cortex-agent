@@ -156,7 +156,7 @@ export function behaviouralCandidates(rows: AuditSignalRow[], timeZone: string):
 
   // --- what keeps failing for them ------------------------------------------
   // Phrased as an instruction, not as a fact, because the useful part is what
-  // Zippy should DO about it. Worth surfacing even though it may go stale: it
+  // Cortex should DO about it. Worth surfacing even though it may go stale: it
   // is a suggestion the person can reject in one click, and a connection that
   // has been broken for a fortnight is exactly the thing nobody reports.
   for (const [family, v] of byFamily) {

@@ -1,4 +1,4 @@
-import { IntegrationError } from '@zipdev/core';
+import { IntegrationError } from '@cortex/core';
 
 /**
  * Workable SPI v3 client — workspace-wide service token (WORKABLE_API_TOKEN),

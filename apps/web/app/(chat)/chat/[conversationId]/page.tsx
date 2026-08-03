@@ -2,7 +2,7 @@ import { ChatRoot } from '@/components/chat/ChatRoot';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { toToolInvocations } from '@/lib/tool-invocations';
-import { listAgents } from '@zipdev/agents';
+import { listAgents } from '@cortex/agents';
 import type { Message } from 'ai';
 
 export default async function ResumeChatPage({

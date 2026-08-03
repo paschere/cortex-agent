@@ -44,8 +44,8 @@ import {
   formatCheckSummary,
   sandboxTimeoutMs,
   totalTokens,
-} from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+} from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 
 /**
  * THE EXECUTION ENGINE: a queued dev task becomes a branch and a pull request.
@@ -155,7 +155,7 @@ export const devTaskRun = inngest.createFunction(
 
     // The allowlist is re-read from the database rather than trusted from the
     // event: the event is a message that could be stale or replayed, while
-    // dev_repositories is the authority on what Zippy may touch right now.
+    // dev_repositories is the authority on what Cortex may touch right now.
     const repository = await step.run('verify-allowlist', async () => verifyRepository(task));
     if ('error' in repository) {
       await report(step, 'rejected', {
@@ -439,7 +439,7 @@ async function conclude(params: {
     };
   }
 
-  // The allowlist grants "Zippy may work here" and "Zippy may open pull
+  // The allowlist grants "Cortex may work here" and "Cortex may open pull
   // requests here" separately. Without the second grant the work is reported
   // and the branch is never pushed — the allowlist decides, not the issue.
   if (!repository.allow_pull_requests) {
@@ -463,7 +463,7 @@ async function conclude(params: {
   await step.run('commit', async () => {
     await commitAll(
       await attachSandbox(task.id),
-      `${task.external_identifier}: ${task.title}\n\nOpened by Zippy for task ${task.id}.`,
+      `${task.external_identifier}: ${task.title}\n\nOpened by Cortex for task ${task.id}.`,
     );
     return { committed: true };
   });

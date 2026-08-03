@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
-import { IntegrationError } from '@zipdev/core';
+import { IntegrationError } from '@cortex/core';
 import { searchCompanies } from '../search-companies';
 import { getCompany } from '../get-company';
 import { searchDeals } from '../search-deals';

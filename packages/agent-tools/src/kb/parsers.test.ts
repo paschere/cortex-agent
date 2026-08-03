@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ValidationError } from '@zipdev/core';
+import { ValidationError } from '@cortex/core';
 import { parseDocument } from './parsers';
 
 describe('parseDocument', () => {

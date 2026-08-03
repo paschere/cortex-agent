@@ -1,7 +1,7 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { flattenMarkdownForChat, parseChatWebhookUrl } from '@zipdev/agent-tools';
-import { ValidationError } from '@zipdev/core';
+import { flattenMarkdownForChat, parseChatWebhookUrl } from '@cortex/agent-tools';
+import { ValidationError } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
   const text = flattenMarkdownForChat(
     [
-      '*Zippy test message*',
+      '*Cortex test message*',
       '',
       `This space is now connected to ${user.name ?? user.email}. Your daily inbox digest will arrive here.`,
       'If you did not expect this, remove the webhook from the space.',

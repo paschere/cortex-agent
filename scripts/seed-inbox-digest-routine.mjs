@@ -75,7 +75,7 @@ const INSTRUCTION = [
   '4. Report, in one line each: who received a digest and through which channel, and who was skipped or failed and why.',
   '',
   'Rules:',
-  "- You must never read, open, quote, summarize or repeat the contents of anyone's mailbox. Delivering the digest goes straight from Zippy to the mailbox's owner; all you ever see back is a count and a destination. Do not use any other mail tool in this routine.",
+  "- You must never read, open, quote, summarize or repeat the contents of anyone's mailbox. Delivering the digest goes straight from Cortex to the mailbox's owner; all you ever see back is a count and a destination. Do not use any other mail tool in this routine.",
   '- Deliver only to the owner of each mailbox. Never send, forward or copy a digest to anyone else, including whoever owns this routine.',
   '- A skip is a normal outcome, not a failure: someone may have turned the digest off, or already have today\'s. Report it plainly and move on.',
   '- The report is for humans: business language, first names, no tool names, no ids, no technical detail. If everything went out cleanly, say so in one line.',
@@ -110,9 +110,9 @@ try {
   const owner = ownerRes.rows[0];
 
   const agentRes = await client.query(
-    `select id, name from public.agents where slug = 'zippy' limit 1`,
+    `select id, name from public.agents where slug = 'cortex' limit 1`,
   );
-  if (agentRes.rows.length === 0) throw new Error("No agent with slug 'zippy' — cannot schedule.");
+  if (agentRes.rows.length === 0) throw new Error("No agent with slug 'cortex' — cannot schedule.");
   const agent = agentRes.rows[0];
 
   const nextRun = nextHalfHour();

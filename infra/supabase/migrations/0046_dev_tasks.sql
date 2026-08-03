@@ -1,16 +1,16 @@
--- Zippy picks up its own development work.
+-- Cortex picks up its own development work.
 --
--- A human assigns a Linear issue to Zippy; /api/webhooks/linear turns that into
+-- A human assigns a Linear issue to Cortex; /api/webhooks/linear turns that into
 -- a row here, and the executor (Inngest, event `dev/task.queued`) does the work
 -- and writes its result back into the same row. Three tables:
 --
---   dev_repositories  the ALLOWLIST — Zippy can only touch a repo that somebody
+--   dev_repositories  the ALLOWLIST — Cortex can only touch a repo that somebody
 --                     registered here, and only opens PRs where allowed.
 --   dev_tasks         one unit of work, from queued to done/failed.
 --   dev_task_events   every inbound webhook delivery we accepted or turned away.
 --                     This is where retry-idempotency is enforced.
 --
--- See docs/operations/zippy-dev-tasks.md for the event contract.
+-- See docs/operations/cortex-dev-tasks.md for the event contract.
 
 -- ---------------------------------------------------------------------------
 -- Allowlist
@@ -26,7 +26,7 @@ create table if not exists public.dev_repositories (
   provider text not null default 'github' check (provider in ('github')),
   clone_url text not null,
   default_branch text not null default 'main',
-  -- Registering a repo lets Zippy READ and work in it. Opening a pull request
+  -- Registering a repo lets Cortex READ and work in it. Opening a pull request
   -- is a second, separate grant — a repo can be added for exploration long
   -- before anyone wants unattended PRs in it.
   allow_pull_requests boolean not null default false,
@@ -56,8 +56,8 @@ alter table public.dev_repositories enable row level security;
 -- codebase; a missing one just asks the human).
 insert into public.dev_repositories (key, name, clone_url, default_branch, allow_pull_requests, notes)
 values
-  ('zipdev-agent', 'zipdev-agent', 'https://github.com/Zipdev-Team/zipdev-agent.git', 'main', true,
-   'Zippy itself — the Next.js app, agent tools and Inngest workers.'),
+  ('cortex-agent', 'cortex-agent', 'https://github.com/Zipdev-Team/cortex-agent.git', 'main', true,
+   'Cortex itself — the Next.js app, agent tools and Inngest workers.'),
   ('zipdev-matcher', 'zipdev-matcher', 'https://github.com/Zipdev-Team/zipdev-matcher.git', 'main', true,
    'Recruiting/matching service behind the recruit.* tools.'),
   ('payroll', 'payroll', 'https://github.com/Zipdev-Team/payroll.git', 'main', true,
@@ -115,7 +115,7 @@ create table if not exists public.dev_tasks (
 --
 -- The dedupe ledger below stops identical retries; this stops the other half of
 -- the problem — an issue that is unassigned and reassigned, or relabelled while
--- Zippy is already working, producing a second concurrent run against the same
+-- Cortex is already working, producing a second concurrent run against the same
 -- branch. Terminal rows are excluded so an issue CAN legitimately be picked up
 -- again after a failed or cancelled attempt.
 create unique index if not exists dev_tasks_one_open_per_issue

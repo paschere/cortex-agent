@@ -2,7 +2,7 @@
  * Branch naming and the push guardrail.
  *
  * The single hardest rule in the executor is enforced here rather than by
- * convention: Zippy never writes to a default branch and never force-pushes.
+ * convention: Cortex never writes to a default branch and never force-pushes.
  * `assertPushable` is the only sanctioned way to build a `git push` argv, so a
  * future caller cannot skip the check by assembling the command by hand.
  */
@@ -33,8 +33,8 @@ const ALWAYS_PROTECTED = new Set([
 /** Characters git forbids anywhere in a ref name (git-check-ref-format). */
 const FORBIDDEN_REF_CHARS = new Set([' ', '~', '^', ':', '?', '*', '[', '\\']);
 
-/** Prefix every branch Zippy opens, so its work is greppable in the repo. */
-export const BRANCH_PREFIX = 'zippy';
+/** Prefix every branch Cortex opens, so its work is greppable in the repo. */
+export const BRANCH_PREFIX = 'cortex';
 
 export class ProtectedBranchError extends Error {
   constructor(branch: string, reason: string) {
@@ -59,7 +59,7 @@ function slugify(input: string, maxLength: number): string {
 }
 
 /**
- * `zippy/eng-142-add-rate-limiting` — derived from the Linear identifier so a
+ * `cortex/eng-142-add-rate-limiting` — derived from the Linear identifier so a
  * human scanning branches can map any branch back to its issue, and so a rerun
  * of the same issue is recognisably the same branch.
  */
@@ -123,7 +123,7 @@ export function assertPushable(params: {
     );
   }
   if (!branch.startsWith(`${BRANCH_PREFIX}/`)) {
-    // Belt and braces: even a non-protected name Zippy did not generate is
+    // Belt and braces: even a non-protected name Cortex did not generate is
     // refused, so a prompt-injected branch name cannot reach a real push.
     throw new ProtectedBranchError(branch, `it is not under the "${BRANCH_PREFIX}/" namespace`);
   }

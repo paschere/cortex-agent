@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { ConfirmationRequiredError, logger } from '@zipdev/core';
+import { ConfirmationRequiredError, logger } from '@cortex/core';
 import {
   runTool,
   getTool,
@@ -8,10 +8,10 @@ import {
   callExternalTool,
   type ToolContext,
   type ExternalServerRow,
-} from '@zipdev/agent-tools';
-import { loadAgent, getAgentTools } from '@zipdev/agents';
+} from '@cortex/agent-tools';
+import { loadAgent, getAgentTools } from '@cortex/agents';
 // Side-effect import: register all built-in tools
-import '@zipdev/agent-tools';
+import '@cortex/agent-tools';
 import type { Env } from './index';
 
 export interface BridgeContext {
@@ -122,7 +122,7 @@ export async function callTool(
   return { ok: false, error: `Unknown tool: ${toolName}` };
 }
 
-// Cast to the unparameterised SupabaseClient expected by @zipdev/agent-tools / @zipdev/agents.
+// Cast to the unparameterised SupabaseClient expected by @cortex/agent-tools / @cortex/agents.
 function makeServiceClient(env: Env): SupabaseClient {
   return createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },

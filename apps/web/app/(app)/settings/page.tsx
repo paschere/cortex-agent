@@ -4,7 +4,7 @@ import { Panel } from '@/components/ui/panel';
 import { isChatOutboundConfigured } from '@/lib/google-chat';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { PREFERENCE_COLUMNS, listMemories, rowToPreferences } from '@zipdev/agent-tools';
+import { PREFERENCE_COLUMNS, listMemories, rowToPreferences } from '@cortex/agent-tools';
 import { Brain, ChevronRight, Settings as SettingsIcon } from 'lucide-react';
 import Link from 'next/link';
 import { SettingsForm } from './SettingsForm';
@@ -24,7 +24,7 @@ export default async function SettingsPage() {
   const [{ data }, link, memories] = await Promise.all([
     db.from('user_preferences').select(PREFERENCE_COLUMNS).eq('user_id', user.id).maybeSingle(),
     // The DM thread is discovered, not created: this row only exists once the
-    // person has messaged the Zippy app in Google Chat. Reading it here is what
+    // person has messaged the Cortex app in Google Chat. Reading it here is what
     // turns the DM toggle from a checkbox that might silently do nothing into
     // one that says, on the page, whether it will work.
     db
@@ -66,7 +66,7 @@ export default async function SettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        subtitle="Your own preferences — what Zippy is allowed to do for you, and how it reaches you"
+        subtitle="Your own preferences — what Cortex is allowed to do for you, and how it reaches you"
         icon={<SettingsIcon className="h-5 w-5" />}
       />
       <SettingsForm initial={initial} chatDm={chatDm} />
@@ -85,11 +85,11 @@ export default async function SettingsPage() {
             </span>
             <div>
               <div className="text-[13px] font-semibold text-ink">
-                What Zippy remembers about you
+                What Cortex remembers about you
               </div>
               <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
                 {activeMemories === 0
-                  ? 'Nothing yet — Zippy starts picking things up as you work together.'
+                  ? 'Nothing yet — Cortex starts picking things up as you work together.'
                   : `${activeMemories} ${activeMemories === 1 ? 'thing' : 'things'} it carries into every conversation.`}
                 {pendingMemories > 0 && ` ${pendingMemories} waiting for you to keep or drop.`}
               </p>

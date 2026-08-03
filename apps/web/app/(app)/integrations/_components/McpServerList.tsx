@@ -31,7 +31,7 @@ export function McpServerList({ servers }: { servers: McpServer[] }) {
   if (servers.length === 0) {
     return (
       <p className="text-[12.5px] text-ink-faint">
-        No external servers plugged in. Zippy runs on the integrations above — add one below only if
+        No external servers plugged in. Cortex runs on the integrations above — add one below only if
         you have an MCP server of your own.
       </p>
     );
@@ -94,7 +94,7 @@ function McpServerRow({ server }: { server: McpServer }) {
 
   async function remove() {
     if (busy) return;
-    if (!confirm(`Remove "${server.name}"? Its tools disappear from Zippy immediately.`)) return;
+    if (!confirm(`Remove "${server.name}"? Its tools disappear from Cortex immediately.`)) return;
     setBusy(true);
     setError(null);
     try {
@@ -139,7 +139,7 @@ function McpServerRow({ server }: { server: McpServer }) {
         </div>
 
         <div className="flex items-center gap-3 text-[12.5px] text-ink-muted">
-          <label className="flex items-center gap-1.5" title="Expose this server's tools to Zippy">
+          <label className="flex items-center gap-1.5" title="Expose this server's tools to Cortex">
             <input
               type="checkbox"
               checked={server.enabled}
@@ -151,7 +151,7 @@ function McpServerRow({ server }: { server: McpServer }) {
           </label>
           <label
             className="flex items-center gap-1.5"
-            title="Let Zippy call this server without asking for confirmation"
+            title="Let Cortex call this server without asking for confirmation"
           >
             <input
               type="checkbox"

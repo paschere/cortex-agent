@@ -8,8 +8,8 @@ import type { ToolContext } from '../types';
  * Unlike every other client in this package, this one NEVER THROWS. Apollo is
  * a metered third party: a missing key, an exhausted credit balance and a 429
  * are ordinary operating conditions, not bugs. A thrown error would abort the
- * whole Zippy turn and the user would see nothing useful; a soft failure lets
- * each tool return `{ configured, reason }` and lets Zippy say a plain sentence
+ * whole Cortex turn and the user would see nothing useful; a soft failure lets
+ * each tool return `{ configured, reason }` and lets Cortex say a plain sentence
  * about what happened and what to do next.
  */
 

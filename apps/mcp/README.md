@@ -1,17 +1,17 @@
-# @zipdev/mcp
+# @cortex/mcp
 
-Cloudflare Worker exposing zipdev-agent tools via MCP (Model Context Protocol).
+Cloudflare Worker exposing cortex-agent tools via MCP (Model Context Protocol).
 
 ## Deploy
 
 ```bash
-pnpm --filter @zipdev/mcp deploy
+pnpm --filter @cortex/mcp deploy
 ```
 
 ## Local dev
 
 ```bash
-pnpm --filter @zipdev/mcp dev
+pnpm --filter @cortex/mcp dev
 ```
 
 Requires a Cloudflare account and `wrangler login`.

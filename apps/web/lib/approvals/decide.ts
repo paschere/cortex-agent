@@ -2,8 +2,8 @@ import 'server-only';
 import { buildToolContext } from '@/lib/agent';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
-import { getTool, runTool } from '@zipdev/agent-tools';
-import { logger } from '@zipdev/core';
+import { getTool, runTool } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import {
   type ApprovalChannel,
   type ApprovalDecision,

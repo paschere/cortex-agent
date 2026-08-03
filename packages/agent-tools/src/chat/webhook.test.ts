@@ -1,4 +1,4 @@
-import { ValidationError } from '@zipdev/core';
+import { ValidationError } from '@cortex/core';
 import { describe, expect, it } from 'vitest';
 import { flattenMarkdownForChat, isGoogleChatWebhookUrl, parseChatWebhookUrl } from './webhook';
 

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { getTool, listTools } from '@zipdev/agent-tools';
+import { getTool, listTools } from '@cortex/agent-tools';
 
 export const runtime = 'nodejs';
 

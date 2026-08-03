@@ -1,13 +1,13 @@
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { forgetMemory, listMemories, setMemoryStatus } from '@zipdev/agent-tools';
+import { forgetMemory, listMemories, setMemoryStatus } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 import { MemoryActionBody, type MemoryView, toMemoryView } from './schema';
 
 export const runtime = 'nodejs';
 
 /**
- * What Zippy remembers about the person, and their controls over it.
+ * What Cortex remembers about the person, and their controls over it.
  *
  * Every call is scoped to `requireSession().id` and there is no user id in the
  * URL or body — but that is only the second line of defence. The first is that
@@ -27,7 +27,7 @@ export async function GET() {
   try {
     return NextResponse.json({ memories: await view(user.id) });
   } catch {
-    return NextResponse.json({ error: 'Could not load what Zippy remembers.' }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load what Cortex remembers.' }, { status: 500 });
   }
 }
 

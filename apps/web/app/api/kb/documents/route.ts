@@ -2,8 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { inngest } from '@/lib/inngest';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { assertCanWriteToSpace, ensurePersonalSpace, getVisibleSpace } from '@zipdev/agent-tools';
-import { ForbiddenError, NotFoundError } from '@zipdev/core';
+import { assertCanWriteToSpace, ensurePersonalSpace, getVisibleSpace } from '@cortex/agent-tools';
+import { ForbiddenError, NotFoundError } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
 const ALLOWED_MIME_TYPES = new Set([

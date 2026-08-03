@@ -1,1 +1,0 @@
-export { zippyProcess } from './process';

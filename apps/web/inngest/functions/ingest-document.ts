@@ -7,11 +7,11 @@ import {
   driveGet,
   driveGetBytes,
   driveGetText,
-} from '@zipdev/agent-tools';
-import { chunkText } from '@zipdev/agent-tools/src/kb/chunker';
-import { embed } from '@zipdev/agent-tools/src/kb/embedder';
-import { parseDocument } from '@zipdev/agent-tools/src/kb/parsers';
-import { logger } from '@zipdev/core';
+} from '@cortex/agent-tools';
+import { chunkText } from '@cortex/agent-tools/src/kb/chunker';
+import { embed } from '@cortex/agent-tools/src/kb/embedder';
+import { parseDocument } from '@cortex/agent-tools/src/kb/parsers';
+import { logger } from '@cortex/core';
 
 export const ingestDocument = inngest.createFunction(
   { id: 'ingest-document', retries: 3 },

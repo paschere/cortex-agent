@@ -5,7 +5,7 @@ import {
   RateLimitError,
   UnauthorizedError,
   ValidationError,
-} from '@zipdev/core';
+} from '@cortex/core';
 import { runTool } from './index';
 import type { ToolContext, ToolDef } from './types';
 

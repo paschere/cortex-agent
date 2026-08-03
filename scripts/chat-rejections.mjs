@@ -2,7 +2,7 @@
 /**
  * Why is the Google Chat app being turned away?
  *
- * Chat tells the person only "Zippy isn't responding" and tells the developer
+ * Chat tells the person only "Cortex isn't responding" and tells the developer
  * only "the response was invalid", so the reason lives in `security_events`,
  * written by apps/web/app/api/chat-app/google/route.ts on every rejection.
  * This prints the recent ones together with the audience Google actually sent —
@@ -44,7 +44,7 @@ const { rows } = await client.query(
 await client.end();
 
 if (rows.length === 0) {
-  console.log('No Chat rejections recorded yet — send Zippy a message in Google Chat first.');
+  console.log('No Chat rejections recorded yet — send Cortex a message in Google Chat first.');
   process.exit(0);
 }
 

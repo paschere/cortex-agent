@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requireSession } from '@/lib/session';
 import { buildToolContext } from '@/lib/agent';
-import { getTool, runTool } from '@zipdev/agent-tools';
+import { getTool, runTool } from '@cortex/agent-tools';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 
 const Body = z.object({

@@ -151,7 +151,7 @@ const FAMILY_LABELS: Record<string, string> = {
   pipeline: 'Pipelines',
   schedule: 'Schedules',
   sales: 'Sales',
-  zippy: 'Zippy',
+  cortex: 'Cortex',
   zipdev: 'Zipdev',
 };
 
@@ -163,7 +163,7 @@ export function familyLabel(family: string): string {
   return FAMILY_LABELS[family] ?? family.charAt(0).toUpperCase() + family.slice(1);
 }
 
-/** The sentence a user says to Zippy to launch this pipeline. */
+/** The sentence a user says to Cortex to launch this pipeline. */
 export function runSentence(
   slug: string,
   params: ParamDef[],

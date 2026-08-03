@@ -12,7 +12,7 @@ import {
   matchesAnyPattern,
   matchesPattern,
 } from '@/lib/tool-taxonomy';
-import { classify, decide, listTools } from '@zipdev/agent-tools';
+import { classify, decide, listTools } from '@cortex/agent-tools';
 import { Layers, Lock, PlugZap, ShieldAlert, Wrench } from 'lucide-react';
 import { type CatalogTeam, type CatalogTool, ToolsCatalog } from './_components/ToolsCatalog';
 
@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
 /**
  * Everything on this page that needs the live tool registry is resolved HERE,
  * in a server component, and handed down as plain serialisable props.
- * `@zipdev/agent-tools` must never reach a client module — it pulls
+ * `@cortex/agent-tools` must never reach a client module — it pulls
  * `node:crypto`, `node:dns` and pdf-parse's `fs` access into the browser bundle
  * and breaks the production build (see apps/web/app/api/settings/preferences/schema.ts).
  */
@@ -204,7 +204,7 @@ export default async function ToolsPage({
     {
       label: 'Families',
       value: String(familyCount),
-      sub: 'systems Zippy can reach',
+      sub: 'systems Cortex can reach',
       icon: Layers,
       tone: 'sky' as const,
     },
@@ -243,7 +243,7 @@ export default async function ToolsPage({
     <>
       <PageHeader
         title="Tools"
-        subtitle="Everything Zippy can actually do, grouped by the system it touches. Access is granted per team; risky actions ask a human first."
+        subtitle="Everything Cortex can actually do, grouped by the system it touches. Access is granted per team; risky actions ask a human first."
         icon={<Wrench className="h-5 w-5" />}
       />
 

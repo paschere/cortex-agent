@@ -1,6 +1,6 @@
 import 'server-only';
 import { createSign } from 'node:crypto';
-import { logger } from '@zipdev/core';
+import { logger } from '@cortex/core';
 
 /**
  * The GitHub credential the sandbox is allowed to hold.

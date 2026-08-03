@@ -12,7 +12,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { type UUID, logger } from '@zipdev/core';
+import { type UUID, logger } from '@cortex/core';
 import { hashInput } from '../audit.js';
 import { isHighFrequency, noteSensitiveCall, sensitiveCallCount } from './frequency.js';
 import {

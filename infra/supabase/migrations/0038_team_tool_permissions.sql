@@ -5,7 +5,7 @@
 --
 -- A row is a rule for one team about one *pattern*. A pattern is either an
 -- exact tool id ('hubspot.search_deals') or a family wildcard ('hubspot.*'),
--- matching the semantics of filterTools/matchPattern in @zipdev/agent-tools:
+-- matching the semantics of filterTools/matchPattern in @cortex/agent-tools:
 -- a pattern ending in '.*' matches every tool id with that prefix, otherwise
 -- it must equal the tool id exactly.
 --

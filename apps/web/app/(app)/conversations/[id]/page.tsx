@@ -62,7 +62,7 @@ export default async function ConversationDetailPage({
     .order('created_at', { ascending: true });
 
   const messages = (msgData ?? []) as unknown as TranscriptMessageRow[];
-  const agentName = relName(conv.agents) ?? 'Zippy';
+  const agentName = relName(conv.agents) ?? 'Cortex';
   const surface = conversationSurface(conv);
   const title = conv.title?.trim() || 'Untitled conversation';
 

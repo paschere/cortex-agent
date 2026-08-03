@@ -14,7 +14,7 @@ import { RESOURCES, readResource } from './resources';
 
 export function buildMcpServer(ctx: BridgeContext): Server {
   const server = new Server(
-    { name: 'zipdev-agent', version: '0.1.0' },
+    { name: 'cortex-agent', version: '0.1.0' },
     { capabilities: { tools: {}, prompts: {}, resources: {} } },
   );
 

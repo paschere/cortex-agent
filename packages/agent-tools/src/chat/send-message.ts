@@ -1,4 +1,4 @@
-import { IntegrationError, ValidationError } from '@zipdev/core';
+import { IntegrationError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import type { ToolContext } from '../types';

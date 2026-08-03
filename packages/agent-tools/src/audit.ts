@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { logger, type UUID } from '@zipdev/core';
+import { logger, type UUID } from '@cortex/core';
 
 export type AuditStatus = 'ok' | 'error' | 'rate_limited' | 'confirmation_required';
 

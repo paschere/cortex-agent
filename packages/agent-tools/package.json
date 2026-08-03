@@ -1,5 +1,5 @@
 {
-  "name": "@zipdev/agent-tools",
+  "name": "@cortex/agent-tools",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@zipdev/core": "workspace:*",
+    "@cortex/core": "workspace:*",
     "@supabase/supabase-js": "2.46.2",
     "@ai-sdk/google": "1.0.10",
     "ai": "4.0.18",

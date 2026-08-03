@@ -3,7 +3,7 @@ import type { ChatCardV2 } from '@/lib/google-chat';
 import { confirmationSummary, toolDisplayName } from '@/lib/tool-labels';
 
 /**
- * The approval CARD Zippy posts in Google Chat.
+ * The approval CARD Cortex posts in Google Chat.
  *
  * The old approval DM was a wall of text ending in "open /approvals". Approvals
  * expire in 15 minutes, and leaving Chat to find a tab, sign in and click is
@@ -31,7 +31,7 @@ import { confirmationSummary, toolDisplayName } from '@/lib/tool-labels';
  */
 
 /** The function name the buttons invoke; echoed back as `common.invokedFunction`. */
-export const APPROVAL_ACTION = 'zippy_approval_decision';
+export const APPROVAL_ACTION = 'cortex_approval_decision';
 
 /** Parameter keys on the button. Read back in the CARD_CLICKED handler. */
 export const APPROVAL_ID_PARAM = 'approvalId';
