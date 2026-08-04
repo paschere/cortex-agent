@@ -39,7 +39,16 @@ export default function SignupPage() {
       setLoading(null);
       return;
     }
-    // Verification email goes out on signup (sendOnSignUp) — tell the user.
+    // With no email provider configured, verification is off and sign-up
+    // already returns a live session — send them into the product instead of
+    // to a screen telling them to check an inbox nothing was sent to. Asking
+    // the client for the session is what makes this self-correcting: configure
+    // Resend and the same code shows the inbox screen again.
+    const { data: session } = await authClient.getSession();
+    if (session?.user) {
+      window.location.href = '/';
+      return;
+    }
     setDone(true);
   }
 

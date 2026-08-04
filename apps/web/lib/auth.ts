@@ -189,7 +189,12 @@ export const auth = betterAuth({
     },
   },
   emailVerification: {
-    sendOnSignUp: true,
+    // Only ask people to verify when a verification email can actually reach
+    // them. Without RESEND_API_KEY the link is written to the server log, which
+    // nobody signing up can read — so demanding verification locks every new
+    // account out of the product it just created. Configure Resend and this
+    // turns itself back on.
+    sendOnSignUp: Boolean(process.env.RESEND_API_KEY),
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       const result = await sendEmail({
