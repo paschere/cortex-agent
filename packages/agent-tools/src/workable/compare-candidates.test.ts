@@ -4,7 +4,6 @@ import type { ToolContext } from '../types';
 import { workableCompareCandidates } from './compare-candidates';
 
 vi.mock('ai', () => ({ generateObject: vi.fn() }));
-vi.mock('@ai-sdk/google', () => ({ google: vi.fn(() => 'mock-model') }));
 
 const generateObjectMock = vi.mocked(generateObject);
 

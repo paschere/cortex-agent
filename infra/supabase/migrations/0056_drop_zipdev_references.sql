@@ -61,7 +61,7 @@ where slug = 'cortex';
 
 update public.agents
 set
-  name = 'Sales',
+  name = 'Cortex Sales',
   system_prompt = replace(
     replace(
       replace(
@@ -87,7 +87,7 @@ where slug = 'sales';
 
 update public.agents
 set
-  name = 'Recruiting',
+  name = 'Cortex Recruiting',
   system_prompt = replace(
     replace(
       replace(
@@ -109,9 +109,9 @@ where slug = 'recruiting';
 -- The seed migrations are not the only way a prompt gets written: 0010 ships a
 -- shorter sales prompt that 0016 later overwrites, and an admin can edit any of
 -- these from the settings page. Anything still naming the company after the
--- passes above is swept generically. The `where ... ilike` guards keep this a
--- no-op on a database that is already clean, which is what makes re-running the
--- migration safe.
+-- passes above is swept generically. The `where ... like '%Zipdev%'` guards keep
+-- each statement a no-op on a database that is already clean, which is what
+-- makes re-running the migration safe.
 
 update public.agents
 set system_prompt = replace(replace(system_prompt, 'Zipdev''s', 'the company''s'), 'Zipdev', 'the company')

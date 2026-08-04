@@ -398,7 +398,7 @@ export async function POST(req: NextRequest) {
                 // Thinking off + real headroom: Claude counts reasoning against
                 // maxTokens, so the old 20-token cap would truncate before the
                 // title itself was ever emitted.
-                experimental_providerMetadata: NO_THINKING,
+                providerOptions: NO_THINKING,
                 maxTokens: 256,
               });
               await db

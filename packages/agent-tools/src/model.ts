@@ -85,8 +85,7 @@ export function utilityModel() {
  * Only valid at effort `high` or below (the default); pairing disabled
  * thinking with xhigh/max effort is rejected with a 400.
  *
- * Pass as `experimental_providerMetadata` — this repo is on AI SDK 4.0, where
- * the stable `providerOptions` name does not exist yet.
+ * Pass as `providerOptions`.
  */
 export const NO_THINKING = {
   anthropic: { thinking: { type: 'disabled' as const } },

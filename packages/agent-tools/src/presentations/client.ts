@@ -122,7 +122,7 @@ export async function renderPdf(candidateId: string, jobId?: string): Promise<Re
   if (res.status === 404) throw new NoPresentationError(candidateId);
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Cortex matcher ${res.status} while exporting the PDF: ${body.slice(0, 300)}`);
+    throw new Error(`matcher ${res.status} while exporting the PDF: ${body.slice(0, 300)}`);
   }
 
   const bytes = new Uint8Array(await res.arrayBuffer());
