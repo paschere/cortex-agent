@@ -320,7 +320,7 @@ export default async function AgentDetailPage({
         <Panel className="p-5">
           <Eyebrow>Default model</Eyebrow>
           <div className="mt-3 flex flex-wrap gap-2">
-            {["gemini-3.1-flash-lite", "gemini-2.5-pro"].map((m) => (
+            {["claude-opus-5", "claude-sonnet-5"].map((m) => (
               <label
                 key={m}
                 className="cursor-pointer"

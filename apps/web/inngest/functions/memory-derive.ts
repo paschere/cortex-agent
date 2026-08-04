@@ -1,6 +1,6 @@
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { google } from '@ai-sdk/google';
+import { utilityModel } from '@cortex/agent-tools';
 import {
   type AuditSignalRow,
   type MemoryCandidate,
@@ -281,7 +281,7 @@ async function languageCandidates(messages: RecentMessage[]): Promise<MemoryCand
   let text = '';
   try {
     const result = await generateText({
-      model: google('gemini-3.1-flash-lite'),
+      model: utilityModel(),
       system: EXTRACTION_PROMPT,
       prompt: transcript.slice(0, 24_000),
       maxTokens: 800,

@@ -11,20 +11,21 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "1.0.5",
+    "@ai-sdk/google": "1.0.10",
     "@cortex/core": "workspace:*",
     "@supabase/supabase-js": "2.46.2",
-    "@ai-sdk/google": "1.0.10",
     "ai": "4.0.18",
     "cron-parser": "4.9.0",
-    "zod": "3.25.28",
+    "mammoth": "1.8.0",
     "pdf-parse": "1.1.1",
-    "mammoth": "1.8.0"
+    "zod": "3.25.28"
   },
   "devDependencies": {
-    "typescript": "5.7.2",
-    "vitest": "2.1.8",
-    "msw": "2.7.0",
     "@types/node": "20.17.10",
-    "@types/pdf-parse": "^1.1.4"
+    "@types/pdf-parse": "^1.1.4",
+    "msw": "2.7.0",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
   }
 }

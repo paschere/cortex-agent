@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { google } from "@ai-sdk/google";
+import { chatModel, utilityModel, NO_THINKING } from "@cortex/agent-tools";
 import {
   streamText,
   generateText,
@@ -391,7 +391,7 @@ export async function POST(req: NextRequest) {
   });
 
   const result = streamText({
-    model: google(agent.defaultModel),
+    model: chatModel(agent.defaultModel),
     system,
     messages: coreMessages,
     tools: aiTools,
@@ -413,9 +413,13 @@ export async function POST(req: NextRequest) {
           void (async () => {
             try {
               const { text: titleText } = await generateText({
-                model: google("gemini-3.1-flash-lite"),
+                model: utilityModel(),
                 prompt: `Summarize this sales conversation starter in 5 words or fewer, no punctuation: "${lastUserMessage.content.slice(0, 200)}"`,
-                maxTokens: 20,
+                // Thinking off + real headroom: Claude counts reasoning against
+                // maxTokens, so the old 20-token cap would truncate before the
+                // title itself was ever emitted.
+                experimental_providerMetadata: NO_THINKING,
+                maxTokens: 256,
               });
               await db
                 .from("conversations")

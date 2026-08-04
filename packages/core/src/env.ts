@@ -7,7 +7,9 @@ const schema = z.object({
   SUPABASE_DB_URL: z.string().url(),
   APP_BASE_URL: z.string().url(),
   SESSION_COOKIE_NAME: z.string().default('cortex_session'),
-  ALLOWED_EMAIL_DOMAIN: z.string().default('zipdev.com'),
+  // Empty = open signup (the SaaS default). Set a single domain to turn a
+  // deployment back into a private, single-company instance.
+  ALLOWED_EMAIL_DOMAIN: z.string().default(''),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),

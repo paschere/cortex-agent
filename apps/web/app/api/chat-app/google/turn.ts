@@ -5,7 +5,7 @@ import { toChatText } from '@/lib/google-chat';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
-import { google } from '@ai-sdk/google';
+import { chatModel } from '@cortex/agent-tools';
 import {
   type RiskLevel,
   classify,
@@ -472,7 +472,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
   let answer = '';
   try {
     const result = await generateText({
-      model: google(agent.defaultModel),
+      model: chatModel(agent.defaultModel),
       system,
       messages,
       tools: aiTools,

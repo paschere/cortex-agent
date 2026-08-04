@@ -55,7 +55,9 @@ const cleanConnectionString = connectionString.replace(/[?&]sslmode=[^&]*/g, (m)
   m.startsWith('?') ? '?' : '',
 ).replace(/\?&/, '?').replace(/\?$/, '');
 
-const pool = new Pool({
+// Exported so the workspace helpers in lib/organization.ts write through the
+// same connection better-auth owns, rather than opening a second pool.
+export const pool = new Pool({
   connectionString: cleanConnectionString,
   ...(isRemoteDb ? { ssl: { rejectUnauthorized: false } } : {}),
   max: 2,

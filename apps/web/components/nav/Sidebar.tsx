@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   MessageSquare,
   MessagesSquare,
+  Network,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
@@ -70,6 +71,9 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: '/agents', label: 'Agents', icon: Bot },
       { href: '/dev-work', label: 'Dev Work', icon: Hammer },
+      // Sits above Pipelines on purpose: a pipeline is a flow somebody wrote
+      // down, an orchestration is one Cortex works out for itself.
+      { href: '/orchestrator', label: 'Orchestrator', icon: Network },
       { href: '/pipelines', label: 'Pipelines', icon: Workflow },
       // The page calls these Routines; the nav used to call them Scheduled Jobs.
       // One name per thing.

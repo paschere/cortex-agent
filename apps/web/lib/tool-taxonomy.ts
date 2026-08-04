@@ -178,6 +178,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'primary',
     icon: 'AlarmClock',
   },
+  vehicles: {
+    name: 'Vehicles',
+    blurb:
+      'Plates worth keeping an eye on — SOAT and RTM validity from RUNT, traffic fines from SIMIT, and what has changed since the last look.',
+    tone: 'emerald',
+    icon: 'Car',
+  },
   web: {
     name: 'Web',
     blurb: 'Public search and page scraping — the only family that touches nothing internal.',

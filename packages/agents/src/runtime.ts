@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterTools, type AnyTool } from "@cortex/agent-tools";
 import { logger } from "@cortex/core";
-import type { AgentDefinition } from "@cortex/core";
+import type { AgentDefinition, ModelId } from "@cortex/core";
 
 export async function loadAgent(
   db: SupabaseClient,
@@ -17,9 +17,7 @@ export async function loadAgent(
     id: data.id as string,
     name: data.name as string,
     team: "", // can be populated by joining teams table; not critical for MVP
-    defaultModel: data.default_model as
-      | "gemini-3.1-flash-lite"
-      | "gemini-2.5-pro",
+    defaultModel: data.default_model as ModelId,
     systemPrompt: data.system_prompt as string,
     allowedTools: data.allowed_tool_ids as string[],
     greeting: "How can I help today?",
