@@ -12,7 +12,7 @@ import { num } from './format';
 import type { IntakeCounts, IntakeKey, SpaceSummary } from './types';
 
 /**
- * The four mouths.
+ * The four sources.
  *
  * WHY THEY ARE TOGETHER. Brain Knowledge eats four ways, and until now three of
  * them were buried: recording lived under the dropzone, Meet and Drive were
@@ -92,7 +92,7 @@ export function IntakeChooser({
 
   return (
     <Panel>
-      <PanelHead title="Por dónde come" right="cuatro entradas" />
+      <PanelHead title="De qué se alimenta" right="cuatro entradas" />
       <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
         Todo termina en el mismo sitio: troceado, indexado y listo para citar.
       </p>
@@ -174,7 +174,7 @@ export function IntakePanel({
     <Panel>
       <PanelHead title={`Alimentar a ${space.name}`} />
       <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
-        Elige por dónde entra. Cortex lo digiere y queda citable.
+        Elige por dónde entra. Cortex lo indexa y queda citable.
       </p>
 
       {/* Plain toggle buttons rather than a tablist: a real tablist owes the

@@ -5,8 +5,10 @@ import { clsx } from 'clsx';
 import { AlertTriangle, Building2, Loader2, Lock, Plus, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { searchKnowledge } from '../actions';
+import { BrainPanel, GrowthPanel } from './BrainPlate';
 import { DigestionPanel, KnowsPanel, useDigest } from './Digestion';
 import { IntakeChooser } from './Intake';
+import { RelationsPanel } from './RelationsGraph';
 import { SpaceDetail } from './SpaceDetail';
 import { SpaceDialog } from './SpaceDialog';
 import { ago, hours, num, plural } from './format';
@@ -40,6 +42,8 @@ export function KnowledgeBase({
   const stats = useDigest(serverStats);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [intake, setIntake] = useState<IntakeKey>('upload');
+  // Which lobe of the plate is open. Null means the map is closed.
+  const [openRegion, setOpenRegion] = useState<IntakeKey | null>(null);
   const [creating, setCreating] = useState<'personal' | 'global' | null>(null);
 
   const company = useMemo(() => spaces.filter((s) => s.kind === 'global'), [spaces]);
@@ -78,9 +82,20 @@ export function KnowledgeBase({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <DigestionPanel stats={stats} />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <BrainPanel
+          stats={stats}
+          openRegion={openRegion}
+          onOpenRegion={(key) => setOpenRegion((current) => (current === key ? null : key))}
+        />
         <KnowsPanel stats={stats} />
+      </div>
+
+      {openRegion && <RelationsPanel source={openRegion} onClose={() => setOpenRegion(null)} />}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <DigestionPanel stats={stats} />
+        <GrowthPanel stats={stats} />
       </div>
 
       <IntakeChooser
@@ -375,7 +390,7 @@ function SpaceCard({ space, onOpen }: { space: SpaceSummary; onOpen: () => void 
           ) : space.pendingCount > 0 ? (
             <span className="inline-flex shrink-0 items-center gap-1 text-amber">
               <Loader2 className="h-3 w-3 animate-spin" />
-              digiriendo <span className="tabular">{num(space.pendingCount)}</span>
+              indexando <span className="tabular">{num(space.pendingCount)}</span>
             </span>
           ) : null}
         </div>

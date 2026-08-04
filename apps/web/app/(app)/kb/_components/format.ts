@@ -63,6 +63,13 @@ export function meetingMoment(iso: string | null): string {
   });
 }
 
+/** "12 may" — the Monday a week started, for a chart axis. */
+export function weekLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
+}
+
 /** "1 documento" / "5 documentos", without the (s) that reads like a form. */
 export function plural(count: number, one: string, many: string): string {
   return `${num(count)} ${count === 1 ? one : many}`;

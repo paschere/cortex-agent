@@ -94,7 +94,7 @@ const DONE_STATUSES = new Set(['ready', 'failed']);
 const GROUPS: Array<{ stages: DigestStage[]; label: string; hint: string }> = [
   {
     stages: ['digesting', 'waiting'],
-    label: 'Digiriendo ahora',
+    label: 'Procesando ahora',
     hint: 'todavía no se puede citar',
   },
   { stages: ['stuck'], label: 'Atascados', hint: 'no entraron a la memoria' },

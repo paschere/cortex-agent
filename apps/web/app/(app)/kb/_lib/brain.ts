@@ -87,11 +87,23 @@ export function stageOf(doc: {
   return 'waiting';
 }
 
-/** Which mouth a document came in through. */
-function intakeOf(doc: { source: string; media_kind: string | null }): keyof IntakeCounts {
+/**
+ * Which of the four sources a document came in through.
+ *
+ * Kept identical to the CASE in 0062's `kb_brain_graph`, including the one
+ * place the two columns disagree: an uploaded audio file has source 'audio'
+ * and is a recording to the person looking at it, even though nobody recorded
+ * it here.
+ */
+export function intakeOf(doc: {
+  source: string;
+  media_kind?: string | null;
+}): keyof IntakeCounts {
   if (doc.source === 'gdrive') return 'drive';
   if (doc.source === 'meeting' || doc.media_kind === 'meeting') return 'meeting';
-  if (doc.source === 'recording') return 'record';
+  if (doc.source === 'recording' || doc.source === 'audio' || doc.media_kind === 'audio') {
+    return 'record';
+  }
   return 'upload';
 }
 
@@ -236,9 +248,7 @@ function lastTwelveWeeks(): Date[] {
 }
 
 function startOfWeek(date: Date): Date {
-  const d = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   // Monday is 0, so a Sunday belongs to the week that has just ended.
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return d;

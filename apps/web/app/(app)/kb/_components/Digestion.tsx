@@ -50,8 +50,8 @@ const STAGES: Array<{
   },
   {
     key: 'digesting',
-    label: 'Se digiere',
-    hint: 'leyendo y troceando',
+    label: 'Indexando',
+    hint: 'troceando y vectorizando',
     bar: 'bg-primary',
     dot: 'bg-primary',
     text: 'text-primary',
@@ -118,7 +118,7 @@ export function DigestionPanel({ stats }: { stats: BrainStats }) {
   return (
     <Panel>
       <PanelHead
-        title="Digestión"
+        title="Indexación"
         right={
           inFlight > 0 ? (
             <span className="inline-flex items-center gap-1.5 text-primary">
@@ -126,7 +126,7 @@ export function DigestionPanel({ stats }: { stats: BrainStats }) {
               <span className="tabular">{num(inFlight)}</span> en proceso
             </span>
           ) : (
-            'todo digerido'
+            'todo indexado'
           )
         }
       />
@@ -198,7 +198,7 @@ export function DigestionPanel({ stats }: { stats: BrainStats }) {
         {stats.digesting.length === 0 ? (
           <p className="text-[12.5px] text-ink-muted">
             {total === 0
-              ? 'Todavía no ha comido nada. Dale el primer documento abajo.'
+              ? 'Todavía no hay nada dentro. Dale el primer documento abajo.'
               : stats.stages.stuck > 0
                 ? 'No hay nada en proceso. Revisa los atascados: esos no entraron.'
                 : 'No hay nada en proceso. Todo lo que entró ya se puede recordar.'}
@@ -253,7 +253,7 @@ export function KnowsPanel({ stats }: { stats: BrainStats }) {
     <Panel>
       <PanelHead title="Cuánto sabe" />
       <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
-        Contado ahora, sobre lo que ya digirió.
+        Contado ahora, sobre lo que ya indexó.
       </p>
 
       <dl className="mt-3 divide-y divide-border border-t border-border">
@@ -279,7 +279,7 @@ export function KnowsPanel({ stats }: { stats: BrainStats }) {
           }
         />
         <Figure
-          label="Último bocado"
+          label="Última entrada"
           value={stats.lastAddedAt ? ago(stats.lastAddedAt) : '—'}
           hint={stats.lastAddedAt ? 'lo último que entró' : 'nada ha entrado todavía'}
         />

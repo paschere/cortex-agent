@@ -8,6 +8,7 @@ import { deleteSpace } from '../actions';
 import { DocumentList } from './DocumentList';
 import { IntakePanel } from './Intake';
 import { SpaceChip } from './KnowledgeBase';
+import { RelationsPanel } from './RelationsGraph';
 import { ago, hours, num, plural } from './format';
 import type { IntakeKey, SpaceSummary } from './types';
 
@@ -100,9 +101,9 @@ export function SpaceDetail({
             value={num(space.documentCount)}
             hint={
               space.pendingCount > 0
-                ? `${num(space.pendingCount)} sin digerir`
+                ? `${num(space.pendingCount)} sin indexar`
                 : space.documentCount > 0
-                  ? 'todos digeridos'
+                  ? 'todo indexado'
                   : 'todavía ninguno'
             }
           />
@@ -116,7 +117,7 @@ export function SpaceDetail({
             }
           />
           <Cell
-            label="Último bocado"
+            label="Última entrada"
             value={space.lastAddedAt ? ago(space.lastAddedAt) : '—'}
             hint={space.lastAddedAt ? 'lo último que entró' : 'nada ha entrado'}
           />
@@ -183,6 +184,9 @@ export function SpaceDetail({
           Si quieres tu propia copia, guárdala en uno de tus espacios.
         </Panel>
       )}
+
+      {/* ------------------------------------------------------- relations */}
+      <RelationsPanel spaceId={space.id} />
 
       {/* --------------------------------------------------------- documents */}
       <Panel>
