@@ -64,7 +64,7 @@ export default async function ConversationDetailPage({
   const messages = (msgData ?? []) as unknown as TranscriptMessageRow[];
   const agentName = relName(conv.agents) ?? 'Cortex';
   const surface = conversationSurface(conv);
-  const title = conv.title?.trim() || 'Untitled conversation';
+  const title = conv.title?.trim() || 'Conversación sin título';
 
   return (
     <>
@@ -73,35 +73,37 @@ export default async function ConversationDetailPage({
         className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:text-ink"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        All conversations
+        Todas las conversaciones
       </Link>
 
       <PageHeader
         title={title}
-        subtitle={`${agentName} · ${messages.length} message${messages.length === 1 ? '' : 's'} · started ${relativeTime(conv.created_at)}`}
+        subtitle={`${agentName} · ${messages.length} ${messages.length === 1 ? 'mensaje' : 'mensajes'} · empezó ${relativeTime(conv.created_at)}`}
         icon={<MessagesSquare className="h-5 w-5" />}
         actions={
           <>
             <SurfaceBadge surface={surface} size="md" />
             <Link href={`/chat/${conv.id}`}>
-              <Button>Resume in chat</Button>
+              <Button>Retomar en el chat</Button>
             </Link>
           </>
         }
       />
 
       {asAdmin && (
-        <Panel className="mb-4 flex items-center gap-2 border-amber/30 bg-amber-soft px-4 py-2.5 text-[12.5px] font-semibold text-amber">
+        <Panel className="mb-4 flex items-center gap-2 border-amber/40 bg-amber-soft px-4 py-2.5 text-[12.5px] font-semibold text-amber">
           <ShieldCheck className="h-4 w-4 shrink-0" />
-          You are viewing someone else&apos;s conversation as an org admin.
+          Estás viendo la conversación de otra persona como administrador de la organización.
         </Panel>
       )}
 
       {messages.length === 0 ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-faint">
-          <MessagesSquare className="mx-auto mb-3 h-8 w-8 text-primary" />
-          <p className="font-semibold text-ink">Nothing was said here yet.</p>
-          <p className="mt-1">This conversation has no messages.</p>
+        <Panel className="p-10 text-center text-[13px] text-ink-muted">
+          <MessagesSquare className="mx-auto mb-3 h-7 w-7 text-primary" />
+          <p className="text-[14px] font-bold text-ink">Aquí no se dijo nada</p>
+          <p className="mx-auto mt-1 max-w-sm leading-relaxed">
+            La conversación se creó pero no llegó ningún mensaje. Retómala en el chat para empezarla.
+          </p>
         </Panel>
       ) : (
         <div className="space-y-3">

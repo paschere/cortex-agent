@@ -44,7 +44,7 @@ export function UploadDropzone({ spaceId, spaceName }: { spaceId: string; spaceN
         const res = await fetch('/api/kb/documents', { method: 'POST', body: form });
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
-          setError(body.error ?? `${f.name} could not be added.`);
+          setError(body.error ?? `No se pudo añadir ${f.name}.`);
           break;
         }
       }
@@ -59,7 +59,7 @@ export function UploadDropzone({ spaceId, spaceName }: { spaceId: string; spaceN
       <div
         {...getRootProps({
           className: clsx(
-            'cursor-pointer rounded-card border border-dashed px-4 py-7 text-center transition-colors',
+            'cursor-pointer rounded-card border border-dashed px-4 py-8 text-center transition-colors',
             isDragActive
               ? 'border-primary bg-primary-soft'
               : 'border-border-strong bg-surface-2 hover:border-primary/40',
@@ -67,7 +67,7 @@ export function UploadDropzone({ spaceId, spaceName }: { spaceId: string; spaceN
         })}
       >
         <input {...getInputProps()} />
-        <span className="mx-auto mb-2 grid h-9 w-9 place-items-center rounded-[10px] bg-surface text-primary">
+        <span className="mx-auto mb-2 grid h-9 w-9 place-items-center rounded-card bg-surface text-primary">
           {busy ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
@@ -76,18 +76,18 @@ export function UploadDropzone({ spaceId, spaceName }: { spaceId: string; spaceN
         </span>
         <p className="text-[13px] font-semibold text-ink">
           {busy
-            ? 'Adding…'
+            ? 'Entrando…'
             : isDragActive
-              ? `Drop it into ${spaceName}`
-              : `Drop a file into ${spaceName}`}
+              ? `Suéltalo en ${spaceName}`
+              : 'Suelta un archivo o toca para elegirlo'}
         </p>
-        <p className="mt-0.5 text-[11.5px] text-ink-faint">
-          PDF, Word, text or Markdown up to 10 MB — or a recording (MP3, M4A, WAV, WebM) up to 200
-          MB, which Cortex transcribes and can quote back with the speaker and the minute.
+        <p className="mx-auto mt-1 max-w-md text-[11.5px] leading-relaxed text-ink-faint">
+          PDF, Word, texto o Markdown hasta 10 MB. También audio (MP3, M4A, WAV, WebM) hasta 200 MB:
+          lo transcribe y lo cita con el hablante y el minuto.
         </p>
       </div>
       {error && (
-        <p className="mt-2 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
           {error}
         </p>
       )}

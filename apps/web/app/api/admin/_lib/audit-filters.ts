@@ -17,17 +17,17 @@ export const AUDIT_RANGES = ['24h', '7d', '30d', 'all'] as const;
 export type AuditRange = (typeof AUDIT_RANGES)[number];
 
 export const RANGE_LABEL: Record<AuditRange, string> = {
-  '24h': 'Last 24h',
-  '7d': 'Last 7 days',
-  '30d': 'Last 30 days',
-  all: 'All time',
+  '24h': 'Últimas 24h',
+  '7d': 'Últimos 7 días',
+  '30d': 'Últimos 30 días',
+  all: 'Todo',
 };
 
 export const SURFACE_LABEL: Record<string, string> = {
-  web: 'Web app',
+  web: 'App web',
   mcp: 'Claude / MCP',
-  schedule: 'Scheduled',
-  unknown: 'Unknown',
+  schedule: 'Rutinas',
+  unknown: 'Sin registrar',
 };
 
 export interface AuditFilters {
@@ -113,11 +113,11 @@ export function auditHref(f: AuditFilters, patch: Partial<AuditFilters> = {}): s
 /** Human sentence describing the active filter set (used in the UI + CSV name). */
 export function describeAuditFilters(f: AuditFilters): string {
   const parts: string[] = [RANGE_LABEL[f.range].toLowerCase()];
-  if (f.status !== 'all') parts.push(`status ${f.status.replaceAll('_', ' ')}`);
-  if (f.surface !== 'all') parts.push(`surface ${f.surface}`);
-  if (f.risk !== 'all') parts.push(`risk ${f.risk}`);
-  if (f.decision !== 'all') parts.push(`decision ${f.decision}`);
-  if (f.tool) parts.push(`tool ${f.tool}*`);
+  if (f.status !== 'all') parts.push(`estado ${f.status.replaceAll('_', ' ')}`);
+  if (f.surface !== 'all') parts.push(`superficie ${SURFACE_LABEL[f.surface] ?? f.surface}`);
+  if (f.risk !== 'all') parts.push(`riesgo ${f.risk}`);
+  if (f.decision !== 'all') parts.push(`decisión ${f.decision}`);
+  if (f.tool) parts.push(`herramienta ${f.tool}*`);
   return parts.join(' · ');
 }
 

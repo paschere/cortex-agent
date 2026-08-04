@@ -26,11 +26,11 @@ const PATH = '/kb';
  * someone else's private space exists.
  */
 function describe(err: unknown, fallback: string): string {
-  if (err instanceof NotFoundError) return 'That is no longer in Brain Knowledge.';
+  if (err instanceof NotFoundError) return 'Eso ya no está en Brain Knowledge.';
   if (err instanceof ForbiddenError) return err.message;
   const message = err instanceof Error ? err.message : '';
   if (/duplicate key|unique/i.test(message)) {
-    return 'You already have a space with that name.';
+    return 'Ya tienes un espacio con ese nombre.';
   }
   return message && message.length < 160 ? message : fallback;
 }
@@ -42,14 +42,14 @@ export async function createSpace(
 ): Promise<SimpleActionResult> {
   const user = await requireSession();
   const trimmed = name.trim();
-  if (!trimmed) return { ok: false, error: 'Give the space a name first.' };
-  if (trimmed.length > 200) return { ok: false, error: 'That name is too long.' };
+  if (!trimmed) return { ok: false, error: 'Ponle un nombre primero.' };
+  if (trimmed.length > 200) return { ok: false, error: 'Ese nombre es muy largo.' };
 
   // The same gate the admin section uses: role on the session row, nothing else.
   if (kind === 'global' && user.role !== 'org_admin') {
     return {
       ok: false,
-      error: 'Only an org admin can create a company-wide space.',
+      error: 'Solo un administrador puede crear un espacio común.',
     };
   }
 
@@ -62,7 +62,7 @@ export async function createSpace(
     created_by: user.id,
   });
 
-  if (error) return { ok: false, error: describe(error, 'That space could not be created.') };
+  if (error) return { ok: false, error: describe(error, 'No se pudo crear el espacio.') };
 
   revalidatePath(PATH);
   return { ok: true };
@@ -75,13 +75,13 @@ export async function deleteSpace(spaceId: string): Promise<SimpleActionResult> 
   try {
     await assertCanWriteToSpace(db, user.id, spaceId);
   } catch (err) {
-    return { ok: false, error: describe(err, 'That space could not be deleted.') };
+    return { ok: false, error: describe(err, 'No se pudo borrar el espacio.') };
   }
 
   // Documents and their indexed text go with it — kb_documents and kb_chunks
   // both cascade off the space. The dialog says so before it gets here.
   const { error } = await db.from('kb_collections').delete().eq('id', spaceId);
-  if (error) return { ok: false, error: describe(error, 'That space could not be deleted.') };
+  if (error) return { ok: false, error: describe(error, 'No se pudo borrar el espacio.') };
 
   revalidatePath(PATH);
   return { ok: true };
@@ -113,7 +113,7 @@ export async function moveDocument(
     revalidatePath(PATH);
     return { ok: true, space: target.name };
   } catch (err) {
-    return { ok: false, error: describe(err, 'That document stayed where it was.') };
+    return { ok: false, error: describe(err, 'El documento se quedó donde estaba.') };
   }
 }
 
@@ -129,7 +129,7 @@ export async function deleteDocument(documentId: string): Promise<SimpleActionRe
     const { error } = await db.from('kb_documents').delete().eq('id', documentId);
     if (error) throw error;
   } catch (err) {
-    return { ok: false, error: describe(err, 'That document could not be removed.') };
+    return { ok: false, error: describe(err, 'No se pudo quitar el documento.') };
   }
 
   revalidatePath(PATH);
@@ -170,6 +170,6 @@ export async function searchKnowledge(
       })),
     };
   } catch (err) {
-    return { ok: false, error: describe(err, 'The search did not run. Try again in a moment.') };
+    return { ok: false, error: describe(err, 'La búsqueda no corrió. Inténtalo en un momento.') };
   }
 }

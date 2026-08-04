@@ -34,7 +34,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
     if (error) {
       setErr(
         error.message ??
-          'This invitation could not be answered — it may have expired. Ask for a new one.',
+          'No se pudo responder la invitación; puede que ya haya vencido. Pide una nueva.',
       );
       setState('idle');
       return;
@@ -48,14 +48,14 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
       <AuthMasthead />
 
       <AuthBody>
-        <AuthTitle hint="Accepting links your account to the workspace and to its shared agents, Brain Knowledge and integrations.">
-          Workspace invitation
+        <AuthTitle hint="Al aceptar, tu cuenta queda ligada al espacio de trabajo y a sus agentes, su Brain Knowledge y sus integraciones.">
+          Invitación al espacio de trabajo
         </AuthTitle>
 
         {/* The invitation id is the one checkable fact on this screen — it is
             what an admin needs if the invite has to be traced. */}
         <div className="mb-5">
-          <div className="field-label">Invitation</div>
+          <div className="field-label">Invitación</div>
           <div className="tabular mt-1 truncate text-[13px] text-ink" title={id}>
             {id}
           </div>
@@ -68,7 +68,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
             onClick={() => respond('accept')}
             className="flex-1 py-2.5"
           >
-            {state === 'working' ? 'Working…' : 'Accept'}
+            {state === 'working' ? 'Un momento…' : 'Aceptar'}
           </Button>
           <Button
             type="button"
@@ -77,7 +77,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
             onClick={() => respond('reject')}
             className="flex-1 py-2.5"
           >
-            Decline
+            Rechazar
           </Button>
         </div>
 

@@ -25,7 +25,9 @@ function ResetPasswordForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!token) {
-      setErr('This link carries no reset token. Request a new one from Forgot password.');
+      setErr(
+        'Este enlace no trae token de recuperación. Pide uno nuevo desde «¿Olvidaste tu contraseña?».',
+      );
       return;
     }
     setLoading(true);
@@ -34,7 +36,8 @@ function ResetPasswordForm() {
     setLoading(false);
     if (error) {
       setErr(
-        error.message ?? 'This link no longer works. Request a new one from Forgot password.',
+        error.message ??
+          'Este enlace ya no sirve. Pide uno nuevo desde «¿Olvidaste tu contraseña?».',
       );
       return;
     }
@@ -46,28 +49,28 @@ function ResetPasswordForm() {
       <AuthMasthead />
 
       <AuthBody>
-        <AuthTitle hint="Pick something you don't use anywhere else. It replaces the old password immediately.">
-          Choose a new password
+        <AuthTitle hint="Elige una que no uses en ninguna otra parte. Reemplaza la anterior de inmediato.">
+          Elige una contraseña nueva
         </AuthTitle>
         <form onSubmit={submit} className="space-y-3">
           <AuthField
-            label="New password"
+            label="Contraseña nueva"
             mono
             type="password"
             required
             minLength={10}
             autoComplete="new-password"
-            placeholder="10 characters or more"
+            placeholder="10 caracteres o más"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
           <Button type="submit" disabled={loading} className="w-full py-2.5">
-            {loading ? 'Saving…' : 'Set new password'}
+            {loading ? 'Guardando…' : 'Guardar contraseña'}
           </Button>
         </form>
         <p className="mt-4 text-center text-[12px]">
           <Link href="/login" className="font-semibold text-primary hover:underline">
-            Back to sign in
+            Volver a iniciar sesión
           </Link>
         </p>
         {err && <AuthError>{err}</AuthError>}

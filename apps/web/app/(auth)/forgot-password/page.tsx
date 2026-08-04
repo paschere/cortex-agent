@@ -29,7 +29,9 @@ export default function ForgotPasswordPage() {
     });
     setLoading(false);
     if (error) {
-      setErr(error.message ?? 'The request did not go through. Check the address and try again.');
+      setErr(
+        error.message ?? 'No se pudo enviar la solicitud. Revisa el correo e inténtalo de nuevo.',
+      );
       return;
     }
     setSent(true);
@@ -44,32 +46,31 @@ export default function ForgotPasswordPage() {
           <AuthTitle
             hint={
               <>
-                If an account exists for <span className="font-mono text-ink">{email}</span>, a
-                reset link is on its way. It stops working after{' '}
-                <span className="tabular">1 hour</span>.
+                Si existe una cuenta para <span className="font-mono text-ink">{email}</span>, el
+                enlace ya va en camino. Vence en <span className="tabular">1 hora</span>.
               </>
             }
           >
-            Check your inbox
+            Revisa tu correo
           </AuthTitle>
         ) : (
           <>
-            <AuthTitle hint="Give us the address on the account and we'll send a link to choose a new password.">
-              Reset your password
+            <AuthTitle hint="Dinos el correo de la cuenta y te enviamos un enlace para elegir una nueva.">
+              Recupera tu contraseña
             </AuthTitle>
             <form onSubmit={submit} className="space-y-3">
               <AuthField
-                label="Email"
+                label="Correo"
                 mono
                 type="email"
                 required
                 autoComplete="email"
-                placeholder="you@company.com"
+                placeholder="tu@empresa.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
               <Button type="submit" disabled={loading} className="w-full py-2.5">
-                {loading ? 'Sending…' : 'Send reset link'}
+                {loading ? 'Enviando…' : 'Enviar enlace'}
               </Button>
             </form>
           </>
@@ -77,7 +78,7 @@ export default function ForgotPasswordPage() {
 
         <p className="mt-4 text-center text-[12px]">
           <Link href="/login" className="font-semibold text-primary hover:underline">
-            Back to sign in
+            Volver a iniciar sesión
           </Link>
         </p>
 

@@ -1,22 +1,19 @@
 'use client';
 
+import { Provenance } from '@/components/ui/provenance';
+import { clsx } from 'clsx';
+import { ArrowDown, ArrowUp, Building2, Check, ChevronDown, Clock, Copy } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import {
-  ArrowDown,
-  ArrowUp,
-  Building2,
-  Check,
-  ChevronDown,
-  Clock,
-  Copy,
-  Sparkles,
-} from 'lucide-react';
 
 /**
  * Structured render of a `sales.draft_proposal` (a.k.a. `sales_draft_proposal`)
  * tool result. The composite tool returns a JSON payload plus a pre-rendered
  * Markdown string; this component renders the structured fields and uses the
  * Markdown for the "Copy as Markdown" action.
+ *
+ * It is a rate sheet, so it is built like one: a ruled table, every figure in
+ * the monospaced face so a column of them can be read down, and a double rule
+ * before the total the way a ledger closes a section.
  *
  * The shape is intentionally permissive: it renders whatever the tool provides
  * today (company, roles with monthly ranges, recent activity, similar KB cases,
@@ -78,8 +75,10 @@ export interface ProposalResult {
 
 const HOURS_PER_MONTH = 160;
 
+// Figures are read by Colombian accountants, so they are grouped the way they
+// are written here (1.234), even though the currency itself is USD.
 function formatUsd(n: number): string {
-  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  return n.toLocaleString('es-CO', { maximumFractionDigits: 0 });
 }
 
 function formatRange(range?: { min: number; max: number } | null): string {
@@ -108,23 +107,14 @@ function daysSince(dateIso: string): number | null {
   return Math.floor(diffMs / 86_400_000);
 }
 
-function activityPill(days: number): { label: string; className: string } {
-  if (days < 14) {
-    return {
-      label: `${days}d since last activity`,
-      className: 'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300',
-    };
-  }
-  if (days <= 30) {
-    return {
-      label: `${days}d since last activity`,
-      className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300',
-    };
-  }
-  return {
-    label: `${days}d since last activity`,
-    className: 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300',
-  };
+/**
+ * How stale the deal is, in the product's own status vocabulary: in force,
+ * lapsing, lapsed. Colour here is meaning, not decoration.
+ */
+function activityTone(days: number): string {
+  if (days < 14) return 'border-emerald/40 bg-emerald-soft text-emerald';
+  if (days <= 30) return 'border-amber/40 bg-amber-soft text-amber';
+  return 'border-rose/40 bg-rose-soft text-rose';
 }
 
 /** Build a Markdown fallback if the tool did not supply one. */
@@ -188,12 +178,19 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
       prev?.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
     );
 
-  // Derive "Why us" bullets from explicit field or KB similar cases.
-  const whyBullets = useMemo(() => {
-    if (result.whyUs?.length) return result.whyUs;
-    return (result.similarCases ?? []).map(
-      (c) => `${c.title}: ${c.excerpt.replace(/\s+/g, ' ').trim()}`,
-    );
+  /**
+   * "Why us" either comes as free text from the tool, or is derived from
+   * Brain Knowledge hits. Only the second kind has somewhere it came from, and
+   * only that kind gets a stamp — a claim with an empty stamp beside it would
+   * borrow authority it has not earned.
+   */
+  const whyItems = useMemo<Array<{ text: string; source?: string; detail?: string }>>(() => {
+    if (result.whyUs?.length) return result.whyUs.map((text) => ({ text }));
+    return (result.similarCases ?? []).map((c) => ({
+      text: c.excerpt.replace(/\s+/g, ' ').trim(),
+      source: c.title,
+      detail: `fragmento ${c.chunkIndex}`,
+    }));
   }, [result.whyUs, result.similarCases]);
 
   // Days since last activity: explicit on deal, else from most recent activity.
@@ -242,99 +239,99 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
     daysLast != null ||
     (!!result.deal && (result.deal.stage != null || result.deal.amount != null));
 
+  const columns: Array<{ key: SortKey; label: string; align: 'left' | 'right' }> = [
+    { key: 'role', label: 'Rol', align: 'left' },
+    { key: 'seniority', label: 'Nivel', align: 'left' },
+    { key: 'qty', label: 'Cant.', align: 'right' },
+    { key: 'monthly', label: 'Mensual', align: 'right' },
+    { key: 'hourly', label: 'Por hora', align: 'right' },
+  ];
+
   return (
-    <div className="not-prose w-full max-w-2xl overflow-hidden rounded-xl border border-neutral-200 bg-white text-neutral-900 shadow-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3 border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
+    <div className="not-prose w-full max-w-2xl overflow-hidden rounded-card border border-border bg-surface text-ink">
+      {/* Head */}
+      <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <div className="mt-0.5 rounded-lg bg-neutral-100 p-1.5 dark:bg-neutral-800">
-            <Building2 className="h-4 w-4 text-neutral-500" />
-          </div>
-          <div>
+          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-card bg-surface-2 text-ink-faint">
+            <Building2 className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold leading-tight">
-              {result.company.name ?? 'Untitled company'}
+              {result.company.name ?? 'Empresa sin nombre'}
             </h3>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-faint">
               {result.company.industry && (
-                <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                <span className="rounded-card bg-surface-2 px-1.5 py-0.5 font-medium text-ink-muted">
                   {result.company.industry}
                 </span>
               )}
-              {result.company.country && (
-                <span className="text-[11px] text-neutral-500">{result.company.country}</span>
-              )}
+              {result.company.country && <span>{result.company.country}</span>}
             </div>
           </div>
         </div>
         <button
           type="button"
           onClick={onCopy}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          aria-label="Copy proposal as Markdown"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-card border border-border-strong px-2.5 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          aria-label="Copiar la propuesta como Markdown"
         >
           {copied ? (
-            <Check className="h-3.5 w-3.5 text-green-600" />
+            <Check className="h-3.5 w-3.5 text-emerald" />
           ) : (
             <Copy className="h-3.5 w-3.5" />
           )}
-          {copied ? 'Copied' : 'Copy as Markdown'}
+          {copied ? 'Copiado' : 'Copiar como Markdown'}
         </button>
       </div>
 
-      {/* Deal context banner */}
+      {/* Deal context */}
       {hasDealContext && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 bg-neutral-50 px-4 py-2.5 text-xs dark:border-neutral-700 dark:bg-neutral-800/50">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border bg-surface-2 px-4 py-2 text-xs">
           {result.deal?.stage && (
-            <span className="font-medium text-neutral-700 dark:text-neutral-200">
-              Stage: {result.deal.stage}
+            <span>
+              <span className="text-ink-faint">Etapa </span>
+              <span className="font-medium text-ink">{result.deal.stage}</span>
             </span>
           )}
           {result.deal?.amount != null && (
-            <span className="text-neutral-600 dark:text-neutral-300">
-              · ${formatUsd(result.deal.amount)}
-            </span>
+            <span className="tabular font-medium text-ink">${formatUsd(result.deal.amount)}</span>
           )}
           {daysLast != null && (
             <span
-              className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${activityPill(daysLast).className}`}
+              className={clsx(
+                'ml-auto inline-flex items-center gap-1 rounded-card border px-1.5 py-0.5 text-[11px] font-medium',
+                activityTone(daysLast),
+              )}
             >
               <Clock className="h-3 w-3" />
-              {activityPill(daysLast).label}
+              <span className="tabular">{daysLast} d</span> sin actividad
             </span>
           )}
         </div>
       )}
 
-      {/* Rate table */}
+      {/* Rate sheet */}
       <div className="px-4 py-3">
-        <div className="overflow-x-auto">
+        <div className="scroll-slim overflow-x-auto">
           <table className="w-full border-collapse text-xs">
             <thead>
-              <tr className="border-b border-neutral-200 text-left text-[11px] uppercase tracking-wide text-neutral-400 dark:border-neutral-700">
-                {(
-                  [
-                    { key: 'role', label: 'Role', align: 'left' },
-                    { key: 'seniority', label: 'Seniority', align: 'left' },
-                    { key: 'qty', label: 'Qty', align: 'right' },
-                    { key: 'monthly', label: 'Monthly', align: 'right' },
-                    { key: 'hourly', label: 'Hourly', align: 'right' },
-                  ] as Array<{
-                    key: SortKey;
-                    label: string;
-                    align: 'left' | 'right';
-                  }>
-                ).map((col) => {
+              <tr className="border-b border-border-strong text-left">
+                {columns.map((col) => {
                   const active = sort?.key === col.key;
                   return (
                     <th
                       key={col.key}
-                      className={`py-1.5 pr-3 font-medium ${col.align === 'right' ? 'text-right' : ''}`}
+                      className={clsx('py-1.5 pr-3', col.align === 'right' && 'text-right')}
                     >
                       <button
                         type="button"
                         onClick={() => toggleSort(col.key)}
-                        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-neutral-700 dark:hover:text-neutral-200 ${active ? 'text-neutral-700 dark:text-neutral-200' : ''} ${col.align === 'right' ? 'flex-row-reverse' : ''}`}
-                        aria-label={`Sort by ${col.label}`}
+                        className={clsx(
+                          'field-label inline-flex items-center gap-1 transition-colors hover:text-ink-muted',
+                          active && '!text-ink-muted',
+                          col.align === 'right' && 'flex-row-reverse',
+                        )}
+                        aria-label={`Ordenar por ${col.label}`}
                       >
                         {col.label}
                         {active &&
@@ -347,7 +344,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
                     </th>
                   );
                 })}
-                <th className="py-1.5 font-medium">Stack</th>
+                <th className="field-label py-1.5">Stack</th>
               </tr>
             </thead>
             <tbody>
@@ -356,17 +353,13 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
                 return (
                   <tr
                     key={`${r.role}-${r.seniority}-${i}`}
-                    className="border-b border-neutral-100 last:border-0 dark:border-neutral-800"
+                    className="border-b border-border last:border-0"
                   >
                     <td className="py-2 pr-3 font-medium capitalize">{r.role}</td>
-                    <td className="py-2 pr-3 capitalize text-neutral-600 dark:text-neutral-300">
-                      {r.seniority}
-                    </td>
-                    <td className="py-2 pr-3 text-right tabular-nums">{r.qty}</td>
-                    <td className="py-2 pr-3 text-right tabular-nums">
-                      {formatRange(r.monthlyRange)}
-                    </td>
-                    <td className="py-2 pr-3 text-right tabular-nums text-neutral-600 dark:text-neutral-300">
+                    <td className="py-2 pr-3 capitalize text-ink-muted">{r.seniority}</td>
+                    <td className="tabular py-2 pr-3 text-right">{r.qty}</td>
+                    <td className="tabular py-2 pr-3 text-right">{formatRange(r.monthlyRange)}</td>
+                    <td className="tabular py-2 pr-3 text-right text-ink-muted">
                       {formatRange(hourly)}
                     </td>
                     <td className="py-2">
@@ -374,7 +367,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
                         {(r.techStack ?? []).map((t) => (
                           <span
                             key={t}
-                            className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+                            className="rounded-card bg-surface-2 px-1.5 py-0.5 text-[10px] text-ink-muted"
                           >
                             {t}
                           </span>
@@ -385,40 +378,48 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
                 );
               })}
             </tbody>
-            {totals && (
-              <tfoot>
-                <tr className="border-t-2 border-neutral-200 font-semibold dark:border-neutral-700">
-                  <td className="py-2 pr-3" colSpan={3}>
-                    Total monthly
-                  </td>
-                  <td className="py-2 pr-3 text-right tabular-nums">{formatRange(totals)}</td>
-                  <td className="py-2 pr-3" />
-                  <td className="py-2" />
-                </tr>
-              </tfoot>
-            )}
           </table>
         </div>
+
+        {/* The double rule closes the section, the way a ledger totals a page. */}
+        {totals && (
+          <div className="rule-double mt-1 flex items-center justify-between pt-2 text-xs font-semibold">
+            <span>Total mensual</span>
+            <span className="tabular">{formatRange(totals)}</span>
+          </div>
+        )}
       </div>
 
-      {/* Why us (collapsible) */}
-      {whyBullets.length > 0 && (
-        <div className="border-t border-neutral-200 px-4 py-2 dark:border-neutral-700">
+      {/* Why us */}
+      {whyItems.length > 0 && (
+        <div className="border-t border-border px-4 py-2">
           <button
             type="button"
             onClick={() => setWhyOpen((o) => !o)}
-            className="flex w-full items-center gap-2 py-1 text-left text-xs font-medium"
+            aria-expanded={whyOpen}
+            className="flex w-full items-center gap-2 py-1 text-left text-xs font-semibold text-ink"
           >
-            <Sparkles className="h-3.5 w-3.5 text-neutral-400" />
-            <span className="flex-1">Why us</span>
+            <span className="flex-1">Por qué nosotros</span>
             <ChevronDown
-              className={`h-3.5 w-3.5 text-neutral-400 transition-transform ${whyOpen ? 'rotate-180' : ''}`}
+              className={clsx(
+                'h-3.5 w-3.5 text-ink-faint transition-transform',
+                whyOpen && 'rotate-180',
+              )}
             />
           </button>
           {whyOpen && (
-            <ul className="mt-1 list-disc space-y-1 pb-2 pl-5 text-xs text-neutral-600 dark:text-neutral-300">
-              {whyBullets.map((b, i) => (
-                <li key={i}>{b}</li>
+            <ul className="space-y-2 pb-2 text-xs text-ink-muted">
+              {whyItems.map((b, i) => (
+                <li key={i} className="leading-snug">
+                  {b.text}
+                  {b.source && (
+                    <Provenance
+                      className="ml-1.5 align-middle"
+                      source={b.source}
+                      {...(b.detail ? { detail: b.detail } : {})}
+                    />
+                  )}
+                </li>
               ))}
             </ul>
           )}
@@ -427,12 +428,12 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
 
       {/* Timeline */}
       {result.timeline && result.timeline.length > 0 && (
-        <div className="border-t border-neutral-200 px-4 py-3 dark:border-neutral-700">
-          <h4 className="mb-1.5 flex items-center gap-2 text-xs font-medium">
-            <Clock className="h-3.5 w-3.5 text-neutral-400" />
-            Timeline
+        <div className="border-t border-border px-4 py-3">
+          <h4 className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-ink">
+            <Clock className="h-3.5 w-3.5 text-ink-faint" />
+            Cronograma
           </h4>
-          <ol className="list-decimal space-y-1 pl-5 text-xs text-neutral-600 dark:text-neutral-300">
+          <ol className="list-decimal space-y-1 pl-5 text-xs text-ink-muted">
             {result.timeline.map((t, i) => (
               <li key={i}>{t}</li>
             ))}

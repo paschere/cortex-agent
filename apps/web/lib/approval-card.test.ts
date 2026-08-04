@@ -70,7 +70,9 @@ describe('buildApprovalCard', () => {
   it('never puts a raw tool id in front of the person', () => {
     const json = cardJson(buildApprovalCard(base));
     expect(json).not.toContain('gmail.send_draft');
-    expect(json).toContain('Send Email Draft');
+    // The label is Spanish because the interface is; what this test protects
+    // is that a raw tool id never reaches the person, not the wording itself.
+    expect(json).toContain('Enviar el correo redactado');
   });
 
   it('escapes a payload that tries to bring its own markup', () => {

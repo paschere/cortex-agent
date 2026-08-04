@@ -1,45 +1,45 @@
 export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
-  qualify_lead: { label: 'Qualify Lead', icon: 'UserCheck' },
-  hubspot_search_companies: { label: 'Search HubSpot Companies', icon: 'Building2' },
-  hubspot_get_company: { label: 'Get Company Details', icon: 'Building2' },
-  hubspot_search_deals: { label: 'Search Deals', icon: 'Briefcase' },
-  hubspot_get_deal: { label: 'Get Deal Details', icon: 'Briefcase' },
-  hubspot_search_contacts: { label: 'Search Contacts', icon: 'Users' },
-  hubspot_get_contact: { label: 'Get Contact Details', icon: 'User' },
-  hubspot_create_deal: { label: 'Create Deal', icon: 'PlusCircle' },
-  hubspot_update_deal: { label: 'Update Deal', icon: 'Edit' },
-  hubspot_create_contact: { label: 'Create Contact', icon: 'UserPlus' },
-  hubspot_log_activity: { label: 'Log Activity', icon: 'ClipboardList' },
-  hubspot_get_pipeline_summary: { label: 'Get Pipeline Summary', icon: 'BarChart2' },
-  hubspot_list_recent_activities: { label: 'List Recent Activities', icon: 'Activity' },
-  gmail_search: { label: 'Search Gmail', icon: 'Mail' },
-  gmail_read_thread: { label: 'Read Email Thread', icon: 'MailOpen' },
-  gmail_draft: { label: 'Draft Email', icon: 'Pencil' },
-  gmail_send_draft: { label: 'Send Email Draft', icon: 'Send' },
-  gmail_list_threads: { label: 'List Email Threads', icon: 'Inbox' },
-  gcal_list_events: { label: 'List Calendar Events', icon: 'Calendar' },
-  gcal_create_event: { label: 'Create Calendar Event', icon: 'CalendarPlus' },
-  gsheets_read_range: { label: 'Read Spreadsheet', icon: 'Table' },
-  gsheets_append_row: { label: 'Append Row to Sheet', icon: 'TableProperties' },
-  kb_search: { label: 'Search Brain Knowledge', icon: 'BookOpen' },
-  rate_estimate: { label: 'Estimate Rate', icon: 'DollarSign' },
-  sales_draft_proposal: { label: 'Draft Proposal', icon: 'FileText' },
-  web_search: { label: 'Web Search', icon: 'Globe' },
-  web_scrape: { label: 'Fetch Web Page', icon: 'Link' },
-  gdrive_search_files: { label: 'Search Drive Files', icon: 'FolderSearch' },
-  gdrive_read_doc: { label: 'Read Drive Document', icon: 'FileSearch' },
-  schedule_create: { label: 'Create Scheduled Job', icon: 'AlarmClockPlus' },
-  schedule_list: { label: 'List Scheduled Jobs', icon: 'AlarmClock' },
-  schedule_update: { label: 'Update Scheduled Job', icon: 'AlarmClockCheck' },
+  qualify_lead: { label: 'Calificar prospecto', icon: 'UserCheck' },
+  hubspot_search_companies: { label: 'Buscar empresas en HubSpot', icon: 'Building2' },
+  hubspot_get_company: { label: 'Ver detalle de la empresa', icon: 'Building2' },
+  hubspot_search_deals: { label: 'Buscar negocios', icon: 'Briefcase' },
+  hubspot_get_deal: { label: 'Ver detalle del negocio', icon: 'Briefcase' },
+  hubspot_search_contacts: { label: 'Buscar contactos', icon: 'Users' },
+  hubspot_get_contact: { label: 'Ver detalle del contacto', icon: 'User' },
+  hubspot_create_deal: { label: 'Crear negocio', icon: 'PlusCircle' },
+  hubspot_update_deal: { label: 'Actualizar negocio', icon: 'Edit' },
+  hubspot_create_contact: { label: 'Crear contacto', icon: 'UserPlus' },
+  hubspot_log_activity: { label: 'Registrar actividad', icon: 'ClipboardList' },
+  hubspot_get_pipeline_summary: { label: 'Resumen del embudo', icon: 'BarChart2' },
+  hubspot_list_recent_activities: { label: 'Actividad reciente', icon: 'Activity' },
+  gmail_search: { label: 'Buscar en Gmail', icon: 'Mail' },
+  gmail_read_thread: { label: 'Leer conversación de correo', icon: 'MailOpen' },
+  gmail_draft: { label: 'Redactar correo', icon: 'Pencil' },
+  gmail_send_draft: { label: 'Enviar el correo redactado', icon: 'Send' },
+  gmail_list_threads: { label: 'Listar conversaciones de correo', icon: 'Inbox' },
+  gcal_list_events: { label: 'Ver eventos del calendario', icon: 'Calendar' },
+  gcal_create_event: { label: 'Crear evento en el calendario', icon: 'CalendarPlus' },
+  gsheets_read_range: { label: 'Leer hoja de cálculo', icon: 'Table' },
+  gsheets_append_row: { label: 'Agregar fila a la hoja', icon: 'TableProperties' },
+  kb_search: { label: 'Buscar en Brain Knowledge', icon: 'BookOpen' },
+  rate_estimate: { label: 'Estimar tarifa', icon: 'DollarSign' },
+  sales_draft_proposal: { label: 'Redactar propuesta', icon: 'FileText' },
+  web_search: { label: 'Buscar en internet', icon: 'Globe' },
+  web_scrape: { label: 'Abrir página web', icon: 'Link' },
+  gdrive_search_files: { label: 'Buscar archivos en Drive', icon: 'FolderSearch' },
+  gdrive_read_doc: { label: 'Leer documento de Drive', icon: 'FileSearch' },
+  schedule_create: { label: 'Programar rutina', icon: 'AlarmClockPlus' },
+  schedule_list: { label: 'Ver rutinas programadas', icon: 'AlarmClock' },
+  schedule_update: { label: 'Actualizar rutina', icon: 'AlarmClockCheck' },
   // Vehicles. The two lookups name the registry they hit rather than the tool,
   // because that is what the person waiting recognises — and a RUNT check runs
   // for the better part of half a minute, so it is on screen a while.
-  vehicles_register: { label: 'Register Vehicle', icon: 'Car' },
-  vehicles_list: { label: 'List Vehicles', icon: 'Car' },
-  vehicles_get: { label: 'Get Vehicle', icon: 'Car' },
-  vehicles_check_runt: { label: 'Check RUNT (SOAT and inspection)', icon: 'ShieldCheck' },
-  vehicles_check_simit: { label: 'Check SIMIT (traffic fines)', icon: 'ReceiptText' },
-  vehicles_recently_changed: { label: 'Check Fleet Changes', icon: 'RefreshCw' },
+  vehicles_register: { label: 'Registrar vehículo', icon: 'Car' },
+  vehicles_list: { label: 'Ver vehículos', icon: 'Car' },
+  vehicles_get: { label: 'Ver detalle del vehículo', icon: 'Car' },
+  vehicles_check_runt: { label: 'Consultar el RUNT (SOAT y tecnomecánica)', icon: 'ShieldCheck' },
+  vehicles_check_simit: { label: 'Consultar el SIMIT (comparendos)', icon: 'ReceiptText' },
+  vehicles_recently_changed: { label: 'Revisar cambios en la flota', icon: 'RefreshCw' },
 };
 
 function toTitleCase(s: string): string {
@@ -81,33 +81,40 @@ export function toolDisplayName(toolId: string): string {
 }
 
 /**
- * Produces a plain-English summary of a confirmation-gated tool action so the
- * user can understand what will happen without reading raw JSON.
+ * A plain-Spanish sentence describing what a confirmation-gated action will do,
+ * so someone can approve it without reading raw JSON. The interface is Spanish;
+ * these strings are read by the person deciding, not by the model.
  */
 export function confirmationSummary(toolId: string, input: Record<string, unknown>): string {
   const key = toolId.replace(/\./g, '_');
   switch (key) {
     case 'hubspot_update_deal':
-      return `Update deal${input.dealstage ? ` stage to "${input.dealstage}"` : ''}${input.amount ? ` · amount $${input.amount}` : ''}`;
+      return `Actualizar el negocio${input.dealstage ? ` a la etapa "${input.dealstage}"` : ''}${input.amount ? ` · monto $${input.amount}` : ''}`;
     case 'hubspot_create_deal':
-      return `Create deal "${input.dealname}" in stage "${input.dealstage}"`;
+      return `Crear el negocio "${input.dealname}" en la etapa "${input.dealstage}"`;
     case 'hubspot_create_contact':
-      return `Create contact ${[input.firstName, input.lastName].filter(Boolean).join(' ')} <${input.email}>`;
+      return `Crear el contacto ${[input.firstName, input.lastName].filter(Boolean).join(' ')} <${input.email}>`;
     case 'hubspot_log_activity':
-      return `Log ${input.type} "${input.subject}" on ${input.associatedObjectType} ${input.associatedObjectId}`;
+      return `Registrar ${input.type} "${input.subject}" en ${input.associatedObjectType} ${input.associatedObjectId}`;
     case 'gmail_send_draft':
-      return `Send Gmail draft ${input.draftId}`;
+      return `Enviar el correo redactado ${input.draftId}`;
     case 'gcal_create_event':
-      return `Create calendar event "${input.summary}" on ${input.start}`;
+      return `Crear el evento "${input.summary}" el ${input.start}`;
     case 'gsheets_append_row':
-      return `Append row to sheet "${input.spreadsheetId}"`;
+      return `Agregar una fila a la hoja "${input.spreadsheetId}"`;
     case 'schedule_create': {
       const when =
-        input.scheduleKind === 'once' ? `once at ${input.runAt}` : `on cron "${input.cron}" (${input.timezone ?? 'UTC'})`;
-      const writes = input.allowUnattendedWrites ? ' · unattended writes ALLOWED' : '';
-      return `Schedule "${input.name}" — runs ${when}${writes}`;
+        input.scheduleKind === 'once'
+          ? `una vez, el ${input.runAt}`
+          : `con la programación "${input.cron}" (${input.timezone ?? 'UTC'})`;
+      // Spelled out because it is the one setting that lets the routine write
+      // to other systems with nobody watching.
+      const writes = input.allowUnattendedWrites ? ' · PUEDE ESCRIBIR sin supervisión' : '';
+      return `Programar "${input.name}" — se ejecuta ${when}${writes}`;
     }
+    case 'vehicles_register':
+      return `Registrar el vehículo de placa ${input.plate}`;
     default:
-      return `Run: ${toolLabel(toolId).label}`;
+      return `Ejecutar: ${toolLabel(toolId).label}`;
   }
 }

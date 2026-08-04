@@ -39,13 +39,9 @@ export function TaskCard({
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1 basis-[20rem]">
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded-pill px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${status.chip}`}
-            >
-              {status.label}
-            </span>
+            <span className={status.chip}>{status.label}</span>
             {task.issueKey && (
-              <span className="rounded-pill bg-surface-2 px-2 py-0.5 text-[10.5px] font-semibold text-ink-faint">
+              <span className="rounded-sm border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-ink-muted">
                 {task.issueKey}
               </span>
             )}
@@ -62,7 +58,7 @@ export function TaskCard({
             <p className="mt-1.5 text-[12.5px] leading-snug text-rose">{task.failureReason}</p>
           )}
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink-faint">
+          <div className="tabular mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-faint">
             {repository && (
               <span className="inline-flex items-center gap-1.5">
                 <FolderGit2 className="h-3.5 w-3.5" />
@@ -78,8 +74,8 @@ export function TaskCard({
             <span className="inline-flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />
               {task.startedAt
-                ? `${task.finishedAt ? 'took' : 'running for'} ${formatDuration(elapsed)} · started ${relativeTime(task.startedAt)}`
-                : `asked ${relativeTime(task.createdAt)}`}
+                ? `${task.finishedAt ? 'tomó' : 'lleva'} ${formatDuration(elapsed)} · empezó ${relativeTime(task.startedAt)}`
+                : `pedido ${relativeTime(task.createdAt)}`}
             </span>
             {cost && (
               <span className="inline-flex items-center gap-1.5">
@@ -96,10 +92,10 @@ export function TaskCard({
               href={task.prUrl}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-primary shadow-card transition hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <GitPullRequest className="h-3.5 w-3.5" />
-              {task.prNumber ? `Review #${task.prNumber}` : 'Review the change'}
+              {task.prNumber ? `Revisar #${task.prNumber}` : 'Revisar el cambio'}
             </a>
           )}
           {(isStoppable(task) || stopping) && (

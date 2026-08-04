@@ -9,7 +9,7 @@ export function DeleteConversationButton({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
 
   async function onDelete() {
-    if (!confirm('Delete this conversation? This cannot be undone.')) return;
+    if (!confirm('¿Eliminar esta conversación? No se puede deshacer.')) return;
     setBusy(true);
     const res = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
     if (res.ok) {
@@ -24,11 +24,15 @@ export function DeleteConversationButton({ id }: { id: string }) {
       type="button"
       onClick={onDelete}
       disabled={busy}
-      aria-label="Delete conversation"
-      title="Delete conversation"
-      className="rounded-[8px] p-2 text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
+      aria-label="Eliminar la conversación"
+      title="Eliminar la conversación"
+      className="rounded-card p-2 text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
     >
-      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+      {busy ? (
+        <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+      ) : (
+        <Trash2 className="h-4 w-4" />
+      )}
     </button>
   );
 }

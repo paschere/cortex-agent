@@ -56,15 +56,15 @@ function formatElapsed(ms: number): string {
 function describeMicError(err: unknown): string {
   const name = (err as { name?: string })?.name ?? '';
   if (name === 'NotAllowedError' || name === 'SecurityError') {
-    return 'Your browser is blocking the microphone for this site. Nothing is recorded and nothing was sent — open the padlock in the address bar, allow the microphone, and try again. You can always upload an audio file instead.';
+    return 'El navegador tiene bloqueado el micrófono en este sitio. No se grabó ni se envió nada: abre el candado de la barra de direcciones, permite el micrófono y vuelve a intentar.';
   }
   if (name === 'NotFoundError' || name === 'OverconstrainedError') {
-    return 'No microphone found. Plug one in or pick a different input in your system settings, then try again.';
+    return 'No hay micrófono. Conecta uno o elige otra entrada en la configuración del equipo y vuelve a intentar.';
   }
   if (name === 'NotReadableError') {
-    return 'Something else is already using the microphone — a call or another tab. Close it and try again.';
+    return 'Otra cosa está usando el micrófono: una llamada u otra pestaña. Ciérrala y vuelve a intentar.';
   }
-  return 'The microphone could not be started. Uploading an audio file works just as well.';
+  return 'No se pudo abrir el micrófono. Subir un archivo de audio funciona igual.';
 }
 
 export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceName: string }) {
@@ -112,7 +112,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
     const mimeType = pickMimeType();
     if (!mimeType) {
       setError(
-        'This browser cannot record audio. Recording works in a recent Chrome, Firefox, Edge or Safari — or upload an audio file instead.',
+        'Este navegador no graba audio. Funciona en un Chrome, Firefox, Edge o Safari reciente — o sube el archivo de audio.',
       );
       return;
     }
@@ -144,9 +144,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
       releaseHardware();
       if (blob.size === 0) {
         setPhase('idle');
-        setError(
-          'Nothing was captured. Check that the right microphone is selected and try again.',
-        );
+        setError('No se capturó nada. Revisa que esté seleccionado el micrófono correcto.');
         return;
       }
       setPreview({ url: URL.createObjectURL(blob), blob, mime: mimeType });
@@ -211,7 +209,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
       dateStyle: 'medium',
       timeStyle: 'short',
     });
-    const file = new File([preview.blob], `Recording — ${stamp}.${extensionFor(preview.mime)}`, {
+    const file = new File([preview.blob], `Grabación — ${stamp}.${extensionFor(preview.mime)}`, {
       type: preview.mime,
     });
 
@@ -225,7 +223,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
     const res = await fetch('/api/kb/documents', { method: 'POST', body: form });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(body.error ?? 'The recording could not be saved. Nothing was lost — try again.');
+      setError(body.error ?? 'No se pudo guardar la grabación. No se perdió nada: vuelve a darle.');
       setPhase('preview');
       return;
     }
@@ -238,33 +236,33 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
   const recording = phase === 'recording';
 
   return (
-    <div className="rounded-card border border-border bg-surface-2 px-4 py-3.5">
+    <div className="rounded-card border border-border bg-surface-2 px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-ink">
             {recording
-              ? 'Recording…'
+              ? 'Grabando…'
               : phase === 'asking'
-                ? 'Waiting for the microphone…'
+                ? 'Esperando el micrófono…'
                 : phase === 'preview' || phase === 'saving'
-                  ? 'Listen back before you save it'
-                  : 'Or record it now'}
+                  ? 'Escúchalo antes de guardarlo'
+                  : 'Graba desde aquí'}
           </p>
           <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-faint">
             {recording
-              ? 'Say who is speaking if there is more than one of you — Cortex quotes the speaker and the minute.'
+              ? 'Si son varios, digan su nombre: Cortex cita al hablante y el minuto.'
               : phase === 'preview' || phase === 'saving'
-                ? `Nothing has been uploaded yet. Save it and it goes into ${spaceName}.`
-                : 'A voice note, a call, a decision someone just made out loud. Cortex transcribes it and can quote it back.'}
+                ? `Todavía no se ha subido nada. Al guardarlo entra en ${spaceName}.`
+                : 'Una nota de voz, una llamada, algo que se decidió en voz alta.'}
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        {/* The recorder is used standing up in a warehouse, so the controls
+            take the full width of a phone before they sit inline. */}
+        <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
           {recording && (
             <>
-              <span className="tabular-nums text-[13px] font-semibold text-ink">
-                {formatElapsed(elapsedMs)}
-              </span>
+              <span className="stat-num text-[15px] text-ink">{formatElapsed(elapsedMs)}</span>
               <LevelMeter level={level} />
             </>
           )}
@@ -273,17 +271,17 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
             <button
               type="button"
               onClick={start}
-              className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3.5 py-1.5 text-[12.5px] font-semibold text-ink transition-colors hover:border-border-strong"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-card border border-border-strong bg-surface px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2 sm:w-auto sm:py-2"
             >
-              <Mic className="h-3.5 w-3.5 text-primary" />
-              Record
+              <Mic className="h-4 w-4 text-primary" />
+              Grabar
             </button>
           )}
 
           {phase === 'asking' && (
             <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Allow the microphone
+              Permite el micrófono
             </span>
           )}
 
@@ -291,10 +289,10 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
             <button
               type="button"
               onClick={stop}
-              className="inline-flex items-center gap-1.5 rounded-pill bg-rose px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90"
+              className="ml-auto inline-flex items-center justify-center gap-1.5 rounded-card bg-rose px-4 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 sm:py-2"
             >
               <Square className="h-3 w-3 fill-current" />
-              Stop
+              Parar
             </button>
           )}
         </div>
@@ -303,30 +301,30 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
       {preview && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
           {/* biome-ignore lint/a11y/useMediaCaption: this IS the audio being captioned — the transcript is what the next step produces. */}
-          <audio src={preview.url} controls className="h-9 min-w-[220px] flex-1" />
+          <audio src={preview.url} controls className="h-9 w-full min-w-[200px] flex-1" />
           <button
             type="button"
             onClick={save}
             disabled={phase === 'saving'}
-            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong disabled:opacity-50 sm:flex-none"
           >
             {phase === 'saving' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {phase === 'saving' ? 'Saving…' : `Save to ${spaceName}`}
+            {phase === 'saving' ? 'Guardando…' : `Guardar en ${spaceName}`}
           </button>
           <button
             type="button"
             onClick={discard}
             disabled={phase === 'saving'}
-            className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold text-ink-faint transition-colors hover:bg-surface hover:text-rose disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-card px-3 py-2 text-[12.5px] font-semibold text-ink-faint transition-colors hover:bg-surface hover:text-rose disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            Discard
+            Descartar
           </button>
         </div>
       )}
 
       {error && (
-        <p className="mt-2.5 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] leading-relaxed text-rose">
+        <p className="mt-2.5 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] leading-relaxed text-rose">
           {error}
         </p>
       )}
@@ -342,7 +340,7 @@ function LevelMeter({ level }: { level: number }) {
         <span
           key={threshold}
           className={clsx(
-            'w-1 rounded-full transition-colors',
+            'w-1 rounded-sm transition-colors',
             level >= threshold ? 'bg-primary' : 'bg-border-strong',
           )}
           style={{ height: `${6 + i * 3}px` }}

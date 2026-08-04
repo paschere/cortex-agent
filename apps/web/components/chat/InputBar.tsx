@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { ArrowUp, ChevronDown, Bot } from 'lucide-react';
 import { clsx } from 'clsx';
+import { ArrowUp, Bot, ChevronDown } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { FileDropZone } from './FileDropZone';
 
 interface AgentInfo {
@@ -108,17 +108,20 @@ export function InputBar({
         )}
 
         {showBriefingHint && (
-          <div className="mb-1.5 px-2 text-xs text-ink-faint">
-            <span className="font-mono text-primary">/briefing [Company]</span> — pulls a deal
-            health briefing from HubSpot
+          <div className="mb-1.5 px-1 text-xs text-ink-faint">
+            <span className="font-mono text-primary">/briefing [Empresa]</span> — trae un informe
+            del estado del negocio desde HubSpot
           </div>
         )}
 
         <form
           onSubmit={handleSubmit}
           className={clsx(
-            'rounded-[20px] border bg-surface shadow-card transition-colors',
-            focused ? 'border-primary/40 ring-4 ring-primary/10' : 'border-border',
+            // The box you write in is a box on a form: squared, ruled, flat.
+            'rounded-card border transition-colors',
+            focused
+              ? 'border-primary bg-surface ring-1 ring-primary/20'
+              : 'border-border bg-surface',
           )}
         >
           <textarea
@@ -128,7 +131,7 @@ export function InputBar({
             onKeyDown={handleKeyDown}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
-            placeholder="Ask anything — research a prospect, draft a proposal, send a follow-up…"
+            placeholder="Pregunta por una llamada, una placa o una rutina; o programa una…"
             disabled={disabled}
             rows={1}
             className="scroll-slim block max-h-[200px] min-h-[24px] w-full resize-none bg-transparent px-4 pt-3.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
@@ -138,21 +141,21 @@ export function InputBar({
             {/* Agent pill */}
             {pillDisabled ? (
               <span
-                title="Start a new chat to switch agents"
-                className="inline-flex items-center gap-1.5 rounded-pill bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-ink-faint"
+                title="Empieza un chat nuevo para cambiar de agente"
+                className="inline-flex items-center gap-1.5 rounded-card bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-ink-faint"
               >
                 <Bot className="h-3.5 w-3.5" />
-                {activeAgent?.name ?? 'Agent'}
+                {activeAgent?.name ?? 'Agente'}
               </span>
             ) : (
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-pill border border-border px-2.5 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none"
+                    className="inline-flex items-center gap-1.5 rounded-card border border-border px-2.5 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
                   >
                     <Bot className="h-3.5 w-3.5 text-primary" />
-                    {activeAgent?.name ?? 'Agent'}
+                    {activeAgent?.name ?? 'Agente'}
                     <ChevronDown size={12} className="opacity-60" />
                   </button>
                 </DropdownMenu.Trigger>
@@ -161,13 +164,15 @@ export function InputBar({
                     side="top"
                     align="start"
                     sideOffset={8}
-                    className="z-50 min-w-[240px] rounded-[14px] border border-border bg-surface p-1.5 shadow-pop"
+                    // A menu genuinely floats over the page, so this is one of
+                    // the few places elevation is earned.
+                    className="z-50 min-w-[240px] rounded-card border border-border bg-surface p-1.5 shadow-pop"
                   >
                     {agents.map((a) => (
                       <DropdownMenu.Item
                         key={a.slug}
                         onSelect={() => onAgentChange(a.slug)}
-                        className="flex cursor-pointer flex-col gap-0.5 rounded-[10px] px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-surface-2"
+                        className="flex cursor-pointer flex-col gap-0.5 rounded-card px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-surface-2"
                       >
                         <span className="font-semibold text-ink">{a.name}</span>
                         {a.description && (
@@ -184,13 +189,13 @@ export function InputBar({
 
             <div className="flex items-center gap-2">
               {text.length > CHAR_COUNT_THRESHOLD && (
-                <span className="text-[10px] tabular-nums text-ink-faint">{text.length}</span>
+                <span className="tabular text-[10px] text-ink-faint">{text.length}</span>
               )}
               <button
                 type="submit"
                 disabled={disabled || !text.trim()}
-                aria-label="Send message"
-                className="grid h-8 w-8 place-items-center rounded-full bg-primary text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none"
+                aria-label="Enviar mensaje"
+                className="grid h-8 w-8 place-items-center rounded-card bg-primary text-white transition-colors hover:bg-primary-strong disabled:opacity-40"
               >
                 <ArrowUp size={16} strokeWidth={2.5} />
               </button>
@@ -198,7 +203,7 @@ export function InputBar({
           </div>
         </form>
         <p className="mt-1.5 text-center text-[11px] text-ink-faint">
-          Cortex can make mistakes. Verify important actions before sending.
+          Cada respuesta trae su fuente: revísala antes de actuar.
         </p>
       </div>
     </div>

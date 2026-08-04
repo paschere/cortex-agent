@@ -1,14 +1,14 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
-import { useChat } from 'ai/react';
 import type { Message } from 'ai';
-import { Menu, Sparkles } from 'lucide-react';
+import { useChat } from 'ai/react';
+import { Menu, Stamp } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
-import { MessageList } from './MessageList';
-import { InputBar } from './InputBar';
 import { CommandPalette } from './CommandPalette';
+import { InputBar } from './InputBar';
+import { MessageList } from './MessageList';
 
 interface AgentInfo {
   slug: string;
@@ -69,7 +69,10 @@ export function ChatRoot({
     sendExtraMessageFields: false,
   });
 
-  const handleSend = useCallback((text: string) => void append({ role: 'user', content: text }), [append]);
+  const handleSend = useCallback(
+    (text: string) => void append({ role: 'user', content: text }),
+    [append],
+  );
 
   const hotkeys = useMemo(
     () => ({
@@ -91,24 +94,31 @@ export function ChatRoot({
 
   return (
     <div className="flex h-full flex-col bg-canvas">
-      <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur-md">
+      <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
-          aria-label="Open menu"
-          className="rounded-[10px] p-1.5 text-ink-muted hover:bg-surface-2 md:hidden"
+          aria-label="Abrir menú"
+          className="rounded-card p-1.5 text-ink-muted hover:bg-surface-2 md:hidden"
         >
           <Menu className="h-5 w-5" />
         </button>
-        <div className="flex items-center gap-2.5">
-          <span className="grid h-7 w-7 place-items-center rounded-[9px] bg-gradient-to-br from-primary to-primary-strong text-white">
-            <Sparkles className="h-4 w-4" />
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-card border border-primary/30 bg-primary-soft text-primary">
+            <Stamp className="h-3.5 w-3.5" />
           </span>
-          <div className="leading-tight">
-            <div className="text-sm font-bold text-ink">{activeAgent?.name ?? 'Chat'}</div>
-            <div className="flex items-center gap-1.5 text-[11px] text-ink-faint">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald" />
-              {conversationId ? 'Conversation' : 'New chat'}
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-[13px] font-semibold text-ink">
+              {activeAgent?.name ?? 'Cortex'}
+            </div>
+            {/* The conversation id is what a person quotes when they need this
+                exchange looked up later, so it is set as evidence, not prose. */}
+            <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+              {conversationId ? (
+                <span title={conversationId}>#{conversationId.slice(0, 8)}</span>
+              ) : (
+                'Conversación nueva'
+              )}
             </div>
           </div>
         </div>

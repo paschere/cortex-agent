@@ -24,17 +24,15 @@ export function DriveBrowserModal({
                 <FolderSearch className="h-4 w-4" />
               </IconChip>
               <div>
-                <Dialog.Title className="text-sm font-semibold text-ink">
-                  Browse Google Drive
-                </Dialog.Title>
-                <Dialog.Description className="text-xs text-ink-faint">
-                  Import files or link a folder for continuous sync.
+                <Dialog.Title className="text-sm font-semibold text-ink">Google Drive</Dialog.Title>
+                <Dialog.Description className="text-[11.5px] text-ink-faint">
+                  Trae archivos sueltos o enlaza una carpeta para que se mantenga sola.
                 </Dialog.Description>
               </div>
             </div>
             <Dialog.Close
-              className="grid h-8 w-8 place-items-center rounded-[10px] text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
-              aria-label="Close"
+              className="grid h-8 w-8 place-items-center rounded-card text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
+              aria-label="Cerrar"
             >
               <X className="h-4 w-4" />
             </Dialog.Close>

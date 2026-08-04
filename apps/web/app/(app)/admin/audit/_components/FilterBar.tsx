@@ -12,6 +12,7 @@ import {
   RANGE_LABEL,
   SURFACE_LABEL,
 } from '@/app/api/admin/_lib/audit-filters';
+import { DECISION_LABEL, RISK_LABEL, STATUS_LABEL } from './tags';
 
 interface Chip {
   key: string;
@@ -74,11 +75,11 @@ export function FilterBar({
   );
 
   const statusChips = [
-    chip('all', 'All', { status: 'all' }, filters.status === 'all'),
+    chip('all', 'Todos', { status: 'all' }, filters.status === 'all'),
     ...AUDIT_STATUSES.map((s) =>
       chip(
         s,
-        `${s.replaceAll('_', ' ')}${statusCounts[s] ? ` (${statusCounts[s]})` : ''}`,
+        `${STATUS_LABEL[s] ?? s.replaceAll('_', ' ')}${statusCounts[s] ? ` (${statusCounts[s]})` : ''}`,
         { status: s },
         filters.status === s,
       ),
@@ -86,44 +87,46 @@ export function FilterBar({
   ];
 
   const surfaceChips = [
-    chip('all', 'All', { surface: 'all' }, filters.surface === 'all'),
+    chip('all', 'Todas', { surface: 'all' }, filters.surface === 'all'),
     ...AUDIT_SURFACES.map((s) =>
       chip(s, SURFACE_LABEL[s] ?? s, { surface: s }, filters.surface === s),
     ),
   ];
 
   const riskChips = [
-    chip('all', 'All', { risk: 'all' }, filters.risk === 'all'),
-    ...AUDIT_RISK_LEVELS.map((r) => chip(r, r, { risk: r }, filters.risk === r)),
+    chip('all', 'Todos', { risk: 'all' }, filters.risk === 'all'),
+    ...AUDIT_RISK_LEVELS.map((r) => chip(r, RISK_LABEL[r] ?? r, { risk: r }, filters.risk === r)),
   ];
 
   const decisionChips = [
-    chip('all', 'All', { decision: 'all' }, filters.decision === 'all'),
-    ...AUDIT_DECISIONS.map((d) => chip(d, d, { decision: d }, filters.decision === d)),
+    chip('all', 'Todas', { decision: 'all' }, filters.decision === 'all'),
+    ...AUDIT_DECISIONS.map((d) =>
+      chip(d, DECISION_LABEL[d] ?? d, { decision: d }, filters.decision === d),
+    ),
   ];
 
   const toolChips = [
-    chip('all', 'All', { tool: '' }, !filters.tool),
+    chip('all', 'Todas', { tool: '' }, !filters.tool),
     ...families.slice(0, 12).map((f) => chip(f, f, { tool: f }, filters.tool === f, true)),
   ];
 
   return (
     <div className="mb-4 space-y-2 rounded-card border border-border bg-surface p-3">
-      <ChipGroup label="Range" chips={rangeChips} />
-      <ChipGroup label="Status" chips={statusChips} />
-      <ChipGroup label="Surface" chips={surfaceChips} />
-      <ChipGroup label="Risk" chips={riskChips} />
-      <ChipGroup label="Decision" chips={decisionChips} />
-      <ChipGroup label="Tool" chips={toolChips} />
+      <ChipGroup label="Rango" chips={rangeChips} />
+      <ChipGroup label="Estado" chips={statusChips} />
+      <ChipGroup label="Origen" chips={surfaceChips} />
+      <ChipGroup label="Riesgo" chips={riskChips} />
+      <ChipGroup label="Decisión" chips={decisionChips} />
+      <ChipGroup label="Familia" chips={toolChips} />
       {filters.user && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="field-label w-[62px] shrink-0">User</span>
+          <span className="field-label w-[62px] shrink-0">Persona</span>
           <span className="tabular rounded-card border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11.5px] font-semibold text-primary-ink">
             {userLabel ?? `${filters.user.slice(0, 8)}…`}
           </span>
           <Link
             href={auditHref(filters, { user: '' })}
-            aria-label="Clear the user filter"
+            aria-label="Quitar el filtro de persona"
             className="rounded-card p-1 text-ink-faint hover:bg-surface-2 hover:text-ink"
           >
             <X className="h-3.5 w-3.5" />

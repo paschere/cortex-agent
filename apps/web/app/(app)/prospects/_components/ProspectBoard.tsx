@@ -1,6 +1,7 @@
 'use client';
 
 import { Eyebrow, Panel } from '@/components/ui/panel';
+import { CHIP_TONE } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { Radar, Search, SearchX } from 'lucide-react';
 import Link from 'next/link';
@@ -163,18 +164,18 @@ export function ProspectBoard({
       {/* ------------------------------------------------------------ funnel */}
       <Panel className="p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Eyebrow>Prospecting funnel</Eyebrow>
+          <Eyebrow>Embudo de prospección</Eyebrow>
           <button
             type="button"
             onClick={() => refilter(() => setStatus(ANY))}
             className={clsx(
-              'rounded-pill px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
+              'tabular rounded-card px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
               status === ANY
                 ? 'bg-primary-soft text-primary'
                 : 'text-ink-faint hover:bg-surface-2 hover:text-ink-muted',
             )}
           >
-            Show all {total}
+            Ver los {total}
           </button>
         </div>
 
@@ -192,27 +193,27 @@ export function ProspectBoard({
                 onClick={() => refilter(() => setStatus(stage))}
                 aria-pressed={active}
                 className={clsx(
-                  'rounded-card bg-surface p-3 text-left transition-all',
+                  'rounded-card bg-surface p-3 text-left transition-colors',
                   active
-                    ? `border border-transparent shadow-pop ring-2 ${meta.ring}`
+                    ? `border border-transparent ring-2 ${meta.ring}`
                     : 'border border-border hover:border-border-strong',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11.5px] font-semibold text-ink-muted">{meta.label}</span>
+                  <span className="field-label truncate">{meta.label}</span>
                   <span
-                    className={clsx('grid h-6 w-6 place-items-center rounded-[8px]', meta.chip)}
+                    className={clsx(
+                      'grid h-6 w-6 place-items-center rounded-sm border',
+                      CHIP_TONE[meta.tone],
+                    )}
                   >
                     <Icon className="h-3.5 w-3.5" />
                   </span>
                 </div>
                 <div className="stat-num mt-1.5 text-[26px] leading-none text-ink">{count}</div>
-                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-canvas">
+                <div className="mt-2 h-1.5 w-full overflow-hidden border border-border bg-canvas">
                   <div
-                    className={clsx(
-                      'h-full rounded-full transition-[width] duration-500',
-                      meta.bar,
-                    )}
+                    className={clsx('h-full transition-[width] duration-500', meta.bar)}
                     style={{ width: `${Math.max(pct, count > 0 ? 5 : 0)}%` }}
                   />
                 </div>
@@ -222,10 +223,10 @@ export function ProspectBoard({
           })}
         </div>
 
-        <p className="mt-3 text-[11.5px] leading-relaxed text-ink-faint">
-          Cortex sweeps the job boards weekly and drops what it finds into <b>New</b>. From there it
-          only ever moves — a rejected company keeps its place under Rejected so nobody spends an
-          afternoon researching it a second time.
+        <p className="mt-3 text-[11.5px] leading-relaxed text-ink-muted">
+          Cortex barre los portales de empleo cada semana y deja lo que encuentra en{' '}
+          <b>Nuevos</b>. De ahí solo se mueve: una empresa descartada se queda en Descartados para
+          que nadie vuelva a perder una tarde investigándola.
         </p>
       </Panel>
 
@@ -236,19 +237,20 @@ export function ProspectBoard({
           <input
             value={query}
             onChange={(e) => refilter(() => setQuery(e.target.value))}
-            placeholder="Search by company"
-            className="w-full rounded-pill border border-border bg-surface py-1.5 pl-8 pr-3 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-border-strong focus:outline-none"
+            placeholder="Buscar por empresa"
+            aria-label="Buscar prospectos por empresa"
+            className="w-full rounded-card border border-border bg-surface py-1.5 pl-8 pr-3 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-border-strong focus:outline-none"
           />
         </div>
 
         <FilterSelect
-          label="Region"
+          label="Región"
           value={region}
           options={regions}
           onChange={(v) => refilter(() => setRegion(v))}
         />
         <FilterSelect
-          label="Found on"
+          label="Encontrado en"
           value={source}
           options={sources}
           onChange={(v) => refilter(() => setSource(v))}
@@ -264,15 +266,15 @@ export function ProspectBoard({
                 setQuery('');
               })
             }
-            className="rounded-pill px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
+            className="rounded-card px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
           >
-            Clear
+            Limpiar
           </button>
         )}
 
-        <span className="ml-auto text-[11.5px] text-ink-faint">
-          {visible.length} shown
-          {truncated && ' · older prospects not loaded'}
+        <span className="tabular ml-auto text-[11px] text-ink-faint">
+          {visible.length} a la vista
+          {truncated && ' · los más antiguos no se cargaron'}
         </span>
       </Panel>
 
@@ -327,9 +329,9 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-pill border border-border bg-surface px-2.5 py-1.5 text-[12.5px] font-medium text-ink focus:border-border-strong focus:outline-none"
+        className="rounded-card border border-border bg-surface px-2.5 py-1.5 text-[12.5px] font-medium text-ink focus:border-border-strong focus:outline-none"
       >
-        <option value={ANY}>Any</option>
+        <option value={ANY}>Cualquiera</option>
         {options.map((o) => (
           <option key={o} value={o}>
             {o}
@@ -344,31 +346,29 @@ function FilterSelect({
 function NothingFoundYet() {
   return (
     <Panel className="p-10 text-center">
-      <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-[14px] bg-primary-soft text-primary">
-        <Radar className="h-5 w-5" />
-      </span>
-      <p className="mb-1 text-[15px] font-bold text-ink">No prospects yet</p>
+      <Radar className="mx-auto mb-3 h-7 w-7 text-primary" />
+      <p className="mb-1 text-[15px] font-bold text-ink">Todavía no hay prospectos</p>
       <p className="mx-auto max-w-lg text-[13px] leading-relaxed text-ink-muted">
-        Cortex sweeps the public job boards once a week looking for companies hiring the kind of
-        people your team places, and everything it finds lands here.
+        Cortex barre los portales de empleo una vez por semana buscando empresas que contraten los
+        perfiles que tu equipo coloca, y todo lo que encuentra aterriza aquí.
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <Link
           href="/chat"
-          className="rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong"
+          className="rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
         >
-          Ask Cortex to sweep now
+          Pedirle a Cortex que barra ahora
         </Link>
         <Link
           href="/schedules"
-          className="rounded-pill border border-border px-4 py-2 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          className="rounded-card border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2"
         >
-          Set up the weekly sweep
+          Programar el barrido semanal
         </Link>
       </div>
       <p className="mx-auto mt-3 max-w-lg text-[11.5px] text-ink-faint">
-        In chat, something like: “Sweep the job boards for senior fullstack and QA roles at US
-        companies hiring remote.”
+        En el chat, algo así: “Barre los portales buscando vacantes de fullstack senior y QA en
+        empresas de Estados Unidos que contraten remoto.”
       </p>
     </Panel>
   );
@@ -385,30 +385,28 @@ function NothingMatches({
 }) {
   const stage = status !== ANY ? STATUS_META[status] : null;
   const message = filtersActive
-    ? 'No company matches those filters. They are still on file — widen the search.'
+    ? 'Ninguna empresa coincide con esos filtros. Siguen archivadas: amplía la búsqueda.'
     : status === 'new'
-      ? 'Nothing new to review. Everything Cortex has found has been dealt with — the next sweep will bring more.'
+      ? 'No queda nada por revisar. Ya despachaste todo lo que Cortex ha encontrado; el próximo barrido traerá más.'
       : status === 'qualified'
-        ? 'Nothing qualified yet. Work through the new ones and keep the companies worth approaching.'
+        ? 'Todavía no has calificado ninguna. Revisa las nuevas y quédate con las empresas que valga la pena buscar.'
         : status === 'contacted'
-          ? 'Nobody has been marked as contacted yet. Once you reach out, mark them here so the team can see it.'
-          : 'Nothing rejected yet.';
+          ? 'Nadie está marcado como contactado. Cuando escribas a una empresa, márcala aquí para que el equipo lo vea.'
+          : 'No has descartado ninguna todavía.';
 
   return (
     <Panel className="p-10 text-center">
-      <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-[14px] bg-surface-2 text-ink-faint">
-        <SearchX className="h-5 w-5" />
-      </span>
+      <SearchX className="mx-auto mb-3 h-7 w-7 text-ink-faint" />
       <p className="mb-1 text-[14px] font-bold text-ink">
-        {stage ? `No ${stage.label.toLowerCase()} prospects here` : 'Nothing to show'}
+        {stage ? `Sin prospectos en ${stage.label.toLowerCase()}` : 'No hay nada que mostrar'}
       </p>
       <p className="mx-auto max-w-md text-[12.5px] leading-relaxed text-ink-muted">{message}</p>
       <button
         type="button"
         onClick={onClear}
-        className="mt-4 rounded-pill border border-border px-4 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+        className="mt-4 rounded-card border border-border-strong px-4 py-1.5 text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2"
       >
-        Show everything
+        Ver todos los prospectos
       </button>
     </Panel>
   );

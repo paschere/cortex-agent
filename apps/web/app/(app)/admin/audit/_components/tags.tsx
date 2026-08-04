@@ -42,7 +42,29 @@ export const SURFACE_TAG: Record<string, string> = {
 export const SURFACE_SHORT: Record<string, string> = {
   web: 'web',
   mcp: 'claude',
-  schedule: 'scheduled',
+  schedule: 'rutina',
+};
+
+/** DB values are English; the register is read in Spanish. */
+export const STATUS_LABEL: Record<string, string> = {
+  ok: 'ok',
+  error: 'error',
+  confirmation_required: 'pide confirmar',
+  rate_limited: 'tope de uso',
+};
+
+export const RISK_LABEL: Record<string, string> = {
+  low: 'bajo',
+  medium: 'medio',
+  high: 'alto',
+  critical: 'crítico',
+};
+
+export const DECISION_LABEL: Record<string, string> = {
+  allowed: 'permitida',
+  confirmed: 'confirmada',
+  flagged: 'marcada',
+  blocked: 'bloqueada',
 };
 
 const NEUTRAL = 'border-border bg-surface-2 text-ink-faint';
@@ -88,7 +110,11 @@ export function Tag({
 }
 
 export function StatusTag({ status }: { status: string }) {
-  return <Tag tone={STATUS_TAG[status] ?? NEUTRAL}>{status.replaceAll('_', ' ')}</Tag>;
+  return (
+    <Tag tone={STATUS_TAG[status] ?? NEUTRAL}>
+      {STATUS_LABEL[status] ?? status.replaceAll('_', ' ')}
+    </Tag>
+  );
 }
 
 export function SurfaceTag({ surface }: { surface: string | null }) {
@@ -99,12 +125,12 @@ export function SurfaceTag({ surface }: { surface: string | null }) {
 /** Low risk is deliberately quiet — only medium and up earn colour. */
 export function RiskTag({ level }: { level: string | null }) {
   if (!level) return null;
-  return <Tag tone={RISK_TAG[level] ?? NEUTRAL}>{level}</Tag>;
+  return <Tag tone={RISK_TAG[level] ?? NEUTRAL}>{RISK_LABEL[level] ?? level}</Tag>;
 }
 
 export function DecisionTag({ decision }: { decision: string | null }) {
   if (!decision || decision === 'allowed') return null;
-  return <Tag tone={DECISION_TAG[decision] ?? NEUTRAL}>{decision}</Tag>;
+  return <Tag tone={DECISION_TAG[decision] ?? NEUTRAL}>{DECISION_LABEL[decision] ?? decision}</Tag>;
 }
 
 /** Small grey chip used for risk signals. */

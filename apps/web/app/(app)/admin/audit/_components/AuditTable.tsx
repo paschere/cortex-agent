@@ -10,7 +10,17 @@ import { DecisionTag, RiskTag, StatusTag, SurfaceTag } from './tags';
 import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from './format';
 import { AuditDetailDrawer } from './AuditDetailDrawer';
 
-const HEADERS = ['When', 'Who', 'Tool', 'Surface', 'Status', 'Risk', 'Decision', 'Latency', 'Detail'];
+const HEADERS = [
+  'Cuándo',
+  'Quién',
+  'Herramienta',
+  'Origen',
+  'Estado',
+  'Riesgo',
+  'Decisión',
+  'Latencia',
+  'Detalle',
+];
 
 /**
  * The audit table. Rows are rendered from server-fetched data; the only client
@@ -27,7 +37,7 @@ export function AuditTable({
 }) {
   const [selected, setSelected] = useState<AuditEventRow | null>(null);
 
-  const nameOf = (id: string) => userNames[id] ?? (id ? `${id.slice(0, 8)}…` : 'unknown');
+  const nameOf = (id: string) => userNames[id] ?? (id ? `${id.slice(0, 8)}…` : 'sin identificar');
 
   return (
     <>
@@ -38,7 +48,7 @@ export function AuditTable({
               {HEADERS.map((h) => (
                 <th
                   key={h}
-                  className={clsx('field-label px-3 py-2.5', h === 'Latency' && 'text-right')}
+                  className={clsx('field-label px-3 py-2.5', h === 'Latencia' && 'text-right')}
                 >
                   {h}
                 </th>
@@ -82,7 +92,7 @@ export function AuditTable({
                   </td>
                   <td className="max-w-[210px] px-3 py-2">
                     <div className="truncate font-semibold text-ink">
-                      {isAgentTurn(e.tool_id) ? 'Chat turn' : toolLabel(e.tool_id).label}
+                      {isAgentTurn(e.tool_id) ? 'Turno de chat' : toolLabel(e.tool_id).label}
                     </div>
                     {!isAgentTurn(e.tool_id) && (
                       <div className="tabular truncate text-[10.5px] text-ink-faint">

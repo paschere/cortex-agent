@@ -12,15 +12,9 @@ import {
 } from '@/lib/dev-work';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import {
-  CircleAlert,
-  CircleDollarSign,
-  FolderGit2,
-  Hammer,
-  Hourglass,
-  Loader,
-  ShieldCheck,
-} from 'lucide-react';
+import { type StatusTone, chipClass } from '@/lib/status-chip';
+import { clsx } from 'clsx';
+import { Hammer, Hourglass, Loader, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { RefreshButton } from '../schedules/_components/RefreshButton';
 import { TaskCard } from './_components/TaskCard';
@@ -35,18 +29,18 @@ function SectionLabel({
   icon,
   children,
   count,
-  chip,
+  tone,
 }: {
   icon: React.ReactNode;
   children: React.ReactNode;
   count: number;
-  chip: string;
+  tone: StatusTone;
 }) {
   return (
-    <div className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+    <div className="field-label mb-2.5 flex items-center gap-2 border-b border-border-strong pb-1.5">
       {icon}
       {children}
-      <span className={`rounded-pill px-1.5 py-0.5 text-[10px] font-bold ${chip}`}>{count}</span>
+      <span className={chipClass(tone)}>{count}</span>
     </div>
   );
 }
@@ -104,65 +98,60 @@ export default async function DevWorkPage() {
   const spendText = recent.some((t) => t.costUsd !== null) ? formatCost(spend) : null;
   const enabledRepos = repos.filter((r) => r.enabled).length;
 
-  const stats = [
+  // Colour only where the figure carries a meaning: amber when a person is
+  // holding something up, red when runs are failing. Counts stay in ink.
+  const stats: Array<{ label: string; value: string; sub: string; tone?: 'amber' | 'rose' }> = [
     {
-      label: 'Working now',
+      label: 'Trabajando ahora',
       value: String(inFlight.length),
-      sub: inFlight.length > 0 ? 'in progress' : 'nothing running',
-      icon: Loader,
-      chip: 'bg-primary-soft text-primary',
+      sub: inFlight.length > 0 ? 'en curso' : 'nada corriendo',
     },
     {
-      label: 'Waiting for you',
+      label: 'Te esperan',
       value: String(needsYou.length),
-      sub: needsYou.length > 0 ? 'needs a person' : 'all reviewed',
-      icon: Hourglass,
-      chip: needsYou.length > 0 ? 'bg-amber-soft text-amber' : 'bg-surface-2 text-ink-faint',
+      sub: needsYou.length > 0 ? 'necesitan una persona' : 'todo revisado',
+      tone: needsYou.length > 0 ? 'amber' : undefined,
     },
     {
-      label: `Shipped · ${WINDOW_DAYS}d`,
+      label: `Entregados · ${WINDOW_DAYS}d`,
       value: String(shippedRecently),
-      sub: 'changes handed over',
-      icon: Hammer,
-      chip: 'bg-emerald-soft text-emerald',
+      sub: 'cambios entregados',
     },
     {
-      label: `Failed · ${WINDOW_DAYS}d`,
+      label: `Fallidos · ${WINDOW_DAYS}d`,
       value: String(failedRecently),
-      sub: failedRecently > 0 ? 'worth a look' : 'none',
-      icon: CircleAlert,
-      chip: failedRecently > 0 ? 'bg-rose-soft text-rose' : 'bg-emerald-soft text-emerald',
+      sub: failedRecently > 0 ? 'vale la pena mirarlos' : 'ninguno',
+      tone: failedRecently > 0 ? 'rose' : undefined,
     },
     spendText
       ? {
-          label: `Spend · ${WINDOW_DAYS}d`,
+          label: `Costo · ${WINDOW_DAYS}d`,
           value: spendText,
-          sub: 'across these runs',
-          icon: CircleDollarSign,
-          chip: 'bg-surface-2 text-ink-muted',
+          sub: 'de estas ejecuciones',
         }
       : {
-          label: 'Repositories',
+          label: 'Repositorios',
           value: String(enabledRepos),
-          sub: `Cortex may edit ${enabledRepos === 1 ? 'one repo' : `${enabledRepos} repos`}`,
-          icon: FolderGit2,
-          chip: 'bg-surface-2 text-ink-muted',
+          sub:
+            enabledRepos === 1
+              ? 'Cortex puede editar uno'
+              : `Cortex puede editar ${enabledRepos}`,
         },
   ];
 
   return (
     <>
       <PageHeader
-        title="Dev Work"
-        subtitle="Every change Cortex is making to your own software, on its own. Watch it here — and stop it here."
+        title="Trabajo de desarrollo"
+        subtitle="Todo lo que Cortex está cambiando en tu propio software, por su cuenta. Míralo aquí y detenlo aquí."
         icon={<Hammer className="h-5 w-5" />}
         actions={
           <>
             <Link
               href="/dev-work/repositories"
-              className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted shadow-card transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <ShieldCheck className="h-3.5 w-3.5" /> Repositories
+              <ShieldCheck className="h-3.5 w-3.5" /> Repositorios
             </Link>
             <RefreshButton />
           </>
@@ -170,49 +159,47 @@ export default async function DevWorkPage() {
       />
 
       {notReady ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-faint">
-          <Hammer className="mx-auto mb-3 h-8 w-8 text-primary" />
-          <p className="mb-1 font-semibold text-ink">Not switched on in this environment yet</p>
-          <p className="mx-auto max-w-md">
-            Cortex cannot pick up its own development work here — the groundwork for it has not been
-            installed. Once it is, every run shows up on this page as it happens.
+        <Panel className="p-10 text-center text-[13px] text-ink-muted">
+          <Hammer className="mx-auto mb-3 h-7 w-7 text-primary" />
+          <p className="mb-1 text-[15px] font-bold text-ink">
+            Todavía no está activo en este ambiente
+          </p>
+          <p className="mx-auto max-w-md leading-relaxed">
+            Aquí Cortex no puede tomar trabajo de desarrollo porque falta instalar la base de
+            datos que lo soporta. Cuando esté, cada ejecución aparece en esta página mientras pasa.
           </p>
         </Panel>
       ) : (
         <>
-          <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <Panel className="mb-5 grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-5">
             {stats.map((s) => (
-              <Panel key={s.label} className="flex items-center gap-3 p-3.5">
-                <span
-                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] ${s.chip}`}
-                >
-                  <s.icon className="h-4 w-4" />
-                </span>
-                <div className="min-w-0">
-                  <div
-                    className="truncate text-[15px] font-extrabold leading-tight text-ink"
-                    title={s.value}
-                  >
-                    {s.value}
-                  </div>
-                  <div className="truncate text-[10.5px] text-ink-faint" title={s.label}>
-                    {s.label}
-                  </div>
-                  <div className="truncate text-[10.5px] text-ink-faint" title={s.sub}>
-                    {s.sub}
-                  </div>
+              <div key={s.label} className="bg-surface px-4 py-3">
+                <div className="field-label truncate" title={s.label}>
+                  {s.label}
                 </div>
-              </Panel>
+                <div
+                  className={clsx(
+                    'stat-num mt-1 truncate text-[20px] leading-none',
+                    s.tone === 'amber' ? 'text-amber' : s.tone === 'rose' ? 'text-rose' : 'text-ink',
+                  )}
+                  title={s.value}
+                >
+                  {s.value}
+                </div>
+                <div className="mt-1 truncate text-[10.5px] text-ink-faint" title={s.sub}>
+                  {s.sub}
+                </div>
+              </div>
             ))}
-          </div>
+          </Panel>
 
           {tasks.length === 0 ? (
-            <Panel className="p-10 text-center text-[13px] text-ink-faint">
-              <Hammer className="mx-auto mb-3 h-8 w-8 text-primary" />
-              <p className="mb-1 font-semibold text-ink">Cortex has not been asked for anything</p>
-              <p className="mx-auto max-w-md">
-                Assign a Linear issue to Cortex and it turns up here — you will see it pick the work
-                up, and you can stop it at any point.
+            <Panel className="p-10 text-center text-[13px] text-ink-muted">
+              <Hammer className="mx-auto mb-3 h-7 w-7 text-primary" />
+              <p className="mb-1 text-[15px] font-bold text-ink">Nadie le ha pedido nada a Cortex</p>
+              <p className="mx-auto max-w-md leading-relaxed">
+                Asígnale un issue de Linear a Cortex y aparece aquí. Vas a verlo tomar el trabajo, y
+                puedes detenerlo en cualquier momento.
               </p>
             </Panel>
           ) : (
@@ -222,9 +209,9 @@ export default async function DevWorkPage() {
                   <SectionLabel
                     icon={<Hourglass className="h-3.5 w-3.5 text-amber" />}
                     count={needsYou.length}
-                    chip="bg-amber-soft text-amber"
+                    tone="amber"
                   >
-                    Waiting for you
+                    Te esperan
                   </SectionLabel>
                   <div className="space-y-3">
                     {needsYou.map((t) => (
@@ -244,9 +231,9 @@ export default async function DevWorkPage() {
                   <SectionLabel
                     icon={<Loader className="h-3.5 w-3.5 text-primary" />}
                     count={inFlight.length}
-                    chip="bg-primary-soft text-primary"
+                    tone="primary"
                   >
-                    Happening now
+                    Pasando ahora
                   </SectionLabel>
                   <div className="space-y-3">
                     {inFlight.map((t) => (
@@ -266,9 +253,9 @@ export default async function DevWorkPage() {
                   <SectionLabel
                     icon={<Hammer className="h-3.5 w-3.5 text-ink-faint" />}
                     count={finished.length}
-                    chip="bg-surface-2 text-ink-faint"
+                    tone="neutral"
                   >
-                    Finished
+                    Terminados
                   </SectionLabel>
                   <div className="space-y-3">
                     {finished.map((t) => (

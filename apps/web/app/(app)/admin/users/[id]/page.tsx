@@ -63,21 +63,38 @@ import {
 export const dynamic = 'force-dynamic';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Header links: ruled and square, like every other control on the page. */
+const HEADER_ACTION =
+  'inline-flex items-center gap-2 rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2';
 const SURFACE_KEYS = ['web', 'mcp', 'schedule', 'unknown'] as const;
 
 type Role = 'member' | 'team_admin' | 'org_admin';
 
-const ROLE_PILL: Record<string, string> = {
-  org_admin: 'bg-primary-soft text-primary-ink',
-  team_admin: 'bg-sky-soft text-sky',
-  member: 'bg-surface-2 text-ink-muted',
+const ROLE_LABEL: Record<string, string> = {
+  org_admin: 'Admin de la organización',
+  team_admin: 'Admin de equipo',
+  member: 'Miembro',
+};
+
+const ROLE_TAG: Record<string, string> = {
+  org_admin: 'border-primary/30 bg-primary-soft text-primary-ink',
+  team_admin: 'border-sky/40 bg-sky-soft text-sky',
+  member: 'border-border bg-surface-2 text-ink-muted',
+};
+
+const JOB_STATUS_LABEL: Record<string, string> = {
+  active: 'Activa',
+  paused: 'En pausa',
+  completed: 'Terminada',
+  cancelled: 'Cancelada',
 };
 
 const JOB_STATUS_TONE: Record<string, string> = {
-  active: 'bg-emerald-soft text-emerald',
-  paused: 'bg-amber-soft text-amber',
-  completed: 'bg-surface-2 text-ink-faint',
-  cancelled: 'bg-surface-2 text-ink-faint',
+  active: 'border-emerald/40 bg-emerald-soft text-emerald',
+  paused: 'border-amber/40 bg-amber-soft text-amber',
+  completed: 'border-border bg-surface-2 text-ink-faint',
+  cancelled: 'border-border bg-surface-2 text-ink-faint',
 };
 
 interface UserRow {
@@ -219,7 +236,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   }>)
     .map((m) => {
       const t = firstEmbed(m.teams);
-      return { id: t?.id ?? m.team_id, name: t?.name ?? 'Unnamed team' };
+      return { id: t?.id ?? m.team_id, name: t?.name ?? 'Equipo sin nombre' };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -294,23 +311,17 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
     <>
       <PageHeader
         title={displayName}
-        subtitle={`Everything this teammate has done with Cortex — last ${WINDOW_DAYS} days`}
+        subtitle={`Todo lo que esta persona ha hecho con Cortex en los últimos ${WINDOW_DAYS} días`}
         icon={<UserIcon className="h-5 w-5" />}
         actions={
           <>
-            <Link
-              href="/admin/users"
-              className="inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted shadow-card hover:text-ink"
-            >
+            <Link href="/admin/users" className={HEADER_ACTION}>
               <ArrowLeft className="h-4 w-4" />
-              All users
+              Todas las personas
             </Link>
-            <Link
-              href={`/admin/audit?user=${user.id}&range=30d`}
-              className="inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted shadow-card hover:text-ink"
-            >
+            <Link href={`/admin/audit?user=${user.id}&range=30d`} className={HEADER_ACTION}>
               <ScrollText className="h-4 w-4" />
-              Audit log
+              Auditoría
             </Link>
           </>
         }
@@ -327,15 +338,15 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                 </h2>
                 <span
                   className={clsx(
-                    'rounded-pill px-2 py-0.5 text-[10.5px] font-bold uppercase',
-                    ROLE_PILL[user.role] ?? 'bg-surface-2 text-ink-muted',
+                    'rounded-card border px-2 py-0.5 text-[11px] font-semibold',
+                    ROLE_TAG[user.role] ?? 'border-border bg-surface-2 text-ink-muted',
                   )}
                 >
-                  {user.role.replace('_', ' ')}
+                  {ROLE_LABEL[user.role] ?? user.role}
                 </span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-ink-muted">
-                <span className="inline-flex items-center gap-1.5">
+                <span className="tabular inline-flex items-center gap-1.5">
                   <Mail className="h-3.5 w-3.5 text-ink-faint" />
                   {user.email}
                 </span>
@@ -344,27 +355,29 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                   title={absoluteTime(user.created_at)}
                 >
                   <CalendarDays className="h-3.5 w-3.5 text-ink-faint" />
-                  Member since{' '}
-                  {new Date(user.created_at).toLocaleDateString('en-US', {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
+                  Entró el{' '}
+                  <span className="tabular">
+                    {new Date(user.created_at).toLocaleDateString('es-CO', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </span>
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Activity className="h-3.5 w-3.5 text-ink-faint" />
                   {usage.lastActive
-                    ? `Last active ${relativeTime(usage.lastActive)}`
-                    : `No activity in ${WINDOW_DAYS} days`}
+                    ? `Última actividad ${relativeTime(usage.lastActive)}`
+                    : `Sin actividad hace ${WINDOW_DAYS} días`}
                 </span>
               </div>
             </div>
 
             <div className="min-w-0">
-              <SectionLabel>Teams</SectionLabel>
+              <SectionLabel>Equipos</SectionLabel>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {teams.length === 0 ? (
-                  <EmptyNote>On no team — unrestricted tool access.</EmptyNote>
+                  <EmptyNote>No está en ningún equipo, así que nada le resta acceso.</EmptyNote>
                 ) : (
                   teams.map((t) => (
                     <Link key={t.id} href={`/tools?team=${t.id}`}>
@@ -381,18 +394,18 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
           <div className="mt-5 border-t border-border pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <SectionLabel>Connected integrations</SectionLabel>
-              <span className="text-[11px] text-ink-faint">
+              <SectionLabel>Integraciones conectadas</SectionLabel>
+              <span className="tabular text-[11px] text-ink-faint">
                 {liveTokens > 0
-                  ? `${liveTokens} live Claude connection${liveTokens === 1 ? '' : 's'}`
-                  : 'No live Claude connection'}
+                  ? `${liveTokens} conexión${liveTokens === 1 ? '' : 'es'} viva${liveTokens === 1 ? '' : 's'} con Claude`
+                  : 'Sin conexión viva con Claude'}
               </span>
             </div>
             {integrations.length === 0 ? (
-              <p className="mt-2.5 flex items-center gap-2 text-[12.5px] text-ink-faint">
-                <Unplug className="h-3.5 w-3.5" />
-                Nothing connected yet — tools that need Google, HubSpot, GitHub or Linear will
-                fail for this person until they connect an account.
+              <p className="mt-2.5 flex items-start gap-2 text-[12.5px] leading-relaxed text-ink-muted">
+                <Unplug className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                No ha conectado nada. Las herramientas que dependen de Google, HubSpot, GitHub o
+                Linear le van a fallar hasta que conecte esa cuenta desde Integraciones.
               </p>
             ) : (
               <div className="mt-2.5 flex flex-wrap gap-2">
@@ -404,7 +417,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                       key={i.provider}
                       title={[
                         (i.scopes ?? []).join('\n'),
-                        i.updated_at ? `Refreshed ${absoluteTime(i.updated_at)}` : '',
+                        i.updated_at ? `Renovado el ${absoluteTime(i.updated_at)}` : '',
                       ]
                         .filter(Boolean)
                         .join('\n\n')}
@@ -425,13 +438,13 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         >
                           {i.provider}
                         </span>
-                        <span className="block text-[10.5px] text-ink-faint">
+                        <span className="tabular block text-[10.5px] text-ink-faint">
                           {scopeCount} scope{scopeCount === 1 ? '' : 's'} ·{' '}
                           {expired
-                            ? 'token expired'
+                            ? 'token vencido'
                             : i.expires_at
-                              ? `expires ${countdown(i.expires_at)}`
-                              : 'no expiry'}
+                              ? `vence ${countdown(i.expires_at)}`
+                              : 'sin vencimiento'}
                         </span>
                       </span>
                     </span>
@@ -440,9 +453,9 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
               </div>
             )}
             {integrations.some((i) => !!i.expires_at && i.expires_at <= nowIso) && (
-              <p className="mt-2 text-[11.5px] text-rose">
-                An expired token is usually why a teammate&apos;s tools suddenly stop working —
-                they need to reconnect from Integrations.
+              <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] leading-relaxed text-rose">
+                Un token vencido es la razón más común de que las herramientas dejen de responder
+                de un momento a otro. Pídele que vuelva a conectar esa cuenta en Integraciones.
               </p>
             )}
           </div>
@@ -451,35 +464,35 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         {/* ---------------------------------------------------- cortex usage */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <StatTile
-            label="Tool calls · 7d"
-            sub="Tool calls · 7d"
+            label="Llamadas · 7d"
+            sub="Llamadas · 7d"
             value={usage.calls7d.toLocaleString()}
             icon={<Zap className="h-4 w-4" />}
           />
           <StatTile
-            label="Tool calls · 30d"
-            sub={`Tool calls · ${WINDOW_DAYS}d`}
+            label="Llamadas · 30d"
+            sub={`Llamadas · ${WINDOW_DAYS}d`}
             value={usage.calls30d.toLocaleString()}
             icon={<Activity className="h-4 w-4" />}
             tone="sky"
           />
           <StatTile
-            label="Chat turns"
-            sub={`Chat turns · ${WINDOW_DAYS}d`}
+            label="Turnos de chat"
+            sub={`Turnos de chat · ${WINDOW_DAYS}d`}
             value={usage.turns30d.toLocaleString()}
             icon={<MessageSquare className="h-4 w-4" />}
             tone="primary"
           />
           <StatTile
-            label="Distinct tools"
-            sub="Distinct tools used"
+            label="Herramientas distintas"
+            sub="Herramientas distintas"
             value={usage.distinctTools.toLocaleString()}
             icon={<Wrench className="h-4 w-4" />}
             tone="sky"
           />
           <StatTile
-            label="Success rate"
-            sub="Success rate"
+            label="Tasa de éxito"
+            sub="Tasa de éxito"
             value={usage.successRate === null ? '—' : `${usage.successRate}%`}
             icon={<CheckCircle2 className="h-4 w-4" />}
             tone={
@@ -491,8 +504,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             }
           />
           <StatTile
-            label="Avg latency"
-            sub="Average latency"
+            label="Latencia media"
+            sub="Latencia media"
             value={usage.avgLatency > 0 ? formatLatency(usage.avgLatency) : '—'}
             icon={<Timer className="h-4 w-4" />}
             tone="amber"
@@ -501,11 +514,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
         <Panel className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <SectionLabel>Daily activity · last {WINDOW_DAYS} days</SectionLabel>
+            <SectionLabel>Actividad diaria · últimos {WINDOW_DAYS} días</SectionLabel>
             <span className="text-[11px] text-ink-faint">
               {usage.capped
-                ? `capped at ${AUDIT_ROW_CAP.toLocaleString()} events — this is a floor`
-                : 'every recorded event'}
+                ? `con tope de ${AUDIT_ROW_CAP.toLocaleString()} eventos: esto es un piso`
+                : 'todos los eventos registrados'}
             </span>
           </div>
           <DayBars days={usage.days} />
@@ -513,12 +526,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Panel className="p-4">
-            <SectionLabel>Top tools · {WINDOW_DAYS}d</SectionLabel>
+            <SectionLabel>Herramientas más usadas · {WINDOW_DAYS}d</SectionLabel>
             <div className="mt-3">
               {usage.topTools.length === 0 ? (
-                <EmptyNote>
-                  This teammate has not run a single tool in this window.
-                </EmptyNote>
+                <EmptyNote>No ha ejecutado ninguna herramienta en esta ventana.</EmptyNote>
               ) : (
                 <ul className="space-y-2.5">
                   {usage.topTools.map((t) => (
@@ -527,10 +538,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         <span className="min-w-0 truncate font-semibold text-ink">
                           {toolLabel(t.toolId).label}
                         </span>
-                        <span className="shrink-0 text-ink-faint">
+                        <span className="tabular shrink-0 text-ink-faint">
                           {t.count}× · {formatLatency(t.avgLatency)}
                           {t.errors > 0 && (
-                            <span className="ml-1 text-rose">· {t.errors} err</span>
+                            <span className="ml-1 text-rose">· {t.errors} con error</span>
                           )}
                         </span>
                       </div>
@@ -547,15 +558,15 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           </Panel>
 
           <Panel className="p-4">
-            <SectionLabel>Where they work</SectionLabel>
+            <SectionLabel>Desde dónde trabaja</SectionLabel>
             <div className="mt-3">
               <StackedBar segments={surfaceSegments} total={surfaceTotal} />
-              <p className="mt-3 text-[11.5px] text-ink-faint">
+              <p className="mt-3 text-[11.5px] leading-relaxed text-ink-faint">
                 {surfaceTotal === 0
-                  ? 'No calls recorded in this window.'
+                  ? 'No hay llamadas registradas en esta ventana.'
                   : (usage.bySurface.unknown ?? 0) === surfaceTotal
-                    ? 'No surface was recorded on these calls yet.'
-                    : 'The web app, Claude via MCP, and unattended scheduled runs.'}
+                    ? 'Estas llamadas todavía no traen la superficie registrada.'
+                    : 'La app web, Claude por MCP y las rutinas que corren solas.'}
               </p>
             </div>
           </Panel>
@@ -565,29 +576,29 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         <div id="security" className="scroll-mt-6 space-y-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatTile
-              label="Flagged · 7d"
-              sub="Flagged · 7d"
+              label="Marcados · 7d"
+              sub="Marcados · 7d"
               value={String(security.flagged7d)}
               icon={<Flag className="h-4 w-4" />}
               tone={security.flagged7d > 0 ? 'amber' : 'neutral'}
             />
             <StatTile
-              label="Flagged · 30d"
-              sub={`Flagged · ${WINDOW_DAYS}d`}
+              label="Marcados · 30d"
+              sub={`Marcados · ${WINDOW_DAYS}d`}
               value={String(security.flagged30d)}
               icon={<Flag className="h-4 w-4" />}
               tone={security.flagged30d > 0 ? 'amber' : 'neutral'}
             />
             <StatTile
-              label="Blocked · 7d"
-              sub="Blocked · 7d"
+              label="Bloqueados · 7d"
+              sub="Bloqueados · 7d"
               value={String(security.blocked7d)}
               icon={<Ban className="h-4 w-4" />}
               tone={security.blocked7d > 0 ? 'rose' : 'neutral'}
             />
             <StatTile
-              label="Blocked · 30d"
-              sub={`Blocked · ${WINDOW_DAYS}d`}
+              label="Bloqueados · 30d"
+              sub={`Bloqueados · ${WINDOW_DAYS}d`}
               value={String(security.blocked30d)}
               icon={<Ban className="h-4 w-4" />}
               tone={security.blocked30d > 0 ? 'rose' : 'neutral'}
@@ -596,47 +607,47 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
           <Panel className="overflow-hidden">
             <PanelHeadRow
-              label="Security review"
+              label="Revisión de seguridad"
               right={
                 security.unavailable
-                  ? 'security layer not migrated here'
+                  ? 'la capa de seguridad no está migrada aquí'
                   : security.events.length === 0
-                    ? 'all clear'
-                    : `${security.events.length} in the last ${WINDOW_DAYS} days`
+                    ? 'sin novedades'
+                    : `${security.events.length} en los últimos ${WINDOW_DAYS} días`
               }
             />
             {security.unavailable ? (
-              <div className="px-4 py-8 text-center text-[12.5px] text-ink-faint">
-                This database has not run the security migration yet, so nothing is recorded for
-                anyone.
+              <div className="px-4 py-8 text-center text-[12.5px] leading-relaxed text-ink-muted">
+                Esta base de datos todavía no corrió la migración de seguridad, así que no se está
+                registrando nada para nadie.
               </div>
             ) : securityClean ? (
               <div className="px-4 py-12 text-center">
                 <ShieldCheck className="mx-auto mb-3 h-6 w-6 text-emerald" />
-                <p className="text-[13px] font-semibold text-ink">Nothing flagged</p>
-                <p className="mt-1 text-[12px] text-ink-faint">
-                  Every action this person took was routine.
+                <p className="text-[13px] font-semibold text-ink">Nada marcado</p>
+                <p className="mt-1 text-[12.5px] text-ink-muted">
+                  Todo lo que hizo esta persona fue rutinario.
                 </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-[12px]">
-                  <thead className="border-b border-border bg-surface-2/60">
-                    <tr className="text-left text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
-                      <th className="px-4 py-2.5 font-semibold">When</th>
-                      <th className="px-4 py-2.5 font-semibold">Tool</th>
-                      <th className="px-4 py-2.5 font-semibold">Surface</th>
-                      <th className="px-4 py-2.5 font-semibold">Level</th>
-                      <th className="px-4 py-2.5 font-semibold">Decision</th>
-                      <th className="px-4 py-2.5 font-semibold">Reason</th>
-                      <th className="px-4 py-2.5 font-semibold">Signals</th>
+                  <thead className="border-b border-border-strong bg-surface-2">
+                    <tr className="text-left">
+                      <th className="field-label px-4 py-2.5">Cuándo</th>
+                      <th className="field-label px-4 py-2.5">Herramienta</th>
+                      <th className="field-label px-4 py-2.5">Superficie</th>
+                      <th className="field-label px-4 py-2.5">Nivel</th>
+                      <th className="field-label px-4 py-2.5">Decisión</th>
+                      <th className="field-label px-4 py-2.5">Motivo</th>
+                      <th className="field-label px-4 py-2.5">Señales</th>
                     </tr>
                   </thead>
                   <tbody>
                     {security.events.slice(0, 25).map((e) => (
                       <tr key={e.id} className="border-t border-border align-top">
                         <td
-                          className="whitespace-nowrap px-4 py-2 text-ink-faint"
+                          className="tabular whitespace-nowrap px-4 py-2 text-ink-faint"
                           title={absoluteTime(e.created_at)}
                         >
                           {relativeTime(e.created_at)}
@@ -645,7 +656,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                           <div className="truncate font-semibold text-ink">
                             {toolLabel(e.tool_id).label}
                           </div>
-                          <div className="truncate font-mono text-[10.5px] text-ink-faint">
+                          <div className="tabular truncate text-[10.5px] text-ink-faint">
                             {e.tool_id}
                           </div>
                         </td>
@@ -663,7 +674,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         </td>
                         <td className="px-4 py-2">
                           {e.signals.length === 0 ? (
-                            <span className="text-ink-faint">—</span>
+                            <span className="tabular text-ink-faint">—</span>
                           ) : (
                             <span className="flex flex-wrap gap-1">
                               {e.signals.slice(0, 4).map((s) => (
@@ -682,15 +693,17 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
           <Panel className="p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <SectionLabel>Waiting on their confirmation</SectionLabel>
-              <span className="text-[11px] text-ink-faint">
-                {livePending.length === 0 ? 'nothing pending' : `${livePending.length} pending`}
+              <SectionLabel>Esperando su confirmación</SectionLabel>
+              <span className="tabular text-[11px] text-ink-faint">
+                {livePending.length === 0
+                  ? 'nada pendiente'
+                  : `${livePending.length} pendiente${livePending.length === 1 ? '' : 's'}`}
               </span>
             </div>
             <div className="mt-3">
               {livePending.length === 0 ? (
                 <EmptyNote>
-                  No action is parked waiting for a yes — nothing is stuck on this person.
+                  No hay ninguna acción parada esperando un sí. Nada depende de esta persona ahora.
                 </EmptyNote>
               ) : (
                 <ul className="space-y-2">
@@ -703,16 +716,16 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         <span className="block truncate text-[12.5px] font-semibold text-ink">
                           {toolLabel(p.tool_id).label}
                         </span>
-                        <span className="block truncate font-mono text-[10.5px] text-ink-faint">
+                        <span className="tabular block truncate text-[10.5px] text-ink-faint">
                           {p.tool_id}
                         </span>
                       </span>
                       <span
-                        className="inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-amber"
+                        className="tabular inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-amber"
                         title={absoluteTime(p.expires_at)}
                       >
                         <Clock className="h-3.5 w-3.5" />
-                        expires {countdown(p.expires_at)}
+                        vence {countdown(p.expires_at)}
                       </span>
                     </li>
                   ))}
@@ -725,10 +738,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         {/* ------------------------------------------- what they've built */}
         <div className="grid gap-4 lg:grid-cols-3">
           <Panel className="p-4">
-            <SectionLabel>Pipelines they own</SectionLabel>
+            <SectionLabel>Pipelines que creó</SectionLabel>
             <div className="mt-3">
               {pipelines.length === 0 ? (
-                <EmptyNote>Has not created a pipeline yet.</EmptyNote>
+                <EmptyNote>Todavía no ha creado ningún pipeline.</EmptyNote>
               ) : (
                 <ul className="space-y-1.5">
                   {pipelines.map((p) => (
@@ -741,14 +754,14 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                           <span className="block truncate text-[12.5px] font-semibold text-ink group-hover:text-primary">
                             {p.name}
                           </span>
-                          <span className="block truncate font-mono text-[10.5px] text-ink-faint">
+                          <span className="tabular block truncate text-[10.5px] text-ink-faint">
                             {p.slug}
-                            {p.archived ? ' · archived' : ''}
+                            {p.archived ? ' · archivado' : ''}
                           </span>
                         </span>
-                        <span className="shrink-0 text-[11px] text-ink-faint">
-                          {(p.times_run ?? 0).toLocaleString()} run
-                          {(p.times_run ?? 0) === 1 ? '' : 's'}
+                        <span className="tabular shrink-0 text-[11px] text-ink-faint">
+                          {(p.times_run ?? 0).toLocaleString()}{' '}
+                          {(p.times_run ?? 0) === 1 ? 'corrida' : 'corridas'}
                         </span>
                       </Link>
                     </li>
@@ -759,10 +772,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           </Panel>
 
           <Panel className="p-4">
-            <SectionLabel>Their routines</SectionLabel>
+            <SectionLabel>Sus rutinas</SectionLabel>
             <div className="mt-3">
               {jobs.length === 0 ? (
-                <EmptyNote>No scheduled routine runs under their name.</EmptyNote>
+                <EmptyNote>No hay ninguna rutina programada a su nombre.</EmptyNote>
               ) : (
                 <ul className="space-y-1.5">
                   {jobs.map((j) => (
@@ -778,18 +791,20 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                               {j.name}
                             </span>
                           </span>
-                          <span className="block truncate text-[10.5px] text-ink-faint">
-                            {j.next_run_at ? `next run ${countdown(j.next_run_at)}` : 'no next run'}
-                            {j.is_global ? ' · workspace-wide' : ''}
+                          <span className="tabular block truncate text-[10.5px] text-ink-faint">
+                            {j.next_run_at
+                              ? `próxima corrida ${countdown(j.next_run_at)}`
+                              : 'sin próxima corrida'}
+                            {j.is_global ? ' · para toda la organización' : ''}
                           </span>
                         </span>
                         <span
                           className={clsx(
-                            'shrink-0 rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase',
-                            JOB_STATUS_TONE[j.status] ?? 'bg-surface-2 text-ink-faint',
+                            'shrink-0 rounded-card border px-2 py-0.5 text-[10.5px] font-semibold',
+                            JOB_STATUS_TONE[j.status] ?? 'border-border bg-surface-2 text-ink-faint',
                           )}
                         >
-                          {j.status}
+                          {JOB_STATUS_LABEL[j.status] ?? j.status}
                         </span>
                       </Link>
                     </li>
@@ -800,10 +815,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           </Panel>
 
           <Panel className="p-4">
-            <SectionLabel>Recent conversations</SectionLabel>
+            <SectionLabel>Conversaciones recientes</SectionLabel>
             <div className="mt-3">
               {conversations.length === 0 ? (
-                <EmptyNote>No conversations on record.</EmptyNote>
+                <EmptyNote>No hay conversaciones registradas.</EmptyNote>
               ) : (
                 <ul className="space-y-1.5">
                   {conversations.map((c) => (
@@ -814,10 +829,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-[12.5px] font-semibold text-ink group-hover:text-primary">
-                            {c.title || 'Untitled conversation'}
+                            {c.title || 'Conversación sin título'}
                           </span>
                           <span
-                            className="block truncate text-[10.5px] text-ink-faint"
+                            className="tabular block truncate text-[10.5px] text-ink-faint"
                             title={absoluteTime(c.updated_at)}
                           >
                             {relativeTime(c.updated_at)}
@@ -836,43 +851,47 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         {/* -------------------------------------------- effective tool access */}
         <Panel className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <SectionLabel>Effective tool access</SectionLabel>
+            <SectionLabel>Acceso real a herramientas</SectionLabel>
             <span className="text-[11px] text-ink-faint">
-              {reachableTools} of {catalog.length} tools reachable
+              <span className="tabular">{reachableTools}</span> de{' '}
+              <span className="tabular">{catalog.length}</span> herramientas a su alcance
             </span>
           </div>
 
           {teams.length === 0 ? (
             <p className="mt-3 flex items-start gap-2 text-[12.5px] text-ink-muted">
               <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald" />
-              They belong to no team, so nothing is taken away — they can use every tool their
-              agent allows.
+              No está en ningún equipo, así que nada le resta acceso: puede usar todas las
+              herramientas que le permita su agente.
             </p>
           ) : denials.length === 0 ? (
             <p className="mt-3 flex items-start gap-2 text-[12.5px] text-ink-muted">
               <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald" />
-              Their {teams.length === 1 ? 'team places' : 'teams place'} no restrictions — they can
-              use every tool their agent allows.
+              {teams.length === 1 ? 'Su equipo no le bloquea nada' : 'Sus equipos no le bloquean nada'}
+              : puede usar todas las herramientas que le permita su agente.
             </p>
           ) : (
             <div className="mt-3">
-              <div className="text-[11.5px] font-semibold text-ink">Denied by their teams</div>
+              <div className="text-[11.5px] font-semibold text-ink">
+                Bloqueado por sus equipos
+              </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {denials.map((d) => {
                   const team = teams.find((t) => d.teams.includes(t.name));
                   return (
                     <Link key={d.pattern} href={`/tools?team=${team?.id ?? ''}`}>
-                      <Chip tone="rose" title={`Denied by ${d.teams.join(', ')}`}>
+                      <Chip tone="rose" title={`Bloqueado por ${d.teams.join(', ')}`}>
                         <ShieldBan className="h-3 w-3" />
-                        <span className="font-mono">{d.pattern}</span>
+                        <span className="tabular">{d.pattern}</span>
                         <span className="font-normal opacity-80">· {d.teams.join(', ')}</span>
                       </Chip>
                     </Link>
                   );
                 })}
               </div>
-              <p className="mt-2 text-[11px] text-ink-faint">
-                Teams only ever subtract — joining another team never gives a denied tool back.
+              <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+                Los equipos solo restan: entrar a otro equipo nunca devuelve una herramienta
+                bloqueada.
               </p>
             </div>
           )}
@@ -880,15 +899,15 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-3">
             <div>
               <div className="text-[11px] font-semibold text-emerald">
-                Open families ({openFamilies.length})
+                Familias abiertas (<span className="tabular">{openFamilies.length}</span>)
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {openFamilies.length === 0 ? (
-                  <EmptyNote>None.</EmptyNote>
+                  <EmptyNote>Ninguna.</EmptyNote>
                 ) : (
                   openFamilies.map((f) => (
-                    <Chip key={f.name} tone="emerald" title={`${f.total} tools`}>
-                      <span className="font-mono">{f.name}</span>
+                    <Chip key={f.name} tone="emerald" title={`${f.total} herramientas`}>
+                      <span className="tabular">{f.name}</span>
                     </Chip>
                   ))
                 )}
@@ -896,20 +915,20 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             </div>
             <div>
               <div className="text-[11px] font-semibold text-amber">
-                Partly restricted ({partialFamilies.length})
+                Parcialmente restringidas (<span className="tabular">{partialFamilies.length}</span>)
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {partialFamilies.length === 0 ? (
-                  <EmptyNote>None.</EmptyNote>
+                  <EmptyNote>Ninguna.</EmptyNote>
                 ) : (
                   partialFamilies.map((f) => (
                     <Chip
                       key={f.name}
                       tone="amber"
-                      title={`${f.denied} of ${f.total} tools denied`}
+                      title={`${f.denied} de ${f.total} herramientas bloqueadas`}
                     >
-                      <span className="font-mono">{f.name}</span>
-                      <span className="font-normal opacity-80">
+                      <span className="tabular">{f.name}</span>
+                      <span className="tabular font-normal opacity-80">
                         {f.denied}/{f.total}
                       </span>
                     </Chip>
@@ -919,15 +938,15 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             </div>
             <div>
               <div className="text-[11px] font-semibold text-rose">
-                Fully blocked ({closedFamilies.length})
+                Bloqueadas del todo (<span className="tabular">{closedFamilies.length}</span>)
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {closedFamilies.length === 0 ? (
-                  <EmptyNote>None.</EmptyNote>
+                  <EmptyNote>Ninguna.</EmptyNote>
                 ) : (
                   closedFamilies.map((f) => (
-                    <Chip key={f.name} tone="rose" title={`all ${f.total} tools denied`}>
-                      <span className="font-mono">{f.name}</span>
+                    <Chip key={f.name} tone="rose" title={`las ${f.total} herramientas bloqueadas`}>
+                      <span className="tabular">{f.name}</span>
                     </Chip>
                   ))
                 )}
@@ -939,38 +958,41 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         {/* ------------------------------------------------- recent activity */}
         <Panel className="overflow-hidden">
           <PanelHeadRow
-            label="Recent activity"
+            label="Actividad reciente"
             right={
               usage.recent.length === 0
-                ? 'nothing yet'
-                : `last ${usage.recent.length} event${usage.recent.length === 1 ? '' : 's'}`
+                ? 'nada todavía'
+                : `últimos ${usage.recent.length} evento${usage.recent.length === 1 ? '' : 's'}`
             }
           />
           {usage.legacySchema && (
             <p className="border-b border-border bg-amber-soft px-4 py-2 text-[11.5px] text-amber">
-              Surface, risk and decision are not recorded on this database yet.
+              Esta base de datos todavía no registra superficie, riesgo ni decisión.
             </p>
           )}
           {usage.recent.length === 0 ? (
             <div className="px-4 py-12 text-center">
               <Workflow className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
-              <p className="text-[13px] font-semibold text-ink">Nothing in the last {WINDOW_DAYS} days</p>
-              <p className="mt-1 text-[12px] text-ink-faint">
-                Their tool calls, chat turns and scheduled runs will land here as they happen.
+              <p className="text-[13px] font-semibold text-ink">
+                Nada en los últimos {WINDOW_DAYS} días
+              </p>
+              <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
+                Sus llamadas a herramientas, turnos de chat y rutinas van cayendo aquí a medida que
+                ocurren.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-[12px]">
-                <thead className="border-b border-border bg-surface-2/60">
-                  <tr className="text-left text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
-                    <th className="px-4 py-2.5 font-semibold">When</th>
-                    <th className="px-4 py-2.5 font-semibold">Tool</th>
-                    <th className="px-4 py-2.5 font-semibold">Surface</th>
-                    <th className="px-4 py-2.5 font-semibold">Status</th>
-                    <th className="px-4 py-2.5 font-semibold">Risk</th>
-                    <th className="px-4 py-2.5 text-right font-semibold">Latency</th>
-                    <th className="px-4 py-2.5 font-semibold">Detail</th>
+                <thead className="border-b border-border-strong bg-surface-2">
+                  <tr className="text-left">
+                    <th className="field-label px-4 py-2.5">Cuándo</th>
+                    <th className="field-label px-4 py-2.5">Herramienta</th>
+                    <th className="field-label px-4 py-2.5">Superficie</th>
+                    <th className="field-label px-4 py-2.5">Estado</th>
+                    <th className="field-label px-4 py-2.5">Riesgo</th>
+                    <th className="field-label px-4 py-2.5 text-right">Latencia</th>
+                    <th className="field-label px-4 py-2.5">Detalle</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -986,17 +1008,17 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         )}
                       >
                         <td
-                          className="whitespace-nowrap px-4 py-2 text-ink-faint"
+                          className="tabular whitespace-nowrap px-4 py-2 text-ink-faint"
                           title={absoluteTime(e.created_at)}
                         >
                           {relativeTime(e.created_at)}
                         </td>
                         <td className="max-w-[220px] px-4 py-2">
                           <div className="truncate font-semibold text-ink">
-                            {isAgentTurn(e.tool_id) ? 'Chat turn' : toolLabel(e.tool_id).label}
+                            {isAgentTurn(e.tool_id) ? 'Turno de chat' : toolLabel(e.tool_id).label}
                           </div>
                           {!isAgentTurn(e.tool_id) && (
-                            <div className="truncate font-mono text-[10.5px] text-ink-faint">
+                            <div className="tabular truncate text-[10.5px] text-ink-faint">
                               {e.tool_id}
                             </div>
                           )}
@@ -1014,17 +1036,17 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                               <DecisionTag decision={e.decision} />
                             </span>
                           ) : (
-                            <span className="text-ink-faint">—</span>
+                            <span className="tabular text-ink-faint">—</span>
                           )}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-2 text-right text-ink-faint">
+                        <td className="tabular whitespace-nowrap px-4 py-2 text-right text-ink-faint">
                           {formatLatency(e.latency_ms)}
                         </td>
                         <td className="max-w-[300px] px-4 py-2 text-ink-muted">
                           {detail ? (
                             <span className="line-clamp-2">{detail}</span>
                           ) : (
-                            <span className="text-ink-faint">—</span>
+                            <span className="tabular text-ink-faint">—</span>
                           )}
                         </td>
                       </tr>
@@ -1039,7 +1061,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
               href={`/admin/audit?user=${user.id}&range=30d`}
               className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-primary hover:underline"
             >
-              See all in the audit log
+              Ver todo en la auditoría
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>

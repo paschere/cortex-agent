@@ -45,9 +45,9 @@ function StackedBar({
   return (
     <div>
       {total === 0 ? (
-        <div className="h-3 w-full rounded-pill bg-surface-2" />
+        <div className="h-3 w-full rounded-card border border-border bg-surface-2" />
       ) : (
-        <div className="flex h-3 w-full overflow-hidden rounded-pill bg-surface-2">
+        <div className="flex h-3 w-full overflow-hidden rounded-card border border-border bg-surface-2">
           {visible.map((s) => (
             <div
               key={s.key}
@@ -220,18 +220,28 @@ export default async function UsagePage({
   }));
 
   const stats = [
-    { label: 'Tool calls', value: String(rows.length), icon: Zap },
-    { label: 'Success rate', value: `${successRate}%`, icon: CheckCircle2 },
-    { label: 'Errors', value: String(errorCount), icon: AlertTriangle },
-    { label: 'Active users', value: String(userIds.length), icon: Users },
-    { label: 'Latency p50 / p95', value: `${p50}ms / ${p95}ms`, icon: Timer },
+    { label: 'Llamadas', value: rows.length.toLocaleString('es-CO'), icon: Zap, tone: 'text-ink' },
+    {
+      label: 'Tasa de éxito',
+      value: `${successRate}%`,
+      icon: CheckCircle2,
+      tone: successRate >= 95 ? 'text-emerald' : successRate >= 80 ? 'text-amber' : 'text-rose',
+    },
+    {
+      label: 'Errores',
+      value: errorCount.toLocaleString('es-CO'),
+      icon: AlertTriangle,
+      tone: errorCount > 0 ? 'text-amber' : 'text-emerald',
+    },
+    { label: 'Personas activas', value: String(userIds.length), icon: Users, tone: 'text-ink' },
+    { label: 'Latencia p50 / p95', value: `${p50}ms / ${p95}ms`, icon: Timer, tone: 'text-ink' },
   ];
 
   return (
     <>
       <PageHeader
-        title="Usage"
-        subtitle={`Tool activity across every surface — last ${days} days`}
+        title="Uso"
+        subtitle={`Actividad de herramientas en todas las superficies · últimos ${days} días`}
         icon={<BarChart3 className="h-5 w-5" />}
       />
 
@@ -242,8 +252,8 @@ export default async function UsagePage({
             href={`/admin/usage?days=${r}`}
             className={
               days === r
-                ? 'rounded-pill bg-primary px-3 py-1 font-bold text-white'
-                : 'rounded-pill bg-surface-2 px-3 py-1 font-semibold text-ink-muted hover:text-ink'
+                ? 'rounded-card border border-primary bg-primary px-3 py-1 font-mono font-semibold text-white'
+                : 'rounded-card border border-border bg-surface px-3 py-1 font-mono font-semibold text-ink-muted hover:border-border-strong hover:text-ink'
             }
           >
             {r}d
@@ -252,25 +262,30 @@ export default async function UsagePage({
       </div>
 
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          {stats.map((s) => (
-            <Panel key={s.label} className="flex items-center gap-3 p-3.5">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
-                <s.icon className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <div className="truncate text-[15px] font-extrabold leading-tight text-ink">{s.value}</div>
-                <div className="truncate text-[10.5px] text-ink-faint">{s.label}</div>
+        {/* Hairlines come from the gap showing the border colour through, so the
+            rules stay correct at every breakpoint the grid reflows to. */}
+        <Panel className="overflow-hidden bg-border">
+          <div className="grid grid-cols-2 gap-px lg:grid-cols-5">
+            {stats.map((s) => (
+              <div key={s.label} className="bg-surface p-4">
+                <div className="flex items-center gap-1.5">
+                  <s.icon className={`h-3.5 w-3.5 ${s.tone}`} />
+                  <span className="field-label">{s.label}</span>
+                </div>
+                <div
+                  className={`stat-num mt-1.5 truncate text-[24px] leading-none ${s.tone}`}
+                  title={s.value}
+                >
+                  {s.value}
+                </div>
               </div>
-            </Panel>
-          ))}
-        </div>
+            ))}
+          </div>
+        </Panel>
 
         {/* Daily activity */}
         <Panel className="p-4">
-          <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-            Daily activity
-          </div>
+          <div className="field-label mb-3">Actividad diaria</div>
           <div className="flex h-28 items-end gap-1">
             {daySeries.map((d) => {
               const total = d.ok + d.error;
@@ -280,9 +295,9 @@ export default async function UsagePage({
                 <div
                   key={d.day}
                   className="group relative flex-1"
-                  title={`${d.day}: ${total} calls (${d.error} errors)`}
+                  title={`${d.day}: ${total} llamadas (${d.error} con error)`}
                 >
-                  <div className="flex h-28 flex-col justify-end overflow-hidden rounded-t-[4px]">
+                  <div className="flex h-28 flex-col justify-end overflow-hidden">
                     <div className="w-full bg-rose" style={{ height: `${errH}%` }} />
                     <div className="w-full bg-primary" style={{ height: `${Math.max(total > 0 ? 2 : 0, h - errH)}%` }} />
                   </div>
@@ -290,7 +305,7 @@ export default async function UsagePage({
               );
             })}
           </div>
-          <div className="mt-1.5 flex justify-between text-[10px] text-ink-faint">
+          <div className="tabular mt-1.5 flex justify-between text-[10px] text-ink-faint">
             <span>{daySeries[0]?.day}</span>
             <span>{daySeries[daySeries.length - 1]?.day}</span>
           </div>
@@ -299,28 +314,24 @@ export default async function UsagePage({
         {/* Where it ran + how risky it was */}
         <div className="grid gap-4 lg:grid-cols-2">
           <Panel className="p-4">
-            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Where it ran
-            </div>
+            <div className="field-label mb-3">Desde dónde corrió</div>
             <StackedBar segments={surfaceSegments} total={rows.length} />
-            <p className="mt-3 text-[11px] text-ink-faint">
+            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
               {rows.length === 0
-                ? 'No calls in this window.'
+                ? 'No hay llamadas en esta ventana.'
                 : bySurface.unknown === rows.length
-                  ? 'No surface was recorded on these calls yet.'
-                  : 'Web app, Claude via MCP, and unattended scheduled runs.'}
+                  ? 'Estas llamadas todavía no traen la superficie registrada.'
+                  : 'La app web, Claude por MCP y las rutinas que corren solas.'}
             </p>
           </Panel>
 
           <Panel className="p-4">
-            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Risk mix
-            </div>
+            <div className="field-label mb-3">Reparto de riesgo</div>
             <StackedBar segments={riskSegments} total={riskClassified} />
-            <p className="mt-3 text-[11px] text-ink-faint">
+            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
               {riskClassified === 0
-                ? 'Nothing has been risk-classified in this window yet.'
-                : `${riskClassified.toLocaleString()} of ${rows.length.toLocaleString()} calls carry a risk level.`}
+                ? 'Todavía no se ha clasificado el riesgo de nada en esta ventana.'
+                : `${riskClassified.toLocaleString('es-CO')} de ${rows.length.toLocaleString('es-CO')} llamadas traen nivel de riesgo.`}
             </p>
           </Panel>
         </div>
@@ -328,32 +339,30 @@ export default async function UsagePage({
         {/* Token usage */}
         <Panel className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Token usage · chat turns
-            </div>
+            <div className="field-label">Consumo de tokens · turnos de chat</div>
             <div className="flex items-center gap-3">
-              <LegendDot color="bg-sky" label="in" />
-              <LegendDot color="bg-primary" label="out" />
+              <LegendDot color="bg-sky" label="entrada" />
+              <LegendDot color="bg-primary" label="salida" />
             </div>
           </div>
 
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             {[
-              { label: 'Total tokens', value: formatTokens(totalTokens) },
-              { label: 'Input', value: formatTokens(tokensIn) },
-              { label: 'Output', value: formatTokens(tokensOut) },
-              { label: 'Per day (avg)', value: formatTokens(tokensPerDay) },
+              { label: 'Tokens en total', value: formatTokens(totalTokens) },
+              { label: 'De entrada', value: formatTokens(tokensIn) },
+              { label: 'De salida', value: formatTokens(tokensOut) },
+              { label: 'Promedio por día', value: formatTokens(tokensPerDay) },
             ].map((s) => (
-              <div key={s.label} className="rounded-card bg-surface-2 p-3">
-                <div className="text-[15px] font-extrabold leading-tight text-ink">{s.value}</div>
-                <div className="text-[10.5px] text-ink-faint">{s.label}</div>
+              <div key={s.label} className="rounded-card border border-border bg-surface-2 p-3">
+                <div className="stat-num text-[20px] leading-tight text-ink">{s.value}</div>
+                <div className="field-label mt-1">{s.label}</div>
               </div>
             ))}
           </div>
 
           {totalTokens === 0 ? (
-            <div className="flex h-20 items-center justify-center rounded-card bg-surface-2 text-[12.5px] text-ink-faint">
-              No chat turns recorded token usage in this window.
+            <div className="flex h-20 items-center justify-center rounded-card border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
+              Ningún turno de chat registró consumo de tokens en esta ventana.
             </div>
           ) : (
             <>
@@ -366,9 +375,9 @@ export default async function UsagePage({
                     <div
                       key={d.day}
                       className="flex-1"
-                      title={`${d.day}: ${d.in.toLocaleString()} in / ${d.out.toLocaleString()} out`}
+                      title={`${d.day}: ${d.in.toLocaleString('es-CO')} de entrada / ${d.out.toLocaleString('es-CO')} de salida`}
                     >
-                      <div className="flex h-20 flex-col justify-end overflow-hidden rounded-t-[4px]">
+                      <div className="flex h-20 flex-col justify-end overflow-hidden">
                         <div className="w-full bg-primary" style={{ height: `${outH}%` }} />
                         <div
                           className="w-full bg-sky"
@@ -379,10 +388,10 @@ export default async function UsagePage({
                   );
                 })}
               </div>
-              <div className="mt-1.5 flex justify-between text-[10px] text-ink-faint">
+              <div className="tabular mt-1.5 flex justify-between text-[10px] text-ink-faint">
                 <span>{tokenSeries[0]?.day}</span>
                 <span>
-                  {turns.toLocaleString()} turn{turns === 1 ? '' : 's'}
+                  {turns.toLocaleString('es-CO')} turno{turns === 1 ? '' : 's'}
                 </span>
                 <span>{tokenSeries[tokenSeries.length - 1]?.day}</span>
               </div>
@@ -393,11 +402,9 @@ export default async function UsagePage({
         <div className="grid gap-4 lg:grid-cols-2">
           {/* By tool */}
           <Panel className="p-4">
-            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Top tools
-            </div>
+            <div className="field-label mb-3">Herramientas más usadas</div>
             {toolEntries.length === 0 ? (
-              <p className="text-[12.5px] text-ink-faint">No activity in this window.</p>
+              <p className="text-[12.5px] text-ink-muted">No hay actividad en esta ventana.</p>
             ) : (
               <ul className="space-y-2">
                 {toolEntries.map(([tool, t]) => {
@@ -407,15 +414,17 @@ export default async function UsagePage({
                   return (
                     <li key={tool}>
                       <div className="mb-0.5 flex items-center justify-between text-[11.5px]">
-                        <span className="truncate font-mono font-semibold text-ink">{tool}</span>
-                        <span className="shrink-0 text-ink-faint">
+                        <span className="tabular truncate font-semibold text-ink">{tool}</span>
+                        <span className="tabular shrink-0 text-ink-faint">
                           {t.count}× · {avg}ms
-                          {t.errors > 0 && <span className="ml-1 text-rose">· {t.errors} err</span>}
+                          {t.errors > 0 && (
+                            <span className="ml-1 text-rose">· {t.errors} con error</span>
+                          )}
                         </span>
                       </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+                      <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
                         <div
-                          className={t.errors > 0 ? 'h-full rounded-full bg-amber' : 'h-full rounded-full bg-primary'}
+                          className={t.errors > 0 ? 'h-full bg-amber' : 'h-full bg-primary'}
                           style={{ width: `${Math.max(3, Math.round((t.count / maxToolCount) * 100))}%` }}
                         />
                       </div>
@@ -428,11 +437,9 @@ export default async function UsagePage({
 
           {/* By user */}
           <Panel className="p-4">
-            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              By teammate
-            </div>
+            <div className="field-label mb-3">Por persona</div>
             {userEntries.length === 0 ? (
-              <p className="text-[12.5px] text-ink-faint">No activity in this window.</p>
+              <p className="text-[12.5px] text-ink-muted">No hay actividad en esta ventana.</p>
             ) : (
               <ul className="space-y-2">
                 {userEntries.map(([userId, count]) => (
@@ -441,11 +448,13 @@ export default async function UsagePage({
                       <span className="truncate font-semibold text-ink">
                         {userMap[userId] ?? userId.slice(0, 8)}
                       </span>
-                      <span className="shrink-0 text-ink-faint">{count} calls</span>
+                      <span className="tabular shrink-0 text-ink-faint">
+                        {count} {count === 1 ? 'llamada' : 'llamadas'}
+                      </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+                    <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
                       <div
-                        className="h-full rounded-full bg-primary"
+                        className="h-full bg-primary"
                         style={{ width: `${Math.max(3, Math.round((count / maxUserCount) * 100))}%` }}
                       />
                     </div>
@@ -456,10 +465,10 @@ export default async function UsagePage({
           </Panel>
         </div>
 
-        <p className="flex items-center gap-1.5 text-[11px] text-ink-faint">
-          <Cpu className="h-3.5 w-3.5" />
-          Token counts come from chat turns recorded in the audit log; tool-only surfaces do not
-          report usage.
+        <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-faint">
+          <Cpu className="mt-px h-3.5 w-3.5 shrink-0" />
+          El conteo de tokens sale de los turnos de chat registrados en la auditoría. Las
+          superficies que solo ejecutan herramientas no reportan consumo.
         </p>
       </div>
     </>

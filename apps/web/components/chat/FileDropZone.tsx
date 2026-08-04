@@ -26,7 +26,7 @@ export function FileDropZone(_props: { conversationId: string }) {
     maxSize: 10 * 1024 * 1024,
     onDrop: async (acceptedFiles) => {
       if (acceptedFiles.length === 0) return;
-      setStatus('Adding…');
+      setStatus('Guardando…');
       try {
         for (const file of acceptedFiles) {
           const form = new FormData();
@@ -35,16 +35,16 @@ export function FileDropZone(_props: { conversationId: string }) {
           // notes, which is the only default that cannot over-share.
           const res = await fetch('/api/kb/documents', { method: 'POST', body: form });
           if (!res.ok) {
-            setStatus(`${file.name} could not be added.`);
+            setStatus(`No se pudo guardar ${file.name}.`);
             return;
           }
         }
         setStatus(
-          `Saved to your own notes — ${acceptedFiles.length === 1 ? 'it' : 'they'} will be searchable in a minute.`,
+          `Guardado en tus propias notas: ${acceptedFiles.length === 1 ? 'se podrá' : 'se podrán'} buscar en un minuto.`,
         );
         setTimeout(() => setStatus(null), 5000);
       } catch (err) {
-        setStatus(err instanceof Error ? err.message : 'That did not upload.');
+        setStatus(err instanceof Error ? err.message : 'No se pudo subir el archivo.');
       }
     },
   });
@@ -53,7 +53,7 @@ export function FileDropZone(_props: { conversationId: string }) {
     <div
       {...getRootProps({
         className: clsx(
-          'cursor-pointer rounded-[10px] border border-dashed p-2 text-xs transition-colors',
+          'cursor-pointer rounded-card border border-dashed p-2 text-xs transition-colors',
           isDragActive
             ? 'border-primary bg-primary-soft text-primary'
             : 'border-border-strong text-ink-faint hover:bg-surface-2',
@@ -61,7 +61,8 @@ export function FileDropZone(_props: { conversationId: string }) {
       })}
     >
       <input {...getInputProps()} />
-      {status ?? 'Drop a file to save it to your own notes (PDF, DOCX, TXT, MD — max 10 MB).'}
+      {status ??
+        'Suelta un archivo para guardarlo en tus propias notas (PDF, DOCX, TXT, MD — máx. 10 MB).'}
     </div>
   );
 }

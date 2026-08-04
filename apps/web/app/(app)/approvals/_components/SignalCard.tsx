@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { chipClass } from '@/lib/status-chip';
 import { Radar, ThumbsUp, ThumbsDown, Loader2, ExternalLink } from 'lucide-react';
 
 interface SignalCardProps {
@@ -46,18 +47,14 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
   const excerpt = summary && summary.length > 220 ? `${summary.slice(0, 220)}…` : summary;
 
   return (
-    <div className="flex h-full flex-col gap-2.5 rounded-card border border-border bg-surface p-4 shadow-card">
+    <div className="flex h-full flex-col gap-2.5 rounded-card border border-border bg-surface p-4">
       <div className="flex items-start gap-3">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
-          <Radar className="h-4 w-4" />
-        </span>
+        <Radar className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13.5px] font-bold text-ink">{company}</div>
           <div className="truncate text-[12.5px] text-ink-muted">{roleTitle}</div>
         </div>
-        <span className="shrink-0 rounded-pill bg-surface-2 px-2 py-0.5 text-[10.5px] font-semibold text-ink-faint">
-          {source}
-        </span>
+        <span className={chipClass('neutral')}>{source}</span>
       </div>
 
       {excerpt && <p className="text-[12px] leading-snug text-ink-muted">{excerpt}</p>}
@@ -69,12 +66,12 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
         className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary hover:text-primary-strong"
       >
         <ExternalLink className="h-3.5 w-3.5" />
-        View posting
+        Ver la vacante
       </a>
 
       {status === 'error' && (
-        <p className="rounded-[8px] border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-xs text-rose">
-          {errorMessage}
+        <p className="rounded-card border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-xs text-rose">
+          {errorMessage} El prospecto sigue igual. Vuelve a intentarlo.
         </p>
       )}
 
@@ -83,27 +80,27 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
           type="button"
           onClick={() => act('qualified')}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-pill bg-emerald px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-colors hover:brightness-95 disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-card bg-emerald px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:brightness-95 disabled:opacity-60"
         >
           {status === 'qualifying' ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
           ) : (
             <ThumbsUp className="h-3.5 w-3.5" />
           )}
-          Qualify
+          Calificar
         </button>
         <button
           type="button"
           onClick={() => act('rejected')}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-medium text-ink-muted transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-card px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-60"
         >
           {status === 'rejecting' ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
           ) : (
             <ThumbsDown className="h-3.5 w-3.5" />
           )}
-          Reject
+          Descartar
         </button>
       </div>
     </div>

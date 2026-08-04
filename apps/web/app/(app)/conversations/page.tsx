@@ -87,13 +87,13 @@ export default async function ConversationsPage({
   }
 
   const subtitle = q
-    ? `${conversations.length} match${conversations.length === 1 ? '' : 'es'} for “${q}”`
-    : `${conversations.length} conversation${conversations.length === 1 ? '' : 's'}`;
+    ? `${conversations.length} ${conversations.length === 1 ? 'coincidencia' : 'coincidencias'} para “${q}”`
+    : `${conversations.length} ${conversations.length === 1 ? 'conversación' : 'conversaciones'}`;
 
   return (
     <>
       <PageHeader
-        title="Conversations"
+        title="Conversaciones"
         subtitle={subtitle}
         icon={<MessagesSquare className="h-5 w-5" />}
       />
@@ -102,25 +102,35 @@ export default async function ConversationsPage({
 
       <Panel className="overflow-hidden">
         {conversations.length === 0 ? (
-          <div className="p-10 text-center text-[13px] text-ink-faint">
+          <div className="p-10 text-center text-[13px] text-ink-muted">
             {q ? (
               <>
-                Nothing matches “{q}”.{' '}
+                <p className="mb-1 text-[14px] font-bold text-ink">
+                  Ninguna conversación se llama así
+                </p>
+                <p className="mx-auto max-w-sm leading-relaxed">
+                  La búsqueda solo mira el título de la conversación. Prueba con otra palabra.
+                </p>
                 <Link
                   href="/conversations"
-                  className="font-semibold text-primary hover:text-primary-strong"
+                  className="mt-4 inline-flex rounded-card border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2"
                 >
-                  Clear the search
+                  Limpiar la búsqueda
                 </Link>
-                .
               </>
             ) : (
               <>
-                No conversations yet.{' '}
-                <Link href="/chat" className="font-semibold text-primary hover:text-primary-strong">
-                  Start chatting
+                <p className="mb-1 text-[14px] font-bold text-ink">Todavía no hay conversaciones</p>
+                <p className="mx-auto max-w-sm leading-relaxed">
+                  Aquí queda todo lo que le has preguntado a Cortex, con las herramientas que usó
+                  para responderte.
+                </p>
+                <Link
+                  href="/chat"
+                  className="mt-4 inline-flex rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
+                >
+                  Abrir el chat
                 </Link>
-                .
               </>
             )}
           </div>
@@ -137,27 +147,27 @@ export default async function ConversationsPage({
                     href={`/conversations/${c.id}`}
                     className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3.5"
                   >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-ink-muted">
                       <MessagesSquare className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px] font-semibold text-ink">
-                        {c.title?.trim() || 'Untitled conversation'}
+                        {c.title?.trim() || 'Conversación sin título'}
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-faint">
                         <SurfaceBadge surface={c.derived} />
                         <span className="truncate">{relName(c.agents) ?? 'Cortex'}</span>
                         {count !== undefined && (
                           <>
                             <span aria-hidden>·</span>
-                            <span>
-                              {count} message{count === 1 ? '' : 's'}
+                            <span className="tabular">
+                              {count} {count === 1 ? 'mensaje' : 'mensajes'}
                             </span>
                           </>
                         )}
                       </div>
                     </div>
-                    <span className="shrink-0 text-xs text-ink-faint">
+                    <span className="tabular shrink-0 text-[11.5px] text-ink-faint">
                       {relativeTime(c.updated_at)}
                     </span>
                   </Link>

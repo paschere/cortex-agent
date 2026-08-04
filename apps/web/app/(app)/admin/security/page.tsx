@@ -55,43 +55,39 @@ interface PolicyRow {
 
 const POLICY_COPY: Record<string, { title: string; explain: (value: unknown) => string }> = {
   block_critical: {
-    title: 'Block critical actions',
+    title: 'Bloquear las acciones críticas',
     explain: (v) =>
       v === true || v === 'true'
-        ? 'Critical actions are blocked automatically before they run.'
-        : 'Critical actions are allowed to run — they are only recorded, not stopped.',
+        ? 'Las acciones críticas se bloquean antes de ejecutarse.'
+        : 'Las acciones críticas alcanzan a ejecutarse: solo quedan registradas, no se detienen.',
   },
   sensitive_reads_per_hour: {
-    title: 'Sensitive read budget',
+    title: 'Cupo de lecturas sensibles',
     explain: (v) =>
-      `More than ${String(v)} sensitive reads in one hour raises a teammate's risk level and starts flagging their calls.`,
+      `Pasar de ${String(v)} lecturas sensibles en una hora le sube el nivel de riesgo a la persona y empieza a marcar sus llamadas.`,
   },
   external_send_requires_confirmation: {
-    title: 'Confirm before anything leaves',
+    title: 'Confirmar antes de que algo salga',
     explain: (v) =>
       v === true || v === 'true'
-        ? 'Anything that leaves the workspace — email, Slack, external writes — needs a human confirmation first.'
-        : 'External sends run without asking for a confirmation first.',
+        ? 'Todo lo que sale de la organización —correo, Slack, escrituras externas— necesita que una persona lo confirme.'
+        : 'Los envíos hacia afuera se ejecutan sin pedir confirmación.',
   },
 };
 
 function policyDisplay(value: unknown): string {
-  if (value === true || value === 'true') return 'On';
-  if (value === false || value === 'false') return 'Off';
+  if (value === true || value === 'true') return 'Activa';
+  if (value === false || value === 'false') return 'Inactiva';
   if (typeof value === 'number' || typeof value === 'string') return String(value);
   return JSON.stringify(value);
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-      {children}
-    </div>
-  );
+  return <div className="field-label mb-3">{children}</div>;
 }
 
 function EmptyNote({ children }: { children: React.ReactNode }) {
-  return <p className="text-[12.5px] text-ink-faint">{children}</p>;
+  return <p className="max-w-lg text-[12.5px] leading-relaxed text-ink-muted">{children}</p>;
 }
 
 export default async function SecurityPage() {
@@ -169,71 +165,81 @@ export default async function SecurityPage() {
   );
 
   const tiles = [
-    { label: 'Blocked · 7d', value: String(blocked7), icon: Ban, tone: 'bg-rose-soft text-rose' },
-    { label: 'Flagged · 7d', value: String(flagged7), icon: Flag, tone: 'bg-amber-soft text-amber' },
     {
-      label: 'High / critical · 7d',
+      label: 'Bloqueadas · 7d',
+      value: String(blocked7),
+      icon: Ban,
+      tone: blocked7 > 0 ? 'text-rose' : 'text-emerald',
+    },
+    {
+      label: 'Marcadas · 7d',
+      value: String(flagged7),
+      icon: Flag,
+      tone: flagged7 > 0 ? 'text-amber' : 'text-emerald',
+    },
+    {
+      label: 'Riesgo alto o crítico · 7d',
       value: String(riskyAudit7d),
       icon: ShieldAlert,
-      tone: 'bg-amber-soft text-amber',
+      tone: riskyAudit7d > 0 ? 'text-amber' : 'text-emerald',
     },
-    { label: 'Teammates involved', value: String(users7), icon: Users, tone: 'bg-primary-soft text-primary' },
-    {
-      label: 'Top signal',
-      value: topSignals[0]?.[0] ?? '—',
-      icon: Radar,
-      tone: 'bg-sky-soft text-sky',
-    },
+    { label: 'Personas involucradas', value: String(users7), icon: Users, tone: 'text-ink' },
+    { label: 'Señal más frecuente', value: topSignals[0]?.[0] ?? '—', icon: Radar, tone: 'text-ink' },
   ];
 
   return (
     <>
       <PageHeader
-        title="Security review"
-        subtitle="What the agent was stopped from doing, what looked risky, and the rules behind it"
+        title="Seguridad"
+        subtitle="Qué se le impidió hacer al agente, qué se vio riesgoso y con qué reglas se decidió"
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={
           <Link
             href="/admin/audit?risk=high"
-            className="inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted shadow-card hover:text-ink"
+            className="inline-flex items-center gap-2 rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
           >
             <ShieldAlert className="h-4 w-4" />
-            Risky events in the audit log
+            Ver los eventos riesgosos
           </Link>
         }
       />
 
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-          {tiles.map((t) => (
-            <Panel key={t.label} className="flex items-center gap-3 p-3.5">
-              <span className={clsx('grid h-9 w-9 shrink-0 place-items-center rounded-[10px]', t.tone)}>
-                <t.icon className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <div className="truncate text-[15px] font-extrabold leading-tight text-ink" title={t.value}>
+        {/* Hairlines come from the gap showing the border colour through, so the
+            rules stay correct at every breakpoint the grid reflows to. */}
+        <Panel className="overflow-hidden bg-border">
+          <div className="grid grid-cols-2 gap-px lg:grid-cols-5">
+            {tiles.map((t) => (
+              <div key={t.label} className="bg-surface p-4">
+                <div className="flex items-center gap-1.5">
+                  <t.icon className={clsx('h-3.5 w-3.5', t.tone)} />
+                  <span className="field-label">{t.label}</span>
+                </div>
+                <div
+                  className={clsx('stat-num mt-1.5 truncate text-[24px] leading-none', t.tone)}
+                  title={t.value}
+                >
                   {t.value}
                 </div>
-                <div className="truncate text-[10.5px] text-ink-faint">{t.label}</div>
               </div>
-            </Panel>
-          ))}
-        </div>
+            ))}
+          </div>
+        </Panel>
 
         {/* Timeline */}
         <Panel className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Flagged vs blocked · last {TIMELINE_DAYS} days
+            <div className="field-label">
+              Marcadas frente a bloqueadas · últimos {TIMELINE_DAYS} días
             </div>
             <div className="flex items-center gap-3">
-              <LegendDot color="bg-amber" label="flagged" />
-              <LegendDot color="bg-rose" label="blocked" />
+              <LegendDot color="bg-amber" label="marcadas" />
+              <LegendDot color="bg-rose" label="bloqueadas" />
             </div>
           </div>
           {timelineTotal === 0 ? (
-            <div className="flex h-28 items-center justify-center rounded-card bg-surface-2 text-[12.5px] text-ink-faint">
-              Nothing has been flagged or blocked in this window.
+            <div className="flex h-28 items-center justify-center rounded-card border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
+              No se marcó ni se bloqueó nada en esta ventana.
             </div>
           ) : (
             <div className="flex h-28 items-end gap-1">
@@ -245,9 +251,9 @@ export default async function SecurityPage() {
                   <div
                     key={d.day}
                     className="flex-1"
-                    title={`${d.day}: ${d.flagged} flagged, ${d.blocked} blocked`}
+                    title={`${d.day}: ${d.flagged} marcadas, ${d.blocked} bloqueadas`}
                   >
-                    <div className="flex h-28 flex-col justify-end overflow-hidden rounded-t-[4px]">
+                    <div className="flex h-28 flex-col justify-end overflow-hidden">
                       <div className="w-full bg-rose" style={{ height: `${blockedH}%` }} />
                       <div
                         className="w-full bg-amber"
@@ -259,7 +265,7 @@ export default async function SecurityPage() {
               })}
             </div>
           )}
-          <div className="mt-1.5 flex justify-between text-[10px] text-ink-faint">
+          <div className="tabular mt-1.5 flex justify-between text-[10px] text-ink-faint">
             <span>{timeline[0]?.day}</span>
             <span>{timeline[timeline.length - 1]?.day}</span>
           </div>
@@ -268,9 +274,9 @@ export default async function SecurityPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           {/* Top risky tools */}
           <Panel className="p-4">
-            <SectionLabel>Top risky tools · {WINDOW_DAYS}d</SectionLabel>
+            <SectionLabel>Herramientas más riesgosas · {WINDOW_DAYS}d</SectionLabel>
             {topTools.length === 0 ? (
-              <EmptyNote>No tool has triggered the security layer yet.</EmptyNote>
+              <EmptyNote>Ninguna herramienta ha activado la capa de seguridad todavía.</EmptyNote>
             ) : (
               <ul className="space-y-2.5">
                 {topTools.map(([toolId, t]) => (
@@ -283,13 +289,16 @@ export default async function SecurityPage() {
                         </span>
                         <RiskTag level={t.worst} />
                       </span>
-                      <span className="shrink-0 text-ink-faint">
-                        {t.total}×{t.blocked > 0 && <span className="ml-1 text-rose">· {t.blocked} blocked</span>}
+                      <span className="tabular shrink-0 text-ink-faint">
+                        {t.total}×
+                        {t.blocked > 0 && (
+                          <span className="ml-1 text-rose">· {t.blocked} bloqueadas</span>
+                        )}
                       </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+                    <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
                       <div
-                        className={t.blocked > 0 ? 'h-full rounded-full bg-rose' : 'h-full rounded-full bg-amber'}
+                        className={t.blocked > 0 ? 'h-full bg-rose' : 'h-full bg-amber'}
                         style={{ width: `${Math.max(3, Math.round((t.total / maxTool) * 100))}%` }}
                       />
                     </div>
@@ -301,20 +310,20 @@ export default async function SecurityPage() {
 
           {/* Top signals */}
           <Panel className="p-4">
-            <SectionLabel>Top signals · {WINDOW_DAYS}d</SectionLabel>
+            <SectionLabel>Señales más frecuentes · {WINDOW_DAYS}d</SectionLabel>
             {topSignals.length === 0 ? (
-              <EmptyNote>No risk signals have fired yet.</EmptyNote>
+              <EmptyNote>Todavía no se ha disparado ninguna señal de riesgo.</EmptyNote>
             ) : (
               <ul className="space-y-2.5">
                 {topSignals.map(([signal, count]) => (
                   <li key={signal}>
                     <div className="mb-1 flex items-center justify-between gap-2 text-[11.5px]">
-                      <span className="truncate font-mono text-ink">{signal}</span>
-                      <span className="shrink-0 text-ink-faint">{count}×</span>
+                      <span className="tabular truncate text-ink">{signal}</span>
+                      <span className="tabular shrink-0 text-ink-faint">{count}×</span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+                    <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
                       <div
-                        className="h-full rounded-full bg-sky"
+                        className="h-full bg-sky"
                         style={{ width: `${Math.max(3, Math.round((count / maxSignal) * 100))}%` }}
                       />
                     </div>
@@ -328,34 +337,34 @@ export default async function SecurityPage() {
         {/* Recent security events */}
         <Panel className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Recent security events
-            </div>
+            <div className="field-label">Eventos de seguridad recientes</div>
             <span className="text-[11px] text-ink-faint">
-              {events.length === 0 ? 'nothing yet' : `${events.length} in the last ${WINDOW_DAYS} days`}
+              {events.length === 0
+                ? 'nada todavía'
+                : `${events.length} en los últimos ${WINDOW_DAYS} días`}
             </span>
           </div>
           {recent.length === 0 ? (
             <div className="px-4 py-12 text-center">
               <ShieldCheck className="mx-auto mb-3 h-6 w-6 text-emerald" />
-              <p className="text-[13px] font-semibold text-ink">Nothing to review</p>
-              <p className="mt-1 text-[12px] text-ink-faint">
-                No call has been flagged or blocked. Incidents will appear here the moment one is.
+              <p className="text-[13px] font-semibold text-ink">Nada por revisar</p>
+              <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
+                No se ha marcado ni bloqueado ninguna llamada. Apenas pase una, aparece aquí.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-[12px]">
-                <thead className="border-b border-border bg-surface-2/60">
-                  <tr className="text-left text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
-                    <th className="px-4 py-2.5 font-semibold">When</th>
-                    <th className="px-4 py-2.5 font-semibold">Who</th>
-                    <th className="px-4 py-2.5 font-semibold">Tool</th>
-                    <th className="px-4 py-2.5 font-semibold">Surface</th>
-                    <th className="px-4 py-2.5 font-semibold">Level</th>
-                    <th className="px-4 py-2.5 font-semibold">Decision</th>
-                    <th className="px-4 py-2.5 font-semibold">Reason</th>
-                    <th className="px-4 py-2.5 font-semibold">Signals</th>
+                <thead className="border-b border-border-strong bg-surface-2">
+                  <tr className="text-left">
+                    <th className="field-label px-4 py-2.5">Cuándo</th>
+                    <th className="field-label px-4 py-2.5">Quién</th>
+                    <th className="field-label px-4 py-2.5">Herramienta</th>
+                    <th className="field-label px-4 py-2.5">Superficie</th>
+                    <th className="field-label px-4 py-2.5">Nivel</th>
+                    <th className="field-label px-4 py-2.5">Decisión</th>
+                    <th className="field-label px-4 py-2.5">Motivo</th>
+                    <th className="field-label px-4 py-2.5">Señales</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -364,7 +373,7 @@ export default async function SecurityPage() {
                     return (
                       <tr key={e.id} className="border-t border-border align-top">
                         <td
-                          className="whitespace-nowrap px-4 py-2 text-ink-faint"
+                          className="tabular whitespace-nowrap px-4 py-2 text-ink-faint"
                           title={absoluteTime(e.created_at)}
                         >
                           {relativeTime(e.created_at)}
@@ -378,14 +387,14 @@ export default async function SecurityPage() {
                               {userNames[e.user_id] ?? `${e.user_id.slice(0, 8)}…`}
                             </Link>
                           ) : (
-                            <span className="text-ink-faint">system</span>
+                            <span className="text-ink-faint">el sistema</span>
                           )}
                         </td>
                         <td className="max-w-[190px] px-4 py-2">
                           <div className="truncate font-semibold text-ink">
                             {toolLabel(e.tool_id).label}
                           </div>
-                          <div className="truncate font-mono text-[10.5px] text-ink-faint">
+                          <div className="tabular truncate text-[10.5px] text-ink-faint">
                             {e.tool_id}
                           </div>
                         </td>
@@ -403,7 +412,7 @@ export default async function SecurityPage() {
                         </td>
                         <td className="px-4 py-2">
                           {signals.length === 0 ? (
-                            <span className="text-ink-faint">—</span>
+                            <span className="tabular text-ink-faint">—</span>
                           ) : (
                             <span className="flex flex-wrap gap-1">
                               {signals.slice(0, 4).map((s) => (
@@ -424,16 +433,14 @@ export default async function SecurityPage() {
         {/* Policies */}
         <Panel className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Active policies
-            </div>
-            <span className="inline-flex items-center gap-1.5 rounded-pill bg-surface-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-ink-faint">
+            <div className="field-label">Políticas activas</div>
+            <span className="inline-flex items-center gap-1.5 rounded-card border border-border bg-surface-2 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
               <Lock className="h-3 w-3" />
-              Read-only
+              Solo lectura
             </span>
           </div>
           {policies.length === 0 ? (
-            <EmptyNote>No policies are configured yet.</EmptyNote>
+            <EmptyNote>Todavía no hay políticas configuradas.</EmptyNote>
           ) : (
             <ul className="grid gap-3 md:grid-cols-3">
               {policies.map((p) => {
@@ -444,31 +451,39 @@ export default async function SecurityPage() {
                       <span className="text-[12.5px] font-bold text-ink">
                         {copy?.title ?? p.key.replaceAll('_', ' ')}
                       </span>
-                      <span className="shrink-0 rounded-pill bg-surface px-2 py-0.5 text-[10.5px] font-bold text-ink">
+                      <span className="tabular shrink-0 rounded-card border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink">
                         {policyDisplay(p.value)}
                       </span>
                     </div>
                     <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-muted">
-                      {copy?.explain(p.value) ?? `Stored as ${JSON.stringify(p.value)}.`}
+                      {copy?.explain(p.value) ?? `Guardada como ${JSON.stringify(p.value)}.`}
                     </p>
-                    <p className="mt-1.5 font-mono text-[10px] text-ink-faint">{p.key}</p>
+                    <p className="tabular mt-1.5 text-[10px] text-ink-faint">{p.key}</p>
                   </li>
                 );
               })}
             </ul>
           )}
-          <p className="mt-3 text-[11px] text-ink-faint">
-            Policies are shown as stored. Editing them from here is not enabled yet — change the
-            values in <span className="font-mono">security_policies</span> and they take effect on
-            the next call.
+          <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+            Las políticas se muestran tal como están guardadas. Todavía no se pueden editar desde
+            aquí: cambia los valores en <span className="tabular">security_policies</span> y toman
+            efecto en la siguiente llamada.
           </p>
         </Panel>
 
-        <p className="text-[11px] text-ink-faint">
-          Surfaces: {Object.values(SURFACE_LABEL).filter((s) => s !== 'Unknown').join(' · ')}.
-          Blocked and flagged calls are also visible in the{' '}
-          <Link href="/admin/audit?decision=blocked" className="font-semibold text-primary hover:underline">
-            audit log
+        <p className="text-[11px] leading-relaxed text-ink-faint">
+          Superficies:{' '}
+          {Object.entries(SURFACE_LABEL)
+            .filter(([key]) => key !== 'unknown')
+            .map(([, label]) => label)
+            .join(' · ')}
+          . Las
+          llamadas marcadas y bloqueadas también se ven en la{' '}
+          <Link
+            href="/admin/audit?decision=blocked"
+            className="font-semibold text-primary hover:underline"
+          >
+            auditoría
           </Link>
           .
         </p>

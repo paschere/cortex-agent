@@ -55,6 +55,8 @@
  * Pure module — no `server-only`, no I/O. Client components import it too.
  */
 
+import { type StatusTone, chipClass } from './status-chip';
+
 // ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
@@ -70,15 +72,15 @@ const KNOWN_STATUSES = new Set<string>([
   'cancelled',
 ]);
 
-export type DevTaskTone = 'neutral' | 'primary' | 'amber' | 'emerald' | 'rose';
+export type DevTaskTone = StatusTone;
 
-/** Pill classes per tone. Design tokens only — the palette is light-only. */
+/** The shared status shape, so a dev run is stamped like every other run. */
 export const DEV_TONE_CHIP: Record<DevTaskTone, string> = {
-  neutral: 'bg-surface-2 text-ink-faint',
-  primary: 'bg-primary-soft text-primary',
-  amber: 'bg-amber-soft text-amber',
-  emerald: 'bg-emerald-soft text-emerald',
-  rose: 'bg-rose-soft text-rose',
+  neutral: chipClass('neutral'),
+  primary: chipClass('primary'),
+  amber: chipClass('amber'),
+  emerald: chipClass('emerald'),
+  rose: chipClass('rose'),
 };
 
 export interface DevTaskStatusMeta {
@@ -281,41 +283,41 @@ export function describeStatus(
 ): DevTaskStatusMeta {
   if (isStopping(task)) {
     return {
-      label: 'Stopping',
-      blurb: 'Someone asked Cortex to stop. It finishes the step it is on, then stands down.',
+      label: 'Deteniendo',
+      blurb: 'Alguien le pidió a Cortex que se detenga. Termina el paso en el que va y para.',
       tone: 'rose',
       chip: DEV_TONE_CHIP.rose,
     };
   }
   const meta: Record<DevTaskStatus, Omit<DevTaskStatusMeta, 'chip'>> = {
     queued: {
-      label: 'Queued',
-      blurb: 'Waiting its turn. Nothing has been touched yet.',
+      label: 'En cola',
+      blurb: 'Esperando su turno. Todavía no se ha tocado nada.',
       tone: 'neutral',
     },
     running: {
-      label: 'Working',
-      blurb: 'Cortex is on it right now — reading the code and making changes.',
+      label: 'Trabajando',
+      blurb: 'Cortex está en esto ahora mismo: leyendo el código y haciendo cambios.',
       tone: 'primary',
     },
     needs_review: {
-      label: 'Needs you',
-      blurb: 'Cortex has done its part and is waiting on a person before anything else happens.',
+      label: 'Te espera',
+      blurb: 'Cortex hizo su parte y no sigue hasta que una persona revise.',
       tone: 'amber',
     },
     done: {
-      label: 'Done',
-      blurb: 'Finished and handed over.',
+      label: 'Listo',
+      blurb: 'Terminado y entregado.',
       tone: 'emerald',
     },
     failed: {
-      label: 'Failed',
-      blurb: 'Cortex could not finish this one.',
+      label: 'Falló',
+      blurb: 'Cortex no pudo terminar este trabajo.',
       tone: 'rose',
     },
     cancelled: {
-      label: 'Stopped',
-      blurb: 'A person stopped this before it finished.',
+      label: 'Detenido',
+      blurb: 'Una persona lo detuvo antes de que terminara.',
       tone: 'neutral',
     },
   };

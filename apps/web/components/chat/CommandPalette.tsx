@@ -16,25 +16,43 @@ interface Entry {
 }
 
 const NAVIGATION: Entry[] = [
-  { href: '/dashboard', label: 'Dashboard', keywords: 'home overview' },
-  { href: '/chat', label: 'New Chat', keywords: 'cortex ask' },
-  { href: '/conversations', label: 'Conversations', keywords: 'history threads' },
-  { href: '/approvals', label: 'Approvals', keywords: 'pending confirm' },
-  { href: '/kb', label: 'Brain Knowledge', keywords: 'kb knowledge base docs brain search' },
-  { href: '/pipelines', label: 'Pipelines', keywords: 'playbooks workflows' },
-  { href: '/schedules', label: 'Routines', keywords: 'scheduled jobs cron' },
-  { href: '/settings', label: 'Settings', keywords: 'preferences digest timezone' },
+  { href: '/dashboard', label: 'Panel', keywords: 'dashboard inicio resumen home overview' },
+  { href: '/chat', label: 'Chat nuevo', keywords: 'cortex preguntar nueva conversacion ask' },
+  {
+    href: '/conversations',
+    label: 'Conversaciones',
+    keywords: 'historial hilos transcripciones history',
+  },
+  { href: '/approvals', label: 'Aprobaciones', keywords: 'pendientes confirmar approvals' },
+  {
+    href: '/kb',
+    label: 'Brain Knowledge',
+    keywords: 'kb conocimiento documentos cerebro buscar brain search',
+  },
+  { href: '/agents', label: 'Agentes', keywords: 'bots agents equipo' },
+  {
+    href: '/orchestrator',
+    label: 'Orquestador',
+    keywords: 'plan grafo multiagente ejecutar orchestrator',
+  },
+  { href: '/pipelines', label: 'Flujos', keywords: 'pipelines manuales playbooks workflows' },
+  { href: '/schedules', label: 'Rutinas', keywords: 'programadas tareas cron routines' },
+  {
+    href: '/settings',
+    label: 'Configuración',
+    keywords: 'ajustes preferencias zona horaria settings',
+  },
 ];
 
 const CONNECTIONS: Entry[] = [
   {
     href: '/integrations',
-    label: 'Integrations — what Cortex is connected to',
+    label: 'Integraciones — a qué está conectado Cortex',
     keywords: 'google hubspot workable slack github linear apollo payroll mcp servers',
   },
   {
     href: '/mcp-tokens',
-    label: 'Connect Claude — use Cortex from an AI client',
+    label: 'Conectar Claude — usa Cortex desde un cliente de IA',
     keywords: 'claude code chatgpt mcp connector url token oauth',
   },
 ];
@@ -53,7 +71,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       key={e.href}
       value={`${e.label} ${e.keywords}`}
       onSelect={() => go(e.href)}
-      className="cursor-pointer rounded-[10px] px-3 py-2 text-[13px] text-ink-muted aria-selected:bg-surface-2 aria-selected:text-ink hover:bg-surface-2 hover:text-ink"
+      className="cursor-pointer rounded-card px-3 py-2 text-[13px] text-ink-muted aria-selected:bg-surface-2 aria-selected:text-ink hover:bg-surface-2 hover:text-ink"
     >
       {e.label}
     </Command.Item>
@@ -71,24 +89,30 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         if (e.key === 'Escape') onClose();
       }}
     >
-      <div className="w-full max-w-lg">
-        <Command className="overflow-hidden rounded-card border border-border bg-surface shadow-pop">
+      {/* No role="dialog"/aria-modal here: nothing traps focus inside the
+          palette, and claiming modality that is not enforced misleads a screen
+          reader more than the missing role does. */}
+      <div className="w-full max-w-lg px-4">
+        {/* A dialog genuinely floats above the page — one of the few places
+            elevation is earned. */}
+        <Command className="overflow-hidden rounded-card border border-border-strong bg-surface shadow-pop">
           <Command.Input
-            placeholder="Type a command or search…"
+            aria-label="Buscar un comando"
+            placeholder="Escribe un comando o busca…"
             className="w-full border-b border-border bg-transparent px-4 py-3 text-[13px] text-ink outline-none placeholder:text-ink-faint"
           />
           <Command.List className="max-h-72 overflow-y-auto p-2">
             <Command.Empty className="py-4 text-center text-[13px] text-ink-faint">
-              No results.
+              Sin resultados.
             </Command.Empty>
             <Command.Group
-              heading="Navigation"
+              heading="Navegación"
               className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.14em] [&_[cmdk-group-heading]]:text-ink-faint"
             >
               {NAVIGATION.map(item)}
             </Command.Group>
             <Command.Group
-              heading="Connections"
+              heading="Conexiones"
               className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.14em] [&_[cmdk-group-heading]]:text-ink-faint"
             >
               {CONNECTIONS.map(item)}

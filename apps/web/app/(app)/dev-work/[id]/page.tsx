@@ -1,4 +1,6 @@
 import { Panel } from '@/components/ui/panel';
+import { Field } from '@/components/ui/provenance';
+import { chipClass } from '@/lib/status-chip';
 import {
   DEV_TASK_COLUMNS,
   describeStatus,
@@ -34,25 +36,25 @@ import { StopButton } from '../_components/StopButton';
 
 export const dynamic = 'force-dynamic';
 
-const SECTION = 'text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint';
+const SECTION = 'field-label';
 
 /** Absolute stamp, spelled out — this page is read after the fact. */
 function stamp(ts: string | null): string {
   if (!ts) return '—';
-  return new Date(ts).toLocaleString(undefined, {
+  return new Date(ts).toLocaleString('es-CO', {
     weekday: 'short',
+    day: '2-digit',
     month: 'short',
-    day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
 }
 
 const CHECK_TONE = {
-  passed: { chip: 'bg-emerald-soft text-emerald', word: 'passed' },
-  failed: { chip: 'bg-rose-soft text-rose', word: 'failed' },
-  pending: { chip: 'bg-primary-soft text-primary', word: 'still running' },
-  skipped: { chip: 'bg-surface-2 text-ink-faint', word: 'skipped' },
+  passed: { tone: 'emerald', word: 'pasó' },
+  failed: { tone: 'rose', word: 'falló' },
+  pending: { tone: 'primary', word: 'corriendo' },
+  skipped: { tone: 'neutral', word: 'omitida' },
 } as const;
 
 export default async function DevWorkDetailPage({
@@ -111,27 +113,23 @@ export default async function DevWorkDetailPage({
           href="/dev-work"
           className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint transition-colors hover:text-ink"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Dev Work
+          <ArrowLeft className="h-3.5 w-3.5" /> Trabajo de desarrollo
         </Link>
       </div>
 
-      <div className="mb-6 flex flex-wrap items-start gap-4">
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
+      <div className="rule-double mb-6 flex flex-wrap items-start gap-4 pt-4">
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-primary">
           <Hammer className="h-5 w-5" />
         </span>
 
         <div className="min-w-0 flex-1 basis-[18rem]">
           <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold tracking-tight text-ink">
             {task.title}
-            <span
-              className={`rounded-pill px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${status.chip}`}
-            >
-              {status.label}
-            </span>
+            <span className={status.chip}>{status.label}</span>
           </h1>
           <p className="mt-1 text-[13px] text-ink-muted">{status.blurb}</p>
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-faint">
+          <div className="tabular mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink-faint">
             {repository && (
               <span className="inline-flex items-center gap-1.5">
                 <FolderGit2 className="h-3.5 w-3.5" />
@@ -141,14 +139,14 @@ export default async function DevWorkDetailPage({
             {requestedBy && (
               <span className="inline-flex items-center gap-1.5">
                 <UserRound className="h-3.5 w-3.5" />
-                Asked by {requestedBy}
+                Lo pidió {requestedBy}
               </span>
             )}
             <span className="inline-flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />
               {task.startedAt
-                ? `${task.finishedAt ? 'Took' : 'Running for'} ${formatDuration(elapsed)}`
-                : 'Not started yet'}
+                ? `${task.finishedAt ? 'Tomó' : 'Lleva'} ${formatDuration(elapsed)}`
+                : 'Sin empezar'}
             </span>
             {cost && (
               <span className="inline-flex items-center gap-1.5">
@@ -165,10 +163,10 @@ export default async function DevWorkDetailPage({
               href={task.prUrl}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-[10px] bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex items-center gap-1.5 rounded-card bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <GitPullRequest className="h-3.5 w-3.5" />
-              {task.prNumber ? `Review #${task.prNumber}` : 'Review the change'}
+              {task.prNumber ? `Revisar #${task.prNumber}` : 'Revisar el cambio'}
             </a>
           )}
           {(isStoppable(task) || stopping) && (
@@ -178,13 +176,14 @@ export default async function DevWorkDetailPage({
       </div>
 
       {overdue && (
-        <Panel className="mb-4 flex items-start gap-3 border-rose/30 bg-rose-soft p-4">
+        <Panel className="mb-4 flex items-start gap-3 border-rose/40 bg-rose-soft p-4">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose" />
           <div className="text-[12.5px] text-ink">
-            <p className="font-semibold text-rose">This run has not stood down yet</p>
+            <p className="font-semibold text-rose">Esta ejecución todavía no se detiene</p>
             <p className="mt-0.5 text-ink-muted">
-              {stoppedBy} asked it to stop {stamp(task.cancelRequestedAt)} and it is still going.
-              Nothing new will be merged, but it is worth telling whoever looks after Cortex.
+              {stoppedBy} pidió detenerla el <span className="tabular">{stamp(task.cancelRequestedAt)}</span>{' '}
+              y sigue corriendo. No se va a integrar nada nuevo, pero avísale a quien administra
+              Cortex.
             </p>
           </div>
         </Panel>
@@ -193,14 +192,14 @@ export default async function DevWorkDetailPage({
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
           <Panel className="p-5">
-            <div className={`mb-3 ${SECTION}`}>What was asked</div>
+            <div className={`mb-3 ${SECTION}`}>Lo que se pidió</div>
             {task.request ? (
-              <RunMarkdown className="rounded-[12px] bg-surface-2 px-3.5 py-3">
+              <RunMarkdown className="rounded-card border border-border bg-surface-2 px-3.5 py-3">
                 {task.request}
               </RunMarkdown>
             ) : (
-              <p className="text-[12.5px] text-ink-faint">
-                Only the headline came across — the full request lives on the Linear issue.
+              <p className="text-[12.5px] text-ink-muted">
+                Solo llegó el título. La petición completa está en el issue de Linear.
               </p>
             )}
             {task.issueUrl && (
@@ -211,26 +210,26 @@ export default async function DevWorkDetailPage({
                 className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary transition-colors hover:text-primary-strong"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                Open {task.issueKey ?? 'the issue'} in Linear
+                Abrir {task.issueKey ?? 'el issue'} en Linear
               </a>
             )}
           </Panel>
 
           {task.status === 'failed' && (
             <Panel className="p-5">
-              <div className={`mb-3 ${SECTION}`}>What went wrong</div>
-              <p className="rounded-[12px] border border-rose/20 bg-rose-soft px-3.5 py-3 text-[13.5px] leading-relaxed text-ink">
+              <div className={`mb-3 ${SECTION}`}>Qué salió mal</div>
+              <p className="rounded-card border border-rose/30 bg-rose-soft px-3.5 py-3 text-[13.5px] leading-relaxed text-ink">
                 {task.failureReason ??
-                  'Cortex stopped before the work was done and did not say why. Nothing was merged.'}
+                  'Cortex se detuvo antes de terminar y no dijo por qué. No se integró nada.'}
               </p>
               {/* The technical detail is real and sometimes needed — it is just
                   never the first thing a person reads. */}
               {task.errorDetail && (
                 <details className="group mt-3">
-                  <summary className="cursor-pointer list-none text-[12px] font-semibold text-ink-faint transition-colors hover:text-ink">
-                    Show the technical detail
+                  <summary className="cursor-pointer list-none text-[12px] font-semibold text-ink-muted transition-colors hover:text-ink">
+                    Ver el detalle técnico
                   </summary>
-                  <pre className="scroll-slim mt-2 overflow-x-auto rounded-[12px] bg-surface-2 px-3.5 py-3 text-[11.5px] leading-[1.6] text-ink-muted">
+                  <pre className="scroll-slim mt-2 overflow-x-auto rounded-card border border-border bg-surface-2 px-3.5 py-3 font-mono text-[11px] leading-[1.6] text-ink-muted">
                     {task.errorDetail}
                   </pre>
                 </details>
@@ -239,32 +238,32 @@ export default async function DevWorkDetailPage({
           )}
 
           <Panel className="p-5">
-            <div className={`mb-3 ${SECTION}`}>What changed</div>
+            <div className={`mb-3 ${SECTION}`}>Qué cambió</div>
             {task.summary ? (
               <RunMarkdown>{task.summary}</RunMarkdown>
             ) : (
-              <p className="text-[12.5px] text-ink-faint">
+              <p className="text-[12.5px] text-ink-muted">
                 {task.status === 'queued' || task.status === 'running'
-                  ? 'Cortex writes this up when it finishes.'
-                  : 'No write-up was recorded for this run.'}
+                  ? 'Cortex escribe este resumen cuando termina.'
+                  : 'No quedó ningún resumen de esta ejecución.'}
               </p>
             )}
           </Panel>
 
           <Panel className="p-5">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <div className={SECTION}>Checks</div>
+              <div className={SECTION}>Pruebas automáticas</div>
               {task.checks.length > 0 && (
-                <span className="text-[11px] text-ink-faint">
+                <span className="tabular text-[11px] text-ink-faint">
                   {failedChecks.length > 0
-                    ? `${failedChecks.length} of ${task.checks.length} failed`
-                    : `${task.checks.length} run`}
+                    ? `${failedChecks.length} de ${task.checks.length} fallaron`
+                    : `${task.checks.length} corrieron`}
                 </span>
               )}
             </div>
             {task.checks.length === 0 ? (
-              <p className="text-[12.5px] text-ink-faint">
-                No automated checks were reported for this run.
+              <p className="text-[12.5px] text-ink-muted">
+                No se reportó ninguna prueba automática para esta ejecución.
               </p>
             ) : (
               <ul className="divide-y divide-border">
@@ -279,7 +278,7 @@ export default async function DevWorkDetailPage({
                       ) : (
                         <Hourglass className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
                       )}
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
+                      <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink">
                         {check.name}
                       </span>
                       {check.url && (
@@ -289,14 +288,10 @@ export default async function DevWorkDetailPage({
                           rel="noreferrer noopener"
                           className="shrink-0 text-[11.5px] font-semibold text-primary hover:text-primary-strong"
                         >
-                          details
+                          detalle
                         </a>
                       )}
-                      <span
-                        className={`shrink-0 rounded-pill px-2 py-0.5 text-[10.5px] font-bold ${tone.chip}`}
-                      >
-                        {tone.word}
-                      </span>
+                      <span className={chipClass(tone.tone)}>{tone.word}</span>
                     </li>
                   );
                 })}
@@ -307,18 +302,18 @@ export default async function DevWorkDetailPage({
 
         <div className="space-y-4">
           <Panel className="p-4">
-            <div className={`mb-2.5 ${SECTION}`}>Where the work lives</div>
+            <div className={`mb-2.5 ${SECTION}`}>Dónde vive el trabajo</div>
             <ul className="space-y-2 text-[12.5px]">
               <li className="flex items-start gap-2">
                 <FolderGit2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
-                <span className="min-w-0 break-words text-ink-muted">
-                  {repository ?? 'No repository recorded'}
+                <span className="min-w-0 break-words font-mono text-[11.5px] text-ink-muted">
+                  {repository ?? 'Sin repositorio registrado'}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <GitBranch className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
                 <span className="min-w-0 break-words font-mono text-[11.5px] text-ink-muted">
-                  {task.branch ?? 'No branch yet'}
+                  {task.branch ?? 'Todavía sin rama'}
                 </span>
               </li>
               <li className="flex items-start gap-2">
@@ -333,48 +328,32 @@ export default async function DevWorkDetailPage({
                     {task.prNumber ? `Pull request #${task.prNumber}` : 'Pull request'}
                   </a>
                 ) : (
-                  <span className="text-ink-muted">No pull request opened</span>
+                  <span className="text-ink-muted">Sin pull request abierto</span>
                 )}
               </li>
             </ul>
           </Panel>
 
           <Panel className="p-4">
-            <div className={`mb-2.5 ${SECTION}`}>Timeline</div>
-            <ul className="space-y-2 text-[12.5px]">
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-muted">Asked</span>
-                <span className="text-right font-semibold text-ink">{stamp(task.createdAt)}</span>
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-muted">Started</span>
-                <span className="text-right font-semibold text-ink">{stamp(task.startedAt)}</span>
-              </li>
-              <li className="flex items-center justify-between gap-3">
-                <span className="text-ink-muted">Finished</span>
-                <span className="text-right font-semibold text-ink">{stamp(task.finishedAt)}</span>
-              </li>
-              <li className="flex items-center justify-between gap-3 border-t border-border pt-2">
-                <span className="text-ink-muted">Took</span>
-                <span className="font-semibold text-ink">{formatDuration(elapsed)}</span>
-              </li>
-              {cost && (
-                <li className="flex items-center justify-between gap-3">
-                  <span className="text-ink-muted">Cost</span>
-                  <span className="font-semibold text-ink">{cost}</span>
-                </li>
-              )}
-            </ul>
+            <div className={`mb-2.5 ${SECTION}`}>Línea de tiempo</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              <Field label="Pedido">{stamp(task.createdAt)}</Field>
+              <Field label="Empezó">{stamp(task.startedAt)}</Field>
+              <Field label="Terminó">{stamp(task.finishedAt)}</Field>
+              <Field label="Duración">{formatDuration(elapsed)}</Field>
+              {cost && <Field label="Costo">{cost}</Field>}
+            </div>
           </Panel>
 
           {task.cancelRequestedAt && (
             <Panel className="p-4">
-              <div className={`mb-2 ${SECTION}`}>Stopped by a person</div>
+              <div className={`mb-2 ${SECTION}`}>Detenido por una persona</div>
               <p className="text-[12.5px] leading-relaxed text-ink-muted">
-                {stoppedBy} pulled the brake on {stamp(task.cancelRequestedAt)}.{' '}
+                {stoppedBy} pisó el freno el{' '}
+                <span className="tabular">{stamp(task.cancelRequestedAt)}</span>.{' '}
                 {task.status === 'cancelled'
-                  ? 'Cortex stood down; nothing further was merged.'
-                  : 'Cortex stands down after the step it is on.'}
+                  ? 'Cortex se detuvo y no se integró nada más.'
+                  : 'Cortex para después del paso en el que va.'}
               </p>
             </Panel>
           )}

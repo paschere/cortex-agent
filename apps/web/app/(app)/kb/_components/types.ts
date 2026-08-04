@@ -9,6 +9,65 @@
 
 export type SpaceKind = 'global' | 'personal';
 
+/**
+ * Where a document is in the cycle that turns a file into something Cortex can
+ * recall. These are the four states the page is built around — the database's
+ * `status`/`transcript_status` pair collapsed into the only distinction a
+ * person cares about: is it in yet, is it being worked on, can it be recalled,
+ * did it break.
+ */
+export type DigestStage = 'waiting' | 'digesting' | 'memory' | 'stuck';
+
+/** The four ways memory gets in. */
+export type IntakeKey = 'upload' | 'record' | 'meeting' | 'drive';
+
+/** How many documents arrived through each intake. */
+export interface IntakeCounts {
+  upload: number;
+  record: number;
+  meeting: number;
+  drive: number;
+}
+
+/** Documents by stage, in one place because they are always read together. */
+export interface StageCounts {
+  waiting: number;
+  digesting: number;
+  memory: number;
+  stuck: number;
+}
+
+/** One document currently being worked on, named so the wait has a subject. */
+export interface DigestingDoc {
+  id: string;
+  title: string;
+  spaceName: string;
+  stage: DigestStage;
+  /** True while a recording is being transcribed rather than merely indexed. */
+  transcribing: boolean;
+}
+
+/**
+ * What this brain knows, in figures that come from rows and nothing else.
+ *
+ * `chunks` is null when the count could not be read — the page then leaves the
+ * figure out rather than showing a zero it cannot stand behind.
+ */
+export interface BrainStats {
+  stages: StageCounts;
+  intake: IntakeCounts;
+  /** Retrievable fragments across every space the viewer can see. */
+  chunks: number | null;
+  /** Seconds of recording and meeting audio that have been digested. */
+  spokenSeconds: number;
+  /** Speakers known by name, from meeting participants and renamed voices. */
+  namedVoices: number;
+  /** Spoken documents whose voices are still "Speaker 1", "Speaker 2"… */
+  unnamedRecordings: number;
+  lastAddedAt: string | null;
+  digesting: DigestingDoc[];
+}
+
 export interface SpaceSummary {
   id: string;
   name: string;
@@ -25,6 +84,11 @@ export interface SpaceSummary {
   lastAddedAt: string | null;
   /** Whether the viewer may add to, move into, or delete this space. */
   canWrite: boolean;
+  /** Retrievable fragments in this space; null when the count is unavailable. */
+  chunkCount: number | null;
+  /** Seconds of digested audio filed here. */
+  spokenSeconds: number;
+  intake: IntakeCounts;
 }
 
 export interface SearchResult {

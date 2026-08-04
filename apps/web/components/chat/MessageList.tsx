@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { toolDisplayName } from '@/lib/tool-labels';
 import type { Message } from 'ai';
+import { useEffect, useRef } from 'react';
+import { EmptyState } from './EmptyState';
 import { MessageBubble } from './MessageBubble';
 import { TypingIndicator } from './TypingIndicator';
-import { EmptyState } from './EmptyState';
-import { toolDisplayName } from '@/lib/tool-labels';
 
 /**
  * What the assistant is busy with, in the user's words.
@@ -18,6 +18,13 @@ function busyLabel(message: Message | undefined): string | undefined {
   const pending = message?.toolInvocations?.filter((inv) => inv.state !== 'result');
   const current = pending?.[pending.length - 1];
   return current ? `${toolDisplayName(current.toolName)}…` : undefined;
+}
+
+/** Whether the turn is already narrating itself through its reasoning trail. */
+function hasReasoning(message: Message | undefined): boolean {
+  if (!message) return false;
+  if (message.reasoning?.trim()) return true;
+  return (message.parts ?? []).some((p) => p.type === 'reasoning' && p.reasoning.trim().length > 0);
 }
 
 interface MessageListProps {
@@ -80,10 +87,14 @@ export function MessageList({
           */}
           {(() => {
             const last = messages[messages.length - 1];
-            const assistantIsSilent =
-              last?.role === 'assistant' && !last.content?.trim();
+            const assistantIsSilent = last?.role === 'assistant' && !last.content?.trim();
             if (!isLoading || (last?.role === 'assistant' && !assistantIsSilent)) return null;
-            return <TypingIndicator label={busyLabel(last)} />;
+            const label = busyLabel(last);
+            // Once the reasoning trail is running it is the better progress
+            // signal, so the dots stand down — unless a tool is in flight, in
+            // which case naming it says something the reasoning does not.
+            if (!label && hasReasoning(last)) return null;
+            return <TypingIndicator label={label} />;
           })()}
         </div>
       )}

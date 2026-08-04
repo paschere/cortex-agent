@@ -38,45 +38,45 @@ export interface SurfaceMeta {
   /** Longer form for headers and tooltips. */
   description: string;
   icon: LucideIcon;
-  /** Chip classes — soft background + matching ink. */
-  chip: string;
 }
 
+/**
+ * Where a conversation came from is an origin, not a state — so none of these
+ * carry a status colour. Green would claim "in force" and amber "needs
+ * attention", neither of which is true of a Google Chat thread. The icon and
+ * the word do the telling; the chip stays in ink.
+ */
 export const SURFACE_META: Record<ConversationSurface, SurfaceMeta> = {
   web: {
-    label: 'Web chat',
-    description: 'Started from the chat in this app',
+    label: 'Chat web',
+    description: 'Empezada desde el chat de esta aplicación',
     icon: MessagesSquare,
-    chip: 'bg-primary-soft text-primary-ink',
   },
   mcp: {
     label: 'Claude',
-    description: 'A Claude / MCP client session',
+    description: 'Una sesión desde Claude u otro cliente MCP',
     icon: Bot,
-    chip: 'bg-sky-soft text-sky',
   },
   google_chat: {
     label: 'Google Chat',
-    description: 'A thread with the Cortex Chat app',
+    description: 'Un hilo con la aplicación de Cortex en Google Chat',
     icon: MessageSquareText,
-    chip: 'bg-emerald-soft text-emerald',
   },
   routine: {
-    label: 'Routine',
-    description: 'Delivered by a scheduled routine',
+    label: 'Rutina',
+    description: 'La entregó una rutina programada',
     icon: AlarmClock,
-    chip: 'bg-amber-soft text-amber',
   },
 };
 
 /** Segments of the /conversations filter, in display order. */
 export const SURFACE_FILTERS = [
   { value: '', label: 'Chats' },
-  { value: 'web', label: 'Web chat' },
-  { value: 'routine', label: 'Routines' },
+  { value: 'web', label: 'Chat web' },
+  { value: 'routine', label: 'Rutinas' },
   { value: 'mcp', label: 'Claude' },
   { value: 'google_chat', label: 'Google Chat' },
-  { value: 'all', label: 'All' },
+  { value: 'all', label: 'Todas' },
 ] as const;
 
 export type SurfaceFilter = (typeof SURFACE_FILTERS)[number]['value'];

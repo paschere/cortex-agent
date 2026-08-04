@@ -2,69 +2,75 @@
  * Why each gated tool is gated — shared by the MCP confirmation flow and the
  * web chat's ConfirmationPrompt so both surfaces explain stakes the same way.
  * Pure data: safe to import from client components.
+ *
+ * Written in Spanish because these are read by the person deciding whether to
+ * approve an action, not by the model. Each one answers the only question that
+ * matters at that moment: what happens if I say yes, and can I take it back?
  */
 export const CONFIRMATION_NOTES: Record<string, string> = {
   'gmail.send_draft':
-    'Sends a real email from your Gmail to its recipients. Once sent it cannot be unsent, and it represents you (and the company) to whoever receives it.',
-  'gmail.draft': 'Creates a draft in your Gmail. Nothing is sent, but it appears in your mailbox.',
+    'Envía un correo real desde tu Gmail a sus destinatarios. Una vez enviado no se puede recuperar, y te representa a ti y a la empresa ante quien lo reciba.',
+  'gmail.draft': 'Crea un borrador en tu Gmail. No se envía nada, pero aparece en tu bandeja.',
   'gcal.create_event':
-    'Creates a calendar event and emails invitations to every attendee listed — external people will see it immediately.',
+    'Crea un evento y manda la invitación por correo a todos los asistentes — la gente de fuera la ve de inmediato.',
   'slack.post_message':
-    'Posts a message in Slack visible to everyone in the channel the moment it lands.',
+    'Publica un mensaje en Slack que todos en el canal ven apenas cae.',
   'hubspot.create_contact':
-    'Creates a permanent CRM record the whole sales team will see and rely on.',
+    'Crea un registro permanente en el CRM que todo el equipo comercial va a ver y usar.',
   'hubspot.create_deal':
-    'Creates a deal in the sales pipeline — it will appear in forecasts and reports.',
+    'Crea un negocio en el embudo — va a aparecer en los pronósticos y en los reportes.',
   'hubspot.update_deal':
-    'Modifies live deal data (stage, amount, fields) that the team and forecasts depend on. Previous values are overwritten.',
+    'Modifica datos vivos del negocio (etapa, monto, campos) de los que dependen el equipo y los pronósticos. Los valores anteriores se pierden.',
   'hubspot.log_activity':
-    'Writes an activity note into the CRM timeline, visible to the whole team.',
+    'Escribe una nota de actividad en la línea de tiempo del CRM, visible para todo el equipo.',
   'workable.move_candidate':
-    "Changes the candidate's stage in the ATS — the hiring team sees it, and stage history drives recruiting metrics.",
+    'Cambia la etapa del candidato en el ATS — el equipo de selección lo ve, y el historial de etapas alimenta las métricas.',
   'workable.create_comment':
-    "Adds a permanent note to the candidate's profile, visible to the whole hiring team.",
+    'Agrega una nota permanente al perfil del candidato, visible para todo el equipo de selección.',
   'github.create_issue':
-    'Creates a public-to-the-team issue in the repository, notifying watchers.',
-  'github.create_issue_comment': 'Posts a comment visible to everyone following the issue.',
-  'linear.create_issue': 'Creates a tracked issue the engineering team will triage and act on.',
-  'linear.create_comment': 'Posts a comment visible to everyone on the issue.',
-  'gsheets.append_row': 'Appends a row to a shared spreadsheet others may use for reporting.',
+    'Crea un issue visible para todo el equipo en el repositorio y notifica a quienes lo siguen.',
+  'github.create_issue_comment': 'Publica un comentario visible para todos los que siguen el issue.',
+  'linear.create_issue':
+    'Crea un issue que el equipo de ingeniería va a revisar y atender.',
+  'linear.create_comment': 'Publica un comentario visible para todos en el issue.',
+  'gsheets.append_row':
+    'Agrega una fila a una hoja compartida que otros pueden estar usando para reportes.',
   'schedule.create':
-    'Creates an UNATTENDED job that will run on its own schedule without further supervision. It keeps running until paused.',
+    'Crea una rutina DESATENDIDA que se ejecuta sola según su programación, sin que nadie la supervise. Sigue corriendo hasta que la pauses.',
   'pipeline.create':
-    'Saves a reusable playbook that anyone on the team can run from any surface — errors in its design get repeated on every run.',
+    'Guarda un procedimiento reutilizable que cualquiera del equipo puede ejecutar desde cualquier lado — un error en su diseño se repite en cada ejecución.',
   'pipeline.update':
-    'Changes a shared playbook for everyone who uses it, effective on the next run.',
+    'Cambia un procedimiento compartido para todos los que lo usan, desde la próxima ejecución.',
   'apollo.enrich_people':
-    "Pulls up to ten people's verified work emails out of Apollo in one go, and spends one Apollo credit for every person found. Looking people up costs the company real money, so a batch is always somebody's decision.",
+    'Saca de Apollo los correos verificados de hasta diez personas de una sola vez, y gasta un crédito de Apollo por cada persona encontrada. Buscar gente le cuesta plata real a la empresa, así que un lote siempre es decisión de alguien.',
   'bamboo.compensation_report':
-    "Pulls pay rates AND bill rates for a whole group of people out of BambooHR in one go — potentially the entire roster. Compensation is the most sensitive data the company holds, and this is the bulk export of it: it belongs to whoever approved it, not to the room it gets pasted into. For one person, the employee lookup answers the same question without exporting anybody else's.",
+    'Saca de BambooHR las tarifas de pago Y de cobro de un grupo entero de personas de una sola vez — potencialmente de toda la nómina. La compensación es el dato más sensible que guarda la empresa, y esto es su exportación masiva: le pertenece a quien la aprobó, no al chat donde termine pegada. Para una sola persona, la consulta individual responde lo mismo sin exportar a nadie más.',
   'recruit.generate_presentation':
-    'Generates a client-facing candidate presentation document that may be shared externally.',
+    'Genera un documento de presentación de candidatos para cliente, que puede terminar compartido por fuera.',
 };
 
 const FAMILY_SYSTEM: Record<string, string> = {
-  gmail: 'your Gmail account',
-  gcal: 'your Google Calendar',
-  gsheets: 'a shared Google Sheet',
-  hubspot: 'the HubSpot CRM',
-  workable: 'the Workable ATS',
+  gmail: 'tu cuenta de Gmail',
+  gcal: 'tu Google Calendar',
+  gsheets: 'una hoja de cálculo compartida',
+  hubspot: 'el CRM de HubSpot',
+  workable: 'el ATS de Workable',
   github: 'GitHub',
   linear: 'Linear',
   slack: 'Slack',
-  schedule: 'the unattended job scheduler',
-  pipeline: 'the shared pipeline library',
-  recruit: 'the recruiting system',
-  apollo: 'the Apollo prospecting database',
-  bamboo: 'BambooHR, the HR system of record',
-  kb: 'the shared Brain Knowledge',
-  vehicles: 'the vehicle registry, and through it RUNT and SIMIT',
+  schedule: 'el programador de rutinas desatendidas',
+  pipeline: 'la biblioteca de procedimientos compartida',
+  recruit: 'el sistema de selección',
+  apollo: 'la base de prospección de Apollo',
+  bamboo: 'BambooHR, el sistema de nómina y personal',
+  kb: 'Brain Knowledge, la memoria compartida',
+  vehicles: 'el registro de vehículos y, a través de él, el RUNT y el SIMIT',
 };
 
 export function confirmationReason(toolId: string): string {
   const note = CONFIRMATION_NOTES[toolId];
   if (note) return note;
   const family = toolId.split('.')[0] ?? '';
-  const system = FAMILY_SYSTEM[family] ?? 'an external system';
-  return `Executes a write against ${system} — it changes real data outside this conversation and may be visible to other people.`;
+  const system = FAMILY_SYSTEM[family] ?? 'un sistema externo';
+  return `Ejecuta una escritura sobre ${system} — cambia datos reales fuera de esta conversación y puede quedar visible para otras personas.`;
 }

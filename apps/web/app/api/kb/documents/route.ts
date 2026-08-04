@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { readBrain } from '@/app/(app)/kb/_lib/brain';
 import { inngest } from '@/lib/inngest';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
@@ -47,12 +48,23 @@ function baseMime(mime: string): string {
 /**
  * List the documents in one space. Polled while an upload is being indexed, so
  * it stays a REST route rather than a server action.
+ *
+ * `?digest=1` answers a different question with the same data: how much of the
+ * whole Knowledge Base is still being swallowed. The Brain Knowledge page polls
+ * it while anything is in flight, so the counts on screen move as documents
+ * finish rather than only on a reload. It never widens what a caller can see —
+ * `readBrain` starts from `listVisibleSpaces`, exactly like the page does.
  */
 export async function GET(req: NextRequest) {
   const session = await requireSession();
   const sb = getSupabaseServiceClient();
   const url = new URL(req.url);
   const spaceId = url.searchParams.get('spaceId');
+
+  if (url.searchParams.get('digest') === '1') {
+    const { stats } = await readBrain(sb, session.id);
+    return NextResponse.json({ stats });
+  }
 
   if (!spaceId) {
     return NextResponse.json({ error: 'Missing spaceId query param' }, { status: 400 });

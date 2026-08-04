@@ -32,19 +32,19 @@ function EmptyState({ filters }: { filters: AuditFilters }) {
     <div className="px-4 py-12 text-center">
       <ScrollText className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
       <p className="text-[13px] font-semibold text-ink">
-        {unfiltered ? 'Nothing has been recorded yet' : 'No event matches these filters'}
+        {unfiltered ? 'Todavía no se ha registrado nada' : 'Ningún evento coincide con estos filtros'}
       </p>
       <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
         {unfiltered
-          ? 'Every tool call, chat turn and scheduled run lands here as it happens, with who asked for it and what it returned.'
-          : 'Widen the range or drop a filter to see more of the record.'}
+          ? 'Cada llamada a una herramienta, cada turno de chat y cada rutina cae aquí apenas ocurre, con quién la pidió y qué devolvió.'
+          : 'Amplía el rango o quita un filtro para ver más del registro.'}
       </p>
       {!unfiltered && (
         <Link
           href="/admin/audit?range=all"
           className="mt-4 inline-block rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
         >
-          Clear all filters
+          Quitar todos los filtros
         </Link>
       )}
     </div>
@@ -91,8 +91,8 @@ export default async function AuditPage({
   return (
     <>
       <PageHeader
-        title="Audit log"
-        subtitle="Every tool call, by everyone, on every surface — who asked, what ran, what happened"
+        title="Auditoría"
+        subtitle="Cada llamada, de cada persona, desde cada superficie: quién la pidió, qué se ejecutó y qué pasó"
         icon={<ScrollText className="h-5 w-5" />}
         actions={
           <a
@@ -100,7 +100,7 @@ export default async function AuditPage({
             className="inline-flex items-center gap-2 rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
           >
             <Download className="h-4 w-4" />
-            Export CSV
+            Exportar CSV
           </a>
         }
       />
@@ -116,8 +116,8 @@ export default async function AuditPage({
         <div className="mb-4 flex items-start gap-2.5 rounded-card border border-border bg-amber-soft p-3 text-[12.5px] text-amber">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            This database has not run the security migration yet, so surface, risk and decision are
-            not recorded. Rows still show status, latency and metadata.
+            Esta base de datos todavía no corrió la migración de seguridad, así que no se registran
+            origen, riesgo ni decisión. Las filas siguen mostrando estado, latencia y metadatos.
           </p>
         </div>
       )}
@@ -132,26 +132,26 @@ export default async function AuditPage({
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-faint">
         <span>
-          Showing <span className="tabular">{rows.length}</span>
+          Mostrando <span className="tabular">{rows.length}</span>
           {typeof total === 'number' && total > rows.length ? (
             <>
               {' '}
-              of <span className="tabular">{total.toLocaleString()}</span>
+              de <span className="tabular">{total.toLocaleString('es-CO')}</span>
             </>
           ) : (
             ''
           )}{' '}
-          event{rows.length === 1 ? '' : 's'} · {describeAuditFilters(filters)}
+          evento{rows.length === 1 ? '' : 's'} · {describeAuditFilters(filters)}
           {riskyCount > 0 ? (
             <>
               {' '}
-              · <span className="tabular text-amber">{riskyCount}</span> need a look
+              · <span className="tabular text-amber">{riskyCount}</span> por revisar
             </>
           ) : (
             ''
           )}
         </span>
-        <span>Open any row for the full record.</span>
+        <span>Abre cualquier fila para ver el registro completo.</span>
       </div>
     </>
   );

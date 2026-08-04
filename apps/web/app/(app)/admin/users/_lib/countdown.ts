@@ -6,19 +6,19 @@
  * are all in the future, and they need to read as a countdown.
  */
 export function countdown(iso: string | null): string {
-  if (!iso) return 'not scheduled';
+  if (!iso) return 'sin programar';
   const target = new Date(iso).getTime();
   if (Number.isNaN(target)) return iso;
 
   const diff = target - Date.now();
-  if (diff <= 0) return 'overdue';
+  if (diff <= 0) return 'vencido';
 
   const min = Math.round(diff / 60_000);
-  if (min < 1) return 'in under a minute';
-  if (min < 60) return `in ${min}m`;
+  if (min < 1) return 'en menos de un minuto';
+  if (min < 60) return `en ${min}m`;
   const hr = Math.round(min / 60);
-  if (hr < 24) return `in ${hr}h`;
+  if (hr < 24) return `en ${hr}h`;
   const day = Math.round(hr / 24);
-  if (day < 7) return `in ${day}d`;
-  return `on ${new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  if (day < 7) return `en ${day}d`;
+  return `el ${new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}`;
 }

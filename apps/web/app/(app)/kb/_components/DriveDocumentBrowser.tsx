@@ -26,14 +26,14 @@ interface Crumb {
   name: string;
 }
 
-const ROOT: Crumb = { id: 'root', name: 'My Drive' };
+const ROOT: Crumb = { id: 'root', name: 'Mi unidad' };
 
 async function fetchBrowse(parentId: string, q: string, pageToken?: string): Promise<BrowsePage> {
   const params = new URLSearchParams({ parentId });
   if (q) params.set('q', q);
   if (pageToken) params.set('pageToken', pageToken);
   const r = await fetch(`/api/kb/drive/browse?${params.toString()}`);
-  if (!r.ok) throw new Error(`Browse failed (${r.status})`);
+  if (!r.ok) throw new Error(`No se pudo abrir Drive (${r.status})`);
   const j = (await r.json()) as Partial<BrowsePage>;
   return {
     connected: j.connected ?? false,
@@ -136,12 +136,12 @@ export function DriveDocumentBrowser({
       });
       if (!r.ok) {
         const j = (await r.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(j?.error ?? `Import failed (${r.status})`);
+        throw new Error(j?.error ?? `No se pudieron traer los archivos (${r.status})`);
       }
       setSelected(new Map());
       invalidateAndClose();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Import failed');
+      setActionError(e instanceof Error ? e.message : 'No se pudieron traer los archivos.');
     } finally {
       setSubmitting(false);
     }
@@ -163,11 +163,11 @@ export function DriveDocumentBrowser({
       });
       if (!r.ok) {
         const j = (await r.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(j?.error ?? `Link failed (${r.status})`);
+        throw new Error(j?.error ?? `No se pudo enlazar la carpeta (${r.status})`);
       }
       invalidateAndClose();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Link failed');
+      setActionError(e instanceof Error ? e.message : 'No se pudo enlazar la carpeta.');
     } finally {
       setSubmitting(false);
     }
@@ -186,7 +186,7 @@ export function DriveDocumentBrowser({
               type="button"
               onClick={() => jumpTo(i)}
               disabled={i === path.length - 1}
-              className="rounded-[8px] px-1.5 py-0.5 transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-default disabled:font-semibold disabled:text-ink disabled:hover:bg-transparent"
+              className="rounded-card px-1.5 py-0.5 transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-default disabled:font-semibold disabled:text-ink disabled:hover:bg-transparent"
             >
               {crumb.name}
             </button>
@@ -197,7 +197,7 @@ export function DriveDocumentBrowser({
       {/* Search */}
       <div className="px-5 pt-3">
         <Input
-          placeholder="Search this folder…"
+          placeholder="Buscar en esta carpeta…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -207,30 +207,30 @@ export function DriveDocumentBrowser({
       <div className="mt-3 flex-1 overflow-y-auto px-5">
         {!connected ? (
           <p className="py-10 text-center text-[13px] text-ink-muted">
-            Google Drive isn’t connected yet. Connect Drive to browse and import files.
+            Google Drive no está conectado todavía.
           </p>
         ) : isLoading ? (
           <ul className="divide-y divide-border">
             {['s1', 's2', 's3', 's4', 's5', 's6'].map((key) => (
               <li key={key} className="flex items-center gap-3 py-2.5">
-                <span className="h-5 w-5 animate-pulse rounded-[6px] bg-surface-2" />
-                <span className="h-3.5 w-1/2 animate-pulse rounded-full bg-surface-2" />
+                <span className="h-5 w-5 animate-pulse rounded-card bg-surface-2" />
+                <span className="h-3.5 w-1/2 animate-pulse rounded-card bg-surface-2" />
               </li>
             ))}
           </ul>
         ) : isError ? (
-          <div className="my-4 rounded-[10px] border border-rose/30 bg-rose-soft px-4 py-3 text-[13px] text-rose">
-            <div className="font-medium">Couldn’t load this folder.</div>
+          <div className="my-4 rounded-card border border-rose/30 bg-rose-soft px-4 py-3 text-[13px] text-rose">
+            <div className="font-medium">No se pudo abrir esta carpeta.</div>
             <div className="mt-0.5 text-rose/80">
-              {error instanceof Error ? error.message : 'Something went wrong.'}
+              {error instanceof Error ? error.message : 'Algo falló.'}
             </div>
             <Button variant="outline" className="mt-2.5" onClick={() => refetch()}>
-              Retry
+              Reintentar
             </Button>
           </div>
         ) : files.length === 0 ? (
           <p className="py-10 text-center text-[13px] text-ink-faint">
-            {debouncedSearch ? 'No files match your search.' : 'This folder is empty.'}
+            {debouncedSearch ? 'Ningún archivo coincide.' : 'Esta carpeta está vacía.'}
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -240,7 +240,7 @@ export function DriveDocumentBrowser({
                   <button
                     type="button"
                     onClick={() => drillInto(f)}
-                    className="flex w-full items-center gap-3 rounded-[10px] px-2 py-2.5 text-left transition-colors hover:bg-surface-2"
+                    className="flex w-full items-center gap-3 rounded-card px-2 py-2.5 text-left transition-colors hover:bg-surface-2"
                   >
                     <span className="grid h-6 w-6 place-items-center text-amber">
                       <FolderClosed className="h-4 w-4" />
@@ -253,14 +253,14 @@ export function DriveDocumentBrowser({
                 </li>
               ) : (
                 <li key={f.id}>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-[10px] px-2 py-2.5 transition-colors hover:bg-surface-2">
+                  <label className="flex cursor-pointer items-center gap-3 rounded-card px-2 py-2.5 transition-colors hover:bg-surface-2">
                     <input
                       type="checkbox"
                       checked={selected.has(f.id)}
                       onChange={() => toggleFile(f)}
                       className="peer sr-only"
                     />
-                    <span className="grid h-6 w-6 place-items-center rounded-[7px] border border-border bg-surface text-ink-faint transition-colors peer-checked:border-primary/40 peer-checked:bg-primary-soft peer-checked:text-primary">
+                    <span className="grid h-6 w-6 place-items-center rounded-card border border-border bg-surface text-ink-faint transition-colors peer-checked:border-primary/40 peer-checked:bg-primary-soft peer-checked:text-primary">
                       <FileText className="h-3.5 w-3.5" />
                     </span>
                     <span className="flex-1 truncate text-[13px] text-ink-muted peer-checked:font-medium peer-checked:text-ink">
@@ -276,7 +276,7 @@ export function DriveDocumentBrowser({
         {hasNextPage && (
           <div className="py-3 text-center">
             <Button variant="ghost" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-              {isFetchingNextPage ? 'Loading…' : 'Load more'}
+              {isFetchingNextPage ? 'Cargando…' : 'Ver más'}
             </Button>
           </div>
         )}
@@ -285,29 +285,29 @@ export function DriveDocumentBrowser({
       {/* Footer action bar */}
       <div className="border-t border-border px-5 py-3">
         {actionError && (
-          <div className="mb-2.5 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+          <div className="mb-2.5 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
             {actionError}
           </div>
         )}
         <div className="flex items-center justify-between gap-3">
           <span className="text-[12px] text-ink-faint">
             {selectedCount > 0
-              ? `${selectedCount} file${selectedCount === 1 ? '' : 's'} selected`
+              ? `${selectedCount} ${selectedCount === 1 ? 'archivo elegido' : 'archivos elegidos'}`
               : atRoot
-                ? 'Open a folder to link it for sync'
-                : 'Select files or link this folder'}
+                ? 'Entra a una carpeta para enlazarla'
+                : 'Elige archivos o enlaza esta carpeta'}
           </span>
           <div className="flex items-center gap-2">
             {!atRoot && (
               <Button variant="outline" onClick={linkFolder} disabled={submitting}>
                 <Link2 className="h-3.5 w-3.5" />
-                Link this folder for sync
+                Enlazar esta carpeta
               </Button>
             )}
             {selectedCount > 0 && (
               <Button onClick={importFiles} disabled={submitting}>
                 <Download className="h-3.5 w-3.5" />
-                Import {selectedCount} file{selectedCount === 1 ? '' : 's'}
+                Traer {selectedCount} {selectedCount === 1 ? 'archivo' : 'archivos'}
               </Button>
             )}
           </div>

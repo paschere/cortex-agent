@@ -93,8 +93,8 @@ export default async function ProspectsPage() {
   return (
     <>
       <PageHeader
-        title="Prospects"
-        subtitle="Companies Cortex caught hiring for roles your team staffs. Keep the good ones, drop the rest — nothing here is ever deleted."
+        title="Prospectos"
+        subtitle="Empresas que Cortex encontró contratando los perfiles que tú colocas. Quédate con las que sirven y descarta el resto: aquí nada se borra."
         icon={<Radar className="h-5 w-5" />}
       />
       <ProspectBoard

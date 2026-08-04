@@ -15,7 +15,7 @@ export interface TranscriptMessageRow {
 }
 
 function speakerLabel(role: string, agentName: string): string {
-  if (role === 'user') return 'You';
+  if (role === 'user') return 'Tú';
   if (role === 'assistant') return agentName;
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
@@ -41,8 +41,8 @@ export function TranscriptMessage({
       <div className="mb-2 flex items-center gap-2">
         <span
           className={clsx(
-            'grid h-7 w-7 shrink-0 place-items-center rounded-full text-white',
-            isUser ? 'bg-ink' : 'bg-gradient-to-br from-primary to-primary-strong',
+            'grid h-7 w-7 shrink-0 place-items-center rounded-card text-white',
+            isUser ? 'bg-ink' : 'bg-primary',
           )}
         >
           {isUser ? <User className="h-3.5 w-3.5" /> : <Sparkles className="h-4 w-4" />}
@@ -50,11 +50,11 @@ export function TranscriptMessage({
         <span className="text-[12.5px] font-bold text-ink">
           {speakerLabel(message.role, agentName)}
         </span>
-        <span className="ml-auto shrink-0 text-[11px] text-ink-faint">
-          {new Date(message.created_at).toLocaleString('en-US', {
+        <span className="tabular ml-auto shrink-0 text-[11px] text-ink-faint">
+          {new Date(message.created_at).toLocaleString('es-CO', {
+            day: '2-digit',
             month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
+            hour: '2-digit',
             minute: '2-digit',
           })}
         </span>
@@ -67,13 +67,13 @@ export function TranscriptMessage({
           <ChatMarkdown content={content} />
         )
       ) : !invocations ? (
-        <p className="text-[13px] italic text-ink-faint">Empty message.</p>
+        <p className="text-[13px] text-ink-faint">Mensaje vacío.</p>
       ) : null}
 
       {invocations && invocations.length > 0 && (
         <div className={clsx(content && 'mt-3')}>
           <div className="mb-1.5">
-            <Eyebrow>What {agentName} did</Eyebrow>
+            <Eyebrow>Lo que hizo {agentName}</Eyebrow>
           </div>
           <div className="space-y-1.5">
             {invocations.map((inv) => (

@@ -38,12 +38,12 @@ export function StopButton({
     return (
       <span
         className={clsx(
-          'inline-flex items-center rounded-[10px] border border-rose/30 bg-rose-soft font-semibold text-rose',
+          'inline-flex items-center rounded-card border border-rose/40 bg-rose-soft font-semibold text-rose',
           shape,
         )}
-        title="A person asked Cortex to stop. It stands down after the step it is on."
+        title="Alguien le pidió a Cortex que se detenga. Para después del paso en el que va."
       >
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Stopping
+        <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" /> Deteniendo
       </span>
     );
   }
@@ -51,7 +51,7 @@ export function StopButton({
   async function stop() {
     if (
       !window.confirm(
-        `Stop Cortex working on “${title}”?\n\nIt stops after the step it is on. Any work already pushed stays on its branch — nothing is merged.`,
+        `¿Detener a Cortex en “${title}”?\n\nPara después del paso en el que va. Lo que ya subió se queda en su rama: no se integra nada.`,
       )
     ) {
       return;
@@ -62,7 +62,7 @@ export function StopButton({
       const res = await fetch(`/api/dev-work/${taskId}/stop`, { method: 'POST' });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? 'Could not stop this run.');
+        throw new Error(body?.error ?? 'No se pudo detener esta ejecución.');
       }
       router.refresh();
     } catch (err) {
@@ -79,23 +79,23 @@ export function StopButton({
         onClick={stop}
         disabled={busy}
         className={clsx(
-          'inline-flex items-center rounded-[10px] border border-border bg-surface font-semibold text-rose shadow-card transition hover:bg-rose-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-rose disabled:opacity-60',
+          'inline-flex items-center rounded-card border border-border-strong bg-surface font-semibold text-rose transition-colors hover:bg-rose-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-rose disabled:opacity-60',
           shape,
         )}
       >
         {busy ? (
           <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Stopping…
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" /> Deteniendo…
           </>
         ) : (
           <>
-            <CircleStop className="h-3.5 w-3.5" /> Stop
+            <CircleStop className="h-3.5 w-3.5" /> Detener
           </>
         )}
       </button>
       {error && (
-        <p className="rounded-[10px] border border-rose/30 bg-rose-soft px-2 py-1 text-[11px] text-rose">
-          {error}
+        <p className="rounded-card border border-rose/40 bg-rose-soft px-2 py-1 text-[11px] text-rose">
+          {error} La ejecución sigue corriendo; vuelve a intentarlo.
         </p>
       )}
     </div>

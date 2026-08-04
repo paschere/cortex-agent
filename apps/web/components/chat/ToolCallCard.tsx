@@ -3,10 +3,22 @@
 import { toolDisplayName } from '@/lib/tool-labels';
 import type { ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
-import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, ChevronDown, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
+/**
+ * The record of a tool run, entered in the transcript.
+ *
+ * What goes in and what comes back is evidence — it is the only place a person
+ * can check that Cortex asked the right question of the right system — so both
+ * are set in monospace under labels that name them, the way a form names its
+ * boxes.
+ *
+ * Only the failure is tinted. A conversation with a dozen successful lookups
+ * used to render as a wall of green, which spends the reader's attention on
+ * the things that went right; a quiet hairline card with a coloured status
+ * rule keeps the eye free for the one that did not.
+ */
 export function ToolCallCard({ invocation }: { invocation: ToolInvocation }) {
   const [open, setOpen] = useState(false);
   const label = toolDisplayName(invocation.toolName);
@@ -18,54 +30,67 @@ export function ToolCallCard({ invocation }: { invocation: ToolInvocation }) {
     typeof result === 'object' &&
     '__error' in (result as Record<string, unknown>);
 
-  const tint = isRunning
-    ? 'border-amber/30 bg-amber-soft'
-    : isError
-      ? 'border-rose/30 bg-rose-soft'
-      : 'border-emerald/30 bg-emerald-soft';
+  const evidence =
+    'scroll-slim max-h-56 overflow-auto rounded-card border border-border bg-surface-2 p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted';
 
   return (
-    <div className={clsx('overflow-hidden rounded-[12px] border text-xs', tint)}>
+    <div
+      className={clsx(
+        'rounded-card border border-l-2 text-xs',
+        isError
+          ? 'border-rose/40 border-l-rose bg-rose-soft'
+          : isRunning
+            ? 'border-border border-l-amber bg-surface'
+            : 'border-border border-l-emerald bg-surface',
+      )}
+    >
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className="flex w-full items-center gap-2 px-3 py-2 text-left"
       >
         {isRunning ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber" />
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-amber" />
         ) : isError ? (
-          <AlertCircle className="h-3.5 w-3.5 text-rose" />
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 text-rose" />
         ) : (
-          <CheckCircle2 className="h-3.5 w-3.5 text-emerald" />
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald" />
         )}
-        <span className="flex-1 font-semibold text-ink">{label}</span>
+        <span className="min-w-0 truncate font-semibold text-ink">{label}</span>
+        {/* The raw tool id, not the friendly label: it is what identifies the
+            call in the audit log and in a support conversation. */}
+        <span className="tabular ml-auto hidden truncate text-[10px] text-ink-faint sm:block">
+          {invocation.toolName}
+        </span>
         <ChevronDown
-          className={clsx('h-3.5 w-3.5 text-ink-faint transition-transform', open && 'rotate-180')}
+          className={clsx(
+            'h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform',
+            open && 'rotate-180',
+          )}
         />
       </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="space-y-1.5 px-3 pb-2.5">
-              {invocation.args !== undefined && (
-                <pre className="scroll-slim overflow-x-auto rounded-[8px] bg-surface/70 p-2 text-[10px] leading-relaxed text-ink-muted ring-1 ring-border">
-                  {JSON.stringify(invocation.args, null, 2)}
-                </pre>
-              )}
-              {invocation.state === 'result' && result !== undefined && (
-                <pre className="scroll-slim max-h-56 overflow-auto rounded-[8px] bg-surface/70 p-2 text-[10px] leading-relaxed text-ink-muted ring-1 ring-border">
-                  {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-                </pre>
-              )}
+
+      {open && (
+        <div className="space-y-2 px-3 pb-2.5">
+          {invocation.args !== undefined && (
+            <div>
+              <div className="field-label">Argumentos</div>
+              <pre className={clsx(evidence, 'mt-1')}>
+                {JSON.stringify(invocation.args, null, 2)}
+              </pre>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+          {invocation.state === 'result' && result !== undefined && (
+            <div>
+              <div className="field-label">{isError ? 'Error' : 'Resultado'}</div>
+              <pre className={clsx(evidence, 'mt-1')}>
+                {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

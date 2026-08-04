@@ -37,8 +37,8 @@ export default function TwoFactorPage() {
       setErr(
         error.message ??
           (useBackup
-            ? 'That backup code was not accepted. Each one works once — try another.'
-            : 'That code was not accepted. Codes change every 30 seconds — enter the current one.'),
+            ? 'Ese código de respaldo no fue aceptado. Cada uno sirve una sola vez: prueba con otro.'
+            : 'Ese código no fue aceptado. Los códigos cambian cada 30 segundos: escribe el actual.'),
       );
       return;
     }
@@ -53,17 +53,17 @@ export default function TwoFactorPage() {
         <AuthTitle
           hint={
             useBackup
-              ? 'Enter one of the backup codes you saved when you turned two-factor on.'
-              : 'Enter the 6-digit code from your authenticator app.'
+              ? 'Escribe uno de los códigos de respaldo que guardaste al activar la verificación en dos pasos.'
+              : 'Escribe el código de 6 dígitos de tu app de autenticación.'
           }
         >
-          Two-factor verification
+          Verificación en dos pasos
         </AuthTitle>
 
         <form onSubmit={submit} className="space-y-3">
           <div>
             <label htmlFor="totp-code" className="field-label">
-              {useBackup ? 'Backup code' : 'Authenticator code'}
+              {useBackup ? 'Código de respaldo' : 'Código de autenticación'}
             </label>
             {/* The code is the one thing on this screen that gets read digit by
                 digit, so it gets the widest, largest monospaced setting in the
@@ -89,12 +89,12 @@ export default function TwoFactorPage() {
                 onChange={(e) => setTrust(e.target.checked)}
                 className="accent-primary"
               />
-              Trust this device for 60 days
+              Confiar en este dispositivo por 60 días
             </label>
           )}
 
           <Button type="submit" disabled={loading} className="w-full py-2.5">
-            {loading ? 'Verifying…' : 'Verify'}
+            {loading ? 'Verificando…' : 'Verificar'}
           </Button>
         </form>
 
@@ -107,7 +107,7 @@ export default function TwoFactorPage() {
           }}
           className="mt-4 w-full text-center text-[12px] font-semibold text-primary hover:underline"
         >
-          {useBackup ? 'Use an authenticator code instead' : 'Use a backup code instead'}
+          {useBackup ? 'Usar el código de la app' : 'Usar un código de respaldo'}
         </button>
 
         {err && <AuthError>{err}</AuthError>}
