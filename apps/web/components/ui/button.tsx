@@ -1,13 +1,13 @@
-import * as React from 'react';
 import { clsx } from 'clsx';
+import * as React from 'react';
 
 /**
- * Squared, not pill-shaped, and unshadowed.
+ * Pill-shaped, and lifted when it is the main action on the screen.
  *
- * A pill with a soft drop shadow is the consumer-app default; on a document it
- * reads as a sticker laid on top of the form. These are the boxes you tick and
- * the stamps you apply: rectangular, ruled, and flat against the page. Weight
- * and colour carry the hierarchy instead of elevation.
+ * The primary button is the one place the brand gets to be loud, so it carries
+ * both the fill and the elevation; everything else recedes to a soft outline or
+ * to nothing at all. The lift grows a hair on hover — the control should feel
+ * like it comes to meet the cursor.
  */
 export const Button = React.forwardRef<
   HTMLButtonElement,
@@ -18,15 +18,16 @@ export const Button = React.forwardRef<
   <button
     ref={ref}
     className={clsx(
-      'inline-flex items-center justify-center gap-1.5 rounded-card px-3.5 py-2 text-[13px] font-semibold',
-      'transition-colors disabled:cursor-not-allowed disabled:opacity-45',
-      variant === 'default' && 'bg-primary text-white hover:bg-primary-strong',
+      'inline-flex items-center justify-center gap-1.5 rounded-pill px-4 py-2 text-[13px] font-semibold',
+      'transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
+      variant === 'default' &&
+        'bg-primary text-white shadow-pop hover:-translate-y-px hover:bg-primary-strong',
       variant === 'outline' &&
-        'border border-border-strong bg-surface text-ink hover:bg-surface-2',
+        'border border-border bg-surface text-ink shadow-card hover:border-border-strong hover:bg-surface-2',
       variant === 'ghost' && 'text-ink-muted hover:bg-surface-2 hover:text-ink',
-      // Reserved for actions that cannot be undone. Red is the rubber stamp
-      // that stops a document, so it must not appear anywhere it can be dismissed.
-      variant === 'danger' && 'bg-rose text-white hover:brightness-95',
+      // Reserved for what cannot be undone. It never appears on anything a
+      // person can dismiss, which is what keeps the colour meaningful.
+      variant === 'danger' && 'bg-rose text-white shadow-card hover:brightness-95',
       className,
     )}
     {...props}

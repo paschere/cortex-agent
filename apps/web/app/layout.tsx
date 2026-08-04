@@ -2,29 +2,29 @@ import './globals.css';
 import 'highlight.js/styles/github-dark-dimmed.css';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Archivo, IBM_Plex_Mono } from 'next/font/google';
+import { JetBrains_Mono, Manrope } from 'next/font/google';
 import { Providers } from './providers';
 
 /**
  * Two faces, two jobs.
  *
- * Archivo is a grotesque drawn for signage and forms — institutional without
- * being bureaucratic, and it holds up at the small sizes a dense operations
- * tool lives at. It replaces Plus Jakarta, whose rounded warmth belonged to a
- * consumer product.
+ * Manrope is a modern geometric sans with slightly open, rounded terminals —
+ * it reads as a product rather than as an administrative tool, which is the
+ * whole point of the direction. It replaces Archivo, whose signage-grotesque
+ * squareness pulled everything toward a form.
  *
- * IBM Plex Mono carries every piece of evidence: plates, waybill numbers, peso
- * figures, timestamps. Monospace here is not a style — it is what makes a
- * column of figures scannable and stops a plate from being misread.
+ * JetBrains Mono carries the evidence: plates, waybill numbers, peso figures,
+ * timestamps. Monospace here is legibility, not styling — a column that lines
+ * up and a zero that cannot be misread as an O.
  */
-const archivo = Archivo({
+const manrope = Manrope({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+  weight: ['400', '500', '600', '700', '800'],
   variable: '--font-sans',
   display: 'swap',
 });
 
-const plexMono = IBM_Plex_Mono({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   weight: ['400', '500', '600'],
   variable: '--font-mono',
@@ -38,7 +38,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${archivo.variable} ${plexMono.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen bg-canvas font-sans text-ink antialiased">
         <Providers>{children}</Providers>
       </body>

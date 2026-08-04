@@ -3,72 +3,78 @@
 @tailwind utilities;
 
 /*
- * Cortex — transit document
+ * Cortex — soft instrument
  *
- * The product's whole claim is provenance: every figure carries where it came
- * from and when it was read. So the interface is built like the paperwork its
- * users already trust — customs forms, waybills, rubber stamps, ruled ledgers —
- * rather than like a dashboard. That choice drives everything below:
+ * The product is a brain: it listens to calls, reads contracts, remembers what
+ * was promised, and can show you why it believes something. The interface
+ * should feel like a well-made modern instrument — light, rounded, with real
+ * depth — not like the paperwork it replaces.
  *
- *  · Rules, not shadows. A form is defined by its lines. Elevation is reserved
- *    for things that genuinely float (menus, dialogs); everything else is ruled.
- *  · Corners are near-square. Rounded cards read as consumer software; a
- *    document does not have them.
- *  · Data is monospaced, always. A plate, a waybill number, a peso figure and a
- *    timestamp are evidence — they get the typeface that lines up in columns and
- *    never lets a 0 pass for an O.
- *  · Colour is meaning, never decoration. Blue is the institution, red is the
- *    stamp that stops you, green is a document in force, amber is one about to
- *    lapse. There is no fifth accent.
+ * Four rules:
+ *
+ *  · Generous curvature. 14px on surfaces, full pills on controls. Nothing is
+ *    cut square; softness is what separates a product from an admin panel.
+ *  · Depth by light, not outline. Surfaces lift with layered, low-opacity
+ *    shadows tinted toward the brand, so a card feels placed rather than drawn.
+ *    Hairlines remain for structure, never as the primary definition.
+ *  · Data stays monospaced. Plates, waybill numbers, peso figures, timestamps
+ *    and ids — a column that aligns, and a zero that cannot pass for an O. This
+ *    is the one austerity worth keeping, because it is legibility not styling.
+ *  · Colour carries meaning. Indigo is the product itself; the status trio says
+ *    in force, lapsing, lapsed. Everything else stays neutral so those read.
  */
 
 :root {
   color-scheme: light;
 
-  /* --- Paper -------------------------------------------------------------
-     Cool, faintly blue — security paper, not cream. Cream reads as stationery
-     and warmth; this product is a system of record. */
-  --canvas: 243 246 249;        /* app background */
-  --surface: 255 255 255;       /* the document itself */
-  --surface-2: 237 241 246;     /* sunken: form boxes, insets, hover */
-  --border: 205 216 228;        /* hairline rule */
-  --border-strong: 168 185 203; /* section rule */
+  /* --- Canvas & surfaces -------------------------------------------------
+     A hint of indigo in the greys keeps the app feeling of one piece, rather
+     than brand colour dropped onto neutral chrome. */
+  --canvas: 249 250 253;
+  --surface: 255 255 255;
+  --surface-2: 244 245 250;
+  --border: 231 233 241;
+  --border-strong: 213 216 229;
 
   /* --- Ink ---------------------------------------------------------------
-     Near-black with a blue tilt: ballpoint on an official form. */
-  --ink: 15 33 54;
-  --ink-muted: 92 112 137;
-  --ink-faint: 137 155 176;
+     Near-black with a cool tilt. Muted and faint are tuned to stay legible on
+     both white and the inset surface. */
+  --ink: 24 26 39;
+  --ink-muted: 99 104 128;
+  --ink-faint: 142 147 170;
 
-  /* --- Stamp blue (primary) ---------------------------------------------
-     The institution's own colour. Used for actions and for anything the system
-     itself asserts. */
-  --primary: 27 75 143;
-  --primary-strong: 18 54 106;
-  --primary-soft: 232 239 248;
-  --primary-ink: 18 54 106;
+  /* --- Brand: indigo -----------------------------------------------------
+     Saturated enough to carry a primary button, calm enough to sit on screen
+     all day. */
+  --primary: 88 80 236;
+  --primary-strong: 71 62 214;
+  --primary-soft: 240 239 254;
+  --primary-ink: 62 53 199;
 
   /* --- Status ------------------------------------------------------------
-     Named for what a document IS, not for a hue, because that is how the people
-     using this speak: in force, lapsing, lapsed. */
-  --emerald: 30 107 79;         /* in force */
-  --emerald-soft: 232 243 238;
-  --amber: 138 101 18;          /* lapsing */
-  --amber-soft: 249 243 229;
-  --rose: 166 58 46;            /* lapsed / blocked — rubber-stamp red */
-  --rose-soft: 250 236 234;
-  --sky: 27 75 143;             /* informational; deliberately the stamp blue */
-  --sky-soft: 232 239 248;
+     Named for what a document IS, because that is how the people using this
+     speak: in force, lapsing, lapsed. */
+  --emerald: 13 148 111;
+  --emerald-soft: 232 249 243;
+  --amber: 190 128 20;
+  --amber-soft: 254 246 231;
+  --rose: 219 63 76;
+  --rose-soft: 254 240 242;
+  --sky: 14 133 200;
+  --sky-soft: 236 247 254;
 
   /* --- Geometry ----------------------------------------------------------
-     Documents are cut square. 3px keeps edges from looking like a rendering
-     mistake without ever reading as a rounded card. */
-  --radius: 3px;
-  --radius-sm: 2px;
+     14px reads as crafted at card size without softening into a bubble; 10px
+     keeps nested elements from looking like circles inside squares. */
+  --radius: 14px;
+  --radius-sm: 10px;
 
-  /* Elevation exists only for things that truly float. Everything else rules. */
-  --shadow-card: 0 1px 0 rgb(15 33 54 / 0.04);
-  --shadow-pop: 0 12px 32px -16px rgb(15 33 54 / 0.35);
+  /* --- Elevation ---------------------------------------------------------
+     Two layers: a tight contact shadow that seats the element, and a wider
+     ambient one that gives it air. Tinted with the brand rather than pure
+     black — which is what stops shadows reading as grey smudges. */
+  --shadow-card: 0 1px 2px rgb(24 26 39 / 0.04), 0 4px 12px -4px rgb(24 26 39 / 0.06);
+  --shadow-pop: 0 4px 12px -2px rgb(24 26 39 / 0.08), 0 16px 32px -12px rgb(62 53 199 / 0.22);
 }
 
 html,
@@ -83,8 +89,7 @@ body {
 }
 
 /* --- Data ---------------------------------------------------------------
-   Every figure the user might check, quote or copy. Tabular so columns line up
-   down a ledger, and lining zeroes so a plate is never misread. */
+   Every figure someone might check, quote or copy. */
 .tabular,
 .stat-num {
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
@@ -94,89 +99,93 @@ body {
 
 .stat-num {
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 /* --- Field label --------------------------------------------------------
-   The small caps above a value on a printed form. Structural, not decorative:
-   it names the box its value sits in. */
+   Names the value beneath it. Gently spaced rather than stamped in small caps:
+   it should recede, not announce itself. */
 .field-label {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   color: rgb(var(--ink-faint));
 }
 
-/* --- Section rule -------------------------------------------------------
-   The double rule that opens a section on a customs form. Reserved for the top
-   of a page or a major division — using it everywhere would flatten it back
-   into decoration. */
+/* --- Section divider ----------------------------------------------------
+   A soft fade rather than a ruled line: structure without the ledger. */
 .rule-double {
-  border-top: 3px double rgb(var(--border-strong));
+  height: 1px;
+  border: 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgb(var(--border-strong)) 15%,
+    rgb(var(--border-strong)) 85%,
+    transparent
+  );
 }
 
-/* --- Provenance stamp ---------------------------------------------------
-   The signature element. Wraps anything the system asserts and shows where it
-   came from and when it was read. Squared, monospaced, and set at a hair of
-   rotation so it reads as applied to the page rather than laid out on it.
-   The tilt is removed under reduced-motion-safe contexts below. */
+/* --- Provenance chip ----------------------------------------------------
+   The signature element: wraps anything the system asserts and shows where it
+   came from and when it was read. A soft capsule, not a rubber stamp — the
+   claim is trustworthy, and trustworthy does not need to shout. */
 .stamp {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgb(var(--primary));
-  border: 1px solid rgb(var(--primary) / 0.45);
-  border-radius: var(--radius-sm);
-  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: rgb(var(--primary-ink));
+  background: rgb(var(--primary-soft));
+  border: 1px solid rgb(var(--primary) / 0.14);
+  border-radius: 999px;
+  padding: 3px 10px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgb(var(--primary-soft));
 }
 
 .stamp--seal {
   color: rgb(var(--rose));
-  border-color: rgb(var(--rose) / 0.45);
   background: rgb(var(--rose-soft));
+  border-color: rgb(var(--rose) / 0.16);
 }
 
-/* The hero band: security-paper guilloche, not a marketing gradient. Two fine
-   rule grids at opposing angles over stamp blue — the moiré you get on a
-   document that is meant to be hard to forge. */
+/* The hero band: a soft indigo aurora. Broad, low-contrast light rather than a
+   hard two-stop gradient, so it reads as atmosphere behind the content. */
 .hero-mesh {
-  background-color: rgb(var(--primary-strong));
+  background-color: rgb(var(--primary));
   background-image:
-    repeating-linear-gradient(
-      58deg,
-      rgb(255 255 255 / 0.07) 0 1px,
-      transparent 1px 7px
-    ),
-    repeating-linear-gradient(
-      -58deg,
-      rgb(255 255 255 / 0.05) 0 1px,
-      transparent 1px 9px
-    ),
-    linear-gradient(160deg, rgb(27 75 143), rgb(13 40 79));
+    radial-gradient(90% 120% at 12% 0%, rgb(139 128 255 / 0.85) 0%, transparent 55%),
+    radial-gradient(80% 130% at 95% 15%, rgb(99 91 255 / 0.75) 0%, transparent 60%),
+    linear-gradient(150deg, rgb(88 80 236), rgb(58 48 168));
 }
 
 @keyframes fade-rise {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .animate-rise {
   animation: fade-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Thin scrollbar for sidebar and panels. */
-.scroll-slim::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-slim::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
 .scroll-slim::-webkit-scrollbar-thumb {
   background: rgb(var(--border-strong));
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
 }
-.scroll-slim::-webkit-scrollbar-track { background: transparent; }
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -188,8 +197,9 @@ body {
   }
 }
 
-/* Keyboard focus has to survive a redesign that removes most borders. */
+/* Keyboard focus has to survive a design that leans on fills over outlines. */
 :focus-visible {
   outline: 2px solid rgb(var(--primary));
   outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
