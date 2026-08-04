@@ -15,6 +15,7 @@ import {
   kbSearch,
   maxLevel,
   runTool,
+  selectToolsForTurn,
 } from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
@@ -25,17 +26,21 @@ import type { ChatAudience } from './events';
  * One Cortex turn, driven from Google Chat.
  *
  * Same brain as the web chat (apps/web/app/api/chat/route.ts): the same agent
- * row, the same system prompt, the same `filterTools` → team deny-list → AI SDK
- * wiring, the same conversation/message persistence. Two things differ:
+ * row, the same system prompt, the same `filterTools` → team deny-list →
+ * semantic selection → AI SDK wiring, the same conversation/message
+ * persistence. Two things differ:
  *
  *   1. No streaming. Chat wants one finished message, so this uses
  *      `generateText` instead of `streamText`.
  *   2. It is AUDIENCE-AWARE. See the privacy guard below — a group space is a
  *      broadcast, and that changes what may be said out loud.
  *
- * Tool scoping (the FAMILY_TRIGGERS trick in the web route) is deliberately not
- * replicated: like the MCP surface, Chat exposes the agent's full toolset, so
- * there is one fewer place for the two lists to drift apart.
+ * Tool scoping used to be skipped here on purpose: the web route narrowed the
+ * catalogue with a hand-written regex per family, and keeping a second copy of
+ * that list in sync was worse than sending everything. `selectToolsForTurn`
+ * removed the list, and with it the reason — there is nothing left to drift, so
+ * both surfaces now call the same function and Chat gets the same benefit
+ * (fewer, better-chosen declarations) that the web chat has always had.
  */
 
 /** How long a staged approval stays valid — same as the MCP surface. */
@@ -344,9 +349,23 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
 
   // --- tools: agent allow-list minus the user's team deny-list --------------
   const denied = await deniedToolPatterns(db, req.userId);
-  const allowed = filterTools(agent.allowedTools).filter(
+  const granted = filterTools(agent.allowedTools).filter(
     (t) => denied.length === 0 || !isToolDenied(t.id, denied),
   );
+
+  // ...then narrowed by meaning, the same way and by the same function as the
+  // web chat. A Chat message is the shortest input any surface gets ("@cortex
+  // qué pasó con Acme?"), which is exactly the case the selector is tuned for:
+  // no match clears the bar, the base families still travel, and anything not
+  // yet indexed is sent rather than hidden.
+  const selection = await selectToolsForTurn({ db, tools: granted, query: req.userText });
+  const allowed = selection.tools;
+  logger.debug('google-chat tool selection', {
+    reason: selection.reason,
+    offered: allowed.length,
+    of: granted.length,
+    families: selection.selectedFamilies,
+  });
 
   const confirmations: StagedConfirmation[] = [];
   const familiesUsed = new Set<string>();

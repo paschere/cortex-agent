@@ -5,12 +5,15 @@ import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
 import {
+  type AnyTool,
+  type EnabledExternalServer,
   type ExternalServerRow,
   callExternalTool,
   fetchEnabledExternalTools,
   filterTools,
   kbSearch,
   runTool,
+  selectToolsForTurn,
 } from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
@@ -32,69 +35,28 @@ function shouldRunRag(message: string): boolean {
 }
 
 /**
- * Context-aware tool scoping. Sending 80+ function declarations to the model
- * on every message measurably degrades its tool selection ("dumb" picks) and
- * adds latency. Core families are always available; situational families are
- * included only when the recent conversation mentions them.
+ * A tool the model may be offered this turn, in the one shape
+ * `selectToolsForTurn` needs to rank it. `ref` carries whatever the executor
+ * needs afterwards, so the selection result can be turned straight back into
+ * AI SDK tools without a second lookup.
  *
- * ⚠️ EVERY tool family must appear in CORE_FAMILIES or FAMILY_TRIGGERS below.
- * A family listed in neither is filtered out of every request once the catalogue
- * passes 40 tools — the model never sees it and answers that it has no such
- * capability, which reads exactly like a missing grant or a broken tool. The
- * vehicles family shipped this way: registered, granted, and invisible.
+ * Built-in and external MCP tools are ranked TOGETHER and in one list. That is
+ * the fix: they used to be two paths, and the external one had no scoping at
+ * all because there was no regex anyone could write for a server a user
+ * connected five minutes ago.
  */
-const CORE_FAMILIES = new Set(['kb', 'sales', 'web', 'pipeline', 'schedule', 'cortex', 'format']);
-
-const FAMILY_TRIGGERS: Array<{ family: string; re: RegExp }> = [
-  {
-    family: 'hubspot',
-    re: /hubspot|deal|pipeline de ventas|crm|prospect|client|cliente|company|empresa|contact/i,
-  },
-  {
-    family: 'presentations',
-    re: /candidat|presentaci[oó]n|shortlist|perfil|entrevista|interview|vacante|requisition/i,
-  },
-  {
-    family: 'gmail',
-    re: /email|correo|mail|inbox|draft|enviar|send|responder|reply/i,
-  },
-  {
-    family: 'gcal',
-    re: /calendar|calendario|meeting|reuni[oó]n|agenda|invite|evento|event|schedule a call/i,
-  },
-  {
-    family: 'gsheets',
-    re: /sheet|hoja de c[aá]lculo|spreadsheet|excel|fila|row/i,
-  },
-  { family: 'gdrive', re: /drive|documento|document|doc\b|archivo|file/i },
-  {
-    family: 'github',
-    re: /github|repo|pull request|\bpr\b|issue|commit|c[oó]digo|code/i,
-  },
-  { family: 'linear', re: /linear|sprint|cycle|ticket|roadmap|eng-\d+/i },
-  { family: 'slack', re: /slack|canal|channel|mensaje al equipo/i },
-  {
-    family: 'growth',
-    re: /signal|se[ñn]al|outreach|lead|prospecc|job post|growth|cold email/i,
-  },
-  { family: 'payroll', re: /payroll|n[oó]mina|salar|pay rate|bill rate|pago/i },
-  { family: 'people', re: /team member|equipo asignado|roster|staff/i },
-  {
-    family: 'vehicles',
-    re: /veh[ií]culo|vehicle|carro|moto|placa|plate|runt|simit|soat|rtm|tecnomec[aá]nica|comparendo|multa|fine|matr[ií]cula|c[eé]dula/i,
-  },
-];
-
-function scopeTools<T extends { id: string }>(tools: T[], recentText: string): T[] {
-  if (tools.length <= 40) return tools;
-  const active = new Set(CORE_FAMILIES);
-  for (const { family, re } of FAMILY_TRIGGERS) {
-    if (re.test(recentText)) active.add(family);
-  }
-  const scoped = tools.filter((t) => active.has(t.id.split('.')[0] ?? ''));
-  // Safety net: never scope below a useful floor.
-  return scoped.length >= 10 ? scoped : tools;
-}
+type Candidate =
+  | { id: string; family: string; description: string; kind: 'registry'; ref: AnyTool }
+  | {
+      id: string;
+      family: string;
+      description: string;
+      kind: 'external';
+      ref: {
+        server: EnabledExternalServer['server'];
+        entry: EnabledExternalServer['tools'][number];
+      };
+    };
 
 /**
  * Distill a tool error into a concise, human-readable message the model can
@@ -235,96 +197,134 @@ export async function POST(req: NextRequest) {
     .slice(-4)
     .map((m) => m.content)
     .join('\n');
-  const scoped = scopeTools(filterTools(agent.allowedTools), recentText);
-  // Team tool permissions are a deny-list layered on the agent's tools:
-  // anything blocked by ANY of the user's teams never reaches the model.
-  const deniedPatterns = await deniedToolPatterns(db, user.id);
-  const allowed =
-    deniedPatterns.length > 0 ? scoped.filter((t) => !isToolDenied(t.id, deniedPatterns)) : scoped;
 
-  // AI SDK requires tool names matching ^[a-zA-Z0-9_-]+$ — replace dots with underscores
-  // Build reverse map to find original tool by its AI SDK name
-  const toolNameToId = new Map<string, string>();
-  const aiTools: Record<string, CoreTool> = Object.fromEntries(
-    allowed.map((t) => {
-      const sdkName = t.id.replaceAll('.', '_');
-      toolNameToId.set(sdkName, t.id);
-      return [
-        sdkName,
-        tool({
-          description: t.description,
-          parameters: t.inputSchema,
-          execute: async (args, { abortSignal }) => {
-            try {
-              return await runTool(t, args, { ...ctx, signal: abortSignal });
-            } catch (err) {
-              if (err instanceof ConfirmationRequiredError) {
-                // Return a sentinel value the client can detect to show a confirmation prompt
-                return {
-                  __requires_confirmation: true,
-                  toolId: t.id,
-                  input: err.input,
-                } as unknown as never;
-              }
-              // Never throw: a failed tool must not kill the turn. Return a
-              // structured error so (a) the model can read it, explain it, and
-              // keep going, and (b) the UI renders it as a failed tool card.
-              return {
-                __error: true,
-                tool: t.id,
-                message: toToolErrorMessage(err),
-              } as unknown as never;
-            }
-          },
-        }),
-      ];
-    }),
+  // Team tool permissions are a deny-list layered on the agent's tools:
+  // anything blocked by ANY of the user's teams never reaches the model. Run
+  // alongside the external-MCP fetch — neither depends on the other, and both
+  // have to finish before anything can be ranked.
+  //
+  // Per-user MCP failures must never break the turn, so that fetch is
+  // best-effort.
+  const [deniedPatterns, externalServers] = await Promise.all([
+    deniedToolPatterns(db, user.id),
+    fetchEnabledExternalTools(db, user.id).catch(() => []),
+  ]);
+
+  const registryCandidates: Candidate[] = filterTools(agent.allowedTools)
+    .filter((t) => deniedPatterns.length === 0 || !isToolDenied(t.id, deniedPatterns))
+    .map((t) => ({
+      id: t.id,
+      family: t.id.split('.')[0] ?? t.id,
+      description: t.description,
+      kind: 'registry' as const,
+      ref: t,
+    }));
+
+  const externalCandidates: Candidate[] = externalServers.flatMap(({ server, tools }) =>
+    tools.map((entry) => ({
+      // Namespaced by server so two servers exposing `search` stay distinct,
+      // and stable across turns so the stored vector keeps matching.
+      id: `mcp:${server.id}:${entry.tool_name}`,
+      // One connected server is one family: its tools were designed to be used
+      // together, exactly like `hubspot` was.
+      family: `mcp:${server.id}`,
+      description: entry.tool_description ?? '',
+      kind: 'external' as const,
+      ref: { server, entry },
+    })),
   );
 
-  // Inject per-user external (dynamic) MCP tools. Failures here must never
-  // break the chat turn, so the whole fetch is best-effort.
-  const externalServers = await fetchEnabledExternalTools(db, user.id).catch(() => []);
-  for (const { server, tools } of externalServers) {
-    for (const t of tools) {
-      const prefix = 'mcp_' + server.id.replace(/-/g, '').slice(0, 16) + '_';
-      const sdkName = (prefix + t.tool_name).slice(0, 64);
-      aiTools[sdkName] = tool({
-        description: (t.tool_description ?? '').slice(0, 500),
-        parameters: jsonSchema(
-          (t.input_schema_json ?? {
-            type: 'object',
-            properties: {},
-          }) as Parameters<typeof jsonSchema>[0],
-        ),
+  // Semantic scoping. This replaced a hand-written regex per family, which was
+  // wrong the moment anyone shipped a family or connected an MCP server without
+  // editing this file — see packages/agent-tools/src/tool-selection. Everything
+  // it can fail on (Voyage, the vector table, an unindexed tool) degrades to
+  // sending MORE tools, never fewer.
+  const selection = await selectToolsForTurn({
+    db,
+    tools: [...registryCandidates, ...externalCandidates],
+    query: recentText,
+  });
+  logger.debug('chat tool selection', {
+    reason: selection.reason,
+    offered: selection.tools.length,
+    of: registryCandidates.length + externalCandidates.length,
+    families: selection.selectedFamilies,
+    unranked: selection.unrankedFamilies,
+  });
+
+  const aiTools: Record<string, CoreTool> = {};
+  for (const candidate of selection.tools) {
+    if (candidate.kind === 'registry') {
+      const t = candidate.ref;
+      // AI SDK requires tool names matching ^[a-zA-Z0-9_-]+$ — replace dots with underscores
+      aiTools[t.id.replaceAll('.', '_')] = tool({
+        description: t.description,
+        parameters: t.inputSchema,
         execute: async (args, { abortSignal }) => {
-          if (!server.trusted) {
-            return {
-              __requires_confirmation: true,
-              toolId: sdkName,
-              input: args,
-            } as unknown as never;
-          }
           try {
-            return await callExternalTool(
-              server as unknown as ExternalServerRow,
-              t.tool_name,
-              args,
-              {
-                userId: user.id,
-                db,
-                signal: abortSignal,
-              },
-            );
+            return await runTool(t, args, { ...ctx, signal: abortSignal });
           } catch (err) {
+            if (err instanceof ConfirmationRequiredError) {
+              // Return a sentinel value the client can detect to show a confirmation prompt
+              return {
+                __requires_confirmation: true,
+                toolId: t.id,
+                input: err.input,
+              } as unknown as never;
+            }
+            // Never throw: a failed tool must not kill the turn. Return a
+            // structured error so (a) the model can read it, explain it, and
+            // keep going, and (b) the UI renders it as a failed tool card.
             return {
               __error: true,
-              tool: `${server.name}/${t.tool_name}`,
+              tool: t.id,
               message: toToolErrorMessage(err),
             } as unknown as never;
           }
         },
       });
+      continue;
     }
+
+    const { server, entry } = candidate.ref;
+    const prefix = 'mcp_' + server.id.replace(/-/g, '').slice(0, 16) + '_';
+    const sdkName = (prefix + entry.tool_name).slice(0, 64);
+    aiTools[sdkName] = tool({
+      description: (entry.tool_description ?? '').slice(0, 500),
+      parameters: jsonSchema(
+        (entry.input_schema_json ?? {
+          type: 'object',
+          properties: {},
+        }) as Parameters<typeof jsonSchema>[0],
+      ),
+      execute: async (args, { abortSignal }) => {
+        if (!server.trusted) {
+          return {
+            __requires_confirmation: true,
+            toolId: sdkName,
+            input: args,
+          } as unknown as never;
+        }
+        try {
+          return await callExternalTool(
+            server as unknown as ExternalServerRow,
+            entry.tool_name,
+            args,
+            {
+              userId: user.id,
+              db,
+              signal: abortSignal,
+            },
+          );
+        } catch (err) {
+          return {
+            __error: true,
+            tool: `${server.name}/${entry.tool_name}`,
+            message: toToolErrorMessage(err),
+          } as unknown as never;
+        }
+      },
+    });
   }
 
   let coreMessages: CoreMessage[] = messages.map((m) => ({

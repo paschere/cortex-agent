@@ -50,6 +50,12 @@ export type {
   EnabledExternalServer,
 } from './external-mcp';
 
+// Semantic tool selection: which of the tools a user may call are worth
+// sending the model this turn. Placed after the tool barrels so the registry is
+// fully populated, though it takes its candidates as an argument and never
+// reads the registry itself — Google Chat and the web chat pass different sets.
+export * from './tool-selection';
+
 // Side-effect import: registers the sales.draft_proposal composite tool.
 // Placed last so the registry + all primitive tools are initialized first.
 export { salesDraftProposal } from './composite/sales-draft-proposal';

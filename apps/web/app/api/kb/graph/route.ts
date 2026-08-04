@@ -36,6 +36,14 @@ interface GraphNode {
   speakers: string[];
   durationSeconds: number | null;
   chunks: number;
+  /**
+   * Where the document is filed. Not in 0062's payload — the function answers
+   * "what is like what", and this is "where do I go to read it". Added here so
+   * that tapping a node on the ring can open the document instead of leaving
+   * the person to go and find it by name.
+   */
+  spaceId?: string;
+  spaceName?: string;
 }
 
 interface SemanticEdge {
@@ -104,6 +112,27 @@ export async function GET(req: NextRequest) {
 
   const graph = (data ?? { nodes: [], edges: [], considered: 0, total: 0 }) as RpcGraph;
   const nodes = graph.nodes ?? [];
+
+  // Where each node lives, so the ring can open it. At most 60 rows by primary
+  // key, over documents the function has already decided this person may see —
+  // a space that is not in `scoped` cannot appear here.
+  if (nodes.length > 0) {
+    const spaceName = new Map(scoped.map((s) => [s.id, s.name] as const));
+    const { data: filed } = await sb
+      .from('kb_documents')
+      .select('id, collection_id')
+      .in(
+        'id',
+        nodes.map((n) => n.id),
+      );
+    const home = new Map((filed ?? []).map((r) => [r.id as string, r.collection_id as string]));
+    for (const node of nodes) {
+      const space = home.get(node.id);
+      if (!space) continue;
+      node.spaceId = space;
+      node.spaceName = spaceName.get(space) ?? undefined;
+    }
+  }
 
   // Who spoke in more than one place. A pair is only drawn when it shares a
   // person by name; two recordings that both say "Speaker 1" share nothing.
