@@ -206,8 +206,9 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
           <div className="border-t border-border px-5 py-10 text-center">
             <Brain className="mx-auto h-6 w-6 text-ink-faint" />
             <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-ink-muted">
-              Cortex todavía no lleva nada. Dile &ldquo;acuérdate de que…&rdquo; en una conversación,
-              o déjalo así: empieza a sugerir cosas después de unos días trabajando contigo.
+              Cortex todavía no lleva nada. Dile &ldquo;acuérdate de que…&rdquo; en una
+              conversación, o déjalo así: empieza a sugerir cosas después de unos días trabajando
+              contigo.
             </p>
             <Link href="/chat" className="mt-4 inline-block">
               <Button variant="outline">

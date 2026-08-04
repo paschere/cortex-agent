@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { clsx } from 'clsx';
+import type { ReactNode } from 'react';
 
 /**
  * The document itself: white, ruled, flat.
@@ -14,10 +14,7 @@ export function Panel({
   ...rest
 }: { className?: string; children: ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={clsx('rounded-card border border-border bg-surface', className)}
-      {...rest}
-    >
+    <div className={clsx('rounded-card border border-border bg-surface', className)} {...rest}>
       {children}
     </div>
   );

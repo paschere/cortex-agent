@@ -24,7 +24,10 @@ export async function linearFetch<T>(
   if (!r.ok) throw new IntegrationError(`Linear ${r.status}: ${await r.text()}`, 'linear');
   const json = (await r.json()) as { data?: T; errors?: Array<{ message: string }> };
   if (json.errors?.length) {
-    throw new IntegrationError(`Linear GraphQL: ${json.errors.map((e) => e.message).join('; ')}`, 'linear');
+    throw new IntegrationError(
+      `Linear GraphQL: ${json.errors.map((e) => e.message).join('; ')}`,
+      'linear',
+    );
   }
   return json.data as T;
 }

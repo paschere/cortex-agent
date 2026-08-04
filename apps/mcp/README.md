@@ -28,6 +28,4 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 wrangler secret put HUBSPOT_CLIENT_ID
 wrangler secret put HUBSPOT_CLIENT_SECRET
 wrangler secret put GOOGLE_GENERATIVE_AI_API_KEY
-wrangler secret put RATE_ESTIMATOR_URL
-wrangler secret put RATE_ESTIMATOR_SERVICE_TOKEN
 ```

@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { SOURCE, buildMeta, metaSchema, provenanceFooter } from '../recruit/shape';
 import {
   NoPresentationError,
   type StoredPresentation,
@@ -8,6 +7,7 @@ import {
   renderPdf,
   writePresentation,
 } from './client';
+import { SOURCE, buildMeta, metaSchema, provenanceFooter } from './provenance';
 import { DEFAULT_EXPIRY_DAYS, expiresIn, formatBytes, storePdf } from './storage';
 
 /**

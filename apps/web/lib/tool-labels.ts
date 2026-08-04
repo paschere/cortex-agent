@@ -22,7 +22,6 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   gsheets_read_range: { label: 'Leer hoja de cálculo', icon: 'Table' },
   gsheets_append_row: { label: 'Agregar fila a la hoja', icon: 'TableProperties' },
   kb_search: { label: 'Buscar en Brain Knowledge', icon: 'BookOpen' },
-  rate_estimate: { label: 'Estimar tarifa', icon: 'DollarSign' },
   sales_draft_proposal: { label: 'Redactar propuesta', icon: 'FileText' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },

@@ -1,8 +1,8 @@
 import './globals.css';
 import 'highlight.js/styles/github-dark-dimmed.css';
 import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
 import { Archivo, IBM_Plex_Mono } from 'next/font/google';
+import type { ReactNode } from 'react';
 import { Providers } from './providers';
 
 /**

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
 import { ValidationError } from '@cortex/core';
+import { describe, expect, it } from 'vitest';
 import { parseDocument } from './parsers';
 
 describe('parseDocument', () => {
@@ -22,14 +22,12 @@ describe('parseDocument', () => {
   });
 
   it('throws ValidationError for unsupported mime type', async () => {
-    await expect(
-      parseDocument(Buffer.from(''), 'application/octet-stream'),
-    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(parseDocument(Buffer.from(''), 'application/octet-stream')).rejects.toBeInstanceOf(
+      ValidationError,
+    );
   });
 
   it('throws ValidationError with message containing the mime type', async () => {
-    await expect(
-      parseDocument(Buffer.from(''), 'image/png'),
-    ).rejects.toThrow('image/png');
+    await expect(parseDocument(Buffer.from(''), 'image/png')).rejects.toThrow('image/png');
   });
 });

@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IntegrationError, ValidationError } from '@cortex/core';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runTool } from '../index';
-import { gmailDraft } from './draft';
 import type { ToolContext } from '../types';
+import { gmailDraft } from './draft';
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   const insertResult = { data: null, error: null };
@@ -92,7 +92,9 @@ describe('gmail.draft', () => {
     // base64url should not contain + or / or =
     expect(raw).not.toMatch(/[+/=]/);
     // Decode and verify MIME headers
-    const decoded = Buffer.from(raw.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
+    const decoded = Buffer.from(raw.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString(
+      'utf-8',
+    );
     expect(decoded).toContain('To: recipient@example.com');
     expect(decoded).toContain('Subject: Hello');
     expect(decoded).toContain('World');

@@ -22,7 +22,7 @@ const CARDS: Record<Direction, Card> = {
     href: '/integrations',
     icon: ArrowUpRight,
     title: 'Cortex → your systems',
-    body: 'What Cortex is connected to: Google Workspace, HubSpot, Workable, the talent pool, payroll — plus any extra MCP server you plug in.',
+    body: 'What Cortex is connected to: Google Workspace, HubSpot, payroll, Slack — plus any extra MCP server you plug in.',
     cta: 'Integrations',
   },
   inbound: {

@@ -8,7 +8,9 @@ export function renderDealCard(deal: any): string {
     `Amount: $${deal.amount?.toLocaleString() ?? 'unknown'} · Close: ${deal.closeDate ?? 'TBD'}`,
     `Owner: ${deal.ownerName ?? deal.ownerId ?? 'unassigned'}`,
     deal.htmlLink ? `[View in HubSpot](${deal.htmlLink})` : '',
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function renderContactCard(contact: any): string {
@@ -17,20 +19,21 @@ export function renderContactCard(contact: any): string {
     contact.email ? `📧 ${contact.email}` : '',
     contact.jobTitle && contact.company ? `${contact.jobTitle} at ${contact.company}` : '',
     contact.lastContacted ? `Last contacted: ${contact.lastContacted}` : '',
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function renderActivityList(activities: any[]): string {
-  return activities.map((a) =>
-    `- **${a.type}** on ${a.date}: ${a.subject}`
-  ).join('\n');
+  return activities.map((a) => `- **${a.type}** on ${a.date}: ${a.subject}`).join('\n');
 }
 
 export function renderPipelineSummary(stages: any[]): string {
   const header = '| Stage | Deals | Total USD | Probability |';
   const divider = '|---|---|---|---|';
-  const rows = stages.map((s) =>
-    `| ${s.label} | ${s.dealCount} | $${(s.totalAmount ?? 0).toLocaleString()} | ${Math.round((s.probability ?? 0) * 100)}% |`
+  const rows = stages.map(
+    (s) =>
+      `| ${s.label} | ${s.dealCount} | $${(s.totalAmount ?? 0).toLocaleString()} | ${Math.round((s.probability ?? 0) * 100)}% |`,
   );
   return [header, divider, ...rows].join('\n');
 }
@@ -46,5 +49,7 @@ export function renderCompanyCard(company: any): string {
     company.industry ? `Industry: ${company.industry}` : '',
     company.numEmployees != null ? `Employees: ${company.numEmployees.toLocaleString()}` : '',
     company.country ? `Country: ${company.country}` : '',
-  ].filter(Boolean).join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }

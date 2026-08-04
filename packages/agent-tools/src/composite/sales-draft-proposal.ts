@@ -1,44 +1,87 @@
-import { z } from 'zod';
 import { logger } from '@cortex/core';
-import { registerTool, getTool, runTool } from '../index';
+import { z } from 'zod';
+import { getTool, registerTool, runTool } from '../index';
 import type { ToolContext } from '../types.js';
 
 const ROLE_KEYWORDS: Record<string, string[]> = {
-  frontend:  ['react','vue','angular','svelte','css','html','tailwind','next','nuxt','remix','ui','frontend','front-end','front end'],
-  backend:   ['node','express','django','rails','spring','laravel','fastapi','postgres','mysql','redis','api','backend','back-end','back end'],
-  fullstack: ['fullstack','full-stack','full stack'],
-  data:      ['sql','spark','ml','pandas','dbt','airflow','snowflake','bigquery','data engineer','data scientist','analytics'],
-  devops:    ['docker','k8s','kubernetes','terraform','ci/cd','github actions','sre','platform','infrastructure','devops'],
-  qa:        ['test','qa','cypress','playwright','selenium','jest','quality'],
-  pm:        ['scrum','jira','product','roadmap','agile','sprint','pm'],
-  designer:  ['figma','sketch','ux','ui design','designer','design system'],
+  frontend: [
+    'react',
+    'vue',
+    'angular',
+    'svelte',
+    'css',
+    'html',
+    'tailwind',
+    'next',
+    'nuxt',
+    'remix',
+    'ui',
+    'frontend',
+    'front-end',
+    'front end',
+  ],
+  backend: [
+    'node',
+    'express',
+    'django',
+    'rails',
+    'spring',
+    'laravel',
+    'fastapi',
+    'postgres',
+    'mysql',
+    'redis',
+    'api',
+    'backend',
+    'back-end',
+    'back end',
+  ],
+  fullstack: ['fullstack', 'full-stack', 'full stack'],
+  data: [
+    'sql',
+    'spark',
+    'ml',
+    'pandas',
+    'dbt',
+    'airflow',
+    'snowflake',
+    'bigquery',
+    'data engineer',
+    'data scientist',
+    'analytics',
+  ],
+  devops: [
+    'docker',
+    'k8s',
+    'kubernetes',
+    'terraform',
+    'ci/cd',
+    'github actions',
+    'sre',
+    'platform',
+    'infrastructure',
+    'devops',
+  ],
+  qa: ['test', 'qa', 'cypress', 'playwright', 'selenium', 'jest', 'quality'],
+  pm: ['scrum', 'jira', 'product', 'roadmap', 'agile', 'sprint', 'pm'],
+  designer: ['figma', 'sketch', 'ux', 'ui design', 'designer', 'design system'],
 };
-
-const SENIORITY_TO_YEARS: Record<string, number> = { junior: 1, mid: 3, senior: 6, lead: 10 };
-const COUNTRY_TO_REGION: Record<string, string> = { MX:'mx', BR:'br', AR:'ar', CO:'co', CL:'cl', PE:'pe' };
 
 function normalizeRole(freeText: string): { role: string; confidence: number } {
   const lower = freeText.toLowerCase();
-  const exact = ['frontend','backend','fullstack','data','devops','qa','pm','designer'];
+  const exact = ['frontend', 'backend', 'fullstack', 'data', 'devops', 'qa', 'pm', 'designer'];
   if (exact.includes(lower)) return { role: lower, confidence: 1.0 };
-  const hasFE = ROLE_KEYWORDS['frontend']?.some(k => lower.includes(k)) ?? false;
-  const hasBE = ROLE_KEYWORDS['backend']?.some(k => lower.includes(k)) ?? false;
+  const hasFE = ROLE_KEYWORDS['frontend']?.some((k) => lower.includes(k)) ?? false;
+  const hasBE = ROLE_KEYWORDS['backend']?.some((k) => lower.includes(k)) ?? false;
   if (hasFE && hasBE) return { role: 'fullstack', confidence: 0.8 };
   for (const [role, keywords] of Object.entries(ROLE_KEYWORDS)) {
-    if (keywords.some(k => lower.includes(k))) return { role, confidence: 0.75 };
+    if (keywords.some((k) => lower.includes(k))) return { role, confidence: 0.75 };
   }
   logger.warn('normalizeRole: no match, defaulting to fullstack', { freeText });
   return { role: 'fullstack', confidence: 0.5 };
 }
 
 const SeniorityIn = z.enum(['junior', 'mid', 'senior', 'staff', 'principal']);
-const RateSeniority = z.enum(['junior', 'mid', 'senior', 'lead']);
-
-// Map extended seniority values to the rate estimator's supported values
-function toRateSeniority(s: z.infer<typeof SeniorityIn>): z.infer<typeof RateSeniority> {
-  if (s === 'staff' || s === 'principal') return 'lead';
-  return s;
-}
 
 const Role = z.object({
   role: z.string(),
@@ -50,7 +93,8 @@ const Role = z.object({
 export const salesDraftProposal = registerTool({
   id: 'sales.draft_proposal',
   description:
-    'End-to-end Sales workflow: given a company (by id OR name) and a list of roles, fetches HubSpot context, calls the rate estimator per role, retrieves matching past proposals from KB, and returns a structured proposal draft (JSON + Markdown).',
+    'End-to-end Sales workflow: given a company (by id OR name) and a list of roles, fetches HubSpot context, retrieves matching past proposals from Brain Knowledge, and returns a structured proposal draft (JSON + Markdown). ' +
+    'It does NOT price the roles — the rate estimator was retired, so the draft leaves the commercial numbers blank on purpose. Pull the figures from comparable past proposals in Brain Knowledge, or ask the user, and never invent a rate.',
   inputSchema: z
     .object({
       companyId: z.string().optional(),
@@ -72,7 +116,6 @@ export const salesDraftProposal = registerTool({
         seniority: z.string(),
         qty: z.number(),
         techStack: z.array(z.string()),
-        monthlyRange: z.object({ min: z.number(), max: z.number() }),
         confidence: z.number(),
       }),
     ),
@@ -132,36 +175,22 @@ export const salesDraftProposal = registerTool({
       listActivitiesTool,
       { companyId: companyId!, days: 30, limit: 5 },
       ctx,
-    )) as { results: Array<{ id: string; type: string; subject: string | null; createdAt: string }> };
+    )) as {
+      results: Array<{ id: string; type: string; subject: string | null; createdAt: string }>;
+    };
 
-    const rateTool = getTool('rate.estimate');
-    if (!rateTool) throw new Error('rate.estimate not available');
-
-    const roleResults = await Promise.all(
-      input.roles.map(async (r) => {
-        const { role: normalizedRole, confidence } = normalizeRole(r.role);
-        const region = COUNTRY_TO_REGION[country?.toUpperCase?.() ?? ''] ?? 'latam';
-        const yearsExperience = SENIORITY_TO_YEARS[r.seniority?.toLowerCase() ?? 'mid'] ?? 3;
-        const e = (await runTool(
-          rateTool,
-          {
-            role: normalizedRole,
-            seniority: toRateSeniority(r.seniority),
-            region,
-            yearsExperience,
-          },
-          ctx,
-        )) as { monthlyRateUsd: { min: number; max: number }; notes: string };
-        return {
-          role: r.role,
-          seniority: r.seniority,
-          qty: r.qty ?? 1,
-          techStack: r.techStack ?? [],
-          monthlyRange: e.monthlyRateUsd,
-          confidence,
-        };
-      }),
-    );
+    // Roles are normalised and echoed back, but NOT priced. The rate estimator
+    // this step used to call was retired with the rest of the `rate.*` family,
+    // and a proposal that quietly ships a made-up number is worse than one that
+    // leaves the cell empty — so the pricing column is left for a human, with
+    // comparable past proposals from Brain Knowledge right underneath it.
+    const roleResults = input.roles.map((r) => ({
+      role: r.role,
+      seniority: r.seniority,
+      qty: r.qty ?? 1,
+      techStack: r.techStack ?? [],
+      confidence: normalizeRole(r.role).confidence,
+    }));
 
     const kbQuery = `${companyName ?? ''} ${input.roles.map((r) => r.role).join(' ')} proposal`;
     const kbTool = getTool('kb.search');
@@ -212,7 +241,6 @@ function renderMarkdown(p: {
     seniority: string;
     qty: number;
     techStack: string[];
-    monthlyRange: { min: number; max: number };
   }>;
   activities: Array<{ type: string; subject: string | null }>;
   kb: Array<{ documentTitle: string; chunkIndex: number; content: string }>;
@@ -224,17 +252,20 @@ function renderMarkdown(p: {
     lines.push(`*${[p.industry, p.country].filter(Boolean).join(' · ')}*`);
   lines.push('');
   lines.push('## Roles');
-  lines.push('| Role | Seniority | Qty | Monthly (USD) |');
-  lines.push('|---|---|---:|---:|');
+  lines.push('| Role | Seniority | Qty | Stack | Monthly (USD) |');
+  lines.push('|---|---|---:|---|---:|');
   for (const r of p.roles)
     lines.push(
-      `| ${r.role} | ${r.seniority} | ${r.qty} | $${r.monthlyRange.min}–$${r.monthlyRange.max} |`,
+      `| ${r.role} | ${r.seniority} | ${r.qty} | ${r.techStack.join(', ') || '—'} | _to be priced_ |`,
     );
+  lines.push('');
+  lines.push(
+    '> Pricing is not filled in automatically. Take the figures from a comparable past proposal below, or confirm them with the account owner, before this goes anywhere near a client.',
+  );
   lines.push('');
   if (p.activities.length) {
     lines.push('## Recent activity (HubSpot, last 30d)');
-    for (const a of p.activities)
-      lines.push(`- **${a.type}**${a.subject ? `: ${a.subject}` : ''}`);
+    for (const a of p.activities) lines.push(`- **${a.type}**${a.subject ? `: ${a.subject}` : ''}`);
     lines.push('');
   }
   if (p.kb.length) {

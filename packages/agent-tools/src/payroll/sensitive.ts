@@ -14,12 +14,14 @@ export const COMP_SENSITIVITY_NOTE =
   'unless the user explicitly confirms that exact action first.';
 
 /**
- * The counterpart of bamboo/shape.ts PAYROLL_BOUNDARY_NOTE.
+ * What the payroll service does and does not know.
  *
- * Both families answer "who works here, where are they placed, what do they
- * cost" from different databases. Merging them would hide a discrepancy that
- * somebody needs to see, so instead every overlapping tool says which system it
- * read and refuses to reconcile the two on its own.
+ * It used to be one of two systems answering "who works here, where are they
+ * placed, what do they cost" — the HR system of record held the other half, and
+ * this note existed to stop the model reconciling the two on its own. That
+ * second system is gone, so the note now states the narrower thing that is
+ * still true and still trips people up: payroll knows what was PAID, not what
+ * the client is CHARGED.
  */
-export const BAMBOO_BOUNDARY_NOTE =
-  'SOURCE: the internal payroll service, which is a different system from BambooHR. BambooHR (bamboo.*) is the HR system of record for the roster, the placement and the bill rate charged to the client; payroll holds what was actually paid and expensed. The two can hold different figures for the same person. If you have numbers from both and they disagree, give both and say which came from where — never average them or silently pick one.';
+export const PAYROLL_SOURCE_NOTE =
+  'SOURCE: the internal payroll service. It holds what people were actually paid and what they expensed — NOT the bill rate charged to the client, not the margin on an account, and not time-off balances. Cortex has no system for those any more, so do not estimate them: say plainly that the figure is not something you can look up.';

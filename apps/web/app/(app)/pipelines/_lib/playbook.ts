@@ -133,8 +133,6 @@ export function renderPlaybook(opts: {
 
 const FAMILY_LABELS: Record<string, string> = {
   hubspot: 'HubSpot',
-  recruit: 'Recruiting',
-  workable: 'Workable',
   kb: 'Brain Knowledge',
   gmail: 'Gmail',
   gcal: 'Google Calendar',
@@ -143,11 +141,11 @@ const FAMILY_LABELS: Record<string, string> = {
   github: 'GitHub',
   linear: 'Linear',
   slack: 'Slack',
-  rate: 'Rates',
   payroll: 'Payroll',
   web: 'Web',
   format: 'Formatting',
   people: 'People',
+  presentations: 'Presentations',
   growth: 'Growth Signals',
   pipeline: 'Pipelines',
   schedule: 'Schedules',

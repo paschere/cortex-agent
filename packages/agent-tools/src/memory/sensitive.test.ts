@@ -67,19 +67,19 @@ describe('behaviouralCandidates', () => {
   it('reports the families someone actually works in, with the count as evidence', () => {
     const rows = [
       ...Array.from({ length: 20 }, (_, i) => ({
-        tool_id: 'recruit.list_candidates',
+        tool_id: 'payroll.team_assignments',
         status: 'ok',
         created_at: at(1, 12 + (i % 4)),
       })),
       ...Array.from({ length: 15 }, (_, i) => ({
-        tool_id: 'workable.list_jobs',
+        tool_id: 'hubspot.search_deals',
         status: 'ok',
         created_at: at(2, 12 + (i % 4)),
       })),
     ];
     const [first] = behaviouralCandidates(rows, 'UTC');
     expect(first?.source).toBe('behavioural');
-    expect(first?.content).toMatch(/talent pool/);
+    expect(first?.content).toMatch(/payroll/);
     expect(first?.note).toMatch(/20×/);
   });
 

@@ -1,22 +1,22 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { chatModel, utilityModel, NO_THINKING } from '@cortex/agent-tools';
-import { streamText, generateText, tool, jsonSchema, type CoreMessage, type CoreTool } from 'ai';
-import { z } from 'zod';
+import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { buildToolContext } from '@/lib/agent';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
-import { loadAgent } from '@cortex/agents';
+import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
 import {
-  filterTools,
-  runTool,
-  kbSearch,
-  fetchEnabledExternalTools,
-  callExternalTool,
   type ExternalServerRow,
+  callExternalTool,
+  fetchEnabledExternalTools,
+  filterTools,
+  kbSearch,
+  runTool,
 } from '@cortex/agent-tools';
+import { loadAgent } from '@cortex/agents';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
+import { type CoreMessage, type CoreTool, generateText, jsonSchema, streamText, tool } from 'ai';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -43,16 +43,7 @@ function shouldRunRag(message: string): boolean {
  * capability, which reads exactly like a missing grant or a broken tool. The
  * vehicles family shipped this way: registered, granted, and invisible.
  */
-const CORE_FAMILIES = new Set([
-  'kb',
-  'rate',
-  'sales',
-  'web',
-  'pipeline',
-  'schedule',
-  'cortex',
-  'format',
-]);
+const CORE_FAMILIES = new Set(['kb', 'sales', 'web', 'pipeline', 'schedule', 'cortex', 'format']);
 
 const FAMILY_TRIGGERS: Array<{ family: string; re: RegExp }> = [
   {
@@ -60,10 +51,9 @@ const FAMILY_TRIGGERS: Array<{ family: string; re: RegExp }> = [
     re: /hubspot|deal|pipeline de ventas|crm|prospect|client|cliente|company|empresa|contact/i,
   },
   {
-    family: 'recruit',
-    re: /candidat|recruit|reclut|talent|shortlist|score|entrevista|interview|requisition|vacante/i,
+    family: 'presentations',
+    re: /candidat|presentaci[oó]n|shortlist|perfil|entrevista|interview|vacante|requisition/i,
   },
-  { family: 'workable', re: /workable|ats|stage|etapa|req\b/i },
   {
     family: 'gmail',
     re: /email|correo|mail|inbox|draft|enviar|send|responder|reply/i,

@@ -1,7 +1,7 @@
 import 'server-only';
-import { Sandbox } from '@vercel/sandbox';
 import { type CheckStep, assertPushable } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
+import { Sandbox } from '@vercel/sandbox';
 import { type RepoRef, redact } from './github-token';
 
 /**
@@ -56,7 +56,7 @@ export interface StartedSandbox {
  * The ONLY secret that goes in is the repo-scoped GitHub token, and it goes in
  * as the clone credential rather than as an environment variable, so it is not
  * sitting in the shell environment of every command the model runs. Nothing
- * else is passed: no Supabase service key, no Workable/Apollo key, no Google
+ * else is passed: no Supabase service key, no HubSpot token, no Google
  * credential, and — importantly — not the Anthropic key either. The model runs
  * in the orchestrator, not in the sandbox; the sandbox only executes its tool
  * calls.

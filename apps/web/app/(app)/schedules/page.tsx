@@ -124,7 +124,11 @@ export default async function SchedulesPage() {
             <div
               className={clsx(
                 'stat-num mt-1 truncate text-[20px] leading-none',
-                s.tone === 'emerald' ? 'text-emerald' : s.tone === 'rose' ? 'text-rose' : 'text-ink',
+                s.tone === 'emerald'
+                  ? 'text-emerald'
+                  : s.tone === 'rose'
+                    ? 'text-rose'
+                    : 'text-ink',
               )}
               title={s.value}
             >

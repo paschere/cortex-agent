@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { clsx } from 'clsx';
+import type { ReactNode } from 'react';
 import { LegendDot } from '../../audit/_components/tags';
 import type { DayPoint } from '../_lib/user-activity';
 

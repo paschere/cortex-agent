@@ -13,8 +13,7 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
   'gmail.draft': 'Crea un borrador en tu Gmail. No se envía nada, pero aparece en tu bandeja.',
   'gcal.create_event':
     'Crea un evento y manda la invitación por correo a todos los asistentes — la gente de fuera la ve de inmediato.',
-  'slack.post_message':
-    'Publica un mensaje en Slack que todos en el canal ven apenas cae.',
+  'slack.post_message': 'Publica un mensaje en Slack que todos en el canal ven apenas cae.',
   'hubspot.create_contact':
     'Crea un registro permanente en el CRM que todo el equipo comercial va a ver y usar.',
   'hubspot.create_deal':
@@ -23,15 +22,11 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
     'Modifica datos vivos del negocio (etapa, monto, campos) de los que dependen el equipo y los pronósticos. Los valores anteriores se pierden.',
   'hubspot.log_activity':
     'Escribe una nota de actividad en la línea de tiempo del CRM, visible para todo el equipo.',
-  'workable.move_candidate':
-    'Cambia la etapa del candidato en el ATS — el equipo de selección lo ve, y el historial de etapas alimenta las métricas.',
-  'workable.create_comment':
-    'Agrega una nota permanente al perfil del candidato, visible para todo el equipo de selección.',
   'github.create_issue':
     'Crea un issue visible para todo el equipo en el repositorio y notifica a quienes lo siguen.',
-  'github.create_issue_comment': 'Publica un comentario visible para todos los que siguen el issue.',
-  'linear.create_issue':
-    'Crea un issue que el equipo de ingeniería va a revisar y atender.',
+  'github.create_issue_comment':
+    'Publica un comentario visible para todos los que siguen el issue.',
+  'linear.create_issue': 'Crea un issue que el equipo de ingeniería va a revisar y atender.',
   'linear.create_comment': 'Publica un comentario visible para todos en el issue.',
   'gsheets.append_row':
     'Agrega una fila a una hoja compartida que otros pueden estar usando para reportes.',
@@ -41,12 +36,8 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
     'Guarda un procedimiento reutilizable que cualquiera del equipo puede ejecutar desde cualquier lado — un error en su diseño se repite en cada ejecución.',
   'pipeline.update':
     'Cambia un procedimiento compartido para todos los que lo usan, desde la próxima ejecución.',
-  'apollo.enrich_people':
-    'Saca de Apollo los correos verificados de hasta diez personas de una sola vez, y gasta un crédito de Apollo por cada persona encontrada. Buscar gente le cuesta plata real a la empresa, así que un lote siempre es decisión de alguien.',
-  'bamboo.compensation_report':
-    'Saca de BambooHR las tarifas de pago Y de cobro de un grupo entero de personas de una sola vez — potencialmente de toda la nómina. La compensación es el dato más sensible que guarda la empresa, y esto es su exportación masiva: le pertenece a quien la aprobó, no al chat donde termine pegada. Para una sola persona, la consulta individual responde lo mismo sin exportar a nadie más.',
-  'recruit.generate_presentation':
-    'Genera un documento de presentación de candidatos para cliente, que puede terminar compartido por fuera.',
+  'presentations.create_pdf':
+    'Genera un documento de presentación de un candidato para cliente, con su nombre y su perfil adentro, que puede terminar compartido por fuera.',
 };
 
 const FAMILY_SYSTEM: Record<string, string> = {
@@ -54,15 +45,13 @@ const FAMILY_SYSTEM: Record<string, string> = {
   gcal: 'tu Google Calendar',
   gsheets: 'una hoja de cálculo compartida',
   hubspot: 'el CRM de HubSpot',
-  workable: 'el ATS de Workable',
   github: 'GitHub',
   linear: 'Linear',
   slack: 'Slack',
   schedule: 'el programador de rutinas desatendidas',
   pipeline: 'la biblioteca de procedimientos compartida',
-  recruit: 'el sistema de selección',
-  apollo: 'la base de prospección de Apollo',
-  bamboo: 'BambooHR, el sistema de nómina y personal',
+  presentations: 'la biblioteca de presentaciones para cliente',
+  payroll: 'el servicio de nómina',
   kb: 'Brain Knowledge, la memoria compartida',
   vehicles: 'el registro de vehículos y, a través de él, el RUNT y el SIMIT',
 };

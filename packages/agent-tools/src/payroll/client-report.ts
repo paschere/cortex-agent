@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { fetchExpensesReport, fetchPayrollStats, fetchTeamAssignments } from './client';
-import { BAMBOO_BOUNDARY_NOTE, COMP_SENSITIVITY_NOTE } from './sensitive';
+import { COMP_SENSITIVITY_NOTE, PAYROLL_SOURCE_NOTE } from './sensitive';
 
 /**
  * payroll.client_report — everything about one client's team in a single call:
@@ -23,8 +23,8 @@ export const payrollClientReport = registerTool({
   description:
     'The COST side of one client account in a single call: every person assigned to that client by name with their role, seniority in the account and monthly cost, the total monthly and annualized cost, the expenses charged against that client, and the recent cost trend. ' +
     'Use this whenever someone asks for a report, a summary, the roster, the cost or "everything we have" about a client (e.g. "give me a full report on PureCars"). Prefer it over calling the roster, expenses and stats tools separately. ' +
-    'It does NOT carry what the company charges that client or the margin on the account — those are bill rates, and they live in BambooHR (bamboo.compensation_report, filtered to the client). Do not call this a complete account picture without them. ' +
-    `Combine with payroll.cost_projection for a forward-looking model. ${BAMBOO_BOUNDARY_NOTE} ${COMP_SENSITIVITY_NOTE}`,
+    'It does NOT carry what the company charges that client or the margin on the account — those are bill rates, and no tool reaches them. Say so rather than presenting this as the complete account picture. ' +
+    `Combine with payroll.cost_projection for a forward-looking model. ${PAYROLL_SOURCE_NOTE} ${COMP_SENSITIVITY_NOTE}`,
   inputSchema: z.object({
     client: z
       .string()

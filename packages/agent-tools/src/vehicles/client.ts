@@ -3,9 +3,9 @@ import type { ToolContext } from '../types';
 /**
  * Transport for the RUNT/SIMIT consult service — a small self-hosted scraper
  * behind VEHICLES_SCRAPER_URL, authenticated with a workspace-wide key sent as
- * `x-api-key` (the same "service account" model as Apollo and BambooHR).
+ * `x-api-key` (a workspace-wide "service account" credential, not per-user).
  *
- * Like the Apollo client, and for the same reason, THIS NEVER THROWS. Neither
+ * THIS NEVER THROWS, and the reason matters. Neither
  * RUNT nor SIMIT is an API: both are public government sites driven through a
  * headless browser and an OCR captcha. A captcha that will not solve, a site
  * that is down for maintenance and a plate the registry has never heard of are

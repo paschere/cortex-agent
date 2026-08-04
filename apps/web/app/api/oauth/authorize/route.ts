@@ -1,13 +1,13 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { getOptionalSession } from '@/lib/session';
 import {
+  MCP_SCOPE,
+  createAuthCode,
   getClient,
   isAllowedRedirectUri,
-  createAuthCode,
   issuer,
   mcpResource,
-  MCP_SCOPE,
 } from '@/lib/oauth';
+import { getOptionalSession } from '@/lib/session';
+import { type NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

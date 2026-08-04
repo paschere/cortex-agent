@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 

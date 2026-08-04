@@ -1,6 +1,5 @@
 import { Panel } from '@/components/ui/panel';
 import { Field } from '@/components/ui/provenance';
-import { chipClass } from '@/lib/status-chip';
 import {
   DEV_TASK_COLUMNS,
   describeStatus,
@@ -13,6 +12,7 @@ import {
   toDevTask,
 } from '@/lib/dev-work';
 import { requireSession } from '@/lib/session';
+import { chipClass } from '@/lib/status-chip';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   ArrowLeft,
@@ -181,9 +181,9 @@ export default async function DevWorkDetailPage({
           <div className="text-[12.5px] text-ink">
             <p className="font-semibold text-rose">Esta ejecución todavía no se detiene</p>
             <p className="mt-0.5 text-ink-muted">
-              {stoppedBy} pidió detenerla el <span className="tabular">{stamp(task.cancelRequestedAt)}</span>{' '}
-              y sigue corriendo. No se va a integrar nada nuevo, pero avísale a quien administra
-              Cortex.
+              {stoppedBy} pidió detenerla el{' '}
+              <span className="tabular">{stamp(task.cancelRequestedAt)}</span> y sigue corriendo. No
+              se va a integrar nada nuevo, pero avísale a quien administra Cortex.
             </p>
           </div>
         </Panel>

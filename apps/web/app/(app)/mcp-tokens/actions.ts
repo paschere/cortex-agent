@@ -1,10 +1,10 @@
 'use server';
 
 import { createHash, randomBytes } from 'node:crypto';
-import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 export async function issueToken(formData: FormData) {
   const user = await requireSession();

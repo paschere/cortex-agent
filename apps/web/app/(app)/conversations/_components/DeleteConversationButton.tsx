@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { Loader2, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { Trash2, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 
 export function DeleteConversationButton({ id }: { id: string }) {
   const router = useRouter();

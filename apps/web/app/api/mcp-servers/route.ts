@@ -1,9 +1,9 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { encryptToken } from '@cortex/core';
 import { isPrivateUrl, syncExternalServerManifest } from '@cortex/agent-tools';
+import { encryptToken } from '@cortex/core';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
@@ -77,11 +77,13 @@ export async function POST(req: NextRequest) {
     .select('id', { count: 'exact', head: true })
     .eq('user_id', user.id);
   if ((count ?? 0) >= MAX_SERVERS) {
-    return NextResponse.json({ error: `Maximum of ${MAX_SERVERS} servers reached` }, { status: 422 });
+    return NextResponse.json(
+      { error: `Maximum of ${MAX_SERVERS} servers reached` },
+      { status: 422 },
+    );
   }
 
-  const auth_value_encrypted =
-    authType !== 'none' && authValue ? encryptToken(authValue) : null;
+  const auth_value_encrypted = authType !== 'none' && authValue ? encryptToken(authValue) : null;
 
   const { data: inserted, error: insErr } = await db
     .from('user_mcp_servers')

@@ -93,7 +93,12 @@ export default async function ConnectClientPage({
       )
       .eq('user_id', user.id)
       .order('created_at', { ascending: false }),
-    sb.from('agents').select('id, name').order('name'),
+    // Selector: archived agents must not be attachable to a new token.
+    sb
+      .from('agents')
+      .select('id, name')
+      .eq('archived', false)
+      .order('name'),
   ]);
 
   const tokens: TokenRow[] = (tokenRows ?? []) as unknown as TokenRow[];
@@ -231,9 +236,7 @@ export default async function ConnectClientPage({
                             <span className="text-[13px] font-semibold text-ink">{t.name}</span>
                             <StateTag state={state} />
                             {/* Prefix only — the token itself is stored hashed. */}
-                            <span className="tabular text-[12px] text-ink-muted">
-                              {t.prefix}…
-                            </span>
+                            <span className="tabular text-[12px] text-ink-muted">{t.prefix}…</span>
                           </div>
                           {state !== 'revoked' && (
                             <form action={revokeToken} className="shrink-0">
@@ -259,9 +262,7 @@ export default async function ConnectClientPage({
                             <span className="text-[13px]">{fmt(t.created_at)}</span>
                           </Field>
                           <Field label={t.revoked_at ? 'Revocado' : 'Vence'}>
-                            <span className="text-[13px]">
-                              {fmt(t.revoked_at ?? t.expires_at)}
-                            </span>
+                            <span className="text-[13px]">{fmt(t.revoked_at ?? t.expires_at)}</span>
                           </Field>
                         </div>
                       </li>

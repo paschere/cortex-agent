@@ -1,8 +1,8 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { Eyebrow, Panel } from '@/components/ui/panel';
 import { DEV_REPO_COLUMNS, isMissingTable, toDevRepository } from '@/lib/dev-work';
-import { chipClass } from '@/lib/status-chip';
 import { requireSession } from '@/lib/session';
+import { chipClass } from '@/lib/status-chip';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   ArrowLeft,

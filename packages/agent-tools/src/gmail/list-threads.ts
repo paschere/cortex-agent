@@ -28,7 +28,9 @@ export const gmailListThreads = registerTool({
       }),
     ),
   }),
-  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] }],
+  requiredScopes: [
+    { provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] },
+  ],
   rateLimit: { perMinute: 20 },
   handler: async (input, ctx) => {
     const q = [

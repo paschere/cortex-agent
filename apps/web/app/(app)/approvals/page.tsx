@@ -1,11 +1,11 @@
-import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import Link from 'next/link';
-import { Inbox, ShieldAlert, Radar, AlarmClockOff, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { AlarmClockOff, ArrowRight, Inbox, Radar, ShieldAlert } from 'lucide-react';
+import Link from 'next/link';
 import { PendingActionCard } from './_components/PendingActionCard';
 import { SignalCard } from './_components/SignalCard';
 
@@ -107,7 +107,9 @@ export default async function ApprovalsPage() {
   const signals = (signalsRes.data ?? []) as unknown as SignalRow[];
   const failing = ((jobsRes.data ?? []) as unknown as JobRow[])
     .map((j) => ({ id: j.id, name: j.name, lastRun: j.scheduled_job_runs?.[0] }))
-    .filter((j): j is { id: string; name: string; lastRun: JobRunRow } => j.lastRun?.status === 'error');
+    .filter(
+      (j): j is { id: string; name: string; lastRun: JobRunRow } => j.lastRun?.status === 'error',
+    );
 
   const nothingPending = approvalRows.length === 0 && signals.length === 0 && failing.length === 0;
 

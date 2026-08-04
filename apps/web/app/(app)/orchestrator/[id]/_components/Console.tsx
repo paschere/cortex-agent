@@ -10,13 +10,7 @@ import {
 import { computeWaves } from '@/lib/orchestrator/graph';
 import { type EventView, type RunView, type TaskView, isTerminal } from '@/lib/orchestrator/types';
 import { clsx } from 'clsx';
-import {
-  ArrowLeft,
-  CircleStop,
-  Loader2,
-  RefreshCw,
-  TriangleAlert,
-} from 'lucide-react';
+import { ArrowLeft, CircleStop, Loader2, RefreshCw, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RunMarkdown } from '../../../schedules/_components/RunMarkdown';

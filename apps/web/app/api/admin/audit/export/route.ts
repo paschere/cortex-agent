@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { type NextRequest, NextResponse } from 'next/server';
 import {
   type AuditEventRow,
   fetchAuditEvents,
@@ -90,7 +90,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   if (session.role !== 'org_admin') {
-    return NextResponse.json({ error: 'Only org admins can export the audit log' }, { status: 403 });
+    return NextResponse.json(
+      { error: 'Only org admins can export the audit log' },
+      { status: 403 },
+    );
   }
 
   const filters = parseAuditFilters(Object.fromEntries(req.nextUrl.searchParams.entries()));
@@ -116,9 +119,7 @@ export async function GET(req: NextRequest) {
         controller.close();
         return;
       }
-      controller.enqueue(
-        encoder.encode(rows.map((e) => csvLine(rowToCells(e, users))).join('')),
-      );
+      controller.enqueue(encoder.encode(rows.map((e) => csvLine(rowToCells(e, users))).join('')));
       offset += rows.length;
       if (rows.length < limit) controller.close();
     },

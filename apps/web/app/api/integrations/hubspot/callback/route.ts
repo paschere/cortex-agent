@@ -1,8 +1,8 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { encryptToken, getEnv, IntegrationError } from '@cortex/core';
+import { IntegrationError, encryptToken, getEnv } from '@cortex/core';
+import { cookies } from 'next/headers';
+import { type NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
   const user = await requireSession();
@@ -17,7 +17,12 @@ export async function GET(req: NextRequest) {
   }
 
   const env = getEnv();
-  if (env.HUBSPOT_PRIVATE_APP_TOKEN || !env.HUBSPOT_CLIENT_ID || !env.HUBSPOT_CLIENT_SECRET || !env.HUBSPOT_REDIRECT_URI) {
+  if (
+    env.HUBSPOT_PRIVATE_APP_TOKEN ||
+    !env.HUBSPOT_CLIENT_ID ||
+    !env.HUBSPOT_CLIENT_SECRET ||
+    !env.HUBSPOT_REDIRECT_URI
+  ) {
     return NextResponse.redirect(new URL('/integrations?error=private_app_mode', req.url));
   }
   const tokenRes = await fetch('https://api.hubapi.com/oauth/v1/token', {
@@ -48,14 +53,16 @@ export async function GET(req: NextRequest) {
       provider: 'hubspot',
       access_token_enc: encryptToken(tok.access_token),
       refresh_token_enc: encryptToken(tok.refresh_token),
-      scopes: tok.scope ? tok.scope.split(' ') : [
-        'crm.objects.companies.read',
-        'crm.objects.deals.read',
-        'crm.objects.contacts.read',
-        'crm.schemas.companies.read',
-        'crm.schemas.deals.read',
-        'oauth',
-      ],
+      scopes: tok.scope
+        ? tok.scope.split(' ')
+        : [
+            'crm.objects.companies.read',
+            'crm.objects.deals.read',
+            'crm.objects.contacts.read',
+            'crm.schemas.companies.read',
+            'crm.schemas.deals.read',
+            'oauth',
+          ],
       expires_at: new Date(Date.now() + tok.expires_in * 1000).toISOString(),
       updated_at: new Date().toISOString(),
     },

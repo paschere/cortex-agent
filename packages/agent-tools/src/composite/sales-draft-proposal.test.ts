@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerTool, runTool } from '@cortex/agent-tools';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import type { ToolContext } from '@cortex/agent-tools';
+import { registerTool } from '../index';
+import type { ToolContext } from '../types.js';
 
 // --- Shared ctx factory (mirrors runtool.test.ts pattern) ---
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
@@ -55,36 +55,14 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
 type ToolRegistry = Map<string, ReturnType<typeof registerTool>>;
 
 // Capture last call args per fake tool for assertions
-let lastRateEstimateInput: unknown = null;
 let lastKbSearchInput: unknown = null;
 let lastHubspotGetCompanyInput: unknown = null;
 let hubspotSearchCalled = false;
 
 function registerFakeTools() {
-  lastRateEstimateInput = null;
   lastKbSearchInput = null;
   lastHubspotGetCompanyInput = null;
   hubspotSearchCalled = false;
-
-  // Rate estimate fake
-  registerTool({
-    id: 'rate.estimate',
-    description: 'fake',
-    inputSchema: z.object({
-      role: z.string(),
-      seniority: z.string(),
-      region: z.string(),
-      yearsExperience: z.number(),
-    }),
-    outputSchema: z.object({
-      monthlyRateUsd: z.object({ min: z.number(), max: z.number() }),
-      notes: z.string(),
-    }),
-    handler: async (input) => {
-      lastRateEstimateInput = input;
-      return { monthlyRateUsd: { min: 4000, max: 6000 }, notes: 'Test rate' };
-    },
-  });
 
   // KB search fake
   registerTool({
@@ -102,7 +80,7 @@ function registerFakeTools() {
         }),
       ),
     }),
-    handler: async (input) => {
+    handler: async (input: unknown) => {
       lastKbSearchInput = input;
       return {
         hits: [
@@ -167,7 +145,7 @@ function registerFakeTools() {
       ownerId: z.string().nullable(),
       recentDeals: z.array(z.any()),
     }),
-    handler: async (input) => {
+    handler: async (input: { id: string }) => {
       lastHubspotGetCompanyInput = input;
       return {
         id: input.id,
@@ -219,36 +197,15 @@ function registerFakeTools() {
 // Import the composite tool (side-effect registration happens at module load)
 // We need it registered after our fakes, but the composite is registered by agent-tools index
 // So we import it explicitly here:
-import '@cortex/agent-tools';
+import '../index';
 
 describe('sales.draft_proposal composite tool', () => {
   beforeEach(() => {
     registerFakeTools();
   });
 
-  it('calls rate.estimate with the correct args', async () => {
-    const { getTool } = await import('@cortex/agent-tools');
-    const tool = getTool('sales.draft_proposal');
-    expect(tool).toBeDefined();
-
-    const ctx = makeCtx();
-    await tool!.handler(
-      {
-        companyId: 'hs-001',
-        roles: [{ role: 'backend', seniority: 'senior', qty: 1, techStack: ['Node.js'] }],
-      },
-      ctx,
-    );
-
-    expect(lastRateEstimateInput).toMatchObject({
-      role: 'backend',
-      seniority: 'senior',
-      region: 'latam',
-    });
-  });
-
   it('calls kb.search with a derived query', async () => {
-    const { getTool } = await import('@cortex/agent-tools');
+    const { getTool } = await import('../index');
     const tool = getTool('sales.draft_proposal');
     expect(tool).toBeDefined();
 
@@ -267,7 +224,7 @@ describe('sales.draft_proposal composite tool', () => {
   });
 
   it('does not call hubspot.get_company when companyId is missing', async () => {
-    const { getTool } = await import('@cortex/agent-tools');
+    const { getTool } = await import('../index');
     const tool = getTool('sales.draft_proposal');
     expect(tool).toBeDefined();
 
@@ -285,8 +242,8 @@ describe('sales.draft_proposal composite tool', () => {
     expect(hubspotSearchCalled).toBe(true);
   });
 
-  it('output markdown contains rate range and citations', async () => {
-    const { getTool } = await import('@cortex/agent-tools');
+  it('output markdown leaves pricing blank and carries the citations', async () => {
+    const { getTool } = await import('../index');
     const tool = getTool('sales.draft_proposal');
     expect(tool).toBeDefined();
 
@@ -301,32 +258,16 @@ describe('sales.draft_proposal composite tool', () => {
     )) as {
       markdown: string;
       similarCases: Array<{ title: string }>;
-      roles: Array<{ monthlyRange: { min: number; max: number } }>;
+      roles: Array<{ role: string }>;
     };
 
-    // Markdown should include the rate range from our fake (4000-6000)
-    expect(result.markdown).toContain('4000');
-    expect(result.markdown).toContain('6000');
+    // The rate estimator is gone: the table says so rather than inventing a
+    // number, and the caveat under it tells the reader where to get one.
+    expect(result.markdown).toContain('to be priced');
+    expect(result.markdown).toContain('Pricing is not filled in automatically');
     // Should include citation from KB fake
     expect(result.similarCases).toHaveLength(1);
     expect(result.similarCases[0]!.title).toBe('Acme Proposal 2025');
     expect(result.markdown).toContain('Acme Proposal 2025');
-  });
-
-  it('maps staff/principal seniority to lead for rate estimator', async () => {
-    const { getTool } = await import('@cortex/agent-tools');
-    const tool = getTool('sales.draft_proposal');
-    expect(tool).toBeDefined();
-
-    const ctx = makeCtx();
-    await tool!.handler(
-      {
-        companyId: 'hs-001',
-        roles: [{ role: 'backend', seniority: 'staff', qty: 1, techStack: [] }],
-      },
-      ctx,
-    );
-
-    expect(lastRateEstimateInput).toMatchObject({ seniority: 'lead' });
   });
 });

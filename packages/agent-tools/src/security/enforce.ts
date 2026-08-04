@@ -11,8 +11,8 @@
  * non-sensitive tools. A low-risk call with warm caches costs zero queries.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { type UUID, logger } from '@cortex/core';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { hashInput } from '../audit.js';
 import { isHighFrequency, noteSensitiveCall, sensitiveCallCount } from './frequency.js';
 import {

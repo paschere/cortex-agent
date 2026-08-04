@@ -1,14 +1,14 @@
 import { z } from 'zod';
-import { getTool, registerTool, runTool } from '../index';
-import type { AnyTool, ToolContext } from '../types';
-import { meetingTypeLabel, type MeetingType } from '../gcal/classify';
+import { type MeetingType, meetingTypeLabel } from '../gcal/classify';
 import {
+  type NormalizedMeeting,
   fetchCalendarTimeZone,
   fetchEvent,
   fetchEventsInRange,
   normalizeEvent,
-  type NormalizedMeeting,
 } from '../gcal/events';
+import { getTool, registerTool, runTool } from '../index';
+import type { AnyTool, ToolContext } from '../types';
 import { MEET_READONLY_SCOPE } from './client';
 import { meetingsListTranscripts } from './list-transcripts';
 
@@ -330,166 +330,18 @@ export const meetingsPrepareBriefing = registerTool({
     });
 
     // ---- Interview: the candidate ----------------------------------------
+    // The applicant-tracking lookups that used to fill this section were
+    // retired with the recruiting toolset. Rather than leave the section out
+    // silently — which reads as "nothing on file" — the briefing says plainly
+    // that there is no system to check, so nobody walks in assuming Cortex
+    // already screened the person.
     if (type === 'interview') {
-      const lookupKey = primaryExternal?.email ?? primaryExternal?.name ?? null;
-      if (!lookupKey) {
-        gaps.push(
-          'No outside guest is listed on the invitation, so the candidate could not be looked up.',
-        );
-      } else {
-        const search = await attempt(ctx, gaps, "The candidate's record in Workable", async () =>
-          call<{ candidates: Array<Record<string, unknown>> }>(
-            'workable.search_candidates',
-            primaryExternal?.email
-              ? { email: primaryExternal.email, limit: 5 }
-              : { name: lookupKey, limit: 5 },
-            ctx,
-          ),
-        );
-
-        const hits = (search.value?.candidates ?? []) as Array<{
-          id: string;
-          name: string;
-          stage: string | null;
-          jobTitle: string | null;
-          jobShortcode: string | null;
-          email: string | null;
-          updatedAt: string | null;
-          disqualified: boolean;
-          profileUrl: string | null;
-        }>;
-
-        if (search.ok && hits.length === 0) {
-          gaps.push(
-            `No candidate record was found for ${lookupKey}. Treat this as a first conversation unless the user knows otherwise.`,
-          );
-        }
-
-        const top = hits[0];
-        if (top) {
-          const ref = sources.add(
-            'Workable (applicant tracking)',
-            `Candidate file for ${top.name}`,
-            freshnessOf(top.updatedAt, 'last updated at an unknown date'),
-          );
-
-          // Fuller profile for the top match; best-effort enrichment.
-          const detail = await attempt(
-            ctx,
-            gaps,
-            "The candidate's full profile",
-            async () =>
-              call<{
-                candidate: {
-                  summary: string | null;
-                  coverLetter: string | null;
-                  source: string | null;
-                  phone: string | null;
-                };
-              }>('workable.get_candidate', { candidateId: top.id }, ctx),
-            { silent: true },
-          );
-
-          // The matcher may hold a richer scored profile under the same id.
-          const scored = await attempt(
-            ctx,
-            gaps,
-            'Scoring history',
-            async () =>
-              call<{ markdown: string }>('recruit.get_candidate', { candidateId: top.id }, ctx),
-            { silent: true },
-          );
-
-          const otherApps = hits
-            .slice(1)
-            .map((h) => `${h.jobTitle ?? 'another role'} (${h.stage ?? 'stage unknown'})`)
-            .slice(0, 4);
-
-          const body = [
-            `**${top.name}**${top.email ? ` · ${top.email}` : ''}`,
-            `**Applied to:** ${top.jobTitle ?? 'role not recorded'}`,
-            `**Current stage:** ${top.stage ?? 'not recorded'}${top.disqualified ? ' (marked disqualified)' : ''}`,
-            top.updatedAt ? `**Last movement:** ${freshnessOf(top.updatedAt)}` : '',
-            detail.value?.candidate.source
-              ? `**Came in via:** ${detail.value.candidate.source}`
-              : '',
-            detail.value?.candidate.summary
-              ? `**Profile:** ${detail.value.candidate.summary.slice(0, 600)}`
-              : '',
-            detail.value?.candidate.coverLetter
-              ? `**In their own words:** ${detail.value.candidate.coverLetter.slice(0, 400)}…`
-              : '',
-            otherApps.length ? `**Also seen on:** ${otherApps.join('; ')}` : '',
-            top.profileUrl ? `**Full file:** ${top.profileUrl}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n');
-
-          const refs = [ref];
-          if (scored.ok && scored.value?.markdown) {
-            refs.push(
-              sources.add(
-                'Cortex talent matching',
-                `Scoring and history for ${top.name}`,
-                'checked just now',
-              ),
-            );
-          }
-
-          sections.push({
-            key: 'candidate',
-            title: 'The candidate',
-            body,
-            sourceRefs: refs,
-          });
-
-          talkingPoints.push(
-            `Confirm where ${top.name.split(' ')[0] ?? top.name} stands on ${top.jobTitle ?? 'the role'} — the file says "${top.stage ?? 'stage not recorded'}".`,
-          );
-          if (!detail.value?.candidate.summary) {
-            talkingPoints.push(
-              'Their profile summary is thin in the system — ask about recent work and fill it in afterwards.',
-            );
-          }
-
-          // The role they applied to, when it can be resolved.
-          if (top.jobShortcode) {
-            const job = await attempt(
-              ctx,
-              gaps,
-              'The role they applied to',
-              async () =>
-                call<{
-                  job: {
-                    title: string;
-                    state: string | null;
-                    department: string | null;
-                  };
-                }>('workable.get_job', { shortcode: top.jobShortcode }, ctx),
-              { silent: true },
-            );
-            if (job.value?.job) {
-              const jobRef = sources.add(
-                'Workable (job posting)',
-                `Requisition "${job.value.job.title}"`,
-                'checked just now',
-              );
-              sections.push({
-                key: 'role',
-                title: 'The role',
-                body: [
-                  `**${job.value.job.title}**`,
-                  job.value.job.department ? `**Team:** ${job.value.job.department}` : '',
-                  job.value.job.state ? `**Status:** ${job.value.job.state}` : '',
-                ]
-                  .filter(Boolean)
-                  .join('\n'),
-                sourceRefs: [jobRef],
-              });
-            }
-          }
-        }
-      }
+      const who = primaryExternal?.name ?? primaryExternal?.email ?? null;
+      gaps.push(
+        who
+          ? `There is no candidate system connected, so nothing is on file about ${who} here. Whatever the recruiter has, ask them for it before the call.`
+          : 'There is no candidate system connected, so nothing about the applicant could be pulled up for this call.',
+      );
     }
 
     // ---- Client: the account ---------------------------------------------

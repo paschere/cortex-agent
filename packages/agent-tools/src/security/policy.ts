@@ -111,24 +111,12 @@ export const WORK_HOURS = { start: 6, end: 22 };
  */
 const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   payroll: 'financial',
-  rate: 'financial',
-  // BambooHR is the HR system of record: the roster, employment status,
-  // documents and — for every active person — both the pay rate the company
-  // pays and the bill rate it charges. The family default is `pii` because
-  // most of the family is roster and time-off data about identifiable
-  // employees; every
-  // tool that actually carries a rate is pinned to `financial` in
-  // TOOL_OVERRIDES below rather than being left to inherit.
-  bamboo: 'pii',
-  recruit: 'pii',
-  workable: 'pii',
   people: 'pii',
   gmail: 'pii',
-  // Apollo hands back named individuals' work emails and phone numbers. It is
-  // bought-in data rather than the company's own, but it is still personal
-  // data about identifiable people, so it is classified like any other PII
-  // source.
-  apollo: 'pii',
+  // Candidate write-ups name a real person and quote assessments of them, so
+  // the family that produces them is personal data even though it holds no
+  // rates.
+  presentations: 'pii',
   hubspot: 'client',
   growth: 'client',
   sales: 'client',
@@ -213,7 +201,7 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // A calendar write is internal bookkeeping; the invite email is a side effect
   // that carries no payload of ours.
   'gcal.create_event': { blastRadius: 'internal_write' },
-  'recruit.generate_presentation': { sensitivity: 'pii', blastRadius: 'internal_write' },
+  'presentations.create_pdf': { sensitivity: 'pii', blastRadius: 'internal_write' },
   'sales.draft_proposal': { sensitivity: 'client', blastRadius: 'internal_write' },
 
   // --- payroll: aggregates are the SAFE way to look at compensation ---------
@@ -221,51 +209,6 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // figures, so they stay ordinary sensitive reads. Only the per-person roster
   // dump counts as bulk.
   'payroll.team_assignments': { sensitivity: 'pii', alwaysBulk: true },
-
-  // --- Apollo: searching is free, pulling contact details is not ------------
-  // A batch lookup pulls up to ten people's verified emails out of a bought
-  // data set in one call — the export shape this policy exists to watch. Its
-  // batch size (10) sits far below BULK_THRESHOLD, so it is declared bulk here
-  // rather than being inferred from the payload: with a human present it asks
-  // first, and on a schedule it is refused outright.
-  'apollo.enrich_people': { sensitivity: 'pii', alwaysBulk: true },
-  // The company-signal tools are the exception to the family default. Job
-  // advertisements and press articles are published material about a business,
-  // and neither projection carries a contact detail — so classifying them as
-  // personal data would spend the sensitive-read budget, and flag every result,
-  // for something anyone can read on a careers page.
-  'apollo.company_job_postings': { sensitivity: 'public', blastRadius: 'read' },
-  'apollo.company_news': { sensitivity: 'public', blastRadius: 'read' },
-  // Our own consumption counters: no data about anyone at all.
-  'apollo.remaining_lookups': { sensitivity: 'internal', blastRadius: 'read' },
-
-  // --- BambooHR: compensation is the most sensitive data in the company ------
-  // Anything carrying a pay rate or a bill rate is financial, whatever else it
-  // also returns. `get_employee` looks like an ordinary profile lookup and is
-  // not: it hands over what one named person costs and what the client is
-  // charged for them.
-  'bamboo.get_employee': { sensitivity: 'financial', blastRadius: 'read' },
-  'bamboo.compensation_history': { sensitivity: 'financial', blastRadius: 'read' },
-  // THE export. Pay and bill rates for a whole client, a whole division or the
-  // entire roster in one call. Its default limit (400) sits above
-  // BULK_THRESHOLD anyway, but declaring it here means it is bulk even when
-  // someone asks for a narrow slice — the shape is the risk, not the row count.
-  // Consequence, by design: with a human present it asks first; on a schedule
-  // it is refused outright.
-  'bamboo.compensation_report': { sensitivity: 'financial', alwaysBulk: true },
-  // Aggregates are the SAFE way to look at the whole company — the same
-  // reasoning as payroll's rollups. Counts by client, division or tenure carry
-  // no per-person figure and no rate, so a headcount question costs nobody a
-  // confirmation and does not spend the sensitive-read budget.
-  'bamboo.headcount': { sensitivity: 'internal', blastRadius: 'read' },
-  // Catalogue and policy metadata: no data about any individual at all.
-  'bamboo.describe_fields': { sensitivity: 'internal', blastRadius: 'read' },
-  'bamboo.time_off_types': { sensitivity: 'internal', blastRadius: 'read' },
-  'bamboo.employee_projects': { sensitivity: 'internal', blastRadius: 'read' },
-
-  // --- rate tools carry pay/bill rates but are calculators, not payroll ------
-  'rate.estimate': { sensitivity: 'financial', blastRadius: 'read' },
-  'rate.estimate_from_document': { sensitivity: 'financial', blastRadius: 'read' },
 
   // --- vehicles: only registration carries an identity document -------------
   // The owner's cédula (or passport, or NIT) is stored so RUNT will answer at

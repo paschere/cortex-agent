@@ -65,7 +65,10 @@ export const listRepositories = registerTool({
       }
       if (data.length < 100) break;
       if (page === MAX_PAGES && data.length === 100) {
-        ctx.logger.info({ org: input.org, fetched: repositories.length }, 'github.list_repositories truncated at page cap');
+        ctx.logger.info(
+          { org: input.org, fetched: repositories.length },
+          'github.list_repositories truncated at page cap',
+        );
       }
     }
 

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { encryptToken, decryptToken } from './crypto';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { decryptToken, encryptToken } from './crypto';
 
 beforeAll(() => {
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 1).toString('base64');
@@ -15,8 +15,6 @@ beforeAll(() => {
   process.env.HUBSPOT_CLIENT_SECRET = 'h';
   process.env.HUBSPOT_REDIRECT_URI = 'http://localhost:3000/cb';
   process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'gem';
-  process.env.RATE_ESTIMATOR_URL = 'https://r.x';
-  process.env.RATE_ESTIMATOR_SERVICE_TOKEN = 't';
   process.env.INNGEST_EVENT_KEY = 'i';
   process.env.INNGEST_SIGNING_KEY = 'i';
 });

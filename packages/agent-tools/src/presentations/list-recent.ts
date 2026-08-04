@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { type ToolMeta, buildMeta, metaSchema, provenanceFooter } from '../recruit/shape';
+import { type ToolMeta, buildMeta, metaSchema, provenanceFooter } from './provenance';
 import { downloadUrlFor, expiresIn, formatBytes } from './storage';
 
 const MAX_LIMIT = 50;

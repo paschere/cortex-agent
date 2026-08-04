@@ -74,8 +74,8 @@ describe('classify — data sensitivity x blast radius', () => {
     expect(decide(c, DEFAULT_POLICY)).toBe('allow');
   });
 
-  it('a candidate read is medium (PII)', () => {
-    const c = run('recruit.get_candidate', { candidateId: 'c-9' });
+  it('a candidate write-up read is medium (PII)', () => {
+    const c = run('presentations.pick_candidate', { jobId: 'j-9' });
     expect(c.sensitivity).toBe('pii');
     expect(c.riskLevel).toBe('medium');
   });
@@ -222,16 +222,16 @@ describe('classify — contextual signals', () => {
   });
 
   it('high-frequency bumps the level one step', () => {
-    const base = run('recruit.get_candidate', { candidateId: 'c-1' });
+    const base = run('presentations.pick_candidate', { jobId: 'j-1' });
     const hot = classify({
-      tool: { id: 'recruit.get_candidate' },
-      input: { candidateId: 'c-1' },
+      tool: { id: 'presentations.pick_candidate' },
+      input: { jobId: 'j-1' },
       ctx: { now: NOON, extraSignals: ['high-frequency'] },
       surface: 'web',
     });
     expect(base.riskLevel).toBe('medium');
     expect(hot.riskLevel).toBe('high');
-    // Escalated and recorded, but a busy recruiter is not stopped from working.
+    // Escalated and recorded, but a busy user is not stopped from working.
     expect(decide(hot, DEFAULT_POLICY)).toBe('allow');
   });
 
@@ -320,7 +320,7 @@ describe('helpers', () => {
 
   it('knows which families count toward the sensitive-read budget', () => {
     expect(isSensitiveFamily('payroll.team_overview')).toBe(true);
-    expect(isSensitiveFamily('recruit.list_candidates')).toBe(true);
+    expect(isSensitiveFamily('presentations.list_recent')).toBe(true);
     expect(isSensitiveFamily('kb.search')).toBe(false);
     expect(isSensitiveFamily('web.search')).toBe(false);
   });

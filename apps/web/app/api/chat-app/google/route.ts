@@ -243,7 +243,7 @@ async function clearDmSpace(chatUserName: string | undefined, space: string | un
 // ---------------------------------------------------------------------------
 
 const DM_GREETING = toChatText(
-  "Hi — I'm Cortex ⚡, your team's agent. Ask me anything here and I'll work it the same way I do inside Cortex: Brain Knowledge, HubSpot, the ATS and talent pool, rates, GitHub and Linear, your Google Workspace. Everything I do runs with **your own** permissions and integrations, and it all shows up in your conversation history and the audit log. Anything that writes to a real system waits for your explicit approval first.",
+  "Hi — I'm Cortex ⚡, your team's agent. Ask me anything here and I'll work it the same way I do inside Cortex: Brain Knowledge, HubSpot, payroll, GitHub and Linear, your Google Workspace. Everything I do runs with **your own** permissions and integrations, and it all shows up in your conversation history and the audit log. Anything that writes to a real system waits for your explicit approval first.",
 );
 
 const SPACE_GREETING = toChatText(

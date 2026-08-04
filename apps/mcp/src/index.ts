@@ -14,8 +14,6 @@ export interface Env {
   HUBSPOT_CLIENT_SECRET: string;
   /** KB embeddings. Absent means kb.search matches on keywords only. */
   VOYAGE_API_KEY?: string;
-  RATE_ESTIMATOR_URL: string;
-  RATE_ESTIMATOR_SERVICE_TOKEN: string;
   PAYROLL_API_URL?: string;
   PAYROLL_API_TOKEN?: string;
 }

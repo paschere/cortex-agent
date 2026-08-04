@@ -1,12 +1,12 @@
 import 'server-only';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   AUDIT_SELECT,
   AUDIT_SELECT_LEGACY,
+  type AuditEventRow,
   normaliseAuditRow,
   riskSignals,
-  type AuditEventRow,
 } from '@/app/api/admin/_lib/audit-filters';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * Aggregates behind /admin/users and /admin/users/[id].
@@ -62,10 +62,7 @@ const EMPTY_ROSTER: RosterActivity = {
   flagged30d: 0,
 };
 
-export function rosterFor(
-  result: RosterActivityResult,
-  userId: string,
-): RosterActivity {
+export function rosterFor(result: RosterActivityResult, userId: string): RosterActivity {
   return result.byUser[userId] ?? EMPTY_ROSTER;
 }
 
@@ -92,11 +89,7 @@ export async function fetchRosterActivity(sb: SupabaseClient): Promise<RosterAct
       .gte('created_at', since30)
       .order('created_at', { ascending: false })
       .limit(AUDIT_ROW_CAP),
-    sb
-      .from('security_events')
-      .select('user_id')
-      .gte('created_at', since30)
-      .limit(SECURITY_ROW_CAP),
+    sb.from('security_events').select('user_id').gte('created_at', since30).limit(SECURITY_ROW_CAP),
   ]);
 
   const auditRows = (auditRes.data ?? []) as unknown as Array<Record<string, unknown>>;
@@ -234,9 +227,10 @@ export async function fetchUserUsage(sb: SupabaseClient, userId: string): Promis
     if (e.status === 'error') d.error += 1;
     else d.ok += 1;
 
-    const surface = e.surface === 'web' || e.surface === 'mcp' || e.surface === 'schedule'
-      ? e.surface
-      : 'unknown';
+    const surface =
+      e.surface === 'web' || e.surface === 'mcp' || e.surface === 'schedule'
+        ? e.surface
+        : 'unknown';
     bySurface[surface] = (bySurface[surface] ?? 0) + 1;
   }
 
@@ -300,10 +294,7 @@ export interface UserSecurity {
  * One bounded read (30 days, newest first, 1 000 rows). A missing table on a
  * pre-0042 database resolves to "unavailable" rather than an error page.
  */
-export async function fetchUserSecurity(
-  sb: SupabaseClient,
-  userId: string,
-): Promise<UserSecurity> {
+export async function fetchUserSecurity(sb: SupabaseClient, userId: string): Promise<UserSecurity> {
   const since30 = sinceIso(WINDOW_DAYS);
   const since7 = sinceIso(7);
 
@@ -326,9 +317,9 @@ export async function fetchUserSecurity(
     };
   }
 
-  const events: UserSecurityEvent[] = ((res.data ?? []) as unknown as Array<
-    Record<string, unknown>
-  >).map((r) => ({
+  const events: UserSecurityEvent[] = (
+    (res.data ?? []) as unknown as Array<Record<string, unknown>>
+  ).map((r) => ({
     id: String(r.id ?? ''),
     tool_id: String(r.tool_id ?? ''),
     surface: (r.surface as string | null) ?? null,

@@ -1,8 +1,8 @@
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import Link from 'next/link';
-import { Bot, Cpu, Wrench, Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { Bot, Cpu, Sparkles, Wrench } from 'lucide-react';
+import Link from 'next/link';
 
 interface AgentRow {
   id: string;
@@ -69,11 +69,7 @@ export default async function AgentsPage() {
                           : 'grid h-10 w-10 shrink-0 place-items-center rounded-card bg-primary-soft text-primary'
                       }
                     >
-                      {isCortex ? (
-                        <Sparkles className="h-5 w-5" />
-                      ) : (
-                        <Bot className="h-5 w-5" />
-                      )}
+                      {isCortex ? <Sparkles className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
                     </span>
                   </div>
 

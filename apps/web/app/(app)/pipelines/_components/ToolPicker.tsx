@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import { Plus, Search, ShieldAlert, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { type BuilderTool, familyLabel } from '../_lib/playbook';
 
 /**
@@ -72,7 +72,7 @@ export function ToolPicker({
           return (
             <span
               key={id}
-              title={t?.description ?? 'Unknown tool — not in the live registry'}
+              title={t?.description ?? 'Herramienta desconocida: no está en el registro activo'}
               className={clsx(
                 'inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-[10.5px] font-semibold',
                 write
@@ -86,7 +86,7 @@ export function ToolPicker({
               <button
                 type="button"
                 onClick={() => onChange(selected.filter((s) => s !== id))}
-                aria-label={`Remove ${id}`}
+                aria-label={`Quitar ${id}`}
                 className="opacity-60 transition-opacity hover:opacity-100"
               >
                 <X className="h-3 w-3" />
@@ -102,7 +102,7 @@ export function ToolPicker({
             className="inline-flex items-center gap-1 rounded-sm border border-dashed border-border-strong px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-muted transition-colors hover:border-primary hover:text-primary"
           >
             <Plus className="h-3 w-3" />
-            Tool
+            Herramienta
           </button>
 
           {open && (
@@ -114,14 +114,14 @@ export function ToolPicker({
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search the live tool registry…"
+                  placeholder="Buscar en el registro de herramientas…"
                   className="h-9 w-full bg-transparent pl-9 pr-3 text-[12.5px] text-ink placeholder:text-ink-faint focus:outline-none"
                 />
               </div>
               <div className="max-h-[280px] overflow-y-auto p-1.5">
                 {groups.length === 0 && (
                   <p className="px-2 py-4 text-center text-[12px] text-ink-muted">
-                    No tool matches that. Clear the box to see the whole registry.
+                    Ninguna herramienta coincide. Limpia el cuadro para ver el registro completo.
                   </p>
                 )}
                 {groups.map(([family, list]) => (
@@ -169,10 +169,10 @@ export function ToolPicker({
               <div className="flex items-center justify-between border-t border-border bg-surface-2 px-3 py-1.5 text-[10.5px] text-ink-faint">
                 <span className="inline-flex items-center gap-2">
                   <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-emerald" /> read-only
+                    <span className="h-2 w-2 rounded-full bg-emerald" /> solo lectura
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-amber" /> confirmation-gated
+                    <span className="h-2 w-2 rounded-full bg-amber" /> pide confirmación
                   </span>
                 </span>
                 <span className="tabular">{selected.length}/8</span>

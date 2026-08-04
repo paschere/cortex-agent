@@ -97,13 +97,7 @@ export default async function ProspectsPage() {
         subtitle="Empresas que Cortex encontró contratando los perfiles que tú colocas. Quédate con las que sirven y descarta el resto: aquí nada se borra."
         icon={<Radar className="h-5 w-5" />}
       />
-      <ProspectBoard
-        prospects={prospects}
-        truncated={rows.length >= MAX_ROWS}
-        // Resolved on the server so the client bundle never touches the tools
-        // package. Without a key the research buttons would only ever fail.
-        apolloAvailable={Boolean(process.env.APOLLO_API_KEY)}
-      />
+      <ProspectBoard prospects={prospects} truncated={rows.length >= MAX_ROWS} />
     </>
   );
 }

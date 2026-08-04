@@ -13,7 +13,6 @@ import {
   UserRound,
   UserSearch,
 } from 'lucide-react';
-import { CompanyResearch } from './CompanyResearch';
 import { STATUS_META } from './status';
 import type { Prospect, SignalStatus } from './types';
 
@@ -52,14 +51,12 @@ export function ProspectCard({
   prospect,
   busyWith,
   error,
-  apolloAvailable,
   filedAway,
   onMove,
 }: {
   prospect: Prospect;
   busyWith: SignalStatus | null;
   error: string | null;
-  apolloAvailable: boolean;
   /** True when the row only survives the current filter because it just moved. */
   filedAway: boolean;
   onMove: (next: SignalStatus) => void;
@@ -171,12 +168,6 @@ export function ProspectCard({
           );
         })}
       </div>
-
-      <CompanyResearch
-        signalId={prospect.id}
-        company={prospect.company}
-        available={apolloAvailable}
-      />
     </div>
   );
 }

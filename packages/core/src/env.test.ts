@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { envSchema } from './env';
 
 describe('envSchema', () => {
@@ -21,8 +21,6 @@ describe('envSchema', () => {
       HUBSPOT_CLIENT_SECRET: 'h',
       HUBSPOT_REDIRECT_URI: 'http://localhost:3000/cb',
       GOOGLE_GENERATIVE_AI_API_KEY: 'gem',
-      RATE_ESTIMATOR_URL: 'https://r.x',
-      RATE_ESTIMATOR_SERVICE_TOKEN: 't',
       INNGEST_EVENT_KEY: 'i',
       INNGEST_SIGNING_KEY: 'i',
       TOKEN_ENCRYPTION_KEY: 'a'.repeat(44),

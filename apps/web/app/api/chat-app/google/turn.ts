@@ -52,8 +52,8 @@ const PENDING_ACTION_TTL_MS = 15 * 60_000;
  * So in a SPACE (never in a DM) an answer is withheld from the room and
  * delivered to the sender privately when the turn touched:
  *
- *   - a financial family — payroll.*, rate.*, bamboo.*       → compensation
- *   - a PII-heavy family — recruit.*, workable.*, people.*,
+ *   - a financial family — payroll.*                        → compensation
+ *   - a PII-heavy family — presentations.*, people.*,
  *     gmail.*                                               → personal data
  *   - anything the security classifier rates high/critical  → everything else
  *
@@ -70,22 +70,21 @@ const PENDING_ACTION_TTL_MS = 15 * 60_000;
  * not to; `findMemoryEcho` checks the finished text and redirects it if it did,
  * because asking is not a guarantee.
  *
- * `bamboo` is listed as FINANCIAL at the family level, not tool by tool, and
- * that is deliberate. BambooHR is the HR system of record: every active
- * employee's pay rate and bill rate live there, and the family's own tool
- * classification distinguishes a headcount from a salary. This guard cannot
- * rely on that distinction, because a single turn mixes tools — Cortex answers
- * "how big is the team on Acme, and what do they cost?" with a headcount call
- * AND a compensation call, and only the coarse family signal is available by
- * the time the answer is assembled. Withholding a "who is out this week"
- * answer into a DM is a mild annoyance; answering "what does María earn?" out
- * loud to seven colleagues is not recoverable. The blunt rule is the right one.
+ * `payroll` is listed as FINANCIAL at the family level, not tool by tool, and
+ * that is deliberate. The family's own tool classification distinguishes a
+ * headcount rollup from a salary, but this guard cannot rely on that: a single
+ * turn mixes tools — Cortex answers "how big is the team on Acme, and what do
+ * they cost?" with a rollup call AND a per-person call, and only the coarse
+ * family signal is available by the time the answer is assembled. Withholding
+ * a "how many people are on Acme" answer into a DM is a mild annoyance;
+ * answering "what does María earn?" out loud to seven colleagues is not
+ * recoverable. The blunt rule is the right one.
  *
  * If this list ever loosens, loosen it deliberately — this rule is the
  * difference between a useful team bot and a data-leak vector.
  */
-const FINANCIAL_FAMILIES = new Set(['payroll', 'rate', 'bamboo']);
-const PII_FAMILIES = new Set(['recruit', 'workable', 'people', 'gmail']);
+const FINANCIAL_FAMILIES = new Set(['payroll']);
+const PII_FAMILIES = new Set(['presentations', 'people', 'gmail']);
 
 export interface ChatTurnRequest {
   userId: string;

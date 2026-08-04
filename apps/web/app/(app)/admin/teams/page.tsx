@@ -1,11 +1,11 @@
-import Link from 'next/link';
-import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { revalidatePath } from 'next/cache';
-import { ShieldBan, UserMinus, UserPlus, Users2, UsersRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Eyebrow, Panel } from '@/components/ui/panel';
+import { requireSession } from '@/lib/session';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { ShieldBan, UserMinus, UserPlus, Users2, UsersRound } from 'lucide-react';
+import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
 
 const FIELD =
   'rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary disabled:opacity-50';
@@ -52,9 +52,12 @@ async function addTeamMember(formData: FormData) {
   const userId = (formData.get('userId') as string | null)?.trim();
   if (!teamId || !userId) return;
   const sb = getSupabaseServiceClient();
-  await sb.from('team_members').upsert({ team_id: teamId, user_id: userId }, {
-    onConflict: 'team_id,user_id',
-  });
+  await sb.from('team_members').upsert(
+    { team_id: teamId, user_id: userId },
+    {
+      onConflict: 'team_id,user_id',
+    },
+  );
   revalidatePath('/admin/teams');
 }
 

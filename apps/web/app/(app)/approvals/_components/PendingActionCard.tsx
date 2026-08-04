@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ShieldAlert, Check, X, Loader2, ChevronDown, Clock } from 'lucide-react';
-import { clsx } from 'clsx';
 import { confirmationReason } from '@/lib/confirmation-notes';
+import { clsx } from 'clsx';
+import { Check, ChevronDown, Clock, Loader2, ShieldAlert, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 interface PendingActionCardProps {
   id: string;
@@ -78,7 +78,7 @@ export function PendingActionCard({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setErrorMessage((data as { error?: string }).error ?? 'Unknown error');
+        setErrorMessage((data as { error?: string }).error ?? 'Ocurrió un error inesperado.');
         setStatus('error');
         return;
       }
@@ -99,7 +99,7 @@ export function PendingActionCard({
         router.refresh();
       }
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Request failed');
+      setErrorMessage(err instanceof Error ? err.message : 'La solicitud falló.');
       setStatus('error');
     }
   }
@@ -174,7 +174,9 @@ export function PendingActionCard({
             </span>
           </div>
           <p className="mt-0.5 text-sm font-semibold text-ink">{title}</p>
-          <p className="mt-1 text-[12px] leading-snug text-ink-muted">{confirmationReason(toolId)}</p>
+          <p className="mt-1 text-[12px] leading-snug text-ink-muted">
+            {confirmationReason(toolId)}
+          </p>
         </div>
       </div>
 
@@ -185,7 +187,9 @@ export function PendingActionCard({
           className="flex items-center gap-1 text-xs font-semibold text-ink-muted hover:text-ink"
           aria-expanded={showDetails}
         >
-          <ChevronDown className={clsx('h-3.5 w-3.5 transition-transform', showDetails && 'rotate-180')} />
+          <ChevronDown
+            className={clsx('h-3.5 w-3.5 transition-transform', showDetails && 'rotate-180')}
+          />
           {showDetails ? 'Ocultar los datos' : 'Ver los datos exactos'}
         </button>
         {showDetails && (

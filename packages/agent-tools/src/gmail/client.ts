@@ -3,7 +3,11 @@ import type { ToolContext } from '../types';
 
 const BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
-export async function gmailFetch<T>(ctx: ToolContext, path: string, init?: RequestInit): Promise<T> {
+export async function gmailFetch<T>(
+  ctx: ToolContext,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const { token } = await ctx.integrations.getAccessToken('google');
   const r = await fetch(`${BASE}${path}`, {
     ...init,

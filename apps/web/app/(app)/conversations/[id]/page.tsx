@@ -102,7 +102,8 @@ export default async function ConversationDetailPage({
           <MessagesSquare className="mx-auto mb-3 h-7 w-7 text-primary" />
           <p className="text-[14px] font-bold text-ink">Aquí no se dijo nada</p>
           <p className="mx-auto mt-1 max-w-sm leading-relaxed">
-            La conversación se creó pero no llegó ningún mensaje. Retómala en el chat para empezarla.
+            La conversación se creó pero no llegó ningún mensaje. Retómala en el chat para
+            empezarla.
           </p>
         </Panel>
       ) : (

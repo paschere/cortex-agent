@@ -1,5 +1,5 @@
-import { IntegrationError } from "@cortex/core";
-import type { ToolContext } from "../types";
+import { IntegrationError } from '@cortex/core';
+import type { ToolContext } from '../types';
 
 export interface ClientCount {
   client: string;
@@ -39,34 +39,25 @@ export interface TeamOverview {
  * configured on this side, and the payroll app only enforces it when its own
  * INTERNAL_API_TOKEN is set. Both sides must be tightened before the payroll
  * app is exposed publicly.
- *
- * This is a separate service from the rate estimator — do not reuse
- * RATE_ESTIMATOR_*.
  */
-export async function payrollFetch<T>(
-  path: string,
-  ctx: ToolContext,
-): Promise<T> {
+export async function payrollFetch<T>(path: string, ctx: ToolContext): Promise<T> {
   const base = process.env.PAYROLL_API_URL;
   if (!base) {
     throw new IntegrationError(
-      "Payroll integration not configured (PAYROLL_API_URL missing)",
-      "payroll",
+      'Payroll integration not configured (PAYROLL_API_URL missing)',
+      'payroll',
     );
   }
   const token = process.env.PAYROLL_API_TOKEN;
 
-  const url = `${base.replace(/\/$/, "")}${path}`;
+  const url = `${base.replace(/\/$/, '')}${path}`;
   const r = await fetch(url, {
-    method: "GET",
+    method: 'GET',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     signal: ctx.signal,
   });
   if (!r.ok) {
-    throw new IntegrationError(
-      `Payroll ${r.status}: ${await r.text()}`,
-      "payroll",
-    );
+    throw new IntegrationError(`Payroll ${r.status}: ${await r.text()}`, 'payroll');
   }
   return r.json() as Promise<T>;
 }
@@ -75,18 +66,16 @@ export async function payrollFetch<T>(
 export function qs(params: Record<string, string | number | undefined | null>): string {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
-    if (v === undefined || v === null || v === "") continue;
+    if (v === undefined || v === null || v === '') continue;
     sp.set(k, String(v));
   }
   const s = sp.toString();
-  return s ? `?${s}` : "";
+  return s ? `?${s}` : '';
 }
 
 /** Fetch the payroll team overview (headcount + distribution). */
-export async function fetchTeamOverview(
-  ctx: ToolContext,
-): Promise<TeamOverview> {
-  return payrollFetch<TeamOverview>("/api/internal/team-overview", ctx);
+export async function fetchTeamOverview(ctx: ToolContext): Promise<TeamOverview> {
+  return payrollFetch<TeamOverview>('/api/internal/team-overview', ctx);
 }
 
 // ---------------------------------------------------------------------------
@@ -270,10 +259,7 @@ export function fetchTeamAssignments(
   ctx: ToolContext,
   params: { client?: string; division?: string; q?: string; limit?: number },
 ): Promise<TeamAssignments> {
-  return payrollFetch<TeamAssignments>(
-    `/api/internal/team-assignments${qs(params)}`,
-    ctx,
-  );
+  return payrollFetch<TeamAssignments>(`/api/internal/team-assignments${qs(params)}`, ctx);
 }
 
 export function fetchEmployeeProfile(
@@ -298,8 +284,5 @@ export function fetchPayrollStats(
   ctx: ToolContext,
   params: { periods?: number; division?: string; client?: string },
 ): Promise<PayrollStats> {
-  return payrollFetch<PayrollStats>(
-    `/api/internal/payroll-stats${qs(params)}`,
-    ctx,
-  );
+  return payrollFetch<PayrollStats>(`/api/internal/payroll-stats${qs(params)}`, ctx);
 }

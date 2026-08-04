@@ -1,5 +1,5 @@
-import * as React from 'react';
 import { clsx } from 'clsx';
+import * as React from 'react';
 
 /**
  * Squared, not pill-shaped, and unshadowed.
@@ -21,8 +21,7 @@ export const Button = React.forwardRef<
       'inline-flex items-center justify-center gap-1.5 rounded-card px-3.5 py-2 text-[13px] font-semibold',
       'transition-colors disabled:cursor-not-allowed disabled:opacity-45',
       variant === 'default' && 'bg-primary text-white hover:bg-primary-strong',
-      variant === 'outline' &&
-        'border border-border-strong bg-surface text-ink hover:bg-surface-2',
+      variant === 'outline' && 'border border-border-strong bg-surface text-ink hover:bg-surface-2',
       variant === 'ghost' && 'text-ink-muted hover:bg-surface-2 hover:text-ink',
       // Reserved for actions that cannot be undone. Red is the rubber stamp
       // that stops a document, so it must not appear anywhere it can be dismissed.

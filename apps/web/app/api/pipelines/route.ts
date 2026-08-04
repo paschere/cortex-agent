@@ -1,6 +1,6 @@
-import { type NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { type NextRequest, NextResponse } from 'next/server';
 import { CreateBody, placeholderError } from './_schema';
 
 export const runtime = 'nodejs';
@@ -45,7 +45,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: error?.message ?? 'Failed to create pipeline' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message ?? 'Failed to create pipeline' },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ slug: data.slug as string }, { status: 201 });

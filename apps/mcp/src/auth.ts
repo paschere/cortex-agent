@@ -1,5 +1,5 @@
-import type { MiddlewareHandler } from 'hono';
 import { createClient } from '@supabase/supabase-js';
+import type { MiddlewareHandler } from 'hono';
 import type { Env } from './index';
 
 interface McpAuthContext {
@@ -48,7 +48,10 @@ export function bearerAuth(): MiddlewareHandler<{ Bindings: Env }> {
     }
 
     // Fire-and-forget update of last_used_at
-    void sb.from('mcp_tokens').update({ last_used_at: new Date().toISOString() }).eq('id', data.id as string);
+    void sb
+      .from('mcp_tokens')
+      .update({ last_used_at: new Date().toISOString() })
+      .eq('id', data.id as string);
 
     c.set('mcp', {
       userId: data.user_id as string,

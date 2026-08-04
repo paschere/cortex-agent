@@ -1,4 +1,4 @@
-import { issuer, MCP_SCOPE } from '@/lib/oauth';
+import { MCP_SCOPE, issuer } from '@/lib/oauth';
 import { corsJson, corsPreflight } from '@/lib/oauth-cors';
 
 export const runtime = 'nodejs';

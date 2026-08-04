@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { type NextRequest, NextResponse } from 'next/server';
 import {
   AUDIT_SELECT,
   AUDIT_SELECT_LEGACY,
@@ -81,7 +81,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     loadNeighbours(sb, { column, value, pivot: event.created_at, direction: 'after' }),
   ]);
 
-  const users = await fetchUserNames(sb, [...before, ...after].map((e) => e.user_id));
+  const users = await fetchUserNames(
+    sb,
+    [...before, ...after].map((e) => e.user_id),
+  );
 
   return NextResponse.json({ event, before, after, scope, users });
 }

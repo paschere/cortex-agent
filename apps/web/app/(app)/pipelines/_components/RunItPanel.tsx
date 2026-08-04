@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Panel } from '@/components/ui/panel';
 import { clsx } from 'clsx';
 import { Check, Copy, Hash, MessageSquare } from 'lucide-react';
-import { Panel } from '@/components/ui/panel';
+import { useMemo, useState } from 'react';
 import { type ParamDef, runSentence } from '../_lib/playbook';
 
 /**
@@ -29,10 +29,10 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
 
   return (
     <Panel className="p-4">
-      <div className="field-label mb-2">Run it</div>
+      <div className="field-label mb-2">Ejecutarlo</div>
       <p className="mb-3 text-[12px] text-ink-muted">
-        Fill in the arguments, then say this to Cortex — in the web chat, in Claude, or from a
-        scheduled routine.
+        Llena los argumentos y dile esto a Cortex: en el chat web, en Claude o desde una rutina
+        programada.
       </p>
 
       {params.length > 0 && (
@@ -47,7 +47,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
               <input
                 value={values[p.name] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [p.name]: e.target.value }))}
-                placeholder={p.description || `Value for ${p.name}`}
+                placeholder={p.description || `Valor de ${p.name}`}
                 className="w-full rounded-card border border-border bg-surface px-2.5 py-1.5 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-border-strong"
               />
             </label>
@@ -71,7 +71,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
         )}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        {copied ? 'Copied' : 'Copy the prompt'}
+        {copied ? 'Copiado' : 'Copiar la frase'}
       </button>
     </Panel>
   );

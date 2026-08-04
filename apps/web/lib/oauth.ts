@@ -81,11 +81,7 @@ function safeEqual(a: string, b: string): boolean {
  * Verify a PKCE code_verifier against a stored S256 challenge.
  * Returns false for any non-S256 method.
  */
-export function verifyPkce(
-  codeVerifier: string,
-  codeChallenge: string,
-  method: string,
-): boolean {
+export function verifyPkce(codeVerifier: string, codeChallenge: string, method: string): boolean {
   if (method !== 'S256') return false;
   if (!codeVerifier) return false;
   return safeEqual(sha256b64url(codeVerifier), codeChallenge);
@@ -116,9 +112,7 @@ export interface RegisterClientInput {
   scope?: string;
 }
 
-export async function registerClient(
-  input: RegisterClientInput,
-): Promise<OAuthClient> {
+export async function registerClient(input: RegisterClientInput): Promise<OAuthClient> {
   const sb = getSupabaseServiceClient();
   const id = `client_${randomToken(16)}`;
   const authMethod = input.token_endpoint_auth_method ?? 'none';
@@ -135,11 +129,7 @@ export async function registerClient(
     scope: input.scope ?? MCP_SCOPE,
   };
 
-  const { data, error } = await sb
-    .from('oauth_clients')
-    .insert(row)
-    .select('*')
-    .single();
+  const { data, error } = await sb.from('oauth_clients').insert(row).select('*').single();
   if (error || !data) {
     throw new Error(`Failed to register client: ${error?.message ?? 'no row'}`);
   }
@@ -158,10 +148,7 @@ export async function getClient(clientId: string): Promise<OAuthClient | null> {
 }
 
 /** Whether a redirect_uri is allowed for this client (registered or claude.ai). */
-export function isAllowedRedirectUri(
-  client: OAuthClient,
-  redirectUri: string,
-): boolean {
+export function isAllowedRedirectUri(client: OAuthClient, redirectUri: string): boolean {
   if (client.redirect_uris.includes(redirectUri)) return true;
   return (CLAUDE_REDIRECT_URIS as readonly string[]).includes(redirectUri);
 }
@@ -215,9 +202,7 @@ export interface StoredAuthCode {
  * Consume (look up + delete) an authorization code. Returns null if missing or
  * expired. Deletion makes the code single-use even if expired.
  */
-export async function consumeAuthCode(
-  code: string,
-): Promise<StoredAuthCode | null> {
+export async function consumeAuthCode(code: string): Promise<StoredAuthCode | null> {
   const sb = getSupabaseServiceClient();
   const hash = sha256(code);
   const { data, error } = await sb
@@ -251,9 +236,7 @@ export interface IssueTokensInput {
 }
 
 /** Mint + store an access token and a refresh token. */
-export async function issueTokens(
-  input: IssueTokensInput,
-): Promise<IssuedTokens> {
+export async function issueTokens(input: IssueTokensInput): Promise<IssuedTokens> {
   const sb = getSupabaseServiceClient();
   const accessToken = randomToken(32);
   const refreshToken = randomToken(32);
@@ -277,9 +260,7 @@ export async function issueTokens(
 
   const { error: aErr } = await sb.from('oauth_access_tokens').insert(accessRow);
   if (aErr) throw new Error(`Failed to store access token: ${aErr.message}`);
-  const { error: rErr } = await sb
-    .from('oauth_refresh_tokens')
-    .insert(refreshRow);
+  const { error: rErr } = await sb.from('oauth_refresh_tokens').insert(refreshRow);
   if (rErr) throw new Error(`Failed to store refresh token: ${rErr.message}`);
 
   return {
@@ -303,9 +284,7 @@ export interface StoredRefreshToken {
  * Consume (look up + delete) a refresh token — used for rotation. Returns null
  * if missing or expired.
  */
-export async function consumeRefreshToken(
-  token: string,
-): Promise<StoredRefreshToken | null> {
+export async function consumeRefreshToken(token: string): Promise<StoredRefreshToken | null> {
   const sb = getSupabaseServiceClient();
   const hash = sha256(token);
   const { data, error } = await sb

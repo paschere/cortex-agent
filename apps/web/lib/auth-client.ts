@@ -1,7 +1,7 @@
 'use client';
 
-import { createAuthClient } from 'better-auth/react';
 import { adminClient, organizationClient, twoFactorClient } from 'better-auth/client/plugins';
+import { createAuthClient } from 'better-auth/react';
 
 export const authClient = createAuthClient({
   // NEXT_PUBLIC_* is baked in at build time, so a deployment built before the

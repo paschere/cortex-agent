@@ -29,28 +29,16 @@ export interface FamilyMeta {
  * lose the blurb, so add new families as they are registered.
  */
 export const FAMILY_META: Record<string, FamilyMeta> = {
-  recruit: {
-    name: 'Recruiting',
-    blurb: 'The ATS — requisitions, candidates, matching, scoring and client presentations.',
-    tone: 'primary',
-    icon: 'UserSearch',
-  },
-  workable: {
-    name: 'Workable',
-    blurb: 'The external ATS the company sources from — jobs, applicants, stage moves and notes.',
-    tone: 'primary',
-    icon: 'ClipboardList',
-  },
   presentations: {
     name: 'Presentations',
-    blurb: 'Candidate PDFs prepared for clients, and the history of what was already sent.',
+    blurb:
+      'Candidate write-ups prepared for clients as PDFs, and the history of what was already sent.',
     tone: 'primary',
     icon: 'FileText',
   },
   people: {
     name: 'People Directory',
-    blurb:
-      'Name to email address, from the Google Workspace directory and personal contacts. Who works where is BambooHR.',
+    blurb: 'Name to email address, from the Google Workspace directory and personal contacts.',
     tone: 'primary',
     icon: 'Users',
   },
@@ -66,25 +54,11 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'amber',
     icon: 'TrendingUp',
   },
-  apollo: {
-    name: 'Apollo',
-    blurb:
-      'The prospecting database — find people by role and company, get verified work emails and firmographics, and see who is hiring or in the news.',
-    tone: 'amber',
-    icon: 'Rocket',
-  },
   sales: {
     name: 'Sales',
     blurb: 'Client-facing proposal drafting, grounded in CRM and Brain Knowledge context.',
     tone: 'amber',
     icon: 'Handshake',
-  },
-  bamboo: {
-    name: 'BambooHR',
-    blurb:
-      'The HR system of record — the roster, employment and job history, time off, hours logged, documents on file, and both the pay rate the company pays and the bill rate it charges.',
-    tone: 'rose',
-    icon: 'Contact',
   },
   payroll: {
     name: 'Payroll',
@@ -92,13 +66,6 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
       'The separate payroll service: what people were actually paid, expenses, cost per client and cost projections.',
     tone: 'rose',
     icon: 'Wallet',
-  },
-  rate: {
-    name: 'Rates',
-    blurb:
-      'What to quote for a role that does not exist yet. Rates actually being charged live in BambooHR.',
-    tone: 'rose',
-    icon: 'Calculator',
   },
   kb: {
     name: 'Brain Knowledge',
@@ -316,7 +283,6 @@ export const PROVIDER_LABEL: Record<string, string> = {
   github: 'GitHub',
   linear: 'Linear',
   slack: 'Slack',
-  workable: 'Workable',
 };
 
 export function providerLabel(provider: string): string {

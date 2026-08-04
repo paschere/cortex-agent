@@ -1,8 +1,8 @@
 'use client';
 
+import type { Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Role } from '@cortex/core';
 import { clsx } from 'clsx';
 import {
   AlarmClock,

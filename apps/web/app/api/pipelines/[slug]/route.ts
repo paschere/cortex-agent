@@ -1,6 +1,6 @@
-import { type NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { type NextRequest, NextResponse } from 'next/server';
 import { UpdateBody, placeholderError } from '../_schema';
 
 export const runtime = 'nodejs';
@@ -26,11 +26,7 @@ export async function PATCH(
   const body = parsed.data;
 
   const db = getSupabaseServiceClient();
-  const { data: existing } = await db
-    .from('pipelines')
-    .select('id')
-    .eq('slug', slug)
-    .maybeSingle();
+  const { data: existing } = await db.from('pipelines').select('id').eq('slug', slug).maybeSingle();
   if (!existing) return NextResponse.json({ error: 'Pipeline not found' }, { status: 404 });
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };

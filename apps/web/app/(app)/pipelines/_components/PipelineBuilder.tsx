@@ -1,8 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { Panel } from '@/components/ui/panel';
 import { clsx } from 'clsx';
 import {
   AlertTriangle,
@@ -16,16 +14,18 @@ import {
   Lock,
   Plus,
   Save,
-  Trash2,
   Terminal,
+  Trash2,
   UserCheck,
 } from 'lucide-react';
-import { Panel } from '@/components/ui/panel';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import {
   type BuilderTool,
   type ParamDef,
-  type StepDef,
   SLUG_RE,
+  type StepDef,
   extractPlaceholders,
   placeholderSources,
   renderPlaybook,
@@ -160,49 +160,56 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
     [intro, cleanSteps],
   );
   const declared = useMemo(() => params.map((p) => p.name.trim()).filter(Boolean), [params]);
-  const undeclared = useMemo(
-    () => used.filter((u) => !declared.includes(u)),
-    [used, declared],
-  );
+  const undeclared = useMemo(() => used.filter((u) => !declared.includes(u)), [used, declared]);
   const unused = useMemo(() => declared.filter((d) => !used.includes(d)), [declared, used]);
 
   const errors = useMemo(() => {
     const list: string[] = [];
-    if (name.trim().length < 2 || name.trim().length > 80) list.push('Name must be 2–80 characters.');
-    if (!SLUG_RE.test(slug)) list.push('Slug must be kebab-case, 2–49 characters (a–z, 0–9, dashes).');
-    if (description.length > 300) list.push('Description must be 300 characters or fewer.');
-    if (emoji.length > 8) list.push('Emoji must be 8 characters or fewer.');
-    if (intro.length > 1000) list.push('Intro must be 1000 characters or fewer.');
-    if (cleanSteps.length < 1) list.push('A pipeline needs at least one step.');
-    if (cleanSteps.length > MAX_STEPS) list.push(`A pipeline can have at most ${MAX_STEPS} steps.`);
+    if (name.trim().length < 2 || name.trim().length > 80)
+      list.push('El nombre debe tener entre 2 y 80 caracteres.');
+    if (!SLUG_RE.test(slug))
+      list.push(
+        'El slug va en minúsculas con guiones, entre 2 y 49 caracteres (a–z, 0–9, guiones).',
+      );
+    if (description.length > 300) list.push('La descripción no puede pasar de 300 caracteres.');
+    if (emoji.length > 8) list.push('El emoji no puede pasar de 8 caracteres.');
+    if (intro.length > 1000) list.push('La introducción no puede pasar de 1000 caracteres.');
+    if (cleanSteps.length < 1) list.push('Un pipeline necesita al menos un paso.');
+    if (cleanSteps.length > MAX_STEPS)
+      list.push(`Un pipeline puede tener máximo ${MAX_STEPS} pasos.`);
     cleanSteps.forEach((s, i) => {
-      if (s.title.length < 2 || s.title.length > 80) list.push(`Step ${i + 1}: title must be 2–80 characters.`);
+      if (s.title.length < 2 || s.title.length > 80)
+        list.push(`Paso ${i + 1}: el título debe tener entre 2 y 80 caracteres.`);
       if (s.detail.length < 5 || s.detail.length > 2000)
-        list.push(`Step ${i + 1}: detail must be 5–2000 characters.`);
-      if ((s.tools ?? []).length > 8) list.push(`Step ${i + 1}: at most 8 tools.`);
+        list.push(`Paso ${i + 1}: el detalle debe tener entre 5 y 2000 caracteres.`);
+      if ((s.tools ?? []).length > 8) list.push(`Paso ${i + 1}: máximo 8 herramientas.`);
     });
-    if (params.length > MAX_PARAMS) list.push(`At most ${MAX_PARAMS} parameters.`);
+    if (params.length > MAX_PARAMS) list.push(`Máximo ${MAX_PARAMS} parámetros.`);
     params.forEach((p, i) => {
       const n = p.name.trim();
-      if (!n) list.push(`Parameter ${i + 1}: name is required.`);
+      if (!n) list.push(`Parámetro ${i + 1}: el nombre es obligatorio.`);
       else if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(n))
-        list.push(`Parameter "${n}": names must start with a letter and use letters, digits or _.`);
+        list.push(`Parámetro “${n}”: debe empezar con letra y usar solo letras, dígitos o _.`);
     });
     const dupes = declared.filter((d, i) => declared.indexOf(d) !== i);
-    if (dupes.length > 0) list.push(`Duplicate parameter names: ${[...new Set(dupes)].join(', ')}.`);
+    if (dupes.length > 0) list.push(`Hay parámetros repetidos: ${[...new Set(dupes)].join(', ')}.`);
     if (undeclared.length > 0)
-      list.push(`Undeclared placeholders: ${undeclared.map((u) => `{{${u}}}`).join(', ')} — add them as parameters.`);
+      list.push(
+        `Faltan por declarar: ${undeclared.map((u) => `{{${u}}}`).join(', ')}. Agrégalos como parámetros.`,
+      );
     return list;
   }, [name, slug, description, emoji, intro, cleanSteps, params, declared, undeclared]);
 
   const warnings = useMemo(() => {
     const list: string[] = [];
     if (unused.length > 0)
-      list.push(`Declared but never used: ${unused.map((u) => `{{${u}}}`).join(', ')}.`);
+      list.push(`Declarados pero nunca usados: ${unused.map((u) => `{{${u}}}`).join(', ')}.`);
     if (cleanSteps.length > 0 && !cleanSteps.some((s) => s.checkpoint))
-      list.push('No checkpoint — the agent will run end to end without pausing for you.');
+      list.push(
+        'Sin puntos de control: el agente corre de principio a fin sin detenerse a preguntarte.',
+      );
     if (cleanSteps.every((s) => (s.tools ?? []).length === 0))
-      list.push('No tools attached to any step. Naming tools makes the playbook far more reliable.');
+      list.push('Ningún paso tiene herramientas. Nombrarlas hace el guion mucho más confiable.');
     return list;
   }, [unused, cleanSteps]);
 
@@ -210,7 +217,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
     () =>
       renderPlaybook({
         emoji,
-        name: name.trim() || 'Untitled pipeline',
+        name: name.trim() || 'Pipeline sin título',
         intro: intro.trim(),
         steps: cleanSteps,
         runNumber: nextRunNumber,
@@ -296,7 +303,9 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: unknown };
         setServerError(
-          typeof data.error === 'string' ? data.error : 'Could not save this pipeline. Try again.',
+          typeof data.error === 'string'
+            ? data.error
+            : 'No se pudo guardar este pipeline. Vuelve a intentarlo.',
         );
         setSaving(false);
         return;
@@ -305,7 +314,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
       router.push(`/pipelines/${data.slug}`);
       router.refresh();
     } catch {
-      setServerError('Network error — please try again.');
+      setServerError('Error de red. Vuelve a intentarlo.');
       setSaving(false);
     }
   }
@@ -319,7 +328,8 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
           href={mode === 'edit' ? `/pipelines/${slug}` : '/pipelines'}
           className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint hover:text-ink"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> {mode === 'edit' ? 'Back to pipeline' : 'Pipelines'}
+          <ArrowLeft className="h-3.5 w-3.5" />{' '}
+          {mode === 'edit' ? 'Volver al pipeline' : 'Pipelines'}
         </Link>
       </div>
 
@@ -328,14 +338,16 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
           <div className="field-label">Pipeline</div>
           <div>
             <h1 className="text-[22px] font-extrabold tracking-tight text-ink">
-              {mode === 'create' ? 'New pipeline' : 'Edit pipeline'}
+              {mode === 'create' ? 'Nuevo pipeline' : 'Editar el pipeline'}
             </h1>
             <p className="tabular mt-0.5 text-[12px] text-ink-muted">
-              {cleanSteps.length} step{cleanSteps.length === 1 ? '' : 's'}
+              {cleanSteps.length} {cleanSteps.length === 1 ? 'paso' : 'pasos'}
               {checkpointCount > 0
-                ? ` · ${checkpointCount} checkpoint${checkpointCount === 1 ? '' : 's'}`
-                : ' · no checkpoints'}
-              {declared.length > 0 ? ` · ${declared.length} parameter${declared.length === 1 ? '' : 's'}` : ''}
+                ? ` · ${checkpointCount} ${checkpointCount === 1 ? 'punto de control' : 'puntos de control'}`
+                : ' · sin puntos de control'}
+              {declared.length > 0
+                ? ` · ${declared.length} ${declared.length === 1 ? 'parámetro' : 'parámetros'}`
+                : ''}
             </p>
           </div>
         </div>
@@ -344,7 +356,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             href={mode === 'edit' ? `/pipelines/${slug}` : '/pipelines'}
             className="rounded-card border border-border-strong px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
           >
-            Cancel
+            Cancelar
           </Link>
           <button
             type="button"
@@ -352,8 +364,12 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             disabled={errors.length > 0 || saving}
             className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            {mode === 'create' ? 'Create pipeline' : 'Save changes'}
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            {mode === 'create' ? 'Crear el pipeline' : 'Guardar cambios'}
           </button>
         </div>
       </div>
@@ -369,7 +385,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
         <div className="space-y-4">
           {/* Identity */}
           <Panel className="p-5">
-            <div className={clsx(SECTION, 'mb-3')}>Identity</div>
+            <div className={clsx(SECTION, 'mb-3')}>Identidad</div>
             <div className="flex gap-3">
               <label className="block w-[70px] shrink-0">
                 <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">Emoji</span>
@@ -377,12 +393,14 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                   value={emoji}
                   onChange={(e) => setEmoji(e.target.value.slice(0, 2))}
                   maxLength={2}
-                  aria-label="Pipeline emoji"
+                  aria-label="Emoji del pipeline"
                   className={clsx(FIELD, 'text-center text-[20px]')}
                 />
               </label>
               <label className="block min-w-0 flex-1">
-                <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">Name</span>
+                <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">
+                  Nombre
+                </span>
                 <input
                   value={name}
                   onChange={(e) => {
@@ -390,7 +408,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                     if (!slugTouched) setSlug(slugify(e.target.value));
                   }}
                   maxLength={80}
-                  placeholder="Weekly client report"
+                  placeholder="Reporte semanal de clientes"
                   className={FIELD}
                 />
               </label>
@@ -409,37 +427,40 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                 }}
                 disabled={mode === 'edit'}
                 maxLength={49}
-                placeholder="weekly-client-report"
+                placeholder="reporte-semanal-clientes"
                 className={clsx(FIELD, 'font-mono text-[12px] disabled:opacity-60')}
               />
               <span className="mt-1 block text-[11px] text-ink-faint">
                 {mode === 'edit'
-                  ? 'The slug is permanent — run history and scheduled routines address this pipeline by it.'
-                  : 'How people (and routines) will name this pipeline. Derived from the name, editable.'}
+                  ? 'El slug es permanente: el historial y las rutinas programadas llaman a este pipeline por él.'
+                  : 'Así lo van a nombrar las personas y las rutinas. Sale del nombre y lo puedes editar.'}
               </span>
             </label>
 
             <label className="mt-3 block">
-              <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">Description</span>
+              <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">
+                Descripción
+              </span>
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={300}
-                placeholder="One line the gallery card will show."
+                placeholder="Una línea, la que se ve en la tarjeta."
                 className={FIELD}
               />
             </label>
 
             <label className="mt-3 block">
               <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">
-                Intro <span className="font-normal text-ink-faint">— context shown before step 1</span>
+                Introducción{' '}
+                <span className="font-normal text-ink-faint">— contexto antes del paso 1</span>
               </span>
               <textarea
                 value={intro}
                 onChange={(e) => setIntro(e.target.value)}
                 maxLength={1000}
                 rows={3}
-                placeholder="You are preparing the weekly report for {{client}}. Keep it to numbers, not adjectives."
+                placeholder="Estás preparando el reporte semanal de {{cliente}}. Cíñete a las cifras, no a los adjetivos."
                 className={clsx(FIELD, 'resize-y leading-relaxed')}
               />
               <span className="tabular mt-1 block text-right text-[11px] text-ink-faint">
@@ -451,9 +472,9 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
           {/* Steps */}
           <Panel className="p-5">
             <div className="mb-4 flex items-center justify-between">
-              <div className={SECTION}>The flow</div>
+              <div className={SECTION}>El flujo</div>
               <span className="tabular text-[11px] text-ink-faint">
-                {cleanSteps.length}/{MAX_STEPS} steps
+                {cleanSteps.length}/{MAX_STEPS} pasos
               </span>
             </div>
 
@@ -478,36 +499,40 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                     <div
                       className={clsx(
                         'min-w-0 flex-1 rounded-card border p-3.5',
-                        s.checkpoint ? 'border-amber/40 bg-amber-soft/40' : 'border-border bg-surface-2',
+                        s.checkpoint
+                          ? 'border-amber/40 bg-amber-soft/40'
+                          : 'border-border bg-surface-2',
                       )}
                     >
                       <div className="mb-2 flex items-center justify-between gap-2">
                         {s.checkpoint ? (
-                          <span className="field-label text-amber">Checkpoint · you decide</span>
+                          <span className="field-label text-amber">
+                            Punto de control · decides tú
+                          </span>
                         ) : (
-                          <span className="field-label">Step {String(i + 1).padStart(2, '0')}</span>
+                          <span className="field-label">Paso {String(i + 1).padStart(2, '0')}</span>
                         )}
                         <div className="flex items-center gap-0.5">
                           <IconBtn
-                            label="Move step up"
+                            label="Subir el paso"
                             disabled={i === 0}
                             onClick={() => move(i, -1)}
                             icon={<ChevronUp className="h-3.5 w-3.5" />}
                           />
                           <IconBtn
-                            label="Move step down"
+                            label="Bajar el paso"
                             disabled={isLast}
                             onClick={() => move(i, 1)}
                             icon={<ChevronDown className="h-3.5 w-3.5" />}
                           />
                           <IconBtn
-                            label="Duplicate step"
+                            label="Duplicar el paso"
                             disabled={steps.length >= MAX_STEPS}
                             onClick={() => duplicateStep(i)}
                             icon={<Copy className="h-3.5 w-3.5" />}
                           />
                           <IconBtn
-                            label="Delete step"
+                            label="Eliminar el paso"
                             disabled={steps.length <= 1}
                             onClick={() => removeStep(i)}
                             tone="rose"
@@ -520,7 +545,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                         value={s.title}
                         onChange={(e) => patchStep(i, { title: e.target.value })}
                         maxLength={80}
-                        placeholder="Short imperative title — e.g. Sweep the job boards"
+                        placeholder="Título corto y en imperativo, por ejemplo: Barre los portales de empleo"
                         className={clsx(FIELD, 'font-bold')}
                       />
                       <textarea
@@ -528,7 +553,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                         onChange={(e) => patchStep(i, { detail: e.target.value })}
                         maxLength={2000}
                         rows={3}
-                        placeholder="What to do: which tools to call, what to look for, what to produce. Use {{param}} to inject arguments."
+                        placeholder="Qué hacer: qué herramientas llamar, qué buscar, qué producir. Usa {{parametro}} para inyectar argumentos."
                         className={clsx(FIELD, 'mt-2 resize-y leading-relaxed')}
                       />
 
@@ -542,14 +567,14 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                         <Switch
                           on={s.checkpoint}
                           tone="amber"
-                          label={`Step ${i + 1} requires my approval`}
+                          label={`El paso ${i + 1} requiere mi aprobación`}
                           onClick={() => patchStep(i, { checkpoint: !s.checkpoint })}
                         />
                         <span className="text-[12px] font-semibold text-ink-muted">
-                          Requires my approval
+                          Requiere mi aprobación
                         </span>
                         <span className="text-[11px] text-ink-faint">
-                          — hard stop: present findings and wait
+                          — parada en firme: muestra lo que encontró y espera
                         </span>
                       </div>
                     </div>
@@ -564,27 +589,28 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
               disabled={steps.length >= MAX_STEPS}
               className="ml-[52px] inline-flex items-center gap-1.5 rounded-card border border-dashed border-border-strong px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Plus className="h-3.5 w-3.5" /> Add step
+              <Plus className="h-3.5 w-3.5" /> Agregar un paso
             </button>
           </Panel>
 
           {/* Params */}
           <Panel className="p-5">
             <div className="mb-3 flex items-center justify-between">
-              <div className={SECTION}>Parameters</div>
+              <div className={SECTION}>Parámetros</div>
               <span className="tabular text-[11px] text-ink-faint">
                 {params.length}/{MAX_PARAMS}
               </span>
             </div>
             <p className="mb-3 text-[12px] text-ink-muted">
-              Anything the pipeline needs at run time. Reference a parameter anywhere in the intro or
-              a step with <code className="font-mono text-[11.5px] text-primary">{'{{name}}'}</code>.
+              Todo lo que el pipeline necesita saber al ejecutarse. Menciona un parámetro en la
+              introducción o en cualquier paso con{' '}
+              <code className="font-mono text-[11.5px] text-primary">{'{{nombre}}'}</code>.
             </p>
 
             {params.length === 0 && (
               <p className="mb-3 rounded-card border border-border bg-surface-2 px-3 py-2.5 text-[12px] text-ink-muted">
-                No parameters yet — this pipeline runs the same way every time. Add one to ask for
-                a value when it runs.
+                Sin parámetros: este pipeline corre igual siempre. Agrega uno si quieres que te pida
+                un valor al ejecutarlo.
               </p>
             )}
 
@@ -602,34 +628,36 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                         prev.map((x, idx) => (idx === i ? { ...x, name: e.target.value } : x)),
                       )
                     }
-                    placeholder="client"
+                    placeholder="cliente"
                     className={clsx(FIELD, 'w-[130px] shrink-0 font-mono text-[12px]')}
                   />
                   <input
                     value={p.description}
                     onChange={(e) =>
                       setParams((prev) =>
-                        prev.map((x, idx) => (idx === i ? { ...x, description: e.target.value } : x)),
+                        prev.map((x, idx) =>
+                          idx === i ? { ...x, description: e.target.value } : x,
+                        ),
                       )
                     }
                     maxLength={200}
-                    placeholder="What this is — shown when someone runs the pipeline"
+                    placeholder="Qué es esto: se muestra cuando alguien ejecuta el pipeline"
                     className={clsx(FIELD, 'min-w-[160px] flex-1')}
                   />
                   <div className="flex items-center gap-1.5">
                     <Switch
                       on={p.required}
-                      label={`Parameter ${p.name || i + 1} is required`}
+                      label={`El parámetro ${p.name || i + 1} es obligatorio`}
                       onClick={() =>
                         setParams((prev) =>
                           prev.map((x, idx) => (idx === i ? { ...x, required: !x.required } : x)),
                         )
                       }
                     />
-                    <span className="text-[11.5px] font-semibold text-ink-muted">Required</span>
+                    <span className="text-[11.5px] font-semibold text-ink-muted">Obligatorio</span>
                   </div>
                   <IconBtn
-                    label="Remove parameter"
+                    label="Quitar el parámetro"
                     tone="rose"
                     onClick={() => setParams((prev) => prev.filter((_, idx) => idx !== i))}
                     icon={<Trash2 className="h-3.5 w-3.5" />}
@@ -644,7 +672,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
               disabled={params.length >= MAX_PARAMS}
               className="mt-3 inline-flex items-center gap-1.5 rounded-card border border-dashed border-border-strong px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Plus className="h-3.5 w-3.5" /> Add parameter
+              <Plus className="h-3.5 w-3.5" /> Agregar un parámetro
             </button>
           </Panel>
         </div>
@@ -652,19 +680,22 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
         {/* ── Side column: validation + live preview ────────────────────── */}
         <div className="space-y-4 lg:sticky lg:top-4">
           <Panel className="p-4">
-            <div className={clsx(SECTION, 'mb-2.5')}>Validation</div>
+            <div className={clsx(SECTION, 'mb-2.5')}>Validación</div>
 
             {errors.length === 0 && warnings.length === 0 && (
               <p className="flex items-start gap-2 text-[12px] font-semibold text-emerald">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                Everything checks out — ready to save.
+                Todo está en orden: ya puedes guardar.
               </p>
             )}
 
             {errors.length > 0 && (
               <ul className="space-y-1.5">
                 {errors.map((e) => (
-                  <li key={e} className="flex items-start gap-2 text-[11.5px] leading-snug text-rose">
+                  <li
+                    key={e}
+                    className="flex items-start gap-2 text-[11.5px] leading-snug text-rose"
+                  >
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>{e}</span>
                   </li>
@@ -673,9 +704,17 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             )}
 
             {warnings.length > 0 && (
-              <ul className={clsx('space-y-1.5', errors.length > 0 && 'mt-2.5 border-t border-border pt-2.5')}>
+              <ul
+                className={clsx(
+                  'space-y-1.5',
+                  errors.length > 0 && 'mt-2.5 border-t border-border pt-2.5',
+                )}
+              >
                 {warnings.map((w) => (
-                  <li key={w} className="flex items-start gap-2 text-[11.5px] leading-snug text-amber">
+                  <li
+                    key={w}
+                    className="flex items-start gap-2 text-[11.5px] leading-snug text-amber"
+                  >
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>{w}</span>
                   </li>
@@ -692,7 +731,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                     onClick={() => addParam(u)}
                     className="inline-flex items-center gap-1 rounded-sm border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
                   >
-                    <Plus className="h-3 w-3" /> declare {u}
+                    <Plus className="h-3 w-3" /> declarar {u}
                   </button>
                 ))}
               </div>
@@ -702,15 +741,15 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
           <Panel className="overflow-hidden">
             <div className="flex items-center gap-2 border-b border-border-strong px-4 py-2.5">
               <Terminal className="h-3.5 w-3.5 text-primary" />
-              <span className={SECTION}>What the agent will actually see</span>
+              <span className={SECTION}>Lo que va a ver el agente</span>
             </div>
             <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[11px] leading-relaxed text-ink">
               {preview}
             </pre>
             <p className="border-t border-border bg-surface-2 px-4 py-2 text-[10.5px] leading-snug text-ink-faint">
-              Byte-for-byte what <span className="font-mono">pipeline.run</span> hands the model.
-              Unfilled <span className="font-mono">{'{{params}}'}</span> stay as placeholders until
-              someone runs it.
+              Esto es, carácter por carácter, lo que <span className="font-mono">pipeline.run</span>{' '}
+              le entrega al modelo. Los <span className="font-mono">{'{{parametros}}'}</span> sin
+              llenar se quedan así hasta que alguien lo ejecute.
             </p>
           </Panel>
         </div>

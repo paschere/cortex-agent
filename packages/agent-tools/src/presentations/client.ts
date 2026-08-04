@@ -1,4 +1,4 @@
-import { BASE, matcherFetch, matcherToken } from '../recruit/client';
+import { BASE, matcherFetch, matcherToken } from './matcher';
 
 /**
  * Matcher access for the presentations family.
@@ -12,7 +12,7 @@ import { BASE, matcherFetch, matcherToken } from '../recruit/client';
  *
  * The export route is reachable service-to-service: the matcher's middleware
  * guards `/api/candidates` only when ENFORCE_API_AUTH is on, and it accepts a
- * bearer service token — the same one recruit/client.ts already sends as
+ * bearer service token — the same one ./matcher.ts already sends as
  * MATCHER_TOKEN. So no new matcher endpoint was needed; the letterheaded,
  * Letter-format renderer in lib/pdf/generate-presentation-pdf.ts stays the
  * single source of truth for what a presentation looks like.

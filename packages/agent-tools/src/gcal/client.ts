@@ -7,9 +7,14 @@ export async function gcalFetch<T>(ctx: ToolContext, path: string, init?: Reques
   const { token } = await ctx.integrations.getAccessToken('google');
   const r = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
     signal: ctx.signal,
   });
-  if (!r.ok) throw new IntegrationError(`Calendar ${r.status} ${path}: ${await r.text()}`, 'google');
+  if (!r.ok)
+    throw new IntegrationError(`Calendar ${r.status} ${path}: ${await r.text()}`, 'google');
   return r.json() as Promise<T>;
 }

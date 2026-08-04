@@ -1,7 +1,7 @@
 'use client';
 
 import { Provenance } from '@/components/ui/provenance';
-import { type StatusTone, DOT_TONE, chipClass } from '@/lib/status-chip';
+import { DOT_TONE, type StatusTone, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -127,7 +127,9 @@ export function RoutineCard({
             <span className="text-[13.5px] font-bold text-ink transition-colors group-hover:text-primary">
               {job.name}
             </span>
-            <span className={chipClass(STATUS_TONE[job.status])}>{JOB_STATUS_LABEL[job.status]}</span>
+            <span className={chipClass(STATUS_TONE[job.status])}>
+              {JOB_STATUS_LABEL[job.status]}
+            </span>
             {job.isGlobal && (
               <span
                 className={chipClass('primary')}
@@ -250,8 +252,9 @@ export function RoutineCard({
             </div>
           ) : (
             <p className="mt-2 text-[11.5px] text-ink-muted">
-              No se ha ejecutado nunca. Dale <span className="font-semibold text-ink">Ejecutar
-              ahora</span> para ver qué produce sin esperar a la hora programada.
+              No se ha ejecutado nunca. Dale{' '}
+              <span className="font-semibold text-ink">Ejecutar ahora</span> para ver qué produce
+              sin esperar a la hora programada.
             </p>
           )}
         </div>

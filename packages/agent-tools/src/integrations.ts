@@ -1,22 +1,20 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import {
-  decryptToken,
-  encryptToken,
   IntegrationError,
   type IntegrationProvider,
   type Logger,
   type UUID,
+  decryptToken,
+  encryptToken,
 } from '@cortex/core';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { IntegrationsClient } from './types';
 
-interface RefreshFn {
-  (refreshToken: string): Promise<{
-    access_token: string;
-    refresh_token?: string;
-    expires_in: number;
-    scope?: string;
-  }>;
-}
+type RefreshFn = (refreshToken: string) => Promise<{
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+  scope?: string;
+}>;
 
 // github/linear are absent: their tokens are long-lived (null expires_at), so the
 // refresh path in getAccessToken is never reached for them.
@@ -83,7 +81,8 @@ export function createIntegrationsClient(
         .eq('user_id', userId)
         .eq('provider', provider)
         .maybeSingle();
-      if (error || !data) throw new IntegrationError(`No ${provider} integration for user`, provider);
+      if (error || !data)
+        throw new IntegrationError(`No ${provider} integration for user`, provider);
 
       const expired = data.expires_at
         ? new Date(data.expires_at as string).getTime() - 60_000 < Date.now()

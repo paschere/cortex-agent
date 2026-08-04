@@ -18,7 +18,6 @@ begin
     'gemini-3.1-flash-lite',
     array[
       'hubspot.search_companies','hubspot.get_company','hubspot.search_deals','hubspot.get_deal','hubspot.list_recent_activities',
-      'rate.estimate','rate.estimate_from_document',
       'gmail.search','gmail.read_thread','gmail.draft',
       'gcal.list_events','gcal.create_event',
       'gsheets.read_range',

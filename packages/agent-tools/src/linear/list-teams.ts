@@ -36,7 +36,9 @@ export const listTeams = registerTool({
   rateLimit: { perMinute: 60 },
   handler: async (_input, ctx) => {
     type R = {
-      teams: { nodes: Array<{ id: string; key: string; name: string; description: string | null }> };
+      teams: {
+        nodes: Array<{ id: string; key: string; name: string; description: string | null }>;
+      };
     };
     const data = await linearFetch<R>(ctx, QUERY);
     return {

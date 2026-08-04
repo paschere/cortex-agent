@@ -1,17 +1,17 @@
 /**
- * Transport for the matcher service — the upstream recruiting/matching app
- * behind the `recruit.*`, `presentations.*` and candidate-ranking tools.
+ * Transport for the matcher service — the upstream app that stores candidate
+ * records and renders the letterheaded PDF behind `presentations.*`.
  *
- * MATCHER_TOKEN is the service token it expects as a bearer. The legacy
- * ZIPDEV_* names are still read as a fallback so a deployment can be renamed
- * without a simultaneous redeploy; transitional, delete once every environment
- * has moved.
+ * It used to serve the `recruit.*` family as well; that family was retired when
+ * the product narrowed, and this module moved here with its only remaining
+ * caller rather than being deleted along with it.
+ *
+ * MATCHER_TOKEN is the service token it expects as a bearer.
  */
-export const BASE = () =>
-  process.env.MATCHER_URL ?? process.env.ZIPDEV_MATCHER_URL ?? 'http://localhost:3100';
+export const BASE = () => process.env.MATCHER_URL ?? 'http://localhost:3100';
 
 export function matcherToken(): string | undefined {
-  return process.env.MATCHER_TOKEN ?? process.env.ZIPDEV_MATCHER_TOKEN;
+  return process.env.MATCHER_TOKEN;
 }
 
 const RETRIES = 2;

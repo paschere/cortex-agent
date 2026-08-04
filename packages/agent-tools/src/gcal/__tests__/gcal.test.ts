@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { setupServer } from 'msw/node';
-import { http, HttpResponse } from 'msw';
-import { gcalListEvents } from '../list-events';
-import { gcalCreateEvent } from '../create-event';
-import { runTool } from '../../index';
 import { ConfirmationRequiredError, IntegrationError } from '@cortex/core';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { runTool } from '../../index';
 import type { ToolContext } from '../../types';
+import { gcalCreateEvent } from '../create-event';
+import { gcalListEvents } from '../list-events';
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   const noRow = { data: null, error: null };
@@ -28,8 +28,12 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     hasScopes: vi.fn().mockResolvedValue(true),
   };
   const logger = {
-    info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn(),
-    trace: vi.fn(), fatal: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    fatal: vi.fn(),
   };
   return {
     userId: '00000000-0000-0000-0000-000000000001',
@@ -58,7 +62,11 @@ const server = setupServer(
     }),
   ),
   http.post('https://www.googleapis.com/calendar/v3/calendars/primary/events', () =>
-    HttpResponse.json({ id: 'e2', summary: 'Test Event', htmlLink: 'https://calendar.google.com/event/new' }),
+    HttpResponse.json({
+      id: 'e2',
+      summary: 'Test Event',
+      htmlLink: 'https://calendar.google.com/event/new',
+    }),
   ),
 );
 
@@ -69,7 +77,12 @@ describe('gcal', () => {
   it('lists events', async () => {
     const ctx = makeCtx();
     const out = await gcalListEvents.handler(
-      { calendarId: 'primary', timeMin: '2026-06-01T00:00:00Z', timeMax: '2026-06-30T00:00:00Z', maxResults: 5 },
+      {
+        calendarId: 'primary',
+        timeMin: '2026-06-01T00:00:00Z',
+        timeMax: '2026-06-30T00:00:00Z',
+        maxResults: 5,
+      },
       ctx,
     );
     expect(out.events).toHaveLength(1);
@@ -82,7 +95,12 @@ describe('gcal', () => {
     await expect(
       runTool(
         gcalCreateEvent,
-        { calendarId: 'primary', summary: 'Test Event', start: '2026-06-01T10:00:00Z', end: '2026-06-01T11:00:00Z' },
+        {
+          calendarId: 'primary',
+          summary: 'Test Event',
+          start: '2026-06-01T10:00:00Z',
+          end: '2026-06-01T11:00:00Z',
+        },
         ctx,
       ),
     ).rejects.toBeInstanceOf(ConfirmationRequiredError);
@@ -92,7 +110,12 @@ describe('gcal', () => {
     const ctx = makeCtx();
     const out = await runTool(
       gcalCreateEvent,
-      { calendarId: 'primary', summary: 'Test Event', start: '2026-06-01T10:00:00Z', end: '2026-06-01T11:00:00Z' },
+      {
+        calendarId: 'primary',
+        summary: 'Test Event',
+        start: '2026-06-01T10:00:00Z',
+        end: '2026-06-01T11:00:00Z',
+      },
       ctx,
       { confirmed: true },
     );
@@ -110,7 +133,12 @@ describe('gcal', () => {
     const ctx = makeCtx();
     await expect(
       gcalListEvents.handler(
-        { calendarId: 'primary', timeMin: '2026-06-01T00:00:00Z', timeMax: '2026-06-30T00:00:00Z', maxResults: 5 },
+        {
+          calendarId: 'primary',
+          timeMin: '2026-06-01T00:00:00Z',
+          timeMax: '2026-06-30T00:00:00Z',
+          maxResults: 5,
+        },
         ctx,
       ),
     ).rejects.toBeInstanceOf(IntegrationError);

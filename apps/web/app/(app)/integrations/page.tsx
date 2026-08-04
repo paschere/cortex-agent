@@ -10,14 +10,12 @@ import {
   Brain,
   Building2,
   CircleCheck,
-  Contact,
   GitBranch,
   Globe,
   ListTodo,
   Mail,
   MessageSquare,
   Plug,
-  Rocket,
   Server,
   Sparkles,
   TriangleAlert,
@@ -132,7 +130,6 @@ export default async function IntegrationsPage({
 
   const googleScopes = (mine.google?.scopes ?? []).length;
   const hubspotWorkspace = !!process.env.HUBSPOT_PRIVATE_APP_TOKEN;
-  const workableOn = !!process.env.WORKABLE_API_TOKEN;
   const matcherOn = !!process.env.MATCHER_URL;
   const payrollOn = !!process.env.PAYROLL_API_URL;
   // Two different keys, reported as one card because they fail as one product.
@@ -143,8 +140,6 @@ export default async function IntegrationsPage({
   const semanticSearchOn = !!process.env.VOYAGE_API_KEY;
   const webOn = !!process.env.TAVILY_API_KEY;
   const slackOn = !!process.env.SLACK_BOT_TOKEN;
-  const apolloOn = !!process.env.APOLLO_API_KEY;
-  const bambooOn = !!process.env.BAMBOOHR_API;
 
   const providers: ProviderCard[] = [
     {
@@ -170,45 +165,23 @@ export default async function IntegrationsPage({
       state: hubspotWorkspace ? 'workspace' : mine.hubspot ? 'user' : 'disconnected',
       unlocks:
         'Negocios, empresas, contactos, salud del pipeline y actividad reciente: el sistema de registro comercial.',
-      offline: 'Sin respuestas de negocios, pipeline ni contactos: todo el lado comercial queda a oscuras.',
+      offline:
+        'Sin respuestas de negocios, pipeline ni contactos: todo el lado comercial queda a oscuras.',
       owner: hubspotWorkspace
         ? 'La configuró el equipo técnico · una sola app privada para toda la organización'
         : personalOwner('hubspot'),
       connectHref: !hubspotWorkspace && !mine.hubspot ? '/api/integrations/hubspot' : undefined,
     },
     {
-      key: 'workable',
-      name: 'Workable',
-      icon: Users,
-      families: ['workable'],
-      state: workableOn ? 'workspace' : 'disconnected',
-      unlocks:
-        'La verdad del ATS: vacantes, candidatos, etapas, respuestas de filtro y actividad reciente.',
-      offline: 'Cortex no ve ninguna vacante ni candidato real; estaría adivinando sobre el pipeline.',
-      owner: opsOwner(workableOn, 'no hay token de servicio de Workable en este entorno'),
-    },
-    {
       key: 'matcher',
-      name: 'Talent Pool',
+      name: 'Presentaciones de candidatos',
       icon: Sparkles,
-      families: ['recruit', 'people', 'rate', 'presentations', 'sales'],
+      families: ['presentations'],
       state: matcherOn ? 'workspace' : 'disconnected',
       unlocks:
-        'Emparejar y calificar candidatos, compararlos lado a lado, armar presentaciones para el cliente y estimar tarifas.',
-      offline: 'Sin emparejamiento, sin calificación, sin presentaciones y sin estimación de tarifas.',
-      owner: opsOwner(matcherOn, 'la URL del servicio de emparejamiento no está configurada'),
-    },
-    {
-      key: 'bamboo',
-      name: 'BambooHR',
-      icon: Contact,
-      families: ['bamboo'],
-      state: bambooOn ? 'workspace' : 'disconnected',
-      unlocks:
-        'El sistema de registro de gente: la nómina de personal, el historial laboral, las vacaciones, las horas registradas, los documentos en archivo, y tanto lo que la empresa paga como lo que le cobra al cliente.',
-      offline:
-        'Cortex no ve quién trabaja aquí: sin nómina de personal, sin vacaciones, sin antigüedad y sin tarifas.',
-      owner: opsOwner(bambooOn, 'no hay API key de BambooHR en este entorno'),
+        'Ver quién está en una vacante, armar la presentación de un candidato para el cliente y volver a bajar las que ya se hicieron, en PDF con la carta de la empresa.',
+      offline: 'No se pueden armar ni consultar presentaciones de candidatos para el cliente.',
+      owner: opsOwner(matcherOn, 'la URL del servicio de presentaciones no está configurada'),
     },
     {
       key: 'payroll',
@@ -252,7 +225,8 @@ export default async function IntegrationsPage({
       icon: MessageSquare,
       families: ['slack'],
       state: slackOn ? 'workspace' : 'disconnected',
-      unlocks: 'Publicar avances, reportes y resultados de rutinas directo en los canales del equipo.',
+      unlocks:
+        'Publicar avances, reportes y resultados de rutinas directo en los canales del equipo.',
       offline: 'Los resultados se quedan en la app y en el correo: nada llega a Slack.',
       owner: opsOwner(slackOn, 'todavía no está aprovisionado el token del bot'),
     },
@@ -263,7 +237,8 @@ export default async function IntegrationsPage({
       families: ['github'],
       state: mine.github ? 'user' : 'disconnected',
       unlocks: 'Repositorios, issues, pull requests y métricas de actividad de ingeniería.',
-      offline: 'Sin visibilidad de repos, issues ni PRs: las preguntas de ingeniería quedan sin respuesta.',
+      offline:
+        'Sin visibilidad de repos, issues ni PRs: las preguntas de ingeniería quedan sin respuesta.',
       owner: mine.github
         ? personalOwner('github')
         : `${personalOwner('github')} · la habilita el equipo técnico`,
@@ -275,21 +250,11 @@ export default async function IntegrationsPage({
       families: ['linear'],
       state: mine.linear ? 'user' : 'disconnected',
       unlocks: 'Proyectos, ciclos, issues y carga del equipo para ver el roadmap.',
-      offline: 'Sin respuestas de roadmap ni de carga: Cortex no ve qué está construyendo el equipo.',
+      offline:
+        'Sin respuestas de roadmap ni de carga: Cortex no ve qué está construyendo el equipo.',
       owner: mine.linear
         ? personalOwner('linear')
         : `${personalOwner('linear')} · la habilita el equipo técnico`,
-    },
-    {
-      key: 'apollo',
-      name: 'Apollo',
-      icon: Rocket,
-      families: ['apollo'],
-      state: apolloOn ? 'workspace' : 'disconnected',
-      unlocks:
-        'Prospección y enriquecimiento de contactos: quién trabaja dónde, su correo de trabajo verificado y datos de las empresas que vale la pena contactar.',
-      offline: 'Las señales de crecimiento se quedan en la empresa: Cortex no logra identificar a quién contactar.',
-      owner: opsOwner(apolloOn, 'no hay API key de Apollo en este entorno'),
     },
   ];
 
@@ -388,8 +353,8 @@ export default async function IntegrationsPage({
 
       {/* Hairlines come from the gap showing the border colour through, so the
           rules stay correct at every breakpoint the grid reflows to. */}
-      <Panel className="mb-5 overflow-hidden bg-border">
-        <div className="grid grid-cols-2 gap-px lg:grid-cols-4">
+      <Panel className="mb-5 overflow-hidden">
+        <div className="grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
           {stats.map((s) => (
             <div key={s.label} className="bg-surface p-4">
               <div className="flex items-center gap-1.5">

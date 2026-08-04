@@ -1,33 +1,32 @@
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { requireSession } from "@/lib/session";
-import { revalidatePath } from "next/cache";
-import { notFound } from "next/navigation";
-import Link from "next/link";
+import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/ui/page-header';
+import { Eyebrow, Panel } from '@/components/ui/panel';
+import { requireSession } from '@/lib/session';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
-  Sparkles,
-  Building2,
-  DollarSign,
-  Mail,
-  Calendar,
-  Table,
-  FolderSearch,
-  Globe,
+  ArrowLeft,
+  Bell,
   BookOpen,
   Boxes,
-  ShieldCheck,
-  Cpu,
-  MessageSquare,
-  ArrowLeft,
-  Users,
-  Bell,
-  Github,
-  Layers,
+  Building2,
+  Calendar,
   Contact,
+  Cpu,
+  FolderSearch,
+  Github,
+  Globe,
+  Layers,
+  Mail,
+  MessageSquare,
+  ShieldCheck,
+  Sparkles,
+  Table,
+  Users,
   Wallet,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
-import { Eyebrow, Panel } from "@/components/ui/panel";
+} from 'lucide-react';
+import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
 
 // ---------------------------------------------------------------------------
 // Tool registry — full v2 surface, grouped with icons. `write` tools are
@@ -45,177 +44,155 @@ interface ToolGroup {
 
 const TOOL_GROUPS: ToolGroup[] = [
   {
-    label: "HubSpot CRM",
+    label: 'HubSpot CRM',
     icon: Building2,
     tools: [
-      { id: "hubspot.search_companies" },
-      { id: "hubspot.get_company" },
-      { id: "hubspot.search_deals" },
-      { id: "hubspot.get_deal" },
-      { id: "hubspot.search_contacts" },
-      { id: "hubspot.get_contact" },
-      { id: "hubspot.get_pipeline_summary" },
-      { id: "hubspot.get_contact_timeline" },
-      { id: "hubspot.list_recent_activities" },
-      { id: "hubspot.create_deal", write: true },
-      { id: "hubspot.update_deal", write: true },
-      { id: "hubspot.create_contact", write: true },
-      { id: "hubspot.log_activity", write: true },
+      { id: 'hubspot.search_companies' },
+      { id: 'hubspot.get_company' },
+      { id: 'hubspot.search_deals' },
+      { id: 'hubspot.get_deal' },
+      { id: 'hubspot.search_contacts' },
+      { id: 'hubspot.get_contact' },
+      { id: 'hubspot.get_pipeline_summary' },
+      { id: 'hubspot.get_contact_timeline' },
+      { id: 'hubspot.list_recent_activities' },
+      { id: 'hubspot.create_deal', write: true },
+      { id: 'hubspot.update_deal', write: true },
+      { id: 'hubspot.create_contact', write: true },
+      { id: 'hubspot.log_activity', write: true },
     ],
   },
   {
-    label: "Gmail",
+    label: 'Gmail',
     icon: Mail,
     tools: [
-      { id: "gmail.search" },
-      { id: "gmail.read_thread" },
-      { id: "gmail.list_threads" },
-      { id: "gmail.draft" },
-      { id: "gmail.send_draft", write: true },
+      { id: 'gmail.search' },
+      { id: 'gmail.read_thread' },
+      { id: 'gmail.list_threads' },
+      { id: 'gmail.draft' },
+      { id: 'gmail.send_draft', write: true },
     ],
   },
   {
-    label: "Calendar",
+    label: 'Calendar',
     icon: Calendar,
-    tools: [
-      { id: "gcal.list_events" },
-      { id: "gcal.create_event", write: true },
-    ],
+    tools: [{ id: 'gcal.list_events' }, { id: 'gcal.create_event', write: true }],
   },
   {
-    label: "Sheets",
+    label: 'Sheets',
     icon: Table,
-    tools: [
-      { id: "gsheets.read_range" },
-      { id: "gsheets.append_row", write: true },
-    ],
+    tools: [{ id: 'gsheets.read_range' }, { id: 'gsheets.append_row', write: true }],
   },
   {
-    label: "Drive",
+    label: 'Drive',
     icon: FolderSearch,
-    tools: [{ id: "gdrive.search_files" }, { id: "gdrive.read_doc" }],
+    tools: [{ id: 'gdrive.search_files' }, { id: 'gdrive.read_doc' }],
   },
   {
-    label: "Investigación web",
+    label: 'Investigación web',
     icon: Globe,
-    tools: [{ id: "web.search" }, { id: "web.scrape" }],
+    tools: [{ id: 'web.search' }, { id: 'web.scrape' }],
   },
   {
-    label: "Calculadora de tarifas",
-    icon: DollarSign,
-    tools: [{ id: "rate.estimate" }, { id: "rate.estimate_from_document" }],
-  },
-  {
-    label: "Reclutamiento (Workable / Matcher)",
+    label: 'Presentaciones para cliente',
     icon: Users,
     tools: [
-      { id: "recruit.list_requisitions" },
-      { id: "recruit.get_requisition" },
-      { id: "recruit.list_candidates" },
-      { id: "recruit.get_candidate" },
-      { id: "recruit.list_companies" },
-      { id: "recruit.pipeline_kanban" },
-      { id: "recruit.find_matches" },
-      { id: "recruit.score_candidate" },
-      { id: "recruit.compare_candidates" },
-      { id: "recruit.get_presentation" },
-      { id: "recruit.generate_presentation", write: true },
-      { id: "recruit.job_insights" },
-      { id: "recruit.recruiter_analytics" },
-      { id: "recruit.dashboard_stats" },
+      { id: 'presentations.pick_candidate' },
+      { id: 'presentations.list_recent' },
+      { id: 'presentations.create_pdf', write: true },
     ],
   },
   {
-    label: "Notificaciones",
+    label: 'Notificaciones',
     icon: Bell,
-    tools: [{ id: "slack.post_message", write: true }],
+    tools: [{ id: 'slack.post_message', write: true }],
   },
   {
-    label: "GitHub",
+    label: 'GitHub',
     icon: Github,
     tools: [
-      { id: "github.list_repositories" },
-      { id: "github.get_repository" },
-      { id: "github.get_repo_contents" },
-      { id: "github.get_issue" },
-      { id: "github.list_issue_comments" },
-      { id: "github.list_pull_requests" },
-      { id: "github.repo_activity" },
-      { id: "github.pr_metrics" },
-      { id: "github.create_issue", write: true },
-      { id: "github.create_issue_comment", write: true },
+      { id: 'github.list_repositories' },
+      { id: 'github.get_repository' },
+      { id: 'github.get_repo_contents' },
+      { id: 'github.get_issue' },
+      { id: 'github.list_issue_comments' },
+      { id: 'github.list_pull_requests' },
+      { id: 'github.repo_activity' },
+      { id: 'github.pr_metrics' },
+      { id: 'github.create_issue', write: true },
+      { id: 'github.create_issue_comment', write: true },
     ],
   },
   {
-    label: "Linear",
+    label: 'Linear',
     icon: Layers,
     tools: [
-      { id: "linear.list_teams" },
-      { id: "linear.list_projects" },
-      { id: "linear.get_project" },
-      { id: "linear.list_issues" },
-      { id: "linear.get_issue" },
-      { id: "linear.list_comments" },
-      { id: "linear.cycle_stats" },
-      { id: "linear.workload_stats" },
-      { id: "linear.create_issue", write: true },
-      { id: "linear.create_comment", write: true },
+      { id: 'linear.list_teams' },
+      { id: 'linear.list_projects' },
+      { id: 'linear.get_project' },
+      { id: 'linear.list_issues' },
+      { id: 'linear.get_issue' },
+      { id: 'linear.list_comments' },
+      { id: 'linear.cycle_stats' },
+      { id: 'linear.workload_stats' },
+      { id: 'linear.create_issue', write: true },
+      { id: 'linear.create_comment', write: true },
     ],
   },
   {
-    label: "Directorio de personas",
+    label: 'Directorio de personas',
     icon: Contact,
-    tools: [{ id: "people.search" }],
+    tools: [{ id: 'people.search' }],
   },
   {
-    label: "Nómina",
+    label: 'Nómina',
     icon: Wallet,
-    tools: [{ id: "payroll.team_overview" }],
+    tools: [{ id: 'payroll.team_overview' }],
   },
   {
-    label: "Brain Knowledge",
+    label: 'Brain Knowledge',
     icon: BookOpen,
     tools: [
-      { id: "kb.search" },
-      { id: "kb.list_spaces" },
-      { id: "kb.create_document", write: true },
+      { id: 'kb.search' },
+      { id: 'kb.list_spaces' },
+      { id: 'kb.create_document', write: true },
     ],
   },
   {
-    label: "Compuestas",
+    label: 'Compuestas',
     icon: Boxes,
-    tools: [{ id: "sales.draft_proposal" }],
+    tools: [{ id: 'sales.draft_proposal' }],
   },
 ];
 
 const TOTAL_TOOLS = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0);
 
 function shortName(id: string): string {
-  const part = id.split(".")[1] ?? id;
-  return part.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const part = id.split('.')[1] ?? id;
+  return part.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ---------------------------------------------------------------------------
 // Server action — org_admin only
 // ---------------------------------------------------------------------------
 async function updateAgent(slug: string, formData: FormData) {
-  "use server";
+  'use server';
   const user = await requireSession();
-  if (user.role !== "org_admin") throw new Error("forbidden");
+  if (user.role !== 'org_admin') throw new Error('forbidden');
 
-  const defaultModel = formData.get("default_model") as string;
-  const systemPrompt = formData.get("system_prompt") as string;
-  const allowedToolIds = formData.getAll("allowed_tool_ids") as string[];
+  const defaultModel = formData.get('default_model') as string;
+  const systemPrompt = formData.get('system_prompt') as string;
+  const allowedToolIds = formData.getAll('allowed_tool_ids') as string[];
 
   const sb = getSupabaseServiceClient();
   await sb
-    .from("agents")
+    .from('agents')
     .update({
       default_model: defaultModel,
       system_prompt: systemPrompt,
       allowed_tool_ids: allowedToolIds,
     })
-    .eq("slug", slug);
+    .eq('slug', slug);
 
   revalidatePath(`/agents/${slug}`);
 }
@@ -239,21 +216,19 @@ export default async function AgentDetailPage({
 
   const sb = getSupabaseServiceClient();
   const { data } = await sb
-    .from("agents")
-    .select(
-      "id, slug, name, default_model, system_prompt, allowed_tool_ids, teams(name)",
-    )
-    .eq("slug", slug)
+    .from('agents')
+    .select('id, slug, name, default_model, system_prompt, allowed_tool_ids, teams(name)')
+    .eq('slug', slug)
     .single();
 
   if (!data) notFound();
   const agent = data as unknown as AgentRow;
   const enabled = new Set(agent.allowed_tool_ids);
-  const isAdmin = user.role === "org_admin";
+  const isAdmin = user.role === 'org_admin';
   const boundAction = updateAgent.bind(null, agent.slug);
   const promptWords = agent.system_prompt.trim().split(/\s+/).length;
 
-  const Wrapper = isAdmin ? "form" : "div";
+  const Wrapper = isAdmin ? 'form' : 'div';
   const wrapperProps = isAdmin ? { action: boundAction } : {};
 
   return (
@@ -267,7 +242,7 @@ export default async function AgentDetailPage({
 
       <PageHeader
         title={agent.name}
-        subtitle={`${agent.teams?.[0]?.name ?? "Sin equipo"} · ${agent.allowed_tool_ids.length} de ${TOTAL_TOOLS} herramientas habilitadas`}
+        subtitle={`${agent.teams?.[0]?.name ?? 'Sin equipo'} · ${agent.allowed_tool_ids.length} de ${TOTAL_TOOLS} herramientas habilitadas`}
         icon={<Sparkles className="h-5 w-5" />}
         actions={
           <Link
@@ -322,12 +297,8 @@ export default async function AgentDetailPage({
         <Panel className="p-5">
           <Eyebrow>Modelo por defecto</Eyebrow>
           <div className="mt-3 flex flex-wrap gap-2">
-            {["claude-opus-5", "claude-sonnet-5"].map((m) => (
-              <label
-                key={m}
-                className="cursor-pointer"
-                aria-disabled={!isAdmin}
-              >
+            {['claude-opus-5', 'claude-sonnet-5'].map((m) => (
+              <label key={m} className="cursor-pointer" aria-disabled={!isAdmin}>
                 <input
                   type="radio"
                   name="default_model"
@@ -363,9 +334,7 @@ export default async function AgentDetailPage({
                     <span className="grid h-6 w-6 place-items-center rounded-card bg-surface-2 text-ink-muted">
                       <Icon className="h-3.5 w-3.5" />
                     </span>
-                    <span className="text-[13px] font-semibold text-ink">
-                      {group.label}
-                    </span>
+                    <span className="text-[13px] font-semibold text-ink">{group.label}</span>
                     <span className="tabular text-[11px] text-ink-faint">
                       {on}/{group.tools.length}
                     </span>
@@ -388,9 +357,7 @@ export default async function AgentDetailPage({
                         <span className="flex items-center justify-between gap-2 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink-muted transition-colors hover:border-border-strong peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:text-ink peer-disabled:opacity-60">
                           <span className="flex items-center gap-2">
                             <span className="h-3.5 w-3.5 shrink-0 rounded-card border border-border-strong bg-surface peer-checked:border-primary peer-checked:bg-primary" />
-                            <span className="font-medium">
-                              {shortName(t.id)}
-                            </span>
+                            <span className="font-medium">{shortName(t.id)}</span>
                           </span>
                           {t.write && (
                             <span className="rounded-card border border-amber/40 bg-amber-soft px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-amber">

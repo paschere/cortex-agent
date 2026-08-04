@@ -60,7 +60,12 @@ export default async function ToolsPage({
 
   const [{ data: agentData }, { data: permissionData }, { data: integrationData }, myDenied] =
     await Promise.all([
-      sb.from('agents').select('slug, name, allowed_tool_ids'),
+      // Archived agents (0037, 0063) are history, not grants: listing them here
+      // would credit a retired agent with access nobody can actually exercise.
+      sb
+        .from('agents')
+        .select('slug, name, allowed_tool_ids')
+        .eq('archived', false),
       // Team permissions are a DENY-list (0038_team_tool_permissions.sql): only
       // allowed = false rows restrict anything.
       sb
@@ -223,9 +228,7 @@ export default async function ToolsPage({
       label: 'Bloqueadas',
       value: restrictedCount,
       sub:
-        restrictedCount > 0
-          ? 'bloqueadas para al menos un equipo'
-          : 'ningún equipo bloquea nada',
+        restrictedCount > 0 ? 'bloqueadas para al menos un equipo' : 'ningún equipo bloquea nada',
       icon: Lock,
       tone: restrictedCount > 0 ? 'text-rose' : 'text-emerald',
     },
@@ -251,8 +254,8 @@ export default async function ToolsPage({
 
       {/* Hairlines come from the gap showing the border colour through, so the
           rules stay correct at every breakpoint the grid reflows to. */}
-      <Panel className="mb-5 overflow-hidden bg-border">
-        <div className="grid grid-cols-2 gap-px sm:grid-cols-3 lg:grid-cols-5">
+      <Panel className="mb-5 overflow-hidden">
+        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-5">
           {stats.map((s) => (
             <div key={s.label} className="bg-surface p-4">
               <div className="flex items-center gap-1.5">

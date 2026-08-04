@@ -43,10 +43,7 @@ export async function POST(
   }
 
   if (!process.env.INNGEST_SIGNING_KEY) {
-    return NextResponse.json(
-      { error: 'Background runs are not configured yet' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'Background runs are not configured yet' }, { status: 503 });
   }
 
   try {

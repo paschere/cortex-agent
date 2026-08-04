@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
+import { type UUID, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { logger, type UUID } from '@cortex/core';
 
 export type AuditStatus = 'ok' | 'error' | 'rate_limited' | 'confirmation_required';
 
@@ -30,7 +30,10 @@ export interface WriteAuditOpts {
 }
 
 export function hashInput(input: unknown): string {
-  return createHash('sha256').update(JSON.stringify(input ?? null)).digest('hex').slice(0, 32);
+  return createHash('sha256')
+    .update(JSON.stringify(input ?? null))
+    .digest('hex')
+    .slice(0, 32);
 }
 
 export async function writeAuditEvent(opts: WriteAuditOpts) {

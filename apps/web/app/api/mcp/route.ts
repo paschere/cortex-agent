@@ -1,3 +1,20 @@
+import { randomUUID } from 'node:crypto';
+import { buildToolContext } from '@/lib/agent';
+import { sendApprovalRequestEmail } from '@/lib/approval-email';
+import { decideApproval } from '@/lib/approvals/decide';
+import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confirm';
+import { issuer, sha256 } from '@/lib/oauth';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { buildSystemPrompt } from '@/lib/system-prompt';
+import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
+import {
+  type AnyTool,
+  filterTools,
+  getTool,
+  listVisibleSpaces,
+  runTool,
+} from '@cortex/agent-tools';
+import { ConfirmationRequiredError } from '@cortex/core';
 /**
  * Remote MCP endpoint — Streamable HTTP transport (MCP 2025-03-26).
  *
@@ -14,8 +31,8 @@
  * Protected Resource Metadata (RFC 9728) document so it can begin the OAuth
  * flow. See infra/supabase/migrations/0025_oauth_mcp.sql + apps/web/lib/oauth.ts.
  *
- * Tool surface: the UNION of every agent's allowed tools (sales, recruiting,
- * cortex, …) loaded from the `agents` table, executed through the exact same
+ * Tool surface: the UNION of every non-archived agent's allowed tools (in
+ * practice just `cortex`) loaded from the `agents` table, executed through the exact same
  * path as the chat route — filterTools -> runTool with a ToolContext from
  * buildToolContext(). Each tool is attributed to the first agent that allows
  * it so audit events keep a real agent_id.
@@ -30,25 +47,8 @@
  * We hand-roll JSON-RPC rather than use the MCP SDK server transport (that
  * transport is Node-stream based and awkward inside a Next.js route handler).
  */
-import { NextResponse, type NextRequest } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { randomUUID } from 'node:crypto';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { buildToolContext } from '@/lib/agent';
-import { sha256, issuer } from '@/lib/oauth';
-import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confirm';
-import { sendApprovalRequestEmail } from '@/lib/approval-email';
-import { decideApproval } from '@/lib/approvals/decide';
-import { buildSystemPrompt } from '@/lib/system-prompt';
-import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
-import {
-  filterTools,
-  getTool,
-  listVisibleSpaces,
-  runTool,
-  type AnyTool,
-} from '@cortex/agent-tools';
-import { ConfirmationRequiredError } from '@cortex/core';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,10 +64,10 @@ const SERVER_VERSION = '0.2.0';
  * and it is what makes Claude behave like the workspace's own agent instead of
  * a generic assistant with tools.
  */
-const INSTRUCTIONS = `While these tools are active you take on the role of **Cortex** ⚡ — the workspace super-agent and newest teammate on the team. This server is Cortex's brain and hands: the company's Brain Knowledge, CRM, ATS, talent pool, rates engine, pipelines, and routines.
+const INSTRUCTIONS = `While these tools are active you take on the role of **Cortex** ⚡ — the workspace super-agent and newest teammate on the team. This server is Cortex's brain and hands: the company's Brain Knowledge, CRM, mailbox and calendar, payroll figures, pipelines, and routines. It does NOT reach a rate estimator, an applicant tracking system, a talent pool, or the HR system of record — if someone asks for a rate, a shortlist, a headcount or a bill rate, say plainly that it is not something you can look up rather than improvising one.
 
 YOUR PERSONA (in effect whenever you do work for the company in this conversation):
-- You are Cortex, a teammate — not a generic assistant. When greeting or starting work, introduce yourself as Cortex. Speak in first person about the work: "ya busqué en el talent pool", "te preparo el borrador".
+- You are Cortex, a teammate — not a generic assistant. When greeting or starting work, introduce yourself as Cortex. Speak in first person about the work: "ya revisé el CRM", "te preparo el borrador".
 - Personality: sharp, warm, direct. Numbers over adjectives. Lead with the answer, then the support. A touch of energy (an occasional ⚡ is fine, never more than one per message).
 - Match the user's language — Spanish in, Spanish out. Client-facing drafts go in the client's language.
 - If someone asks what you literally are, be honest (Claude acting as Cortex, the workspace's agent) — never deceptive, but don't volunteer the machinery.
@@ -79,8 +79,8 @@ HOW CORTEX SPEAKS (users are often non-technical):
 
 HOW CORTEX WORKS:
 1. **Orient first.** Call \`cortex_overview\` early to see connected integrations, agents, and Brain Knowledge spaces.
-2. **Brain Knowledge is the company's memory.** Before answering anything that could be covered by internal knowledge — clients, playbooks, rates, candidates, past proposals — search it with \`kb_search\` and ground your answer in the hits. Persist durable work products back with \`kb_create_document\`.
-3. **Ground every claim in tool data.** Never invent a deal, contact, candidate, rate, or statistic. Fetch it this turn; cite human-verifiable references (deal names, \`ENG-45\`, \`owner/repo#123\`).
+2. **Brain Knowledge is the company's memory.** Before answering anything that could be covered by internal knowledge — clients, playbooks, pricing, past proposals — search it with \`kb_search\` and ground your answer in the hits. It is also the only place a rate can come from now, and quoting one means quoting the document it came from. Persist durable work products back with \`kb_create_document\`.
+3. **Ground every claim in tool data.** Never invent a deal, contact, rate, or statistic. Fetch it this turn; cite human-verifiable references (deal names, \`ENG-45\`, \`owner/repo#123\`).
 4. **Writes are confirmation-gated.** Create/update/send/post tools do NOT execute on first call — they return a confirmation_id, the exact payload, and WHY the action is gated. Explain that in the user's language, show what will happen, get an explicit yes, then call \`cortex_confirm_action\`. If the user declines, do nothing.
 5. **Offload heavy reading.** For large documents, delegate with \`cortex_process\` instead of pulling the content into the conversation.`;
 
@@ -283,10 +283,10 @@ const FAMILY_TITLES: Record<string, string> = {
   github: 'GitHub',
   linear: 'Linear',
   web: 'Web',
-  rate: 'Rates',
-  recruit: 'Recruiting',
   slack: 'Slack',
   people: 'People',
+  presentations: 'Presentations',
+  growth: 'Growth Signals',
   payroll: 'Payroll',
   sales: 'Sales',
   format: 'Formatting',
@@ -693,7 +693,7 @@ const PROMPTS: PromptDef[] = [
     render: (a) =>
       `Draft a complete client proposal for a ${a.seniority ?? ''} ${a.role ?? ''} role.` +
       (a.companyId ? ` Pull company context from HubSpot company ${a.companyId} first.` : '') +
-      ' Search Brain Knowledge (kb_search) for prior proposals and rate guidance, estimate the rate with rate_estimate, and structure the proposal with scope, profile, rate, and next steps.',
+      ' Search Brain Knowledge (kb_search) for prior proposals and rate guidance, and structure the proposal with scope, profile, rate and next steps. There is no rate estimator: take the numbers from a comparable past proposal and say which one, or leave them for the user to fill in.',
   },
   {
     name: 'qualify-lead',
@@ -701,17 +701,6 @@ const PROMPTS: PromptDef[] = [
     arguments: [{ name: 'dealId', description: 'HubSpot deal ID', required: true }],
     render: (a) =>
       `Qualify HubSpot deal ${a.dealId ?? ''}: fetch the deal, its company and recent activities, check Brain Knowledge for prior interactions, and give a BANT-style assessment with a clear go/no-go recommendation.`,
-  },
-  {
-    name: 'rate-question',
-    description: 'Answer a rate question by calling rate.estimate.',
-    arguments: [
-      { name: 'role', description: 'Role to estimate', required: true },
-      { name: 'seniority', description: 'Seniority level', required: true },
-      { name: 'region', description: 'Optional region', required: false },
-    ],
-    render: (a) =>
-      `Estimate the rate for a ${a.seniority ?? ''} ${a.role ?? ''}${a.region ? ` in ${a.region}` : ''} using the rate estimation tool, and explain the drivers behind the number.`,
   },
   {
     name: 'document-repo',

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { chipClass } from '@/lib/status-chip';
-import { Radar, ThumbsUp, ThumbsDown, Loader2, ExternalLink } from 'lucide-react';
+import { ExternalLink, Loader2, Radar, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 interface SignalCardProps {
   id: string;
@@ -31,14 +31,14 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setErrorMessage((data as { error?: string }).error ?? 'Unknown error');
+        setErrorMessage((data as { error?: string }).error ?? 'Ocurrió un error inesperado.');
         setStatus('error');
         return;
       }
       // Status changed away from 'new' — refresh removes it from the queue.
       router.refresh();
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Request failed');
+      setErrorMessage(err instanceof Error ? err.message : 'La solicitud falló.');
       setStatus('error');
     }
   }

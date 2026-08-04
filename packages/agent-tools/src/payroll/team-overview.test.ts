@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IntegrationError } from '@cortex/core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runTool } from '../index';
-import { payrollTeamOverview } from './team-overview';
 import type { ToolContext } from '../types';
+import { payrollTeamOverview } from './team-overview';
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   const fromBuilder = {
@@ -74,10 +74,13 @@ describe('payroll.team_overview', () => {
   });
 
   it('happy path: calls payroll internal API and returns validated overview', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => mockOverview,
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockOverview,
+      }),
+    );
 
     const ctx = makeCtx();
     const result = await runTool(payrollTeamOverview, {}, ctx);
@@ -101,11 +104,14 @@ describe('payroll.team_overview', () => {
   });
 
   it('throws IntegrationError when payroll returns non-ok', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
-      text: async () => 'service unavailable',
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        text: async () => 'service unavailable',
+      }),
+    );
 
     const ctx = makeCtx();
     await expect(runTool(payrollTeamOverview, {}, ctx)).rejects.toBeInstanceOf(IntegrationError);

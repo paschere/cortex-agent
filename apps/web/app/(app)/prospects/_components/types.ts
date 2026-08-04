@@ -37,31 +37,6 @@ export interface Prospect {
   reviewerName: string | null;
 }
 
-/** What an Apollo company lookup gives back, trimmed to what the card shows. */
-export interface CompanyProfile {
-  apolloId: string | null;
-  name: string | null;
-  domain: string | null;
-  website: string | null;
-  linkedinUrl: string | null;
-  industry: string | null;
-  employees: number | null;
-  location: string | null;
-  foundedYear: number | null;
-  annualRevenue: string | null;
-  totalFunding: string | null;
-  latestFundingStage: string | null;
-  technologies: string[];
-}
-
-export interface NewsItem {
-  headline: string | null;
-  url: string | null;
-  publisher: string | null;
-  publishedAt: string | null;
-  categories: string[];
-}
-
 /**
  * Every action returns this instead of throwing. A thrown server action reaches
  * the browser as an opaque "an error occurred" in production, and a card that

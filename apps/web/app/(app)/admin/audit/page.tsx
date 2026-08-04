@@ -1,19 +1,19 @@
-import Link from 'next/link';
-import { Download, ScrollText, ShieldAlert } from 'lucide-react';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
 import {
   type AuditFilters,
+  auditHref,
   auditSearchParams,
   describeAuditFilters,
   fetchAuditEvents,
   fetchUserNames,
-  auditHref,
   parseAuditFilters,
 } from '@/app/api/admin/_lib/audit-filters';
-import { FilterBar } from './_components/FilterBar';
+import { PageHeader } from '@/components/ui/page-header';
+import { Panel } from '@/components/ui/panel';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { Download, ScrollText, ShieldAlert } from 'lucide-react';
+import Link from 'next/link';
 import { AuditTable } from './_components/AuditTable';
+import { FilterBar } from './_components/FilterBar';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +32,9 @@ function EmptyState({ filters }: { filters: AuditFilters }) {
     <div className="px-4 py-12 text-center">
       <ScrollText className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
       <p className="text-[13px] font-semibold text-ink">
-        {unfiltered ? 'Todavía no se ha registrado nada' : 'Ningún evento coincide con estos filtros'}
+        {unfiltered
+          ? 'Todavía no se ha registrado nada'
+          : 'Ningún evento coincide con estos filtros'}
       </p>
       <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
         {unfiltered
@@ -64,7 +66,10 @@ export default async function AuditPage({
     count: true,
   });
 
-  const userNames = await fetchUserNames(sb, rows.map((e) => e.user_id));
+  const userNames = await fetchUserNames(
+    sb,
+    rows.map((e) => e.user_id),
+  );
 
   // Status counts + tool families come from the loaded window — cheap, and they
   // describe exactly what the auditor can see.

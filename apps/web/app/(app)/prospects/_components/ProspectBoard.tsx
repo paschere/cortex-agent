@@ -19,11 +19,9 @@ const ANY = 'all';
 export function ProspectBoard({
   prospects,
   truncated,
-  apolloAvailable,
 }: {
   prospects: Prospect[];
   truncated: boolean;
-  apolloAvailable: boolean;
 }) {
   // The default view is the work, not the archive.
   const [status, setStatus] = useState<SignalStatus | typeof ANY>('new');
@@ -118,7 +116,7 @@ export function ProspectBoard({
       ...m,
       [prospect.id]: {
         status: next,
-        reviewerName: 'you',
+        reviewerName: 'ti',
         reviewedAt: new Date().toISOString(),
       },
     }));
@@ -224,9 +222,9 @@ export function ProspectBoard({
         </div>
 
         <p className="mt-3 text-[11.5px] leading-relaxed text-ink-muted">
-          Cortex barre los portales de empleo cada semana y deja lo que encuentra en{' '}
-          <b>Nuevos</b>. De ahí solo se mueve: una empresa descartada se queda en Descartados para
-          que nadie vuelva a perder una tarde investigándola.
+          Cortex barre los portales de empleo cada semana y deja lo que encuentra en <b>Nuevos</b>.
+          De ahí solo se mueve: una empresa descartada se queda en Descartados para que nadie vuelva
+          a perder una tarde investigándola.
         </p>
       </Panel>
 
@@ -300,7 +298,6 @@ export function ProspectBoard({
               prospect={p}
               busyWith={busy[p.id] ?? null}
               error={errors[p.id] ?? null}
-              apolloAvailable={apolloAvailable}
               filedAway={pinned.has(p.id) && status !== ANY && p.status !== status}
               onMove={(next) => move(p, next)}
             />

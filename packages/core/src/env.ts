@@ -24,8 +24,6 @@ const schema = z.object({
   // not a reason to refuse to boot. GOOGLE_GENERATIVE_AI_API_KEY used to be
   // required here for the same job and is gone — nothing reads Gemini any more.
   VOYAGE_API_KEY: z.string().min(1).optional(),
-  RATE_ESTIMATOR_URL: z.string().url(),
-  RATE_ESTIMATOR_SERVICE_TOKEN: z.string().min(1),
   PAYROLL_API_URL: z.string().url().optional(),
   PAYROLL_API_TOKEN: z.string().min(1).optional(),
   // Optional so the app can boot before Inngest Cloud is wired; the

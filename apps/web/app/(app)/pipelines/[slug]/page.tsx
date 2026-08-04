@@ -1,11 +1,21 @@
-import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { ArrowLeft, Archive, Hash, Play, UserCheck, Wrench, CheckCircle2, XCircle, CircleDashed } from 'lucide-react';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { requireSession } from '@/lib/session';
 import { chipClass } from '@/lib/status-chip';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import {
+  Archive,
+  ArrowLeft,
+  CheckCircle2,
+  CircleDashed,
+  Hash,
+  Play,
+  UserCheck,
+  Wrench,
+  XCircle,
+} from 'lucide-react';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { PipelineHeaderActions } from '../_components/PipelineHeaderActions';
 import { RunItPanel } from '../_components/RunItPanel';
 import type { ParamDef, StepDef } from '../_lib/playbook';
@@ -73,19 +83,20 @@ export default async function PipelineDetailPage({
             {p.name as string}
             {archived && (
               <span className={`${chipClass('neutral')} gap-1`}>
-                <Archive className="h-3 w-3" /> Archived
+                <Archive className="h-3 w-3" /> Archivado
               </span>
             )}
           </h1>
           <p className="mt-0.5 text-[13px] text-ink-muted">
-            {(p.description as string) || 'No description yet — add one when you next edit it.'}
+            {(p.description as string) ||
+              'Sin descripción todavía. Agrégale una la próxima vez que lo edites.'}
           </p>
           <div className="tabular mt-2 flex flex-wrap items-center gap-3 text-[11px] text-ink-faint">
             <span>{p.slug as string}</span>
             <span className="inline-flex items-center gap-1">
-              <Play className="h-3.5 w-3.5" /> {p.times_run as number} runs
+              <Play className="h-3.5 w-3.5" /> {p.times_run as number} ejecuciones
             </span>
-            {p.last_run_at ? <span>last {relativeTime(p.last_run_at as string)}</span> : null}
+            {p.last_run_at ? <span>última {relativeTime(p.last_run_at as string)}</span> : null}
           </div>
         </div>
         <PipelineHeaderActions slug={p.slug as string} archived={archived} />
@@ -94,22 +105,22 @@ export default async function PipelineDetailPage({
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         {/* The flow: numbered steps, amber nodes where a person has to decide. */}
         <Panel className="p-5">
-          <div className="field-label mb-4">The flow</div>
+          <div className="field-label mb-4">El flujo</div>
           {(p.intro as string) && (
             <p className="mb-5 rounded-card border border-border bg-surface-2 px-4 py-3 text-[13px] leading-relaxed text-ink-muted">
               {p.intro as string}
             </p>
           )}
           {steps.length === 0 ? (
-            <p className="text-[13px] text-ink-faint">
-              Legacy pipeline (free-form instruction).{' '}
+            <p className="text-[13px] text-ink-muted">
+              Este pipeline es de la versión vieja: una instrucción libre, sin pasos.{' '}
               <Link
                 href={`/pipelines/${p.slug as string}/edit`}
                 className="font-semibold text-primary hover:text-primary-strong"
               >
-                Rebuild it with structured steps
-              </Link>
-              .
+                Vuélvelo a armar con pasos
+              </Link>{' '}
+              para poder ver el flujo aquí.
             </p>
           ) : (
             <ol className="relative space-y-0">
@@ -133,10 +144,14 @@ export default async function PipelineDetailPage({
                     )}
                     <div className="min-w-0 flex-1 pt-1">
                       {s.checkpoint && (
-                        <div className="field-label mb-0.5 text-amber">Checkpoint · you decide</div>
+                        <div className="field-label mb-0.5 text-amber">
+                          Punto de control · decides tú
+                        </div>
                       )}
                       <div className="text-[13.5px] font-bold text-ink">{s.title}</div>
-                      <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">{s.detail}</p>
+                      <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+                        {s.detail}
+                      </p>
                       {(s.tools ?? []).length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {(s.tools ?? []).map((t) => (
@@ -165,7 +180,7 @@ export default async function PipelineDetailPage({
           {/* Params */}
           {pipelineParams.length > 0 && (
             <Panel className="p-4">
-              <div className="field-label mb-2.5">Parameters</div>
+              <div className="field-label mb-2.5">Parámetros</div>
               <ul className="space-y-2">
                 {pipelineParams.map((param) => (
                   <li key={param.name} className="text-[12.5px]">
@@ -185,11 +200,11 @@ export default async function PipelineDetailPage({
 
           {/* Run history */}
           <Panel className="p-4">
-            <div className="field-label mb-2.5">Recent runs</div>
+            <div className="field-label mb-2.5">Ejecuciones recientes</div>
             {runs.length === 0 ? (
               <p className="text-[12px] leading-relaxed text-ink-muted">
-                Nobody has run this yet. Copy the prompt above and say it to Cortex — the run and
-                who started it show up here.
+                Nadie lo ha ejecutado. Copia la frase de arriba y dísela a Cortex: la ejecución y
+                quién la lanzó aparecen aquí.
               </p>
             ) : (
               <ul className="space-y-3">
@@ -206,13 +221,15 @@ export default async function PipelineDetailPage({
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="text-[12px] font-semibold text-ink">
-                          {u?.name || u?.email || 'Unknown'}{' '}
+                          {u?.name || u?.email || 'Desconocido'}{' '}
                           <span className="tabular font-normal text-ink-faint">
                             · {relativeTime(r.started_at)}
                           </span>
                         </div>
                         {r.summary && (
-                          <p className="mt-0.5 text-[11.5px] leading-snug text-ink-muted">{r.summary}</p>
+                          <p className="mt-0.5 text-[11.5px] leading-snug text-ink-muted">
+                            {r.summary}
+                          </p>
                         )}
                         {Object.keys(r.args ?? {}).length > 0 && (
                           <p className="mt-0.5 truncate font-mono text-[10.5px] text-ink-faint">

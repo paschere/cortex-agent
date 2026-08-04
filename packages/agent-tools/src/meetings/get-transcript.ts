@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { registerTool } from '../index';
 import { fetchEvent, normalizeEvent } from '../gcal/events';
+import { registerTool } from '../index';
 import {
   MEET_READONLY_SCOPE,
   fetchSpaceMeetingCode,
@@ -35,10 +35,7 @@ export const meetingsGetTranscript = registerTool({
   inputSchema: z
     .object({
       eventId: z.string().optional().describe('Calendar entry id for the meeting'),
-      meetCode: z
-        .string()
-        .optional()
-        .describe('Meet code from the join link, e.g. "abc-defg-hij"'),
+      meetCode: z.string().optional().describe('Meet code from the join link, e.g. "abc-defg-hij"'),
       calendarId: z.string().default('primary'),
       maxChars: z
         .number()
@@ -87,7 +84,10 @@ export const meetingsGetTranscript = registerTool({
     const maxChars = input.maxChars ?? 20_000;
     const lookbackDays = input.lookbackDays ?? 30;
 
-    const empty = (note: string, extra: Partial<{ title: string | null; meetingCode: string | null }> = {}) => ({
+    const empty = (
+      note: string,
+      extra: Partial<{ title: string | null; meetingCode: string | null }> = {},
+    ) => ({
       available: false,
       note,
       eventId: input.eventId ?? null,
@@ -160,7 +160,9 @@ export const meetingsGetTranscript = registerTool({
           );
         }
 
-        const names = [...new Set(participants.map((p) => p.displayName).filter(Boolean))] as string[];
+        const names = [
+          ...new Set(participants.map((p) => p.displayName).filter(Boolean)),
+        ] as string[];
         const duration = recordDurationMinutes(record);
         const note = text.truncated
           ? `Transcript found. Showing the first ${maxChars.toLocaleString()} characters of a longer conversation.`

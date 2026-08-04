@@ -40,8 +40,6 @@ const NON_TOOL_IDS = new Set(['__agent_turn']);
 
 const FAMILY_LABELS: Record<string, string> = {
   hubspot: 'the CRM',
-  recruit: 'the talent pool',
-  workable: 'the ATS',
   gmail: 'email',
   gcal: 'the calendar',
   gsheets: 'spreadsheets',
@@ -51,11 +49,8 @@ const FAMILY_LABELS: Record<string, string> = {
   slack: 'Slack',
   growth: 'growth signals',
   payroll: 'payroll',
-  bamboo: 'BambooHR',
   people: 'the team roster',
-  rate: 'the rate calculator',
   kb: 'Brain Knowledge',
-  apollo: 'prospect research',
   pipeline: 'pipelines',
   schedule: 'routines',
   web: 'web research',

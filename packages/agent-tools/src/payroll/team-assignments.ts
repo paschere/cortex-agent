@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { fetchTeamAssignments } from './client';
-import { BAMBOO_BOUNDARY_NOTE, COMP_SENSITIVITY_NOTE } from './sensitive';
+import { COMP_SENSITIVITY_NOTE, PAYROLL_SOURCE_NOTE } from './sensitive';
 
 function money(n: number | null | undefined): string {
   if (typeof n !== 'number' || !Number.isFinite(n)) return 'N/A';
@@ -14,8 +14,8 @@ export const payrollTeamAssignments = registerTool({
     'List the people currently working at the company and which client each one is placed with — name, client, division (Tech / Non-tech / Internal), job title, currency, start date, how long they have been here, and their monthly rate. ' +
     'Use this for questions like "who is assigned to <client>", "who works on the <client> team", "who joined recently", or "what does the team for <client> cost us per month". ' +
     'Filter with client, division, or q (a name / email / job-title search). ' +
-    'For a plain "who works here / who is on X" list with no money in it, bamboo.list_employees is the cheaper and less sensitive answer; use this one when the monthly cost is part of the question. ' +
-    `${BAMBOO_BOUNDARY_NOTE} ` +
+    'It always carries the monthly cost, so it is a compensation read even when the question was only "who is on X" — treat it as such. ' +
+    `${PAYROLL_SOURCE_NOTE} ` +
     COMP_SENSITIVITY_NOTE,
   inputSchema: z.object({
     client: z

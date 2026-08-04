@@ -1,10 +1,10 @@
-import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import Link from 'next/link';
-import { Workflow, Play, Hash, Clock, UserCheck, Plus, Archive, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { requireSession } from '@/lib/session';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { Archive, ChevronRight, Clock, Hash, Play, Plus, UserCheck, Workflow } from 'lucide-react';
+import Link from 'next/link';
 import { PipelineCardMenu } from './_components/PipelineCardMenu';
 
 interface ParamDef {
@@ -49,14 +49,14 @@ export default async function PipelinesPage() {
     <>
       <PageHeader
         title="Pipelines"
-        subtitle="Reusable playbooks — build one here or in chat, run it anywhere: web, Claude, or on a schedule"
+        subtitle="Guiones reutilizables. Arma uno aquí o en el chat y ejecútalo donde quieras: en la web, en Claude o de forma programada."
         icon={<Workflow className="h-5 w-5" />}
         actions={
           <Link
             href="/pipelines/new"
             className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
           >
-            <Plus className="h-4 w-4" /> New pipeline
+            <Plus className="h-4 w-4" /> Nuevo pipeline
           </Link>
         }
       />
@@ -64,25 +64,27 @@ export default async function PipelinesPage() {
       {pipelines.length === 0 ? (
         <Panel className="p-10 text-center text-[13px] text-ink-muted">
           <Workflow className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <p className="mb-1 text-[15px] font-bold text-ink">No pipelines yet</p>
+          <p className="mb-1 text-[15px] font-bold text-ink">Todavía no hay pipelines</p>
           <p className="mx-auto max-w-md leading-relaxed">
-            A pipeline is a playbook you write once and run anywhere — here, in Claude, or on a
-            schedule. Build one step by step, or ask Cortex in chat: <em>&ldquo;Create a pipeline
-            that every Friday prepares each client&apos;s active-candidates report and drafts the
-            emails for my approval.&rdquo;</em>
+            Un pipeline es un guion que escribes una vez y ejecutas donde quieras: aquí, en Claude o
+            de forma programada. Ármalo paso a paso, o pídeselo a Cortex en el chat:{' '}
+            <em>
+              &ldquo;Crea un pipeline que cada viernes prepare el reporte de candidatos activos de
+              cada cliente y me deje los correos listos para aprobar.&rdquo;
+            </em>
           </p>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
             <Link
               href="/pipelines/new"
               className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
             >
-              <Plus className="h-3.5 w-3.5" /> New pipeline
+              <Plus className="h-3.5 w-3.5" /> Nuevo pipeline
             </Link>
             <Link
               href="/chat"
               className="rounded-card border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2"
             >
-              Ask Cortex in chat
+              Pedírselo a Cortex en el chat
             </Link>
           </div>
         </Panel>
@@ -99,7 +101,7 @@ export default async function PipelinesPage() {
           <summary className="field-label flex cursor-pointer list-none items-center gap-2 transition-colors hover:text-ink">
             <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
             <Archive className="h-3.5 w-3.5" />
-            Archived ({archived.length})
+            Archivados ({archived.length})
           </summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {archived.map((p) => (
@@ -133,7 +135,9 @@ function PipelineCard({ p }: { p: PipelineRow }) {
           </div>
 
           {p.description && (
-            <p className="line-clamp-2 text-[12.5px] leading-snug text-ink-muted">{p.description}</p>
+            <p className="line-clamp-2 text-[12.5px] leading-snug text-ink-muted">
+              {p.description}
+            </p>
           )}
 
           {/* Step track: one mark per step, amber = a person has to decide. */}
@@ -176,17 +180,19 @@ function PipelineCard({ p }: { p: PipelineRow }) {
           <div className="tabular mt-auto flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-ink-faint">
             <span className="inline-flex items-center gap-1">
               <Play className="h-3.5 w-3.5" />
-              {p.times_run} run{p.times_run === 1 ? '' : 's'}
+              {p.times_run} {p.times_run === 1 ? 'ejecución' : 'ejecuciones'}
             </span>
             <span className="inline-flex items-center gap-1">
               {p.archived ? (
                 <>
-                  <Archive className="h-3.5 w-3.5" /> archived
+                  <Archive className="h-3.5 w-3.5" /> archivado
                 </>
               ) : (
                 <>
                   <Clock className="h-3.5 w-3.5" />
-                  {p.last_run_at ? `last ${relativeTime(p.last_run_at)}` : 'never run'}
+                  {p.last_run_at
+                    ? `última ${relativeTime(p.last_run_at)}`
+                    : 'nunca se ha ejecutado'}
                 </>
               )}
             </span>

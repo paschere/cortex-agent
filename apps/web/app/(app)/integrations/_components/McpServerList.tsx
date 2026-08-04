@@ -26,7 +26,8 @@ function authBadge(t: McpServer['auth_type']): string {
 }
 
 /** A ruled tag on the row: squared, bordered, never a shadow. */
-const TAG = 'rounded-card border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]';
+const TAG =
+  'rounded-card border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]';
 
 export function McpServerList({ servers }: { servers: McpServer[] }) {
   if (servers.length === 0) {
@@ -127,10 +128,15 @@ function McpServerRow({ server }: { server: McpServer }) {
               {server.tool_count} {server.tool_count === 1 ? 'herramienta' : 'herramientas'}
             </span>
             {!server.enabled && (
-              <span className={clsx(TAG, 'border-amber/40 bg-amber-soft text-amber')}>En pausa</span>
+              <span className={clsx(TAG, 'border-amber/40 bg-amber-soft text-amber')}>
+                En pausa
+              </span>
             )}
           </div>
-          <p className="tabular mt-1 max-w-md truncate text-[11px] text-ink-faint" title={server.url}>
+          <p
+            className="tabular mt-1 max-w-md truncate text-[11px] text-ink-faint"
+            title={server.url}
+          >
             {server.url}
           </p>
         </div>

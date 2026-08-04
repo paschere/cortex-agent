@@ -1,7 +1,7 @@
 import { Panel } from '@/components/ui/panel';
 import { Provenance } from '@/components/ui/provenance';
-import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { requireSession } from '@/lib/session';
+import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   AlarmClock,
@@ -165,7 +165,9 @@ export default async function RoutineDetailPage({
         <div className="min-w-0 flex-1 basis-[18rem]">
           <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold tracking-tight text-ink">
             {job.name}
-            <span className={chipClass(STATUS_TONE[job.status])}>{JOB_STATUS_LABEL[job.status]}</span>
+            <span className={chipClass(STATUS_TONE[job.status])}>
+              {JOB_STATUS_LABEL[job.status]}
+            </span>
             {job.isGlobal && (
               <span
                 className={chipClass('primary')}

@@ -6,7 +6,7 @@ export const gmailSearch = registerTool({
   id: 'gmail.search',
   description:
     'Search the user\'s Gmail with a Gmail query string (e.g., "from:foo subject:bar newer_than:30d"). Returns subject, snippet, from, and date per thread. ' +
-    'gmail.list_threads runs the same search and returns the same rows plus the To: header, and takes a contact\'s address directly instead of making you write the query — prefer it when you are looking at correspondence with a particular person.',
+    "gmail.list_threads runs the same search and returns the same rows plus the To: header, and takes a contact's address directly instead of making you write the query — prefer it when you are looking at correspondence with a particular person.",
   inputSchema: z.object({
     query: z.string().min(1),
     maxResults: z.number().int().min(1).max(25).default(10),
@@ -22,7 +22,9 @@ export const gmailSearch = registerTool({
       }),
     ),
   }),
-  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] }],
+  requiredScopes: [
+    { provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] },
+  ],
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     type ThreadList = { threads?: Array<{ id: string; snippet?: string }> };
@@ -31,7 +33,13 @@ export const gmailSearch = registerTool({
       `/threads?q=${encodeURIComponent(input.query)}&maxResults=${input.maxResults}`,
     );
 
-    const out: Array<{ id: string; snippet: string; from: string | null; subject: string | null; date: string | null }> = [];
+    const out: Array<{
+      id: string;
+      snippet: string;
+      from: string | null;
+      subject: string | null;
+      date: string | null;
+    }> = [];
 
     for (const t of list.threads ?? []) {
       type ThreadMeta = {

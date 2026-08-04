@@ -1,15 +1,15 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { ConfirmationRequiredError, logger } from '@cortex/core';
 import {
-  runTool,
-  getTool,
+  type ExternalServerRow,
+  type ToolContext,
+  callExternalTool,
   createIntegrationsClient,
   fetchEnabledExternalTools,
-  callExternalTool,
-  type ToolContext,
-  type ExternalServerRow,
+  getTool,
+  runTool,
 } from '@cortex/agent-tools';
-import { loadAgent, getAgentTools } from '@cortex/agents';
+import { getAgentTools, loadAgent } from '@cortex/agents';
+import { ConfirmationRequiredError, logger } from '@cortex/core';
+import { type SupabaseClient, createClient } from '@supabase/supabase-js';
 // Side-effect import: register all built-in tools
 import '@cortex/agent-tools';
 import type { Env } from './index';
@@ -138,9 +138,8 @@ async function resolveAgentSlug(sb: SupabaseClient, agentId: string | null): Pro
 function hydrateProcessEnv(env: Env) {
   // Cloudflare doesn't have a real process.env. Workers polyfill via nodejs_compat
   // provides a stub. Make sure the env vars getEnv() expects are present.
-  const target = (
-    globalThis as unknown as { process?: { env?: Record<string, string> } }
-  ).process?.env;
+  const target = (globalThis as unknown as { process?: { env?: Record<string, string> } }).process
+    ?.env;
   if (!target) return;
   target.NEXT_PUBLIC_SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
   target.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -150,8 +149,6 @@ function hydrateProcessEnv(env: Env) {
   target.HUBSPOT_CLIENT_ID = env.HUBSPOT_CLIENT_ID;
   target.HUBSPOT_CLIENT_SECRET = env.HUBSPOT_CLIENT_SECRET;
   if (env.VOYAGE_API_KEY) target.VOYAGE_API_KEY = env.VOYAGE_API_KEY;
-  target.RATE_ESTIMATOR_URL = env.RATE_ESTIMATOR_URL;
-  target.RATE_ESTIMATOR_SERVICE_TOKEN = env.RATE_ESTIMATOR_SERVICE_TOKEN;
   if (env.PAYROLL_API_URL) target.PAYROLL_API_URL = env.PAYROLL_API_URL;
   if (env.PAYROLL_API_TOKEN) target.PAYROLL_API_TOKEN = env.PAYROLL_API_TOKEN;
 }

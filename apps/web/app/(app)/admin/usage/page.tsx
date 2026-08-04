@@ -1,11 +1,11 @@
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import Link from 'next/link';
-import { BarChart3, Zap, AlertTriangle, Users, Timer, CheckCircle2, Cpu } from 'lucide-react';
+import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
-import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
-import { LegendDot, RISK_BAR, SURFACE_BAR } from '../audit/_components/tags';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { AlertTriangle, BarChart3, CheckCircle2, Cpu, Timer, Users, Zap } from 'lucide-react';
+import Link from 'next/link';
 import { formatTokens, turnTokens } from '../audit/_components/format';
+import { LegendDot, RISK_BAR, SURFACE_BAR } from '../audit/_components/tags';
 
 interface AuditEvent {
   user_id: string;
@@ -30,7 +30,8 @@ const RANGES = [7, 14, 30] as const;
 const SURFACE_KEYS = ['web', 'mcp', 'schedule', 'unknown'] as const;
 const RISK_KEYS = ['low', 'medium', 'high', 'critical'] as const;
 
-const SELECT_FULL = 'user_id, tool_id, status, latency_ms, created_at, surface, risk_level, metadata';
+const SELECT_FULL =
+  'user_id, tool_id, status, latency_ms, created_at, surface, risk_level, metadata';
 const SELECT_LEGACY = 'user_id, tool_id, status, latency_ms, created_at, metadata';
 
 /** Horizontal stacked bar + legend, built from plain divs. */
@@ -101,16 +102,18 @@ export default async function UsagePage({
   let res = await run(SELECT_FULL);
   if (res.error) res = await run(SELECT_LEGACY);
 
-  const rows: AuditEvent[] = ((res.data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
-    user_id: String(r.user_id ?? ''),
-    tool_id: String(r.tool_id ?? ''),
-    status: String(r.status ?? ''),
-    latency_ms: Number(r.latency_ms ?? 0),
-    created_at: String(r.created_at ?? ''),
-    surface: (r.surface as string | null) ?? null,
-    risk_level: (r.risk_level as string | null) ?? null,
-    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
-  }));
+  const rows: AuditEvent[] = ((res.data ?? []) as unknown as Record<string, unknown>[]).map(
+    (r) => ({
+      user_id: String(r.user_id ?? ''),
+      tool_id: String(r.tool_id ?? ''),
+      status: String(r.status ?? ''),
+      latency_ms: Number(r.latency_ms ?? 0),
+      created_at: String(r.created_at ?? ''),
+      surface: (r.surface as string | null) ?? null,
+      risk_level: (r.risk_level as string | null) ?? null,
+      metadata: (r.metadata as Record<string, unknown> | null) ?? null,
+    }),
+  );
 
   // Aggregations
   const byTool: Record<string, { count: number; errors: number; latencies: number[] }> = {};
@@ -171,7 +174,8 @@ export default async function UsagePage({
     return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0;
   };
 
-  const successRate = okCount + errorCount > 0 ? Math.round((okCount / (okCount + errorCount)) * 100) : 100;
+  const successRate =
+    okCount + errorCount > 0 ? Math.round((okCount / (okCount + errorCount)) * 100) : 100;
   const p50 = pct(allLatencies, 0.5);
   const p95 = pct(allLatencies, 0.95);
 
@@ -184,9 +188,13 @@ export default async function UsagePage({
     );
   }
 
-  const toolEntries = Object.entries(byTool).sort((a, b) => b[1].count - a[1].count).slice(0, 15);
+  const toolEntries = Object.entries(byTool)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 15);
   const maxToolCount = toolEntries[0]?.[1].count ?? 1;
-  const userEntries = Object.entries(byUser).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const userEntries = Object.entries(byUser)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
   const maxUserCount = userEntries[0]?.[1] ?? 1;
 
   // Day series, oldest → newest, filling gaps
@@ -264,8 +272,8 @@ export default async function UsagePage({
       <div className="space-y-4">
         {/* Hairlines come from the gap showing the border colour through, so the
             rules stay correct at every breakpoint the grid reflows to. */}
-        <Panel className="overflow-hidden bg-border">
-          <div className="grid grid-cols-2 gap-px lg:grid-cols-5">
+        <Panel className="overflow-hidden">
+          <div className="grid grid-cols-2 gap-px bg-border lg:grid-cols-5">
             {stats.map((s) => (
               <div key={s.label} className="bg-surface p-4">
                 <div className="flex items-center gap-1.5">
@@ -299,7 +307,10 @@ export default async function UsagePage({
                 >
                   <div className="flex h-28 flex-col justify-end overflow-hidden">
                     <div className="w-full bg-rose" style={{ height: `${errH}%` }} />
-                    <div className="w-full bg-primary" style={{ height: `${Math.max(total > 0 ? 2 : 0, h - errH)}%` }} />
+                    <div
+                      className="w-full bg-primary"
+                      style={{ height: `${Math.max(total > 0 ? 2 : 0, h - errH)}%` }}
+                    />
                   </div>
                 </div>
               );
@@ -425,7 +436,9 @@ export default async function UsagePage({
                       <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
                         <div
                           className={t.errors > 0 ? 'h-full bg-amber' : 'h-full bg-primary'}
-                          style={{ width: `${Math.max(3, Math.round((t.count / maxToolCount) * 100))}%` }}
+                          style={{
+                            width: `${Math.max(3, Math.round((t.count / maxToolCount) * 100))}%`,
+                          }}
                         />
                       </div>
                     </li>
@@ -455,7 +468,9 @@ export default async function UsagePage({
                     <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
                       <div
                         className="h-full bg-primary"
-                        style={{ width: `${Math.max(3, Math.round((count / maxUserCount) * 100))}%` }}
+                        style={{
+                          width: `${Math.max(3, Math.round((count / maxUserCount) * 100))}%`,
+                        }}
                       />
                     </div>
                   </li>

@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { Panel } from '@/components/ui/panel';
 import {
   BLAST_LABEL,
@@ -14,18 +15,15 @@ import {
   qualifiedToolLabel,
   toolActionLabel,
 } from '@/lib/tool-taxonomy';
-import { Button } from '@/components/ui/button';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
   BookOpen,
   Bot,
   Building2,
-  Calculator,
   CalendarDays,
   Car,
   ChevronDown,
-  ClipboardList,
   FileText,
   FolderOpen,
   Gauge,
@@ -39,7 +37,6 @@ import {
   MessagesSquare,
   Mic,
   PlugZap,
-  Rocket,
   Search,
   Send,
   ShieldAlert,
@@ -49,7 +46,6 @@ import {
   Table2,
   TrendingUp,
   Type,
-  UserSearch,
   Users,
   Users2,
   UsersRound,
@@ -106,10 +102,8 @@ const FAMILY_ICONS: Record<string, typeof Wrench> = {
   AlarmClock,
   BookOpen,
   Building2,
-  Calculator,
   CalendarDays,
   Car,
-  ClipboardList,
   FileText,
   FolderOpen,
   GitBranch,
@@ -120,7 +114,6 @@ const FAMILY_ICONS: Record<string, typeof Wrench> = {
   MessageSquare,
   MessagesSquare,
   Mic,
-  Rocket,
   ShieldCheck,
   Sparkles,
   SquareKanban,
@@ -128,7 +121,6 @@ const FAMILY_ICONS: Record<string, typeof Wrench> = {
   TrendingUp,
   Type,
   Users,
-  UserSearch,
   Wallet,
   Workflow,
   Wrench,
@@ -558,17 +550,17 @@ export function ToolsCatalog({
                           {familyPattern}
                         </span>
                         <span className="text-[10.5px] text-ink-faint">
-                          <span className="tabular">{list.length}</span> tool
-                          {list.length === 1 ? '' : 's'}
+                          <span className="tabular">{list.length}</span>{' '}
+                          {list.length === 1 ? 'herramienta' : 'herramientas'}
                         </span>
                         {approvals > 0 && (
                           <span className="text-[10.5px] font-semibold text-amber">
-                            <span className="tabular">{approvals}</span> need approval
+                            <span className="tabular">{approvals}</span> piden confirmación
                           </span>
                         )}
                         {restricted > 0 && (
                           <span className="text-[10.5px] font-semibold text-rose">
-                            <span className="tabular">{restricted}</span> restricted
+                            <span className="tabular">{restricted}</span> bloqueadas
                           </span>
                         )}
                       </span>
@@ -588,7 +580,7 @@ export function ToolsCatalog({
                       <Toggle
                         on={!familyBlocked}
                         disabled={savingPattern === familyPattern}
-                        label={`${familyBlocked ? 'Allow' : 'Block'} the whole ${meta.name} family for ${selectedTeam.name}`}
+                        label={`${familyBlocked ? 'Permitir' : 'Bloquear'} toda la familia ${meta.name} para ${selectedTeam.name}`}
                         onClick={() => setPermission(familyPattern, familyBlocked)}
                       />
                       <span
@@ -597,7 +589,7 @@ export function ToolsCatalog({
                           familyBlocked ? 'text-rose' : 'text-ink-faint',
                         )}
                       >
-                        {familyBlocked ? 'Family blocked' : 'Whole family'}
+                        {familyBlocked ? 'Familia bloqueada' : 'Toda la familia'}
                       </span>
                     </div>
                   )}
@@ -639,7 +631,7 @@ export function ToolsCatalog({
                                 title={[
                                   `${SENSITIVITY_LABEL[t.sensitivity]} · ${BLAST_LABEL[t.blastRadius]}`,
                                   t.outboundRiskLevel
-                                    ? `Rises to ${RISK_LABEL[t.outboundRiskLevel].toLowerCase()} when addressed outside the company`
+                                    ? `Sube a ${RISK_LABEL[t.outboundRiskLevel].toLowerCase()} cuando va dirigida por fuera de la empresa`
                                     : null,
                                 ]
                                   .filter(Boolean)
@@ -657,23 +649,21 @@ export function ToolsCatalog({
                                   icon={Send}
                                   title={
                                     t.outboundRiskLevel
-                                      ? `Scored ${RISK_LABEL[t.outboundRiskLevel].toLowerCase()} once it is addressed to someone outside the company`
-                                      : 'Content reaches people outside the company'
+                                      ? `Puntúa ${RISK_LABEL[t.outboundRiskLevel].toLowerCase()} apenas va dirigida a alguien fuera de la empresa`
+                                      : 'El contenido llega a gente fuera de la empresa'
                                   }
                                 >
-                                  Can leave the company
+                                  Puede salir de la empresa
                                 </Badge>
                               ) : (
-                                <Badge className={NEUTRAL_CHIP}>
-                                  {BLAST_LABEL[t.blastRadius]}
-                                </Badge>
+                                <Badge className={NEUTRAL_CHIP}>{BLAST_LABEL[t.blastRadius]}</Badge>
                               )}
                               {t.needsApproval ? (
                                 <Badge className={WARN_CHIP} icon={ShieldAlert}>
-                                  Needs approval
+                                  Pide confirmación
                                 </Badge>
                               ) : (
-                                <Badge className={OK_CHIP}>Runs without approval</Badge>
+                                <Badge className={OK_CHIP}>Corre sin confirmar</Badge>
                               )}
                               {t.providers.map((p) => {
                                 const missing = t.missingProviders.includes(p);
@@ -684,12 +674,12 @@ export function ToolsCatalog({
                                     className={missing ? WARN_CHIP : OK_CHIP}
                                     title={
                                       missing
-                                        ? `${providerLabel(p)} is not connected on your account — connect it in Integrations`
-                                        : `${providerLabel(p)} is connected`
+                                        ? `${providerLabel(p)} no está conectado en tu cuenta. Conéctalo en Integraciones`
+                                        : `${providerLabel(p)} está conectado`
                                     }
                                   >
                                     {providerLabel(p)}
-                                    {missing ? ' not connected' : ''}
+                                    {missing ? ' sin conectar' : ''}
                                   </Badge>
                                 );
                               })}
@@ -697,7 +687,7 @@ export function ToolsCatalog({
                                 <Badge
                                   className={clsx(NEUTRAL_CHIP, 'tabular')}
                                   icon={Gauge}
-                                  title="Rate limit per user, per minute"
+                                  title="Tope de llamadas por persona, por minuto"
                                 >
                                   {t.ratePerMinute}/min
                                 </Badge>
@@ -707,7 +697,7 @@ export function ToolsCatalog({
                                   key={name}
                                   className="border-primary/30 bg-primary-soft text-primary"
                                   icon={Bot}
-                                  title={`Exposed by the ${name} agent`}
+                                  title={`Lo expone el agente ${name}`}
                                 >
                                   {name}
                                 </Badge>
@@ -716,20 +706,20 @@ export function ToolsCatalog({
                                 <Badge
                                   className={BLOCK_CHIP}
                                   icon={Lock}
-                                  title={`Blocked for ${t.restrictedFor.join(', ')}`}
+                                  title={`Bloqueada para ${t.restrictedFor.join(', ')}`}
                                 >
-                                  Blocked for {t.restrictedFor.join(', ')}
+                                  Bloqueada para {t.restrictedFor.join(', ')}
                                 </Badge>
                               ) : (
                                 isAdmin && (
                                   <Badge className={NEUTRAL_CHIP} icon={Users2}>
-                                    All teams
+                                    Todos los equipos
                                   </Badge>
                                 )
                               )}
                               {!isAdmin && t.deniedForMe && (
                                 <Badge className={BLOCK_CHIP} icon={Lock}>
-                                  Not available to your team
+                                  No disponible para tu equipo
                                 </Badge>
                               )}
                             </div>
@@ -746,17 +736,17 @@ export function ToolsCatalog({
                               <Toggle
                                 on={!blocked}
                                 disabled={familyBlocked || savingPattern === t.id}
-                                label={`${blocked ? 'Allow' : 'Block'} ${qualifiedToolLabel(t.id)} for ${selectedTeam.name}`}
+                                label={`${blocked ? 'Permitir' : 'Bloquear'} ${qualifiedToolLabel(t.id)} para ${selectedTeam.name}`}
                                 onClick={() => setPermission(t.id, toolBlocked)}
                               />
                               {familyBlocked ? (
                                 <span className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-rose">
-                                  By family
+                                  Por familia
                                 </span>
                               ) : (
                                 toolBlocked && (
                                   <span className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-rose">
-                                    Blocked
+                                    Bloqueada
                                   </span>
                                 )
                               )}

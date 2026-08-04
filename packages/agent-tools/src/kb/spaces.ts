@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { ForbiddenError, NotFoundError } from '@cortex/core';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { embedQuery } from './embedder';
 
 /**
