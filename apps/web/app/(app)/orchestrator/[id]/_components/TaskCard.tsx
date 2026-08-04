@@ -66,11 +66,11 @@ function ToolCallRow({ call }: { call: ToolCallEntry }) {
 
       {open && (
         <div className="border-t border-border bg-canvas px-2.5 py-2">
-          <div className="field-label">Arguments</div>
+          <div className="field-label">Argumentos</div>
           <pre className="scroll-slim mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-sm border border-border bg-surface p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted">
-            {call.args || '(none)'}
+            {call.args || '(ninguno)'}
           </pre>
-          <div className="field-label mt-2">{failed ? 'Error' : 'Result'}</div>
+          <div className="field-label mt-2">{failed ? 'Error' : 'Resultado'}</div>
           <pre
             className={clsx(
               'scroll-slim mt-1 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm border p-2 font-mono text-[10.5px] leading-relaxed',
@@ -79,7 +79,7 @@ function ToolCallRow({ call }: { call: ToolCallEntry }) {
                 : 'border-border bg-surface text-ink-muted',
             )}
           >
-            {call.preview ?? (pending ? 'Still running…' : '(empty)')}
+            {call.preview ?? (pending ? 'Todavía corriendo…' : '(vacío)')}
           </pre>
         </div>
       )}
@@ -109,8 +109,11 @@ export function TaskCard({
   const evidence =
     settled && calls.length > 0
       ? {
-          source: distinctTools.length === 1 ? (distinctTools[0] as string) : `${distinctTools.length} tools`,
-          detail: `${calls.length} call${calls.length === 1 ? '' : 's'}`,
+          source:
+            distinctTools.length === 1
+              ? (distinctTools[0] as string)
+              : `${distinctTools.length} herramientas`,
+          detail: `${calls.length} ${calls.length === 1 ? 'llamada' : 'llamadas'}`,
         }
       : null;
 
@@ -138,7 +141,9 @@ export function TaskCard({
               </span>
             )}
             {task.dependsOn.length > 0 && (
-              <span>after {task.dependsOn.map((d) => `#${String(d).padStart(2, '0')}`).join(' ')}</span>
+              <span>
+                después de {task.dependsOn.map((d) => `#${String(d).padStart(2, '0')}`).join(' ')}
+              </span>
             )}
             {duration !== null && <span>{formatDuration(duration)}</span>}
             {task.tokens > 0 && <span>{task.tokens.toLocaleString()} tok</span>}
@@ -163,7 +168,7 @@ export function TaskCard({
               onClick={() => setShowBrief((v) => !v)}
               className="mt-1 text-[11px] font-semibold text-primary hover:underline"
             >
-              {showBrief ? 'Hide the brief' : 'Read the full brief'}
+              {showBrief ? 'Ocultar el encargo' : 'Leer el encargo completo'}
             </button>
           )}
         </div>
@@ -190,7 +195,7 @@ export function TaskCard({
       {calls.length > 0 && (
         <div className="border-t border-border">
           <div className="field-label flex items-center justify-between px-2.5 pt-2">
-            <span>Tool calls</span>
+            <span>Herramientas ejecutadas</span>
             <span className="tabular">{calls.length}</span>
           </div>
           <ul className="mt-1 border-t border-border">
@@ -204,7 +209,7 @@ export function TaskCard({
       {running && calls.length === 0 && (
         <div className="flex items-center gap-1.5 px-3.5 pb-3 text-[11.5px] text-ink-faint">
           <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
-          Thinking — no tool called yet.
+          Pensando: todavía no ha llamado ninguna herramienta.
         </div>
       )}
 
@@ -230,7 +235,7 @@ export function TaskCard({
                 ) : (
                   <ChevronRight className="h-3 w-3" />
                 )}
-                {showAnswer ? 'Hide the answer' : 'Read the answer'}
+                {showAnswer ? 'Ocultar la respuesta' : 'Leer la respuesta'}
               </button>
             ) : (
               <span />
@@ -257,7 +262,7 @@ export function TaskCard({
 
 /** Compact absolute stamp for the provenance mark: "04 Aug 10:18". */
 function stamp(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
+  return new Date(iso).toLocaleString('es-CO', {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',

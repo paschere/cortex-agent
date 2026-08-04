@@ -148,7 +148,7 @@ export default async function ToolsPage({
             ...new Set(
               deniedRows
                 .filter((r) => matchesPattern(t.id, r.tool_pattern))
-                .map((r) => teamNameById.get(r.team_id) ?? 'Unknown team')
+                .map((r) => teamNameById.get(r.team_id) ?? 'Equipo desconocido')
                 .filter(Boolean),
             ),
           ].sort()
@@ -198,32 +198,44 @@ export default async function ToolsPage({
    * counts in mono, each column naming what the organisation actually holds.
    */
   const stats = [
-    { label: 'Tools', value: total, sub: 'in the live registry', icon: Wrench, tone: 'text-ink' },
     {
-      label: 'Families',
+      label: 'Herramientas',
+      value: total,
+      sub: 'en el registro activo',
+      icon: Wrench,
+      tone: 'text-ink',
+    },
+    {
+      label: 'Familias',
       value: familyCount,
-      sub: 'systems Cortex reaches',
+      sub: 'sistemas a los que llega Cortex',
       icon: Layers,
       tone: 'text-ink',
     },
     {
-      label: 'Need approval',
+      label: 'Piden confirmación',
       value: approvalCount,
-      sub: 'a person confirms first',
+      sub: 'una persona aprueba primero',
       icon: ShieldAlert,
       tone: approvalCount > 0 ? 'text-amber' : 'text-ink',
     },
     {
-      label: 'Restricted',
+      label: 'Bloqueadas',
       value: restrictedCount,
-      sub: restrictedCount > 0 ? 'denied to at least one team' : 'no team blocks any tool',
+      sub:
+        restrictedCount > 0
+          ? 'bloqueadas para al menos un equipo'
+          : 'ningún equipo bloquea nada',
       icon: Lock,
       tone: restrictedCount > 0 ? 'text-rose' : 'text-emerald',
     },
     {
-      label: 'Not connected',
+      label: 'Sin conectar',
       value: needsConnectionCount,
-      sub: needsConnectionCount > 0 ? 'waiting on an integration' : 'every integration is linked',
+      sub:
+        needsConnectionCount > 0
+          ? 'esperando una integración'
+          : 'todas las integraciones están listas',
       icon: PlugZap,
       tone: needsConnectionCount > 0 ? 'text-amber' : 'text-emerald',
     },
@@ -232,8 +244,8 @@ export default async function ToolsPage({
   return (
     <>
       <PageHeader
-        title="Tools"
-        subtitle="What this organisation has enabled Cortex to do, grouped by the system it touches. Access is granted per team; risky actions ask a person first."
+        title="Herramientas"
+        subtitle="Lo que esta organización tiene habilitado en Cortex, agrupado por el sistema que toca. El acceso se da por equipo y lo riesgoso se le consulta primero a una persona."
         icon={<Wrench className="h-5 w-5" />}
       />
 

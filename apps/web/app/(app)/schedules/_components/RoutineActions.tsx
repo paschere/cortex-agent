@@ -29,7 +29,7 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
       const res = await fetch(`/api/schedules/${job.id}/run`, { method: 'POST' });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? `Request failed (${res.status})`);
+        throw new Error(body?.error ?? `La solicitud falló (${res.status}).`);
       }
       // The run happens in the background; give it a beat before re-reading.
       setTimeout(() => {
@@ -43,7 +43,7 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
   }
 
   async function act(action: 'pause' | 'resume' | 'cancel') {
-    if (action === 'cancel' && !window.confirm('Cancel this routine permanently?')) return;
+    if (action === 'cancel' && !window.confirm('¿Cancelar esta rutina para siempre?')) return;
     setBusy(true);
     setError(null);
     try {
@@ -54,7 +54,7 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? `Request failed (${res.status})`);
+        throw new Error(body?.error ?? `La solicitud falló (${res.status}).`);
       }
       router.refresh();
     } catch (err) {
@@ -73,18 +73,19 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
           disabled={running || job.status !== 'active'}
           title={
             job.status === 'active'
-              ? 'Run this routine now'
-              : `Only active routines can be run (this one is ${job.status})`
+              ? 'Ejecutar esta rutina ahora'
+              : 'Solo se pueden ejecutar las rutinas activas'
           }
           className="inline-flex items-center gap-1.5 rounded-card bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
         >
           {running ? (
             <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…
+              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />{' '}
+              Ejecutando…
             </>
           ) : (
             <>
-              <Play className="h-3.5 w-3.5" /> Run now
+              <Play className="h-3.5 w-3.5" /> Ejecutar ahora
             </>
           )}
         </button>
@@ -96,7 +97,7 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
             onClick={() => act('pause')}
             className={clsx(GHOST, 'text-ink-muted hover:bg-surface-2 hover:text-ink')}
           >
-            <Pause className="h-3.5 w-3.5" /> Pause
+            <Pause className="h-3.5 w-3.5" /> Pausar
           </button>
         )}
         {job.status === 'paused' && (
@@ -106,7 +107,7 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
             onClick={() => act('resume')}
             className={clsx(GHOST, 'text-emerald hover:bg-emerald-soft')}
           >
-            <Play className="h-3.5 w-3.5" /> Resume
+            <Play className="h-3.5 w-3.5" /> Reanudar
           </button>
         )}
 
@@ -116,7 +117,7 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
             onClick={() => setEditing(true)}
             className={clsx(GHOST, 'text-ink-muted hover:bg-surface-2 hover:text-ink')}
           >
-            <Pencil className="h-3.5 w-3.5" /> Edit
+            <Pencil className="h-3.5 w-3.5" /> Editar
           </button>
         )}
 
@@ -125,17 +126,17 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
             type="button"
             disabled={busy}
             onClick={() => act('cancel')}
-            title="Cancel permanently"
+            title="Cancelar para siempre"
             className={clsx(GHOST, 'text-rose hover:bg-rose-soft')}
           >
-            <X className="h-3.5 w-3.5" /> Cancel
+            <X className="h-3.5 w-3.5" /> Cancelar
           </button>
         )}
       </div>
 
       {error && (
         <p className="rounded-card border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
-          {error} Nothing changed — try again.
+          {error} No se cambió nada; vuelve a intentarlo.
         </p>
       )}
 

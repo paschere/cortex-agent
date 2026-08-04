@@ -146,7 +146,7 @@ export function MeetingImportPanel({ spaceId, spaceName }: { spaceId: string; sp
             placeholder="meet.google.com/abc-defg-hij"
             disabled={busy}
             aria-label="Enlace o código de Meet"
-            className="tabular h-9 w-full max-w-[280px] rounded-card border border-border bg-surface px-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none disabled:opacity-60"
+            className="tabular h-9 w-full max-w-[280px] rounded-card border border-border bg-surface px-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 disabled:opacity-60"
           />
           <Button onClick={() => void importMeeting()} disabled={busy || !code.trim()}>
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

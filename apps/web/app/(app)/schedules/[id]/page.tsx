@@ -26,7 +26,13 @@ import { LiveRelative } from '../_components/LiveRelative';
 import { RoutineActions } from '../_components/RoutineActions';
 import { RunHistory } from '../_components/RunHistory';
 import { RunMarkdown } from '../_components/RunMarkdown';
-import { fmtLong, humanizeCron, runDuration, stripMarkdown } from '../_components/format';
+import {
+  JOB_STATUS_LABEL,
+  fmtLong,
+  humanizeCron,
+  runDuration,
+  stripMarkdown,
+} from '../_components/format';
 import type { JobRun, JobStatus, ScheduledJob } from '../_components/types';
 
 export const dynamic = 'force-dynamic';
@@ -128,10 +134,10 @@ export default async function RoutineDetailPage({
 
   const toolInput = row.tool_input as unknown;
   const ownerLabel =
-    (owner?.name as string | null) ?? (owner?.email as string | null) ?? 'Unknown owner';
+    (owner?.name as string | null) ?? (owner?.email as string | null) ?? 'Dueño desconocido';
   const schedule =
     job.scheduleKind === 'once'
-      ? `Once at ${fmtLong(job.runAt)}`
+      ? `Una vez, el ${fmtLong(job.runAt)}`
       : humanizeCron(job.cron, job.timezone);
 
   const lastSuccess = runs.find((r) => r.status === 'ok' && r.output);
@@ -146,7 +152,7 @@ export default async function RoutineDetailPage({
           href="/schedules"
           className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint transition-colors hover:text-ink"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Routines
+          <ArrowLeft className="h-3.5 w-3.5" /> Rutinas
         </Link>
       </div>
 
@@ -159,19 +165,21 @@ export default async function RoutineDetailPage({
         <div className="min-w-0 flex-1 basis-[18rem]">
           <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold tracking-tight text-ink">
             {job.name}
-            <span className={chipClass(STATUS_TONE[job.status])}>{job.status}</span>
+            <span className={chipClass(STATUS_TONE[job.status])}>{JOB_STATUS_LABEL[job.status]}</span>
             {job.isGlobal && (
               <span
                 className={chipClass('primary')}
-                title="Team routine — runs for the whole workspace"
+                title="Rutina del equipo: corre para todo el espacio de trabajo"
               >
                 <Globe className="h-3 w-3" /> global
               </span>
             )}
-            <span className={chipClass('neutral')}>{job.kind === 'tool' ? 'tool' : 'agent'}</span>
+            <span className={chipClass('neutral')}>
+              {job.kind === 'tool' ? 'herramienta' : 'agente'}
+            </span>
             {failing && (
               <span className={chipClass('rose')}>
-                <TriangleAlert className="h-3 w-3" /> failing
+                <TriangleAlert className="h-3 w-3" /> fallando
               </span>
             )}
           </h1>
@@ -185,19 +193,19 @@ export default async function RoutineDetailPage({
               <Clock className="h-3.5 w-3.5" />
               {job.status === 'active' && job.nextRunAt ? (
                 <>
-                  Next {fmtLong(job.nextRunAt)} (<LiveRelative ts={job.nextRunAt} mode="next" />)
+                  Próxima {fmtLong(job.nextRunAt)} (<LiveRelative ts={job.nextRunAt} mode="next" />)
                 </>
               ) : (
-                'No run scheduled'
+                'Sin próxima ejecución'
               )}
             </span>
-            <span className="inline-flex items-center gap-1.5" title={`Owner: ${ownerLabel}`}>
+            <span className="inline-flex items-center gap-1.5" title={`Dueño: ${ownerLabel}`}>
               <User className="h-3.5 w-3.5" />
               {ownerLabel}
             </span>
             <span className="inline-flex items-center gap-1.5">
               <History className="h-3.5 w-3.5" />
-              Last run {job.lastRunAt ? fmtLong(job.lastRunAt) : 'never'}
+              Última ejecución {job.lastRunAt ? fmtLong(job.lastRunAt) : 'nunca'}
             </span>
           </div>
         </div>
@@ -209,7 +217,7 @@ export default async function RoutineDetailPage({
         <div className="space-y-4">
           {/* What it does */}
           <Panel className="p-5">
-            <div className={`mb-3 ${SECTION}`}>What it does</div>
+            <div className={`mb-3 ${SECTION}`}>Qué hace</div>
 
             {job.kind === 'agent' ? (
               job.instruction ? (
@@ -218,15 +226,15 @@ export default async function RoutineDetailPage({
                 </RunMarkdown>
               ) : (
                 <p className="text-[12.5px] text-ink-muted">
-                  No instruction was stored for this routine. Ask Cortex in chat to describe it
-                  again and it will be rewritten.
+                  No quedó guardada ninguna instrucción. Pídele a Cortex en el chat que la vuelva a
+                  describir y se reescribe.
                 </p>
               )
             ) : (
               <div className="space-y-2">
                 <span className="inline-flex items-center gap-1.5 rounded-sm border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[11.5px] font-semibold text-primary">
                   <Wrench className="h-3 w-3" />
-                  {job.toolId ?? 'unknown tool'}
+                  {job.toolId ?? 'herramienta desconocida'}
                 </span>
                 {toolInput != null && (
                   <pre className="scroll-slim overflow-x-auto rounded-card border border-border bg-surface-2 px-3.5 py-3 font-mono text-[11.5px] leading-[1.6] text-ink-muted">
@@ -240,23 +248,23 @@ export default async function RoutineDetailPage({
               <p className="flex items-start gap-2 text-[12.5px] text-ink-muted">
                 <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
                 {job.notifyEmail
-                  ? 'Emails the result every time it finishes.'
-                  : 'Does not email anyone — results live here and in the conversation.'}
+                  ? 'Envía el resultado por correo cada vez que termina.'
+                  : 'No le escribe a nadie: el resultado se queda aquí y en la conversación.'}
               </p>
               <p className="flex items-start gap-2 text-[12.5px] text-ink-muted">
                 <ShieldAlert
                   className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${job.allowUnattendedWrites ? 'text-amber' : 'text-ink-faint'}`}
                 />
                 {job.allowUnattendedWrites
-                  ? 'May run write tools unattended — no human confirms each action.'
-                  : 'Read-only: any write tool would wait for a human confirmation.'}
+                  ? 'Puede ejecutar herramientas de escritura sin que nadie confirme cada acción.'
+                  : 'Solo lectura: cualquier herramienta de escritura esperaría tu confirmación.'}
               </p>
 
               <div className="pt-1">
-                <div className={`mb-1.5 ${SECTION}`}>Recipients</div>
+                <div className={`mb-1.5 ${SECTION}`}>Destinatarios</div>
                 {job.recipients.length === 0 ? (
                   <p className="text-[12px] text-ink-muted">
-                    Nobody added — the result goes to the owner only.
+                    Nadie agregado: el resultado le llega solo al dueño.
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
@@ -278,9 +286,9 @@ export default async function RoutineDetailPage({
           {/* Runs */}
           <Panel className="p-5">
             <div className="mb-3 flex items-center justify-between gap-3">
-              <div className={SECTION}>Runs</div>
+              <div className={SECTION}>Ejecuciones</div>
               <span className="tabular text-[11px] text-ink-faint">
-                {runs.length === 0 ? 'none yet' : `last ${runs.length}`}
+                {runs.length === 0 ? 'ninguna' : `últimas ${runs.length}`}
               </span>
             </div>
             <RunHistory runs={runs} />
@@ -290,15 +298,15 @@ export default async function RoutineDetailPage({
         <div className="space-y-4">
           {/* Last successful result */}
           <Panel className="p-4">
-            <div className={`mb-2 ${SECTION}`}>Last successful result</div>
+            <div className={`mb-2 ${SECTION}`}>Último resultado exitoso</div>
             {lastSuccess && summary ? (
               <>
                 {/* The report is the routine's assertion, so it carries the run
                     that produced it and the moment that run started. */}
                 <Provenance
-                  source="Routine run"
+                  source="Ejecución"
                   readAt={fmtLong(lastSuccess.started_at)}
-                  detail="succeeded"
+                  detail="exitosa"
                 />
                 <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
                   {summary}
@@ -308,43 +316,44 @@ export default async function RoutineDetailPage({
                   href={`#run-${lastSuccess.id}`}
                   className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary transition-colors hover:text-primary-strong"
                 >
-                  <Sparkles className="h-3.5 w-3.5" /> Read the full report
+                  <Sparkles className="h-3.5 w-3.5" /> Leer el reporte completo
                 </Link>
               </>
             ) : (
               <p className="text-[12.5px] text-ink-muted">
-                No run has succeeded yet. The first good one is summarised here.
+                Ninguna ejecución ha salido bien todavía. La primera que funcione se resume aquí.
               </p>
             )}
           </Panel>
 
           {/* Track record */}
           <Panel className="p-4">
-            <div className={`mb-2.5 ${SECTION}`}>Track record</div>
+            <div className={`mb-2.5 ${SECTION}`}>Historial</div>
             <ul className="space-y-2 text-[12.5px]">
               <li className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-1.5 text-ink-muted">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald" /> Successful runs
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald" /> Ejecuciones exitosas
                 </span>
                 <span className="stat-num text-ink">{okCount}</span>
               </li>
               <li className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-1.5 text-ink-muted">
-                  <XCircle className="h-3.5 w-3.5 text-rose" /> Failed runs
+                  <XCircle className="h-3.5 w-3.5 text-rose" /> Ejecuciones fallidas
                 </span>
                 <span className="stat-num text-ink">{failedCount}</span>
               </li>
               <li className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-1.5 text-ink-muted">
-                  <Clock className="h-3.5 w-3.5 text-ink-faint" /> Average duration
+                  <Clock className="h-3.5 w-3.5 text-ink-faint" /> Duración promedio
                 </span>
                 <span className="stat-num text-ink">{avg ?? '—'}</span>
               </li>
             </ul>
             {okCount + failedCount > 0 && (
               <p className="tabular mt-2.5 border-t border-border pt-2 text-[11px] text-ink-faint">
-                {Math.round((okCount / (okCount + failedCount)) * 100)}% of finished runs succeeded
-                {avg && ` · average over the last ${runs.length} runs`}
+                {Math.round((okCount / (okCount + failedCount)) * 100)}% de las ejecuciones
+                terminadas salieron bien
+                {avg && ` · promedio de las últimas ${runs.length}`}
               </p>
             )}
           </Panel>
@@ -352,15 +361,15 @@ export default async function RoutineDetailPage({
           {/* Results conversation */}
           {job.conversationId && (
             <Panel className="p-4">
-              <div className={`mb-2 ${SECTION}`}>Results conversation</div>
+              <div className={`mb-2 ${SECTION}`}>Conversación de resultados</div>
               <p className="mb-2.5 text-[12px] text-ink-muted">
-                Every run posts its result into this chat — reply there to dig in.
+                Cada ejecución publica su resultado en este chat. Responde ahí para profundizar.
               </p>
               <Link
                 href={`/chat/${job.conversationId}`}
                 className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                <MessageSquare className="h-3.5 w-3.5" /> Open conversation
+                <MessageSquare className="h-3.5 w-3.5" /> Abrir la conversación
               </Link>
             </Panel>
           )}

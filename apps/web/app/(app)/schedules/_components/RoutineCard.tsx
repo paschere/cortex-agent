@@ -20,7 +20,15 @@ import {
   X,
 } from 'lucide-react';
 import Link from 'next/link';
-import { fmt, humanizeCron, relative, runDuration, stripMarkdown, untilNext } from './format';
+import {
+  JOB_STATUS_LABEL,
+  fmt,
+  humanizeCron,
+  relative,
+  runDuration,
+  stripMarkdown,
+  untilNext,
+} from './format';
 import type { JobRun, JobStatus, ScheduledJob } from './types';
 
 /** A routine in force is green; paused wants attention; cancelled is a red stamp. */
@@ -38,9 +46,9 @@ const RUN_TONE: Record<JobRun['status'], StatusTone> = {
 };
 
 const RUN_LABEL: Record<JobRun['status'], string> = {
-  ok: 'succeeded',
-  error: 'failed',
-  running: 'running',
+  ok: 'exitosa',
+  error: 'falló',
+  running: 'corriendo',
 };
 
 const ICON_BTN =
@@ -96,7 +104,7 @@ export function RoutineCard({
          */}
         <Link
           href={`/schedules/${job.id}`}
-          aria-label={`Open ${job.name}`}
+          aria-label={`Abrir ${job.name}`}
           className="absolute inset-0 z-0 rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
         <span
@@ -119,32 +127,32 @@ export function RoutineCard({
             <span className="text-[13.5px] font-bold text-ink transition-colors group-hover:text-primary">
               {job.name}
             </span>
-            <span className={chipClass(STATUS_TONE[job.status])}>{job.status}</span>
+            <span className={chipClass(STATUS_TONE[job.status])}>{JOB_STATUS_LABEL[job.status]}</span>
             {job.isGlobal && (
               <span
                 className={chipClass('primary')}
-                title="Team routine — runs for the whole workspace"
+                title="Rutina del equipo: corre para todo el espacio de trabajo"
               >
                 <Globe className="h-3 w-3" /> global
               </span>
             )}
             {failing && (
-              <span className={chipClass('rose')} title="The last runs failed in a row">
-                <TriangleAlert className="h-3 w-3" /> failing
+              <span className={chipClass('rose')} title="Las últimas ejecuciones fallaron seguidas">
+                <TriangleAlert className="h-3 w-3" /> fallando
               </span>
             )}
             {job.allowUnattendedWrites && (
               <span
                 className={chipClass('amber')}
-                title="This job may execute write tools without a human confirming each one"
+                title="Esta rutina puede ejecutar herramientas de escritura sin que nadie confirme cada una"
               >
-                <ShieldAlert className="h-3 w-3" /> unattended writes
+                <ShieldAlert className="h-3 w-3" /> escribe sin permiso
               </span>
             )}
             {job.notifyEmail && (
               <span
                 className="inline-flex items-center gap-1 text-[10.5px] text-ink-faint"
-                title="Emails results"
+                title="Envía el resultado por correo"
               >
                 <Mail className="h-3 w-3" />
               </span>
@@ -155,15 +163,15 @@ export function RoutineCard({
             <span className="inline-flex items-center gap-1 font-semibold text-ink-muted">
               <AlarmClock className="h-3.5 w-3.5 text-primary" />
               {job.scheduleKind === 'once'
-                ? `Once at ${fmt(job.runAt)}`
+                ? `Una vez, el ${fmt(job.runAt)}`
                 : humanizeCron(job.cron, job.timezone)}
             </span>
             {next && job.status === 'active' && (
               <span className="rounded-sm border border-primary/30 bg-primary-soft px-1.5 font-semibold text-primary">
-                next {next}
+                próxima {next}
               </span>
             )}
-            <span>last {fmt(job.lastRunAt)}</span>
+            <span>última {fmt(job.lastRunAt)}</span>
 
             {/* Run strip — newest first, hoverable, click to jump to the run. */}
             {job.runs.length > 0 && (
@@ -171,7 +179,7 @@ export function RoutineCard({
                 {job.runs.slice(0, 10).map((r) => {
                   const when = relative(r.started_at, now);
                   const took = runDuration(r.started_at, r.finished_at);
-                  const label = `${r.status === 'ok' ? 'Succeeded' : r.status === 'error' ? 'Failed' : 'Running'}${
+                  const label = `${r.status === 'ok' ? 'Exitosa' : r.status === 'error' ? 'Falló' : 'Corriendo'}${
                     when ? ` · ${when}` : ''
                   }${took ? ` · ${took}` : ''}`;
                   return (
@@ -202,7 +210,7 @@ export function RoutineCard({
               title={job.recipients.join(', ')}
             >
               <Mail className="h-3 w-3 shrink-0" />
-              <span className="truncate">Emails {job.recipients.join(', ')}</span>
+              <span className="truncate">Le escribe a {job.recipients.join(', ')}</span>
             </div>
           )}
 
@@ -213,11 +221,11 @@ export function RoutineCard({
           {lastRun ? (
             <div className="mt-2">
               <Provenance
-                source="Last run"
+                source="Última ejecución"
                 readAt={fmt(lastRun.started_at)}
                 detail={
                   runDuration(lastRun.started_at, lastRun.finished_at)
-                    ? `${RUN_LABEL[lastRun.status]} in ${runDuration(lastRun.started_at, lastRun.finished_at)}`
+                    ? `${RUN_LABEL[lastRun.status]} en ${runDuration(lastRun.started_at, lastRun.finished_at)}`
                     : RUN_LABEL[lastRun.status]
                 }
                 tone={lastRun.status === 'error' ? 'seal' : 'stamp'}
@@ -226,7 +234,7 @@ export function RoutineCard({
                 <button
                   type="button"
                   onClick={() => onOpenRun(lastRun)}
-                  title="Open the full result"
+                  title="Ver el resultado completo"
                   className="relative z-10 mt-1.5 block w-full rounded-card border border-border bg-surface-2 px-3 py-2 text-left transition-colors hover:bg-canvas focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <span
@@ -242,8 +250,8 @@ export function RoutineCard({
             </div>
           ) : (
             <p className="mt-2 text-[11.5px] text-ink-muted">
-              Never run. Hit <span className="font-semibold text-ink">Run now</span> to see what it
-              produces without waiting for the schedule.
+              No se ha ejecutado nunca. Dale <span className="font-semibold text-ink">Ejecutar
+              ahora</span> para ver qué produce sin esperar a la hora programada.
             </p>
           )}
         </div>
@@ -256,17 +264,18 @@ export function RoutineCard({
             className="inline-flex items-center gap-1.5 rounded-card bg-primary px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
             title={
               job.status === 'active'
-                ? 'Run this routine now'
-                : `Only active routines can be run (this one is ${job.status})`
+                ? 'Ejecutar esta rutina ahora'
+                : 'Solo se pueden ejecutar las rutinas activas'
             }
           >
             {running ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Running…
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />{' '}
+                Ejecutando…
               </>
             ) : (
               <>
-                <Play className="h-3.5 w-3.5" /> Run now
+                <Play className="h-3.5 w-3.5" /> Ejecutar ahora
               </>
             )}
           </button>
@@ -276,8 +285,8 @@ export function RoutineCard({
               type="button"
               onClick={onEdit}
               className={clsx(ICON_BTN, 'text-ink-faint hover:bg-surface-2 hover:text-ink')}
-              title="Edit name, schedule and recipients"
-              aria-label="Edit routine"
+              title="Editar el nombre, la programación y los destinatarios"
+              aria-label="Editar la rutina"
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -287,7 +296,7 @@ export function RoutineCard({
             <Link
               href={`/chat/${job.conversationId}`}
               className={clsx(ICON_BTN, 'text-ink-faint hover:bg-surface-2 hover:text-ink')}
-              title="Open results conversation"
+              title="Abrir la conversación con los resultados"
             >
               <MessageSquare className="h-4 w-4" />
             </Link>
@@ -299,7 +308,7 @@ export function RoutineCard({
               disabled={busy}
               onClick={() => onAction('pause')}
               className={clsx(ICON_BTN, 'text-ink-faint hover:bg-surface-2 hover:text-ink')}
-              title="Pause"
+              title="Pausar"
             >
               <Pause className="h-4 w-4" />
             </button>
@@ -310,7 +319,7 @@ export function RoutineCard({
               disabled={busy}
               onClick={() => onAction('resume')}
               className={clsx(ICON_BTN, 'text-emerald hover:bg-emerald-soft')}
-              title="Resume"
+              title="Reanudar"
             >
               <Play className="h-4 w-4" />
             </button>
@@ -321,7 +330,7 @@ export function RoutineCard({
               disabled={busy}
               onClick={() => onAction('cancel')}
               className={clsx(ICON_BTN, 'text-rose hover:bg-rose-soft')}
-              title="Cancel permanently"
+              title="Cancelar para siempre"
             >
               <X className="h-4 w-4" />
             </button>
@@ -330,7 +339,7 @@ export function RoutineCard({
             type="button"
             onClick={onToggle}
             className={clsx(ICON_BTN, 'text-ink-faint hover:bg-surface-2 hover:text-ink')}
-            aria-label={expanded ? 'Collapse' : 'Expand'}
+            aria-label={expanded ? 'Contraer' : 'Desplegar'}
             aria-expanded={expanded}
           >
             <ChevronDown
@@ -345,7 +354,7 @@ export function RoutineCard({
           {(job.instruction ?? job.toolId) && (
             <div>
               <h3 className="field-label mb-1">
-                {job.kind === 'agent' ? 'Instruction' : 'Tool'}
+                {job.kind === 'agent' ? 'Instrucción' : 'Herramienta'}
               </h3>
               <p
                 className={clsx(
@@ -358,11 +367,12 @@ export function RoutineCard({
             </div>
           )}
           <div>
-            <h3 className="field-label mb-1.5">Recent runs</h3>
+            <h3 className="field-label mb-1.5">Ejecuciones recientes</h3>
             {job.runs.length === 0 ? (
               <p className="text-[12.5px] text-ink-muted">
-                No run recorded yet. Hit <span className="font-semibold text-ink">Run now</span> and
-                the result lands here.
+                Todavía no hay ninguna ejecución. Dale{' '}
+                <span className="font-semibold text-ink">Ejecutar ahora</span> y el resultado
+                aparece aquí.
               </p>
             ) : (
               <ul className="space-y-1.5">
@@ -388,8 +398,8 @@ export function RoutineCard({
                           <span className="text-ink-faint">{fmt(run.started_at)}</span>
                           {when && <span className="text-ink-faint">· {when}</span>}
                           {took && (
-                            <span className="text-ink-faint" title="Run duration">
-                              · took {took}
+                            <span className="text-ink-faint" title="Duración de la ejecución">
+                              · tomó {took}
                             </span>
                           )}
                         </span>

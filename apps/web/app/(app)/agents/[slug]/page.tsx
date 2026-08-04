@@ -96,17 +96,17 @@ const TOOL_GROUPS: ToolGroup[] = [
     tools: [{ id: "gdrive.search_files" }, { id: "gdrive.read_doc" }],
   },
   {
-    label: "Web Research",
+    label: "Investigación web",
     icon: Globe,
     tools: [{ id: "web.search" }, { id: "web.scrape" }],
   },
   {
-    label: "Rate Calculator",
+    label: "Calculadora de tarifas",
     icon: DollarSign,
     tools: [{ id: "rate.estimate" }, { id: "rate.estimate_from_document" }],
   },
   {
-    label: "Recruitment (Workable / Matcher)",
+    label: "Reclutamiento (Workable / Matcher)",
     icon: Users,
     tools: [
       { id: "recruit.list_requisitions" },
@@ -126,7 +126,7 @@ const TOOL_GROUPS: ToolGroup[] = [
     ],
   },
   {
-    label: "Notifications",
+    label: "Notificaciones",
     icon: Bell,
     tools: [{ id: "slack.post_message", write: true }],
   },
@@ -163,12 +163,12 @@ const TOOL_GROUPS: ToolGroup[] = [
     ],
   },
   {
-    label: "People Directory",
+    label: "Directorio de personas",
     icon: Contact,
     tools: [{ id: "people.search" }],
   },
   {
-    label: "Payroll",
+    label: "Nómina",
     icon: Wallet,
     tools: [{ id: "payroll.team_overview" }],
   },
@@ -182,7 +182,7 @@ const TOOL_GROUPS: ToolGroup[] = [
     ],
   },
   {
-    label: "Composite",
+    label: "Compuestas",
     icon: Boxes,
     tools: [{ id: "sales.draft_proposal" }],
   },
@@ -262,19 +262,19 @@ export default async function AgentDetailPage({
         href="/agents"
         className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-muted hover:text-ink"
       >
-        <ArrowLeft className="h-4 w-4" /> All agents
+        <ArrowLeft className="h-4 w-4" /> Todos los agentes
       </Link>
 
       <PageHeader
         title={agent.name}
-        subtitle={`${agent.teams?.[0]?.name ?? "No team"} · ${agent.allowed_tool_ids.length} of ${TOTAL_TOOLS} tools enabled`}
+        subtitle={`${agent.teams?.[0]?.name ?? "Sin equipo"} · ${agent.allowed_tool_ids.length} de ${TOTAL_TOOLS} herramientas habilitadas`}
         icon={<Sparkles className="h-5 w-5" />}
         actions={
           <Link
             href="/chat"
             className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-primary-strong"
           >
-            <MessageSquare className="h-4 w-4" /> Open chat
+            <MessageSquare className="h-4 w-4" /> Abrir el chat
           </Link>
         }
       />
@@ -286,7 +286,7 @@ export default async function AgentDetailPage({
             <Cpu className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <Eyebrow>Model</Eyebrow>
+            <Eyebrow>Modelo</Eyebrow>
             <div className="tabular mt-0.5 truncate text-[13px] font-semibold text-ink">
               {agent.default_model}
             </div>
@@ -308,10 +308,10 @@ export default async function AgentDetailPage({
             <ShieldCheck className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <Eyebrow>Status</Eyebrow>
+            <Eyebrow>Estado</Eyebrow>
             <div className="mt-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
               {/* A status dot keeps its circle — it is a light, not a chip. */}
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald" /> Online
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald" /> En línea
             </div>
           </div>
         </Panel>
@@ -320,7 +320,7 @@ export default async function AgentDetailPage({
       <Wrapper {...wrapperProps} className="space-y-4 pb-24">
         {/* Model picker */}
         <Panel className="p-5">
-          <Eyebrow>Default model</Eyebrow>
+          <Eyebrow>Modelo por defecto</Eyebrow>
           <div className="mt-3 flex flex-wrap gap-2">
             {["claude-opus-5", "claude-sonnet-5"].map((m) => (
               <label
@@ -348,9 +348,9 @@ export default async function AgentDetailPage({
         {/* Tools */}
         <Panel className="p-5">
           <div className="flex items-center justify-between">
-            <Eyebrow>Capabilities</Eyebrow>
+            <Eyebrow>Capacidades</Eyebrow>
             <span className="tabular rounded-card border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary-ink">
-              {agent.allowed_tool_ids.length} / {TOTAL_TOOLS} enabled
+              {agent.allowed_tool_ids.length} / {TOTAL_TOOLS} habilitadas
             </span>
           </div>
           <div className="mt-4 space-y-5">
@@ -394,7 +394,7 @@ export default async function AgentDetailPage({
                           </span>
                           {t.write && (
                             <span className="rounded-card border border-amber/40 bg-amber-soft px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-amber">
-                              Write
+                              Escribe
                             </span>
                           )}
                         </span>
@@ -410,9 +410,9 @@ export default async function AgentDetailPage({
         {/* System prompt */}
         <Panel className="p-5">
           <div className="flex items-center justify-between">
-            <Eyebrow>System prompt</Eyebrow>
+            <Eyebrow>Instrucciones del sistema</Eyebrow>
             <span className="text-[11px] text-ink-faint">
-              <span className="tabular">{promptWords}</span> words
+              <span className="tabular">{promptWords}</span> palabras
             </span>
           </div>
           {isAdmin ? (
@@ -435,10 +435,10 @@ export default async function AgentDetailPage({
           <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface/90 backdrop-blur-md md:left-64">
             <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 md:px-8">
               <span className="text-[13px] text-ink-faint">
-                Changes apply to every conversation with this agent.
+                Los cambios aplican a todas las conversaciones con este agente.
               </span>
               <Button type="submit" className="px-6">
-                Save changes
+                Guardar cambios
               </Button>
             </div>
           </div>

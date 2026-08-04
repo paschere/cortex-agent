@@ -22,7 +22,7 @@ export interface McpServer {
 }
 
 function authBadge(t: McpServer['auth_type']): string {
-  return t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer' : 'No auth';
+  return t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer' : 'Sin auth';
 }
 
 /** A ruled tag on the row: squared, bordered, never a shadow. */
@@ -32,8 +32,8 @@ export function McpServerList({ servers }: { servers: McpServer[] }) {
   if (servers.length === 0) {
     return (
       <p className="max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-        Nothing plugged in. Cortex runs on the integrations above — add a server below only if you
-        have an MCP server of your own.
+        No hay nada conectado. Cortex funciona con las integraciones de arriba; agrega un servidor
+        abajo solo si tienes uno propio de MCP.
       </p>
     );
   }
@@ -64,12 +64,12 @@ function McpServerRow({ server }: { server: McpServer }) {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        setError('Could not save that change. Try again in a moment.');
+        setError('No se pudo guardar el cambio. Inténtalo de nuevo en un momento.');
         return;
       }
       router.refresh();
     } catch {
-      setError('Could not reach Cortex. Check your connection and try again.');
+      setError('No se pudo conectar con Cortex. Revisa tu conexión e inténtalo de nuevo.');
     } finally {
       setBusy(false);
     }
@@ -82,12 +82,12 @@ function McpServerRow({ server }: { server: McpServer }) {
     try {
       const res = await fetch(`/api/mcp-servers/${server.id}/refresh`, { method: 'POST' });
       if (!res.ok) {
-        setError('Could not read this server\u2019s tools. Check that the URL is reachable.');
+        setError('No se pudieron leer las herramientas. Revisa que la URL responda.');
         return;
       }
       router.refresh();
     } catch {
-      setError('Could not reach Cortex. Check your connection and try again.');
+      setError('No se pudo conectar con Cortex. Revisa tu conexión e inténtalo de nuevo.');
     } finally {
       setBusy(false);
     }
@@ -95,18 +95,19 @@ function McpServerRow({ server }: { server: McpServer }) {
 
   async function remove() {
     if (busy) return;
-    if (!confirm(`Remove "${server.name}"? Its tools disappear from Cortex immediately.`)) return;
+    if (!confirm(`¿Eliminar "${server.name}"? Sus herramientas salen de Cortex de inmediato.`))
+      return;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch(`/api/mcp-servers/${server.id}`, { method: 'DELETE' });
       if (!res.ok && res.status !== 204) {
-        setError('Could not remove this server. Try again in a moment.');
+        setError('No se pudo eliminar el servidor. Inténtalo de nuevo en un momento.');
         return;
       }
       router.refresh();
     } catch {
-      setError('Could not reach Cortex. Check your connection and try again.');
+      setError('No se pudo conectar con Cortex. Revisa tu conexión e inténtalo de nuevo.');
     } finally {
       setBusy(false);
     }
@@ -123,10 +124,10 @@ function McpServerRow({ server }: { server: McpServer }) {
               {server.authConfigured ? ' · stored' : ''}
             </span>
             <span className={clsx(TAG, 'border-primary/30 bg-primary-soft text-primary')}>
-              {server.tool_count} tool{server.tool_count === 1 ? '' : 's'}
+              {server.tool_count} {server.tool_count === 1 ? 'herramienta' : 'herramientas'}
             </span>
             {!server.enabled && (
-              <span className={clsx(TAG, 'border-amber/40 bg-amber-soft text-amber')}>Paused</span>
+              <span className={clsx(TAG, 'border-amber/40 bg-amber-soft text-amber')}>En pausa</span>
             )}
           </div>
           <p className="tabular mt-1 max-w-md truncate text-[11px] text-ink-faint" title={server.url}>
@@ -135,7 +136,10 @@ function McpServerRow({ server }: { server: McpServer }) {
         </div>
 
         <div className="flex items-center gap-3 text-[12.5px] text-ink-muted">
-          <label className="flex items-center gap-1.5" title="Expose this server's tools to Cortex">
+          <label
+            className="flex items-center gap-1.5"
+            title="Deja que Cortex vea las herramientas de este servidor"
+          >
             <input
               type="checkbox"
               checked={server.enabled}
@@ -143,11 +147,11 @@ function McpServerRow({ server }: { server: McpServer }) {
               onChange={(e) => patch({ enabled: e.target.checked })}
               className="accent-primary"
             />
-            <span>Enabled</span>
+            <span>Activo</span>
           </label>
           <label
             className="flex items-center gap-1.5"
-            title="Let Cortex call this server without asking for confirmation"
+            title="Deja que Cortex llame a este servidor sin pedir confirmación"
           >
             <input
               type="checkbox"
@@ -156,15 +160,15 @@ function McpServerRow({ server }: { server: McpServer }) {
               onChange={(e) => patch({ trusted: e.target.checked })}
               className="accent-primary"
             />
-            <span>Trusted</span>
+            <span>De confianza</span>
           </label>
         </div>
       </div>
 
       {server.last_error && (
         <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
-          Cortex could not reach this server: {server.last_error}. Check the URL and the credential,
-          then refresh its tools.
+          Cortex no pudo comunicarse con este servidor: {server.last_error}. Revisa la URL y la
+          credencial, y vuelve a sincronizar sus herramientas.
         </p>
       )}
       {error && (
@@ -176,13 +180,13 @@ function McpServerRow({ server }: { server: McpServer }) {
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={refresh} disabled={busy}>
           <RefreshCw className={clsx('h-3 w-3', busy && 'animate-spin')} />
-          Refresh tools
+          Sincronizar herramientas
         </Button>
         {/* Removing a server takes its tools out of Cortex at once — it stops
             something, so it takes the red. */}
         <Button type="button" variant="danger" onClick={remove} disabled={busy}>
           <Trash2 className="h-3 w-3" />
-          Remove
+          Eliminar
         </Button>
         {server.tools.length > 0 && (
           <button
@@ -191,8 +195,8 @@ function McpServerRow({ server }: { server: McpServer }) {
             className="text-[11.5px] font-semibold text-primary hover:underline"
           >
             {expanded
-              ? 'Hide tools'
-              : `Show ${server.tools.length} tool${server.tools.length === 1 ? '' : 's'}`}
+              ? 'Ocultar las herramientas'
+              : `Ver ${server.tools.length} ${server.tools.length === 1 ? 'herramienta' : 'herramientas'}`}
           </button>
         )}
       </div>

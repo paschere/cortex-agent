@@ -45,7 +45,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
         setError(
           typeof data.error === 'string'
             ? data.error
-            : 'Cortex could not add that server. Check the URL and try again.',
+            : 'Cortex no pudo agregar ese servidor. Revisa la URL e inténtalo de nuevo.',
         );
         return;
       }
@@ -79,7 +79,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
       setAuthValue('');
       router.refresh();
     } catch {
-      setError('Could not reach Cortex. Check your connection and try again.');
+      setError('No se pudo conectar con Cortex. Revisa tu conexión e inténtalo de nuevo.');
     } finally {
       setSubmitting(false);
     }
@@ -89,7 +89,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
     <form onSubmit={onSubmit} className="mt-3 space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="field-label">Name</span>
+          <span className="field-label">Nombre</span>
           <input
             type="text"
             value={name}
@@ -97,12 +97,12 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
             required
             maxLength={60}
             disabled={disabled}
-            placeholder="My Notion MCP"
+            placeholder="Mi MCP de Notion"
             className={FIELD}
           />
         </label>
         <label className="block">
-          <span className="field-label">Server URL (SSE)</span>
+          <span className="field-label">URL del servidor (SSE)</span>
           <input
             type="url"
             value={url}
@@ -117,7 +117,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
       </div>
 
       <fieldset>
-        <legend className="field-label">Authentication</legend>
+        <legend className="field-label">Autenticación</legend>
         <div className="mt-1.5 flex flex-wrap gap-4">
           {(['none', 'bearer', 'api_key'] as AuthType[]).map((t) => (
             <label key={t} className="flex items-center gap-1.5 text-[13px] text-ink">
@@ -130,7 +130,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
                 disabled={disabled}
                 className="accent-primary"
               />
-              <span>{t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer token' : 'None'}</span>
+              <span>{t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer token' : 'Ninguna'}</span>
             </label>
           ))}
         </div>
@@ -148,8 +148,8 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
             placeholder="••••••••••••"
             className={FIELD}
           />
-          <span className="mt-1 block text-[11px] text-ink-faint">
-            Stored encrypted and never shown again — re-add the server to change it.
+          <span className="mt-1 block text-[11px] leading-relaxed text-ink-faint">
+            Se guarda cifrada y no se vuelve a mostrar. Para cambiarla, agrega el servidor de nuevo.
           </span>
         </label>
       )}
@@ -161,14 +161,14 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
       )}
       {result && (
         <p className="rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-[12.5px] text-emerald">
-          Server added. Cortex found <span className="tabular">{result.toolCount}</span> tool
-          {result.toolCount === 1 ? '' : 's'}.
-          {result.lastError ? ` It also reported: ${result.lastError}` : ''}
+          Servidor agregado. Cortex encontró <span className="tabular">{result.toolCount}</span>{' '}
+          {result.toolCount === 1 ? 'herramienta' : 'herramientas'}.
+          {result.lastError ? ` También reportó: ${result.lastError}` : ''}
         </p>
       )}
 
       <Button type="submit" disabled={disabled || submitting}>
-        {submitting ? 'Adding…' : 'Add server'}
+        {submitting ? 'Agregando…' : 'Agregar servidor'}
       </Button>
     </form>
   );

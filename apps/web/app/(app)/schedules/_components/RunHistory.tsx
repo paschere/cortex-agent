@@ -17,9 +17,9 @@ const TONE: Record<JobRun['status'], StatusTone> = {
 };
 
 const LABEL: Record<JobRun['status'], string> = {
-  ok: 'succeeded',
-  error: 'failed',
-  running: 'running',
+  ok: 'exitosa',
+  error: 'falló',
+  running: 'corriendo',
 };
 
 /**
@@ -37,10 +37,10 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
     return (
       <div className="rounded-card border border-dashed border-border-strong px-4 py-8 text-center">
         <History className="mx-auto mb-2 h-6 w-6 text-ink-faint" />
-        <p className="text-[13px] font-semibold text-ink">No runs yet</p>
+        <p className="text-[13px] font-semibold text-ink">Todavía no hay ejecuciones</p>
         <p className="mt-0.5 text-[12px] text-ink-muted">
-          Hit <span className="font-semibold text-ink">Run now</span> above to see what this routine
-          produces without waiting for its schedule.
+          Dale <span className="font-semibold text-ink">Ejecutar ahora</span> arriba para ver qué
+          produce esta rutina sin esperar a la hora programada.
         </p>
       </div>
     );
@@ -71,8 +71,11 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
                   <LiveRelative ts={run.started_at} fallback="" />
                 </span>
               </span>
-              <span className="tabular shrink-0 text-[11.5px] text-ink-faint" title="Run duration">
-                {took ?? (run.status === 'running' ? 'in flight' : '—')}
+              <span
+                className="tabular shrink-0 text-[11.5px] text-ink-faint"
+                title="Duración de la ejecución"
+              >
+                {took ?? (run.status === 'running' ? 'en curso' : '—')}
               </span>
               <ChevronDown
                 className={clsx(
@@ -86,11 +89,11 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
               <div className="border-t border-border bg-canvas px-3 py-3">
                 <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap gap-x-5 gap-y-1">
-                    <Field label="Started">{fmtLong(run.started_at)}</Field>
-                    <Field label="Finished">
-                      {run.finished_at ? fmtLong(run.finished_at) : 'still running'}
+                    <Field label="Empezó">{fmtLong(run.started_at)}</Field>
+                    <Field label="Terminó">
+                      {run.finished_at ? fmtLong(run.finished_at) : 'sigue corriendo'}
                     </Field>
-                    <Field label="Duration">{took ?? '—'}</Field>
+                    <Field label="Duración">{took ?? '—'}</Field>
                   </div>
                   <CopyRaw text={run.error ?? run.output ?? ''} />
                 </div>
@@ -113,8 +116,8 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
                   !run.error && (
                     <p className="rounded-card border border-border bg-surface px-3.5 py-3 text-[12.5px] text-ink-muted">
                       {run.status === 'running'
-                        ? 'Still in flight — the result lands here the moment it finishes.'
-                        : 'This run finished without writing anything.'}
+                        ? 'Sigue en curso. El resultado aparece aquí apenas termine.'
+                        : 'Esta ejecución terminó sin escribir nada.'}
                     </p>
                   )
                 )}
@@ -153,11 +156,11 @@ function CopyRaw({ text }: { text: string }) {
     >
       {copied ? (
         <>
-          <Check className="h-3.5 w-3.5 text-emerald" /> Copied
+          <Check className="h-3.5 w-3.5 text-emerald" /> Copiado
         </>
       ) : (
         <>
-          <Copy className="h-3.5 w-3.5" /> Copy raw
+          <Copy className="h-3.5 w-3.5" /> Copiar sin formato
         </>
       )}
     </button>

@@ -383,7 +383,7 @@ function Row({
                 value=""
                 disabled={working}
                 onChange={(e) => onMove(d, e.target.value)}
-                className="h-7 rounded-card border border-border bg-surface px-2.5 text-[11.5px] font-medium text-ink-muted focus:border-border-strong focus:outline-none disabled:opacity-50"
+                className="h-7 rounded-card border border-border bg-surface px-2.5 text-[11.5px] font-medium text-ink-muted focus:border-border-strong disabled:opacity-50"
                 aria-label={`Mover ${d.title} a otro espacio`}
               >
                 <option value="">Mover a…</option>

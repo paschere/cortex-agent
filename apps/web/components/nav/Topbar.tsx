@@ -16,7 +16,7 @@ export function Topbar({ email }: { email?: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Open menu"
+        aria-label="Abrir el menú"
         className="rounded-card p-1.5 text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink md:hidden"
       >
         <Menu className="h-5 w-5" />
@@ -26,7 +26,7 @@ export function Topbar({ email }: { email?: string }) {
         <Search className="pointer-events-none absolute left-3 h-4 w-4 text-ink-faint" />
         <input
           type="search"
-          placeholder="Search people, deals, documents"
+          placeholder="Buscar personas, negocios, documentos"
           className="h-9 w-full rounded-card border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-border-strong focus:bg-surface"
         />
       </label>
@@ -34,7 +34,7 @@ export function Topbar({ email }: { email?: string }) {
       <div className="ml-auto flex items-center gap-2">
         <button
           type="button"
-          aria-label="Notifications"
+          aria-label="Notificaciones"
           className="relative rounded-card p-2 text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
         >
           <Bell className="h-[18px] w-[18px]" />

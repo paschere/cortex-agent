@@ -1,6 +1,12 @@
 import { type Space, listVisibleSpaces } from '@cortex/agent-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { BrainStats, DigestStage, DigestingDoc, IntakeCounts } from '../_components/types';
+import type {
+  BrainStats,
+  DigestStage,
+  DigestingDoc,
+  IntakeCounts,
+  WeekPoint,
+} from '../_components/types';
 
 /**
  * One reading of the brain: what it has swallowed, what it is digesting, and
@@ -109,9 +115,13 @@ export async function readBrain(
 
   const facts = new Map<string, SpaceFacts>(spaces.map((s) => [s.id, emptyFacts()] as const));
 
+  const weeks = lastTwelveWeeks();
+
   const stats: BrainStats = {
     stages: { waiting: 0, digesting: 0, memory: 0, stuck: 0 },
     intake: emptyIntake(),
+    indexed: emptyIntake(),
+    growth: weeks.map((start) => ({ start: start.toISOString(), added: 0 })),
     chunks: null,
     spokenSeconds: 0,
     namedVoices: 0,
@@ -138,10 +148,19 @@ export async function readBrain(
       entry.lastAddedAt = row.created_at;
     }
 
-    const mouth = intakeOf(row);
-    entry.intake[mouth] += 1;
-    stats.intake[mouth] += 1;
+    const source = intakeOf(row);
+    entry.intake[source] += 1;
+    stats.intake[source] += 1;
     stats.stages[stage] += 1;
+    // The plate is drawn from what is actually retrievable, so a document only
+    // enlarges its region once it can be quoted.
+    if (stage === 'memory') stats.indexed[source] += 1;
+
+    const bucket = weekIndex(weeks, row.created_at);
+    if (bucket !== -1) {
+      const point = stats.growth[bucket];
+      if (point) point.added += 1;
+    }
 
     if (!stats.lastAddedAt || row.created_at > stats.lastAddedAt) {
       stats.lastAddedAt = row.created_at;
@@ -198,6 +217,44 @@ export async function readBrain(
  * would move megabytes to produce one integer. Returns null on failure so the
  * caller can omit the figure rather than claim zero.
  */
+/**
+ * The last twelve Mondays, oldest first, in UTC.
+ *
+ * Weeks rather than days because a company files a handful of things a week and
+ * a daily chart of that is mostly empty columns; twelve of them is a quarter,
+ * which is the span people here actually compare against.
+ */
+function lastTwelveWeeks(): Date[] {
+  const monday = startOfWeek(new Date());
+  const out: Date[] = [];
+  for (let i = 11; i >= 0; i -= 1) {
+    const d = new Date(monday);
+    d.setUTCDate(d.getUTCDate() - i * 7);
+    out.push(d);
+  }
+  return out;
+}
+
+function startOfWeek(date: Date): Date {
+  const d = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+  // Monday is 0, so a Sunday belongs to the week that has just ended.
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d;
+}
+
+/** Which of the twelve weeks a timestamp lands in, or -1 if it is older. */
+function weekIndex(weeks: Date[], iso: string): number {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return -1;
+  for (let i = weeks.length - 1; i >= 0; i -= 1) {
+    const start = weeks[i];
+    if (start && t >= start.getTime()) return i;
+  }
+  return -1;
+}
+
 async function countChunks(db: SupabaseClient, spaceIds: string[]): Promise<number | null> {
   if (spaceIds.length === 0) return 0;
   const { count, error } = await db

@@ -4,7 +4,17 @@
  * import them too.
  */
 
-export const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+import type { JobStatus } from './types';
+
+/** What each routine state is called on screen. */
+export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
+  active: 'activa',
+  paused: 'en pausa',
+  completed: 'terminada',
+  cancelled: 'cancelada',
+};
+
+export const DOW = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'] as const;
 
 /** Humanize the common cron shapes; fall back to the raw expression. */
 export function humanizeCron(cron: string | null, tz: string): string {
@@ -17,20 +27,20 @@ export function humanizeCron(cron: string | null, tz: string): string {
       ? `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`
       : null;
 
-  if (min.startsWith('*/') && hour === '*') return `Every ${min.slice(2)} min`;
-  if (time && dom === '*' && dow === '*') return `Daily at ${time}`;
-  if (time && dom === '*' && dow === '1-5') return `Weekdays at ${time}`;
-  if (time && dom === '*' && /^\d$/.test(dow)) return `${DOW[Number(dow)]}s at ${time}`;
-  if (time && /^\d+$/.test(dom) && dow === '*') return `Monthly on day ${dom} at ${time}`;
+  if (min.startsWith('*/') && hour === '*') return `Cada ${min.slice(2)} min`;
+  if (time && dom === '*' && dow === '*') return `Todos los días a las ${time}`;
+  if (time && dom === '*' && dow === '1-5') return `De lunes a viernes a las ${time}`;
+  if (time && dom === '*' && /^\d$/.test(dow)) return `Cada ${DOW[Number(dow)]} a las ${time}`;
+  if (time && /^\d+$/.test(dom) && dow === '*') return `El día ${dom} de cada mes a las ${time}`;
   return `${cron} (${tz})`;
 }
 
-/** Compact absolute stamp, e.g. "Mar 4, 09:30". */
+/** Compact absolute stamp, e.g. "04 mar, 09:30". */
 export function fmt(ts: string | null): string {
   if (!ts) return '—';
-  return new Date(ts).toLocaleString(undefined, {
+  return new Date(ts).toLocaleString('es-CO', {
+    day: '2-digit',
     month: 'short',
-    day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -39,10 +49,10 @@ export function fmt(ts: string | null): string {
 /** Full stamp with weekday and seconds — used in the run drawer. */
 export function fmtLong(ts: string | null): string {
   if (!ts) return '—';
-  return new Date(ts).toLocaleString(undefined, {
+  return new Date(ts).toLocaleString('es-CO', {
     weekday: 'short',
+    day: '2-digit',
     month: 'short',
-    day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -70,15 +80,15 @@ function spell(absMs: number): string {
 }
 
 /**
- * "in 2h 10m" / "3d ago". `now` is passed in (rather than read from the clock)
+ * "en 2h 10m" / "hace 3d". `now` is passed in (rather than read from the clock)
  * so client components can hold it in state and stay hydration-safe.
  */
 export function relative(ts: string | null, now: number | null): string | null {
   if (!ts || now === null) return null;
   const diff = new Date(ts).getTime() - now;
   if (!Number.isFinite(diff)) return null;
-  if (Math.abs(diff) < 45_000) return diff >= 0 ? 'in a moment' : 'just now';
-  return diff >= 0 ? `in ${spell(diff)}` : `${spell(-diff)} ago`;
+  if (Math.abs(diff) < 45_000) return diff >= 0 ? 'en un momento' : 'ahora';
+  return diff >= 0 ? `en ${spell(diff)}` : `hace ${spell(-diff)}`;
 }
 
 /**
@@ -106,9 +116,9 @@ export function stripMarkdown(md: string): string {
     .trim();
 }
 
-/** Same as `relative`, but past timestamps read as "due now". */
+/** Same as `relative`, but past timestamps read as "ya toca". */
 export function untilNext(ts: string | null, now: number | null): string | null {
   if (!ts || now === null) return null;
-  if (new Date(ts).getTime() - now <= 0) return 'due now';
+  if (new Date(ts).getTime() - now <= 0) return 'ya toca';
   return relative(ts, now);
 }

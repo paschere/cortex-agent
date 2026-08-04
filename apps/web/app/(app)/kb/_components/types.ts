@@ -47,6 +47,12 @@ export interface DigestingDoc {
   transcribing: boolean;
 }
 
+/** Documents that entered in one calendar week. `start` is a Monday, ISO. */
+export interface WeekPoint {
+  start: string;
+  added: number;
+}
+
 /**
  * What this brain knows, in figures that come from rows and nothing else.
  *
@@ -56,6 +62,10 @@ export interface DigestingDoc {
 export interface BrainStats {
   stages: StageCounts;
   intake: IntakeCounts;
+  /** The same four sources, counting only what is already indexed. */
+  indexed: IntakeCounts;
+  /** The last twelve weeks, oldest first. Empty weeks are present as zeroes. */
+  growth: WeekPoint[];
   /** Retrievable fragments across every space the viewer can see. */
   chunks: number | null;
   /** Seconds of recording and meeting audio that have been digested. */

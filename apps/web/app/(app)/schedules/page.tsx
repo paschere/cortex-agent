@@ -76,41 +76,41 @@ export default async function SchedulesPage() {
       (a, b) =>
         new Date(a.nextRunAt as string).getTime() - new Date(b.nextRunAt as string).getTime(),
     )[0];
-  const nextDueIn = nextDue ? (relative(nextDue.nextRunAt, Date.now()) ?? 'due now') : null;
+  const nextDueIn = nextDue ? (relative(nextDue.nextRunAt, Date.now()) ?? 'ya toca') : null;
 
   // Colour only where the figure means something: green for routines in force,
   // red for failures that need a look. A plain count stays in ink.
   const stats: Array<{ label: string; value: string; sub: string; tone?: 'emerald' | 'rose' }> = [
     {
-      label: 'Active routines',
+      label: 'Rutinas activas',
       value: String(activeCount),
-      sub: `${jobs.length} in total`,
+      sub: `${jobs.length} en total`,
       tone: activeCount > 0 ? 'emerald' : undefined,
     },
-    { label: 'Global routines', value: String(globalCount), sub: 'shared with the team' },
+    { label: 'Rutinas globales', value: String(globalCount), sub: 'compartidas con el equipo' },
     {
-      label: `Runs · ${WINDOW_DAYS}d`,
+      label: `Ejecuciones · ${WINDOW_DAYS}d`,
       value: String(recentRuns.length),
-      sub: 'across visible routines',
+      sub: 'de las rutinas que ves',
     },
     {
-      label: `Failures · ${WINDOW_DAYS}d`,
+      label: `Fallos · ${WINDOW_DAYS}d`,
       value: String(failures),
-      sub: failures > 0 ? 'needs a look' : 'none',
+      sub: failures > 0 ? 'hay que mirarlos' : 'ninguno',
       tone: failures > 0 ? 'rose' : undefined,
     },
     {
-      label: 'Next due',
+      label: 'Próxima',
       value: nextDueIn ?? '—',
-      sub: nextDue?.name ?? 'nothing scheduled',
+      sub: nextDue?.name ?? 'nada programado',
     },
   ];
 
   return (
     <>
       <PageHeader
-        title="Routines"
-        subtitle="Unattended jobs Cortex runs on schedule — created from any chat in plain words. Global routines run for the whole team and email their results."
+        title="Rutinas"
+        subtitle="Trabajos que Cortex ejecuta solo, a la hora que le digas. Los creas hablando en el chat. Las rutinas globales corren para todo el equipo y envían el resultado por correo."
         icon={<AlarmClock className="h-5 w-5" />}
         actions={<RefreshButton />}
       />

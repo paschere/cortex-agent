@@ -22,25 +22,26 @@ import { useState } from 'react';
  */
 
 const KIND_LABEL: Record<MemoryKindView, string> = {
-  instruction: 'Always does this',
-  preference: 'How you like things',
-  vocabulary: 'What you mean',
-  fact: 'About you',
+  instruction: 'Siempre lo hace así',
+  preference: 'Cómo te gustan las cosas',
+  vocabulary: 'A qué te refieres',
+  fact: 'Sobre ti',
 };
 
 const SOURCE_LABEL: Record<MemorySourceView, string> = {
-  explicit: 'You told Cortex this',
-  derived: 'Noticed in your conversations',
-  behavioural: 'Counted from what you actually do',
+  explicit: 'Se lo dijiste tú',
+  derived: 'Lo notó en tus conversaciones',
+  behavioural: 'Lo contó de lo que realmente haces',
 };
 
 function whenLastUseful(memory: MemoryView): string {
-  if (!memory.lastUsedAt) return 'not used yet';
+  if (!memory.lastUsedAt) return 'sin usar todavía';
   const days = Math.floor((Date.now() - new Date(memory.lastUsedAt).getTime()) / 86_400_000);
-  if (days <= 0) return 'used today';
-  if (days === 1) return 'used yesterday';
-  if (days < 30) return `last useful ${days} days ago`;
-  return `last useful ${Math.floor(days / 30)} months ago`;
+  if (days <= 0) return 'usada hoy';
+  if (days === 1) return 'usada ayer';
+  if (days < 30) return `útil hace ${days} días`;
+  const months = Math.floor(days / 30);
+  return `útil hace ${months} ${months === 1 ? 'mes' : 'meses'}`;
 }
 
 function Meta({ children }: { children: React.ReactNode }) {
@@ -88,7 +89,7 @@ function MemoryCard({
             className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary hover:underline"
           >
             <MessageSquare className="h-3.5 w-3.5" />
-            Open the conversation this came from
+            Abrir la conversación de donde salió
           </Link>
         )}
       </div>
@@ -109,12 +110,12 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
       const res = await request();
       const json = (await res.json()) as { memories?: MemoryView[]; error?: string };
       if (!res.ok) {
-        setError(json.error ?? 'That did not work. Try again in a moment.');
+        setError(json.error ?? 'Eso no funcionó. Inténtalo de nuevo en un momento.');
         return;
       }
       if (json.memories) setMemories(json.memories);
     } catch {
-      setError('Could not reach the server.');
+      setError('No se pudo conectar con Cortex. Revisa tu conexión.');
     } finally {
       setBusyId(null);
     }
@@ -149,14 +150,14 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
       {suggested.length > 0 && (
         <Panel>
           <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
-            <Eyebrow>Waiting on you</Eyebrow>
+            <Eyebrow>Esperando por ti</Eyebrow>
             <span className="text-[12px] text-ink-faint">
-              <span className="tabular">{suggested.length}</span> to decide
+              <span className="tabular">{suggested.length}</span> por decidir
             </span>
           </div>
           <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
-            Cortex noticed these while you were working. Nothing here is in use yet — it only starts
-            shaping answers once you keep it.
+            Cortex notó estas cosas mientras trabajabas. Nada de esto se está usando todavía:
+            empieza a influir en las respuestas solo cuando lo guardas.
           </p>
           <div className="border-t border-border">
             {suggested.map((m) => (
@@ -172,7 +173,7 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
                       disabled={busyId === m.id}
                     >
                       <X className="h-3.5 w-3.5" />
-                      Not true
+                      No es así
                     </Button>
                     <Button onClick={() => act(m.id, 'accept')} disabled={busyId === m.id}>
                       {busyId === m.id ? (
@@ -180,7 +181,7 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
                       ) : (
                         <Check className="h-3.5 w-3.5" />
                       )}
-                      Keep it
+                      Guardar
                     </Button>
                   </>
                 }
@@ -192,27 +193,26 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
 
       <Panel>
         <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
-          <Eyebrow>In every conversation</Eyebrow>
+          <Eyebrow>En cada conversación</Eyebrow>
           <span className="tabular text-[12px] text-ink-faint">
-            {active.length} of {MEMORY_LIMIT_VIEW}
+            {active.length} de {MEMORY_LIMIT_VIEW}
           </span>
         </div>
         <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
-          Cortex carries these into every conversation, on every surface — the app, Google Chat and
-          Claude. They are never quoted out loud in a group space, only used.
+          Cortex lleva esto a cada conversación, en todas partes: la app, Google Chat y Claude.
+          Nunca las cita en voz alta en un espacio de grupo, solo las usa.
         </p>
         {active.length === 0 ? (
           <div className="border-t border-border px-5 py-10 text-center">
             <Brain className="mx-auto h-6 w-6 text-ink-faint" />
             <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-ink-muted">
-              Cortex is not carrying anything yet. Say &ldquo;remember that…&rdquo; in a
-              conversation, or leave it — it starts suggesting things once it has worked with you
-              for a few days.
+              Cortex todavía no lleva nada. Dile &ldquo;acuérdate de que…&rdquo; en una conversación,
+              o déjalo así: empieza a sugerir cosas después de unos días trabajando contigo.
             </p>
             <Link href="/chat" className="mt-4 inline-block">
               <Button variant="outline">
                 <MessageSquare className="h-3.5 w-3.5" />
-                Start a conversation
+                Empezar una conversación
               </Button>
             </Link>
           </div>
@@ -227,8 +227,8 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
                   <>
                     <Button
                       variant="ghost"
-                      aria-label="Stop using this memory"
-                      title="Stop using it, but keep it here"
+                      aria-label="Dejar de usar esta memoria"
+                      title="Deja de usarla, pero la conserva aquí"
                       onClick={() => act(m.id, 'archive')}
                       disabled={busyId === m.id}
                     >
@@ -236,8 +236,8 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
                     </Button>
                     <Button
                       variant="ghost"
-                      aria-label="Delete this memory"
-                      title="Delete it for good"
+                      aria-label="Borrar esta memoria"
+                      title="Bórrala para siempre"
                       onClick={() => remove(m.id)}
                       disabled={busyId === m.id}
                     >
@@ -254,12 +254,12 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
       {archived.length > 0 && (
         <Panel>
           <div className="px-5 pt-4 pb-3">
-            <Eyebrow>No longer in use</Eyebrow>
+            <Eyebrow>Ya no se usan</Eyebrow>
           </div>
           <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
-            You put these aside, or they dropped out when you hit{' '}
-            <span className="tabular">{MEMORY_LIMIT_VIEW}</span>. Cortex does
-            not use them — nothing is deleted behind your back.
+            Las guardaste aparte, o se salieron cuando llegaste a{' '}
+            <span className="tabular">{MEMORY_LIMIT_VIEW}</span>. Cortex no las usa, y nada se borra
+            a tus espaldas.
           </p>
           <div className="border-t border-border">
             {archived.map((m) => (
@@ -275,11 +275,11 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
                       disabled={busyId === m.id}
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
-                      Use it again
+                      Volver a usarla
                     </Button>
                     <Button
                       variant="ghost"
-                      aria-label="Delete this memory"
+                      aria-label="Borrar esta memoria"
                       onClick={() => remove(m.id)}
                       disabled={busyId === m.id}
                     >

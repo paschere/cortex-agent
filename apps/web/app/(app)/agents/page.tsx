@@ -26,18 +26,18 @@ export default async function AgentsPage() {
   return (
     <>
       <PageHeader
-        title="Agents"
-        subtitle={`${agents.length} agent${agents.length === 1 ? '' : 's'} configured across your teams`}
+        title="Agentes"
+        subtitle={`${agents.length} ${agents.length === 1 ? 'agente configurado' : 'agentes configurados'} en tus equipos`}
         icon={<Bot className="h-5 w-5" />}
       />
 
       {agents.length === 0 ? (
         <Panel className="p-10 text-center">
           <Bot className="mx-auto mb-3 h-8 w-8 text-ink-faint" />
-          <p className="text-[13px] font-semibold text-ink">No agents are configured</p>
+          <p className="text-[13px] font-semibold text-ink">No hay agentes configurados</p>
           <p className="mx-auto mt-1 max-w-md text-[13px] leading-relaxed text-ink-muted">
-            An agent is a named model with a fixed tool list. Ops provisions them — ask an
-            administrator to add the first one.
+            Un agente es un modelo con nombre y una lista fija de herramientas. Los habilita el
+            equipo técnico: pídele a un administrador que cree el primero.
           </p>
         </Panel>
       ) : (
@@ -53,13 +53,13 @@ export default async function AgentsPage() {
                         <span className="truncate text-[14px] font-bold text-ink">{a.name}</span>
                         {isCortex && (
                           <span className="shrink-0 rounded-card border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-primary-ink">
-                            Super-agent
+                            Super-agente
                           </span>
                         )}
                       </div>
                       <div className="truncate text-[11px] text-ink-faint">
                         <span className="tabular">{a.slug}</span> ·{' '}
-                        {a.teams?.[0]?.name ?? 'No team'}
+                        {a.teams?.[0]?.name ?? 'Sin equipo'}
                       </div>
                     </div>
                     <span
@@ -84,8 +84,8 @@ export default async function AgentsPage() {
                     </span>
                     <span className="inline-flex shrink-0 items-center gap-1">
                       <Wrench className="h-3.5 w-3.5" />
-                      <span className="tabular">{a.allowed_tool_ids.length}</span> tool
-                      {a.allowed_tool_ids.length === 1 ? '' : 's'}
+                      <span className="tabular">{a.allowed_tool_ids.length}</span>{' '}
+                      {a.allowed_tool_ids.length === 1 ? 'herramienta' : 'herramientas'}
                     </span>
                   </div>
                 </Panel>

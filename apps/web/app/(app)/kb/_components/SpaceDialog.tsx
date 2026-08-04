@@ -94,7 +94,7 @@ export function SpaceDialog({
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submit()}
                 placeholder={isGlobal ? 'Tarifas y fletes' : 'Mis notas de clientes'}
-                className="mt-1.5 w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                className="mt-1.5 w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink transition placeholder:text-ink-faint focus:border-primary"
               />
             </label>
 
@@ -107,7 +107,7 @@ export function SpaceDialog({
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 placeholder="Una línea para que el siguiente sepa qué guardar aquí."
-                className="mt-1.5 w-full resize-none rounded-card border border-border bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink outline-none transition placeholder:text-ink-faint focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                className="mt-1.5 w-full resize-none rounded-card border border-border bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink transition placeholder:text-ink-faint focus:border-primary"
               />
             </label>
 

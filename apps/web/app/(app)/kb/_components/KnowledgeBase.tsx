@@ -172,7 +172,7 @@ function AskPanel({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && run()}
             placeholder="Tarifa de bodegaje, cómo se liquida una importación…"
-            className="h-9 w-full rounded-card border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface focus:outline-none"
+            className="h-9 w-full rounded-card border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface"
           />
         </div>
 
@@ -180,7 +180,7 @@ function AskPanel({
           <select
             value={scope}
             onChange={(e) => setScope(e.target.value)}
-            className="h-9 rounded-card border border-border bg-surface px-3 text-[12.5px] font-medium text-ink focus:border-border-strong focus:outline-none"
+            className="h-9 rounded-card border border-border bg-surface px-3 text-[12.5px] font-medium text-ink focus:border-border-strong"
           >
             <option value="">En todo lo que ves</option>
             {spaces.map((s) => (

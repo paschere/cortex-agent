@@ -123,14 +123,14 @@ export function SettingsForm({
       if (!res.ok) {
         setStatus({
           kind: 'error',
-          message: json.error ?? 'Could not save your settings.',
+          message: json.error ?? 'No se pudo guardar tu configuración. Vuelve a intentarlo.',
         });
         return;
       }
       if (json.preferences) setPrefs(json.preferences);
       setStatus({ kind: 'saved' });
     } catch {
-      setStatus({ kind: 'error', message: 'Could not reach the server.' });
+      setStatus({ kind: 'error', message: 'No se pudo conectar con Cortex. Revisa tu conexión.' });
     }
   }
 
@@ -148,11 +148,14 @@ export function SettingsForm({
           ? { kind: 'saved' }
           : {
               kind: 'error',
-              message: json.error ?? 'The test message did not go through.',
+              message: json.error ?? 'El mensaje de prueba no llegó. Revisa la URL del webhook.',
             },
       );
     } catch {
-      setTestStatus({ kind: 'error', message: 'Could not reach the server.' });
+      setTestStatus({
+        kind: 'error',
+        message: 'No se pudo conectar con Cortex. Revisa tu conexión.',
+      });
     }
   }
 
@@ -167,13 +170,14 @@ export function SettingsForm({
           ? { kind: 'saved' }
           : {
               kind: 'error',
-              message: json.error ?? 'The test message did not go through.',
+              message:
+                json.error ?? 'El mensaje de prueba no llegó. Saluda a Cortex en Google Chat.',
             },
       );
     } catch {
       setTestDmStatus({
         kind: 'error',
-        message: 'Could not reach the server.',
+        message: 'No se pudo conectar con Cortex. Revisa tu conexión.',
       });
     }
   }
@@ -188,40 +192,39 @@ export function SettingsForm({
         <Toggle
           checked={on}
           onChange={(v) => set('inboxDigestEnabled', v)}
-          label="Daily inbox digest"
-          description="Once a day, Cortex reads your recent email and sends you a short summary: what is waiting on your reply, what you are waiting on from other people, and what is just worth knowing."
+          label="Resumen diario del correo"
+          description="Una vez al día Cortex lee tu correo reciente y te manda un resumen corto: qué está esperando tu respuesta, qué estás esperando tú de otros y qué vale la pena saber."
         />
 
         <div className="mt-4 rounded-card border border-border bg-surface-2 p-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            <Eyebrow>What Cortex reads, and what it does not</Eyebrow>
+            <Eyebrow>Qué lee Cortex y qué no</Eyebrow>
           </div>
           <ul className="mt-2.5 space-y-1.5 text-[12.5px] leading-relaxed text-ink-muted">
             <li>
-              <strong className="text-ink">Only your mailbox.</strong> Cortex reads the recent
-              conversations in your own inbox — who wrote, when, the subject and the message content
-              — using the Google access you already granted when you signed in. Nobody else&apos;s
-              mail is ever involved.
+              <strong className="text-ink">Solo tu buzón.</strong> Cortex lee las conversaciones
+              recientes de tu propio correo —quién escribió, cuándo, el asunto y el contenido— con
+              el acceso de Google que ya diste al entrar. Nunca toca el correo de nadie más.
             </li>
             <li>
-              <strong className="text-ink">Summarized on our side.</strong> The messages are
-              condensed on our servers into the digest you receive. The mail itself is never stored,
-              never added to Brain Knowledge, and never handed to the assistant you chat with.
+              <strong className="text-ink">Se resume de nuestro lado.</strong> Los mensajes se
+              condensan en nuestros servidores para armar el resumen que recibes. El correo en sí
+              no se guarda, no entra a Brain Knowledge y no se le pasa al asistente con el que
+              chateas.
             </li>
             <li>
-              <strong className="text-ink">Delivered only to you.</strong> The digest goes to your
-              own email address, to a Google Chat space you set up yourself, or as a direct message
-              from Cortex that only you can see. It is never shared with your team, your manager or
-              anyone else.
+              <strong className="text-ink">Te llega solo a ti.</strong> El resumen va a tu correo, a
+              un espacio de Google Chat que tú configures o como mensaje directo de Cortex que solo
+              tú ves. Nunca se comparte con tu equipo, tu jefe ni nadie más.
             </li>
             <li>
-              <strong className="text-ink">Newsletters are filtered out</strong> before anything is
-              read closely, and each digest tells you what it left out and why.
+              <strong className="text-ink">Los boletines quedan por fuera</strong> antes de que se
+              lea nada a fondo, y cada resumen te dice qué dejó por fuera y por qué.
             </li>
             <li>
-              <strong className="text-ink">Off is off.</strong> Turn this switch off and Cortex
-              stops reading your mail on a schedule, immediately.
+              <strong className="text-ink">Apagado es apagado.</strong> Apaga este interruptor y
+              Cortex deja de leer tu correo de una vez.
             </li>
           </ul>
         </div>
@@ -229,11 +232,11 @@ export function SettingsForm({
 
       {/* ---- When ---------------------------------------------------------- */}
       <Panel className={clsx('p-5 transition-opacity', !on && 'opacity-55')}>
-        <Eyebrow>When it arrives</Eyebrow>
+        <Eyebrow>Cuándo llega</Eyebrow>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="digest-time" className="field-label mb-1 block">
-              Time
+              Hora
             </label>
             <input
               id="digest-time"
@@ -246,7 +249,7 @@ export function SettingsForm({
           </div>
           <div>
             <label htmlFor="digest-tz" className="field-label mb-1 block">
-              Time zone
+              Zona horaria
             </label>
             <select
               id="digest-tz"
@@ -264,13 +267,14 @@ export function SettingsForm({
           </div>
         </div>
         <p className="mt-2 text-[12px] text-ink-faint">
-          Cortex checks every half hour, so the digest lands within 30 minutes of the time you pick.
+          Cortex revisa cada media hora, así que el resumen te llega dentro de los 30 minutos
+          siguientes a la hora que elijas.
         </p>
       </Panel>
 
       {/* ---- Where --------------------------------------------------------- */}
       <Panel className={clsx('p-5 transition-opacity', !on && 'opacity-55')}>
-        <Eyebrow>Where it goes</Eyebrow>
+        <Eyebrow>A dónde llega</Eyebrow>
 
         <div className="mt-3 space-y-4">
           <div className="rounded-card border border-border p-4">
@@ -278,16 +282,16 @@ export function SettingsForm({
               checked={prefs.deliverEmail}
               disabled={!on}
               onChange={(v) => set('deliverEmail', v)}
-              label="Email"
+              label="Correo"
               description={
                 <>
-                  Sent to <span className="tabular text-ink">{prefs.email}</span>
+                  Se envía a <span className="tabular text-ink">{prefs.email}</span>
                 </>
               }
             />
-            <div className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-faint">
-              <Mail className="h-3.5 w-3.5" />
-              This is the address on your Cortex account and cannot be changed here.
+            <div className="mt-2 flex items-start gap-1.5 text-[12px] leading-relaxed text-ink-faint">
+              <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Es la dirección de tu cuenta de Cortex y no se puede cambiar desde aquí.
             </div>
           </div>
 
@@ -296,13 +300,13 @@ export function SettingsForm({
               checked={prefs.deliverChat}
               disabled={!on}
               onChange={(v) => set('deliverChat', v)}
-              label="Google Chat — a space"
-              description="Posted into a space you choose, through a webhook you create yourself. Everyone in that space can read it."
+              label="Google Chat — un espacio"
+              description="Se publica en el espacio que elijas, a través de un webhook que tú mismo creas. Todo el que esté en ese espacio lo puede leer."
             />
 
             <div className="mt-3">
               <label htmlFor="chat-webhook" className="field-label mb-1 block">
-                Webhook URL
+                URL del webhook
               </label>
               <input
                 id="chat-webhook"
@@ -321,20 +325,21 @@ export function SettingsForm({
               />
 
               <ol className="mt-2.5 space-y-1 text-[12px] leading-relaxed text-ink-muted">
-                <li>1. In Google Chat, open the space you want the digest in.</li>
+                <li>1. En Google Chat, abre el espacio donde quieres el resumen.</li>
                 <li>
-                  2. Click the space name →{' '}
-                  <strong className="text-ink">Apps &amp; integrations</strong>.
+                  2. Haz clic en el nombre del espacio →{' '}
+                  <strong className="text-ink">Apps e integraciones</strong>.
                 </li>
                 <li>
-                  3. Choose <strong className="text-ink">Webhooks</strong> →{' '}
-                  <strong className="text-ink">Add webhook</strong>, name it &ldquo;Cortex&rdquo;.
+                  3. Elige <strong className="text-ink">Webhooks</strong> →{' '}
+                  <strong className="text-ink">Agregar webhook</strong> y ponle
+                  &ldquo;Cortex&rdquo;.
                 </li>
-                <li>4. Copy the whole URL it gives you and paste it above.</li>
+                <li>4. Copia la URL completa que te da y pégala arriba.</li>
               </ol>
-              <p className="mt-2 text-[12px] text-ink-faint">
-                Anyone in that space will see your digest — put it in a space that is just yours if
-                you would rather keep it private.
+              <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+                Todo el que esté en ese espacio va a ver tu resumen. Si lo prefieres privado, usa un
+                espacio que sea solo tuyo.
               </p>
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -349,12 +354,12 @@ export function SettingsForm({
                   ) : (
                     <MessageCircle className="h-3.5 w-3.5" />
                   )}
-                  Send test message to the space
+                  Enviar un mensaje de prueba al espacio
                 </Button>
                 {testStatus.kind === 'saved' && (
                   <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald">
                     <Check className="h-3.5 w-3.5" />
-                    Sent — check the space.
+                    Enviado. Revisa el espacio.
                   </span>
                 )}
                 {testStatus.kind === 'error' && (
@@ -376,8 +381,8 @@ export function SettingsForm({
                 set('deliverChatDm', v);
                 setTestDmStatus({ kind: 'idle' });
               }}
-              label="Google Chat — direct message"
-              description="Cortex sends the digest straight to you in Google Chat. Nobody else is in that conversation — and the routines you own arrive there too."
+              label="Google Chat — mensaje directo"
+              description="Cortex te manda el resumen directo por Google Chat. Nadie más está en esa conversación, y tus rutinas también llegan ahí."
             />
 
             <div className="mt-3">
@@ -387,37 +392,38 @@ export function SettingsForm({
                 <div className="flex items-start gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
-                    The Cortex Chat app is not set up on this environment yet, so direct messages
-                    cannot be sent. Ask an admin to enable it.
+                    La app de Cortex para Chat todavía no está configurada en este entorno, así que
+                    no se pueden enviar mensajes directos. Pídele a un administrador que la active.
                   </span>
                 </div>
               ) : dmReady ? (
                 <div className="flex items-start gap-2 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-emerald">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
-                    Connected as{' '}
+                    Conectado como{' '}
                     <span className="tabular font-semibold">
                       {chatDm.displayName ?? prefs.email}
-                    </span>{' '}
-                    — messages will arrive in your Cortex chat.
+                    </span>
+                    . Los mensajes te van a llegar a tu chat con Cortex.
                   </span>
                 </div>
               ) : (
                 <div className="rounded-card border border-amber/30 bg-amber-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
                   <div className="flex items-start gap-2 font-medium text-amber">
                     <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>Not connected yet — nothing can be delivered here.</span>
+                    <span>Todavía no está conectado, así que aquí no llega nada.</span>
                   </div>
                   <p className="mt-1.5 pl-[22px]">
-                    Cortex can only write in a conversation you started. Open Google Chat, search
-                    for <strong className="text-ink">Cortex</strong>, say hi — then refresh this
-                    page.
+                    Cortex solo puede escribir en una conversación que empezaste tú. Abre Google
+                    Chat, busca <strong className="text-ink">Cortex</strong>, salúdalo y luego
+                    recarga esta página.
                   </p>
                 </div>
               )}
 
-              <p className="mt-2 text-[12px] text-ink-faint">
-                This is the private option: unlike the space above, the digest goes only to you.
+              <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+                Esta es la opción privada: a diferencia del espacio de arriba, el resumen te llega
+                solo a ti.
               </p>
 
               <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -432,12 +438,12 @@ export function SettingsForm({
                   ) : (
                     <Send className="h-3.5 w-3.5" />
                   )}
-                  Send test DM
+                  Enviar un mensaje de prueba
                 </Button>
                 {testDmStatus.kind === 'saved' && (
                   <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald">
                     <Check className="h-3.5 w-3.5" />
-                    Sent — check your Cortex chat.
+                    Enviado. Revisa tu chat con Cortex.
                   </span>
                 )}
                 {testDmStatus.kind === 'error' && (
@@ -451,8 +457,8 @@ export function SettingsForm({
               {prefs.deliverChatDm && chatDm.configured && !chatDm.linked && (
                 <p className="mt-2.5 flex items-start gap-1.5 text-[12px] leading-relaxed text-amber">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  You can save this now, but the digest will not reach Google Chat until you have
-                  said hi to Cortex there.
+                  Puedes guardarlo ya, pero el resumen no va a llegar a Google Chat hasta que
+                  saludes a Cortex allá.
                 </p>
               )}
             </div>
@@ -462,10 +468,10 @@ export function SettingsForm({
 
       {/* ---- Focus --------------------------------------------------------- */}
       <Panel className={clsx('p-5 transition-opacity', !on && 'opacity-55')}>
-        <Eyebrow>What matters to me</Eyebrow>
-        <p className="mt-1.5 text-[12.5px] text-ink-muted">
-          Tell Cortex how to rank your morning. Written in your own words — it is used to order the
-          digest, not to decide what gets read.
+        <Eyebrow>Qué es lo que más te importa</Eyebrow>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+          Cuéntale a Cortex cómo ordenar tu mañana, con tus propias palabras. Sirve para ordenar el
+          resumen, no para decidir qué se lee.
         </p>
         <textarea
           value={prefs.digestFocus}
@@ -473,7 +479,7 @@ export function SettingsForm({
           maxLength={600}
           rows={3}
           onChange={(e) => set('digestFocus', e.target.value)}
-          placeholder="Clients first, then anything about open roles. Internal newsletters can go to the bottom."
+          placeholder="Primero los clientes, después lo de las vacantes abiertas. Los boletines internos al final."
           className={clsx(FIELD, 'mt-2.5 resize-y')}
         />
         <div className="tabular mt-1 text-right text-[11px] text-ink-faint">
@@ -485,12 +491,12 @@ export function SettingsForm({
       <div className="flex flex-wrap items-center gap-3 pb-2">
         <Button type="button" onClick={save} disabled={status.kind === 'saving'}>
           {status.kind === 'saving' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Save settings
+          Guardar
         </Button>
         {status.kind === 'saved' && (
           <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald">
             <Check className="h-3.5 w-3.5" />
-            Saved.
+            Guardado.
           </span>
         )}
         {status.kind === 'error' && (

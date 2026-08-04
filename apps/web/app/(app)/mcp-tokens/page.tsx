@@ -35,7 +35,7 @@ interface TokenRow {
 
 function fmt(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-US', {
+  return new Date(iso).toLocaleString('es-CO', {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
@@ -54,9 +54,9 @@ function stateOf(t: TokenRow): TokenState {
 }
 
 const STATE: Record<TokenState, { label: string; className: string }> = {
-  active: { label: 'In force', className: 'border-emerald/40 bg-emerald-soft text-emerald' },
-  expired: { label: 'Expired', className: 'border-amber/40 bg-amber-soft text-amber' },
-  revoked: { label: 'Revoked', className: 'border-rose/40 bg-rose-soft text-rose' },
+  active: { label: 'Vigente', className: 'border-emerald/40 bg-emerald-soft text-emerald' },
+  expired: { label: 'Vencido', className: 'border-amber/40 bg-amber-soft text-amber' },
+  revoked: { label: 'Revocado', className: 'border-rose/40 bg-rose-soft text-rose' },
 };
 
 function StateTag({ state }: { state: TokenState }) {
@@ -103,8 +103,8 @@ export default async function ConnectClientPage({
   return (
     <>
       <PageHeader
-        title="Connect Claude"
-        subtitle="Use Cortex from Claude, Claude Code, ChatGPT or any MCP client — same tools, your permissions, every action audited."
+        title="Conectar Claude"
+        subtitle="Usa Cortex desde Claude, Claude Code, ChatGPT o cualquier cliente MCP: las mismas herramientas, tus permisos y todo queda en la auditoría."
         icon={<Cable className="h-5 w-5" />}
       />
 
@@ -119,12 +119,12 @@ export default async function ConnectClientPage({
             </span>
             <div className="min-w-0">
               <h2 className="text-[15px] font-bold tracking-tight text-ink">
-                No token needed — just sign in
+                No necesitas token: solo inicia sesión
               </h2>
               <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-                Claude, Claude Code and ChatGPT connect over OAuth: you paste the URL below, they
-                send you to Google, you approve once. Nothing to copy, nothing to store, and access
-                dies with your Cortex account.
+                Claude, Claude Code y ChatGPT se conectan por OAuth: pegas la URL de abajo, te
+                mandan a Google y apruebas una vez. Nada que copiar, nada que guardar, y el acceso
+                se acaba junto con tu cuenta de Cortex.
               </p>
             </div>
           </div>
@@ -139,19 +139,19 @@ export default async function ConnectClientPage({
               <KeyRound className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <div className="field-label">Advanced</div>
+              <div className="field-label">Avanzado</div>
               <h2 className="mt-0.5 text-[15px] font-bold tracking-tight text-ink">
-                Personal access tokens
+                Tokens de acceso personal
               </h2>
               <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-                Only for clients that cannot do OAuth — a script, a self-hosted bridge, an older MCP
-                client. A token acts as you: whoever holds it gets your tools and your data, until
-                you revoke it here.
+                Solo para clientes que no manejan OAuth: un script, un puente que alojas tú, un
+                cliente MCP viejo. Un token actúa como tú: quien lo tenga usa tus herramientas y ve
+                tus datos, hasta que lo revoques desde aquí.
               </p>
               {liveTokens > 0 && (
                 <p className="mt-1 text-[11.5px] text-ink-faint">
-                  <span className="tabular text-ink-muted">{liveTokens}</span> token
-                  {liveTokens === 1 ? '' : 's'} in force on your account.
+                  <span className="tabular text-ink-muted">{liveTokens}</span>{' '}
+                  {liveTokens === 1 ? 'token vigente' : 'tokens vigentes'} en tu cuenta.
                 </p>
               )}
             </div>
@@ -162,17 +162,17 @@ export default async function ConnectClientPage({
             <div className="mt-4 rounded-card border border-amber/40 bg-amber-soft p-4">
               <p className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-amber">
                 <TriangleAlert className="h-4 w-4" />
-                Copy this token now — it will not be shown again.
+                Copia este token ahora: no se vuelve a mostrar.
               </p>
               <div className="flex flex-wrap items-center gap-2 rounded-card border border-amber/30 bg-surface px-3 py-2">
                 <code className="min-w-0 flex-1 break-all font-mono text-xs text-ink">
                   {justIssued}
                 </code>
-                <CopyButton text={justIssued} label="Copy token" />
+                <CopyButton text={justIssued} label="Copiar el token" />
               </div>
               <p className="mt-2 text-[11.5px] text-amber">
-                Leave this page and the token is gone from here for good — only its hash is stored.
-                Keep it somewhere safe.
+                Si sales de esta página el token desaparece de aquí para siempre: solo se guarda su
+                hash. Guárdalo en un lugar seguro.
               </p>
             </div>
           )}
@@ -182,23 +182,23 @@ export default async function ConnectClientPage({
             <form action={issueToken} className="space-y-3">
               <div>
                 <label htmlFor="token-name" className="field-label mb-1 block">
-                  Token name
+                  Nombre del token
                 </label>
                 <input
                   id="token-name"
                   name="name"
                   required
                   maxLength={60}
-                  placeholder="Work laptop"
+                  placeholder="Portátil del trabajo"
                   className={FIELD}
                 />
               </div>
               <div>
                 <label htmlFor="agent-select" className="field-label mb-1 block">
-                  Agent
+                  Agente
                 </label>
                 <select id="agent-select" name="agentId" className={FIELD}>
-                  <option value="">Any agent</option>
+                  <option value="">Cualquier agente</option>
                   {agents.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
@@ -206,19 +206,19 @@ export default async function ConnectClientPage({
                   ))}
                 </select>
                 <p className="mt-1 text-[11.5px] text-ink-faint">
-                  Pick one to narrow the token to that agent&apos;s tools.
+                  Escoge uno para limitar el token a las herramientas de ese agente.
                 </p>
               </div>
-              <Button type="submit">Generate token</Button>
+              <Button type="submit">Generar el token</Button>
             </form>
 
             {/* The register: one row per token, every date and id in mono. */}
             <div>
-              <div className="field-label">Your tokens</div>
+              <div className="field-label">Tus tokens</div>
               {tokens.length === 0 ? (
                 <p className="mt-3 max-w-md text-[13px] leading-relaxed text-ink-muted">
-                  No tokens issued. Name one on the left and generate it — though most people
-                  connect over OAuth above and never need one.
+                  No has emitido ningún token. Ponle nombre a la izquierda y genéralo, aunque casi
+                  todo el mundo se conecta por OAuth arriba y nunca necesita uno.
                 </p>
               ) : (
                 <ul className="mt-2 divide-y divide-border border-t border-border">
@@ -241,24 +241,24 @@ export default async function ConnectClientPage({
                               <Button
                                 type="submit"
                                 variant="danger"
-                                title="Kills this token immediately, everywhere it is used"
+                                title="Mata este token de inmediato, en todas partes donde se use"
                               >
-                                Revoke
+                                Revocar
                               </Button>
                             </form>
                           )}
                         </div>
                         <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-4">
-                          <Field label="Agent">
-                            <span className="text-[13px]">{t.agents?.name ?? 'Any'}</span>
+                          <Field label="Agente">
+                            <span className="text-[13px]">{t.agents?.name ?? 'Cualquiera'}</span>
                           </Field>
-                          <Field label="Last used">
+                          <Field label="Último uso">
                             <span className="text-[13px]">{fmt(t.last_used_at)}</span>
                           </Field>
-                          <Field label="Created">
+                          <Field label="Creado">
                             <span className="text-[13px]">{fmt(t.created_at)}</span>
                           </Field>
-                          <Field label={t.revoked_at ? 'Revoked' : 'Expires'}>
+                          <Field label={t.revoked_at ? 'Revocado' : 'Vence'}>
                             <span className="text-[13px]">
                               {fmt(t.revoked_at ?? t.expires_at)}
                             </span>

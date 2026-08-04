@@ -17,9 +17,9 @@ const RUN_STATUS_TONE: Record<JobRun['status'], StatusTone> = {
 };
 
 const RUN_STATUS_LABEL: Record<JobRun['status'], string> = {
-  ok: 'succeeded',
-  error: 'failed',
-  running: 'running',
+  ok: 'exitosa',
+  error: 'falló',
+  running: 'corriendo',
 };
 
 /** Full detail of a single run: timings, the whole output, and the error. */
@@ -74,34 +74,34 @@ export function RunDetailDialog({
                 <span className={chipClass(RUN_STATUS_TONE[run.status])}>
                   {RUN_STATUS_LABEL[run.status]}
                 </span>
-                <span>Started {fmtLong(run.started_at)}</span>
+                <span>Empezó {fmtLong(run.started_at)}</span>
                 {when && <span>· {when}</span>}
               </Dialog.Description>
               {/* The run is the system of record for this output: say when it
                   ran and how it ended, right above what it produced. */}
               <Provenance
                 className="mt-2"
-                source="Routine run"
+                source="Ejecución"
                 readAt={fmtLong(run.started_at)}
-                detail={took ? `${RUN_STATUS_LABEL[run.status]} in ${took}` : RUN_STATUS_LABEL[run.status]}
+                detail={took ? `${RUN_STATUS_LABEL[run.status]} en ${took}` : RUN_STATUS_LABEL[run.status]}
                 tone={run.status === 'error' ? 'seal' : 'stamp'}
               />
             </div>
             <Dialog.Close
               className="grid h-8 w-8 shrink-0 place-items-center rounded-card text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              aria-label="Close"
+              aria-label="Cerrar"
             >
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>
 
           <div className="grid grid-cols-2 gap-px border-b border-border bg-border sm:grid-cols-3">
-            <Meta label="Started" value={fmtLong(run.started_at)} />
+            <Meta label="Empezó" value={fmtLong(run.started_at)} />
             <Meta
-              label="Finished"
-              value={run.finished_at ? fmtLong(run.finished_at) : 'Still running'}
+              label="Terminó"
+              value={run.finished_at ? fmtLong(run.finished_at) : 'Sigue corriendo'}
             />
-            <Meta label="Duration" value={took ?? '—'} />
+            <Meta label="Duración" value={took ?? '—'} />
           </div>
 
           <div className="scroll-slim min-h-0 flex-1 overflow-auto px-5 py-4">
@@ -114,7 +114,7 @@ export function RunDetailDialog({
               </div>
             )}
 
-            <div className="field-label mb-1.5">Output</div>
+            <div className="field-label mb-1.5">Resultado</div>
             {body ? (
               <RunOutput
                 text={body}
@@ -123,8 +123,8 @@ export function RunDetailDialog({
             ) : (
               <p className="rounded-card border border-border bg-surface-2 px-3.5 py-3 text-[13px] text-ink-muted">
                 {run.status === 'running'
-                  ? 'Still in flight — the result lands here the moment it finishes.'
-                  : 'This run finished without writing anything.'}
+                  ? 'Sigue en curso. El resultado aparece aquí apenas termine.'
+                  : 'Esta ejecución terminó sin escribir nada.'}
               </p>
             )}
           </div>
@@ -135,11 +135,11 @@ export function RunDetailDialog({
                 href={`/chat/${conversationId}`}
                 className="inline-flex items-center gap-1.5 rounded-card px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                <MessageSquare className="h-3.5 w-3.5" /> Open results conversation
+                <MessageSquare className="h-3.5 w-3.5" /> Abrir la conversación
               </Link>
             ) : (
               <span className="text-[11.5px] text-ink-faint">
-                No results conversation for this routine
+                Esta rutina no tiene conversación de resultados
               </span>
             )}
             <button
@@ -150,11 +150,11 @@ export function RunDetailDialog({
             >
               {copied ? (
                 <>
-                  <Check className="h-3.5 w-3.5 text-emerald" /> Copied
+                  <Check className="h-3.5 w-3.5 text-emerald" /> Copiado
                 </>
               ) : (
                 <>
-                  <Copy className="h-3.5 w-3.5" /> Copy output
+                  <Copy className="h-3.5 w-3.5" /> Copiar el resultado
                 </>
               )}
             </button>

@@ -118,7 +118,7 @@ export function IntakeChooser({
             <select
               value={target}
               onChange={(e) => setChosen(e.target.value)}
-              className="h-8 min-w-0 max-w-full rounded-card border border-border bg-surface px-2.5 text-[12.5px] font-medium text-ink focus:border-border-strong focus:outline-none"
+              className="h-8 min-w-0 max-w-full rounded-card border border-border bg-surface px-2.5 text-[12.5px] font-medium text-ink focus:border-border-strong"
             >
               {writable.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -180,11 +180,7 @@ export function IntakePanel({
       {/* Plain toggle buttons rather than a tablist: a real tablist owes the
           keyboard arrow-key navigation, and four buttons you can Tab through
           are what people actually expect here. */}
-      <div
-        className="mt-3 grid grid-cols-2 gap-px border-y border-border bg-border sm:grid-cols-4"
-        role="group"
-        aria-label="Formas de alimentar este espacio"
-      >
+      <div className="mt-3 grid grid-cols-2 gap-px border-y border-border bg-border sm:grid-cols-4">
         {INTAKES.map(({ key, label, icon: Icon, unit }) => {
           const on = key === active;
           return (

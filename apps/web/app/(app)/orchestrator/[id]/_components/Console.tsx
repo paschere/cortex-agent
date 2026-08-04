@@ -51,7 +51,7 @@ function CancelButton({ runId, onCancelled }: { runId: string; onCancelled: () =
   async function cancel() {
     if (
       !window.confirm(
-        'Stop this run?\n\nSub-agents already working finish their current step; nothing new is started.',
+        '¿Detener esta ejecución?\n\nLos subagentes que ya están trabajando terminan el paso en el que van; no se lanza nada nuevo.',
       )
     ) {
       return;
@@ -77,7 +77,7 @@ function CancelButton({ runId, onCancelled }: { runId: string; onCancelled: () =
       ) : (
         <CircleStop className="h-3.5 w-3.5" />
       )}
-      Stop
+      Detener
     </button>
   );
 }
@@ -86,10 +86,10 @@ function ConnectionDot({ connection, active }: { connection: Connection; active:
   if (!active) return null;
   const label =
     connection === 'live'
-      ? 'Live'
+      ? 'En vivo'
       : connection === 'reconnecting'
-        ? 'Reconnecting…'
-        : 'Disconnected';
+        ? 'Reconectando…'
+        : 'Desconectado';
   return (
     <span className="field-label inline-flex items-center gap-1.5">
       <span
@@ -216,7 +216,7 @@ export function Console({
           href="/orchestrator"
           className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint transition-colors hover:text-ink"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Orchestrator
+          <ArrowLeft className="h-3.5 w-3.5" /> Orquestador
         </Link>
         <ConnectionDot connection={connection} active={active} />
       </div>
@@ -225,7 +225,7 @@ export function Console({
       <div className="rule-double mb-5 pt-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1 basis-[20rem]">
-            <div className="field-label">Objective</div>
+            <div className="field-label">Objetivo</div>
             <h1 className="mt-1 text-[19px] font-extrabold leading-snug tracking-tight text-ink">
               {run.objective}
             </h1>
@@ -239,16 +239,16 @@ export function Console({
                 onClick={() => window.location.reload()}
                 className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
               >
-                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                <RefreshCw className="h-3.5 w-3.5" /> Actualizar
               </button>
             )}
           </div>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
-          <Meter label="Sub-agents" value={String(tasks.length)} />
-          <Meter label="Elapsed" value={formatDuration(duration)} />
-          <Meter label="Tool calls" value={toolCallCount.toLocaleString()} />
+          <Meter label="Subagentes" value={String(tasks.length)} />
+          <Meter label="Transcurrido" value={formatDuration(duration)} />
+          <Meter label="Herramientas" value={toolCallCount.toLocaleString()} />
           <Meter
             label="Tokens"
             value={run.totalTokens > 0 ? run.totalTokens.toLocaleString() : '—'}
@@ -260,7 +260,7 @@ export function Console({
         <div className="mb-5">
           <div className="mb-1.5 flex items-center justify-between">
             <span className="field-label">
-              {done} of {tasks.length} done
+              {done} de {tasks.length} listos
             </span>
             <span className="tabular text-[11px] text-ink-muted">{progress}%</span>
           </div>
@@ -278,7 +278,7 @@ export function Console({
           <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-rose">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="min-w-0 break-words">
-              {state.error} The sub-agents below show how far the run got before it stopped.
+              {state.error} Los subagentes de abajo muestran hasta dónde alcanzó a llegar.
             </span>
           </p>
         </Panel>
@@ -287,20 +287,20 @@ export function Console({
       {planning && tasks.length === 0 && (
         <Panel className="mb-5 px-6 py-12 text-center">
           <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-primary motion-reduce:animate-none" />
-          <h2 className="text-[14px] font-bold text-ink">Working out the plan</h2>
+          <h2 className="text-[14px] font-bold text-ink">Armando el plan</h2>
           <p className="mx-auto mt-1 max-w-sm text-[12.5px] leading-relaxed text-ink-muted">
-            Cortex is deciding which specialists this needs and which of them can work at the same
-            time. The manifest below fills in the moment it decides.
+            Cortex está decidiendo qué especialistas necesita y cuáles pueden trabajar al tiempo. El
+            manifiesto de abajo se llena apenas lo decida.
           </p>
         </Panel>
       )}
 
       {!planning && tasks.length === 0 && (
         <Panel className="mb-5 px-6 py-12 text-center">
-          <h2 className="text-[14px] font-bold text-ink">No sub-agents ran</h2>
+          <h2 className="text-[14px] font-bold text-ink">No corrió ningún subagente</h2>
           <p className="mx-auto mt-1 max-w-sm text-[12.5px] leading-relaxed text-ink-muted">
-            This run ended before the first task started, so there is nothing to inspect. Run the
-            objective again, or reword it if it was ambiguous.
+            Esta ejecución terminó antes de arrancar la primera tarea, así que no hay nada que
+            revisar. Vuelve a ejecutar el objetivo, o reescríbelo si quedó ambiguo.
           </p>
         </Panel>
       )}
@@ -316,14 +316,14 @@ export function Console({
         return (
           <section key={wave} className="mb-5">
             <div className="mb-2 flex items-center gap-2 border-b border-border-strong pb-1.5">
-              <div className="field-label text-ink-muted">Wave {wave}</div>
+              <div className="field-label text-ink-muted">Ola {wave}</div>
               <div className="tabular text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-                {parallel ? `${waveTasks.length} in parallel` : 'single agent'}
+                {parallel ? `${waveTasks.length} en paralelo` : 'un solo agente'}
               </div>
               {runningHere > 0 && (
                 <span className="tabular ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] text-primary">
                   <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
-                  {runningHere} working
+                  {runningHere} trabajando
                 </span>
               )}
             </div>
@@ -338,14 +338,14 @@ export function Console({
 
       <Panel className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-strong px-4 py-3">
-          <div className="field-label">Final report</div>
+          <div className="field-label">Informe final</div>
           {/* Real provenance: the report is Cortex's own assertion, and this
               says which run produced it and when that run stopped. */}
           {run.summary && run.finishedAt && (
             <Provenance
-              source="Orchestrator"
+              source="Orquestador"
               readAt={stamp(run.finishedAt)}
-              detail={`${tasks.length} sub-agent${tasks.length === 1 ? '' : 's'}`}
+              detail={`${tasks.length} ${tasks.length === 1 ? 'subagente' : 'subagentes'}`}
               tone={run.status === 'failed' ? 'seal' : 'stamp'}
             />
           )}
@@ -356,13 +356,13 @@ export function Console({
           ) : active ? (
             <p className="flex items-center gap-2 text-[12.5px] text-ink-faint">
               <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-              Cortex writes this once every sub-agent has finished.
+              Cortex lo escribe cuando todos los subagentes terminen.
             </p>
           ) : (
             <p className="text-[12.5px] text-ink-muted">
               {run.status === 'cancelled'
-                ? 'This run was stopped before a report was written. Each sub-agent above kept whatever it had found.'
-                : 'This run produced no report. The sub-agents above show what it did reach.'}
+                ? 'La detuviste antes de que se escribiera el informe. Cada subagente de arriba conservó lo que alcanzó a encontrar.'
+                : 'Esta ejecución no produjo informe. Los subagentes de arriba muestran hasta dónde llegó.'}
             </p>
           )}
         </div>
@@ -383,7 +383,7 @@ function Meter({ label, value }: { label: string; value: string }) {
 
 /** Compact absolute stamp for the provenance mark: "04 Aug 10:18". */
 function stamp(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
+  return new Date(iso).toLocaleString('es-CO', {
     day: '2-digit',
     month: 'short',
     hour: '2-digit',

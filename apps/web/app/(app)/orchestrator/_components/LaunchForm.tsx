@@ -17,9 +17,9 @@ import { useState } from 'react';
 const MIN_CHARS = 10;
 
 const EXAMPLES = [
-  'Research our three closest competitors and tell me where our pricing sits against theirs.',
-  'Audit the open pull requests and the Linear backlog, then tell me what is actually blocking the release.',
-  'Pull last month’s hiring pipeline, find where candidates drop off, and propose two fixes.',
+  'Investiga a nuestros tres competidores más cercanos y dime cómo quedan nuestras tarifas frente a las de ellos.',
+  'Revisa los pull requests abiertos y el backlog de Linear, y dime qué está frenando de verdad el lanzamiento.',
+  'Saca el embudo de contratación del mes pasado, encuentra dónde se caen los candidatos y propón dos arreglos.',
 ];
 
 export function LaunchForm({ concurrency }: { concurrency: number }) {
@@ -44,7 +44,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
         runId?: string;
         error?: string;
       } | null;
-      if (!res.ok || !body?.runId) throw new Error(body?.error ?? 'Could not start the run.');
+      if (!res.ok || !body?.runId) throw new Error(body?.error ?? 'No se pudo iniciar la ejecución.');
       router.push(`/orchestrator/${body.runId}`);
     } catch (err) {
       setError((err as Error).message);
@@ -54,7 +54,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
 
   return (
     <div className="rounded-card border border-border bg-surface p-4 md:p-5">
-      <div className="field-label mb-2">Objective</div>
+      <div className="field-label mb-2">Objetivo</div>
 
       <textarea
         value={objective}
@@ -70,13 +70,13 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
         rows={4}
         maxLength={4000}
         disabled={busy}
-        placeholder="Describe the outcome you want. Cortex breaks it into sub-agents, runs the independent ones in parallel, and writes you one report."
+        placeholder="Describe el resultado que quieres. Cortex lo reparte entre subagentes, corre en paralelo los que no dependen de nadie y te escribe un solo informe."
         className="scroll-slim w-full resize-y rounded-card border border-border bg-canvas px-3.5 py-3 text-[14px] leading-relaxed text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-border-strong disabled:opacity-60"
       />
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="field-label">Start from</span>
+          <span className="field-label">Empieza con</span>
           {EXAMPLES.map((example, i) => (
             <button
               key={example}
@@ -86,7 +86,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
               onClick={() => setObjective(example)}
               className="tabular rounded-card border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-50"
             >
-              Example {i + 1}
+              Ejemplo {i + 1}
             </button>
           ))}
         </div>
@@ -107,11 +107,11 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
           >
             {busy ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> Planning…
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> Planeando…
               </>
             ) : (
               <>
-                <Sparkles className="h-4 w-4" /> Run it
+                <Sparkles className="h-4 w-4" /> Ejecutar
                 <CornerDownLeft className="hidden h-3.5 w-3.5 opacity-60 sm:block" />
               </>
             )}
@@ -122,9 +122,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
       {error && (
         <p className="mt-3 flex items-start gap-2 rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            {error} Check the objective and run it again — nothing was started.
-          </span>
+          <span>{error} No se lanzó nada: revisa el objetivo y vuelve a ejecutar.</span>
         </p>
       )}
     </div>

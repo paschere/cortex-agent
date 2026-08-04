@@ -107,27 +107,27 @@ export default async function DashboardPage() {
       <Panel className="animate-rise mb-4 p-5 sm:p-6">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
           <div className="min-w-0">
-            <div className="field-label">Workspace</div>
+            <div className="field-label">Espacio de trabajo</div>
             <h1 className="mt-1 text-[22px] font-extrabold tracking-tight text-ink">
-              Hi, {firstName}
+              Hola, {firstName}
             </h1>
             <p className="mt-0.5 text-[13px] text-ink-muted">
-              Here is what moved while you were away.
+              Esto es lo que se movió mientras no estabas.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
-            <Field label="Tool calls today">{toolCallsToday.toLocaleString()}</Field>
-            <Field label="New signals">
+            <Field label="Herramientas hoy">{toolCallsToday.toLocaleString()}</Field>
+            <Field label="Prospectos nuevos">
               <span className={newSignals > 0 ? 'text-amber' : undefined}>
                 {newSignals.toLocaleString()}
               </span>
             </Field>
-            <Field label="To approve">
+            <Field label="Por aprobar">
               <span className={pendingApprovals > 0 ? 'text-amber' : undefined}>
                 {pendingApprovals.toLocaleString()}
               </span>
             </Field>
-            <Field label="Active routines">{activeRoutines.toLocaleString()}</Field>
+            <Field label="Rutinas activas">{activeRoutines.toLocaleString()}</Field>
           </div>
         </div>
       </Panel>
@@ -140,21 +140,21 @@ export default async function DashboardPage() {
         >
           <BadgeCheck className="h-4 w-4 shrink-0 text-amber" />
           <div className="min-w-0 flex-1 text-[13px]">
-            <span className="font-semibold text-ink">Cortex is waiting on you</span>
+            <span className="font-semibold text-ink">Cortex te está esperando</span>
             <span className="text-ink-muted">
               {' '}
               —{' '}
               {pendingApprovals > 0 && (
                 <>
                   <span className="tabular">{pendingApprovals}</span>
-                  {` action${pendingApprovals === 1 ? '' : 's'} to approve`}
+                  {pendingApprovals === 1 ? ' acción por aprobar' : ' acciones por aprobar'}
                 </>
               )}
               {pendingApprovals > 0 && newSignals > 0 && ' · '}
               {newSignals > 0 && (
                 <>
                   <span className="tabular">{newSignals}</span>
-                  {` growth signal${newSignals === 1 ? '' : 's'} to review`}
+                  {newSignals === 1 ? ' prospecto por revisar' : ' prospectos por revisar'}
                 </>
               )}
             </span>
@@ -167,19 +167,19 @@ export default async function DashboardPage() {
         {/* Latest routine runs */}
         <Panel className="p-4">
           <div className="mb-3 flex items-center justify-between">
-            <div className="field-label">Routines — latest runs</div>
+            <div className="field-label">Rutinas — últimas ejecuciones</div>
             <Link
               href="/schedules"
               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
             >
-              Open routines <ArrowRight className="h-3 w-3" />
+              Ver las rutinas <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
           {runs.length === 0 ? (
             <Empty
-              title="No routine has run yet"
-              body="Routines are unattended jobs Cortex runs on a schedule. Ask for one in chat and its runs land here."
-              action={{ href: '/chat', label: 'Ask Cortex for a routine' }}
+              title="Ninguna rutina se ha ejecutado"
+              body="Una rutina es un trabajo que Cortex ejecuta solo, a la hora que le digas. Pídele una en el chat y sus ejecuciones aparecen aquí."
+              action={{ href: '/chat', label: 'Pedirle una rutina a Cortex' }}
             />
           ) : (
             <ul className="divide-y divide-border">
@@ -190,7 +190,7 @@ export default async function DashboardPage() {
                     <div className="flex items-center gap-2">
                       <RunStatusChip status={r.status} />
                       <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
-                        {relName(r.scheduled_jobs) ?? 'Routine'}
+                        {relName(r.scheduled_jobs) ?? 'Rutina'}
                       </span>
                       <span className="tabular shrink-0 text-[11.5px] text-ink-faint">
                         {relativeTime(r.started_at)}
@@ -216,19 +216,19 @@ export default async function DashboardPage() {
         {/* Recent conversations */}
         <Panel className="p-4">
           <div className="mb-3 flex items-center justify-between">
-            <div className="field-label">Recent conversations</div>
+            <div className="field-label">Conversaciones recientes</div>
             <Link
               href="/chat"
               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
             >
-              New chat <ArrowRight className="h-3 w-3" />
+              Nuevo chat <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
           {conversations.length === 0 ? (
             <Empty
-              title="No conversations yet"
-              body="Everything you ask Cortex is kept here, with the tools it ran to answer."
-              action={{ href: '/chat', label: 'Start a chat' }}
+              title="Todavía no hay conversaciones"
+              body="Aquí queda todo lo que le preguntas a Cortex, con las herramientas que usó para responderte."
+              action={{ href: '/chat', label: 'Abrir el chat' }}
             />
           ) : (
             <ul className="divide-y divide-border">
@@ -243,7 +243,7 @@ export default async function DashboardPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13px] font-medium text-ink">
-                        {c.title?.trim() || 'Untitled conversation'}
+                        {c.title?.trim() || 'Conversación sin título'}
                       </div>
                       <div className="truncate text-xs text-ink-faint">
                         {relName(c.agents) ?? 'Cortex'}
@@ -262,23 +262,23 @@ export default async function DashboardPage() {
 
       {/* Quick actions */}
       <div className="mt-4">
-        <div className="field-label mb-2">Quick actions</div>
+        <div className="field-label mb-2">Atajos</div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <QuickAction href="/chat" icon={<Sparkles className="h-4 w-4" />} label="New chat" />
+          <QuickAction href="/chat" icon={<Sparkles className="h-4 w-4" />} label="Nuevo chat" />
           <QuickAction
             href="/pipelines"
             icon={<Workflow className="h-4 w-4" />}
-            label="Run a pipeline"
+            label="Ejecutar un pipeline"
           />
           <QuickAction
             href="/kb"
             icon={<BookOpen className="h-4 w-4" />}
-            label="Search the brain"
+            label="Buscar en Brain Knowledge"
           />
           <QuickAction
             href="/schedules"
             icon={<AlarmClock className="h-4 w-4" />}
-            label="Routines"
+            label="Rutinas"
           />
         </div>
       </div>
@@ -294,12 +294,12 @@ export default async function DashboardPage() {
             </span>
             <div className="min-w-0">
               <h2 className="text-[15px] font-bold tracking-tight text-ink">
-                Connect Cortex anywhere
+                Conecta Cortex donde trabajes
               </h2>
               <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-                The same brain — every tool, Brain Knowledge, pipelines and routines — inside
-                Claude, Claude Code, ChatGPT or any MCP client. It runs with your own permissions
-                and every action stays audited.
+                El mismo cerebro —todas las herramientas, Brain Knowledge, los pipelines y las
+                rutinas— dentro de Claude, Claude Code, ChatGPT o cualquier cliente MCP. Corre con
+                tus propios permisos y cada acción queda auditada.
               </p>
             </div>
           </div>
@@ -307,23 +307,23 @@ export default async function DashboardPage() {
             href="/mcp-tokens"
             className="inline-flex shrink-0 items-center gap-1.5 rounded-card bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
           >
-            Set up a client
+            Configurar un cliente
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
         <div className="mt-4">
-          <div className="field-label">Connector URL</div>
+          <div className="field-label">URL del conector</div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5">
             <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[13px] font-semibold text-ink">
               {mcpUrl}
             </code>
-            <CopyButton text={mcpUrl} label="Copy URL" />
+            <CopyButton text={mcpUrl} label="Copiar la URL" />
           </div>
           <p className="mt-2 text-[11.5px] text-ink-faint">
-            Claude signs you in with your Google account — there is no token to paste.{' '}
+            Claude te identifica con tu cuenta de Google: no hay ningún token que pegar.{' '}
             <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
-              Step-by-step for Claude, ChatGPT and Claude Code
+              Paso a paso para Claude, ChatGPT y Claude Code
             </Link>
             .
           </p>
@@ -334,19 +334,19 @@ export default async function DashboardPage() {
           <TrustItem
             href="/tools"
             icon={<ShieldCheck className="h-3.5 w-3.5" />}
-            label="Your access, your permissions"
+            label="Tu acceso, tus permisos"
           />
           <span className="text-ink-faint">·</span>
           <TrustItem
             href="/approvals"
             icon={<BadgeCheck className="h-3.5 w-3.5" />}
-            label="Writes ask before running"
+            label="Lo que escribe te lo pregunta antes"
           />
           <span className="text-ink-faint">·</span>
           <TrustItem
             href={isAdmin ? '/admin/audit' : undefined}
             icon={<ScrollText className="h-3.5 w-3.5" />}
-            label="Every action audited"
+            label="Cada acción queda auditada"
           />
         </div>
       </Panel>
@@ -410,7 +410,7 @@ function Empty({
 function RunStatusChip({ status }: { status: string }) {
   const tone: StatusTone =
     status === 'ok' ? 'emerald' : status === 'error' ? 'rose' : 'primary';
-  const label = status === 'ok' ? 'ok' : status === 'error' ? 'failed' : status;
+  const label = status === 'ok' ? 'exitosa' : status === 'error' ? 'falló' : 'corriendo';
   return <span className={chipClass(tone)}>{label}</span>;
 }
 

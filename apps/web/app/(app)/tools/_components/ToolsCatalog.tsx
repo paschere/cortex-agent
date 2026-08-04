@@ -362,7 +362,7 @@ export function ToolsCatalog({
       if (!res.ok) throw new Error('save failed');
     } catch {
       setDenied(prev);
-      setError('Could not save the change. Please try again.');
+      setError('No se pudo guardar el cambio. Inténtalo de nuevo.');
     } finally {
       setSavingPattern(null);
     }
@@ -377,20 +377,20 @@ export function ToolsCatalog({
               <UsersRound className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <div className="text-[13px] font-semibold text-ink">Team access</div>
-              <div className="text-[11.5px] text-ink-faint">
-                Access is granted per team, never per person. Pick a team to block whole families or
-                individual tools for everyone in it.
+              <div className="text-[13px] font-semibold text-ink">Acceso por equipo</div>
+              <div className="text-[11.5px] leading-relaxed text-ink-faint">
+                El acceso se da por equipo, nunca por persona. Escoge un equipo para bloquear
+                familias enteras o herramientas sueltas a todos sus integrantes.
               </div>
             </div>
             <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
               <select
                 value={selectedTeamId}
                 onChange={(e) => selectTeam(e.target.value)}
-                aria-label="Team to edit permissions for"
+                aria-label="Equipo cuyos permisos vas a editar"
                 className="w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary sm:w-auto sm:min-w-[240px]"
               >
-                <option value="">Browse only — no team selected</option>
+                <option value="">Solo mirar — sin equipo seleccionado</option>
                 {teams.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -400,29 +400,29 @@ export function ToolsCatalog({
               {selectedTeam && (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-card border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-ink-muted">
                   <Users2 className="h-3 w-3" />
-                  <span className="tabular">{selectedTeam.memberCount}</span> member
-                  {selectedTeam.memberCount === 1 ? '' : 's'}
+                  <span className="tabular">{selectedTeam.memberCount}</span>{' '}
+                  {selectedTeam.memberCount === 1 ? 'persona' : 'personas'}
                 </span>
               )}
             </div>
           </div>
           {selectedTeam && (
-            <p className="mt-2 text-[11.5px] text-ink-faint">
-              Toggles control what{' '}
-              <span className="font-semibold text-ink-muted">{selectedTeam.name}</span> can use. Off
-              blocks the tool for every member of the team; on removes the block and restores the
-              agent default. Teams only ever subtract — a second team cannot restore what this one
-              denies.
-              {isPending && <span className="ml-2 text-primary">Loading permissions…</span>}
+            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">
+              Los interruptores controlan qué puede usar{' '}
+              <span className="font-semibold text-ink-muted">{selectedTeam.name}</span>. Apagado
+              bloquea la herramienta para todo el equipo; encendido quita el bloqueo y vuelve a lo
+              que permita el agente. Los equipos solo restan: otro equipo no puede devolver lo que
+              este bloquea.
+              {isPending && <span className="ml-2 text-primary">Cargando los permisos…</span>}
             </p>
           )}
           {teams.length === 0 && (
             <p className="mt-2 text-[11.5px] text-ink-faint">
-              There are no teams to grant access to yet.{' '}
+              Todavía no hay equipos a los que darles acceso.{' '}
               <Link href="/admin/teams" className="font-semibold text-primary hover:underline">
-                Create one in Teams
-              </Link>
-              , then come back.
+                Crea uno en Equipos
+              </Link>{' '}
+              y vuelve acá.
             </p>
           )}
           {error && (
@@ -441,7 +441,7 @@ export function ToolsCatalog({
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name, what it does, or the system it touches…"
+              placeholder="Busca por nombre, por lo que hace o por el sistema que toca…"
               className="h-9 w-full rounded-card border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary focus:bg-surface"
             />
           </label>
@@ -451,19 +451,19 @@ export function ToolsCatalog({
             onClick={() => setOpenFamilies(allOpen ? new Set() : new Set(grouped.map(([f]) => f)))}
             disabled={filtersActive}
           >
-            {allOpen ? 'Collapse all' : 'Expand all'}
+            {allOpen ? 'Contraer todo' : 'Expandir todo'}
           </Button>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="field-label mr-1">Filter</span>
+          <span className="field-label mr-1">Filtrar</span>
           <FilterChip active={approvalOnly} onClick={() => setApprovalOnly((v) => !v)}>
             <ShieldAlert className="h-3 w-3" />
-            Needs approval
+            Piden confirmación
           </FilterChip>
           <FilterChip active={restrictedOnly} onClick={() => setRestrictedOnly((v) => !v)}>
             <Lock className="h-3 w-3" />
-            Restricted for a team
+            Bloqueadas para algún equipo
           </FilterChip>
           <FilterChip
             active={connection === 'needs-connection'}
@@ -472,7 +472,7 @@ export function ToolsCatalog({
             }
           >
             <PlugZap className="h-3 w-3" />
-            Integration not connected
+            Integración sin conectar
           </FilterChip>
           <FilterChip
             active={connection === 'no-integration'}
@@ -481,31 +481,32 @@ export function ToolsCatalog({
             }
           >
             <Sparkles className="h-3 w-3" />
-            Works with no integration
+            No necesita integración
           </FilterChip>
 
           <span className="mx-1 h-4 w-px bg-border" />
-          <span className="field-label mr-1">Risk</span>
+          <span className="field-label mr-1">Riesgo</span>
           {(['all', 'low', 'medium', 'high', 'critical'] as RiskFilter[]).map((level) => (
             <FilterChip key={level} active={risk === level} onClick={() => setRisk(level)}>
-              {level === 'all' ? 'Any' : RISK_LABEL[level].replace(' risk', '')}
+              {level === 'all' ? 'Cualquiera' : RISK_LABEL[level]}
             </FilterChip>
           ))}
         </div>
 
         <p className="text-[11px] leading-relaxed text-ink-faint">
-          Risk is the baseline the guardrail assigns to a tool from what it touches and how far it
-          reaches. The real call can be scored higher — compensation figures in the payload, a
-          recipient outside the company, or a bulk export all raise it, and only the genuinely
-          dangerous combinations are refused outright. Everything else runs and is recorded.
+          El riesgo es la línea base que la capa de seguridad le asigna a cada herramienta según qué
+          toca y hasta dónde llega. La llamada real puede puntuar más alto: cifras de sueldos en los
+          datos, un destinatario fuera de la empresa o una exportación masiva la suben. Solo las
+          combinaciones de verdad peligrosas se rechazan de plano; todo lo demás corre y queda
+          registrado.
         </p>
       </Panel>
 
       {grouped.length === 0 ? (
         <Panel className="p-10 text-center">
           <p className="mx-auto max-w-sm text-[13px] leading-relaxed text-ink-muted">
-            No tool in the registry matches this search and these filters. Widen the search or clear
-            what is set.
+            Ninguna herramienta del registro coincide con esta búsqueda y estos filtros. Amplía la
+            búsqueda o quita lo que tengas puesto.
           </p>
           <Button
             type="button"
@@ -519,7 +520,7 @@ export function ToolsCatalog({
               setConnection('all');
             }}
           >
-            Clear filters
+            Quitar los filtros
           </Button>
         </Panel>
       ) : (

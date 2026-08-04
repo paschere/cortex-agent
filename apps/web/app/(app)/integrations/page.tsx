@@ -56,16 +56,16 @@ interface ProviderCard {
  * grey, for the missing ones: it is something to act on, not a neutral fact.
  */
 const STATE_TAG: Record<ConnState, { label: string; cls: string }> = {
-  workspace: { label: 'In force · team', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
-  user: { label: 'In force · you', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
-  disconnected: { label: 'Not connected', cls: 'border-amber/40 bg-amber-soft text-amber' },
+  workspace: { label: 'Conectada · equipo', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
+  user: { label: 'Conectada · tú', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
+  disconnected: { label: 'Sin conectar', cls: 'border-amber/40 bg-amber-soft text-amber' },
 };
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
+  return new Date(iso).toLocaleDateString('es-CO', {
     day: 'numeric',
+    month: 'short',
   });
 }
 
@@ -104,18 +104,20 @@ export default async function IntegrationsPage({
     const own = mine[provider];
     if (own) {
       const when = fmtDate(own.updated_at);
-      return when ? `Connected by you · ${when}` : 'Connected by you';
+      return when ? `La conectaste tú · ${when}` : 'La conectaste tú';
     }
     const n = teammates[provider] ?? 0;
     if (n > 0) {
-      return `${n} teammate${n === 1 ? '' : 's'} connected it — your account has not`;
+      return `${n} ${n === 1 ? 'compañero la conectó' : 'compañeros la conectaron'}; tu cuenta no`;
     }
-    return 'Nobody has connected this yet';
+    return 'Nadie la ha conectado todavía';
   }
 
   /** Owner line for a workspace credential provisioned by ops. */
   function opsOwner(connected: boolean, what: string): string {
-    return connected ? 'Set up by ops · shared by the whole team' : `Waiting on ops — ${what}`;
+    return connected
+      ? 'La configuró el equipo técnico · la usa toda la organización'
+      : `Falta que el equipo técnico la habilite: ${what}`;
   }
 
   // Tool counts per family, straight from the live registry.
@@ -152,12 +154,12 @@ export default async function IntegrationsPage({
       families: ['gmail', 'gcal', 'gsheets', 'gdrive', 'meetings', 'chat'],
       state: mine.google ? 'user' : 'disconnected',
       unlocks:
-        'Read and draft your email, see and create calendar events, open Docs, Sheets and Drive files, and pull meeting transcripts.',
+        'Leer y redactar tu correo, ver y crear eventos del calendario, abrir archivos de Docs, Sheets y Drive, y traer transcripciones de reuniones.',
       offline:
-        'No inbox, no calendar, no Drive and no meeting notes — Cortex cannot see your day at all.',
+        'Sin correo, sin calendario, sin Drive y sin notas de reuniones: Cortex no ve nada de tu día.',
       owner: mine.google
-        ? `Connected by you${googleScopes ? ` · ${googleScopes} scopes granted` : ''}`
-        : 'Granted when you sign in — connect below if it was skipped',
+        ? `La conectaste tú${googleScopes ? ` · ${googleScopes} permisos otorgados` : ''}`
+        : 'Se otorga al entrar. Si la saltaste, conéctala aquí',
       connectHref: mine.google ? undefined : '/api/integrations/google?preset=all',
     },
     {
@@ -167,10 +169,10 @@ export default async function IntegrationsPage({
       families: ['hubspot'],
       state: hubspotWorkspace ? 'workspace' : mine.hubspot ? 'user' : 'disconnected',
       unlocks:
-        'Deals, companies, contacts, pipeline health and recent activity — the sales system of record.',
-      offline: 'No deal, pipeline or contact answers — the whole sales side goes dark.',
+        'Negocios, empresas, contactos, salud del pipeline y actividad reciente: el sistema de registro comercial.',
+      offline: 'Sin respuestas de negocios, pipeline ni contactos: todo el lado comercial queda a oscuras.',
       owner: hubspotWorkspace
-        ? 'Set up by ops · one private app for the whole team'
+        ? 'La configuró el equipo técnico · una sola app privada para toda la organización'
         : personalOwner('hubspot'),
       connectHref: !hubspotWorkspace && !mine.hubspot ? '/api/integrations/hubspot' : undefined,
     },
@@ -181,9 +183,9 @@ export default async function IntegrationsPage({
       families: ['workable'],
       state: workableOn ? 'workspace' : 'disconnected',
       unlocks:
-        'The ATS ground truth: jobs, candidates, stages, screening answers and recent activity.',
-      offline: 'Cortex cannot see any real job or candidate — it would be guessing about pipeline.',
-      owner: opsOwner(workableOn, 'no Workable service token on this environment'),
+        'La verdad del ATS: vacantes, candidatos, etapas, respuestas de filtro y actividad reciente.',
+      offline: 'Cortex no ve ninguna vacante ni candidato real; estaría adivinando sobre el pipeline.',
+      owner: opsOwner(workableOn, 'no hay token de servicio de Workable en este entorno'),
     },
     {
       key: 'matcher',
@@ -192,9 +194,9 @@ export default async function IntegrationsPage({
       families: ['recruit', 'people', 'rate', 'presentations', 'sales'],
       state: matcherOn ? 'workspace' : 'disconnected',
       unlocks:
-        'Candidate matching and scoring, side-by-side comparisons, client presentations and rate estimates.',
-      offline: 'No matching, no scoring, no presentations and no rate estimates.',
-      owner: opsOwner(matcherOn, 'the matcher service URL is not configured'),
+        'Emparejar y calificar candidatos, compararlos lado a lado, armar presentaciones para el cliente y estimar tarifas.',
+      offline: 'Sin emparejamiento, sin calificación, sin presentaciones y sin estimación de tarifas.',
+      owner: opsOwner(matcherOn, 'la URL del servicio de emparejamiento no está configurada'),
     },
     {
       key: 'bamboo',
@@ -203,21 +205,21 @@ export default async function IntegrationsPage({
       families: ['bamboo'],
       state: bambooOn ? 'workspace' : 'disconnected',
       unlocks:
-        'The HR system of record: the roster, job and employment history, time off, hours logged, documents on file, and both the pay rate the company pays and the bill rate it charges the client.',
+        'El sistema de registro de gente: la nómina de personal, el historial laboral, las vacaciones, las horas registradas, los documentos en archivo, y tanto lo que la empresa paga como lo que le cobra al cliente.',
       offline:
-        'Cortex cannot see who actually works here — no roster, no time off, no tenure and no rates.',
-      owner: opsOwner(bambooOn, 'no BambooHR API key on this environment'),
+        'Cortex no ve quién trabaja aquí: sin nómina de personal, sin vacaciones, sin antigüedad y sin tarifas.',
+      owner: opsOwner(bambooOn, 'no hay API key de BambooHR en este entorno'),
     },
     {
       key: 'payroll',
-      name: 'Payroll',
+      name: 'Nómina',
       icon: Wallet,
       families: ['payroll'],
       state: payrollOn ? 'workspace' : 'disconnected',
       unlocks:
-        'Who is assigned to which client, payroll and expense reports, and forward-looking cost projections.',
-      offline: 'No team cost, assignment or expense answers.',
-      owner: opsOwner(payrollOn, 'no payroll API URL on this environment'),
+        'Quién está asignado a qué cliente, reportes de nómina y gastos, y proyecciones de costo hacia adelante.',
+      offline: 'Sin respuestas de costo del equipo, asignaciones ni gastos.',
+      owner: opsOwner(payrollOn, 'no hay URL de la API de nómina en este entorno'),
     },
     {
       key: 'brain',
@@ -226,22 +228,23 @@ export default async function IntegrationsPage({
       families: ['kb', 'pipeline', 'schedule', 'inbox', 'security'],
       state: brainOn ? 'workspace' : 'disconnected',
       unlocks:
-        'Brain Knowledge search and memory, pipelines, routines and the inbox digest — Cortex’s own reasoning.',
-      offline: 'The core stops: no Brain Knowledge, no pipelines, no routines.',
+        'Búsqueda y memoria en Brain Knowledge, pipelines, rutinas y el resumen del correo: el razonamiento propio de Cortex.',
+      offline: 'Se para el corazón: sin Brain Knowledge, sin pipelines y sin rutinas.',
       owner:
         brainOn && !semanticSearchOn
-          ? 'Set up by ops · no embedding key, so Brain Knowledge only matches keywords'
-          : opsOwner(brainOn, 'the model API key is missing'),
+          ? 'La configuró el equipo técnico · sin llave de embeddings, así que Brain Knowledge solo busca por palabras'
+          : opsOwner(brainOn, 'falta la API key del modelo'),
     },
     {
       key: 'web',
-      name: 'Web Research',
+      name: 'Investigación web',
       icon: Globe,
       families: ['web', 'growth'],
       state: webOn ? 'workspace' : 'disconnected',
-      unlocks: 'Live web search and page reading for prospect research and growth signals.',
-      offline: 'Cortex is limited to what it already knows — no fresh research on companies.',
-      owner: opsOwner(webOn, 'no search API key on this environment'),
+      unlocks:
+        'Búsqueda en vivo y lectura de páginas para investigar prospectos y señales de crecimiento.',
+      offline: 'Cortex se queda con lo que ya sabe: no puede investigar empresas al día.',
+      owner: opsOwner(webOn, 'no hay API key de búsqueda en este entorno'),
     },
     {
       key: 'slack',
@@ -249,9 +252,9 @@ export default async function IntegrationsPage({
       icon: MessageSquare,
       families: ['slack'],
       state: slackOn ? 'workspace' : 'disconnected',
-      unlocks: 'Post updates, reports and routine results straight into team channels.',
-      offline: 'Results stay in the app and in email — nothing reaches Slack.',
-      owner: opsOwner(slackOn, 'the bot token is not provisioned yet'),
+      unlocks: 'Publicar avances, reportes y resultados de rutinas directo en los canales del equipo.',
+      offline: 'Los resultados se quedan en la app y en el correo: nada llega a Slack.',
+      owner: opsOwner(slackOn, 'todavía no está aprovisionado el token del bot'),
     },
     {
       key: 'github',
@@ -259,11 +262,11 @@ export default async function IntegrationsPage({
       icon: GitBranch,
       families: ['github'],
       state: mine.github ? 'user' : 'disconnected',
-      unlocks: 'Repositories, issues, pull requests and engineering activity metrics.',
-      offline: 'No repo, issue or PR visibility — engineering questions go unanswered.',
+      unlocks: 'Repositorios, issues, pull requests y métricas de actividad de ingeniería.',
+      offline: 'Sin visibilidad de repos, issues ni PRs: las preguntas de ingeniería quedan sin respuesta.',
       owner: mine.github
         ? personalOwner('github')
-        : `${personalOwner('github')} · ops provisions it`,
+        : `${personalOwner('github')} · la habilita el equipo técnico`,
     },
     {
       key: 'linear',
@@ -271,11 +274,11 @@ export default async function IntegrationsPage({
       icon: ListTodo,
       families: ['linear'],
       state: mine.linear ? 'user' : 'disconnected',
-      unlocks: 'Projects, cycles, issues and team workload for roadmap visibility.',
-      offline: 'No roadmap or workload answers — Cortex cannot see what the team is building.',
+      unlocks: 'Proyectos, ciclos, issues y carga del equipo para ver el roadmap.',
+      offline: 'Sin respuestas de roadmap ni de carga: Cortex no ve qué está construyendo el equipo.',
       owner: mine.linear
         ? personalOwner('linear')
-        : `${personalOwner('linear')} · ops provisions it`,
+        : `${personalOwner('linear')} · la habilita el equipo técnico`,
     },
     {
       key: 'apollo',
@@ -284,9 +287,9 @@ export default async function IntegrationsPage({
       families: ['apollo'],
       state: apolloOn ? 'workspace' : 'disconnected',
       unlocks:
-        'Prospecting and contact enrichment for outbound — who works where, their verified work email, and firmographics on the companies worth targeting.',
-      offline: 'Growth signals stop at the company: Cortex cannot identify the person to contact.',
-      owner: opsOwner(apolloOn, 'no Apollo API key on this environment'),
+        'Prospección y enriquecimiento de contactos: quién trabaja dónde, su correo de trabajo verificado y datos de las empresas que vale la pena contactar.',
+      offline: 'Las señales de crecimiento se quedan en la empresa: Cortex no logra identificar a quién contactar.',
+      owner: opsOwner(apolloOn, 'no hay API key de Apollo en este entorno'),
     },
   ];
 
@@ -333,30 +336,30 @@ export default async function IntegrationsPage({
   /** The register header: what the organisation holds, counted in mono. */
   const stats = [
     {
-      label: 'Systems in force',
+      label: 'Sistemas conectados',
       value: `${connected.length}/${providers.length}`,
-      sub: 'Cortex can act in these',
+      sub: 'Cortex puede actuar en estos',
       icon: CircleCheck,
       tone: 'text-emerald',
     },
     {
-      label: 'Not connected',
+      label: 'Sin conectar',
       value: String(missing.length),
-      sub: missing.length > 0 ? missing.map((p) => p.name).join(', ') : 'nothing missing',
+      sub: missing.length > 0 ? missing.map((p) => p.name).join(', ') : 'no falta ninguno',
       icon: TriangleAlert,
       tone: missing.length > 0 ? 'text-amber' : 'text-emerald',
     },
     {
-      label: 'Built-in tools',
+      label: 'Herramientas propias',
       value: String(totalToolCount),
-      sub: 'available to Cortex',
+      sub: 'disponibles para Cortex',
       icon: Wrench,
       tone: 'text-ink',
     },
     {
-      label: 'Tools you plugged in',
+      label: 'Herramientas que conectaste',
       value: String(totalMcpTools),
-      sub: `${mcpServers.length} external MCP server${mcpServers.length === 1 ? '' : 's'}`,
+      sub: `${mcpServers.length} ${mcpServers.length === 1 ? 'servidor MCP externo' : 'servidores MCP externos'}`,
       icon: Boxes,
       tone: 'text-ink',
     },
@@ -365,8 +368,8 @@ export default async function IntegrationsPage({
   return (
     <>
       <PageHeader
-        title="Integrations"
-        subtitle="The systems this organisation has connected — what Cortex can read and act in on your behalf."
+        title="Integraciones"
+        subtitle="Los sistemas que esta organización tiene conectados: dónde puede leer y actuar Cortex en tu nombre."
         icon={<Plug className="h-5 w-5" />}
       />
 
@@ -374,12 +377,12 @@ export default async function IntegrationsPage({
 
       {sp.connected && (
         <div className="mb-4 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-[12.5px] text-emerald">
-          Connected {sp.connected}.
+          Se conectó {sp.connected}.
         </div>
       )}
       {sp.error && (
         <div className="mb-4 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
-          Error: {sp.error}
+          No se pudo conectar: {sp.error}. Inténtalo otra vez desde la tarjeta.
         </div>
       )}
 
@@ -444,7 +447,7 @@ export default async function IntegrationsPage({
                 <p className="flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
                   <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
                   <span>
-                    <span className="font-semibold">While it is off: </span>
+                    <span className="font-semibold">Mientras esté apagada: </span>
                     {p.offline}
                   </span>
                 </p>
@@ -455,10 +458,11 @@ export default async function IntegrationsPage({
                   <Wrench className="h-3 w-3" />
                   {tools > 0 ? (
                     <>
-                      <span className="tabular">{tools}</span> tool{tools === 1 ? '' : 's'}
+                      <span className="tabular">{tools}</span>{' '}
+                      {tools === 1 ? 'herramienta' : 'herramientas'}
                     </>
                   ) : (
-                    'no tools yet'
+                    'todavía sin herramientas'
                   )}
                 </span>
                 {p.connectHref && (
@@ -466,7 +470,7 @@ export default async function IntegrationsPage({
                     href={p.connectHref}
                     className="rounded-card bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong"
                   >
-                    Connect
+                    Conectar
                   </Link>
                 )}
               </div>
@@ -485,19 +489,19 @@ export default async function IntegrationsPage({
           <div className="min-w-0 flex-1">
             <div className="field-label">Advanced</div>
             <h2 className="mt-0.5 text-[15px] font-bold tracking-tight text-ink">
-              Extra tools you plug into Cortex
+              Herramientas extra que le conectas a Cortex
             </h2>
             <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-              Point Cortex at your own Model Context Protocol server — Notion, a vendor’s hosted
-              server, something you self-host — and its tools join the list above for your account
-              only. Most people never need this.
+              Apunta Cortex a tu propio servidor de Model Context Protocol —Notion, el servidor de
+              un proveedor, algo que tú mismo alojes— y sus herramientas se suman a la lista de
+              arriba, solo para tu cuenta. Casi nadie necesita esto.
             </p>
             <p className="mt-1 text-[11.5px] text-ink-faint">
-              Up to <span className="tabular">{MAX_MCP_SERVERS}</span> servers and{' '}
-              <span className="tabular">{MAX_MCP_TOOLS}</span> tools in total. Looking for how to
-              use Cortex <em>from</em> Claude instead?{' '}
+              Hasta <span className="tabular">{MAX_MCP_SERVERS}</span> servidores y{' '}
+              <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas en total. ¿Lo que buscas
+              es usar Cortex <em>desde</em> Claude?{' '}
               <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
-                That is the other page
+                Esa es la otra página
               </Link>
               .
             </p>
@@ -509,20 +513,20 @@ export default async function IntegrationsPage({
 
           {atServerCapacity && (
             <p className="mt-4 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
-              You are at the limit of <span className="tabular">{MAX_MCP_SERVERS}</span> servers.
-              Delete one above to add another.
+              Llegaste al tope de <span className="tabular">{MAX_MCP_SERVERS}</span> servidores.
+              Elimina uno de arriba para agregar otro.
             </p>
           )}
           {atToolCapacity && (
             <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
-              You are at the limit of <span className="tabular">{MAX_MCP_TOOLS}</span> tools. Cortex
-              stops syncing new ones until you remove a server above.
+              Llegaste al tope de <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas.
+              Cortex deja de sincronizar nuevas hasta que elimines un servidor de arriba.
             </p>
           )}
 
           {!atServerCapacity && (
             <div className="mt-4 border-t border-border pt-4">
-              <h3 className="text-[12.5px] font-semibold text-ink">Add a server</h3>
+              <h3 className="text-[12.5px] font-semibold text-ink">Agregar un servidor</h3>
               <AddMcpServerForm disabled={atServerCapacity} />
             </div>
           )}

@@ -15,12 +15,12 @@ export const dynamic = 'force-dynamic';
 function when(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.round(diff / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return 'ahora';
+  if (minutes < 60) return `hace ${minutes}m`;
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return `hace ${hours}h`;
   const days = Math.round(hours / 24);
-  return days < 7 ? `${days}d ago` : new Date(iso).toLocaleDateString();
+  return days < 7 ? `hace ${days}d` : new Date(iso).toLocaleDateString('es-CO');
 }
 
 export default async function OrchestratorPage() {
@@ -40,17 +40,17 @@ export default async function OrchestratorPage() {
   const subAgents = runs.reduce((sum, r) => sum + r.taskCount, 0);
 
   const stats: Array<{ label: string; value: string; live?: boolean }> = [
-    { label: 'Runs', value: String(runs.length) },
-    { label: 'Live now', value: String(live), live: live > 0 },
-    { label: 'Sub-agents dispatched', value: String(subAgents) },
-    { label: 'Median run', value: formatDuration(median) },
+    { label: 'Ejecuciones', value: String(runs.length) },
+    { label: 'En vivo', value: String(live), live: live > 0 },
+    { label: 'Subagentes lanzados', value: String(subAgents) },
+    { label: 'Duración mediana', value: formatDuration(median) },
   ];
 
   return (
     <>
       <PageHeader
-        title="Orchestrator"
-        subtitle="Give it one objective. It plans a team of sub-agents, runs the independent ones side by side, and shows you every tool call as it happens."
+        title="Orquestador"
+        subtitle="Dale un solo objetivo. Arma un equipo de subagentes, corre en paralelo los que no dependen de nadie y te muestra cada herramienta que ejecuta, en vivo."
         icon={<Network className="h-5 w-5" />}
       />
 
@@ -79,18 +79,20 @@ export default async function OrchestratorPage() {
       {runs.length === 0 ? (
         <Panel className="px-6 py-12 text-center">
           <Network className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <h2 className="text-[15px] font-bold text-ink">No runs yet</h2>
+          <h2 className="text-[15px] font-bold text-ink">Todavía no hay ejecuciones</h2>
           <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-muted">
-            Describe an objective in the box above. Cortex splits it into two to eight specialists,
-            runs everything that does not depend on anything else at the same time, and writes you
-            a single report at the end.
+            Describe un objetivo en el cuadro de arriba. Cortex lo reparte entre dos y ocho
+            especialistas, corre al tiempo todo lo que no dependa de nada más y al final te escribe
+            un solo informe.
           </p>
         </Panel>
       ) : (
         <Panel className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-border-strong px-4 py-3">
-            <div className="field-label">History</div>
-            <div className="tabular text-[11px] text-ink-faint">{runs.length} runs</div>
+            <div className="field-label">Historial</div>
+            <div className="tabular text-[11px] text-ink-faint">
+              {runs.length} {runs.length === 1 ? 'ejecución' : 'ejecuciones'}
+            </div>
           </div>
           <ul>
             {runs.map((run) => {
@@ -110,7 +112,7 @@ export default async function OrchestratorPage() {
                         <span>{when(run.createdAt)}</span>
                         {run.taskCount > 0 && (
                           <span>
-                            {done}/{run.taskCount} tasks
+                            {done}/{run.taskCount} tareas
                           </span>
                         )}
                         <span>{formatDuration(duration)}</span>

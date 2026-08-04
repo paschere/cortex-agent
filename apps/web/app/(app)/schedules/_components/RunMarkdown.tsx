@@ -60,12 +60,12 @@ export function RunOutput({ text, className }: { text: string; className?: strin
         >
           {full ? (
             <>
-              <ChevronUp className="h-3.5 w-3.5" /> Show less
+              <ChevronUp className="h-3.5 w-3.5" /> Ver menos
             </>
           ) : (
             <>
-              <ChevronDown className="h-3.5 w-3.5" /> Show full output (
-              <span className="tabular">{Math.round(text.length / 1000)}k</span> characters)
+              <ChevronDown className="h-3.5 w-3.5" /> Ver el resultado completo (
+              <span className="tabular">{Math.round(text.length / 1000)}k</span> caracteres)
             </>
           )}
         </button>

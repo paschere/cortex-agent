@@ -4,9 +4,9 @@ import type { AuditEventRow } from '@/app/api/admin/_lib/audit-filters';
 export function absoluteTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('en-US', {
-    month: 'short',
+  return d.toLocaleString('es-CO', {
     day: 'numeric',
+    month: 'short',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
@@ -51,14 +51,14 @@ export function eventDetail(e: AuditEventRow): string | null {
   if (typeof m.reason === 'string' && m.reason) {
     if (m.reason === 'missing_scopes') {
       const scopes = Array.isArray(m.scopes) ? m.scopes.join(', ') : '';
-      return `missing ${String(m.provider ?? '')} scopes: ${scopes}`.trim();
+      return `faltan permisos de ${String(m.provider ?? '')}: ${scopes}`.trim();
     }
     return String(m.reason).replaceAll('_', ' ');
   }
   if (e.tool_id === '__agent_turn') {
     const { model, tokensIn, tokensOut } = turnTokens(e.metadata);
     if (tokensIn || tokensOut) {
-      return `${model ? `${model} · ` : ''}${formatTokens(tokensIn)} in / ${formatTokens(tokensOut)} out tokens`;
+      return `${model ? `${model} · ` : ''}${formatTokens(tokensIn)} tokens de entrada / ${formatTokens(tokensOut)} de salida`;
     }
   }
   if (typeof m.summary === 'string' && m.summary) return m.summary;

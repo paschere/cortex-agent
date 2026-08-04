@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { toolLabel } from '@/lib/tool-labels';
 import { relativeTime } from '@/lib/relative-time';
 import type { AuditEventRow } from '@/app/api/admin/_lib/audit-filters';
-import { DecisionTag, RiskTag, StatusTag, SurfaceTag } from './tags';
+import { DECISION_LABEL, DecisionTag, RiskTag, StatusTag, SurfaceTag } from './tags';
 import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from './format';
 import { AuditDetailDrawer } from './AuditDetailDrawer';
 
@@ -118,7 +118,7 @@ export function AuditTable({
                       <DecisionTag decision={e.decision} />
                     ) : (
                       <span className="tabular text-[10.5px] text-ink-faint">
-                        {e.decision ?? '—'}
+                        {e.decision ? (DECISION_LABEL[e.decision] ?? e.decision) : '—'}
                       </span>
                     )}
                   </td>
@@ -129,7 +129,7 @@ export function AuditTable({
                     {detail ? (
                       <span className="line-clamp-2">{detail}</span>
                     ) : (
-                      <span className="text-ink-faint">—</span>
+                      <span className="tabular text-ink-faint">—</span>
                     )}
                   </td>
                 </tr>

@@ -9,6 +9,12 @@ import type { RoutinePatch, ScheduledJob } from './types';
 
 type Frequency = 'daily' | 'weekly' | 'monthly';
 
+const FREQUENCY_LABEL: Record<Frequency, string> = {
+  daily: 'Diaria',
+  weekly: 'Semanal',
+  monthly: 'Mensual',
+};
+
 /** Short, deliberately opinionated list — the timezones this team actually uses. */
 const TIMEZONES = [
   'America/Bogota',
@@ -119,7 +125,7 @@ export function EditRoutineDialog({
     const value = (raw ?? recipientDraft).trim().toLowerCase().replace(/,$/, '');
     if (!value) return;
     if (!EMAIL_RE.test(value)) {
-      setError(`"${value}" doesn't look like an email address`);
+      setError(`“${value}” no parece un correo electrónico.`);
       return;
     }
     setRecipients((prev) => (prev.includes(value) ? prev : [...prev, value]));
@@ -130,11 +136,11 @@ export function EditRoutineDialog({
   async function save() {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Give the routine a name');
+      setError('Ponle un nombre a la rutina.');
       return;
     }
     if (isCron && composedCron.trim().split(/\s+/).length !== 5) {
-      setError('A cron expression needs exactly 5 fields, e.g. "0 9 * * 1-5"');
+      setError('La expresión cron necesita exactamente 5 campos, por ejemplo “0 9 * * 1-5”.');
       return;
     }
     // A half-typed recipient in the box is almost always meant to be included.
@@ -142,7 +148,7 @@ export function EditRoutineDialog({
     const pending = recipientDraft.trim().toLowerCase();
     if (pending) {
       if (!EMAIL_RE.test(pending)) {
-        setError(`"${pending}" doesn't look like an email address`);
+        setError(`“${pending}” no parece un correo electrónico.`);
         return;
       }
       finalRecipients = recipients.includes(pending) ? recipients : [...recipients, pending];
@@ -168,7 +174,7 @@ export function EditRoutineDialog({
         const body = (await res.json().catch(() => null)) as {
           error?: string;
         } | null;
-        throw new Error(body?.error ?? `Request failed (${res.status})`);
+        throw new Error(body?.error ?? `La solicitud falló (${res.status}).`);
       }
       onSaved(patch);
     } catch (err) {
@@ -189,9 +195,9 @@ export function EditRoutineDialog({
                 <SlidersHorizontal className="h-4 w-4" />
               </span>
               <div>
-                <Dialog.Title className="text-sm font-bold text-ink">Edit routine</Dialog.Title>
+                <Dialog.Title className="text-sm font-bold text-ink">Editar la rutina</Dialog.Title>
                 <Dialog.Description className="text-[11.5px] text-ink-faint">
-                  Name, timing and who hears about it. Change the instruction from chat.
+                  El nombre, la hora y a quién le llega. La instrucción se cambia desde el chat.
                 </Dialog.Description>
               </div>
             </div>
@@ -204,21 +210,21 @@ export function EditRoutineDialog({
           </div>
 
           <div className="scroll-slim min-h-0 flex-1 space-y-5 overflow-auto px-5 py-4">
-            <Field label="Name" htmlFor="routine-name">
+            <Field label="Nombre" htmlFor="routine-name">
               <input
                 id="routine-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={120}
                 className="w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
-                placeholder="Friday client report"
+                placeholder="Reporte de clientes del viernes"
               />
             </Field>
 
             {isCron ? (
               <div>
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="field-label">Schedule</span>
+                  <span className="field-label">Programación</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -228,7 +234,7 @@ export function EditRoutineDialog({
                     }}
                     className="rounded-card px-2 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
-                    {advanced ? 'Use the picker' : 'Advanced'}
+                    {advanced ? 'Usar el selector' : 'Avanzado'}
                   </button>
                 </div>
 
@@ -249,19 +255,19 @@ export function EditRoutineDialog({
                           type="button"
                           onClick={() => setDraft({ ...draft, frequency: f })}
                           className={clsx(
-                            'rounded-sm px-2 py-1.5 text-[12px] font-semibold capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                            'rounded-sm px-2 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                             draft.frequency === f
                               ? 'border border-border-strong bg-surface text-ink'
                               : 'border border-transparent text-ink-muted hover:text-ink',
                           )}
                         >
-                          {f}
+                          {FREQUENCY_LABEL[f]}
                         </button>
                       ))}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <label className="flex min-w-[120px] flex-1 flex-col gap-1">
-                        <span className="field-label">Time</span>
+                        <span className="field-label">Hora</span>
                         <input
                           type="time"
                           value={draft.time}
@@ -271,7 +277,7 @@ export function EditRoutineDialog({
                       </label>
                       {draft.frequency === 'weekly' && (
                         <label className="flex min-w-[140px] flex-1 flex-col gap-1">
-                          <span className="field-label">Weekday</span>
+                          <span className="field-label">Día de la semana</span>
                           <select
                             value={draft.weekday}
                             onChange={(e) => setDraft({ ...draft, weekday: e.target.value })}
@@ -287,7 +293,7 @@ export function EditRoutineDialog({
                       )}
                       {draft.frequency === 'monthly' && (
                         <label className="flex min-w-[140px] flex-1 flex-col gap-1">
-                          <span className="field-label">Day of month</span>
+                          <span className="field-label">Día del mes</span>
                           <select
                             value={draft.monthDay}
                             onChange={(e) => setDraft({ ...draft, monthDay: e.target.value })}
@@ -312,12 +318,12 @@ export function EditRoutineDialog({
               </div>
             ) : (
               <div className="rounded-card border border-border bg-surface-2 px-3 py-2.5 text-[12px] text-ink-muted">
-                This routine runs once, so it cannot be retimed here. Ask Cortex in chat for a new
-                one at the time you want.
+                Esta rutina corre una sola vez, así que no se le puede cambiar la hora aquí. Pídele
+                a Cortex en el chat una nueva a la hora que quieras.
               </div>
             )}
 
-            <Field label="Timezone" htmlFor="routine-timezone">
+            <Field label="Zona horaria" htmlFor="routine-timezone">
               <select
                 id="routine-timezone"
                 value={timezone}
@@ -333,14 +339,14 @@ export function EditRoutineDialog({
             </Field>
 
             <div>
-              <div className="field-label mb-2">Delivery</div>
+              <div className="field-label mb-2">Entrega</div>
               <button
                 type="button"
                 onClick={() => setNotifyEmail(!notifyEmail)}
                 className="flex w-full items-center justify-between gap-3 rounded-card border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
-                  <Mail className="h-4 w-4 text-ink-faint" /> Email the results
+                  <Mail className="h-4 w-4 text-ink-faint" /> Enviar el resultado por correo
                 </span>
                 <span
                   className={clsx(
@@ -359,7 +365,7 @@ export function EditRoutineDialog({
 
               <div className="mt-2">
                 <div className="field-label mb-1.5">
-                  Recipients {recipients.length === 0 && '— empty means the owner only'}
+                  Destinatarios {recipients.length === 0 && '— vacío significa solo el dueño'}
                 </div>
                 {recipients.length > 0 && (
                   <div className="mb-2 flex flex-wrap gap-1.5">
@@ -373,7 +379,7 @@ export function EditRoutineDialog({
                           type="button"
                           onClick={() => setRecipients(recipients.filter((x) => x !== r))}
                           className="grid h-4 w-4 place-items-center rounded-sm transition-colors hover:bg-primary hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                          aria-label={`Remove ${r}`}
+                          aria-label={`Quitar ${r}`}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -393,7 +399,7 @@ export function EditRoutineDialog({
                     }}
                     onBlur={() => recipientDraft.trim() && addRecipient()}
                     type="email"
-                    placeholder="teammate@example.com"
+                    placeholder="companero@empresa.com"
                     className="min-w-0 flex-1 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
                   />
                   <button
@@ -401,7 +407,7 @@ export function EditRoutineDialog({
                     onClick={() => addRecipient()}
                     className="inline-flex shrink-0 items-center gap-1 rounded-card border border-border-strong bg-surface px-2.5 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Add
+                    <Plus className="h-3.5 w-3.5" /> Agregar
                   </button>
                 </div>
               </div>
@@ -416,7 +422,7 @@ export function EditRoutineDialog({
 
           <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
             <Dialog.Close className="rounded-card px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-              Cancel
+              Cancelar
             </Dialog.Close>
             <button
               type="button"
@@ -425,7 +431,7 @@ export function EditRoutineDialog({
               className="inline-flex items-center gap-1.5 rounded-card bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {saving ? 'Saving…' : 'Save changes'}
+              {saving ? 'Guardando…' : 'Guardar cambios'}
             </button>
           </div>
         </Dialog.Content>

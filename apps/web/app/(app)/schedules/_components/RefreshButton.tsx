@@ -20,7 +20,7 @@ export function RefreshButton() {
       <RefreshCw
         className={clsx('h-3.5 w-3.5', pending && 'animate-spin motion-reduce:animate-none')}
       />
-      {pending ? 'Refreshing…' : 'Refresh'}
+      {pending ? 'Actualizando…' : 'Actualizar'}
     </button>
   );
 }

@@ -65,8 +65,8 @@ export default async function SettingsPage() {
   return (
     <>
       <PageHeader
-        title="Settings"
-        subtitle="Your own preferences — what Cortex is allowed to do for you, and how it reaches you"
+        title="Configuración"
+        subtitle="Tus preferencias: qué puede hacer Cortex por ti y por dónde te escribe"
         icon={<SettingsIcon className="h-5 w-5" />}
       />
       <SettingsForm initial={initial} chatDm={chatDm} />
@@ -85,22 +85,24 @@ export default async function SettingsPage() {
             </span>
             <div>
               <div className="text-[13px] font-semibold text-ink">
-                What Cortex remembers about you
+                Lo que Cortex recuerda de ti
               </div>
               <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
                 {activeMemories === 0 ? (
-                  'Nothing yet — Cortex starts picking things up as you work together.'
+                  'Todavía nada. Cortex va anotando cosas a medida que trabajan juntos.'
                 ) : (
                   <>
                     <span className="tabular text-ink">{activeMemories}</span>{' '}
-                    {activeMemories === 1 ? 'thing' : 'things'} it carries into every conversation.
+                    {activeMemories === 1 ? 'cosa que lleva' : 'cosas que lleva'} a cada
+                    conversación.
                   </>
                 )}
                 {pendingMemories > 0 && (
                   <>
                     {' '}
-                    <span className="tabular text-ink">{pendingMemories}</span> waiting for you to
-                    keep or drop.
+                    <span className="tabular text-ink">{pendingMemories}</span>{' '}
+                    {pendingMemories === 1 ? 'espera' : 'esperan'} a que las guardes o las
+                    descartes.
                   </>
                 )}
               </p>

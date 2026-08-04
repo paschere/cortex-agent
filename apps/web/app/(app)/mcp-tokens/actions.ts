@@ -12,7 +12,7 @@ export async function issueToken(formData: FormData) {
   const agentId = (formData.get('agentId') as string | null) || null;
 
   if (!name || name.length === 0 || name.length > 60) {
-    throw new Error('Token name must be between 1 and 60 characters.');
+    throw new Error('El nombre del token debe tener entre 1 y 60 caracteres.');
   }
 
   // Generate plaintext: zda_ + 32 base64url chars (randomBytes(24) → 32 base64url chars)
@@ -30,7 +30,7 @@ export async function issueToken(formData: FormData) {
   });
 
   if (error) {
-    throw new Error(`Failed to create token: ${error.message}`);
+    throw new Error(`No se pudo crear el token: ${error.message}`);
   }
 
   revalidatePath('/mcp-tokens');
@@ -42,7 +42,7 @@ export async function revokeToken(formData: FormData) {
   const tokenId = (formData.get('tokenId') as string | null)?.trim();
 
   if (!tokenId) {
-    throw new Error('Missing token ID.');
+    throw new Error('Falta el identificador del token.');
   }
 
   const sb = getSupabaseServiceClient();
@@ -53,7 +53,7 @@ export async function revokeToken(formData: FormData) {
     .eq('user_id', user.id); // security: only revoke own tokens
 
   if (error) {
-    throw new Error(`Failed to revoke token: ${error.message}`);
+    throw new Error(`No se pudo revocar el token: ${error.message}`);
   }
 
   revalidatePath('/mcp-tokens');

@@ -16,10 +16,10 @@ export type { JobRun, ScheduledJob } from './types';
 type Filter = 'all' | 'global' | 'mine' | 'paused';
 
 const FILTERS: Array<{ id: Filter; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'global', label: 'Global' },
-  { id: 'mine', label: 'Mine' },
-  { id: 'paused', label: 'Paused' },
+  { id: 'all', label: 'Todas' },
+  { id: 'global', label: 'Globales' },
+  { id: 'mine', label: 'Mías' },
+  { id: 'paused', label: 'En pausa' },
 ];
 
 function matchesFilter(job: ScheduledJob, filter: Filter, userId: string): boolean {
@@ -118,7 +118,7 @@ export function ScheduleList({
       const res = await fetch(`/api/schedules/${jobId}/run`, { method: 'POST' });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? `Request failed (${res.status})`);
+        throw new Error(body?.error ?? `La solicitud falló (${res.status}).`);
       }
       setTimeout(() => {
         setRunning(null);
@@ -131,7 +131,7 @@ export function ScheduleList({
   }
 
   async function act(jobId: string, action: 'pause' | 'resume' | 'cancel') {
-    if (action === 'cancel' && !window.confirm('Cancel this routine permanently?')) return;
+    if (action === 'cancel' && !window.confirm('¿Cancelar esta rutina para siempre?')) return;
     const optimistic: JobStatus =
       action === 'pause' ? 'paused' : action === 'resume' ? 'active' : 'cancelled';
     setStatusOverride((prev) => ({ ...prev, [jobId]: optimistic }));
@@ -145,7 +145,7 @@ export function ScheduleList({
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? `Request failed (${res.status})`);
+        throw new Error(body?.error ?? `La solicitud falló (${res.status}).`);
       }
       router.refresh();
     } catch (err) {
@@ -196,19 +196,20 @@ export function ScheduleList({
     return (
       <section className="rounded-card border border-border bg-surface p-10 text-center text-[13px] text-ink-muted">
         <AlarmClock className="mx-auto mb-3 h-7 w-7 text-primary" />
-        <p className="mb-1 text-[15px] font-bold text-ink">No routines yet</p>
+        <p className="mb-1 text-[15px] font-bold text-ink">Todavía no hay rutinas</p>
         <p className="mx-auto max-w-md leading-relaxed">
-          A routine is a job Cortex runs on a schedule without being asked. Describe one in chat and
-          it appears here:{' '}
+          Una rutina es un trabajo que Cortex ejecuta solo, a la hora que le digas. Descríbela en el
+          chat y aparece aquí:{' '}
           <em>
-            &ldquo;Every Friday at 4pm, send each client their active-candidates report.&rdquo;
+            &ldquo;Todos los viernes a las 4 de la tarde, mándale a cada cliente el reporte de
+            candidatos activos.&rdquo;
           </em>
         </p>
         <Link
           href="/chat"
           className="mt-4 inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
         >
-          Set up a routine in chat
+          Programar una rutina en el chat
         </Link>
       </section>
     );
@@ -249,15 +250,15 @@ export function ScheduleList({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name or instruction…"
-            aria-label="Search routines"
+            placeholder="Buscar por nombre o instrucción…"
+            aria-label="Buscar rutinas"
             className="w-full rounded-card border border-border bg-surface py-1.5 pl-8 pr-7 text-[12.5px] text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-border-strong"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
-              aria-label="Clear search"
+              aria-label="Limpiar la búsqueda"
               className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-sm text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <X className="h-3 w-3" />
@@ -268,15 +269,17 @@ export function ScheduleList({
 
       {error && (
         <div className="rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
-          {error} Nothing changed — try again.
+          {error} No se cambió nada; vuelve a intentarlo.
         </div>
       )}
 
       {visible.length === 0 ? (
         <section className="rounded-card border border-border bg-surface p-8 text-center text-[13px] text-ink-muted">
           <SearchX className="mx-auto mb-2.5 h-7 w-7 text-ink-faint" />
-          <p className="mb-1 text-[14px] font-bold text-ink">No routine matches</p>
-          <p className="mb-3">Nothing fits this filter and search together. They are all still here.</p>
+          <p className="mb-1 text-[14px] font-bold text-ink">Ninguna rutina coincide</p>
+          <p className="mb-3">
+            Nada encaja con este filtro y esta búsqueda a la vez. Todas siguen guardadas.
+          </p>
           <button
             type="button"
             onClick={() => {
@@ -285,21 +288,21 @@ export function ScheduleList({
             }}
             className="rounded-card bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            Show every routine
+            Ver todas las rutinas
           </button>
         </section>
       ) : grouped ? (
         <div className="space-y-5">
           <Group
             icon={<Globe className="h-3.5 w-3.5" />}
-            label="Global routines"
+            label="Rutinas globales"
             count={globals.length}
           >
             {globals.map(renderCard)}
           </Group>
           <Group
             icon={<User className="h-3.5 w-3.5" />}
-            label="My routines"
+            label="Mis rutinas"
             count={personal.length}
           >
             {personal.map(renderCard)}

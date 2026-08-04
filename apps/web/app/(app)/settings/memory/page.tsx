@@ -30,8 +30,8 @@ export default async function MemoryPage() {
   return (
     <>
       <PageHeader
-        title="What Cortex remembers"
-        subtitle="Everything Cortex has picked up about how you work — visible, editable, and yours to delete"
+        title="Lo que Cortex recuerda"
+        subtitle="Todo lo que Cortex ha aprendido de cómo trabajas: visible, editable y tuyo para borrar"
         icon={<Brain className="h-5 w-5" />}
       />
       <MemoryList initial={memories} />

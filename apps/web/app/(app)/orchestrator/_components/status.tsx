@@ -14,22 +14,22 @@ import { Ban, Circle, CircleCheckBig, CircleSlash, CircleX, Loader2, Sparkles } 
  */
 
 export const RUN_TONE: Record<RunStatus, { label: string; tone: StatusTone }> = {
-  planning: { label: 'Planning', tone: 'primary' },
-  running: { label: 'Running', tone: 'primary' },
-  completed: { label: 'Completed', tone: 'emerald' },
-  failed: { label: 'Failed', tone: 'rose' },
-  cancelled: { label: 'Stopped', tone: 'neutral' },
+  planning: { label: 'Planeando', tone: 'primary' },
+  running: { label: 'Ejecutando', tone: 'primary' },
+  completed: { label: 'Terminada', tone: 'emerald' },
+  failed: { label: 'Falló', tone: 'rose' },
+  cancelled: { label: 'Detenida', tone: 'neutral' },
 };
 
 export const TASK_TONE: Record<
   TaskStatus,
   { label: string; tone: StatusTone; ring: string; icon: typeof Circle }
 > = {
-  pending: { label: 'Waiting', tone: 'neutral', ring: 'border-border', icon: Circle },
-  running: { label: 'Running', tone: 'primary', ring: 'border-primary', icon: Loader2 },
-  completed: { label: 'Done', tone: 'emerald', ring: 'border-emerald/50', icon: CircleCheckBig },
-  failed: { label: 'Failed', tone: 'rose', ring: 'border-rose/50', icon: CircleX },
-  skipped: { label: 'Skipped', tone: 'neutral', ring: 'border-border', icon: CircleSlash },
+  pending: { label: 'En espera', tone: 'neutral', ring: 'border-border', icon: Circle },
+  running: { label: 'Trabajando', tone: 'primary', ring: 'border-primary', icon: Loader2 },
+  completed: { label: 'Listo', tone: 'emerald', ring: 'border-emerald/50', icon: CircleCheckBig },
+  failed: { label: 'Falló', tone: 'rose', ring: 'border-rose/50', icon: CircleX },
+  skipped: { label: 'Omitido', tone: 'neutral', ring: 'border-border', icon: CircleSlash },
 };
 
 export function RunStatusPill({ status, className }: { status: RunStatus; className?: string }) {
