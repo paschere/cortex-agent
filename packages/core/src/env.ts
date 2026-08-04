@@ -19,7 +19,11 @@ const schema = z.object({
   HUBSPOT_CLIENT_ID: z.string().min(1).optional(),
   HUBSPOT_CLIENT_SECRET: z.string().min(1).optional(),
   HUBSPOT_REDIRECT_URI: z.string().url().optional(),
-  GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1),
+  // Knowledge Base embeddings (Voyage AI). Optional on purpose: without it the
+  // KB degrades to keyword search and queues what it cannot vectorise, which is
+  // not a reason to refuse to boot. GOOGLE_GENERATIVE_AI_API_KEY used to be
+  // required here for the same job and is gone — nothing reads Gemini any more.
+  VOYAGE_API_KEY: z.string().min(1).optional(),
   RATE_ESTIMATOR_URL: z.string().url(),
   RATE_ESTIMATOR_SERVICE_TOKEN: z.string().min(1),
   PAYROLL_API_URL: z.string().url().optional(),

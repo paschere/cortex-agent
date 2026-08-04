@@ -36,7 +36,7 @@ cortex-agent/
 | Monorepo | Turborepo 2 |
 | Web framework | Next.js 15 (App Router) |
 | UI | React 19, Tailwind CSS, shadcn/ui (Radix UI), Framer Motion |
-| AI / LLM | Vercel AI SDK 4, Claude Opus 5 (generation) + Gemini embeddings |
+| AI / LLM | Vercel AI SDK 4, Claude Opus 5 (generation) + Voyage AI `voyage-3-large` (embeddings) |
 | Auth | better-auth — email/password + Google SSO, organizations (multi-tenant), admin, 2FA |
 | Database | Supabase — Postgres 15 + pgvector + Auth + Storage |
 | Background jobs | Inngest |

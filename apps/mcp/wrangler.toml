@@ -11,7 +11,7 @@ NEXT_PUBLIC_SUPABASE_URL = ""  # set per env via wrangler secret
 # - TOKEN_ENCRYPTION_KEY
 # - GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 # - HUBSPOT_CLIENT_ID, HUBSPOT_CLIENT_SECRET
-# - GOOGLE_GENERATIVE_AI_API_KEY
+# - VOYAGE_API_KEY  (optional; without it kb.search matches keywords only)
 # - RATE_ESTIMATOR_URL, RATE_ESTIMATOR_SERVICE_TOKEN
 # - PAYROLL_API_URL, PAYROLL_API_TOKEN  (optional; payroll internal/team-overview)
 

@@ -29,7 +29,7 @@ openssl rand -base64 32
 | `HUBSPOT_CLIENT_ID` | Vercel env | HubSpot app client ID |
 | `HUBSPOT_CLIENT_SECRET` | Vercel env (sensitive) | HubSpot app client secret |
 | `HUBSPOT_REDIRECT_URI` | Vercel env | `${APP_BASE_URL}/api/integrations/hubspot/callback` |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Vercel env (sensitive) | Gemini API key |
+| `VOYAGE_API_KEY` | Vercel env (sensitive) | Voyage AI key — Knowledge Base embeddings (voyage-3-large, 1024 dims). Optional: without it the KB stores documents and searches keywords, but nothing is findable by meaning. |
 | `RATE_ESTIMATOR_URL` | Vercel env | Internal rate estimator service URL |
 | `RATE_ESTIMATOR_SERVICE_TOKEN` | Vercel env (sensitive) | Service-to-service auth token |
 | `INNGEST_EVENT_KEY` | Vercel env (sensitive) | Inngest event key |

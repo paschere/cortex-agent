@@ -21,9 +21,9 @@ export interface Team {
 }
 
 /**
- * Models an agent can answer with. Generation runs on Claude; embeddings still
- * run on Gemini (Anthropic has no embedding endpoint, and the pgvector indexes
- * are built for 768 dimensions) — see packages/agent-tools/src/model.ts.
+ * Models an agent can answer with. Generation runs on Claude; embeddings run on
+ * Voyage (Anthropic has no embedding endpoint) — see
+ * packages/agent-tools/src/kb/embedder.ts.
  */
 export type ModelId = "claude-opus-5" | "claude-sonnet-5";
 

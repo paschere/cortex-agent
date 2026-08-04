@@ -43,7 +43,7 @@ Open `.env.local` and fill in each variable. See [`docs/operations/secrets.md`](
 | `SUPABASE_DB_URL` | Already pre-filled in `.env.example`: `postgresql://postgres:postgres@localhost:54322/postgres` |
 | `BETTER_AUTH_SECRET` | Generate locally — see step 5 |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud Console — see step 6 |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Google AI Studio — [aistudio.google.com](https://aistudio.google.com) |
+| `VOYAGE_API_KEY` | Voyage AI — [dashboard.voyageai.com](https://dashboard.voyageai.com). Optional locally: without it the Knowledge Base falls back to keyword search |
 | `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` | Inngest dashboard — required for background jobs |
 | `TOKEN_ENCRYPTION_KEY` | Generate locally — see secrets.md |
 | `SENTRY_DSN` / `SENTRY_AUTH_TOKEN` | Sentry project settings — optional for local dev |

@@ -220,6 +220,8 @@ export async function POST(req: NextRequest) {
         documentTitle: string;
         chunkIndex: number;
         content: string;
+        // Set only on chunks from a recording — `mm:ss` into it.
+        spokenAt?: string;
       }>
     ).filter((h) => (h.score ?? 1) >= 0.65);
     if (relevant.length > 0) {
@@ -228,7 +230,10 @@ export async function POST(req: NextRequest) {
         relevant
           .map(
             (h, i) =>
-              `[^${i + 1}] (${(h.score ?? 0).toFixed(2)}) ${h.documentTitle} chunk ${h.chunkIndex}:\n${h.content}`,
+              // A chunk of a recording is located by its offset, not by a chunk
+              // number, and its text already opens with the speaker — so this
+              // reads "[12:34] Ana: …" and can be quoted straight back.
+              `[^${i + 1}] (${(h.score ?? 0).toFixed(2)}) ${h.documentTitle} ${h.spokenAt ? `at ${h.spokenAt}` : `chunk ${h.chunkIndex}`}:\n${h.spokenAt ? `[${h.spokenAt}] ` : ''}${h.content}`,
           )
           .join('\n\n') +
         '\n</context>';

@@ -12,7 +12,8 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   HUBSPOT_CLIENT_ID: string;
   HUBSPOT_CLIENT_SECRET: string;
-  GOOGLE_GENERATIVE_AI_API_KEY: string;
+  /** KB embeddings. Absent means kb.search matches on keywords only. */
+  VOYAGE_API_KEY?: string;
   RATE_ESTIMATOR_URL: string;
   RATE_ESTIMATOR_SERVICE_TOKEN: string;
   PAYROLL_API_URL?: string;

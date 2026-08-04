@@ -252,13 +252,14 @@ type SearchTool = ToolDef<
   }
 >;
 
+/** A Voyage response shaped like the real one; the values themselves never matter here. */
 function stubEmbedding() {
   vi.stubGlobal(
     'fetch',
     vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        embeddings: [{ values: Array.from({ length: 768 }, () => 0.1) }],
+        data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }],
       }),
       text: async () => '',
     }),
@@ -271,7 +272,7 @@ describe('kb.search space scoping', () => {
   let kbSearch: typeof KbSearchType;
 
   beforeEach(async () => {
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-key';
+    process.env.VOYAGE_API_KEY = 'test-key';
     stubEmbedding();
     kbSearch = (await import('./search')).kbSearch;
   });
@@ -354,7 +355,7 @@ describe('searchSpaces boundary', () => {
   });
 
   it('drops space ids the caller cannot see instead of honouring them', async () => {
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'test-key';
+    process.env.VOYAGE_API_KEY = 'test-key';
     stubEmbedding();
     const { searchSpaces } = await import('./spaces');
 

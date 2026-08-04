@@ -214,6 +214,85 @@ export async function fetchTranscriptText(
   };
 }
 
+/** One thing somebody said, with the clock still attached. */
+export interface TranscriptEntry {
+  /** Participant resource name, matching `MeetParticipant.name`. */
+  participant: string | null;
+  text: string;
+  /** RFC3339 wall-clock start of the utterance, when Meet reports one. */
+  startTime: string | null;
+  endTime: string | null;
+}
+
+/**
+ * The same entries `fetchTranscriptText` reads, returned structured instead of
+ * flattened into "Speaker: line".
+ *
+ * WHY BOTH EXIST. `fetchTranscriptText` answers "what was said" for a model that
+ * is about to summarise a call and needs a character budget, and it deliberately
+ * drops the timestamps because they cost tokens and buy nothing in that use.
+ * Storing a meeting is the opposite problem: the timestamps ARE the value. A
+ * chunk that knows it covers 12:04–12:31 can be cited as "she said it 12 minutes
+ * in"; the same chunk without them degrades to "somewhere in this 50-minute
+ * call". So this returns the entries whole and lets the caller decide.
+ */
+export async function fetchTranscriptEntries(
+  ctx: ToolContext,
+  opts: { transcriptName: string; maxEntries?: number; maxPages?: number },
+): Promise<TranscriptEntry[]> {
+  const maxEntries = opts.maxEntries ?? 20_000;
+  const out: TranscriptEntry[] = [];
+  let pageToken: string | undefined;
+
+  for (let page = 0; page < (opts.maxPages ?? 50); page++) {
+    const qs = new URLSearchParams({ pageSize: '1000' });
+    if (pageToken) qs.set('pageToken', pageToken);
+    const data = await meetGet<{
+      transcriptEntries?: Array<{
+        participant?: string;
+        text?: string;
+        startTime?: string;
+        endTime?: string;
+      }>;
+      nextPageToken?: string;
+    }>(ctx, `${opts.transcriptName}/entries?${qs.toString()}`);
+
+    for (const entry of data.transcriptEntries ?? []) {
+      if (!entry.text) continue;
+      out.push({
+        participant: entry.participant ?? null,
+        text: entry.text,
+        startTime: entry.startTime ?? null,
+        endTime: entry.endTime ?? null,
+      });
+      if (out.length >= maxEntries) return out;
+    }
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
+  }
+
+  return out;
+}
+
+/**
+ * One conference record by its resource name. Used when the caller already
+ * knows exactly which sitting it wants (a stored import, a re-run) and should
+ * not have to scan a meeting code's history to find it again.
+ */
+export async function getConferenceRecord(
+  ctx: ToolContext,
+  conferenceRecordName: string,
+): Promise<ConferenceRecord | null> {
+  try {
+    return await meetGet<ConferenceRecord>(ctx, conferenceRecordName);
+  } catch (err) {
+    // A 404 is "that sitting is gone" and is a normal answer; anything else
+    // (revoked scope, Meet outage) is the caller's problem to report.
+    if (/ 404 /.test((err as Error).message)) return null;
+    throw err;
+  }
+}
+
 /** The joinable code for a space, used to label a conference record. */
 export async function fetchSpaceMeetingCode(
   ctx: ToolContext,

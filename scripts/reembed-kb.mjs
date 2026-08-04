@@ -1,105 +1,53 @@
 #!/usr/bin/env node
 /**
- * Re-embed every kb_chunks row with gemini-embedding-001 (768 dims).
+ * Kick the Knowledge Base re-embedding job by hand.
  *
- * Why: the KB was originally embedded with Google's text-embedding-004, which
- * was retired from the Gemini API. Query embeddings now come from
- * gemini-embedding-001 (packages/agent-tools/src/kb/embedder.ts), which lives
- * in a different vector space — chunks embedded with the old model are
- * effectively unfindable until re-embedded. Run this ONCE per environment
- * after deploying the embedder change.
+ * This used to embed every chunk itself, against Gemini. It no longer does any
+ * embedding: the work lives in the `kb-reindex-embeddings` Inngest function
+ * (apps/web/inngest/functions/reindex-embeddings.ts), which batches, retries,
+ * reports progress and resumes where it stopped. A second implementation here
+ * would be a second set of batching and rate-limit rules to keep in step with
+ * Voyage, and it would drift.
+ *
+ * You rarely need this. The job runs on a cron and drains anything with
+ * `kb_chunks.embedding is null` on its own — after migration 0057, and after a
+ * VOYAGE_API_KEY is added to a deployment that has been storing chunks
+ * unvectorised. Use this when you do not want to wait for the next tick.
  *
  * Usage:
- *   node scripts/reembed-kb.mjs [--dry-run] [--batch 64]
+ *   node scripts/reembed-kb.mjs                 # production (inn.gs)
+ *   node scripts/reembed-kb.mjs --dev           # local Inngest dev server
+ *   node scripts/reembed-kb.mjs --url http://…  # any other Inngest host
  *
- * Required env (or pass via shell):
- *   NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GOOGLE_GENERATIVE_AI_API_KEY
- *
- * Idempotent and resumable: processes chunks in stable id order; re-running
- * re-embeds everything (harmless — same model, same output). Rate-limited by
- * batch size; ~100 texts per Gemini request.
+ * Required env: INNGEST_EVENT_KEY (any non-empty value works against the dev
+ * server, which does not authenticate).
  */
-// Resolve @supabase/supabase-js from the web app's dependencies (this script
-// lives outside any workspace package, so bare ESM imports don't resolve).
-import { createRequire } from 'node:module';
-const require = createRequire(new URL('../apps/web/package.json', import.meta.url));
-const { createClient } = require('@supabase/supabase-js');
 
 const args = process.argv.slice(2);
-const DRY_RUN = args.includes('--dry-run');
-const BATCH = Number(args[args.indexOf('--batch') + 1]) || 64;
+const DEV = args.includes('--dev');
+const urlFlag = args.indexOf('--url');
+const BASE = urlFlag !== -1 ? args[urlFlag + 1] : DEV ? 'http://localhost:8288' : 'https://inn.gs';
 
-const ENDPOINT =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents';
-const DIMENSIONS = 768;
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const geminiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-if (!url || !serviceKey || !geminiKey) {
-  console.error(
-    'Missing env. Need NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GOOGLE_GENERATIVE_AI_API_KEY',
-  );
+const eventKey = process.env.INNGEST_EVENT_KEY || (DEV ? 'dev' : '');
+if (!eventKey) {
+  console.error('Missing INNGEST_EVENT_KEY. Set it, or pass --dev for the local dev server.');
   process.exit(1);
 }
 
-const db = createClient(url, serviceKey);
+const res = await fetch(`${BASE.replace(/\/+$/, '')}/e/${encodeURIComponent(eventKey)}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: 'kb/embeddings.reindex',
+    data: { triggeredBy: 'scripts/reembed-kb.mjs' },
+  }),
+});
 
-function l2Normalize(values) {
-  let sum = 0;
-  for (const v of values) sum += v * v;
-  const norm = Math.sqrt(sum);
-  return norm === 0 ? values : values.map((v) => v / norm);
+if (!res.ok) {
+  console.error(`Inngest rejected the event (${res.status}): ${await res.text()}`);
+  process.exit(1);
 }
 
-async function embedBatch(texts) {
-  const res = await fetch(`${ENDPOINT}?key=${encodeURIComponent(geminiKey)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      requests: texts.map((t) => ({
-        model: 'models/gemini-embedding-001',
-        content: { parts: [{ text: t }] },
-        outputDimensionality: DIMENSIONS,
-      })),
-    }),
-  });
-  if (!res.ok) throw new Error(`Embed failed ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.embeddings.map((e) => l2Normalize(e.values));
-}
-
-const { count } = await db.from('kb_chunks').select('id', { count: 'exact', head: true });
-console.log(`kb_chunks total: ${count ?? 0}${DRY_RUN ? ' (dry run — no writes)' : ''}`);
-
-let processed = 0;
-let lastId = '00000000-0000-0000-0000-000000000000';
-
-for (;;) {
-  const { data: rows, error } = await db
-    .from('kb_chunks')
-    .select('id, content')
-    .gt('id', lastId)
-    .order('id', { ascending: true })
-    .limit(BATCH);
-  if (error) throw new Error(`Fetch failed: ${error.message}`);
-  if (!rows || rows.length === 0) break;
-
-  const embeddings = await embedBatch(rows.map((r) => r.content ?? ''));
-
-  if (!DRY_RUN) {
-    for (let i = 0; i < rows.length; i++) {
-      const { error: upErr } = await db
-        .from('kb_chunks')
-        .update({ embedding: JSON.stringify(embeddings[i]) })
-        .eq('id', rows[i].id);
-      if (upErr) throw new Error(`Update failed for ${rows[i].id}: ${upErr.message}`);
-    }
-  }
-
-  processed += rows.length;
-  lastId = rows[rows.length - 1].id;
-  console.log(`  ${processed}/${count ?? '?'} re-embedded`);
-}
-
-console.log(`Done. ${processed} chunks ${DRY_RUN ? 'would be' : ''} re-embedded.`);
+console.log(
+  'Queued kb/embeddings.reindex. Watch it in the Inngest dashboard — the run reports how many chunks it embedded and how many are left.',
+);

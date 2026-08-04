@@ -9,9 +9,22 @@ import {
   driveGetText,
 } from '@cortex/agent-tools';
 import { chunkText } from '@cortex/agent-tools/src/kb/chunker';
-import { embed } from '@cortex/agent-tools/src/kb/embedder';
+import { embedDocuments } from '@cortex/agent-tools/src/kb/embedder';
 import { parseDocument } from '@cortex/agent-tools/src/kb/parsers';
+import { transcribeAudio } from '@cortex/agent-tools/src/kb/transcribe';
+import { chunkTranscript } from '@cortex/agent-tools/src/kb/transcript-chunker';
 import { logger } from '@cortex/core';
+
+/** Long enough for Deepgram to pull a 200MB recording, short enough to expire. */
+const AUDIO_SIGNED_URL_TTL_SECONDS = 60 * 60;
+
+/** What goes into kb_chunks, whichever branch produced it. */
+interface PendingChunk {
+  content: string;
+  chunkIndex: number;
+  tokens: number;
+  metadata: Record<string, unknown>;
+}
 
 export const ingestDocument = inngest.createFunction(
   { id: 'ingest-document', retries: 3 },
@@ -50,7 +63,77 @@ export const ingestDocument = inngest.createFunction(
       // Resolve the document content into a buffer + parse it.
       let text = '';
       let pages: number | undefined;
-      if (doc.source === 'upload') {
+      // Filled by the audio branch only. A conversation is not chunked from a
+      // wall of text — its chunks are groups of speech turns, each carrying the
+      // speaker and the offsets that make a citation checkable — so that branch
+      // produces finished chunks rather than a string for `chunkText`.
+      let transcriptChunks: PendingChunk[] | null = null;
+
+      if (doc.media_kind === 'audio') {
+        const audioPath = (doc.media_path ?? doc.source_ref) as string | null;
+        if (!audioPath) {
+          return await failAndStop(`Recording ${documentId} has no stored audio path`);
+        }
+
+        await sb
+          .from('kb_documents')
+          .update({ transcript_status: 'transcribing', transcript_error: null })
+          .eq('id', documentId);
+
+        // Signing and transcribing live in one step so the URL cannot expire
+        // between them, and so an Inngest retry of a LATER step never re-pays
+        // for a transcription that already succeeded — minutes of work and the
+        // most expensive call in this function.
+        const outcome = await step.run('transcribe-audio', async () => {
+          const { data: signed, error: signError } = await sb.storage
+            .from('kb-uploads')
+            .createSignedUrl(audioPath, AUDIO_SIGNED_URL_TTL_SECONDS);
+          if (signError || !signed?.signedUrl) {
+            throw new Error(
+              `Could not sign the recording for transcription: ${signError?.message}`,
+            );
+          }
+          // Deepgram fetches the audio itself. Downloading it here only to
+          // upload the same bytes back would double the transfer and hold the
+          // whole file in this function's heap for the length of the call.
+          return await transcribeAudio({ url: signed.signedUrl }, { logger });
+        });
+
+        if (!outcome.ok) {
+          await sb
+            .from('kb_documents')
+            .update({ transcript_status: 'failed', transcript_error: outcome.reason })
+            .eq('id', documentId);
+          // A missing key or an undecodable file will fail identically on every
+          // retry; a rate limit or an outage will not. Only the first kind stops.
+          if (!outcome.retryable) return await failAndStop(outcome.reason);
+          throw new Error(outcome.reason);
+        }
+
+        const transcript = outcome.data;
+        transcriptChunks = chunkTranscript(transcript.turns).map((c) => ({
+          content: c.content,
+          chunkIndex: c.chunkIndex,
+          tokens: c.tokens,
+          metadata: {
+            ...c.metadata,
+            ...(transcript.language ? { language: transcript.language } : {}),
+          },
+        }));
+
+        await sb
+          .from('kb_documents')
+          .update({
+            transcript_status: 'ready',
+            transcript_error: null,
+            duration_seconds: transcript.durationSeconds,
+            speakers: transcript.speakers,
+            // Only filled in if the uploader could not say when the call
+            // happened — their answer is better than our guess.
+            ...(doc.recorded_at ? {} : { recorded_at: doc.created_at }),
+          })
+          .eq('id', documentId);
+      } else if (doc.source === 'upload') {
         const storagePath = doc.source_ref as string | null;
         if (!storagePath) throw new Error(`Document ${documentId} has no source_ref`);
         const { data: file } = await sb.storage.from('kb-uploads').download(storagePath);
@@ -137,27 +220,50 @@ export const ingestDocument = inngest.createFunction(
         await sb.from('kb_chunks').delete().eq('document_id', documentId);
       });
 
-      // Chunk the text
-      const chunks = chunkText(text);
+      const chunks: PendingChunk[] =
+        transcriptChunks ??
+        chunkText(text).map((c) => ({
+          content: c.content,
+          chunkIndex: c.chunkIndex,
+          tokens: c.tokens,
+          metadata: pages != null ? { pages } : {},
+        }));
       if (chunks.length === 0) throw new Error('No chunks produced');
 
-      // Embed all chunks (in batches handled internally by embed())
-      const embeddings = await embed(chunks.map((c) => c.content));
+      // Embed all chunks (batched internally, as documents — never as queries)
+      const embedded = await embedDocuments(chunks.map((c) => c.content));
 
-      // Insert chunks
+      // A missing Voyage key is not a reason to lose the document. The text is
+      // the expensive part (download, export, parse); the vectors are cheap to
+      // add later. Storing the chunks with a null embedding keeps the document
+      // findable by keyword and hands it to kb-reindex-embeddings, which fills
+      // the vectors in and flips the row to `ready` once the key exists. Any
+      // other failure is transient and worth an Inngest retry.
+      if (!embedded.ok && embedded.configured) throw new Error(embedded.reason);
+
       await sb.from('kb_chunks').insert(
         chunks.map((c, i) => ({
           document_id: documentId,
           chunk_index: c.chunkIndex,
           content: c.content,
           tokens: c.tokens,
-          embedding: embeddings[i],
-          metadata: pages != null ? { pages } : {},
+          embedding: embedded.ok ? embedded.data[i] : null,
+          metadata: c.metadata,
         })),
       );
 
-      // Mark ready
-      await sb.from('kb_documents').update({ status: 'ready' }).eq('id', documentId);
+      if (!embedded.ok) {
+        await sb
+          .from('kb_documents')
+          .update({ status: 'pending', error_message: embedded.reason })
+          .eq('id', documentId);
+        return { ok: true, chunks: chunks.length, awaitingEmbeddings: true };
+      }
+
+      await sb
+        .from('kb_documents')
+        .update({ status: 'ready', error_message: null })
+        .eq('id', documentId);
 
       return { ok: true, chunks: chunks.length };
     } catch (err) {

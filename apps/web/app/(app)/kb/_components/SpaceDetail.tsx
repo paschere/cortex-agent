@@ -6,9 +6,11 @@ import { ArrowLeft, Building2, FileText, Loader2, Lock, Trash2 } from 'lucide-re
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { deleteSpace } from '../actions';
+import { AudioRecorder } from './AudioRecorder';
 import { DocumentList } from './DocumentList';
 import { DriveSyncPanel } from './DriveSyncPanel';
 import { SpaceChip } from './KnowledgeBase';
+import { MeetingImportPanel } from './MeetingImportPanel';
 import { UploadDropzone } from './UploadDropzone';
 import type { SpaceSummary } from './types';
 
@@ -157,8 +159,12 @@ export function SpaceDetail({
               Add to {space.name}
             </div>
             <UploadDropzone spaceId={space.id} spaceName={space.name} />
+            <div className="mt-3">
+              <AudioRecorder spaceId={space.id} spaceName={space.name} />
+            </div>
           </Panel>
           <DriveSyncPanel spaceId={space.id} />
+          <MeetingImportPanel spaceId={space.id} spaceName={space.name} />
         </>
       ) : (
         <Panel className="px-5 py-4 text-[12.5px] leading-relaxed text-ink-faint">

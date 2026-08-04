@@ -1,18 +1,37 @@
 // Side-effect imports register each tool with the registry at module load.
 import './get-transcript';
+import './import-transcript';
 import './list-transcripts';
 import './prepare-briefing';
 import './schedule-briefings';
 
 export { meetingsGetTranscript } from './get-transcript';
+export { meetingsImportTranscript } from './import-transcript';
 export { meetingsListTranscripts } from './list-transcripts';
 export { meetingsPrepareBriefing } from './prepare-briefing';
 export { meetingsScheduleBriefings } from './schedule-briefings';
 
+// The importer's engine, for the callers that are not a model turn: the Inngest
+// sweep and the Knowledge Base page's manual import button.
+export {
+  buildChunks,
+  buildHeader,
+  buildSpeechTurns,
+  importMeetingTranscript,
+} from './import-transcript';
+export type {
+  ImportMeetingOptions,
+  MeetingImportContext,
+  MeetingImportOutcome,
+  MeetingImportResult,
+} from './import-transcript';
+
 export {
   MEET_READONLY_SCOPE,
   fetchSpaceMeetingCode,
+  fetchTranscriptEntries,
   fetchTranscriptText,
+  getConferenceRecord,
   listConferenceRecords,
   listParticipants,
   listTranscripts,
@@ -23,6 +42,7 @@ export {
 export type {
   ConferenceRecord,
   MeetParticipant,
+  TranscriptEntry,
   TranscriptRef,
   TranscriptText,
 } from './client';

@@ -2,6 +2,7 @@ import { ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { listVisibleSpaces, resolveSpaceByName, searchSpaces } from './spaces';
+import { chunkOffsetMs, formatOffset } from './transcript-chunker';
 
 const HitSchema = z.object({
   documentId: z.string().uuid(),
@@ -11,6 +12,13 @@ const HitSchema = z.object({
   chunkIndex: z.number().int(),
   content: z.string(),
   score: z.number(),
+  /**
+   * Present only on hits from a recording: `mm:ss` into it, where this was
+   * said. It is the difference between "it is somewhere in that call" and a
+   * quote the person can go and listen to. Who said it is already the first
+   * thing in `content`.
+   */
+  spokenAt: z.string().optional(),
 });
 
 /**
@@ -38,6 +46,13 @@ export const kbSearch = registerTool({
   }),
   outputSchema: z.object({
     hits: z.array(HitSchema),
+    /**
+     * Present only when retrieval ran degraded (keyword-only). It is in the
+     * output rather than only in the logs because "I found nothing" and "I could
+     * only match on words" are different answers, and the model is the one
+     * talking to the person.
+     */
+    note: z.string().optional(),
   }),
   rateLimit: { perMinute: 60 },
   handler: async (input, ctx) => {
@@ -56,23 +71,34 @@ export const kbSearch = registerTool({
       spaceIds = [space.id];
     }
 
+    let degraded: string | undefined;
     const hits = await searchSpaces(ctx.db, {
       userId: ctx.userId,
       query: input.query,
       ...(spaceIds ? { spaceIds } : {}),
       limit: input.limit,
+      onDegraded: (reason) => {
+        degraded = reason;
+        ctx.logger.warn({ reason }, 'kb.search fell back to keyword-only retrieval');
+      },
     });
 
     return {
-      hits: hits.map((h) => ({
-        documentId: h.documentId,
-        documentTitle: h.documentTitle,
-        space: h.spaceName,
-        spaceKind: h.spaceKind,
-        chunkIndex: h.chunkIndex,
-        content: h.content,
-        score: h.score,
-      })),
+      ...(degraded ? { note: degraded } : {}),
+      hits: hits.map((h) => {
+        const offsetMs = chunkOffsetMs(h.metadata);
+        const spokenAt = offsetMs === null ? undefined : formatOffset(offsetMs);
+        return {
+          documentId: h.documentId,
+          documentTitle: h.documentTitle,
+          space: h.spaceName,
+          spaceKind: h.spaceKind,
+          chunkIndex: h.chunkIndex,
+          content: h.content,
+          score: h.score,
+          ...(spokenAt ? { spokenAt } : {}),
+        };
+      }),
     };
   },
 });

@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { FolderSearch, Loader2, Upload } from 'lucide-react';
+import { AudioLines, FolderSearch, Loader2, Upload, Video } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { deleteDocument, moveDocument } from '../actions';
@@ -14,8 +14,19 @@ interface Doc {
   mime: string;
   status: string;
   error_message: string | null;
-  source: 'upload' | 'gdrive' | 'url';
+  source: 'upload' | 'gdrive' | 'url' | 'audio' | 'recording' | 'meeting';
   created_at: string;
+  media_kind?: 'text' | 'audio' | 'meeting' | null;
+  duration_seconds?: number | null;
+  transcript_status?: string | null;
+  transcript_error?: string | null;
+  speakers?: string[] | null;
+}
+
+function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds % 60);
+  return `${minutes}:${String(rest).padStart(2, '0')}`;
 }
 
 async function fetchDocs(spaceId: string): Promise<Doc[]> {
@@ -108,7 +119,8 @@ export function DocumentList({
     return (
       <p className="max-w-lg py-2 text-[12.5px] leading-relaxed text-ink-muted">
         {spaceName} is empty. Drop in a rate card, a client brief, a playbook — anything you would
-        otherwise have to explain twice — and Cortex can answer from it, naming the document it used.
+        otherwise have to explain twice — and Cortex can answer from it, naming the document it
+        used.
       </p>
     );
   }
@@ -117,6 +129,11 @@ export function DocumentList({
     <ul className="divide-y divide-border">
       {docs.map((d) => {
         const isDrive = d.source === 'gdrive';
+        const isAudio = d.media_kind === 'audio';
+        // A meeting is spoken material like audio, but it arrived already
+        // transcribed from Google Meet — there is no recording to play back, so
+        // it gets its own badge rather than being called "Audio".
+        const isMeeting = d.media_kind === 'meeting';
         const status = statusLabel(d.status);
         const working = busy === d.id;
         return (
@@ -128,15 +145,31 @@ export function DocumentList({
                   <span
                     className={clsx(
                       'inline-flex shrink-0 items-center gap-1 rounded-pill px-2 py-0.5 text-[10.5px] font-semibold',
-                      isDrive ? 'bg-sky-soft text-sky' : 'bg-surface-2 text-ink-muted',
+                      isDrive
+                        ? 'bg-sky-soft text-sky'
+                        : isMeeting
+                          ? 'bg-primary-soft text-primary'
+                          : 'bg-surface-2 text-ink-muted',
                     )}
                   >
                     {isDrive ? (
                       <FolderSearch className="h-3 w-3" />
+                    ) : isMeeting ? (
+                      <Video className="h-3 w-3" />
+                    ) : isAudio ? (
+                      <AudioLines className="h-3 w-3" />
                     ) : (
                       <Upload className="h-3 w-3" />
                     )}
-                    {isDrive ? 'Drive' : 'Upload'}
+                    {isDrive
+                      ? 'Drive'
+                      : isMeeting
+                        ? 'Meeting'
+                        : d.source === 'recording'
+                          ? 'Recorded'
+                          : isAudio
+                            ? 'Audio'
+                            : 'Upload'}
                   </span>
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-faint">
@@ -144,10 +177,29 @@ export function DocumentList({
                     <span className={clsx('h-1.5 w-1.5 rounded-full', status.dot)} />
                     <span className={clsx('font-medium', status.tone)}>{status.text}</span>
                   </span>
-                  {d.error_message && (
+                  {isAudio && (
                     <>
                       <span>&middot;</span>
-                      <span className="text-rose">{d.error_message}</span>
+                      {/* Transcription is the slow half and fails for its own
+                          reasons, so it says so in its own words rather than
+                          hiding behind "being read…". */}
+                      <span>
+                        {d.transcript_status === 'transcribing'
+                          ? 'Transcribing…'
+                          : d.transcript_status === 'failed'
+                            ? 'Could not be transcribed'
+                            : d.duration_seconds
+                              ? `${formatDuration(d.duration_seconds)}${
+                                  d.speakers?.length ? ` · ${d.speakers.length} speakers` : ''
+                                }`
+                              : 'Waiting to be transcribed'}
+                      </span>
+                    </>
+                  )}
+                  {(d.transcript_error ?? d.error_message) && (
+                    <>
+                      <span>&middot;</span>
+                      <span className="text-rose">{d.transcript_error ?? d.error_message}</span>
                     </>
                   )}
                 </div>
@@ -187,8 +239,8 @@ export function DocumentList({
             {confirming === d.id && (
               <div className="mt-2 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2.5">
                 <p className="text-[12px] leading-relaxed text-ink">
-                  Removing <b>{d.title}</b> deletes it and everything Cortex learned from it. Answers
-                  that cited it will stop citing it. This cannot be undone.
+                  Removing <b>{d.title}</b> deletes it and everything Cortex learned from it.
+                  Answers that cited it will stop citing it. This cannot be undone.
                 </p>
                 <div className="mt-2 flex items-center gap-2">
                   <button

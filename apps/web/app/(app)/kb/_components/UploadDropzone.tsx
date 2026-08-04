@@ -19,8 +19,20 @@ export function UploadDropzone({ spaceId, spaceName }: { spaceId: string; spaceN
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
       'text/plain': ['.txt'],
       'text/markdown': ['.md'],
+      // Audio is transcribed rather than parsed, so a call recording becomes
+      // as answerable as a document. Both m4a labels are listed because the
+      // same file is typed one way by Safari and the other by Chrome.
+      'audio/mpeg': ['.mp3'],
+      'audio/mp4': ['.m4a', '.mp4'],
+      'audio/x-m4a': ['.m4a'],
+      'audio/wav': ['.wav'],
+      'audio/webm': ['.webm'],
+      'audio/ogg': ['.ogg', '.oga'],
     },
-    maxSize: 10 * 1024 * 1024,
+    // The ceiling is the audio one; the server still holds documents to 10 MB.
+    // Rejecting a 30 MB recording in the browser for being "too big" would be
+    // a lie about a file the Knowledge Base accepts.
+    maxSize: 200 * 1024 * 1024,
     onDrop: async (files) => {
       setBusy(true);
       setError(null);
@@ -70,8 +82,8 @@ export function UploadDropzone({ spaceId, spaceName }: { spaceId: string; spaceN
               : `Drop a file into ${spaceName}`}
         </p>
         <p className="mt-0.5 text-[11.5px] text-ink-faint">
-          PDF, Word, text or Markdown, up to 10 MB. Cortex reads it and can answer from it within a
-          minute.
+          PDF, Word, text or Markdown up to 10 MB — or a recording (MP3, M4A, WAV, WebM) up to 200
+          MB, which Cortex transcribes and can quote back with the speaker and the minute.
         </p>
       </div>
       {error && (

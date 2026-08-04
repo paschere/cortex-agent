@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ForbiddenError, NotFoundError } from '@cortex/core';
-import { embed } from './embedder';
+import { embedQuery } from './embedder';
 
 /**
  * The Knowledge Base access boundary. Everything that reads or writes KB
@@ -44,6 +44,12 @@ export interface SpaceHit {
   chunkIndex: number;
   content: string;
   score: number;
+  /**
+   * Whatever the chunk was filed with. `{pages}` for a parsed document,
+   * `{speaker, speakers, startMs, endMs}` for a chunk of a recording — which
+   * is what lets a caller cite the minute rather than just the file.
+   */
+  metadata: Record<string, unknown>;
 }
 
 type SpaceRow = {
@@ -206,15 +212,27 @@ export interface SearchSpacesOptions {
    */
   spaceIds?: string[];
   limit?: number;
+  /**
+   * Called with a human-readable reason when the semantic half of the search
+   * could not run. The search still returns keyword matches, so the caller
+   * decides whether to log it, tell the person, or both — what it must not do
+   * is present a degraded result as a complete one.
+   */
+  onDegraded?: (reason: string) => void;
 }
 
 /**
  * The single retrieval entry point. Embeds the query and hands the USER — not
  * a list of spaces — to Postgres, which decides what is searchable.
+ *
+ * When the query cannot be embedded (no Voyage key, provider down), the
+ * embedding is sent as null and `kb_search_scoped` falls back to its full-text
+ * arm. Half a search beats an exception: the person asked a question, and
+ * "here is what matched on words" is a better answer than a red box.
  */
 export async function searchSpaces(
   db: SupabaseClient,
-  { userId, query, spaceIds, limit = 8 }: SearchSpacesOptions,
+  { userId, query, spaceIds, limit = 8, onDegraded }: SearchSpacesOptions,
 ): Promise<SpaceHit[]> {
   // A caller that has lost track of who it is asking for must retrieve
   // nothing, not everything.
@@ -224,12 +242,14 @@ export async function searchSpaces(
   // same as "search everything" — sending null here would silently widen it.
   if (spaceIds && spaceIds.length === 0) return [];
 
-  const [embedding] = await embed([query]);
-  if (!embedding) return [];
+  // `input_type: "query"`, never "document" — the two live on different sides
+  // of the same space and mixing them quietly costs recall.
+  const embedded = await embedQuery(query);
+  if (!embedded.ok) onDegraded?.(embedded.reason);
 
   const { data, error } = await db.rpc('kb_search_scoped', {
     p_user_id: userId,
-    p_query_embedding: embedding,
+    p_query_embedding: embedded.ok ? embedded.data : null,
     p_query_text: query,
     p_limit: limit,
     p_space_ids: spaceIds ?? null,
@@ -245,6 +265,7 @@ export async function searchSpaces(
     chunk_index: number;
     content: string;
     score: number;
+    metadata?: Record<string, unknown> | null;
   };
 
   return ((data as Row[]) ?? []).map((r) => ({
@@ -256,6 +277,10 @@ export async function searchSpaces(
     chunkIndex: r.chunk_index,
     content: r.content,
     score: Number(r.score),
+    // Optional on the row rather than required: the column arrived in 0058 and
+    // a deployment whose migrations lag by one should degrade to "no timestamp",
+    // not to a crash on every search.
+    metadata: r.metadata ?? {},
   }));
 }
 

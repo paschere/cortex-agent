@@ -129,7 +129,12 @@ export default async function IntegrationsPage({
   const workableOn = !!process.env.WORKABLE_API_TOKEN;
   const matcherOn = !!process.env.MATCHER_URL;
   const payrollOn = !!process.env.PAYROLL_API_URL;
-  const brainOn = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  // Two different keys, reported as one card because they fail as one product.
+  // Reasoning runs on Claude; retrieval by MEANING additionally needs Voyage.
+  // Losing the second is a degradation (keyword search still works), losing the
+  // first is an outage — so only the first switches the card off.
+  const brainOn = !!process.env.ANTHROPIC_API_KEY;
+  const semanticSearchOn = !!process.env.VOYAGE_API_KEY;
   const webOn = !!process.env.TAVILY_API_KEY;
   const slackOn = !!process.env.SLACK_BOT_TOKEN;
   const apolloOn = !!process.env.APOLLO_API_KEY;
@@ -219,7 +224,10 @@ export default async function IntegrationsPage({
       unlocks:
         'Knowledge Base search and memory, pipelines, routines and the inbox digest — Cortex’s own reasoning.',
       offline: 'The core stops: no Knowledge Base, no pipelines, no routines.',
-      owner: opsOwner(brainOn, 'the model API key is missing'),
+      owner:
+        brainOn && !semanticSearchOn
+          ? 'Set up by ops · no embedding key, so the Knowledge Base only matches keywords'
+          : opsOwner(brainOn, 'the model API key is missing'),
     },
     {
       key: 'web',

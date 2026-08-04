@@ -61,6 +61,8 @@ export const kbContext = registerTool({
       chunkIndex: number;
       content: string;
       score: number;
+      /** `mm:ss` into the recording, on hits that came from one. */
+      spokenAt?: string;
     }
     // Dedupe by document+chunk, keeping the best score across queries.
     const byChunk = new Map<string, Hit>();
@@ -110,9 +112,14 @@ export const kbContext = registerTool({
         bestScore: Number(entry.best.toFixed(3)),
         excerpts: entry.hits
           .sort((a, b) => a.chunkIndex - b.chunkIndex)
-          .map((h) =>
-            h.content.length > maxChars ? `${h.content.slice(0, maxChars)}…` : h.content,
-          ),
+          .map((h) => {
+            const body =
+              h.content.length > maxChars ? `${h.content.slice(0, maxChars)}…` : h.content;
+            // A quote from a call is only worth as much as the ability to go
+            // and check it. The chunk already names the speaker, so the offset
+            // is all that is missing: "[12:34] Ana: we'll have it by Friday".
+            return h.spokenAt ? `[${h.spokenAt}] ${body}` : body;
+          }),
       }));
 
     const contextBlock =

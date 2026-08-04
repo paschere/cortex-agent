@@ -4,8 +4,15 @@ export interface Chunk {
   tokens: number;
 }
 
-/** Approximate token count: words * 1.3 */
-function approxTokens(text: string): number {
+/**
+ * Approximate token count: words * 1.3.
+ *
+ * Exported so the transcript chunker measures speech with exactly the same
+ * ruler. Two chunkers with two different notions of "400 tokens" would produce
+ * systematically different-sized embeddings for the same amount of meaning,
+ * and hybrid search ranks them against each other.
+ */
+export function approxTokens(text: string): number {
   return Math.ceil(text.split(/\s+/).filter(Boolean).length * 1.3);
 }
 
