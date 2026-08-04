@@ -1,6 +1,6 @@
 # Desktop Release Runbook
 
-How to cut a new release of the Cortex Agent desktop app.
+How to cut a new release of the Cortex desktop app.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ Without these, builds succeed but users see OS security warnings:
 | ------------------------------ | ---------------------------------------------------- |
 | `APPLE_CERTIFICATE`            | Base64 `.p12` for macOS code signing                 |
 | `APPLE_CERTIFICATE_PASSWORD`   | Password for the `.p12`                              |
-| `APPLE_SIGNING_IDENTITY`       | e.g. `Developer ID Application: Cortex (XXXXXXXXXX)` |
+| `APPLE_SIGNING_IDENTITY`       | e.g. `Developer ID Application: Your Company (XXXXXXXXXX)` |
 | `APPLE_ID`                     | Apple ID email used for notarization                 |
 | `APPLE_PASSWORD`               | App-specific password for that Apple ID              |
 | `APPLE_TEAM_ID`                | 10-character Apple Developer team ID                 |
@@ -78,7 +78,7 @@ Go to **Releases → Draft a new release** (or use `gh`):
 
 ```bash
 gh release create desktop-v0.2.0 \
-  --title "Cortex Agent 0.2.0" \
+  --title "Cortex 0.2.0" \
   --notes "Release notes here."
 ```
 
@@ -98,9 +98,9 @@ Navigate to **Actions → Desktop release** and watch the three jobs:
 Each job uploads its artifacts and attaches them to the GitHub release.
 On success the release will have:
 
-- `Cortex.Agent_0.2.0_aarch64.dmg` (or `.app.tar.gz`)
-- `Cortex.Agent_0.2.0_x64.dmg`
-- `Cortex.Agent_0.2.0_x64_en-US.msi` (and/or `.exe` NSIS installer)
+- `Cortex_0.2.0_aarch64.dmg` (or `.app.tar.gz`)
+- `Cortex_0.2.0_x64.dmg`
+- `Cortex_0.2.0_x64_en-US.msi` (and/or `.exe` NSIS installer)
 - `latest.json` (used by the Tauri updater)
 
 ### 5. Update the updater endpoint (first release only)
@@ -109,7 +109,7 @@ Once the first release exists, verify the updater endpoint in
 `tauri.conf.json` resolves correctly:
 
 ```
-https://github.com/Cortex/cortex-agent/releases/latest/download/latest.json
+https://github.com/your-org/cortex-agent/releases/latest/download/latest.json
 ```
 
 If the GitHub org/repo path differs, update
@@ -122,7 +122,7 @@ If the GitHub org/repo path differs, update
 | Symptom                                    | Cause                             | Fix                                                                                        |
 | ------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------------------------ |
 | Build fails: missing icons                 | Icon files not committed          | Add real icon assets to `apps/desktop/src-tauri/icons/`                                    |
-| macOS: "app is damaged" / Gatekeeper block | Unsigned build + quarantine       | Add Apple signing secrets, or user runs `xattr -dr com.apple.quarantine Cortex\ Agent.app` |
+| macOS: "app is damaged" / Gatekeeper block | Unsigned build + quarantine       | Add Apple signing secrets, or user runs `xattr -dr com.apple.quarantine Cortex.app` |
 | Windows SmartScreen warning                | No Authenticode signature         | Add `WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD` secrets                         |
 | Updater silently skips update              | Wrong pubkey in `tauri.conf.json` | Re-run `tauri signer generate`, update `pubkey` field                                      |
 | `tauri-action` can't find project          | Wrong `projectPath`               | Verify `apps/desktop/src-tauri/tauri.conf.json` exists                                     |

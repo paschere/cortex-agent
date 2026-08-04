@@ -14,7 +14,7 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "Cortex",
-  description: "Cortexorkspace AI co-pilot",
+  description: 'Your workspace AI co-pilot',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

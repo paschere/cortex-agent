@@ -57,7 +57,7 @@ export const rateEstimateFromDocument = registerTool({
   id: "rate.estimate_from_document",
   description:
     "Same price guide as rate.estimate, but starting from the already-extracted text of a job description or RFP: it detects role, seniority, region and years from the wording and falls back to provided defaults for anything it cannot find. Use it only when you are holding the document text; if you already know the four fields, call rate.estimate directly. " +
-    "Like rate.estimate, this is a quote for a role that does not exist yet — it is not what Cortex charges any client today. Real bill rates live in BambooHR (bamboo.get_employee, bamboo.compensation_report).",
+    "Like rate.estimate, this is a quote for a role that does not exist yet — it is not what the company charges any client today. Real bill rates live in BambooHR (bamboo.get_employee, bamboo.compensation_report).",
   inputSchema: z.object({
     documentText: z.string().min(1),
     defaults: z

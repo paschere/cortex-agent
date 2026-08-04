@@ -12,8 +12,8 @@ import type {
 export const dynamic = "force-dynamic";
 
 /**
- * The prospecting list: every company Cortex has caught hiring for a role Cortex
- * fills. The sweep runs weekly and nothing is ever deleted, so this grows by
+ * The prospecting list: every company Cortex has caught hiring for a role the
+ * company staffs. The sweep runs weekly and nothing is ever deleted, so this grows by
  * roughly fifteen rows a week — the whole set is handed to the client, which
  * filters, searches and counts it. That keeps the funnel numbers and the list
  * derived from exactly the same data, which is what makes an optimistic status
@@ -72,7 +72,7 @@ export default async function ProspectsPage() {
     for (const u of users ?? []) {
       const label = (u.name as string | null) ?? (u.email as string);
       // Falling back to the local part of the address keeps it a name, not a
-      // mail route: "ana", never "ana@Cortex.com".
+      // mail route: "ana", never "ana@example.com".
       names.set(u.id as string, label.split("@")[0] ?? label);
     }
   }
@@ -104,7 +104,7 @@ export default async function ProspectsPage() {
     <>
       <PageHeader
         title="Prospects"
-        subtitle="Companies Cortex caught hiring for roles Cortex fills. Keep the good ones, drop the rest — nothing here is ever deleted."
+        subtitle="Companies Cortex caught hiring for roles your team staffs. Keep the good ones, drop the rest — nothing here is ever deleted."
         icon={<Radar className="h-5 w-5" />}
       />
       <ProspectBoard

@@ -81,7 +81,7 @@ export function renderApprovalRequestEmail(
     "",
     approvalsUrl
       ? `Approve or decline: ${approvalsUrl}`
-      : "Approve or decline it in Cortex OS.",
+      : "Approve or decline it in Cortex.",
     "",
     `Nothing has happened yet — it only runs if you approve. The request expires in ${minutes} minutes.`,
   ].join("\n");

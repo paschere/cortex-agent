@@ -139,7 +139,7 @@ async function configureGit(
   });
   await run(sandbox, {
     cmd: "git",
-    args: ["config", "user.email", "cortex@Cortex.com"],
+    args: ["config", "user.email", "cortex@example.com"],
     cwd: REPO_ROOT,
   });
   const created = await run(sandbox, {

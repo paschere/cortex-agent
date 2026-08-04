@@ -18,7 +18,7 @@ export const jobInsights = registerTool({
   description:
     "Aggregate analytics for one requisition's candidate pool: the true total, how many have AI scores / interviews / recruiter ratings / TestGorilla results, the score distribution, who the top five are, and interview / TestGorilla / predictive summaries. " +
     "Use it for 'how is the pipeline for this role', 'who are the top candidates', or 'how many are ready for a decision', and use it to get the REAL pool size before quoting a number from recruit.list_candidates. " +
-    'PROVENANCE: the totals and stage counts come from the Cortex matcher DB; every score, ranking and "success probability" is Cortex AI scoring; interview figures come from AI interview analysis and test figures from TestGorilla. Attribute each to its own system — none of it is Workable ATS data or client feedback — and cite meta.fetchedAt for freshness.',
+    'PROVENANCE: the totals and stage counts come from the matcher service DB; every score, ranking and "success probability" is Cortex AI scoring; interview figures come from AI interview analysis and test figures from TestGorilla. Attribute each to its own system — none of it is Workable ATS data or client feedback — and cite meta.fetchedAt for freshness.',
   inputSchema: z.object({
     jobId: z.string().min(1),
   }),

@@ -1,4 +1,4 @@
-import { BASE, matcherFetch } from "../recruit/client";
+import { BASE, matcherFetch, matcherToken } from "../recruit/client";
 
 /**
  * Matcher access for the presentations family.
@@ -11,12 +11,11 @@ import { BASE, matcherFetch } from "../recruit/client";
  *   POST /api/candidates/<id>/presentation/export     Puppeteer → PDF bytes
  *
  * The export route is reachable service-to-service: the matcher's middleware
- * guards `/api/candidates` only when ENFORCE_API_AUTH is on, and it accepts
- * `Authorization: Bearer <Cortex_AGENT_SERVICE_TOKEN>` — the same header
- * recruit/client.ts already sends as Cortex_MATCHER_TOKEN. So no new matcher
- * endpoint was needed; the Cortex-letterhead, Letter-format renderer in
- * lib/pdf/generate-presentation-pdf.ts stays the single source of truth for
- * what a Cortex presentation looks like.
+ * guards `/api/candidates` only when ENFORCE_API_AUTH is on, and it accepts a
+ * bearer service token — the same one recruit/client.ts already sends as
+ * MATCHER_TOKEN. So no new matcher endpoint was needed; the letterheaded,
+ * Letter-format renderer in lib/pdf/generate-presentation-pdf.ts stays the
+ * single source of truth for what a presentation looks like.
  *
  * What the export route does NOT return is metadata — it answers with bytes
  * and a filename, nothing about which version or author is inside them. That
@@ -116,7 +115,7 @@ export async function renderPdf(
   candidateId: string,
   jobId?: string,
 ): Promise<RenderedPdf> {
-  const token = process.env.Cortex_MATCHER_TOKEN;
+  const token = matcherToken();
   const url = `${BASE()}/api/candidates/${encodeURIComponent(candidateId)}/presentation/export`;
   const res = await fetch(url, {
     method: "POST",

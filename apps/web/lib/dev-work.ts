@@ -373,7 +373,7 @@ export function formatCost(usd: number | null): string | null {
   return usd < 1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(usd < 100 ? 2 : 0)}`;
 }
 
-/** "Cortex/cortex-agent" if we have it, otherwise the bare name. */
+/** "owner/repository" if we have it, otherwise the bare name. */
 export function repoLabel(
   repo: DevRepository | undefined | null,
 ): string | null {

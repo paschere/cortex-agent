@@ -202,8 +202,7 @@ export function InputBar({
           </div>
         </form>
         <p className="mt-1.5 text-center text-[11px] text-ink-faint">
-          Cortex Sales can make mistakes. Verify important actions before
-          sending.
+          Cortex can make mistakes. Verify important actions before sending.
         </p>
       </div>
     </div>

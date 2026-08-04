@@ -99,11 +99,11 @@ export function renderRoutineResultEmail(
           markdownToEmailHtml(clamped.markdown),
           clamped.truncated
             ? fineprint(
-                "This report was shortened for email. See the full result in Cortex OS.",
+                "This report was shortened for email. See the full result in Cortex.",
               )
             : "",
           detailUrl
-            ? button({ href: detailUrl, label: "Open in Cortex OS" })
+            ? button({ href: detailUrl, label: "Open in Cortex" })
             : "",
         ]
       : [
@@ -115,7 +115,7 @@ export function renderRoutineResultEmail(
           }),
           codeBlock(errorText, { label: "Error" }),
           detailUrl
-            ? button({ href: detailUrl, label: "Open in Cortex OS" })
+            ? button({ href: detailUrl, label: "Open in Cortex" })
             : "",
         ];
 
@@ -130,7 +130,7 @@ export function renderRoutineResultEmail(
         tone: input.ok ? "success" : "danger",
       }),
       bodyHtml: body.filter(Boolean).join(""),
-      footerNote: `You are on the recipient list for the "${input.jobName}" routine. Change or pause it in Cortex OS.`,
+      footerNote: `You are on the recipient list for the "${input.jobName}" routine. Change or pause it in Cortex.`,
     });
   };
 
@@ -161,10 +161,10 @@ export function renderRoutineResultEmail(
       ? textReport.markdown || "(no output)"
       : `The routine failed:\n\n${errorText}`,
     textReport.truncated
-      ? "\n(Shortened for email — see the full result in Cortex OS.)"
+      ? "\n(Shortened for email — see the full result in Cortex.)"
       : null,
     "",
-    detailUrl ? `Open in Cortex OS: ${detailUrl}` : null,
+    detailUrl ? `Open in Cortex: ${detailUrl}` : null,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");

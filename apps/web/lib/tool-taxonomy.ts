@@ -39,7 +39,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   workable: {
     name: "Workable",
     blurb:
-      "The external ATS Cortex sources from — jobs, applicants, stage moves and notes.",
+      "The external ATS the company sources from — jobs, applicants, stage moves and notes.",
     tone: "primary",
     icon: "ClipboardList",
   },
@@ -88,7 +88,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   bamboo: {
     name: "BambooHR",
     blurb:
-      "The HR system of record — the roster, employment and job history, time off, hours logged, documents on file, and both the pay rate Cortex pays and the bill rate it charges.",
+      "The HR system of record — the roster, employment and job history, time off, hours logged, documents on file, and both the pay rate the company pays and the bill rate it charges.",
     tone: "rose",
     icon: "Contact",
   },
@@ -109,7 +109,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   kb: {
     name: "Knowledge Base",
     blurb:
-      "Cortex's memory — search internal documents and write new ones back.",
+      "The company's memory — search internal documents and write new ones back.",
     tone: "sky",
     icon: "BookOpen",
   },

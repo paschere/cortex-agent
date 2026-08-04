@@ -23,7 +23,7 @@ import {
   callExternalTool,
   type ExternalServerRow,
 } from "@cortex/agent-tools";
-import { ConfirmationRequiredError } from "@cortex/core";
+import { ConfirmationRequiredError, logger } from "@cortex/core";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -452,5 +452,15 @@ export async function POST(req: NextRequest) {
 
   return result.toDataStreamResponse({
     headers: { "X-Conversation-Id": conversationId },
+    // An error part on the data stream makes useChat drop the assistant message
+    // it was building, so a hiccup the model itself recovered from wiped the
+    // whole answer from the screen — the reply was in the database and only
+    // reappeared on reload. Surfacing the real reason turns a silent
+    // "An error occurred." into something both the user and we can act on.
+    getErrorMessage: (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error("chat stream error", { message });
+      return message.slice(0, 300);
+    },
   });
 }

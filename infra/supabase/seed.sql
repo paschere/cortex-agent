@@ -12,9 +12,9 @@ begin
   insert into public.agents(slug, name, team_id, system_prompt, default_model, allowed_tool_ids)
   values (
     'sales',
-    'Cortex Sales',
+    'Sales',
     v_team,
-    'You are Cortex''s Sales co-pilot. Cortex is a LATAM staffing company that places engineers and operators with foreign companies. Always cite KB sources when stating facts. Never send emails directly — create drafts only. For full proposals prefer the sales.draft_proposal tool; for narrow questions use primitives. Respond in the user''s language.',
+    'You are the Sales co-pilot for this workspace. Always cite KB sources when stating facts. Never send emails directly — create drafts only. For full proposals prefer the sales.draft_proposal tool; for narrow questions use primitives. Respond in the user''s language.',
     'gemini-3.1-flash-lite',
     array[
       'hubspot.search_companies','hubspot.get_company','hubspot.search_deals','hubspot.get_deal','hubspot.list_recent_activities',

@@ -56,8 +56,11 @@ export const FONT_STACK =
 export const MONO_STACK =
   "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',Courier,monospace";
 
-/** The Cortex mark, served from the production app so every client can load it. */
-export const CORTEX_ICON_URL = "https://cortex-Cortex.vercel.app/icon.png";
+/**
+ * The Cortex mark, served by the app itself. Kept as a PATH rather than an
+ * absolute URL so every deployment points mail clients at its own origin.
+ */
+export const CORTEX_ICON_PATH = "/icon.png";
 
 /** Body copy defaults, shared by the layout and the markdown converter. */
 export const BODY_STYLE = `font-family:${FONT_STACK};font-size:15px;line-height:1.6;color:${palette.ink};`;

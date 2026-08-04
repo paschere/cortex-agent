@@ -5,6 +5,7 @@ import {
   SOURCE,
   type ToolMeta,
   buildMeta,
+  clientOrNull,
   matcherLink,
   metaSchema,
   provenanceFooter,
@@ -56,7 +57,7 @@ export const getCandidate = registerTool({
   description:
     "Get one candidate's profile and their applications across every job: contact details, years of experience, skills, and per-application stage, AI score, score history and a short AI summary. " +
     "By default the heavy fields are omitted — resume text, the extracted-profile JSON and the raw AI analysis blocks were ~80% of this record and a model needs none of them. Set includeResumeText or includeRawInsights only if you specifically need to quote them. " +
-    "PROVENANCE: profile fields come from the candidate record imported into the Cortex matcher (Workable ATS where workableId is set); every score and summary is Cortex AI scoring and must be attributed as such, never as ATS or client feedback. `source.profileUpdatedAt` tells you how fresh the profile is — cite it.",
+    "PROVENANCE: profile fields come from the candidate record imported into the matcher service (Workable ATS where workableId is set); every score and summary is Cortex AI scoring and must be attributed as such, never as ATS or client feedback. `source.profileUpdatedAt` tells you how fresh the profile is — cite it.",
   inputSchema: z.object({
     candidateId: z.string().min(1),
     includeResumeText: z.boolean().default(false),
@@ -86,9 +87,8 @@ export const getCandidate = registerTool({
         applicationId: a?.id ?? null,
         jobId: a?.jobId ?? null,
         jobTitle: a?.jobTitle ?? null,
-        // /api/candidates/:id defaults an unlinked job's company to "Cortex";
-        // treat that literal as "unknown" rather than repeating it as a client.
-        client: a?.company && a.company !== "Cortex" ? a.company : null,
+        // An unlinked job carries a placeholder company, not a real account.
+        client: clientOrNull(a?.company),
         stage: a?.status ?? null,
         jobArchived: a?.jobArchived ?? null,
         score: typeof a?.combinedScore === "number" ? a.combinedScore : null,

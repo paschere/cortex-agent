@@ -7,7 +7,7 @@
  * needs only the Meet scope. No Drive access, no file hunting, no permission
  * surprises when the recording lives in someone else's My Drive.
  *
- * Mirrors the working client in Cortex-matcher (lib/google/meet-transcripts.ts),
+ * Mirrors the working client in the matcher service (lib/google/meet-transcripts.ts),
  * adapted to ToolContext + ctx.integrations.getAccessToken('google').
  */
 

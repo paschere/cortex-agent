@@ -60,7 +60,7 @@ function fixture(): Row[] {
     {
       id: "m-ana-2",
       user_id: ANA,
-      content: 'Calls tpp.Cortex.com "the matcher".',
+      content: 'Calls tpp.example.com "the matcher".',
       status: "active",
       ...base,
     },
@@ -177,7 +177,7 @@ describe("memory isolation", () => {
     const ana = await loadMemoryContext(db, ANA);
     expect(ana.map((m) => m.content)).toEqual([
       "Prefers costs in USD.",
-      'Calls tpp.Cortex.com "the matcher".',
+      'Calls tpp.example.com "the matcher".',
     ]);
     // The whole point.
     expect(ana.some((m) => m.content.includes("Ben"))).toBe(false);

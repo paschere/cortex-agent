@@ -125,7 +125,7 @@ export function renderDevTaskEmail(input: DevTaskEmailInput): RenderedEmail {
           detailUrl
             ? button({
                 href: detailUrl,
-                label: "See the whole run in Cortex OS",
+                label: "See the whole run in Cortex",
                 tone: "quiet",
               })
             : "",
@@ -142,7 +142,7 @@ export function renderDevTaskEmail(input: DevTaskEmailInput): RenderedEmail {
             ? codeBlock(input.errorDetail, { label: "Technical detail" })
             : "",
           detailUrl
-            ? button({ href: detailUrl, label: "Open the run in Cortex OS" })
+            ? button({ href: detailUrl, label: "Open the run in Cortex" })
             : "",
         ];
 

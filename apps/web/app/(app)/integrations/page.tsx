@@ -129,7 +129,7 @@ export default async function IntegrationsPage({
   const googleScopes = (mine.google?.scopes ?? []).length;
   const hubspotWorkspace = !!process.env.HUBSPOT_PRIVATE_APP_TOKEN;
   const workableOn = !!process.env.WORKABLE_API_TOKEN;
-  const matcherOn = !!process.env.Cortex_MATCHER_URL;
+  const matcherOn = !!process.env.MATCHER_URL;
   const payrollOn = !!process.env.PAYROLL_API_URL;
   const brainOn = !!process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const webOn = !!process.env.TAVILY_API_KEY;
@@ -194,7 +194,7 @@ export default async function IntegrationsPage({
     },
     {
       key: "matcher",
-      name: "Cortex Talent Pool",
+      name: "Talent Pool",
       icon: Sparkles,
       families: ["recruit", "people", "rate", "presentations", "sales"],
       state: matcherOn ? "workspace" : "disconnected",
@@ -211,7 +211,7 @@ export default async function IntegrationsPage({
       families: ["bamboo"],
       state: bambooOn ? "workspace" : "disconnected",
       unlocks:
-        "The HR system of record: the roster, job and employment history, time off, hours logged, documents on file, and both the pay rate Cortex pays and the bill rate it charges the client.",
+        "The HR system of record: the roster, job and employment history, time off, hours logged, documents on file, and both the pay rate the company pays and the bill rate it charges the client.",
       offline:
         "Cortex cannot see who actually works here — no roster, no time off, no tenure and no rates.",
       owner: opsOwner(bambooOn, "no BambooHR API key on this environment"),

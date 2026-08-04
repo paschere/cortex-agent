@@ -99,9 +99,9 @@ fn main() { tauri_build::build() }
 ```json
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
-  "productName": "Cortex Agent",
+  "productName": "Cortex",
   "version": "0.1.0",
-  "identifier": "com.Cortex.agent",
+  "identifier": "com.cortex.agent",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
@@ -112,7 +112,7 @@ fn main() { tauri_build::build() }
     "windows": [
       {
         "label": "main",
-        "title": "Cortex Agent",
+        "title": "Cortex",
         "width": 920,
         "height": 720,
         "minWidth": 480,
@@ -133,7 +133,7 @@ fn main() { tauri_build::build() }
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/Cortex/cortex-agent/releases/latest/download/latest.json"
+        "https://github.com/your-org/cortex-agent/releases/latest/download/latest.json"
       ],
       "pubkey": "REPLACE_AT_TASK_6"
     },
@@ -259,7 +259,7 @@ use tauri::{
 pub fn setup<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
     let icon = Image::from_bytes(include_bytes!("../icons/128x128.png"))?;
 
-    let open = MenuItem::with_id(app, "open", "Open Cortex Agent", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open Cortex", true, None::<&str>)?;
     let new_chat = MenuItem::with_id(app, "new_chat", "New chat", true, Some("CmdOrCtrl+Shift+Z"))?;
     let sep = tauri::menu::PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -439,7 +439,7 @@ export async function POST(req: NextRequest) {
 }
 ```
 
-(For MVP, the simplest reliable approach is: the web app's login completes normally; once a session exists, the desktop opens `https://cortex-agent.vercel.app/chat` in its webview and the Supabase cookie set during login persists in the webview's cookie jar. The deep link approach is needed only if the SSO must happen in the user's default browser. Choose during implementation: if the simpler in-webview SSO works for `@Cortex.com` accounts, drop the deep-link redemption and ship.)
+(For MVP, the simplest reliable approach is: the web app's login completes normally; once a session exists, the desktop opens `https://cortex-agent.vercel.app/chat` in its webview and the Supabase cookie set during login persists in the webview's cookie jar. The deep link approach is needed only if the SSO must happen in the user's default browser. Choose during implementation: if the simpler in-webview SSO works for the workspace's own accounts, drop the deep-link redemption and ship.)
 
 - [ ] **Step 2: `apps/desktop/src-tauri/src/auth.rs`** — handle the deep link if used
 
@@ -491,7 +491,7 @@ git commit -m "feat(desktop): auth flow via webview SSO; deep-link redemption fa
 ````markdown
 # cortex-agent-desktop
 
-Tauri shell around the Cortex Agent chat UI.
+Tauri shell around the Cortex chat UI.
 
 ## Dev
 
@@ -583,7 +583,7 @@ jobs:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           tagName: ${{ github.ref_name }}
-          releaseName: 'Cortex Agent ${{ github.ref_name }}'
+          releaseName: 'Cortex ${{ github.ref_name }}'
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
@@ -617,7 +617,7 @@ git commit -m "ci(desktop): cross-platform release + updater signing"
 
 - [ ] **Step 1: macOS install**
 
-Download the `.dmg` from the GitHub release, drag to Applications. Open Cortex Agent. Verify:
+Download the `.dmg` from the GitHub release, drag to Applications. Open Cortex. Verify:
 
 - Window opens to chat (after Google SSO if first launch).
 - Tray icon appears in menu bar.

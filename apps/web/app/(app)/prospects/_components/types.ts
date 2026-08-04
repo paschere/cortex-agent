@@ -11,10 +11,10 @@
  * The whole workflow, and the same four values `growth.update_signal` accepts.
  * There is no fifth state: a signal is waiting, kept, dropped, or done.
  */
-export type SignalStatus = 'new' | 'qualified' | 'rejected' | 'contacted';
+export type SignalStatus = "new" | "qualified" | "rejected" | "contacted";
 
 /** How much the identified contact can be trusted. `inferred` is a guess. */
-export type ContactConfidence = 'found' | 'inferred' | 'unknown';
+export type ContactConfidence = "found" | "inferred" | "unknown";
 
 export interface Prospect {
   id: string;
@@ -23,7 +23,7 @@ export interface Prospect {
   /** The job posting itself — the evidence anyone can check for themselves. */
   url: string;
   source: string;
-  /** Why it matches what Zipdev sells. */
+  /** Why it matches what your team sells. */
   summary: string | null;
   region: string | null;
   status: SignalStatus;

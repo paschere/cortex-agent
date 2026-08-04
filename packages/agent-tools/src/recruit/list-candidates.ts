@@ -144,9 +144,9 @@ export const listCandidates = registerTool({
       sort: input.sort,
       provenance: {
         "name, email, topSkills, experienceYears":
-          "Workable ATS / Cortex matcher DB — imported profile data",
+          "Workable ATS / Matcher service DB — imported profile data",
         "stage, appliedAt":
-          "Cortex matcher DB — pipeline state maintained by recruiters",
+          "Matcher service DB — pipeline state maintained by recruiters",
         "scores.*, summary": "Cortex AI scoring — derived, never an ATS field",
       },
       dataQuality: [

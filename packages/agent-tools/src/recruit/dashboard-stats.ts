@@ -13,7 +13,7 @@ export const dashboardStats = registerTool({
   id: "recruit.dashboard_stats",
   description:
     "Org-wide recruitment health check in one cheap call: active candidates (and new today), open positions, AI scoring accuracy, interview success rate, presentation totals by outcome, pipeline volume by stage, and the most in-demand skills. Use it before drilling into any single requisition. " +
-    'PROVENANCE: counts come from the Cortex matcher DB; "AI accuracy" and "interview success" are Cortex-computed metrics, not externally validated benchmarks — present them as internal figures and cite meta.fetchedAt.',
+    'PROVENANCE: counts come from the matcher service DB; "AI accuracy" and "interview success" are Cortex-computed metrics, not externally validated benchmarks — present them as internal figures and cite meta.fetchedAt.',
   inputSchema: z.object({}),
   outputSchema: z.object({
     stats: z.any(),

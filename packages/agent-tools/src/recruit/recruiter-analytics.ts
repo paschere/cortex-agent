@@ -38,7 +38,7 @@ export const recruiterAnalytics = registerTool({
   description:
     "Recruiter KPIs from the matcher: time-to-fill / days-to-acceptance, acceptance and loss rates, requisitions opened and closed in the period, margins, and the status breakdown. " +
     'Pass `recruiterId` for one recruiter (their jobs, hires and presentations); omit it for the org-wide view with per-recruiter and per-pod rollups (the markdown lists the top 15 — read meta.totalAvailable before saying "everyone"). Requires an ADMIN session on the matcher, so it may return 401 for a service caller. ' +
-    'PROVENANCE: every figure is computed by the Cortex matcher over its own requisition and placement records for the period in `range` — always state the period alongside the number, since "8 hires" means nothing without it.',
+    'PROVENANCE: every figure is computed by the matcher service over its own requisition and placement records for the period in `range` — always state the period alongside the number, since "8 hires" means nothing without it.',
   inputSchema: z.object({
     recruiterId: z.string().optional(),
   }),

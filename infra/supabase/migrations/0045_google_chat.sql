@@ -1,7 +1,7 @@
 -- Google Chat as a first-class Cortex surface.
 --
 -- The Chat app talks to one endpoint (/api/chat-app/google) and needs two
--- things persisted: which Chat user maps to which Cortex user (so every tool
+-- things persisted: which Chat user maps to which Zipdev user (so every tool
 -- call still runs with a real person's credentials and lands in the audit
 -- trail under their name), and where to send proactive messages — the DM
 -- space Google creates the first time someone messages the app.
@@ -22,7 +22,7 @@ create index if not exists google_chat_links_user_idx on public.google_chat_link
 alter table public.google_chat_links enable row level security;
 
 -- Chat threads map onto the same conversations table every other surface uses,
--- so history is shared: ask Cortex something in Chat, see it in Cortex OS.
+-- so history is shared: ask Cortex something in Chat, see it in Zipdev OS.
 -- The existing conversations.external_key carries "gchat:<space>/<thread>".
 
 -- Delivery preference: people who linked Chat can receive digests there.

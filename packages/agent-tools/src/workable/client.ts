@@ -5,7 +5,7 @@ import { IntegrationError } from "@cortex/core";
  * same "service account" model as the HubSpot private app. Per-user
  * attribution stays in our audit_events.
  */
-const SUBDOMAIN = () => process.env.WORKABLE_SUBDOMAIN ?? "Cortex";
+const SUBDOMAIN = () => process.env.WORKABLE_SUBDOMAIN?.trim() ?? "";
 
 export async function workableFetch<T>(
   path: string,

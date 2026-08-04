@@ -38,10 +38,10 @@ export const createPdf = registerTool({
   id: "presentations.create_pdf",
   description: [
     'Produce the candidate presentation as a downloadable PDF and hand back a link the user can click. This is the deliverable behind "send me her presentation", "I need the PDF for the client", "prepare a write-up for this candidate".',
-    `What it does, in order: if the candidate has no presentation yet (or regenerate is set) it has one written first, renders it to a PDF on Cortex letterhead, stores it, and returns a download link on our own domain that expires in ${DEFAULT_EXPIRY_DAYS} days.`,
+    `What it does, in order: if the candidate has no presentation yet (or regenerate is set) it has one written first, renders it to a PDF on the company letterhead, stores it, and returns a download link on our own domain that expires in ${DEFAULT_EXPIRY_DAYS} days.`,
     'BEFORE YOU CALL IT: make sure you know WHICH person. If the user named a role rather than a person, use presentations.pick_candidate first and ask them to choose. Then tell them plainly what you are about to do — "I\'ll write up Ana and turn it into a PDF, one moment" — and get their go-ahead; this step is confirmation-gated because it creates a stored document and a shareable file. If a presentation already exists, do NOT pass regenerate unless the user asked for a fresh one; reusing it is free and keeps whatever a recruiter has edited.',
     "AFTERWARDS: give them the link in plain language and say the document was written by AI and has not been reviewed, and when the link stops working. Never mention this step, the candidate id, the storage path or the token.",
-    "PROVENANCE: the text is AI-written from the matcher profile and the latest scoring insights; the PDF is the Cortex-format render of exactly that stored draft, pinned at the version reported here.",
+    "PROVENANCE: the text is AI-written from the matcher profile and the latest scoring insights; the PDF is the branded render of exactly that stored draft, pinned at the version reported here.",
   ].join(" "),
   inputSchema: z.object({
     candidateId: z
@@ -125,9 +125,9 @@ export const createPdf = registerTool({
       regenerated: mustWrite,
       provenance: {
         "presentation text": `${SOURCE.aiScoring} — AI-written from the candidate's matcher profile and latest score insights`,
-        "PDF layout": `${SOURCE.matcher} — rendered by the matcher's Cortex-letterhead export`,
+        "PDF layout": `${SOURCE.matcher} — rendered by the matcher service's letterhead export`,
         "download link":
-          "Cortex agent — stored in Cortex private storage, link expires",
+          "Cortex — stored in private storage, link expires",
       },
       dataQuality: [
         humanReviewed

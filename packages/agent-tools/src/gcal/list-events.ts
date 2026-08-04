@@ -6,7 +6,7 @@ export const gcalListEvents = registerTool({
   id: "gcal.list_events",
   description:
     "Raw calendar rows for an explicit window: title, start, end, attendee addresses and a link. This is the tool for the PAST ('what meetings did I have last week') and for text-searching the calendar with q. " +
-    'For "what is on my calendar" or anything you are about to act on, use gcal.upcoming_meetings instead — it covers the same events going forward and adds duration, who is outside Cortex, the video link, and what kind of conversation each one is.',
+    'For "what is on my calendar" or anything you are about to act on, use gcal.upcoming_meetings instead — it covers the same events going forward and adds duration, who is outside the company, the video link, and what kind of conversation each one is.',
   inputSchema: z.object({
     calendarId: z.string().default("primary"),
     timeMin: z.string().optional(),

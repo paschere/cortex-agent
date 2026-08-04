@@ -4,7 +4,7 @@
 >
 > **Depends on Plan 1.** Plan 1 must be deployed (or at least merged) before this plan executes — we reuse `@cortex/agent-tools`, `@cortex/agents`, `@cortex/core`, and the Supabase data model.
 
-**Goal:** Expose the Sales agent's tools to Claude Desktop via an MCP server, so a Cortex salesperson can run the same prospect-to-proposal flow from Claude with their own credentials.
+**Goal:** Expose the Sales agent's tools to Claude Desktop via an MCP server, so a salesperson can run the same prospect-to-proposal flow from Claude with their own credentials.
 
 **Architecture:** Standalone Cloudflare Worker that imports `@cortex/agent-tools` and `@cortex/agents`, authenticates each MCP request with a per-user bearer token issued from the admin UI, and exposes each registered tool over the MCP protocol. The Worker connects to the same Supabase database with the service-role key for tool execution, scoped by the resolved user id.
 
@@ -214,9 +214,9 @@ export default function McpPage() {
   const snippet = created
     ? `{
   "mcpServers": {
-    "Cortex": {
+    "cortex": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-fetch", "${process.env.NEXT_PUBLIC_MCP_URL ?? "https://mcp.Cortex.app"}/mcp"],
+      "args": ["-y", "@modelcontextprotocol/server-fetch", "${process.env.NEXT_PUBLIC_MCP_URL ?? "https://mcp.example.com"}/mcp"],
       "env": { "MCP_BEARER": "${created.token}" }
     }
   }
@@ -352,13 +352,13 @@ git commit -m "feat(mcp-tokens): admin UI for issuing + revoking per-user MCP be
 - [ ] **Step 3: `apps/mcp/wrangler.toml`**
 
 ```toml
-name = "Cortex-mcp"
+name = "cortex-mcp"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-APP_NAME = "Cortex-mcp"
+APP_NAME = "cortex-mcp"
 
 # Secrets set via: wrangler secret put NAME
 # NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
@@ -849,7 +849,7 @@ git commit -m "test(mcp): smoke for tools/list via SSE"
 - [ ] **Step 1: `apps/mcp/README.md`**
 
 ````markdown
-# Cortex-mcp
+# cortex-mcp
 
 Cloudflare Worker exposing Cortex's shared tools to Claude Desktop via MCP.
 
@@ -871,7 +871,7 @@ wrangler secret put RATE_ESTIMATOR_SERVICE_TOKEN
 ```
 ````
 
-The Worker should be deployed at a stable URL (e.g., `https://mcp.Cortex.app`); set this in `apps/web` as `NEXT_PUBLIC_MCP_URL`.
+The Worker should be deployed at a stable URL (e.g., `https://mcp.example.com`); set this in `apps/web` as `NEXT_PUBLIC_MCP_URL`.
 
 ## Install in Claude Desktop
 
@@ -887,7 +887,7 @@ The Worker should be deployed at a stable URL (e.g., `https://mcp.Cortex.app`); 
 
 ```bash
 pnpm --filter @cortex/mcp deploy
-curl https://mcp.Cortex.app/healthz   # expect "ok"
+curl https://mcp.example.com/healthz   # expect "ok"
 ````
 
 - [ ] **Step 3: Set `NEXT_PUBLIC_MCP_URL` in Vercel** for `apps/web` and redeploy.

@@ -43,7 +43,10 @@ const FONT =
   "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
 const MONO =
   "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',Courier,monospace";
-const CORTEX_ICON_URL = "https://cortex-Cortex.vercel.app/icon.png";
+// A mail client fetches the logo out of band, so it has to be an absolute URL
+// on the deployment's own public origin rather than a site-relative path.
+const cortexIconUrl = () =>
+  `${(process.env.APP_BASE_URL ?? "").replace(/\/+$/, "")}/icon.png`;
 
 const S = {
   h2: `margin:26px 0 10px;font-family:${FONT};font-size:19px;line-height:1.3;font-weight:700;color:${C.ink};letter-spacing:-.01em;`,
@@ -532,7 +535,7 @@ export function renderDigestHtml(input: DigestRenderInput): string {
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;border-collapse:collapse;">
 <tr><td style="padding:0 4px 14px;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td width="32" style="width:32px;padding-right:9px;vertical-align:middle;"><img src="${CORTEX_ICON_URL}" width="32" height="32" alt="Cortex" style="display:block;width:32px;height:32px;border:0;border-radius:8px;" /></td>
+<td width="32" style="width:32px;padding-right:9px;vertical-align:middle;"><img src="${cortexIconUrl()}" width="32" height="32" alt="Cortex" style="display:block;width:32px;height:32px;border:0;border-radius:8px;" /></td>
 <td style="vertical-align:middle;font-family:${FONT};font-size:16px;font-weight:700;letter-spacing:-.01em;color:${C.primary};">Cortex</td>
 </tr></table>
 </td></tr>

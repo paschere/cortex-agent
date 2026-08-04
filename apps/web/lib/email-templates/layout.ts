@@ -1,6 +1,6 @@
 import {
   FONT_STACK,
-  CORTEX_ICON_URL,
+  CORTEX_ICON_PATH,
   escapeHtml,
   palette,
   safeHref,
@@ -16,7 +16,7 @@ import {
  *   └ 600px centred table
  *     ├ header band: the Cortex mark + wordmark
  *     ├ white card: title, optional eyebrow/pill, body
- *     └ footer: link back to Cortex OS + why this landed in their inbox
+ *     └ footer: link back to Cortex + why this landed in their inbox
  */
 
 /** Gmail clips messages past ~102KB; stay comfortably under it. */
@@ -64,8 +64,10 @@ const PREHEADER_PADDING = "&#847;&zwnj;&nbsp;".repeat(60);
 
 export function renderEmail(opts: RenderEmailOptions): string {
   const base = appBaseUrl();
-  const home = safeHref(base || "https://cortex-Cortex.vercel.app");
-  const icon = safeHref(CORTEX_ICON_URL);
+  // No base URL configured means no absolute link and no logo — both the
+  // header and the footer below already render fine without them.
+  const home = safeHref(base);
+  const icon = base ? safeHref(`${base}${CORTEX_ICON_PATH}`) : "";
 
   const header = [
     `<tr><td style="padding:0 4px 14px;">`,
@@ -92,7 +94,7 @@ export function renderEmail(opts: RenderEmailOptions): string {
     `<tr><td style="padding:18px 4px 0;">`,
     `<p style="margin:0 0 6px;font-family:${FONT_STACK};font-size:12.5px;line-height:1.55;color:${palette.faint};">`,
     home
-      ? `Sent by Cortex · <a href="${home}" style="color:${palette.primary};text-decoration:underline;">Open Cortex OS</a>`
+      ? `Sent by Cortex · <a href="${home}" style="color:${palette.primary};text-decoration:underline;">Open Cortex</a>`
       : "Sent by Cortex",
     "</p>",
     opts.footerNote

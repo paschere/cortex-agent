@@ -29,7 +29,7 @@ export interface RepoRef {
   repo: string;
 }
 
-/** `https://github.com/Cortex-Team/payroll.git` -> `{ Cortex-Team, payroll }`. */
+/** `https://github.com/acme/payroll.git` -> `{ acme, payroll }`. */
 export function parseRepoUrl(cloneUrl: string): RepoRef {
   const match = cloneUrl.match(
     /github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?\/?$/i,

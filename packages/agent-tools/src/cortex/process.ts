@@ -87,7 +87,7 @@ export const cortexProcess = registerTool({
       source = source.slice(0, MAX_SOURCE_CHARS);
 
     const sourceLabel = documentTitle ? ` (document: "${documentTitle}")` : "";
-    const prompt = `You are Cortex, Cortexmpany's internal processing engine. Follow the instruction precisely and answer with ONLY the requested output — no preamble.\n\nINSTRUCTION:\n${input.instruction}\n\nSOURCE${sourceLabel}:\n${source}`;
+    const prompt = `You are Cortex, the company's internal processing engine. Follow the instruction precisely and answer with ONLY the requested output — no preamble.\n\nINSTRUCTION:\n${input.instruction}\n\nSOURCE${sourceLabel}:\n${source}`;
 
     // No `temperature`: Claude Opus 5 rejects sampling parameters outright
     // (400). Determinism comes from the instruction, not from the knob.

@@ -40,7 +40,6 @@ const PUBLIC_PATHS = [
   // too. They are public images by nature.
   "/icon.png",
   "/apple-icon.png",
-  "/Cortex-logo.png",
   // Presentation PDFs are authorized by their own unguessable, expiring token
   // (the link is opened from Claude/email where no cookie exists — see the
   // route's header comment for the trade-off).

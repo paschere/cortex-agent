@@ -9,7 +9,7 @@ import { getEnv } from "@cortex/core";
  * /api/chat/confirm). Over MCP there is no UI channel, so instead: when a
  * gated tool is called unconfirmed, the server returns a signed token binding
  * (user, agent, tool, validated input, expiry). Claude shows the payload to
- * the user, and on explicit approval calls `Cortex_confirm_action` with the
+ * the user, and on explicit approval calls `cortex_confirm_action` with the
  * token — which we verify and execute with { confirmed: true }.
  *
  * Tokens are HMAC-SHA256 signed with a key derived from TOKEN_ENCRYPTION_KEY
@@ -21,7 +21,11 @@ import { getEnv } from "@cortex/core";
 
 const TOKEN_VERSION = "v1";
 const TOKEN_TTL_MS = 15 * 60_000;
-const HMAC_DOMAIN = "Cortex-mcp-confirm";
+// Changing this tag re-derives the signing key, so tokens minted under the old
+// tag stop verifying. That is acceptable here: nothing is persisted and the TTL
+// above is 15 minutes, so the blast radius is the handful of approvals in
+// flight across a single deploy.
+const HMAC_DOMAIN = "cortex-mcp-confirm";
 
 export interface ConfirmationPayload {
   userId: string;

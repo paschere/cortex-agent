@@ -84,7 +84,7 @@ export async function sendApprovalRequestEmail(opts: {
           ? "your Claude conversation"
           : opts.surface === "chat"
             ? "Google Chat"
-            : "Cortex OS";
+            : "Cortex";
 
     const mail = renderApprovalRequestEmail({
       toolLabel: humanizeToolId(opts.toolId),
@@ -154,7 +154,7 @@ export async function sendApprovalRequestEmail(opts: {
         "",
         base
           ? `Approve or decline: [${base}/approvals](${base}/approvals)`
-          : "Approve or decline it in Cortex OS.",
+          : "Approve or decline it in Cortex.",
         "",
         "Nothing has happened yet — it only runs if you approve. The request expires in 15 minutes.",
       ].join("\n"),

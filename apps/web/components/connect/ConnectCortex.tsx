@@ -135,7 +135,7 @@ export function ConnectCortex({ url }: { url: string }) {
         "Open **Settings → Connectors**.",
         "Choose **Add custom connector**.",
         "Paste the connector URL above.",
-        "Sign in with your **@Cortex.com** Google account and hit **Approve**.",
+        "Sign in with your **work** Google account and hit **Approve**.",
       ],
       note: "Inside a chat, enable the connector from the tools menu so Cortex can use it.",
     },

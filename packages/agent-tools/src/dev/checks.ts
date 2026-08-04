@@ -1,7 +1,7 @@
 /**
  * "Run the repo's own checks" — discovered, not hardcoded.
  *
- * The executor must work against cortex-agent, Cortextcher service and payroll,
+ * The executor must work against cortex-agent, the matcher service and payroll,
  * which do not share a script vocabulary. So instead of assuming
  * `pnpm typecheck`, we read the target repo's package.json and build a plan
  * from the scripts it actually declares, in the order a human would run them

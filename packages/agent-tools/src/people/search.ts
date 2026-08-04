@@ -13,7 +13,7 @@ interface SearchResponse {
 
 /**
  * Resolve a person mentioned by name to their email + role, searching the
- * Cortex Google Workspace directory first (all @Cortex.com colleagues) and the
+ * company's Google Workspace directory first (every colleague on it) and the
  * caller's personal contacts as a fallback. Use this whenever the user refers
  * to someone by name and you need their email — e.g. before drafting an email
  * or scheduling a meeting.
@@ -21,8 +21,8 @@ interface SearchResponse {
 export const peopleSearch = registerTool({
   id: "people.search",
   description:
-    "Resolve a person's name to their EMAIL ADDRESS. Searches the Cortex Google Workspace directory (internal @Cortex.com colleagues) and the user's personal Google contacts — which includes people outside Cortex. Call this when the user mentions someone by name and you need an address to write to or invite — e.g. before gmail.draft or gcal.create_event. Returns up to `limit` matches; if more than one matches, ask the user which one. " +
-    "It returns a name, an email and whatever job title Google holds, and nothing else — no client placement, no manager, no hire date, no pay. Those questions are about a different population and a different system: bamboo.list_employees for who works at Cortex and where they are placed, recruit.list_candidates or workable.search_candidates for job applicants, who are not colleagues at all.",
+    "Resolve a person's name to their EMAIL ADDRESS. Searches the company's Google Workspace directory (internal colleagues) and the user's personal Google contacts — which includes people outside the company. Call this when the user mentions someone by name and you need an address to write to or invite — e.g. before gmail.draft or gcal.create_event. Returns up to `limit` matches; if more than one matches, ask the user which one. " +
+    "It returns a name, an email and whatever job title Google holds, and nothing else — no client placement, no manager, no hire date, no pay. Those questions are about a different population and a different system: bamboo.list_employees for who works at the company and where they are placed, recruit.list_candidates or workable.search_candidates for job applicants, who are not colleagues at all.",
   inputSchema: z.object({
     query: z
       .string()

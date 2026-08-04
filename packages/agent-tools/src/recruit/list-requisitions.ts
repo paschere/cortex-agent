@@ -49,10 +49,10 @@ export const listRequisitions = registerTool({
   description:
     "START HERE for any question about open roles/requisitions — it is the cheap call. Returns one compact row per requisition: title, client, pipeline status, days open, candidate count with stage breakdown, candidates presented to the client, last activity date, assigned recruiter/sourcer, and a one-line summary of the role. " +
     "It never returns full job descriptions — use recruit.get_requisition for those, and only when the exact wording matters. " +
-    "This reads the Cortex matcher, which syncs FROM Workable and can therefore lag it. workable.list_jobs is the same roles straight from the ATS, with less detail; go there when the question is what Workable says right now, or when another workable.* tool needs a shortcode. If the two disagree about a role, report both and name the sync time — do not reconcile them yourself. " +
+    "This reads the matcher service, which syncs FROM Workable and can therefore lag it. workable.list_jobs is the same roles straight from the ATS, with less detail; go there when the question is what Workable says right now, or when another workable.* tool needs a shortcode. If the two disagree about a role, report both and name the sync time — do not reconcile them yourself. " +
     "Capped at 50 per call (default 15): check meta.truncated and meta.totalAvailable and page with offset rather than assuming you saw everything. " +
     'Filters: status ("open", "closed", or an exact pipeline status such as OPEN / ON_HOLD / KOC / CLOSED_WON), companyId, ownerId (recruiter or sourcer), search (title/location/client), includeArchived. ' +
-    'PROVENANCE: every row carries `source` (Workable ATS vs Cortex matcher DB, with syncedAt/lastUpdatedAt) and `links` to the matcher and to Workable. When you report findings, cite the system and the freshness ("from Workable, synced 2 hours ago") and never present AI-derived scores as ATS data. ' +
+    'PROVENANCE: every row carries `source` (Workable ATS vs matcher service DB, with syncedAt/lastUpdatedAt) and `links` to the matcher and to Workable. When you report findings, cite the system and the freshness ("from Workable, synced 2 hours ago") and never present AI-derived scores as ATS data. ' +
     'Relay meta.dataQuality when it matters — in particular, most requisitions have no client linked, so `client` is null instead of a misleading "Cortex".',
   inputSchema: z.object({
     status: z.string().optional(),
@@ -160,14 +160,14 @@ export const listRequisitions = registerTool({
       provenance: {
         "title, location, summary, skills.required":
           "Workable ATS, imported into the matcher",
-        "client, owner": "Cortex matcher DB",
-        "candidates.*": "Cortex matcher DB — counts as reported by /api/jobs",
+        "client, owner": "Matcher service DB",
+        "candidates.*": "Matcher service DB — counts as reported by /api/jobs",
       },
       dataQuality: [
         'Pipeline status is unavailable on this endpoint (it reports every job as "Active"), so `status` is null and the placeholder is exposed as `atsStatus`.',
         ...(unlinked
           ? [
-              `Client attribution is incomplete: ${unlinked} of ${page.length} returned requisitions have no company linked, so their client is null. Do not report them as Cortex's own roles.`,
+              `Client attribution is incomplete: ${unlinked} of ${page.length} returned requisitions have no company linked, so their client is null. Do not report them as the company's own roles.`,
             ]
           : []),
       ],

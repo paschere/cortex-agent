@@ -56,11 +56,11 @@ alter table public.dev_repositories enable row level security;
 -- codebase; a missing one just asks the human).
 insert into public.dev_repositories (key, name, clone_url, default_branch, allow_pull_requests, notes)
 values
-  ('cortex-agent', 'cortex-agent', 'https://github.com/Cortex-Team/cortex-agent.git', 'main', true,
+  ('cortex-agent', 'cortex-agent', 'https://github.com/Zipdev-Team/cortex-agent.git', 'main', true,
    'Cortex itself — the Next.js app, agent tools and Inngest workers.'),
-  ('Cortex-matcher', 'Cortex-matcher', 'https://github.com/Cortex-Team/Cortex-matcher.git', 'main', true,
+  ('zipdev-matcher', 'zipdev-matcher', 'https://github.com/Zipdev-Team/zipdev-matcher.git', 'main', true,
    'Recruiting/matching service behind the recruit.* tools.'),
-  ('payroll', 'payroll', 'https://github.com/Cortex-Team/payroll.git', 'main', true,
+  ('payroll', 'payroll', 'https://github.com/Zipdev-Team/payroll.git', 'main', true,
    'Payroll service behind the payroll.* tools.')
 on conflict (key) do nothing;
 

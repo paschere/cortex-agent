@@ -48,7 +48,7 @@
 create type memory_kind as enum (
   'instruction',  -- a standing rule: "never CC the client"
   'preference',   -- how they like things: "costs always in USD"
-  'vocabulary',   -- what their words mean: "the matcher = tpp.Cortex.com"
+  'vocabulary',   -- what their words mean: "the matcher = tpp.zipdev.com"
   'fact'          -- stable context about them and their work
 );
 

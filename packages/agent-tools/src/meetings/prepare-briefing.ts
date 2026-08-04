@@ -230,7 +230,7 @@ async function resolveMeeting(
 export const meetingsPrepareBriefing = registerTool({
   id: "meetings.prepare_briefing",
   description:
-    "Prepare everything the user needs to walk into a meeting well-informed, tailored to what kind of meeting it is. For an interview it pulls the candidate's file — where they are in the process, which role they applied to, the highlights of their profile. For a client call it pulls the account — the company, open deals and what happened recently. For internal meetings it sticks to the agenda and the last conversation. In every case it adds what Cortex's Knowledge Base knows about the topic and the transcript of the previous call with the same people. Give it the calendar entry (or just the meeting title and time) and it returns the briefing as text and as a ready-to-send email, with a short list of suggested talking points and a footnote saying where each fact came from and how fresh it is. Anything it could not find is stated plainly rather than guessed.",
+    "Prepare everything the user needs to walk into a meeting well-informed, tailored to what kind of meeting it is. For an interview it pulls the candidate's file — where they are in the process, which role they applied to, the highlights of their profile. For a client call it pulls the account — the company, open deals and what happened recently. For internal meetings it sticks to the agenda and the last conversation. In every case it adds what the company's Knowledge Base knows about the topic and the transcript of the previous call with the same people. Give it the calendar entry (or just the meeting title and time) and it returns the briefing as text and as a ready-to-send email, with a short list of suggested talking points and a footnote saying where each fact came from and how fresh it is. Anything it could not find is stated plainly rather than guessed.",
   inputSchema: z
     .object({
       eventId: z
@@ -351,7 +351,7 @@ export const meetingsPrepareBriefing = registerTool({
             ? guests
                 .map(
                   (a) =>
-                    `${a.name ?? a.email}${a.external ? " — outside Cortex" : ""}`,
+                    `${a.name ?? a.email}${a.external ? " — external" : ""}`,
                 )
                 .join(", ")
             : "no other guests on the invitation"
@@ -732,7 +732,7 @@ export const meetingsPrepareBriefing = registerTool({
 
     // ---- Knowledge Base (always) -----------------------------------------
     const topicParts = [m.title, ...m.externalDomains].filter(Boolean);
-    const kb = await attempt(ctx, gaps, "Cortex's Knowledge Base", async () =>
+    const kb = await attempt(ctx, gaps, "the company's Knowledge Base", async () =>
       call<{
         sources: Array<{
           ref: number;
@@ -765,7 +765,7 @@ export const meetingsPrepareBriefing = registerTool({
       );
       sections.push({
         key: "knowledge",
-        title: "What Cortex already knows",
+        title: "What the company already knows",
         body: kbSources
           .slice(0, 4)
           .map(
@@ -864,7 +864,7 @@ export const meetingsPrepareBriefing = registerTool({
     // ---- Why this matters --------------------------------------------------
     const whyThisMatters =
       type === "interview"
-        ? `This is an interview${primaryExternal ? ` with ${primaryExternal.name ?? primaryExternal.email}` : ""}. Everything below is what Cortex already knows about them, so the call can go straight to what is not on paper.`
+        ? `This is an interview${primaryExternal ? ` with ${primaryExternal.name ?? primaryExternal.email}` : ""}. Everything below is what the company already knows about them, so the call can go straight to what is not on paper.`
         : type === "client"
           ? `This is a client conversation${m.externalDomains[0] ? ` with ${m.externalDomains[0]}` : ""}. The account context below is what they will expect you to remember.`
           : type === "internal"

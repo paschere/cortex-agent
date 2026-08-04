@@ -83,9 +83,9 @@ describe('classify — data sensitivity x blast radius', () => {
 
 describe('classify — sending compensation outside the company', () => {
   it('is critical and blocked', () => {
-    const c = run('gmail.send_draft', {Cortex
+    const c = run('gmail.send_draft', {
       to: 'cfo@acme-client.com',
-      subject: Cortexrates',
+      subject: 'Contractor rates',
       body: 'Monthly salary for each engineer is attached.',
     });
     expect(c.signals).toContain('external-recipient');
@@ -107,6 +107,30 @@ describe('classify — sending compensation outside the company', () => {
     expect(c.riskLevel).toBe('high');
     // Flag-first: nothing left the company, so it runs and is recorded.
     expect(decide(c, DEFAULT_POLICY)).toBe('allow');
+  });
+
+  it('treats nobody as internal when no internal domains are configured', () => {
+    // The fail-safe direction for a fresh multi-tenant deployment: with no
+    // INTERNAL_EMAIL_DOMAINS set, the same message that would relax to an
+    // internal write above is treated as leaving the company.
+    process.env.INTERNAL_EMAIL_DOMAINS = '';
+    const c = run('gmail.send_draft', {
+      to: `ceo@${INTERNAL}`,
+      subject: 'Team rates',
+      body: 'Monthly salary breakdown.',
+    });
+    expect(c.signals).toContain('external-recipient');
+    expect(c.blastRadius).toBe('external_send');
+    expect(decide(c, DEFAULT_POLICY)).toBe('block');
+  });
+
+  it('counts a subdomain of an internal domain as internal', () => {
+    const c = run('gmail.send_draft', {
+      to: `ops@mail.${INTERNAL}`,
+      body: 'salary breakdown',
+    });
+    expect(c.signals).not.toContain('external-recipient');
+    expect(c.blastRadius).toBe('internal_write');
   });
 
   it('does not treat an ordinary client email as an exfiltration attempt', () => {
@@ -262,7 +286,7 @@ describe('decide — policy overrides', () => {
     });
     expect(c.riskLevel).toBe('medium');
     expect(c.signals).toContain('external-recipient');
-    expect(deciCortexDEFAULT_POLICY)).toBe('confirm');
+    expect(decide(c, DEFAULT_POLICY)).toBe('confirm');
     expect(decide(c, permissive)).toBe('allow');
   });
 

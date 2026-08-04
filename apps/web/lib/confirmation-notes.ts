@@ -5,7 +5,7 @@
  */
 export const CONFIRMATION_NOTES: Record<string, string> = {
   "gmail.send_draft":
-    "Sends a real email from your Gmail to its recipients. Once sent it cannot be unsent, and it represents you (and Cortex) to whoever receives it.",
+    "Sends a real email from your Gmail to its recipients. Once sent it cannot be unsent, and it represents you (and the company) to whoever receives it.",
   "gmail.draft":
     "Creates a draft in your Gmail. Nothing is sent, but it appears in your mailbox.",
   "gcal.create_event":
@@ -42,7 +42,7 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
   "apollo.enrich_people":
     "Pulls up to ten people's verified work emails out of Apollo in one go, and spends one Apollo credit for every person found. Looking people up costs the company real money, so a batch is always somebody's decision.",
   "bamboo.compensation_report":
-    "Pulls pay rates AND bill rates for a whole group of people out of BambooHR in one go — potentially the entire roster. Compensation is the most sensitive data Cortex holds, and this is the bulk export of it: it belongs to whoever approved it, not to the room it gets pasted into. For one person, the employee lookup answers the same question without exporting anybody else's.",
+    "Pulls pay rates AND bill rates for a whole group of people out of BambooHR in one go — potentially the entire roster. Compensation is the most sensitive data the company holds, and this is the bulk export of it: it belongs to whoever approved it, not to the room it gets pasted into. For one person, the employee lookup answers the same question without exporting anybody else's.",
   "recruit.generate_presentation":
     "Generates a client-facing candidate presentation document that may be shared externally.",
 };

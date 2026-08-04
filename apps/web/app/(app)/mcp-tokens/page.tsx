@@ -1,15 +1,15 @@
-import { ConnectCortex, CopyButton } from '@/components/connect/ConnectCortex';
-import { DirectionPair } from '@/components/connect/DirectionPair';
-import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
-import { getMcpUrl } from '@/lib/mcp-url';
-import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { Cable, KeyRound, ShieldCheck, TriangleAlert } from 'lucide-react';
-import { issueToken, revokeToken } from './actions';
+import { ConnectCortex, CopyButton } from "@/components/connect/ConnectCortex";
+import { DirectionPair } from "@/components/connect/DirectionPair";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { Panel } from "@/components/ui/panel";
+import { getMcpUrl } from "@/lib/mcp-url";
+import { requireSession } from "@/lib/session";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { Cable, KeyRound, ShieldCheck, TriangleAlert } from "lucide-react";
+import { issueToken, revokeToken } from "./actions";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 interface AgentRow {
   id: string;
@@ -29,10 +29,10 @@ interface TokenRow {
 }
 
 function fmt(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
   });
 }
 
@@ -50,13 +50,13 @@ export default async function ConnectClientPage({
 
   const [{ data: tokenRows }, { data: agentRows }] = await Promise.all([
     sb
-      .from('mcp_tokens')
+      .from("mcp_tokens")
       .select(
-        'id, name, prefix, last_used_at, revoked_at, expires_at, created_at, agent_id, agents(name)',
+        "id, name, prefix, last_used_at, revoked_at, expires_at, created_at, agent_id, agents(name)",
       )
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false }),
-    sb.from('agents').select('id, name').order('name'),
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    sb.from("agents").select("id, name").order("name"),
   ]);
 
   const tokens: TokenRow[] = (tokenRows ?? []) as unknown as TokenRow[];
@@ -85,9 +85,10 @@ export default async function ConnectClientPage({
                 No token needed — just sign in
               </h2>
               <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-                Claude, Claude Code and ChatGPT connect over OAuth: you paste the URL below, they
-                send you to Google, you approve once. Nothing to copy, nothing to store, and access
-                dies with your Zipdev account.
+                Claude, Claude Code and ChatGPT connect over OAuth: you paste
+                the URL below, they send you to Google, you approve once.
+                Nothing to copy, nothing to store, and access dies with your
+                Cortex account.
               </p>
             </div>
           </div>
@@ -109,13 +110,14 @@ export default async function ConnectClientPage({
                 Personal access tokens
               </h2>
               <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-                Only for clients that cannot do OAuth — a script, a self-hosted bridge, an older MCP
-                client. A token acts as you: whoever holds it gets your tools and your data, until
-                you revoke it here.
+                Only for clients that cannot do OAuth — a script, a self-hosted
+                bridge, an older MCP client. A token acts as you: whoever holds
+                it gets your tools and your data, until you revoke it here.
               </p>
               {liveTokens > 0 && (
                 <p className="mt-1 text-[11.5px] text-ink-faint">
-                  {liveTokens} active token{liveTokens === 1 ? '' : 's'} on your account.
+                  {liveTokens} active token{liveTokens === 1 ? "" : "s"} on your
+                  account.
                 </p>
               )}
             </div>
@@ -135,8 +137,8 @@ export default async function ConnectClientPage({
                 <CopyButton text={justIssued} label="Copy token" />
               </div>
               <p className="mt-2 text-[11.5px] text-amber">
-                Leave this page and the token is gone from here for good — only its hash is stored.
-                Keep it somewhere safe.
+                Leave this page and the token is gone from here for good — only
+                its hash is stored. Keep it somewhere safe.
               </p>
             </div>
           )}
@@ -149,7 +151,10 @@ export default async function ConnectClientPage({
                   htmlFor="token-name"
                   className="mb-1 block text-xs font-medium text-ink-muted"
                 >
-                  Token name <span className="text-ink-faint">(e.g. &quot;Work laptop&quot;)</span>
+                  Token name{" "}
+                  <span className="text-ink-faint">
+                    (e.g. &quot;Work laptop&quot;)
+                  </span>
                 </label>
                 <input
                   id="token-name"
@@ -165,7 +170,10 @@ export default async function ConnectClientPage({
                   htmlFor="agent-select"
                   className="mb-1 block text-xs font-medium text-ink-muted"
                 >
-                  Agent <span className="text-ink-faint">(optional — narrows the tool list)</span>
+                  Agent{" "}
+                  <span className="text-ink-faint">
+                    (optional — narrows the tool list)
+                  </span>
                 </label>
                 <select
                   id="agent-select"
@@ -195,29 +203,40 @@ export default async function ConnectClientPage({
               ) : (
                 <ul className="mt-1 divide-y divide-border text-[13px]">
                   {tokens.map((t) => (
-                    <li key={t.id} className="flex items-start justify-between gap-4 py-3">
+                    <li
+                      key={t.id}
+                      className="flex items-start justify-between gap-4 py-3"
+                    >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-ink">{t.name}</span>
+                          <span className="font-semibold text-ink">
+                            {t.name}
+                          </span>
                           {t.revoked_at && (
                             <span className="rounded-pill bg-rose-soft px-2 py-0.5 text-[10.5px] font-bold uppercase text-rose">
                               Revoked
                             </span>
                           )}
-                          {!t.revoked_at && t.expires_at && new Date(t.expires_at) < new Date() && (
-                            <span className="rounded-pill bg-amber-soft px-2 py-0.5 text-[10.5px] font-bold uppercase text-amber">
-                              Expired
-                            </span>
-                          )}
+                          {!t.revoked_at &&
+                            t.expires_at &&
+                            new Date(t.expires_at) < new Date() && (
+                              <span className="rounded-pill bg-amber-soft px-2 py-0.5 text-[10.5px] font-bold uppercase text-amber">
+                                Expired
+                              </span>
+                            )}
                         </div>
                         {/* Prefix only — the token itself is stored hashed. */}
-                        <div className="mt-0.5 font-mono text-xs text-ink-muted">{t.prefix}…</div>
+                        <div className="mt-0.5 font-mono text-xs text-ink-muted">
+                          {t.prefix}…
+                        </div>
                         <div className="mt-1 space-x-3 text-xs text-ink-faint">
-                          <span>Agent: {t.agents?.name ?? 'any'}</span>
+                          <span>Agent: {t.agents?.name ?? "any"}</span>
                           <span>Last used: {fmt(t.last_used_at)}</span>
                           <span>Expires: {fmt(t.expires_at)}</span>
                           <span>Created: {fmt(t.created_at)}</span>
-                          {t.revoked_at && <span>Revoked: {fmt(t.revoked_at)}</span>}
+                          {t.revoked_at && (
+                            <span>Revoked: {fmt(t.revoked_at)}</span>
+                          )}
                         </div>
                       </div>
                       {!t.revoked_at && (

@@ -2,24 +2,24 @@
 
 How to run the capability tests from the July 2026 evaluation criteria
 yourself. No terminal, no code — everything happens in claude.ai or in the
-Cortex OS web app.
+Cortex web app.
 
 ## One-time setup (~2 minutes)
 
-1. Open **https://cortex-Cortex.vercel.app** and sign in with your
-   `@Cortex.com` Google account.
+1. Open your deployment's public origin (e.g. **https://cortex.example.com**)
+   and sign in with your Google account.
 2. In **claude.ai** → Settings → Connectors → **Add custom connector**, paste:
 
    ```
-   https://cortex-Cortex.vercel.app/mcp
+   https://cortex.example.com/mcp
    ```
 
 3. Approve with the same Google account when the login window opens. Done —
-   every Claude chat can now use Cortex's tools (enable the "Cortex" connector
+   every Claude chat can now use Cortex's tools (enable the "cortex" connector
    in the chat's tool menu if it isn't on).
 
-You can also run every test in the **Cortex OS chat** (same brain, same
-tools) at https://cortex-Cortex.vercel.app/chat.
+You can also run every test in the **Cortex chat** (same brain, same
+tools) at `<your origin>/chat`.
 
 ## Running the tests
 
@@ -34,7 +34,7 @@ check — an answer without sources is a fail even if it sounds right.
 
 Verify against the sheet itself. (Cortex reads it with the Google Sheets tool
 using your own Google access — if it says it lacks access, connect Google
-under Integrations in Cortex OS.)
+under Integrations in Cortex.)
 
 ### Test 2 — Rate lookup
 
@@ -79,7 +79,7 @@ guess without evidence = fail; "unknown" with honest reasoning = acceptable.
 ### Test 7 — Outreach drafting
 
 > Draft a cold email to that contact referencing their actual job post, in
-> Cortex's voice.
+> the company's voice.
 
 Cortex drafts; it does **not** send. Sending is confirmation-gated: it shows
 you the exact email and waits for an explicit yes (and during the pilot, all
@@ -89,9 +89,9 @@ sends are human-approved by policy).
 
 Everything Cortex touches is recorded. Two places to look:
 
-- **Cortex OS → Admin → Audit Logs** — one row per tool call: who asked,
+- **Cortex → Admin → Audit Logs** — one row per tool call: who asked,
   which tool, when, status, latency. This answers "what did it just access."
-- **Cortex OS → Conversations** — Claude sessions appear as conversations
+- **Cortex → Conversations** — Claude sessions appear as conversations
   (surface "mcp") with every tool call and result preserved.
 
 If you can't find a task you just ran in the audit log, that's a finding —
@@ -99,7 +99,7 @@ report it.
 
 ## If something fails
 
-- "Tool not available / not connected" → check Integrations in Cortex OS
+- "Tool not available / not connected" → check Integrations in Cortex
   (Google, etc.) for your user.
 - Web search tests (5–6) need the search key configured
   (`TAVILY_API_KEY`) — an explicit error about it is a setup gap, not a

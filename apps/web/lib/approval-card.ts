@@ -46,7 +46,7 @@ const ORIGIN_LABEL: Record<ApprovalOrigin, string> = {
   schedule: "a scheduled routine",
   mcp: "your Claude conversation",
   chat: "Google Chat",
-  web: "Cortex OS",
+  web: "Cortex",
 };
 
 /** Chat renders these literally, so they have to be neutralised. */
@@ -85,7 +85,7 @@ function payloadText(input: unknown): string {
   }
   const clipped =
     json.length > MAX_PAYLOAD_CHARS
-      ? `${json.slice(0, MAX_PAYLOAD_CHARS)}\n… (the rest is in Cortex OS)`
+      ? `${json.slice(0, MAX_PAYLOAD_CHARS)}\n… (the rest is in Cortex)`
       : json;
   return escapeHtml(clipped).replace(/\n/g, "<br>");
 }
@@ -132,7 +132,7 @@ export interface ApprovalCardOptions {
   origin: ApprovalOrigin;
   /** The person's own timezone, so "expires at 14:47" means 14:47 to them. */
   timeZone: string;
-  /** Absolute base URL of Cortex OS, for the escape hatch link. Optional. */
+  /** Absolute base URL of Cortex, for the escape hatch link. Optional. */
   appBaseUrl?: string;
 }
 
@@ -203,7 +203,7 @@ export function buildApprovalCard(opts: ApprovalCardOptions): ChatCardV2 {
           buttonList: {
             buttons: [
               {
-                text: "Open in Cortex OS",
+                text: "Open in Cortex",
                 onClick: {
                   openLink: {
                     url: `${opts.appBaseUrl.replace(/\/+$/, "")}/approvals`,

@@ -4,9 +4,8 @@ import type { ToolContext } from "../types";
  * BambooHR REST API v1 transport.
  *
  * Auth and endpoint shape are deliberately identical to the payroll app's
- * client (payroll/src/lib/bamboohr.ts), which has been talking to this same
- * instance in production for years: HTTP Basic with `base64(apiKey + ":x")`
- * against the `gateway.php/Cortex/v1` base. Inventing a second dialect against
+ * client (payroll/src/lib/bamboohr.ts): HTTP Basic with `base64(apiKey + ":x")`
+ * against a `gateway.php/<company>/v1` base. Inventing a second dialect against
  * one HR system of record is how two integrations drift apart and start
  * disagreeing about who works here.
  *
@@ -20,14 +19,19 @@ import type { ToolContext } from "../types";
  * echoed into an error message, and never included in a tool's output.
  */
 
-export const DEFAULT_BAMBOO_BASE =
-  "https://api.bamboohr.com/api/gateway.php/Cortex/v1";
-
-export function bambooBase(): string {
-  return (process.env.BAMBOOHR_BASE_URL || DEFAULT_BAMBOO_BASE).replace(
-    /\/+$/,
-    "",
-  );
+/**
+ * The gateway base from `BAMBOOHR_BASE_URL`, or `null` when unset.
+ *
+ * There is deliberately NO default. BambooHR's gateway URL embeds the
+ * customer's own subdomain (`.../gateway.php/<company>/v1`), so any default
+ * would point every deployment at one particular company's HR system — a
+ * cross-tenant leak waiting to happen, and a confusing 404 at best. Unset is
+ * therefore treated exactly like a missing API key: the tools degrade with a
+ * sentence a human can act on instead of guessing an address.
+ */
+export function bambooBase(): string | null {
+  const raw = process.env.BAMBOOHR_BASE_URL?.trim();
+  return raw ? raw.replace(/\/+$/, "") : null;
 }
 
 /** Soft failure: never thrown, always returned. `reason` is user-facing prose. */
@@ -42,6 +46,9 @@ export type BambooResult<T> = { ok: true; data: T } | BambooFailure;
 export const NOT_CONFIGURED_REASON =
   "BambooHR is not connected yet — this workspace has no BambooHR key, so I cannot see the employee records. Someone on the ops team needs to add it first.";
 
+export const NO_BASE_URL_REASON =
+  "BambooHR is only half configured — there is a key but no BambooHR address for this workspace, so I do not know which BambooHR account to ask. Ops needs to set BAMBOOHR_BASE_URL before I can read anything from there.";
+
 function describeHttpFailure(status: number): string {
   if (status === 401) {
     return "BambooHR rejected our key. It has most likely been rotated or switched off — ops needs to refresh it before I can read anything from there.";
@@ -50,7 +57,7 @@ function describeHttpFailure(status: number): string {
     return "BambooHR let us in but will not share that particular information — the account Cortex uses does not have permission for it. An HR admin can widen that access in BambooHR.";
   }
   if (status === 404) {
-    return "BambooHR has nothing at that address. Usually that means the person or record does not exist, or Cortex does not use that part of BambooHR.";
+    return "BambooHR has nothing at that address. Usually that means the person or record does not exist, or this workspace does not use that part of BambooHR.";
   }
   if (status === 429) {
     return "BambooHR is rate-limiting us right now — too many lookups in a short window. Give it a minute and I can try again.";
@@ -86,10 +93,14 @@ export async function bambooFetch<T>(
   if (!key)
     return { ok: false, configured: false, reason: NOT_CONFIGURED_REASON };
 
+  const base = bambooBase();
+  if (!base)
+    return { ok: false, configured: false, reason: NO_BASE_URL_REASON };
+
   // BambooHR uses the API key as the Basic username with a throwaway password;
   // "x" is the literal the vendor documents.
   const auth = `Basic ${Buffer.from(`${key}:x`).toString("base64")}`;
-  const url = `${bambooBase()}${path}${toSearchParams(opts.params ?? {})}`;
+  const url = `${base}${path}${toSearchParams(opts.params ?? {})}`;
 
   let res: Response;
   try {

@@ -57,7 +57,7 @@ export const pipelineKanban = registerTool({
   description:
     "Get a requisition's CLIENT-facing pipeline board: the client's stages and the candidates presented into each, with the client's decision, their sentiment, the bill rate quoted, and whether a card is still waiting on client feedback. Use it for \"where are we with the client on this role\" — recruit.list_candidates covers the internal pipeline instead. " +
     'Requires jobId. A requisition with no client linked has no board at all — the tool says so rather than returning an empty list you might misread as "nothing presented". ' +
-    'PROVENANCE: stages and decisions come from the Cortex matcher DB, recorded from the client\'s own review in the client portal — they are client feedback, never AI output. Cite the freshness from meta.fetchedAt, and relay meta.dataQuality: "no sentiment recorded" means no feedback yet, not negative feedback.',
+    'PROVENANCE: stages and decisions come from the matcher service DB, recorded from the client\'s own review in the client portal — they are client feedback, never AI output. Cite the freshness from meta.fetchedAt, and relay meta.dataQuality: "no sentiment recorded" means no feedback yet, not negative feedback.',
   inputSchema: z.object({
     jobId: z.string().min(1),
   }),

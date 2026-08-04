@@ -6,7 +6,7 @@ export interface EstimateInput {
   seniority: "junior" | "mid" | "senior" | "lead";
   region: "mx" | "latam" | "br" | "ar" | "co" | "cl" | "pe";
   yearsExperience: number;
-  /** Percentage. Omitted lets the estimator apply Cortex's standard margin. */
+  /** Percentage. Omitted lets the estimator apply the company's standard margin. */
   margin?: number;
 }
 

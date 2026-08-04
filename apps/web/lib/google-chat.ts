@@ -609,7 +609,7 @@ export function toChatText(
 
 /**
  * Trim to Chat's length ceiling on a line boundary, pointing at the full
- * version in Cortex OS rather than silently swallowing the tail.
+ * version in Cortex rather than silently swallowing the tail.
  */
 export function capForChat(
   text: string,
@@ -619,8 +619,8 @@ export function capForChat(
   if (text.length <= limit) return text;
   const base = (moreUrl ?? process.env.APP_BASE_URL ?? "").replace(/\/+$/, "");
   const tail = base
-    ? `\n…\n<${base}|See the full report in Cortex OS>`
-    : "\n…\n(See the full report in Cortex OS.)";
+    ? `\n…\n<${base}|See the full report in Cortex>`
+    : "\n…\n(See the full report in Cortex.)";
   const room = Math.max(0, limit - tail.length);
   const cut = text.slice(0, room);
   const lastBreak = cut.lastIndexOf("\n");

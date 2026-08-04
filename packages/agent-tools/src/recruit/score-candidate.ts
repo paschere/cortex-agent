@@ -4,6 +4,7 @@ import { matcherFetch } from "./client";
 import {
   SOURCE,
   buildMeta,
+  clientOrNull,
   matcherLink,
   metaSchema,
   provenanceFooter,
@@ -151,7 +152,7 @@ export const scoreCandidate = registerTool({
       applications: apps.map((a) => ({
         jobId: a?.jobId ?? null,
         jobTitle: a?.jobTitle ?? null,
-        client: a?.company && a.company !== "Cortex" ? a.company : null,
+        client: clientOrNull(a?.company),
         stage: a?.status ?? null,
         score: typeof a?.combinedScore === "number" ? a.combinedScore : null,
         aiMatchScore: a?.insights?.overallMatchScore ?? null,

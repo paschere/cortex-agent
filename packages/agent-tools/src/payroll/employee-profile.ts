@@ -11,7 +11,7 @@ function money(n: number | null | undefined): string {
 export const payrollEmployeeProfile = registerTool({
   id: "payroll.employee_profile",
   description:
-    "Get the full picture of one person on the Cortex team: who they are, which client they are placed with, their job title, when they started and how long they have been here, their current pay rate and how it changed over time, what they were paid in recent payroll periods, and their expense history. " +
+    "Get the full picture of one person on the team: who they are, which client they are placed with, their job title, when they started and how long they have been here, their current pay rate and how it changed over time, what they were paid in recent payroll periods, and their expense history. " +
     'Use this for "tell me about <person>", "what does <person> do", "who is <person> working for", "how long has <person> been with us", "what is <person> paid", or "how much has <person> expensed". ' +
     "Accepts a name, an email, or the numeric payroll id; if a name matches several people the tool reports the candidates so you can ask which one. " +
     "What it does NOT have: the bill rate charged to the client, the margin on that person, their manager, their client-side contact, or their time-off balance — those live in BambooHR, via bamboo.get_employee. " +

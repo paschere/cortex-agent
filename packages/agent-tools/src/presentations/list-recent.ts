@@ -149,18 +149,18 @@ export const listRecent = registerTool({
     const expiredCount = files.filter((f) => f.expired).length;
 
     const meta = buildMeta({
-      endpoint: "presentation_files (Cortex agent DB)",
+      endpoint: "presentation_files (Cortex DB)",
       totalAvailable: count ?? files.length,
       returned: files.length,
       limit,
       truncated: (count ?? files.length) > files.length,
       provenance: {
         "candidateName, filename, sizeBytes, createdAt":
-          "Cortex agent DB — recorded when the PDF was prepared",
+          "Cortex DB — recorded when the PDF was prepared",
         downloads:
-          "Cortex agent DB — counted on every click of the download link",
+          "Cortex DB — counted on every click of the download link",
         "the document itself":
-          "AI-written by the Cortex matcher at the time it was prepared",
+          "AI-written by the matcher service at the time it was prepared",
       },
       dataQuality: [
         "These files are snapshots. If the candidate's profile or the write-up changed since, the PDF still shows the older version — prepare a fresh one when in doubt.",

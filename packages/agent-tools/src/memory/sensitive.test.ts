@@ -14,7 +14,7 @@ describe("screenMemory", () => {
     for (const good of [
       "Prefers every cost quoted in USD, monthly.",
       "Never CC the client on internal threads.",
-      'When they say "the matcher" they mean tpp.Cortex.com.',
+      'When they say "the matcher" they mean tpp.example.com.',
       "Owns the Growth pipeline and reviews it on Mondays.",
       "Responde siempre en español, aunque le escriban en inglés.",
       "Quotes senior React around 8,500 a month before discount.",
@@ -46,7 +46,7 @@ describe("screenMemory", () => {
 
   it("refuses contact details and identity numbers", () => {
     expect(
-      screenMemory("Reach their assistant at ana@Cortex.com first.").reason,
+      screenMemory("Reach their assistant at ana@example.com first.").reason,
     ).toBe("contact-detail");
     expect(
       screenMemory("Their cédula is on file for the contract.").reason,

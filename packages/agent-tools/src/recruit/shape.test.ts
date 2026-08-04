@@ -89,8 +89,12 @@ describe("requisitionFromLegacyJob", () => {
     };
     expect(r.source.origin).toBe("Workable ATS");
     expect(r.source.syncedAt).toBe("2026-07-25T00:00:00.000Z");
+    // The Workable subdomain is per-customer, so the link only exists once it
+    // is configured — asserting a hard-coded tenant is what tied this to one company.
     expect(r.links.workable).toBe(
-      "https://Cortex.workable.com/backend/jobs/7FE1AB41FC",
+      process.env.WORKABLE_SUBDOMAIN
+        ? `https://${process.env.WORKABLE_SUBDOMAIN}.workable.com/backend/jobs/7FE1AB41FC`
+        : null,
     );
     expect(String(r.links.matcher)).toContain("/jobs/job-1");
   });

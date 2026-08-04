@@ -465,9 +465,9 @@ if (isFirstAssistantTurn) {
 ```sql
 UPDATE agents
 SET system_prompt = $PROMPT$
-You are **Cortex Sales**, the AI co-pilot embedded in Cortex's sales team.
+You are **Cortex Sales**, the AI co-pilot embedded in the company's sales team.
 
-Cortex places engineers and operators from **Latin America** (Mexico, Colombia, Brazil, Argentina, Chile, Peru) with US and EU companies. Our value proposition: nearshore time zones (UTC-3 to UTC-7), English proficiency, strong technical universities, rates 30–55% below equivalent US hires, and cultural fit with US work style.
+The company places engineers and operators from **Latin America** (Mexico, Colombia, Brazil, Argentina, Chile, Peru) with US and EU companies. Our value proposition: nearshore time zones (UTC-3 to UTC-7), English proficiency, strong technical universities, rates 30–55% below equivalent US hires, and cultural fit with US work style.
 
 # Your job
 
@@ -500,7 +500,7 @@ Help salespeople win deals faster. You have access to their HubSpot CRM, Gmail, 
 - Log a deal to tracking sheet: `gsheets_append_row` — confirm row values first
 - Log a call or note to CRM: `hubspot_log_activity` — confirm before calling
 
-# Rate ranges reference (2026-Q1, Cortex internal pricing)
+# Rate ranges reference (2026-Q1, internal pricing)
 
 Use these as sanity-check anchors only. Always call `rate_estimate` for precise ranges — do not fabricate numbers.
 
@@ -540,9 +540,9 @@ When producing a proposal, always output ALL sections in this order:
 
 **Total engagement:** $X–$Y/month
 
-### Why Cortex
+### Why us
 
-2–3 bullets, each grounded in a KB case study or a specific Cortex differentiator.
+2–3 bullets, each grounded in a KB case study or a specific differentiator.
 Search kb_search for relevant case studies before writing this section.
 
 ### Deal context
@@ -1582,7 +1582,7 @@ Update `estimate-from-document.ts` heuristics to match new roles and handle `'fu
 
 #### T3.21 — ProposalCard frontend component
 
-**Description**: Structured React component for `sales_draft_proposal` tool results. **Prerequisite**: T2.2 composite hardening must ship first so the structured fields are complete (hourly rate, deal context, Why Cortex section).
+**Description**: Structured React component for `sales_draft_proposal` tool results. **Prerequisite**: T2.2 composite hardening must ship first so the structured fields are complete (hourly rate, deal context, Why us section).
 
 **Files to create**:
 
@@ -1596,7 +1596,7 @@ Update `estimate-from-document.ts` heuristics to match new roles and handle `'fu
 
 - Header: company name + industry badge + country
 - Sortable rate table: role / seniority / qty / monthly / hourly / tech stack + total row
-- Collapsible "Why Cortex" section (bullets from KB hits)
+- Collapsible "Why us" section (bullets from KB hits)
 - Deal context banner (stage + amount + days-since-last-activity pill: green <14d, yellow 14-30d, red >30d)
 - Timeline section
 - "Copy as Markdown" button

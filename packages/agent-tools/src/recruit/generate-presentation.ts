@@ -12,7 +12,7 @@ import {
 export const generatePresentation = registerTool({
   id: "recruit.generate_presentation",
   description:
-    "Generate an AI-written candidate presentation (Cortex-format HTML) from the candidate's skills, experience, education and latest score insights. This CREATES/updates a stored presentation (version-bumped, createdBy='AI') and therefore requires confirmation. It produces no file and nothing anyone can be sent — if the user wants something to hand to a client, use presentations.create_pdf, which writes the draft itself when there is not one yet and comes back with a download link. Use THIS tool only to refresh the stored draft on its own; to just read an existing one, use recruit.get_presentation. " +
+    "Generate an AI-written candidate presentation (formatted HTML) from the candidate's skills, experience, education and latest score insights. This CREATES/updates a stored presentation (version-bumped, createdBy='AI') and therefore requires confirmation. It produces no file and nothing anyone can be sent — if the user wants something to hand to a client, use presentations.create_pdf, which writes the draft itself when there is not one yet and comes back with a download link. Use THIS tool only to refresh the stored draft on its own; to just read an existing one, use recruit.get_presentation. " +
     "The HTML body is not returned (it is tens of thousands of characters) — you get the version, size and timestamps back; pass includeHtml if you genuinely need to quote the document. " +
     "PROVENANCE: the resulting document is AI-written and unreviewed. Say so when you hand it over — never present it as a recruiter-authored or client-approved write-up.",
   inputSchema: z.object({

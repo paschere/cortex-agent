@@ -14,7 +14,7 @@ export const getPresentation = registerTool({
   description:
     "Get the latest stored candidate presentation for a candidate, if one exists. Returns its version, who wrote and last edited it, when it was last updated and how large it is — but NOT the HTML body by default, because a presentation runs to tens of thousands of characters and a model rarely needs the markup. Pass includeHtml only when you must read or quote the document itself. " +
     "A null presentation is normal, not an error: it means none has been created yet. Read-only — use recruit.generate_presentation to create one. " +
-    "PROVENANCE: presentations are stored in the Cortex matcher DB; `createdBy` / `lastEditedBy` tell you whether the text was AI-written or edited by a human, and `updatedAt` how fresh it is. Say which when you describe it.",
+    "PROVENANCE: presentations are stored in the matcher service DB; `createdBy` / `lastEditedBy` tell you whether the text was AI-written or edited by a human, and `updatedAt` how fresh it is. Say which when you describe it.",
   inputSchema: z.object({
     candidateId: z.string().min(1),
     includeHtml: z.boolean().default(false),

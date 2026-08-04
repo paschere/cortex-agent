@@ -73,7 +73,7 @@ describe("rate.estimate", () => {
 
   const mockEstimatorResponse = {
     monthlyRateUsd: { min: 4000, max: 6000 },
-    notes: "Based on 2026-Q1 Cortex pricing table",
+    notes: "Based on the 2026-Q1 pricing table",
   };
 
   beforeEach(() => {
@@ -166,7 +166,7 @@ describe("rate.estimate", () => {
 describe("rate.estimate_from_document", () => {
   const mockEstimatorResponse = {
     monthlyRateUsd: { min: 3500, max: 5000 },
-    notes: "Based on 2026-Q1 Cortex pricing table",
+    notes: "Based on the 2026-Q1 pricing table",
   };
 
   beforeEach(() => {

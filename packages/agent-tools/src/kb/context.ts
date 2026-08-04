@@ -29,7 +29,7 @@ const MIN_SCORE = 0.55;
 export const kbContext = registerTool({
   id: "kb.context",
   description:
-    "Build a grounded context briefing on a topic from Cortex's Knowledge Base. Give it the topic (and optionally a few related angles) and it searches the brain from every angle, removes duplicates, groups the findings per source document, and returns a citation-ready block plus the structured sources. Use this before writing anything that should reflect what Cortex already knows — a proposal, a client email, a rate answer, an internal explanation — instead of running several separate searches. If it returns nothing, say plainly that the Knowledge Base has no material on the topic rather than inventing an answer.",
+    "Build a grounded context briefing on a topic from the company's Knowledge Base. Give it the topic (and optionally a few related angles) and it searches the brain from every angle, removes duplicates, groups the findings per source document, and returns a citation-ready block plus the structured sources. Use this before writing anything that should reflect what the company already knows — a proposal, a client email, a rate answer, an internal explanation — instead of running several separate searches. If it returns nothing, say plainly that the Knowledge Base has no material on the topic rather than inventing an answer.",
   inputSchema: z.object({
     topic: z
       .string()
@@ -134,7 +134,7 @@ export const kbContext = registerTool({
             ...sources.map((s) =>
               [
                 // The space is part of the citation because it changes what the
-                // finding is worth: a company-wide space is what Cortex has
+                // finding is worth: a company-wide space is what the company has
                 // agreed on, a personal one is one person's working note.
                 `[${s.ref}] ${s.documentTitle} — ${s.space}${s.spaceKind === "personal" ? " (your own notes)" : ""}`,
                 ...s.excerpts.map((e) => `    ${e.replace(/\s+/g, " ")}`),

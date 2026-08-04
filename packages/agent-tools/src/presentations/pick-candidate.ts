@@ -126,7 +126,7 @@ export const pickCandidate = registerTool({
     "Returns one compact row per candidate: name, pipeline stage, match score, years of experience, and whether a presentation already exists (with its version, date, and whether a human has reviewed it or it is still the raw AI draft). Read-only — it creates nothing and costs the user nothing. " +
     'HOW TO USE IT IN CONVERSATION: resolve the role first (recruit.list_requisitions), call this, then ask the user to choose in plain language — "I have four people on that role: Ana, Luis, Marta and Diego. Ana and Luis already have a write-up from last week. Who should I prepare?" Never read out ids, scores nobody asked for, or the name of this step. If someone already has a presentation, say so and offer to reuse it rather than silently rewriting it. ' +
     'Capped at 50 rows (default 10); check meta.truncated before implying this is the whole pipeline. Presentation status is only looked up for the first 25 rows — beyond that it reads "not checked", which is not the same as "none". ' +
-    "PROVENANCE: candidates and stages come from the Cortex matcher; match scores are Cortex AI output, not an ATS field; presentation drafts are AI-written unless a recruiter has edited them.",
+    "PROVENANCE: candidates and stages come from the matcher service; match scores are Cortex AI output, not an ATS field; presentation drafts are AI-written unless a recruiter has edited them.",
   inputSchema: z.object({
     jobId: z
       .string()

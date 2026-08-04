@@ -21,7 +21,7 @@ import {
  * The shape is intentionally permissive: it renders whatever the tool provides
  * today (company, roles with monthly ranges, recent activity, similar KB cases,
  * markdown) and surfaces the richer fields the T2.2 composite hardening adds
- * later (hourly ranges, deal stage/amount, timeline, "Why Cortex" bullets)
+ * later (hourly ranges, deal stage/amount, timeline, "Why us" bullets)
  * when they are present.
  */
 
@@ -68,8 +68,8 @@ export interface ProposalResult {
   similarCases?: ProposalSimilarCase[];
   /** Optional deal context block — present once T2.2 composite hardening ships. */
   deal?: ProposalDeal | null;
-  /** Optional "Why Cortex" bullets sourced from KB hits. */
-  whyCortex?: string[];
+  /** Optional "Why us" bullets sourced from KB hits. */
+  whyUs?: string[];
   /** Optional timeline / next-steps lines. */
   timeline?: string[];
   /** Pre-rendered Markdown for the copy action. */
@@ -196,13 +196,13 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
         : { key, dir: "asc" },
     );
 
-  // Derive "Why Cortex" bullets from explicit field or KB similar cases.
+  // Derive "Why us" bullets from explicit field or KB similar cases.
   const whyBullets = useMemo(() => {
-    if (result.whyCortex?.length) return result.whyCortex;
+    if (result.whyUs?.length) return result.whyUs;
     return (result.similarCases ?? []).map(
       (c) => `${c.title}: ${c.excerpt.replace(/\s+/g, " ").trim()}`,
     );
-  }, [result.whyCortex, result.similarCases]);
+  }, [result.whyUs, result.similarCases]);
 
   // Days since last activity: explicit on deal, else from most recent activity.
   const daysLast = useMemo(() => {
@@ -419,7 +419,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
         </div>
       </div>
 
-      {/* Why Cortex (collapsible) */}
+      {/* Why us (collapsible) */}
       {whyBullets.length > 0 && (
         <div className="border-t border-neutral-200 px-4 py-2 dark:border-neutral-700">
           <button
@@ -428,7 +428,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
             className="flex w-full items-center gap-2 py-1 text-left text-xs font-medium"
           >
             <Sparkles className="h-3.5 w-3.5 text-neutral-400" />
-            <span className="flex-1">Why Cortex</span>
+            <span className="flex-1">Why us</span>
             <ChevronDown
               className={`h-3.5 w-3.5 text-neutral-400 transition-transform ${whyOpen ? "rotate-180" : ""}`}
             />

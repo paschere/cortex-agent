@@ -51,7 +51,7 @@ function truncate(s: string): string {
 /**
  * The same result, shaped for a Google Chat DM: markdown flattened into Chat's
  * small formatting subset and capped at Chat's 4096-character limit, with a
- * link back to the full run in Cortex OS.
+ * link back to the full run in Cortex.
  */
 function buildChatBody(job: JobRow, result: ExecResult): string {
   const base = (process.env.APP_BASE_URL ?? "").replace(/\/+$/, "");
@@ -61,7 +61,7 @@ function buildChatBody(job: JobRow, result: ExecResult): string {
     result.ok
       ? result.output || "(no output)"
       : `The routine failed:\n\n${result.error ?? "Unknown error"}`,
-    base ? `\n[View this routine in Cortex OS](${base}/schedules)` : "",
+    base ? `\n[View this routine in Cortex](${base}/schedules)` : "",
   ].join("\n");
   return toChatText(body, base ? { moreUrl: `${base}/schedules` } : {});
 }

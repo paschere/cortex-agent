@@ -28,7 +28,7 @@ import {
  * half a shortlist presented as the whole one.
  *
  * The matching run already records its own state on the job row (syncStatus
- * Cortex_MOTOR → COMPLETED/ERROR, plus a find_matches_completed step carrying
+ * moves to COMPLETED/ERROR, plus a find_matches_completed step carrying
  * the run's totals), so /api/internal/recruit/match-status answers "is it done"
  * definitively in a couple of cheap counts. Because each poll is now ~100 ms
  * instead of ~1.2 s, the interval drops from 8 s to 5 s: the same 40-second

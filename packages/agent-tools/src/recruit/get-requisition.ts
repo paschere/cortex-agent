@@ -91,7 +91,7 @@ export const getRequisition = registerTool({
     "Get one requisition in detail by id: pipeline status, client, seats, budget, owner, days open, full stage breakdown, the five top-scored candidates, and the job description. " +
     "Prefer recruit.list_requisitions first — this call is only worth it when you need the description text, the budget/seat detail, or the top-candidate shortlist for ONE role. " +
     "The description is truncated to ~3000 characters by default; pass includeFullDescription only when the exact wording matters (job ads run to tens of thousands of characters and will swamp your context). " +
-    "PROVENANCE: `source` states whether the role came from Workable ATS or was created in the Cortex matcher, with syncedAt/lastUpdatedAt, and `links` gives the matcher and Workable URLs. Cite the system and freshness when you report, and label topCandidates[].score as Cortex AI scoring — it is not an ATS field. Relay meta.dataQuality (unlinked client, unset status, truncation) instead of papering over it.",
+    "PROVENANCE: `source` states whether the role came from Workable ATS or was created in the matcher service, with syncedAt/lastUpdatedAt, and `links` gives the matcher and Workable URLs. Cite the system and freshness when you report, and label topCandidates[].score as Cortex AI scoring — it is not an ATS field. Relay meta.dataQuality (unlinked client, unset status, truncation) instead of papering over it.",
   inputSchema: z.object({
     id: z.string().min(1),
     includeFullDescription: z.boolean().default(false),
@@ -151,8 +151,8 @@ export const getRequisition = registerTool({
       provenance: {
         "title, location, description, requirements, skills":
           "Workable ATS, imported into the matcher",
-        "client, owner, budget": "Cortex matcher DB",
-        "candidates.*": "Cortex matcher DB — counts as reported by /api/jobs",
+        "client, owner, budget": "Matcher service DB",
+        "candidates.*": "Matcher service DB — counts as reported by /api/jobs",
       },
       dataQuality: [
         "Pipeline status, seats, pod and the per-stage breakdown are not available on this endpoint.",

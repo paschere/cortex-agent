@@ -24,9 +24,13 @@ export type Raw = any;
 
 import { CHAT_MODEL } from "../model";
 
-/** Cortex's default model; override for a cheaper or deeper read via env. */
+/**
+ * The default chat model, overridable per deployment for a cheaper or deeper
+ * read of a candidate. ZIPDEV_RANKING_MODEL is still honoured as a fallback —
+ * transitional, drop it once every environment sets RANKING_MODEL_ID.
+ */
 export const RANKING_MODEL = () =>
-  process.env.Cortex_RANKING_MODEL ?? CHAT_MODEL;
+  process.env.RANKING_MODEL_ID ?? process.env.ZIPDEV_RANKING_MODEL ?? CHAT_MODEL;
 
 export const VERDICT_LABEL: Record<string, string> = {
   strong_match: "strong match",

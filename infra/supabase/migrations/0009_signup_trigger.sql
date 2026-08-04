@@ -1,9 +1,9 @@
--- Auto-provision public.users on auth signup; reject non-Cortex domain
+-- Auto-provision public.users on auth signup; reject non-zipdev domain
 create or replace function public.handle_new_auth_user() returns trigger
 language plpgsql security definer as $$
 declare
   v_domain text := lower(split_part(new.email, '@', 2));
-  v_allowed text := coalesce(current_setting('app.allowed_email_domain', true), 'Cortex.com');
+  v_allowed text := coalesce(current_setting('app.allowed_email_domain', true), 'zipdev.com');
 begin
   if v_domain <> v_allowed then
     raise exception 'sign-in restricted to % accounts', v_allowed;

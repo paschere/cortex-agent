@@ -400,7 +400,7 @@ export function SettingsForm({
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     The Cortex Chat app is not set up on this environment yet,
-                    so direct messages cannot be sent. Ask an aCortexo enable
+                    so direct messages cannot be sent. Ask an admin to enable
                     it.
                   </span>
                 </div>

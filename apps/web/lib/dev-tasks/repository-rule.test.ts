@@ -9,7 +9,7 @@ function repo(key: string, over: Partial<RepoRow> = {}): RepoRow {
   return {
     id: `id-${key}`,
     key,
-    clone_url: `https://github.com/Cortex-Team/${key}.git`,
+    clone_url: `https://github.com/acme/${key}.git`,
     default_branch: "main",
     allow_pull_requests: true,
     is_active: true,
@@ -28,7 +28,7 @@ const NOTHING: RepoSelectionInput = {
 
 const ALLOWLIST = [
   repo("cortex-agent", { linear_team_keys: ["ENG"] }),
-  repo("Cortex-matcher", { linear_project_ids: ["project-matcher"] }),
+  repo("acme-matcher", { linear_project_ids: ["project-matcher"] }),
   repo("payroll", { allow_pull_requests: false }),
 ];
 
@@ -58,7 +58,7 @@ describe("pickRepository", () => {
   it("prefers a project mapping over a team mapping", () => {
     const rows = [
       repo("cortex-agent", { linear_team_keys: ["ENG"] }),
-      repo("Cortex-matcher", {
+      repo("acme-matcher", {
         linear_project_ids: ["p1"],
         linear_team_keys: ["ENG"],
       }),
@@ -69,7 +69,7 @@ describe("pickRepository", () => {
       teamKey: "ENG",
     });
     expect(result).toMatchObject({ ok: true, via: "project" });
-    if (result.ok) expect(result.repository.key).toBe("Cortex-matcher");
+    if (result.ok) expect(result.repository.key).toBe("acme-matcher");
   });
 
   it("falls back to the team mapping, case-insensitively", () => {
@@ -92,9 +92,9 @@ describe("pickRepository", () => {
     if (!result.ok) {
       expect(result.reason).toMatch(/does not say which repository/);
       expect(result.available).toEqual([
+        "acme-matcher",
         "cortex-agent",
         "payroll",
-        "Cortex-matcher",
       ]);
     }
   });
@@ -106,13 +106,13 @@ describe("pickRepository", () => {
   it("REJECTS a repo that is not on the allowlist rather than falling back", () => {
     const result = pickRepository(ALLOWLIST, {
       ...NOTHING,
-      directiveKey: "Cortex-secrets",
+      directiveKey: "acme-secrets",
       teamKey: "ENG",
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toMatch(/not a repository I am allowed to work in/);
-      expect(result.askedFor).toBe("Cortex-secrets");
+      expect(result.askedFor).toBe("acme-secrets");
     }
   });
 
@@ -129,7 +129,7 @@ describe("pickRepository", () => {
   it("REJECTS an ambiguous team mapping instead of choosing", () => {
     const rows = [
       repo("cortex-agent", { linear_team_keys: ["ENG"] }),
-      repo("Cortex-matcher", { linear_team_keys: ["ENG"] }),
+      repo("acme-matcher", { linear_team_keys: ["ENG"] }),
     ];
     const result = pickRepository(rows, { ...NOTHING, teamKey: "ENG" });
     expect(result.ok).toBe(false);
@@ -139,9 +139,9 @@ describe("pickRepository", () => {
   it("ignores inactive rows when a team mapping is applied", () => {
     const rows = [
       repo("cortex-agent", { linear_team_keys: ["ENG"], is_active: false }),
-      repo("Cortex-matcher", { linear_team_keys: ["ENG"] }),
+      repo("acme-matcher", { linear_team_keys: ["ENG"] }),
     ];
     const result = pickRepository(rows, { ...NOTHING, teamKey: "ENG" });
-    expect(result.ok && result.repository.key).toBe("Cortex-matcher");
+    expect(result.ok && result.repository.key).toBe("acme-matcher");
   });
 });

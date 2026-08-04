@@ -46,7 +46,7 @@ whose name I recognise" path.
 | `is_active`                              | soft off-switch                                                                                                       |
 | `linear_team_keys`, `linear_project_ids` | team/project → repo mapping (see below). Ship empty.                                                                  |
 
-Seeded with `cortex-agent`, `Cortex-matcher` and `payroll`. Adding a fourth is
+Seeded with `cortex-agent`, `matcher` and `payroll`. Adding a fourth is
 one `INSERT`; nothing in the code knows those three names.
 
 ### `dev_tasks` — one unit of work
@@ -111,7 +111,7 @@ highest first (`apps/web/lib/dev-tasks/repository-rule.ts`):
 
 1. `Repo: <key>` on its own line in the issue description. Also accepted:
    `**Repo:** payroll`, `- repo = payroll`, `Repository: cortex-agent`,
-   `Repo: Cortex-Team/payroll`. First match wins.
+   `Repo: your-org/payroll`. First match wins.
 2. A `repo:<key>` Linear label.
 3. The issue's Linear **project**, if a repo lists that project id in
    `linear_project_ids`.

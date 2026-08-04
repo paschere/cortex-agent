@@ -1,5 +1,5 @@
 import { ConfirmationRequiredError, SecurityBlockedError } from "@cortex/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { runTool } from "../registry";
 import type { ToolContext, ToolDef } from "../types";
@@ -91,10 +91,20 @@ function tool(
   };
 }
 
+// The workspace's own domains decide what counts as leaving the company, so
+// these cases only mean anything against a configured deployment. The
+// unconfigured posture (nobody internal) is covered in policy.test.ts.
+const INTERNAL = "acme.test";
+
 beforeEach(() => {
+  process.env.INTERNAL_EMAIL_DOMAINS = INTERNAL;
   resetPolicyCache();
   resetFrequencyCache();
   handler.mockClear();
+});
+
+afterEach(() => {
+  process.env.INTERNAL_EMAIL_DOMAINS = "";
 });
 
 describe("runTool security gate", () => {
@@ -122,7 +132,7 @@ describe("runTool security gate", () => {
     } catch (e) {
       const err = e as SecurityBlockedError;
       expect(err.code).toBe("SECURITY_BLOCKED");
-      expect(err.message).toMatch(/outside Cortex/i);
+      expect(err.message).toMatch(/outside the company/i);
       expect(err.message).toMatch(/org admin/i);
       // no thresholds, policy keys, signal names or stack traces
       expect(err.message).not.toMatch(
@@ -195,12 +205,19 @@ describe("runTool security gate", () => {
   });
 
   it("a high-risk non-bulk call runs, is flagged, and tells the model why", async () => {
+    // Compensation to an INTERNAL recipient is high-risk but allowed. With no
+    // INTERNAL_EMAIL_DOMAINS configured every address counts as external and the
+    // same call is blocked instead — which is the safe default, not this case.
+    const previous = process.env.INTERNAL_EMAIL_DOMAINS;
+    process.env.INTERNAL_EMAIL_DOMAINS = "acme.test";
     const ctx = makeCtx();
     const result = await runTool(
       tool("gmail.send_draft"),
-      { to: "ceo@Cortex.com", body: "the salary breakdown you asked for" },
+      { to: "ceo@acme.test", body: "the salary breakdown you asked for" },
       ctx,
     );
+    if (previous === undefined) delete process.env.INTERNAL_EMAIL_DOMAINS;
+    else process.env.INTERNAL_EMAIL_DOMAINS = previous;
     // Flag-first: no confirmation prompt, no block — it just runs.
     expect(handler).toHaveBeenCalled();
     expect(result).toMatchObject({ ok: true });
@@ -249,7 +266,7 @@ describe("runTool security gate", () => {
       body: "Two candidates are ready to interview.",
     };
     const ctx = makeCtx();
-    // Anything addressed outside Cortex.com gets one confirmation…
+    // Anything addressed outside the company gets one confirmation…
     await expect(
       runTool(tool("gmail.send_draft"), mail, ctx),
     ).rejects.toBeInstanceOf(ConfirmationRequiredError);

@@ -152,7 +152,7 @@ export function buildSystemPrompt(params: {
     ? checkPlan.steps.map((s) => `\`${s.cmd} ${s.args.join(" ")}\``).join(", ")
     : "none detected";
 
-  return `You are Cortex, Cortexmpany's engineering agent. You have been handed one issue and a
+  return `You are Cortex, the company's engineering agent. You have been handed one issue and a
 checkout of the \`${repository.key}\` repository at ${repoRoot}, on a fresh branch off
 \`${repository.default_branch}\`. Your job is to make the change and prove it works.
 

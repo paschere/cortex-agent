@@ -4,7 +4,7 @@
 
 **Goal:** Deliver a working web-only Sales agent that 5 pilot users can use end-to-end: sign in via Google SSO, connect HubSpot + Google Workspace, configure RAG knowledge bases (global / team / user / per-conversation), and draft client proposals via a streaming chat backed by Gemini 2.5 Flash and a shared tool layer.
 
-**Architecture:** Monorepo (pnpm + Turborepo) with `apps/web` (Next.js 15 on Vercel — admin UI + chat UI + chat API + agent loop), `packages/agent-tools` (shared tool registry), `packages/agents` (Sales agent definition), `packages/core` (shared types/utilities). Supabase (Postgres + pgvector + Auth + Storage) for data, auth, vector search, RLS. Inngest for background jobs (KB ingestion, Drive sync). Existing `Cortex-rate-estimator-master` repo gets a single new internal endpoint.
+**Architecture:** Monorepo (pnpm + Turborepo) with `apps/web` (Next.js 15 on Vercel — admin UI + chat UI + chat API + agent loop), `packages/agent-tools` (shared tool registry), `packages/agents` (Sales agent definition), `packages/core` (shared types/utilities). Supabase (Postgres + pgvector + Auth + Storage) for data, auth, vector search, RLS. Inngest for background jobs (KB ingestion, Drive sync). Existing `rate-estimator` repo gets a single new internal endpoint.
 
 **Tech Stack:** TypeScript 5.7, Node 20, pnpm 9, Turborepo 2, Next.js 15 (App Router), React 19, Tailwind CSS, shadcn/ui, Framer Motion, TanStack Query, Vercel AI SDK 4 (with `@ai-sdk/google` for Gemini 2.5), Zod 3, Supabase JS, pgvector, Inngest, Sentry, OpenTelemetry, Vitest, msw, Playwright.
 
@@ -375,7 +375,7 @@ SUPABASE_DB_URL=postgresql://postgres:postgres@localhost:54322/postgres
 # App
 APP_BASE_URL=http://localhost:3000
 SESSION_COOKIE_NAME=cortex_session
-ALLOWED_EMAIL_DOMAIN=Cortex.com
+ALLOWED_EMAIL_DOMAIN=example.com
 
 # Google OAuth (per-user integrations, separate from Supabase SSO config)
 GOOGLE_CLIENT_ID=
@@ -391,7 +391,7 @@ HUBSPOT_REDIRECT_URI=http://localhost:3000/api/integrations/hubspot/callback
 GOOGLE_GENERATIVE_AI_API_KEY=
 
 # Rate Estimator service-token
-RATE_ESTIMATOR_URL=https://rate.Cortex.internal
+RATE_ESTIMATOR_URL=https://rate.internal.example.com
 RATE_ESTIMATOR_SERVICE_TOKEN=
 
 # Inngest
@@ -635,7 +635,7 @@ const schema = z.object({
   SUPABASE_DB_URL: z.string().url(),
   APP_BASE_URL: z.string().url(),
   SESSION_COOKIE_NAME: z.string().default("cortex_session"),
-  ALLOWED_EMAIL_DOMAIN: z.string().default("Cortex.com"),
+  ALLOWED_EMAIL_DOMAIN: z.string().default("example.com"),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),
@@ -1273,12 +1273,12 @@ grant select on public.integrations_view to authenticated;
 - [ ] **Step 10: Migration `0009_signup_trigger.sql`**
 
 ```sql
--- Auto-provision public.users on auth signup; reject non-Cortex domain
+-- Auto-provision public.users on auth signup; reject any other domain
 create or replace function public.handle_new_auth_user() returns trigger
 language plpgsql security definer as $$
 declare
   v_domain text := lower(split_part(new.email, '@', 2));
-  v_allowed text := coalesce(current_setting('app.allowed_email_domain', true), 'Cortex.com');
+  v_allowed text := coalesce(current_setting('app.allowed_email_domain', true), 'example.com');
 begin
   if v_domain <> v_allowed then
     raise exception 'sign-in restricted to % accounts', v_allowed;
@@ -1322,7 +1322,7 @@ begin
     'sales',
     'Cortex Sales',
     v_team,
-    'You are Cortex''s Sales co-pilot. Cortex is a LATAM staffing company that places engineers and operators with foreign companies. Always cite KB sources when stating facts. Never send emails directly — create drafts only. For full proposals prefer the sales.draft_proposal tool; for narrow questions use primitives. Respond in the user''s language.',
+    'You are the Sales co-pilot. The company is a LATAM staffing company that places engineers and operators with foreign companies. Always cite KB sources when stating facts. Never send emails directly — create drafts only. For full proposals prefer the sales.draft_proposal tool; for narrow questions use primitives. Respond in the user''s language.',
     'gemini-3.1-flash-lite',
     array[
       'hubspot.search_companies','hubspot.get_company','hubspot.search_deals','hubspot.get_deal','hubspot.list_recent_activities',
@@ -1672,8 +1672,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 export const metadata: Metadata = {
-  title: "Cortex Agent",
-  description: "Cortex internal AI co-pilot",
+  title: "Cortex",
+  description: "Internal AI co-pilot",
 };
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -1720,7 +1720,7 @@ export default function LoginPage() {
         queryParams: {
           access_type: "offline",
           prompt: "consent",
-          hd: "Cortex.com",
+          hd: "example.com",
         },
         scopes: "openid email profile",
       },
@@ -1733,9 +1733,9 @@ export default function LoginPage() {
 
   return (
     <div className="max-w-sm w-full rounded-2xl border bg-white dark:bg-neutral-900 p-8 shadow-sm">
-      <h1 className="text-2xl font-semibold mb-2">Cortex Agent</h1>
+      <h1 className="text-2xl font-semibold mb-2">Cortex</h1>
       <p className="text-neutral-500 text-sm mb-6">
-        Sign in with your @Cortex.com Google account.
+        Sign in with your @example.com Google account.
       </p>
       <button
         onClick={signIn}
@@ -1769,7 +1769,7 @@ export async function GET(req: NextRequest) {
         new URL(`/login?error=${encodeURIComponent(error.message)}`, req.url),
       );
   }
-  // Domain guard: signup trigger rejects non-Cortex; double-check here too
+  // Domain guard: signup trigger rejects other domains; double-check here too
   const {
     data: { user },
   } = await sb.auth.getUser();
@@ -1796,7 +1796,7 @@ Visit http://localhost:3000/login → expect the login page.
 
 ```bash
 git add apps/web
-git commit -m "feat(web): Next.js scaffold + Google SSO with @Cortex.com restriction"
+git commit -m "feat(web): Next.js scaffold + Google SSO with @example.com restriction"
 ```
 
 ---
@@ -3471,7 +3471,7 @@ git commit -m "feat(tools): HubSpot read-only tools (5)"
 
 **Files:**
 
-- Modify: `C:\Users\User\Desktop\Cortex-rate-estimator-master\app\api\internal\estimate\route.ts` (CREATE in existing repo)
+- Modify: `C:\Users\User\Desktop\rate-estimator-master\app\api\internal\estimate\route.ts` (CREATE in existing repo)
 - Create: `packages/agent-tools/src/rate/{client,estimate,estimate-from-document}.ts`
 - Create: `packages/agent-tools/src/rate/__tests__/rate.test.ts`
 - Modify: `packages/agent-tools/src/index.ts` (register the rate tools)
@@ -6231,9 +6231,9 @@ export function getAgentTools(agent: AgentDefinition): AnyTool[] {
 - [ ] **Step 4: `packages/agents/src/sales/system-prompt.md`**
 
 ```markdown
-You are **Cortex Sales**, the AI co-pilot for Cortex's sales team.
+You are **Cortex Sales**, the AI co-pilot for the company's sales team.
 
-Cortex is a staffing company that places engineers and operators from **Latin America** with foreign (mostly US/EU) companies, in nearshore time zones.
+The company is a staffing company that places engineers and operators from **Latin America** with foreign (mostly US/EU) companies, in nearshore time zones.
 
 # Your job
 
@@ -6252,7 +6252,7 @@ When you draft a proposal, organise sections like:
 
 - **Resumen / Summary** (1–2 sentences: who, what, when)
 - **Roles** (table of: role, seniority, qty, monthly range, hourly range)
-- **Why Cortex** (2–3 bullets tied to KB cases similar to this client)
+- **Why us** (2–3 bullets tied to KB cases similar to this client)
 - **Timeline & next steps**
 - **Citations**
 
@@ -8043,7 +8043,7 @@ export async function register() {
       await import("@opentelemetry/semantic-conventions");
     const sdk = new NodeSDK({
       resource: new Resource({
-        [SemanticResourceAttributes.SERVICE_NAME]: "Cortex-web",
+        [SemanticResourceAttributes.SERVICE_NAME]: "cortex-web",
       }),
       traceExporter: process.env.OTEL_EXPORTER_OTLP_ENDPOINT
         ? new OTLPTraceExporter({
@@ -8079,7 +8079,7 @@ const tracer = trace.getTracer("cortex-agent-tools");
 
 // inside runTool, replace the existing handler call with:
 const span = tracer.startSpan(`tool.${tool.id}`, {
-  attributes: { "Cortex.user_id": ctx.userId, "Cortex.agent_id": ctx.agentId },
+  attributes: { "cortex.user_id": ctx.userId, "cortex.agent_id": ctx.agentId },
 });
 try {
   const result = await tool.handler(parsed.data, ctx);
@@ -8205,7 +8205,7 @@ jobs:
 
 There are TWO Google OAuth clients in play:
 
-1. **Supabase SSO client** — for user sign-in via `@Cortex.com`. Created in Supabase dashboard → Auth → Providers → Google. Use a separate client in Google Cloud Console with redirect `https://<project>.supabase.co/auth/v1/callback`. Restrict consent to internal users in your Workspace.
+1. **Supabase SSO client** — for user sign-in via your own email domain. Created in Supabase dashboard → Auth → Providers → Google. Use a separate client in Google Cloud Console with redirect `https://<project>.supabase.co/auth/v1/callback`. Restrict consent to internal users in your Workspace.
 
 2. **Per-user integrations client** — for Gmail/Drive/Calendar/Sheets. Create a second OAuth client in Google Cloud Console with redirect `${APP_BASE_URL}/api/integrations/google/callback`. Add scopes via the OAuth consent screen ("Edit app" → "Scopes" → add Gmail/Drive/Calendar/Sheets scopes).
 
@@ -8288,7 +8288,7 @@ export default defineConfig({
 ```markdown
 # Acme Corp — Past proposal (sample)
 
-Acme is a US fintech that engaged Cortex in 2025 for 4 senior React engineers and 1 SRE. Engagement: 12 months. Average ramp time: 3 weeks. NPS at engagement end: 9.
+Acme is a US fintech that engaged the company in 2025 for 4 senior React engineers and 1 SRE. Engagement: 12 months. Average ramp time: 3 weeks. NPS at engagement end: 9.
 
 Key learnings:
 
@@ -8307,7 +8307,7 @@ export async function seedE2EUser() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } },
   );
-  const email = "e2e@Cortex.com";
+  const email = "e2e@example.com";
   const { data } = await sb.auth.admin.createUser({
     email,
     email_confirm: true,

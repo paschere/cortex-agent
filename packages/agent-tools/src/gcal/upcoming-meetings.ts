@@ -74,7 +74,7 @@ function renderMarkdown(meetings: NormalizedMeeting[], hours: number): string {
       const shown = guests
         .slice(0, 8)
         .map(
-          (a) => `${a.name ?? a.email}${a.external ? " (outside Cortex)" : ""}`,
+          (a) => `${a.name ?? a.email}${a.external ? " (external)" : ""}`,
         )
         .join(", ");
       lines.push(
@@ -97,7 +97,7 @@ function renderMarkdown(meetings: NormalizedMeeting[], hours: number): string {
 export const gcalUpcomingMeetings = registerTool({
   id: "gcal.upcoming_meetings",
   description:
-    "See what meetings are coming up on the user's calendar, ready to act on. For each one you get the title, when it starts and ends, how long it runs, who is invited (and which of them are outside Cortex), the organizer, where it happens or the video link, and a best guess at what kind of conversation it is — an interview, a client call, something internal, or personal time. Use it to answer \"what's on my calendar today\", to pick the meeting someone is talking about, or as the first step before preparing a briefing. Looks 24 hours ahead by default and can reach up to two weeks.",
+    "See what meetings are coming up on the user's calendar, ready to act on. For each one you get the title, when it starts and ends, how long it runs, who is invited (and which of them are outside the company), the organizer, where it happens or the video link, and a best guess at what kind of conversation it is — an interview, a client call, something internal, or personal time. Use it to answer \"what's on my calendar today\", to pick the meeting someone is talking about, or as the first step before preparing a briefing. Looks 24 hours ahead by default and can reach up to two weeks.",
   inputSchema: z.object({
     hours: z
       .number()

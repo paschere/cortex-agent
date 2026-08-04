@@ -36,9 +36,9 @@ function renderMarkdown(companies: any[], meta: ToolMeta): string {
 export const listCompanies = registerTool({
   id: "recruit.list_companies",
   description:
-    'List Cortex clients from the recruitment system, each with how many requisitions they have, how many are still open, and how many candidates sit in their pipelines — enough to answer "which clients are we actively hiring for" in one call. ' +
+    'List the client companies in the recruitment system, each with how many requisitions they have, how many are still open, and how many candidates sit in their pipelines — enough to answer "which clients are we actively hiring for" in one call. ' +
     "Supports search, includeInactive, and limit/offset (max 200, default 50); check meta.truncated before concluding you have the full client list. " +
-    "PROVENANCE: client records live in the Cortex matcher DB (not in Workable), and every count is computed live from the matcher. Read meta.dataQuality out loud when it matters: many requisitions are not linked to any client, so per-client totals are a floor, not a census.",
+    "PROVENANCE: client records live in the matcher service DB (not in Workable), and every count is computed live from the matcher. Read meta.dataQuality out loud when it matters: many requisitions are not linked to any client, so per-client totals are a floor, not a census.",
   inputSchema: z.object({
     search: z.string().optional(),
     includeInactive: z.boolean().default(false),

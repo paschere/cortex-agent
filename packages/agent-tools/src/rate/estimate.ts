@@ -7,9 +7,9 @@ const MonthlyRateRange = z.object({ min: z.number(), max: z.number() });
 export const rateEstimate = registerTool({
   id: "rate.estimate",
   description:
-    "Estimate the monthly USD rate to quote for a LATAM staffing role that does not exist yet — pick the role, seniority, region and years, get a min/max range with notes. Uses the Cortex 2026-Q1 pricing table. " +
-    "Quotes at Cortex standard 33% margin unless a different one is asked for — say which margin the number carries, and that it can be changed. " +
-    "This is a PRICE GUIDE, not a record of anything: it does not know what Cortex actually charges any client today. For the real bill rate on a person Cortex already staffs, use bamboo.get_employee; for a whole client or division, bamboo.compensation_report. Never present an estimate from here as what a client is being charged.",
+    "Estimate the monthly USD rate to quote for a LATAM staffing role that does not exist yet — pick the role, seniority, region and years, get a min/max range with notes. Uses the internal 2026-Q1 pricing table. " +
+    "Quotes at the standard 33% margin unless a different one is asked for — say which margin the number carries, and that it can be changed. " +
+    "This is a PRICE GUIDE, not a record of anything: it does not know what the company actually charges any client today. For the real bill rate on a person the company already staffs, use bamboo.get_employee; for a whole client or division, bamboo.compensation_report. Never present an estimate from here as what a client is being charged.",
   inputSchema: z.object({
     role: z.enum([
       "frontend",
@@ -39,7 +39,7 @@ export const rateEstimate = registerTool({
       .max(95)
       .optional()
       .describe(
-        "Margin to quote at, as a percentage. Leave it out to use Cortex standard 33%.",
+        "Margin to quote at, as a percentage. Leave it out to use the standard 33%.",
       ),
   }),
   outputSchema: z.object({

@@ -177,7 +177,7 @@ export default async function DevWorkPage() {
     <>
       <PageHeader
         title="Dev Work"
-        subtitle="Every change Cortex is making to Cortex's own software, on its own. Watch it here — and stop it here."
+        subtitle="Every change Cortex is making to your own software, on its own. Watch it here — and stop it here."
         icon={<Hammer className="h-5 w-5" />}
         actions={
           <>

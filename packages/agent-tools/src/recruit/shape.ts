@@ -24,12 +24,28 @@ import { BASE } from "./client";
  *  lib/internal/recruit-provenance.ts. Never invent a label. */
 export const SOURCE = {
   workable: "Workable ATS",
-  matcher: "Cortex matcher DB",
+  matcher: "Matcher service DB",
   aiScoring: "Cortex AI scoring",
   testGorilla: "TestGorilla",
   interviewAnalysis: "Interview analysis (AI)",
   recruiterRatings: "Recruiter ratings (human)",
 } as const;
+
+/**
+ * The matcher substitutes the operating company's own name for `company` when
+ * an application's job has no client linked. That name is a placeholder, not an
+ * account, so reporting it back as a client would invent a customer.
+ *
+ * It is data we RECEIVE, so the label depends on the upstream deployment rather
+ * than on anything this codebase can know — hence `MATCHER_UNLINKED_COMPANY`.
+ * Unset means no name is filtered, which is why it must be configured wherever
+ * the matcher fills the field in.
+ */
+export function clientOrNull(company: unknown): string | null {
+  if (typeof company !== "string" || !company.trim()) return null;
+  const placeholder = process.env.MATCHER_UNLINKED_COMPANY?.trim();
+  return placeholder && company === placeholder ? null : company;
+}
 
 export const metaSchema = z
   .object({
@@ -65,7 +81,7 @@ export function buildMeta(input: MetaInput): ToolMeta {
   return {
     fetchedAt: new Date().toISOString(),
     source: {
-      system: "Cortex matcher",
+      system: "Matcher service",
       baseUrl: BASE(),
       endpoint,
       mode: degraded ? "legacy-public-endpoint" : "lean-internal-endpoint",
@@ -105,7 +121,7 @@ export function provenanceFooter(meta: ToolMeta): string {
   const m = meta as any;
   const bits: string[] = [];
   bits.push(
-    `source: ${m.source?.system ?? "Cortex matcher"} (${m.source?.endpoint ?? "n/a"})`,
+    `source: ${m.source?.system ?? "Matcher service"} (${m.source?.endpoint ?? "n/a"})`,
   );
   bits.push(`read ${meta.fetchedAt}`);
   if (m.cache?.hit) bits.push(`cached ${m.cache.ageSeconds ?? 0}s ago`);
@@ -149,14 +165,23 @@ export function shortSummary(
   };
 }
 
-const WORKABLE_SUBDOMAIN = () => process.env.WORKABLE_SUBDOMAIN ?? "Cortex";
+/**
+ * The Workable account belongs to whoever runs the deployment, so there is no
+ * default worth guessing: an invented subdomain would send a recruiter to a
+ * stranger's ATS.
+ */
+const WORKABLE_SUBDOMAIN = () => process.env.WORKABLE_SUBDOMAIN?.trim() ?? "";
 
-/** `Job.workableId` holds the Workable shortcode, which keys the backend UI. */
+/**
+ * `Job.workableId` holds the Workable shortcode, which keys the backend UI.
+ * Null when no subdomain is configured — no link beats a wrong one.
+ */
 export function workableJobUrl(
   shortcode: string | null | undefined,
 ): string | null {
-  return shortcode
-    ? `https://${WORKABLE_SUBDOMAIN()}.workable.com/backend/jobs/${shortcode}`
+  const subdomain = WORKABLE_SUBDOMAIN();
+  return shortcode && subdomain
+    ? `https://${subdomain}.workable.com/backend/jobs/${shortcode}`
     : null;
 }
 
@@ -179,9 +204,9 @@ export function daysSince(iso: string | null | undefined): number | null {
  *  - `status` is hardcoded to "Active" for every job by the matcher's job
  *    formatter, so it says nothing. It is reported as `atsStatus`, and the
  *    real pipeline `status` is null because the legacy endpoint doesn't carry it.
- *  - `company` falls back to the literal string "Cortex" whenever the job has
- *    no company linked (49 of 57 production requisitions), so `client` is only
- *    trusted when `companyId` is present.
+ *  - `company` falls back to a placeholder name whenever the job has no company
+ *    linked (49 of 57 production requisitions), so `client` is only trusted
+ *    when `companyId` is present.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function requisitionFromLegacyJob(j: any): Record<string, unknown> {
