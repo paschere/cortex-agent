@@ -1,4 +1,4 @@
-import 'server-only';
+import "server-only";
 import {
   DEV_TASK_COLUMNS,
   type DevTask,
@@ -6,12 +6,12 @@ import {
   formatDuration,
   taskElapsedMs,
   toDevTask,
-} from '@/lib/dev-work';
-import { sendEmail } from '@/lib/email';
-import { renderDevTaskEmail } from '@/lib/email-templates';
-import { sendChatDm, toChatText } from '@/lib/google-chat';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { logger } from '@cortex/core';
+} from "@/lib/dev-work";
+import { sendEmail } from "@/lib/email";
+import { renderDevTaskEmail } from "@/lib/email-templates";
+import { sendChatDm, toChatText } from "@/lib/google-chat";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { logger } from "@cortex/core";
 
 /**
  * "Cortex did some work on our software" notifications.
@@ -39,7 +39,7 @@ import { logger } from '@cortex/core';
  * must never fail the run that triggered it. Nothing throws.
  */
 
-export type DevTaskNotice = 'needs_review' | 'failed';
+export type DevTaskNotice = "needs_review" | "failed";
 
 /** Chat groups both messages about one run into a single thread. */
 const threadKeyFor = (taskId: string) => `dev-task:${taskId}`;
@@ -52,7 +52,7 @@ interface Recipient {
 
 /**
  * Who hears about it: the person who asked. If the Linear author never mapped
- * to a Zipdev account there is nobody to tell personally, so it falls back to
+ * to a Cortex account there is nobody to tell personally, so it falls back to
  * the workspace admins — the people accountable for Cortex touching the code.
  */
 async function resolveRecipients(
@@ -61,32 +61,34 @@ async function resolveRecipients(
 ): Promise<Recipient[]> {
   if (task.requestedBy) {
     const { data } = await db
-      .from('users')
-      .select('id, email, name')
-      .eq('id', task.requestedBy)
+      .from("users")
+      .select("id, email, name")
+      .eq("id", task.requestedBy)
       .maybeSingle();
     if (data?.email) {
       return [
         {
           userId: data.id as string,
           email: data.email as string,
-          firstName: data.name ? (String(data.name).split(' ')[0] ?? null) : null,
+          firstName: data.name
+            ? (String(data.name).split(" ")[0] ?? null)
+            : null,
         },
       ];
     }
   }
 
   const { data: admins } = await db
-    .from('users')
-    .select('id, email, name')
-    .eq('role', 'org_admin')
+    .from("users")
+    .select("id, email, name")
+    .eq("role", "org_admin")
     .limit(10);
   return (admins ?? [])
     .filter((a) => a.email)
     .map((a) => ({
       userId: a.id as string,
       email: a.email as string,
-      firstName: a.name ? (String(a.name).split(' ')[0] ?? null) : null,
+      firstName: a.name ? (String(a.name).split(" ")[0] ?? null) : null,
     }));
 }
 
@@ -105,14 +107,14 @@ async function claimNotification(
   notice: DevTaskNotice,
 ): Promise<boolean> {
   const { data, error } = await db
-    .from('dev_tasks')
+    .from("dev_tasks")
     .update({ notified_state: notice })
-    .eq('id', taskId)
+    .eq("id", taskId)
     .or(`notified_state.is.null,notified_state.neq.${notice}`)
-    .select('id');
+    .select("id");
 
   if (error) {
-    logger.warn('dev-work: could not claim the notification, sending anyway', {
+    logger.warn("dev-work: could not claim the notification, sending anyway", {
       taskId,
       reason: error.message,
     });
@@ -139,20 +141,20 @@ function chatMessage(opts: {
     opts.costText ? `Cost: ${opts.costText}` : null,
   ].filter(Boolean) as string[];
 
-  if (notice === 'needs_review') {
+  if (notice === "needs_review") {
     return toChatText(
       [
         `**Ready for you — ${task.title}**`,
-        '',
-        'I finished this one and opened a pull request. Nothing merges until you say so.',
-        '',
+        "",
+        "I finished this one and opened a pull request. Nothing merges until you say so.",
+        "",
         ...meta,
-        '',
-        task.prUrl ? `[Review the pull request](${task.prUrl})` : '',
-        detailUrl ? `[See the whole run](${detailUrl})` : '',
+        "",
+        task.prUrl ? `[Review the pull request](${task.prUrl})` : "",
+        detailUrl ? `[See the whole run](${detailUrl})` : "",
       ]
-        .filter((l) => l !== '')
-        .join('\n'),
+        .filter((l) => l !== "")
+        .join("\n"),
       detailUrl ? { moreUrl: detailUrl } : undefined,
     );
   }
@@ -160,28 +162,30 @@ function chatMessage(opts: {
   return toChatText(
     [
       `**I could not finish — ${task.title}**`,
-      '',
-      task.failureReason ?? 'I stopped before the work was done. Nothing was merged.',
-      '',
+      "",
+      task.failureReason ??
+        "I stopped before the work was done. Nothing was merged.",
+      "",
       ...meta,
-      '',
-      detailUrl ? `[See what happened](${detailUrl})` : '',
+      "",
+      detailUrl ? `[See what happened](${detailUrl})` : "",
     ]
-      .filter((l) => l !== '')
-      .join('\n'),
+      .filter((l) => l !== "")
+      .join("\n"),
     detailUrl ? { moreUrl: detailUrl } : undefined,
   );
 }
 
 function summariseChecks(task: DevTask): string | null {
   if (task.checks.length === 0) return null;
-  const failed = task.checks.filter((c) => c.status === 'failed');
+  const failed = task.checks.filter((c) => c.status === "failed");
   if (failed.length > 0) {
-    return `${failed.length} failed — ${failed.map((c) => c.name).join(', ')}`;
+    return `${failed.length} failed — ${failed.map((c) => c.name).join(", ")}`;
   }
-  const pending = task.checks.filter((c) => c.status === 'pending').length;
-  const passed = task.checks.filter((c) => c.status === 'passed').length;
-  if (pending > 0) return `${passed} of ${task.checks.length} passed, ${pending} still running`;
+  const pending = task.checks.filter((c) => c.status === "pending").length;
+  const passed = task.checks.filter((c) => c.status === "passed").length;
+  if (pending > 0)
+    return `${passed} of ${task.checks.length} passed, ${pending} still running`;
   return `all ${task.checks.length} passed`;
 }
 
@@ -198,14 +202,14 @@ export async function notifyDevTaskOutcome(opts: {
   try {
     const db = getSupabaseServiceClient();
     const { data: row, error } = await db
-      .from('dev_tasks')
+      .from("dev_tasks")
       .select(DEV_TASK_COLUMNS)
-      .eq('id', opts.taskId)
+      .eq("id", opts.taskId)
       .maybeSingle();
     if (error || !row) {
-      logger.warn('dev-work: nothing to notify about', {
+      logger.warn("dev-work: nothing to notify about", {
         taskId: opts.taskId,
-        reason: error?.message ?? 'task not found',
+        reason: error?.message ?? "task not found",
       });
       return;
     }
@@ -216,26 +220,30 @@ export async function notifyDevTaskOutcome(opts: {
     let repository: string | null = null;
     if (task.repositoryId) {
       const { data: repo } = await db
-        .from('dev_repositories')
-        .select('name, full_name')
-        .eq('id', task.repositoryId)
+        .from("dev_repositories")
+        .select("name, full_name")
+        .eq("id", task.repositoryId)
         .maybeSingle();
       repository =
-        ((repo?.full_name as string | null) ?? (repo?.name as string | null) ?? null) || null;
+        ((repo?.full_name as string | null) ??
+          (repo?.name as string | null) ??
+          null) ||
+        null;
     }
 
-    const base = (process.env.APP_BASE_URL ?? process.env.BETTER_AUTH_URL ?? '').replace(
-      /\/+$/,
-      '',
-    );
-    const detailUrl = base ? `${base}/dev-work/${task.id}` : '';
+    const base = (
+      process.env.APP_BASE_URL ??
+      process.env.BETTER_AUTH_URL ??
+      ""
+    ).replace(/\/+$/, "");
+    const detailUrl = base ? `${base}/dev-work/${task.id}` : "";
     const durationText = formatDuration(taskElapsedMs(task));
     const costText = formatCost(task.costUsd);
     const checkSummary = summariseChecks(task);
 
     const recipients = await resolveRecipients(db, task);
     if (recipients.length === 0) {
-      logger.warn('dev-work: no one to notify', { taskId: task.id });
+      logger.warn("dev-work: no one to notify", { taskId: task.id });
       return;
     }
 
@@ -253,7 +261,7 @@ export async function notifyDevTaskOutcome(opts: {
         failureReason: task.failureReason,
         errorDetail: task.errorDetail,
         checks: task.checks.map((c) => ({ name: c.name, status: c.status })),
-        durationText: durationText === '—' ? null : durationText,
+        durationText: durationText === "—" ? null : durationText,
         costText,
         firstName: person.firstName,
       });
@@ -266,7 +274,7 @@ export async function notifyDevTaskOutcome(opts: {
           html: mail.html,
         });
         if (!sent.sent) {
-          logger.warn('dev-work: result email not sent', {
+          logger.warn("dev-work: result email not sent", {
             taskId: task.id,
             reason: sent.reason,
           });
@@ -283,14 +291,14 @@ export async function notifyDevTaskOutcome(opts: {
             notice: opts.notice,
             repository,
             detailUrl,
-            durationText: durationText === '—' ? null : durationText,
+            durationText: durationText === "—" ? null : durationText,
             costText,
             checkSummary,
           }),
           threadKey: threadKeyFor(task.id),
         });
-        if (!chat.sent && chat.reason !== 'not linked') {
-          logger.warn('dev-work: result Chat DM not sent', {
+        if (!chat.sent && chat.reason !== "not linked") {
+          logger.warn("dev-work: result Chat DM not sent", {
             taskId: task.id,
             reason: chat.reason,
           });
@@ -298,7 +306,7 @@ export async function notifyDevTaskOutcome(opts: {
       }
     }
   } catch (err) {
-    logger.error('dev-work: notification failed', {
+    logger.error("dev-work: notification failed", {
       taskId: opts.taskId,
       error: (err as Error).message,
     });

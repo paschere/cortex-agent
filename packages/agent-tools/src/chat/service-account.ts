@@ -202,8 +202,8 @@ export function capForChat(text: string, limit = CHAT_TEXT_LIMIT, moreUrl?: stri
   if (text.length <= limit) return text;
   const base = (moreUrl ?? process.env.APP_BASE_URL ?? '').replace(/\/+$/, '');
   const tail = base
-    ? `\n…\n<${base}|See the full report in Zipdev OS>`
-    : '\n…\n(See the full report in Zipdev OS.)';
+    ? `\n…\n<${base}|See the full report in Cortex>`
+    : '\n…\n(See the full report in Cortex.)';
   const room = Math.max(0, limit - tail.length);
   const cut = text.slice(0, room);
   const lastBreak = cut.lastIndexOf('\n');

@@ -1,7 +1,7 @@
 /**
  * "Run the repo's own checks" — discovered, not hardcoded.
  *
- * The executor must work against cortex-agent, zipdev-matcher and payroll,
+ * The executor must work against cortex-agent, Cortextcher service and payroll,
  * which do not share a script vocabulary. So instead of assuming
  * `pnpm typecheck`, we read the target repo's package.json and build a plan
  * from the scripts it actually declares, in the order a human would run them
@@ -11,7 +11,7 @@
  * is false — which the orchestrator treats as "cannot verify", never as "pass".
  */
 
-export type PackageManager = 'pnpm' | 'yarn' | 'npm';
+export type PackageManager = "pnpm" | "yarn" | "npm";
 
 export interface CheckStep {
   /** Stable id used in the transcript and the PR body. */
@@ -38,10 +38,14 @@ export interface CheckPlan {
 
 /** Script names we know how to interpret, most specific first. */
 const KNOWN_SCRIPTS: Array<{ id: string; label: string; names: string[] }> = [
-  { id: 'typecheck', label: 'typecheck', names: ['typecheck', 'type-check', 'tsc'] },
-  { id: 'lint', label: 'lint', names: ['lint', 'check'] },
-  { id: 'test', label: 'tests', names: ['test', 'test:unit'] },
-  { id: 'build', label: 'build', names: ['build'] },
+  {
+    id: "typecheck",
+    label: "typecheck",
+    names: ["typecheck", "type-check", "tsc"],
+  },
+  { id: "lint", label: "lint", names: ["lint", "check"] },
+  { id: "test", label: "tests", names: ["test", "test:unit"] },
+  { id: "build", label: "build", names: ["build"] },
 ];
 
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
@@ -51,23 +55,28 @@ export function detectPackageManager(files: {
   hasYarnLock: boolean;
   packageManagerField?: string | null;
 }): PackageManager {
-  const field = files.packageManagerField ?? '';
-  if (field.startsWith('pnpm')) return 'pnpm';
-  if (field.startsWith('yarn')) return 'yarn';
-  if (files.hasPnpmLock) return 'pnpm';
-  if (files.hasYarnLock) return 'yarn';
-  return 'npm';
+  const field = files.packageManagerField ?? "";
+  if (field.startsWith("pnpm")) return "pnpm";
+  if (field.startsWith("yarn")) return "yarn";
+  if (files.hasPnpmLock) return "pnpm";
+  if (files.hasYarnLock) return "yarn";
+  return "npm";
 }
 
-function runScript(pm: PackageManager, script: string): { cmd: string; args: string[] } {
-  if (pm === 'npm') return { cmd: 'npm', args: ['run', script] };
-  return { cmd: pm, args: ['run', script] };
+function runScript(
+  pm: PackageManager,
+  script: string,
+): { cmd: string; args: string[] } {
+  if (pm === "npm") return { cmd: "npm", args: ["run", script] };
+  return { cmd: pm, args: ["run", script] };
 }
 
 function installArgs(pm: PackageManager): { cmd: string; args: string[] } {
-  if (pm === 'pnpm') return { cmd: 'pnpm', args: ['install', '--frozen-lockfile'] };
-  if (pm === 'yarn') return { cmd: 'yarn', args: ['install', '--frozen-lockfile'] };
-  return { cmd: 'npm', args: ['ci'] };
+  if (pm === "pnpm")
+    return { cmd: "pnpm", args: ["install", "--frozen-lockfile"] };
+  if (pm === "yarn")
+    return { cmd: "yarn", args: ["install", "--frozen-lockfile"] };
+  return { cmd: "npm", args: ["ci"] };
 }
 
 /**
@@ -78,7 +87,10 @@ function installArgs(pm: PackageManager): { cmd: string; args: string[] } {
  * guess at some other toolchain.
  */
 export function buildCheckPlan(params: {
-  packageJson: { scripts?: Record<string, string>; packageManager?: string } | null;
+  packageJson: {
+    scripts?: Record<string, string>;
+    packageManager?: string;
+  } | null;
   hasPnpmLock: boolean;
   hasYarnLock: boolean;
 }): CheckPlan {
@@ -91,18 +103,26 @@ export function buildCheckPlan(params: {
 
   const steps: CheckStep[] = [];
   for (const known of KNOWN_SCRIPTS) {
-    const name = known.names.find((n) => typeof scripts[n] === 'string' && scripts[n] !== '');
+    const name = known.names.find(
+      (n) => typeof scripts[n] === "string" && scripts[n] !== "",
+    );
     if (!name) continue;
     const { cmd, args } = runScript(pm, name);
-    steps.push({ id: known.id, label: known.label, cmd, args, timeoutMs: FIFTEEN_MINUTES });
+    steps.push({
+      id: known.id,
+      label: known.label,
+      cmd,
+      args,
+      timeoutMs: FIFTEEN_MINUTES,
+    });
   }
 
   const install = installArgs(pm);
   return {
     packageManager: pm,
     install: {
-      id: 'install',
-      label: 'install dependencies',
+      id: "install",
+      label: "install dependencies",
       cmd: install.cmd,
       args: install.args,
       timeoutMs: FIFTEEN_MINUTES,
@@ -127,8 +147,10 @@ export function allChecksPassed(outcomes: CheckOutcome[]): boolean {
 
 /** One line per check, for the PR body's "what was verified" section. */
 export function formatCheckSummary(outcomes: CheckOutcome[]): string {
-  if (outcomes.length === 0) return '_No verification steps were run._';
+  if (outcomes.length === 0) return "_No verification steps were run._";
   return outcomes
-    .map((o) => `- ${o.passed ? '✅' : '❌'} \`${o.label}\` (exit ${o.exitCode})`)
-    .join('\n');
+    .map(
+      (o) => `- ${o.passed ? "✅" : "❌"} \`${o.label}\` (exit ${o.exitCode})`,
+    )
+    .join("\n");
 }

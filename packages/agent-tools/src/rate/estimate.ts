@@ -1,34 +1,37 @@
-import { z } from 'zod';
-import { registerTool } from '../index';
-import { callEstimator } from './client';
+import { z } from "zod";
+import { registerTool } from "../index";
+import { callEstimator } from "./client";
 
 const MonthlyRateRange = z.object({ min: z.number(), max: z.number() });
 
 export const rateEstimate = registerTool({
-  id: 'rate.estimate',
+  id: "rate.estimate",
   description:
-    'Estimate the monthly USD rate to quote for a LATAM staffing role that does not exist yet — pick the role, seniority, region and years, get a min/max range with notes. Uses the Zipdev 2026-Q1 pricing table. ' +
-    'Quotes at Zipdev standard 33% margin unless a different one is asked for — say which margin the number carries, and that it can be changed. ' +
-    'This is a PRICE GUIDE, not a record of anything: it does not know what Zipdev actually charges any client today. For the real bill rate on a person Zipdev already staffs, use bamboo.get_employee; for a whole client or division, bamboo.compensation_report. Never present an estimate from here as what a client is being charged.',
+    "Estimate the monthly USD rate to quote for a LATAM staffing role that does not exist yet — pick the role, seniority, region and years, get a min/max range with notes. Uses the Cortex 2026-Q1 pricing table. " +
+    "Quotes at Cortex standard 33% margin unless a different one is asked for — say which margin the number carries, and that it can be changed. " +
+    "This is a PRICE GUIDE, not a record of anything: it does not know what Cortex actually charges any client today. For the real bill rate on a person Cortex already staffs, use bamboo.get_employee; for a whole client or division, bamboo.compensation_report. Never present an estimate from here as what a client is being charged.",
   inputSchema: z.object({
     role: z.enum([
-      'frontend',
-      'backend',
-      'fullstack',
-      'data',
-      'devops',
-      'qa',
-      'pm',
-      'designer',
-      'mobile',
-      'ml_engineer',
-      'security',
-      'sre',
-      'other',
+      "frontend",
+      "backend",
+      "fullstack",
+      "data",
+      "devops",
+      "qa",
+      "pm",
+      "designer",
+      "mobile",
+      "ml_engineer",
+      "security",
+      "sre",
+      "other",
     ]),
-    openRole: z.string().optional().describe('Free-text role description; used when role is "other"'),
-    seniority: z.enum(['junior', 'mid', 'senior', 'lead']),
-    region: z.enum(['mx', 'latam', 'br', 'ar', 'co', 'cl', 'pe']),
+    openRole: z
+      .string()
+      .optional()
+      .describe('Free-text role description; used when role is "other"'),
+    seniority: z.enum(["junior", "mid", "senior", "lead"]),
+    region: z.enum(["mx", "latam", "br", "ar", "co", "cl", "pe"]),
     yearsExperience: z.number().int().min(0).max(40),
     margin: z
       .number()
@@ -36,7 +39,7 @@ export const rateEstimate = registerTool({
       .max(95)
       .optional()
       .describe(
-        'Margin to quote at, as a percentage. Leave it out to use Zipdev standard 33%.',
+        "Margin to quote at, as a percentage. Leave it out to use Cortex standard 33%.",
       ),
   }),
   outputSchema: z.object({

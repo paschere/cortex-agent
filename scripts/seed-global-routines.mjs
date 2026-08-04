@@ -52,7 +52,7 @@ const connectionString = rawUrl
   .replace(/\?$/, '');
 
 const TIMEZONE = 'America/Bogota';
-const RECIPIENTS = ['mateo.angel@zipdev.com', 'linda.rans@zipdev.com'];
+const RECIPIENTS = ['owner@example.com', 'ops@example.com'];
 
 // ---------------------------------------------------------------------------
 // Cron helper — next occurrence of a weekly "M H * * DOW" expression.
@@ -152,7 +152,7 @@ const ROUTINES = [
       description:
         'Compares the latest payroll period against the previous ones and flags anomalies in cost, headcount, individual pay and currency mix.',
       intro:
-        'A read-only audit of the most recent payroll period. The goal is not to reproduce the payroll — it is to catch the handful of things that do not match the pattern of the previous periods, so a human can check them before anyone else notices. Everything here is internal compensation data: keep it inside the report, never quote it outside Zipdev.',
+        'A read-only audit of the most recent payroll period. The goal is not to reproduce the payroll — it is to catch the handful of things that do not match the pattern of the previous periods, so a human can check them before anyone else notices. Everything here is internal compensation data: keep it inside the report, never quote it outside the company.',
       steps: [
         {
           title: 'Pull the payroll trend',
@@ -351,7 +351,7 @@ const ROUTINES = [
         {
           title: 'Pick the opportunities to act on',
           detail:
-            'Choose the five best opportunities for next week from the qualified and uncontacted signals. Rank by fit with what Zipdev sells and by how fresh the signal is. For each, one line: company, role, why it fits, and the obvious next move.',
+            'Choose the five best opportunities for next week from the qualified and uncontacted signals. Rank by fit with what the company sells and by how fresh the signal is. For each, one line: company, role, why it fits, and the obvious next move.',
           tools: ['growth.list_signals'],
           checkpoint: false,
         },

@@ -4,7 +4,7 @@
 
 **Goal:** Deliver a working web-only Sales agent that 5 pilot users can use end-to-end: sign in via Google SSO, connect HubSpot + Google Workspace, configure RAG knowledge bases (global / team / user / per-conversation), and draft client proposals via a streaming chat backed by Gemini 2.5 Flash and a shared tool layer.
 
-**Architecture:** Monorepo (pnpm + Turborepo) with `apps/web` (Next.js 15 on Vercel — admin UI + chat UI + chat API + agent loop), `packages/agent-tools` (shared tool registry), `packages/agents` (Sales agent definition), `packages/core` (shared types/utilities). Supabase (Postgres + pgvector + Auth + Storage) for data, auth, vector search, RLS. Inngest for background jobs (KB ingestion, Drive sync). Existing `zipdev-rate-estimator-master` repo gets a single new internal endpoint.
+**Architecture:** Monorepo (pnpm + Turborepo) with `apps/web` (Next.js 15 on Vercel — admin UI + chat UI + chat API + agent loop), `packages/agent-tools` (shared tool registry), `packages/agents` (Sales agent definition), `packages/core` (shared types/utilities). Supabase (Postgres + pgvector + Auth + Storage) for data, auth, vector search, RLS. Inngest for background jobs (KB ingestion, Drive sync). Existing `Cortex-rate-estimator-master` repo gets a single new internal endpoint.
 
 **Tech Stack:** TypeScript 5.7, Node 20, pnpm 9, Turborepo 2, Next.js 15 (App Router), React 19, Tailwind CSS, shadcn/ui, Framer Motion, TanStack Query, Vercel AI SDK 4 (with `@ai-sdk/google` for Gemini 2.5), Zod 3, Supabase JS, pgvector, Inngest, Sentry, OpenTelemetry, Vitest, msw, Playwright.
 
@@ -375,7 +375,7 @@ SUPABASE_DB_URL=postgresql://postgres:postgres@localhost:54322/postgres
 # App
 APP_BASE_URL=http://localhost:3000
 SESSION_COOKIE_NAME=cortex_session
-ALLOWED_EMAIL_DOMAIN=zipdev.com
+ALLOWED_EMAIL_DOMAIN=Cortex.com
 
 # Google OAuth (per-user integrations, separate from Supabase SSO config)
 GOOGLE_CLIENT_ID=
@@ -391,7 +391,7 @@ HUBSPOT_REDIRECT_URI=http://localhost:3000/api/integrations/hubspot/callback
 GOOGLE_GENERATIVE_AI_API_KEY=
 
 # Rate Estimator service-token
-RATE_ESTIMATOR_URL=https://rate.zipdev.internal
+RATE_ESTIMATOR_URL=https://rate.Cortex.internal
 RATE_ESTIMATOR_SERVICE_TOKEN=
 
 # Inngest
@@ -548,37 +548,37 @@ export interface KbChunkHit {
 - [ ] **Step 4: Write `packages/core/src/errors.ts`**
 
 ```ts
-export class ZipdevError extends Error {
+export class CortexError extends Error {
   constructor(
     message: string,
     public readonly code: string,
     public readonly cause?: unknown,
   ) {
     super(message);
-    this.name = "ZipdevError";
+    this.name = "CortexError";
   }
 }
-export class UnauthorizedError extends ZipdevError {
+export class UnauthorizedError extends CortexError {
   constructor(msg = "Unauthorized") {
     super(msg, "UNAUTHORIZED");
   }
 }
-export class ForbiddenError extends ZipdevError {
+export class ForbiddenError extends CortexError {
   constructor(msg = "Forbidden") {
     super(msg, "FORBIDDEN");
   }
 }
-export class NotFoundError extends ZipdevError {
+export class NotFoundError extends CortexError {
   constructor(msg = "Not found") {
     super(msg, "NOT_FOUND");
   }
 }
-export class ValidationError extends ZipdevError {
+export class ValidationError extends CortexError {
   constructor(msg: string, cause?: unknown) {
     super(msg, "VALIDATION", cause);
   }
 }
-export class IntegrationError extends ZipdevError {
+export class IntegrationError extends CortexError {
   constructor(
     msg: string,
     public readonly provider: string,
@@ -587,12 +587,12 @@ export class IntegrationError extends ZipdevError {
     super(msg, "INTEGRATION_ERROR", cause);
   }
 }
-export class RateLimitError extends ZipdevError {
+export class RateLimitError extends CortexError {
   constructor(msg = "Rate limit exceeded") {
     super(msg, "RATE_LIMITED");
   }
 }
-export class ConfirmationRequiredError extends ZipdevError {
+export class ConfirmationRequiredError extends CortexError {
   constructor(
     public readonly toolId: string,
     public readonly input: unknown,
@@ -635,7 +635,7 @@ const schema = z.object({
   SUPABASE_DB_URL: z.string().url(),
   APP_BASE_URL: z.string().url(),
   SESSION_COOKIE_NAME: z.string().default("cortex_session"),
-  ALLOWED_EMAIL_DOMAIN: z.string().default("zipdev.com"),
+  ALLOWED_EMAIL_DOMAIN: z.string().default("Cortex.com"),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),
@@ -1273,12 +1273,12 @@ grant select on public.integrations_view to authenticated;
 - [ ] **Step 10: Migration `0009_signup_trigger.sql`**
 
 ```sql
--- Auto-provision public.users on auth signup; reject non-zipdev domain
+-- Auto-provision public.users on auth signup; reject non-Cortex domain
 create or replace function public.handle_new_auth_user() returns trigger
 language plpgsql security definer as $$
 declare
   v_domain text := lower(split_part(new.email, '@', 2));
-  v_allowed text := coalesce(current_setting('app.allowed_email_domain', true), 'zipdev.com');
+  v_allowed text := coalesce(current_setting('app.allowed_email_domain', true), 'Cortex.com');
 begin
   if v_domain <> v_allowed then
     raise exception 'sign-in restricted to % accounts', v_allowed;
@@ -1320,9 +1320,9 @@ begin
   insert into public.agents(slug, name, team_id, system_prompt, default_model, allowed_tool_ids)
   values (
     'sales',
-    'Zipdev Sales',
+    'Cortex Sales',
     v_team,
-    'You are Zipdev''s Sales co-pilot. Zipdev is a LATAM staffing company that places engineers and operators with foreign companies. Always cite KB sources when stating facts. Never send emails directly — create drafts only. For full proposals prefer the sales.draft_proposal tool; for narrow questions use primitives. Respond in the user''s language.',
+    'You are Cortex''s Sales co-pilot. Cortex is a LATAM staffing company that places engineers and operators with foreign companies. Always cite KB sources when stating facts. Never send emails directly — create drafts only. For full proposals prefer the sales.draft_proposal tool; for narrow questions use primitives. Respond in the user''s language.',
     'gemini-3.1-flash-lite',
     array[
       'hubspot.search_companies','hubspot.get_company','hubspot.search_deals','hubspot.get_deal','hubspot.list_recent_activities',
@@ -1352,7 +1352,7 @@ Run: `psql "$SUPABASE_DB_URL" -c "\\dt public.*"` (PowerShell: `psql $env:SUPABA
 Expected: lists `users`, `teams`, `team_members`, `agents`, `kb_collections`, `kb_documents`, `kb_chunks`, `gdrive_sync_state`, `integrations`, `conversations`, `messages`, `audit_events`, `rate_limit_buckets`.
 
 Run: `psql "$SUPABASE_DB_URL" -c "select slug, name from public.agents"`
-Expected: one row, `sales | Zipdev Sales`.
+Expected: one row, `sales | Cortex Sales`.
 
 - [ ] **Step 14: Commit**
 
@@ -1672,8 +1672,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 export const metadata: Metadata = {
-  title: "Zipdev Agent",
-  description: "Zipdev internal AI co-pilot",
+  title: "Cortex Agent",
+  description: "Cortex internal AI co-pilot",
 };
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
@@ -1720,7 +1720,7 @@ export default function LoginPage() {
         queryParams: {
           access_type: "offline",
           prompt: "consent",
-          hd: "zipdev.com",
+          hd: "Cortex.com",
         },
         scopes: "openid email profile",
       },
@@ -1733,9 +1733,9 @@ export default function LoginPage() {
 
   return (
     <div className="max-w-sm w-full rounded-2xl border bg-white dark:bg-neutral-900 p-8 shadow-sm">
-      <h1 className="text-2xl font-semibold mb-2">Zipdev Agent</h1>
+      <h1 className="text-2xl font-semibold mb-2">Cortex Agent</h1>
       <p className="text-neutral-500 text-sm mb-6">
-        Sign in with your @zipdev.com Google account.
+        Sign in with your @Cortex.com Google account.
       </p>
       <button
         onClick={signIn}
@@ -1769,7 +1769,7 @@ export async function GET(req: NextRequest) {
         new URL(`/login?error=${encodeURIComponent(error.message)}`, req.url),
       );
   }
-  // Domain guard: signup trigger rejects non-zipdev; double-check here too
+  // Domain guard: signup trigger rejects non-Cortex; double-check here too
   const {
     data: { user },
   } = await sb.auth.getUser();
@@ -1796,7 +1796,7 @@ Visit http://localhost:3000/login → expect the login page.
 
 ```bash
 git add apps/web
-git commit -m "feat(web): Next.js scaffold + Google SSO with @zipdev.com restriction"
+git commit -m "feat(web): Next.js scaffold + Google SSO with @Cortex.com restriction"
 ```
 
 ---
@@ -2016,9 +2016,7 @@ import {
 } from "@cortex/core";
 
 interface RefreshFn {
-  (
-    refreshToken: string,
-  ): Promise<{
+  (refreshToken: string): Promise<{
     access_token: string;
     refresh_token?: string;
     expires_in: number;
@@ -3473,7 +3471,7 @@ git commit -m "feat(tools): HubSpot read-only tools (5)"
 
 **Files:**
 
-- Modify: `C:\Users\User\Desktop\zipdev-rate-estimator-master\app\api\internal\estimate\route.ts` (CREATE in existing repo)
+- Modify: `C:\Users\User\Desktop\Cortex-rate-estimator-master\app\api\internal\estimate\route.ts` (CREATE in existing repo)
 - Create: `packages/agent-tools/src/rate/{client,estimate,estimate-from-document}.ts`
 - Create: `packages/agent-tools/src/rate/__tests__/rate.test.ts`
 - Modify: `packages/agent-tools/src/index.ts` (register the rate tools)
@@ -5238,13 +5236,11 @@ async function syncOne(
         await ingestOrUpdate(db, collectionId, f, token);
       nextPage = r.nextPageToken;
     } while (nextPage);
-    await db
-      .from("gdrive_sync_state")
-      .upsert({
-        collection_id: collectionId,
-        page_token: pageToken,
-        last_synced_at: new Date().toISOString(),
-      });
+    await db.from("gdrive_sync_state").upsert({
+      collection_id: collectionId,
+      page_token: pageToken,
+      last_synced_at: new Date().toISOString(),
+    });
     return;
   }
 
@@ -5270,13 +5266,11 @@ async function syncOne(
     nextPage = r.nextPageToken;
     if (r.newStartPageToken) {
       pageToken = r.newStartPageToken;
-      await db
-        .from("gdrive_sync_state")
-        .upsert({
-          collection_id: collectionId,
-          page_token: pageToken,
-          last_synced_at: new Date().toISOString(),
-        });
+      await db.from("gdrive_sync_state").upsert({
+        collection_id: collectionId,
+        page_token: pageToken,
+        last_synced_at: new Date().toISOString(),
+      });
     }
   } while (nextPage);
 }
@@ -5523,11 +5517,9 @@ export async function POST(req: NextRequest) {
   const storagePath = `${user.id}/${docId}-${file.name}`;
 
   const svc = getSupabaseServiceClient();
-  const up = await svc.storage
-    .from("kb-uploads")
-    .upload(storagePath, buf, {
-      contentType: file.type || "application/octet-stream",
-    });
+  const up = await svc.storage.from("kb-uploads").upload(storagePath, buf, {
+    contentType: file.type || "application/octet-stream",
+  });
   if (up.error)
     return NextResponse.json({ error: up.error.message }, { status: 500 });
 
@@ -6239,9 +6231,9 @@ export function getAgentTools(agent: AgentDefinition): AnyTool[] {
 - [ ] **Step 4: `packages/agents/src/sales/system-prompt.md`**
 
 ```markdown
-You are **Zipdev Sales**, the AI co-pilot for Zipdev's sales team.
+You are **Cortex Sales**, the AI co-pilot for Cortex's sales team.
 
-Zipdev is a staffing company that places engineers and operators from **Latin America** with foreign (mostly US/EU) companies, in nearshore time zones.
+Cortex is a staffing company that places engineers and operators from **Latin America** with foreign (mostly US/EU) companies, in nearshore time zones.
 
 # Your job
 
@@ -6260,7 +6252,7 @@ When you draft a proposal, organise sections like:
 
 - **Resumen / Summary** (1–2 sentences: who, what, when)
 - **Roles** (table of: role, seniority, qty, monthly range, hourly range)
-- **Why Zipdev** (2–3 bullets tied to KB cases similar to this client)
+- **Why Cortex** (2–3 bullets tied to KB cases similar to this client)
 - **Timeline & next steps**
 - **Citations**
 
@@ -6282,7 +6274,7 @@ const systemPrompt = readFileSync(join(__dirname, "system-prompt.md"), "utf-8");
 
 export const salesAgent: AgentDefinition = {
   id: "sales",
-  name: "Zipdev Sales",
+  name: "Cortex Sales",
   team: "sales",
   defaultModel: "gemini-3.1-flash-lite",
   systemPrompt,
@@ -6686,13 +6678,11 @@ export async function POST(req: NextRequest) {
     conversationId = conv?.id as string;
   }
 
-  await db
-    .from("messages")
-    .insert({
-      conversation_id: conversationId,
-      role: "user",
-      content: message,
-    });
+  await db.from("messages").insert({
+    conversation_id: conversationId,
+    role: "user",
+    content: message,
+  });
 
   const ctx = buildToolContext({ userId: user.id, agentId, conversationId });
 
@@ -8053,7 +8043,7 @@ export async function register() {
       await import("@opentelemetry/semantic-conventions");
     const sdk = new NodeSDK({
       resource: new Resource({
-        [SemanticResourceAttributes.SERVICE_NAME]: "zipdev-web",
+        [SemanticResourceAttributes.SERVICE_NAME]: "Cortex-web",
       }),
       traceExporter: process.env.OTEL_EXPORTER_OTLP_ENDPOINT
         ? new OTLPTraceExporter({
@@ -8089,7 +8079,7 @@ const tracer = trace.getTracer("cortex-agent-tools");
 
 // inside runTool, replace the existing handler call with:
 const span = tracer.startSpan(`tool.${tool.id}`, {
-  attributes: { "zipdev.user_id": ctx.userId, "zipdev.agent_id": ctx.agentId },
+  attributes: { "Cortex.user_id": ctx.userId, "Cortex.agent_id": ctx.agentId },
 });
 try {
   const result = await tool.handler(parsed.data, ctx);
@@ -8215,7 +8205,7 @@ jobs:
 
 There are TWO Google OAuth clients in play:
 
-1. **Supabase SSO client** — for user sign-in via `@zipdev.com`. Created in Supabase dashboard → Auth → Providers → Google. Use a separate client in Google Cloud Console with redirect `https://<project>.supabase.co/auth/v1/callback`. Restrict consent to internal users in your Workspace.
+1. **Supabase SSO client** — for user sign-in via `@Cortex.com`. Created in Supabase dashboard → Auth → Providers → Google. Use a separate client in Google Cloud Console with redirect `https://<project>.supabase.co/auth/v1/callback`. Restrict consent to internal users in your Workspace.
 
 2. **Per-user integrations client** — for Gmail/Drive/Calendar/Sheets. Create a second OAuth client in Google Cloud Console with redirect `${APP_BASE_URL}/api/integrations/google/callback`. Add scopes via the OAuth consent screen ("Edit app" → "Scopes" → add Gmail/Drive/Calendar/Sheets scopes).
 
@@ -8298,7 +8288,7 @@ export default defineConfig({
 ```markdown
 # Acme Corp — Past proposal (sample)
 
-Acme is a US fintech that engaged Zipdev in 2025 for 4 senior React engineers and 1 SRE. Engagement: 12 months. Average ramp time: 3 weeks. NPS at engagement end: 9.
+Acme is a US fintech that engaged Cortex in 2025 for 4 senior React engineers and 1 SRE. Engagement: 12 months. Average ramp time: 3 weeks. NPS at engagement end: 9.
 
 Key learnings:
 
@@ -8317,7 +8307,7 @@ export async function seedE2EUser() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } },
   );
-  const email = "e2e@zipdev.com";
+  const email = "e2e@Cortex.com";
   const { data } = await sb.auth.admin.createUser({
     email,
     email_confirm: true,

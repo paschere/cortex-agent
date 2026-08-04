@@ -162,10 +162,10 @@ function escapeLike(value: string): string {
 }
 
 /**
- * Chat user → Zipdev user, by email.
+ * Chat user → Cortex user, by email.
  *
  * `email` is present for people inside the Workspace domain, which is exactly
- * who this app is published to. No email (or no matching Zipdev account) means
+ * who this app is published to. No email (or no matching Cortex account) means
  * we refuse to act: running tools for an unidentified sender would attribute
  * someone else's data access to whoever we guessed.
  */
@@ -243,19 +243,19 @@ async function clearDmSpace(chatUserName: string | undefined, space: string | un
 // ---------------------------------------------------------------------------
 
 const DM_GREETING = toChatText(
-  "Hi — I'm Cortex ⚡, Zipdev's agent. Ask me anything here and I'll work it the same way I do inside Zipdev OS: the Knowledge Base, HubSpot, the ATS and talent pool, rates, GitHub and Linear, your Google Workspace. Everything I do runs with **your own** permissions and integrations, and it all shows up in your conversation history and the audit log. Anything that writes to a real system waits for your explicit approval first.",
+  "Hi — I'm Cortex ⚡, your team's agent. Ask me anything here and I'll work it the same way I do inside Cortex: the Knowledge Base, HubSpot, the ATS and talent pool, rates, GitHub and Linear, your Google Workspace. Everything I do runs with **your own** permissions and integrations, and it all shows up in your conversation history and the audit log. Anything that writes to a real system waits for your explicit approval first.",
 );
 
 const SPACE_GREETING = toChatText(
-  "Hi everyone — I'm Cortex ⚡, Zipdev's agent. **@mention me** in a thread and I'll answer there: pipeline and deal questions, candidates and requisitions, rates, tickets, whatever the Knowledge Base knows. I answer with the permissions of **whoever asks**, not the room's — so two people can get different answers, and that's on purpose. Anything involving compensation or personal data I send to you privately instead of posting here.",
+  "Hi everyone — I'm Cortex ⚡, your team's agent. **@mention me** in a thread and I'll answer there: pipeline and deal questions, candidates and requisitions, rates, tickets, whatever the Knowledge Base knows. I answer with the permissions of **whoever asks**, not the room's — so two people can get different answers, and that's on purpose. Anything involving compensation or personal data I send to you privately instead of posting here.",
 );
 
 const UNLINKED_REPLY = toChatText(
-  "I can't help yet — I don't see a Zipdev OS account for your address, and I only ever act with a real person's own permissions. Ask an admin to set you up in Zipdev OS and then message me again.",
+  "I can't help yet — I don't see a Cortex account for your address, and I only ever act with a real person's own permissions. Ask an admin to set you up in Cortex and then message me again.",
 );
 
 const NO_EMAIL_REPLY = toChatText(
-  "I can't tell who you are from here — Google Chat isn't sharing your work address with me, so I have no way to run anything as you. This app is meant for Zipdev accounts inside the company.",
+  "I can't tell who you are from here — Google Chat isn't sharing your work address with me, so I have no way to run anything as you. This app is meant for work accounts inside your organization.",
 );
 
 const EMPTY_MESSAGE_REPLY = toChatText("I'm here — what do you need? ⚡");
@@ -520,7 +520,7 @@ async function handleCardClicked(event: ChatEvent, asAddOn: boolean): Promise<Ne
   if (outcome.status === 'already_decided') {
     const where =
       outcome.decidedVia === 'web'
-        ? ' in Zipdev OS'
+        ? ' in Cortex'
         : outcome.decidedVia === 'mcp'
           ? ' from your Claude conversation'
           : '';

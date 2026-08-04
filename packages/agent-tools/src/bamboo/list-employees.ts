@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { registerTool } from '../index';
-import { fetchReport } from './roster';
+import { z } from "zod";
+import { registerTool } from "../index";
+import { fetchReport } from "./roster";
 import {
   DATASET,
   OK_STATUS,
@@ -14,7 +14,7 @@ import {
   sourceSchema,
   statusShape,
   str,
-} from './shape';
+} from "./shape";
 
 /**
  * The roster, without a single figure of compensation on it.
@@ -35,36 +35,56 @@ function matches(value: string | null, wanted: string | undefined): boolean {
 }
 
 export const bambooListEmployees = registerTool({
-  id: 'bamboo.list_employees',
+  id: "bamboo.list_employees",
   description: [
-    "List the people in BambooHR — Zipdev's HR system of record — with their job title, client, division, location, employment type, hire date and who they report to. Filterable by any of those, and by name. This is the everyday \"who works here\" answer and the default for \"who is on <client>\". Carries NO pay or bill rates; ask for compensation separately if that is what you need. Note the BambooHR convention at Zipdev: 'department' holds the CLIENT or project someone is placed with, and 'division' is the internal grouping (Tech, Non-tech, Internal, LatAm Staff).",
+    "List the people in BambooHR — Cortex's HR system of record — with their job title, client, division, location, employment type, hire date and who they report to. Filterable by any of those, and by name. This is the everyday \"who works here\" answer and the default for \"who is on <client>\". Carries NO pay or bill rates; ask for compensation separately if that is what you need. Note the BambooHR convention at Cortex: 'department' holds the CLIENT or project someone is placed with, and 'division' is the internal grouping (Tech, Non-tech, Internal, LatAm Staff).",
     "Related but different: payroll.team_assignments lists the same kind of people from the payroll service and adds what each costs per month; people.search finds a colleague's email in the Google directory and knows nothing about placements.",
     PAYROLL_BOUNDARY_NOTE,
-  ].join(' '),
+  ].join(" "),
   inputSchema: z.object({
     status: z
-      .enum(['active', 'inactive', 'any'])
-      .default('active')
-      .describe('Whether to include people who have left. Defaults to current employees only.'),
-    search: z.string().max(120).optional().describe('Match part of a name or work email'),
+      .enum(["active", "inactive", "any"])
+      .default("active")
+      .describe(
+        "Whether to include people who have left. Defaults to current employees only.",
+      ),
+    search: z
+      .string()
+      .max(120)
+      .optional()
+      .describe("Match part of a name or work email"),
     department: z
       .string()
       .max(120)
       .optional()
-      .describe('The client or project someone is placed with, e.g. "Momentive Software"'),
+      .describe(
+        'The client or project someone is placed with, e.g. "Momentive Software"',
+      ),
     division: z
       .string()
       .max(120)
       .optional()
-      .describe('Internal grouping, e.g. "Tech", "Non-tech", "Internal", "LatAm Staff"'),
+      .describe(
+        'Internal grouping, e.g. "Tech", "Non-tech", "Internal", "LatAm Staff"',
+      ),
     jobTitle: z.string().max(120).optional(),
-    location: z.string().max(120).optional().describe('Country or office, e.g. "Mexico"'),
+    location: z
+      .string()
+      .max(120)
+      .optional()
+      .describe('Country or office, e.g. "Mexico"'),
     employmentType: z
       .string()
       .max(60)
       .optional()
-      .describe('Full-Time, Part-Time, Contractor, Bench, Payroll Only, Terminated'),
-    reportsTo: z.string().max(120).optional().describe("Match part of the manager's name"),
+      .describe(
+        "Full-Time, Part-Time, Contractor, Bench, Payroll Only, Terminated",
+      ),
+    reportsTo: z
+      .string()
+      .max(120)
+      .optional()
+      .describe("Match part of the manager's name"),
     limit: z.number().int().min(1).max(MAX_RESULTS).default(50),
   }),
   outputSchema: z.object({
@@ -80,19 +100,19 @@ export const bambooListEmployees = registerTool({
       source: sourceOf(DATASET.roster),
       employees: [],
       totalMatched: 0,
-      guidance: '',
+      guidance: "",
     };
 
     const res = await fetchReport(ctx, ROSTER_FIELDS);
     if (!res.ok) return { ...empty, ...failureStatus(res) };
 
-    const wantStatus = input.status ?? 'active';
+    const wantStatus = input.status ?? "active";
     const filtered = res.data.filter((row: ReportRow) => {
       const status = str(row.status);
-      if (wantStatus === 'active' && status !== 'Active') return false;
-      if (wantStatus === 'inactive' && status === 'Active') return false;
+      if (wantStatus === "active" && status !== "Active") return false;
+      if (wantStatus === "inactive" && status === "Active") return false;
       if (input.search) {
-        const hay = `${str(row.displayName) ?? ''} ${str(row.workEmail) ?? ''}`;
+        const hay = `${str(row.displayName) ?? ""} ${str(row.workEmail) ?? ""}`;
         if (!matches(hay, input.search)) return false;
       }
       return (
@@ -117,7 +137,7 @@ export const bambooListEmployees = registerTool({
         ? 'Nobody matched. The filters are matched loosely, so a shorter search term usually helps — and remember "department" here means the client someone is placed with.'
         : filtered.length > employees.length
           ? `Showing ${employees.length} of ${filtered.length} matches. Narrow the filters, or raise the limit, to see the rest.`
-          : `${filtered.length} ${filtered.length === 1 ? 'person' : 'people'} matched. No pay or bill rates are included here.`,
+          : `${filtered.length} ${filtered.length === 1 ? "person" : "people"} matched. No pay or bill rates are included here.`,
     };
   },
 });

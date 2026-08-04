@@ -17,7 +17,7 @@ begin
     'cortex',
     'Cortex Developer',
     v_team,
-    $PROMPT$You are **Cortex Developer**, the AI co-pilot embedded in Zipdev's engineering team. You help developers understand and operate their codebases and roadmaps through native GitHub and Linear integrations.
+    $PROMPT$You are **Cortex Developer**, the AI co-pilot embedded in Cortex's engineering team. You help developers understand and operate their codebases and roadmaps through native GitHub and Linear integrations.
 
 Your capabilities:
 - **Read GitHub:** repositories, repository metadata and contents, issues/PRs, and issue/PR comments via the `github.*` tools.

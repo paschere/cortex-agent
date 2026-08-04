@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { registerTool } from '../index';
-import { fetchReport } from './roster';
+import { z } from "zod";
+import { registerTool } from "../index";
+import { fetchReport } from "./roster";
 import {
   DATASET,
   OK_STATUS,
@@ -12,7 +12,7 @@ import {
   sourceSchema,
   statusShape,
   str,
-} from './shape';
+} from "./shape";
 
 /**
  * Headcount rollups — the SAFE way to look at the whole company.
@@ -27,31 +27,47 @@ import {
 
 const bucketSchema = z.object({ label: z.string(), count: z.number() });
 
-const GROUPINGS = ['client', 'division', 'location', 'employmentType', 'jobTitle'] as const;
+const GROUPINGS = [
+  "client",
+  "division",
+  "location",
+  "employmentType",
+  "jobTitle",
+] as const;
 
 const TENURE_BANDS: Array<[string, (m: number) => boolean]> = [
-  ['Under 6 months', (m) => m < 6],
-  ['6–12 months', (m) => m >= 6 && m < 12],
-  ['1–2 years', (m) => m >= 12 && m < 24],
-  ['2–5 years', (m) => m >= 24 && m < 60],
-  ['5+ years', (m) => m >= 60],
+  ["Under 6 months", (m) => m < 6],
+  ["6–12 months", (m) => m >= 6 && m < 12],
+  ["1–2 years", (m) => m >= 12 && m < 24],
+  ["2–5 years", (m) => m >= 24 && m < 60],
+  ["5+ years", (m) => m >= 60],
 ];
 
 export const bambooHeadcount = registerTool({
-  id: 'bamboo.headcount',
+  id: "bamboo.headcount",
   description: [
-    'Count people in BambooHR, grouped however you need: by client or project, by division, by location, by employment type (full-time, contractor, bench) or by job title, plus a breakdown of how long people have been with Zipdev. Returns counts only — no names, no pay, no bill rates — so it is the right tool for "how big is the team on X?", "how many people are on the bench?" or "how many are in Mexico?".',
-    'payroll.team_overview answers the same shape of question from the payroll service, but only company-wide and without filters; this one is the one that can be narrowed.',
+    'Count people in BambooHR, grouped however you need: by client or project, by division, by location, by employment type (full-time, contractor, bench) or by job title, plus a breakdown of how long people have been with Cortex. Returns counts only — no names, no pay, no bill rates — so it is the right tool for "how big is the team on X?", "how many people are on the bench?" or "how many are in Mexico?".',
+    "payroll.team_overview answers the same shape of question from the payroll service, but only company-wide and without filters; this one is the one that can be narrowed.",
     PAYROLL_BOUNDARY_NOTE,
-  ].join(' '),
+  ].join(" "),
   inputSchema: z.object({
     groupBy: z
       .enum(GROUPINGS)
-      .default('division')
-      .describe('"client" is the BambooHR department field — the account someone is placed with'),
-    status: z.enum(['active', 'inactive', 'any']).default('active'),
-    client: z.string().max(120).optional().describe('Narrow to one client before grouping'),
-    division: z.string().max(120).optional().describe('Narrow to one division before grouping'),
+      .default("division")
+      .describe(
+        '"client" is the BambooHR department field — the account someone is placed with',
+      ),
+    status: z.enum(["active", "inactive", "any"]).default("active"),
+    client: z
+      .string()
+      .max(120)
+      .optional()
+      .describe("Narrow to one client before grouping"),
+    division: z
+      .string()
+      .max(120)
+      .optional()
+      .describe("Narrow to one division before grouping"),
     limit: z.number().int().min(1).max(100).default(30),
   }),
   outputSchema: z.object({
@@ -69,30 +85,30 @@ export const bambooHeadcount = registerTool({
     const empty = {
       source: sourceOf(DATASET.headcount),
       total: 0,
-      groupedBy: input.groupBy ?? 'division',
+      groupedBy: input.groupBy ?? "division",
       groups: [] as Array<{ label: string; count: number }>,
       byEmploymentType: [] as Array<{ label: string; count: number }>,
       byTenure: [] as Array<{ label: string; count: number }>,
-      guidance: '',
+      guidance: "",
     };
 
     const res = await fetchReport(ctx, [
-      'id',
-      'status',
-      'department',
-      'division',
-      'location',
-      'jobTitle',
-      'employmentHistoryStatus',
-      'hireDate',
+      "id",
+      "status",
+      "department",
+      "division",
+      "location",
+      "jobTitle",
+      "employmentHistoryStatus",
+      "hireDate",
     ]);
     if (!res.ok) return { ...empty, ...failureStatus(res) };
 
-    const wantStatus = input.status ?? 'active';
+    const wantStatus = input.status ?? "active";
     const rows = res.data.filter((row: ReportRow) => {
       const status = str(row.status);
-      if (wantStatus === 'active' && status !== 'Active') return false;
-      if (wantStatus === 'inactive' && status === 'Active') return false;
+      if (wantStatus === "active" && status !== "Active") return false;
+      if (wantStatus === "inactive" && status === "Active") return false;
       if (
         input.client &&
         !str(row.department)?.toLowerCase().includes(input.client.toLowerCase())
@@ -109,17 +125,17 @@ export const bambooHeadcount = registerTool({
     });
 
     const keyOf = (row: ReportRow): string => {
-      switch (input.groupBy ?? 'division') {
-        case 'client':
-          return str(row.department) ?? 'Not recorded';
-        case 'location':
-          return str(row.location) ?? 'Not recorded';
-        case 'employmentType':
-          return str(row.employmentHistoryStatus) ?? 'Not recorded';
-        case 'jobTitle':
-          return str(row.jobTitle) ?? 'Not recorded';
+      switch (input.groupBy ?? "division") {
+        case "client":
+          return str(row.department) ?? "Not recorded";
+        case "location":
+          return str(row.location) ?? "Not recorded";
+        case "employmentType":
+          return str(row.employmentHistoryStatus) ?? "Not recorded";
+        case "jobTitle":
+          return str(row.jobTitle) ?? "Not recorded";
         default:
-          return str(row.division) ?? 'Not recorded';
+          return str(row.division) ?? "Not recorded";
       }
     };
 
@@ -141,11 +157,11 @@ export const bambooHeadcount = registerTool({
       const months = monthsBetween(str(row.hireDate));
       const band =
         months === null
-          ? 'Not recorded'
-          : (TENURE_BANDS.find(([, f]) => f(months))?.[0] ?? 'Not recorded');
+          ? "Not recorded"
+          : (TENURE_BANDS.find(([, f]) => f(months))?.[0] ?? "Not recorded");
       tenureCounts.set(band, (tenureCounts.get(band) ?? 0) + 1);
     }
-    const order = [...TENURE_BANDS.map(([l]) => l), 'Not recorded'];
+    const order = [...TENURE_BANDS.map(([l]) => l), "Not recorded"];
     const byTenure = order
       .filter((l) => tenureCounts.has(l))
       .map((label) => ({ label, count: tenureCounts.get(label) as number }));
@@ -155,11 +171,13 @@ export const bambooHeadcount = registerTool({
       ...empty,
       total: rows.length,
       groups,
-      byEmploymentType: tally((row) => str(row.employmentHistoryStatus) ?? 'Not recorded'),
+      byEmploymentType: tally(
+        (row) => str(row.employmentHistoryStatus) ?? "Not recorded",
+      ),
       byTenure,
       guidance: rows.length
-        ? `${rows.length} ${rows.length === 1 ? 'person' : 'people'} counted. These are counts only — no names or rates are included.`
-        : 'Nobody matched those filters.',
+        ? `${rows.length} ${rows.length === 1 ? "person" : "people"} counted. These are counts only — no names or rates are included.`
+        : "Nobody matched those filters.",
     };
   },
 });

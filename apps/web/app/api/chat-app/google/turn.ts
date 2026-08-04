@@ -266,7 +266,7 @@ function buildConfirmationBlock(confirmations: StagedConfirmation[]): string {
     lines.push('');
     lines.push(
       base
-        ? `Approve or Decline right on the card I sent you — or from [Zipdev OS](${base}/approvals). It expires in 15 minutes.`
+        ? `Approve or Decline right on the card I sent you — or from [Cortex](${base}/approvals). It expires in 15 minutes.`
         : 'Approve or Decline right on the card I sent you. It expires in 15 minutes.',
     );
   }

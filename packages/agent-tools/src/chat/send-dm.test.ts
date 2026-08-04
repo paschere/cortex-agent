@@ -118,9 +118,9 @@ describe('capForChat', () => {
 
   it('trims on a line boundary and points at the full report', () => {
     const text = `${'line of digest text\n'.repeat(60)}`;
-    const capped = capForChat(text, 200, 'https://os.zipdev.com');
+    const capped = capForChat(text, 200, 'https://os.example.com');
     expect(capped.length).toBeLessThanOrEqual(200);
-    expect(capped).toContain('See the full report in Zipdev OS');
+    expect(capped).toContain('See the full report in Cortex');
     // The cut lands on a line boundary, not mid-word.
     expect(capped.split('\n…')[0]?.endsWith('line of digest text')).toBe(true);
   });
@@ -128,7 +128,7 @@ describe('capForChat', () => {
   it('falls back to plain wording when no base URL is available', () => {
     const previous = process.env.APP_BASE_URL;
     process.env.APP_BASE_URL = '';
-    expect(capForChat('x'.repeat(500), 100)).toContain('(See the full report in Zipdev OS.)');
+    expect(capForChat('x'.repeat(500), 100)).toContain('(See the full report in Cortex.)');
     if (previous === undefined) {
       // biome-ignore lint/performance/noDelete: restore the original absence
       delete process.env.APP_BASE_URL;

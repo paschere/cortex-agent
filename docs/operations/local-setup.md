@@ -114,7 +114,7 @@ better-auth handles Google SSO. You need a Google OAuth 2.0 client for user sign
 
 > **Note:** This is the integrations OAuth client (used for Gmail/Calendar/Sheets/Drive per-user connections). For production SSO configuration, see [`google-oauth-setup.md`](./google-oauth-setup.md).
 
-Sign-in is restricted to `@zipdev.com` accounts. The domain is enforced by `ALLOWED_EMAIL_DOMAIN=zipdev.com` in `.env.local`.
+Sign-up is open by default. To restrict a private deployment to a single email domain, set `ALLOWED_EMAIL_DOMAIN=example.com` in `.env.local`; leaving it empty lets anyone sign up.
 
 ---
 
@@ -124,7 +124,7 @@ Sign-in is restricted to `@zipdev.com` accounts. The domain is enforced by `ALLO
 pnpm --filter @cortex/web dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000). You should be redirected to `/login`. Sign in with a `@zipdev.com` Google account. On success you will land at `/chat`.
+Visit [http://localhost:3000](http://localhost:3000). You should be redirected to `/login`. Sign in with a Google account. On success you will land at `/chat`.
 
 Alternatively, `pnpm dev` runs the full Turborepo dev pipeline (all apps in parallel), which also starts `apps/mcp` (Cloudflare Worker via wrangler) and `apps/desktop` (Tauri, requires Rust toolchain). Use the filtered form above to start only the web app.
 
@@ -172,7 +172,7 @@ Builds all packages and apps in dependency order via Turborepo. Output goes to `
 | Symptom | Cause | Fix |
 |---|---|---|
 | `pnpm db:start` fails or hangs | Docker Desktop is not running | Start Docker Desktop, then retry |
-| Sign-in redirects back to `/login` with an error | Email domain is not `@zipdev.com` | Use a `@zipdev.com` Google account |
+| Sign-in redirects back to `/login` with an error | `ALLOWED_EMAIL_DOMAIN` is set and the account is on another domain | Use an account on the configured domain, or clear the variable |
 | `pnpm db:reset` fails | Missing Docker or corrupted local DB | Run `pnpm db:stop`, `pnpm db:start`, then retry `pnpm db:reset` |
 | `0011_better_auth` migration error | Migration already partially applied | Run `pnpm exec supabase --workdir infra db reset` to wipe and reapply all |
 | Build fails on `apps/web` with missing modules | Installed deps in wrong workspace | Run `pnpm install` from the **repo root**, not from inside `apps/web` |

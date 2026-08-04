@@ -1,5 +1,5 @@
-import { internalFetch } from '../recruit/client';
-import { workableFetch } from './client';
+import { internalFetch } from "../recruit/client";
+import { workableFetch } from "./client";
 
 /**
  * Shared evaluation plumbing for the Workable-direct ranking tools
@@ -22,31 +22,32 @@ import { workableFetch } from './client';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Raw = any;
 
-import { CHAT_MODEL } from '../model';
+import { CHAT_MODEL } from "../model";
 
 /** Cortex's default model; override for a cheaper or deeper read via env. */
-export const RANKING_MODEL = () => process.env.ZIPDEV_RANKING_MODEL ?? CHAT_MODEL;
+export const RANKING_MODEL = () =>
+  process.env.Cortex_RANKING_MODEL ?? CHAT_MODEL;
 
 export const VERDICT_LABEL: Record<string, string> = {
-  strong_match: 'strong match',
-  good_match: 'good match',
-  possible: 'possible',
-  weak: 'weak',
+  strong_match: "strong match",
+  good_match: "good match",
+  possible: "possible",
+  weak: "weak",
 };
 
 export function stripHtml(s: string | null | undefined, cap = 12_000): string {
-  if (!s) return '';
+  if (!s) return "";
   return s
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/\s+/g, ' ')
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
     .trim()
     .slice(0, cap);
 }
 
 function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -58,7 +59,10 @@ function escapeRegExp(s: string): string {
 export function termInText(term: string, loweredText: string): boolean {
   const t = term.trim().toLowerCase();
   if (t.length < 2) return false;
-  const re = new RegExp(`(^|[^a-z0-9+#])${escapeRegExp(t)}($|[^a-z0-9+#])`, 'i');
+  const re = new RegExp(
+    `(^|[^a-z0-9+#])${escapeRegExp(t)}($|[^a-z0-9+#])`,
+    "i",
+  );
   return re.test(loweredText);
 }
 
@@ -90,7 +94,7 @@ export function experienceYears(entries: Raw[]): number | null {
 
 /** Workable stage names vary per account — rank by well-known keywords. */
 export function stageProgress(stage: string | null | undefined): number {
-  const s = (stage ?? '').toLowerCase();
+  const s = (stage ?? "").toLowerCase();
   if (/hire/.test(s)) return 100;
   if (/offer/.test(s)) return 90;
   if (/interview|panel|onsite|final|client|manager/.test(s)) return 70;
@@ -100,35 +104,35 @@ export function stageProgress(stage: string | null | undefined): number {
 }
 
 const STOPWORDS = new Set([
-  'the',
-  'and',
-  'for',
-  'with',
-  'our',
-  'you',
-  'your',
-  'per',
-  'via',
-  'de',
-  'del',
-  'la',
-  'el',
-  'los',
-  'las',
-  'para',
-  'con',
-  'y',
-  'o',
-  'en',
-  'un',
-  'una',
-  'jr',
-  'sr',
-  'mid',
-  'level',
-  'remote',
-  'remoto',
-  'latam',
+  "the",
+  "and",
+  "for",
+  "with",
+  "our",
+  "you",
+  "your",
+  "per",
+  "via",
+  "de",
+  "del",
+  "la",
+  "el",
+  "los",
+  "las",
+  "para",
+  "con",
+  "y",
+  "o",
+  "en",
+  "un",
+  "una",
+  "jr",
+  "sr",
+  "mid",
+  "level",
+  "remote",
+  "remoto",
+  "latam",
 ]);
 
 export function titleTokens(title: string): string[] {
@@ -156,8 +160,13 @@ export function buildJobContext(job: Raw, fallbackTitle: string): JobContext {
     title,
     stripHtml(job?.requirements),
     stripHtml(job?.full_description ?? job?.description),
-  ].join(' ');
-  return { title, text, textLower: text.toLowerCase(), tokens: titleTokens(title) };
+  ].join(" ");
+  return {
+    title,
+    text,
+    textLower: text.toLowerCase(),
+    tokens: titleTokens(title),
+  };
 }
 
 /**
@@ -186,7 +195,11 @@ export interface TestGorillaSignal {
   tests: number;
   completed: number;
   avgScore: number | null;
-  results: { testName: string | null; score: number | null; completed: boolean }[];
+  results: {
+    testName: string | null;
+    score: number | null;
+    completed: boolean;
+  }[];
   lastUpdatedAt: string | null;
 }
 
@@ -199,12 +212,16 @@ export async function fetchTestGorillaSignals(
   emails: string[],
 ): Promise<{ byEmail: Map<string, TestGorillaSignal>; note: string | null }> {
   const cleaned = [
-    ...new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => e.includes('@'))),
+    ...new Set(
+      emails.map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@")),
+    ),
   ];
   if (!cleaned.length) return { byEmail: new Map(), note: null };
   try {
-    const res = await internalFetch<{ results: Record<string, TestGorillaSignal> }>(
-      `/api/internal/recruit/testgorilla?emails=${encodeURIComponent(cleaned.join(','))}`,
+    const res = await internalFetch<{
+      results: Record<string, TestGorillaSignal>;
+    }>(
+      `/api/internal/recruit/testgorilla?emails=${encodeURIComponent(cleaned.join(","))}`,
     );
     if (!res.available) {
       return {
@@ -212,7 +229,10 @@ export async function fetchTestGorillaSignals(
         note: `TestGorilla scores could not be included (${res.reason}) — ranking proceeds on profile evidence only.`,
       };
     }
-    return { byEmail: new Map(Object.entries(res.data.results ?? {})), note: null };
+    return {
+      byEmail: new Map(Object.entries(res.data.results ?? {})),
+      note: null,
+    };
   } catch (err) {
     return {
       byEmail: new Map(),
@@ -231,7 +251,12 @@ export interface EvidenceCandidate {
   profileUrl: string | null;
   testGorilla: TestGorillaSignal | null;
   preScore: number;
-  breakdown: { skills: number; roleFit: number; experience: number; stageProgress: number };
+  breakdown: {
+    skills: number;
+    roleFit: number;
+    experience: number;
+    stageProgress: number;
+  };
   matchedSkills: string[];
   missingMustHaves: string[];
   experienceYears: number | null;
@@ -250,7 +275,7 @@ export function buildEvidence(
   const skills: string[] = [
     ...new Set(
       [...(detail?.skills ?? []), ...(detail?.tags ?? [])]
-        .map((s: Raw) => String(typeof s === 'string' ? s : (s?.name ?? '')))
+        .map((s: Raw) => String(typeof s === "string" ? s : (s?.name ?? "")))
         .filter((s: string) => s.trim().length >= 2),
     ),
   ];
@@ -269,18 +294,20 @@ export function buildEvidence(
     // The recruiter told us what matters: score coverage of THEIR list against
     // the candidate's own profile text (skills + summary + experience prose).
     const candidateText = [
-      skills.join(' '),
+      skills.join(" "),
       stripHtml(detail?.summary, 4_000),
-      headline ?? '',
-      ...experiences.map((e) => `${e?.title ?? ''} ${stripHtml(e?.summary, 500)}`),
+      headline ?? "",
+      ...experiences.map(
+        (e) => `${e?.title ?? ""} ${stripHtml(e?.summary, 500)}`,
+      ),
     ]
-      .join(' ')
+      .join(" ")
       .toLowerCase();
     matchedSkills = mustHaves.filter((m) => termInText(m, candidateText));
     missingMustHaves = mustHaves.filter((m) => !matchedSkills.includes(m));
     skillsScore = (matchedSkills.length / mustHaves.length) * 100;
     evidence.push(
-      `Covers ${matchedSkills.length}/${mustHaves.length} must-have skills${matchedSkills.length ? `: ${matchedSkills.join(', ')}` : ''}${missingMustHaves.length && missingMustHaves.length <= 5 ? ` (missing: ${missingMustHaves.join(', ')})` : ''}`,
+      `Covers ${matchedSkills.length}/${mustHaves.length} must-have skills${matchedSkills.length ? `: ${matchedSkills.join(", ")}` : ""}${missingMustHaves.length && missingMustHaves.length <= 5 ? ` (missing: ${missingMustHaves.join(", ")})` : ""}`,
     );
   } else {
     // No curated list: count which of THEIR skills the job posting mentions.
@@ -288,26 +315,33 @@ export function buildEvidence(
     skillsScore = (Math.min(matchedSkills.length, 8) / 8) * 100;
     if (matchedSkills.length) {
       evidence.push(
-        `${matchedSkills.length} of their ${skills.length} listed skills appear in the job posting: ${matchedSkills.slice(0, 8).join(', ')}${matchedSkills.length > 8 ? '…' : ''}`,
+        `${matchedSkills.length} of their ${skills.length} listed skills appear in the job posting: ${matchedSkills.slice(0, 8).join(", ")}${matchedSkills.length > 8 ? "…" : ""}`,
       );
     } else if (skills.length) {
       evidence.push(
         `None of their ${skills.length} listed skills appear verbatim in the job posting`,
       );
     } else {
-      evidence.push('No skills/tags on their Workable profile — skill match unknown');
+      evidence.push(
+        "No skills/tags on their Workable profile — skill match unknown",
+      );
     }
   }
 
   // --- role fit (20%) ---
-  const roleText = [headline ?? '', ...experiences.slice(0, 3).map((e) => String(e?.title ?? ''))]
-    .join(' ')
+  const roleText = [
+    headline ?? "",
+    ...experiences.slice(0, 3).map((e) => String(e?.title ?? "")),
+  ]
+    .join(" ")
     .toLowerCase();
   const fitHits = jobCtx.tokens.filter((t) => termInText(t, roleText));
-  const roleFit = jobCtx.tokens.length ? (fitHits.length / jobCtx.tokens.length) * 100 : 0;
+  const roleFit = jobCtx.tokens.length
+    ? (fitHits.length / jobCtx.tokens.length) * 100
+    : 0;
   if (fitHits.length) {
     evidence.push(
-      `Role fit: ${headline ? `"${headline}"` : 'their recent titles'} match the job title on ${fitHits.join(', ')}`,
+      `Role fit: ${headline ? `"${headline}"` : "their recent titles"} match the job title on ${fitHits.join(", ")}`,
     );
   }
 
@@ -315,20 +349,27 @@ export function buildEvidence(
   const years = experienceYears(experiences);
   const expScore = years == null ? 0 : Math.min(years / 8, 1) * 100;
   if (years != null) {
-    evidence.push(`≈${years} yrs experience across ${experiences.length} role(s)`);
+    evidence.push(
+      `≈${years} yrs experience across ${experiences.length} role(s)`,
+    );
   } else {
-    evidence.push('No dated work history on their profile — experience length unknown');
+    evidence.push(
+      "No dated work history on their profile — experience length unknown",
+    );
   }
 
   // --- pipeline progress (15%) ---
   const stage = listRow?.stage ?? detail?.stage ?? null;
   const stageScore = stageProgress(stage);
   if (stage && stageScore >= 45) {
-    evidence.push(`Already at stage "${stage}" — the team has been advancing them`);
+    evidence.push(
+      `Already at stage "${stage}" — the team has been advancing them`,
+    );
   }
 
   const answers: Raw[] = Array.isArray(detail?.answers) ? detail.answers : [];
-  if (answers.length > 0) evidence.push(`Answered ${answers.length} screening question(s)`);
+  if (answers.length > 0)
+    evidence.push(`Answered ${answers.length} screening question(s)`);
 
   // --- TestGorilla (verified assessment — reported as evidence and weighed
   //     by the LLM; it does not move the deterministic pre-score) ---
@@ -337,14 +378,20 @@ export function buildEvidence(
       .map((r) => r.testName)
       .filter(Boolean)
       .slice(0, 3)
-      .join(', ');
+      .join(", ");
     evidence.push(
-      `TestGorilla: ${testGorilla.avgScore != null ? `avg ${testGorilla.avgScore}` : 'no numeric score'} across ${testGorilla.tests} test(s)${names ? ` (${names})` : ''} — verified assessment`,
+      `TestGorilla: ${testGorilla.avgScore != null ? `avg ${testGorilla.avgScore}` : "no numeric score"} across ${testGorilla.tests} test(s)${names ? ` (${names})` : ""} — verified assessment`,
     );
   }
 
   const preScore =
-    Math.round((skillsScore * 0.5 + roleFit * 0.2 + expScore * 0.15 + stageScore * 0.15) * 10) / 10;
+    Math.round(
+      (skillsScore * 0.5 +
+        roleFit * 0.2 +
+        expScore * 0.15 +
+        stageScore * 0.15) *
+        10,
+    ) / 10;
 
   // The card is everything the LLM is allowed to know about this person:
   // compact, factual, no raw resume dump.
@@ -352,48 +399,52 @@ export function buildEvidence(
     .slice(0, 4)
     .map(
       (e) =>
-        `${e?.title ?? '?'} @ ${e?.company ?? '?'} (${String(e?.start_date ?? '?').slice(0, 7)}–${e?.current ? 'now' : String(e?.end_date ?? '?').slice(0, 7)})`,
+        `${e?.title ?? "?"} @ ${e?.company ?? "?"} (${String(e?.start_date ?? "?").slice(0, 7)}–${e?.current ? "now" : String(e?.end_date ?? "?").slice(0, 7)})`,
     )
-    .join('; ');
+    .join("; ");
   const answerLines = answers
     .slice(0, 3)
     .map(
       (a: Raw) =>
-        `Q: ${stripHtml(String(a?.question ?? ''), 120)} → A: ${stripHtml(String(a?.answer ?? ''), 180)}`,
+        `Q: ${stripHtml(String(a?.question ?? ""), 120)} → A: ${stripHtml(String(a?.answer ?? ""), 180)}`,
     )
-    .join(' | ');
+    .join(" | ");
   const tgLine =
     testGorilla && testGorilla.tests > 0
       ? `testgorilla (verified assessment): ${testGorilla.results
           .slice(0, 4)
           .map(
             (r) =>
-              `${r.testName ?? 'test'}: ${r.score != null ? r.score : 'n/a'}${r.completed ? '' : ' (incomplete)'}`,
+              `${r.testName ?? "test"}: ${r.score != null ? r.score : "n/a"}${r.completed ? "" : " (incomplete)"}`,
           )
-          .join('; ')}${testGorilla.avgScore != null ? ` | avg ${testGorilla.avgScore}` : ''}`
+          .join(
+            "; ",
+          )}${testGorilla.avgScore != null ? ` | avg ${testGorilla.avgScore}` : ""}`
       : null;
   const card = [
-    `id: ${String(detail?.id ?? listRow?.id ?? '')}`,
-    `name: ${detail?.name ?? listRow?.name ?? '?'}`,
+    `id: ${String(detail?.id ?? listRow?.id ?? "")}`,
+    `name: ${detail?.name ?? listRow?.name ?? "?"}`,
     headline ? `headline: ${headline}` : null,
-    `current stage: ${stage ?? 'unknown'}`,
-    `skills on profile: ${skills.slice(0, 15).join(', ') || 'none listed'}`,
-    years != null ? `experience: ≈${years} yrs` : 'experience: undated',
+    `current stage: ${stage ?? "unknown"}`,
+    `skills on profile: ${skills.slice(0, 15).join(", ") || "none listed"}`,
+    years != null ? `experience: ≈${years} yrs` : "experience: undated",
     recentRoles ? `recent roles: ${recentRoles}` : null,
-    detail?.summary ? `profile summary: ${stripHtml(detail.summary, 500)}` : null,
+    detail?.summary
+      ? `profile summary: ${stripHtml(detail.summary, 500)}`
+      : null,
     answerLines ? `screening answers: ${answerLines}` : null,
     tgLine,
-    `deterministic evidence: ${evidence.join(' | ')}`,
+    `deterministic evidence: ${evidence.join(" | ")}`,
   ]
     .filter(Boolean)
-    .join('\n');
+    .join("\n");
 
   return {
-    id: String(detail?.id ?? listRow?.id ?? ''),
+    id: String(detail?.id ?? listRow?.id ?? ""),
     name:
       detail?.name ??
       listRow?.name ??
-      [detail?.firstname, detail?.lastname].filter(Boolean).join(' '),
+      [detail?.firstname, detail?.lastname].filter(Boolean).join(" "),
     email: detail?.email ?? listRow?.email ?? null,
     headline,
     stage,

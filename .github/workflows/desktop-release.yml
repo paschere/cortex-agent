@@ -15,7 +15,7 @@
 #   see "unidentified developer" Gatekeeper warnings):
 #   APPLE_CERTIFICATE          – base64-encoded .p12 exported from Keychain
 #   APPLE_CERTIFICATE_PASSWORD – password for that .p12
-#   APPLE_SIGNING_IDENTITY     – e.g. "Developer ID Application: Zipdev (XXXXXXXXXX)"
+#   APPLE_SIGNING_IDENTITY     – e.g. "Developer ID Application: Your Company (XXXXXXXXXX)"
 #   APPLE_ID                   – Apple ID email used for notarization
 #   APPLE_PASSWORD             – App-specific password for that Apple ID
 #   APPLE_TEAM_ID              – 10-character Apple Developer team ID
@@ -127,7 +127,7 @@ jobs:
           # tagName and releaseName are ignored when the release already exists,
           # but tauri-action uses them to find / create the release draft.
           tagName: ${{ github.ref_name }}
-          releaseName: 'Zipdev Agent ${{ github.ref_name }}'
+          releaseName: 'Cortex ${{ github.ref_name }}'
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}

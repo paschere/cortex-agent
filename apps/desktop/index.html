@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Zipdev Agent</title>
+  <title>Cortex</title>
   <style>
     body {
       margin: 0;
@@ -17,11 +17,11 @@
   </style>
 </head>
 <body>
-  <p>Loading Zipdev Agent…</p>
+  <p>Loading Cortex…</p>
   <script>
-    // __ZIPDEV_WEB_URL__ is replaced at build time by Vite (see vite.config.ts).
+    // __CORTEX_WEB_URL__ is replaced at build time by Vite (see vite.config.ts).
     // Falls back to localhost:3000 for dev mode.
-    var url = __ZIPDEV_WEB_URL__;
+    var url = __CORTEX_WEB_URL__;
     setTimeout(function () {
       window.location.replace(url + '/chat');
     }, 100);

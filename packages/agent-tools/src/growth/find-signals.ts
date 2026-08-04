@@ -5,11 +5,11 @@ import { webSearch } from '../web';
 
 /**
  * Growth pilot, test 5 (job-post signal detection): sweep public job boards
- * for open remote roles matching Zipdev's ICP at US companies, dedupe against
+ * for open remote roles matching our ICP at US companies, dedupe against
  * the growth_signals table, and persist the new ones for review.
  *
  * A "signal" is a live job post that suggests the company is hiring for a
- * role Zipdev can fill (senior fullstack, QA, DevOps, ...). Sweeps are
+ * role we can fill (senior fullstack, QA, DevOps, ...). Sweeps are
  * composable: run from chat for a one-off, or from a weekly scheduled agent
  * job for the sustained 15-signals/week pilot target.
  */
@@ -35,7 +35,7 @@ const SignalSchema = z.object({
 export const growthFindSignals = registerTool({
   id: 'growth.find_signals',
   description:
-    'Sweep public job boards (Greenhouse, Lever, Ashby, Workable, SmartRecruiters) for live job posts matching roles Zipdev fills (e.g. "senior fullstack engineer", "QA engineer") at companies hiring remote. Deduplicates against previously found signals (by posting URL) and stores the new ones with status "new" for review. Returns the new signals plus counts. Run weekly (via schedule.create) for the growth pilot. ' +
+    'Sweep public job boards (Greenhouse, Lever, Ashby, Workable, SmartRecruiters) for live job posts matching the roles your organization fills (e.g. "senior fullstack engineer", "QA engineer") at companies hiring remote. Deduplicates against previously found signals (by posting URL) and stores the new ones with status "new" for review. Returns the new signals plus counts. Run weekly (via schedule.create) for the growth pilot. ' +
     'This DISCOVERS companies from a role — you do not name the company. If you already know which company you are asking about, apollo.company_job_postings lists everything that one company is advertising, including on career pages these five boards never see (it costs Apollo credits and stores nothing).',
   inputSchema: z.object({
     roles: z

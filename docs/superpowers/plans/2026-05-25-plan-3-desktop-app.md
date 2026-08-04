@@ -41,6 +41,7 @@ apps/desktop/
 ## Task 1: Tauri scaffolding
 
 **Files:**
+
 - Create: `apps/desktop/package.json`, `apps/desktop/src-tauri/{Cargo.toml,tauri.conf.json,build.rs,src/main.rs}`
 - Create: `apps/desktop/src-tauri/capabilities/default.json`
 - Create: `apps/desktop/src-tauri/icons/` (placeholders for now; real assets in Task 6)
@@ -98,9 +99,9 @@ fn main() { tauri_build::build() }
 ```json
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
-  "productName": "Zipdev Agent",
+  "productName": "Cortex Agent",
   "version": "0.1.0",
-  "identifier": "com.zipdev.agent",
+  "identifier": "com.Cortex.agent",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
@@ -111,7 +112,7 @@ fn main() { tauri_build::build() }
     "windows": [
       {
         "label": "main",
-        "title": "Zipdev Agent",
+        "title": "Cortex Agent",
         "width": 920,
         "height": 720,
         "minWidth": 480,
@@ -131,7 +132,9 @@ fn main() { tauri_build::build() }
   "plugins": {
     "updater": {
       "active": true,
-      "endpoints": ["https://github.com/zipdev/cortex-agent/releases/latest/download/latest.json"],
+      "endpoints": [
+        "https://github.com/Cortex/cortex-agent/releases/latest/download/latest.json"
+      ],
       "pubkey": "REPLACE_AT_TASK_6"
     },
     "deep-link": {
@@ -256,7 +259,7 @@ use tauri::{
 pub fn setup<R: tauri::Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
     let icon = Image::from_bytes(include_bytes!("../icons/128x128.png"))?;
 
-    let open = MenuItem::with_id(app, "open", "Open Zipdev Agent", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open Cortex Agent", true, None::<&str>)?;
     let new_chat = MenuItem::with_id(app, "new_chat", "New chat", true, Some("CmdOrCtrl+Shift+Z"))?;
     let sep = tauri::menu::PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -298,6 +301,7 @@ fn focus_main<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 ```bash
 pnpm --filter @cortex/desktop dev
 ```
+
 Expected: tray icon appears (status bar on macOS, system tray on Windows). Clicking shows the window. "Quit" exits. "New chat" navigates to `/chat`.
 
 - [ ] **Step 3: Commit**
@@ -346,6 +350,7 @@ pub fn setup<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> 
 ```bash
 pnpm --filter @cortex/desktop dev
 ```
+
 With the app running but window not focused: press `Ctrl+Shift+Z` (or `Cmd+Shift+Z`). The window should focus and navigate to `/chat`.
 
 - [ ] **Step 3: Commit**
@@ -362,6 +367,7 @@ git commit -m "feat(desktop): global hotkey Cmd/Ctrl+Shift+Z opens chat"
 The desktop app needs to authenticate against the same Supabase backend. Approach: open the browser to the web app's login page with a `?desktop=1` query, which after successful SSO redirects to a `cortex-agent://` deep link carrying a one-shot session token. The desktop app receives the deep link, sets cookies via a webview eval, and navigates to chat.
 
 **Files:**
+
 - Modify: `apps/desktop/src-tauri/src/auth.rs`
 - Modify: `apps/web/app/api/auth/callback/route.ts` (already exists from Plan 1 — extend for `desktop=1`)
 - Create: `apps/web/app/api/auth/desktop-session/route.ts`
@@ -369,48 +375,71 @@ The desktop app needs to authenticate against the same Supabase backend. Approac
 - [ ] **Step 1: `apps/web/app/api/auth/desktop-session/route.ts`** — issue a short-lived cookie token for the desktop deep link
 
 ```ts
-import { NextResponse } from 'next/server';
-import { randomBytes, createHash } from 'node:crypto';
-import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { NextResponse } from "next/server";
+import { randomBytes, createHash } from "node:crypto";
+import { requireSession } from "@/lib/session";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 // Reuses mcp_tokens but with a different prefix to distinguish desktop.
 export async function POST() {
   const user = await requireSession();
-  const raw = `zdk_${randomBytes(24).toString('hex')}`;
-  const hash = createHash('sha256').update(raw).digest('hex');
+  const raw = `zdk_${randomBytes(24).toString("hex")}`;
+  const hash = createHash("sha256").update(raw).digest("hex");
   const db = getSupabaseServiceClient();
-  await db.from('mcp_tokens').insert({ user_id: user.id, name: 'Desktop one-shot', token_hash: hash, prefix: raw.slice(0, 12) });
+  await db
+    .from("mcp_tokens")
+    .insert({
+      user_id: user.id,
+      name: "Desktop one-shot",
+      token_hash: hash,
+      prefix: raw.slice(0, 12),
+    });
   // The desktop redeems this token via /api/auth/desktop-redeem to get a real Supabase session cookie.
   return NextResponse.json({ token: raw }, { status: 201 });
 }
 ```
 
 Create `apps/web/app/api/auth/desktop-redeem/route.ts`:
+
 ```ts
-import { NextResponse, type NextRequest } from 'next/server';
-import { createHash } from 'node:crypto';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { NextResponse, type NextRequest } from "next/server";
+import { createHash } from "node:crypto";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export async function POST(req: NextRequest) {
-  const { token } = await req.json() as { token?: string };
-  if (!token) return NextResponse.json({ error: 'token required' }, { status: 400 });
-  const hash = createHash('sha256').update(token).digest('hex');
+  const { token } = (await req.json()) as { token?: string };
+  if (!token)
+    return NextResponse.json({ error: "token required" }, { status: 400 });
+  const hash = createHash("sha256").update(token).digest("hex");
   const db = getSupabaseServiceClient();
-  const { data: row } = await db.from('mcp_tokens').select('id, user_id, revoked_at').eq('token_hash', hash).maybeSingle();
-  if (!row || row.revoked_at) return NextResponse.json({ error: 'invalid' }, { status: 401 });
+  const { data: row } = await db
+    .from("mcp_tokens")
+    .select("id, user_id, revoked_at")
+    .eq("token_hash", hash)
+    .maybeSingle();
+  if (!row || row.revoked_at)
+    return NextResponse.json({ error: "invalid" }, { status: 401 });
 
   // Mark this one-shot token as revoked
-  await db.from('mcp_tokens').update({ revoked_at: new Date().toISOString() }).eq('id', row.id as string);
+  await db
+    .from("mcp_tokens")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", row.id as string);
 
   // Issue a fresh Supabase session for this user using auth.admin (magic link short-lived approach)
-  const { data: link } = await db.auth.admin.generateLink({ type: 'magiclink', email: '', options: { redirectTo: 'about:blank' } });  // placeholder; see note below
+  const { data: link } = await db.auth.admin.generateLink({
+    type: "magiclink",
+    email: "",
+    options: { redirectTo: "about:blank" },
+  }); // placeholder; see note below
   // The cleanest path: redirect the desktop webview to a magic link URL the admin SDK generates for the user.
-  return NextResponse.json({ magicLink: link?.properties?.action_link ?? null });
+  return NextResponse.json({
+    magicLink: link?.properties?.action_link ?? null,
+  });
 }
 ```
 
-(For MVP, the simplest reliable approach is: the web app's login completes normally; once a session exists, the desktop opens `https://cortex-agent.vercel.app/chat` in its webview and the Supabase cookie set during login persists in the webview's cookie jar. The deep link approach is needed only if the SSO must happen in the user's default browser. Choose during implementation: if the simpler in-webview SSO works for `@zipdev.com` accounts, drop the deep-link redemption and ship.)
+(For MVP, the simplest reliable approach is: the web app's login completes normally; once a session exists, the desktop opens `https://cortex-agent.vercel.app/chat` in its webview and the Supabase cookie set during login persists in the webview's cookie jar. The deep link approach is needed only if the SSO must happen in the user's default browser. Choose during implementation: if the simpler in-webview SSO works for `@Cortex.com` accounts, drop the deep-link redemption and ship.)
 
 - [ ] **Step 2: `apps/desktop/src-tauri/src/auth.rs`** — handle the deep link if used
 
@@ -459,18 +488,20 @@ git commit -m "feat(desktop): auth flow via webview SSO; deep-link redemption fa
 
 - [ ] **Step 1: Update `apps/desktop/README.md`**
 
-```markdown
+````markdown
 # cortex-agent-desktop
 
-Tauri shell around the Zipdev Agent chat UI.
+Tauri shell around the Cortex Agent chat UI.
 
 ## Dev
 
 In two terminals:
+
 ```bash
 pnpm --filter @cortex/web dev          # http://localhost:3000
 pnpm --filter @cortex/desktop dev      # opens window to /chat
 ```
+````
 
 ## Build
 
@@ -479,20 +510,22 @@ pnpm --filter @cortex/desktop build
 ```
 
 Set `TAURI_ENV` env var to switch URLs (handled at build time by reading `tauri.conf.json` and Vercel env). For a custom staging URL, edit `src-tauri/tauri.conf.json#build.frontendDist` or pass `--config` overrides.
-```
+
+````
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add apps/desktop/README.md
 git commit -m "docs(desktop): dev + build instructions"
-```
+````
 
 ---
 
 ## Task 6: Build, sign, release pipeline
 
 **Files:**
+
 - Create: `.github/workflows/desktop-release.yml`
 - Replace placeholders: real icons, Tauri updater pubkey
 
@@ -501,6 +534,7 @@ git commit -m "docs(desktop): dev + build instructions"
 ```bash
 pnpm --filter @cortex/desktop tauri signer generate -w ~/.tauri/cortex-agent.key
 ```
+
 This prints a public key — paste it into `tauri.conf.json#plugins.updater.pubkey`. Save the private key as a GitHub secret `TAURI_SIGNING_PRIVATE_KEY` and the passphrase as `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 
 - [ ] **Step 2: `.github/workflows/desktop-release.yml`**
@@ -549,7 +583,7 @@ jobs:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
           tagName: ${{ github.ref_name }}
-          releaseName: 'Zipdev Agent ${{ github.ref_name }}'
+          releaseName: 'Cortex Agent ${{ github.ref_name }}'
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
@@ -583,7 +617,8 @@ git commit -m "ci(desktop): cross-platform release + updater signing"
 
 - [ ] **Step 1: macOS install**
 
-Download the `.dmg` from the GitHub release, drag to Applications. Open Zipdev Agent. Verify:
+Download the `.dmg` from the GitHub release, drag to Applications. Open Cortex Agent. Verify:
+
 - Window opens to chat (after Google SSO if first launch).
 - Tray icon appears in menu bar.
 - `Cmd+Shift+Z` works from anywhere to focus the window.
@@ -605,12 +640,12 @@ Open issues for any rough edges (signing prompts, hotkey conflicts on a given OS
 
 ## Spec coverage self-review
 
-| Spec § | Requirement | Implemented in |
-|---|---|---|
-| 12 | Tauri shell wrapping chat UI | Tasks 1, 5 |
-| 12 | System tray | Task 2 |
-| 12 | Global hotkey | Task 3 |
-| 12 | Native auth flow | Task 4 |
-| 12 | Auto-update via Tauri updater + signed builds | Task 6 |
-| 17 | Desktop builds via GitHub Releases | Task 6 |
-| (v2) | Native notifications — plugin registered but not wired beyond confirmation prompts | Task 1 plugin registration; full proactive alert wiring is v2 per spec |
+| Spec § | Requirement                                                                        | Implemented in                                                         |
+| ------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 12     | Tauri shell wrapping chat UI                                                       | Tasks 1, 5                                                             |
+| 12     | System tray                                                                        | Task 2                                                                 |
+| 12     | Global hotkey                                                                      | Task 3                                                                 |
+| 12     | Native auth flow                                                                   | Task 4                                                                 |
+| 12     | Auto-update via Tauri updater + signed builds                                      | Task 6                                                                 |
+| 17     | Desktop builds via GitHub Releases                                                 | Task 6                                                                 |
+| (v2)   | Native notifications — plugin registered but not wired beyond confirmation prompts | Task 1 plugin registration; full proactive alert wiring is v2 per spec |

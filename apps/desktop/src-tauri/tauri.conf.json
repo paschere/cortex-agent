@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
-  "productName": "Zipdev Agent",
+  "productName": "Cortex",
   "version": "0.1.0",
-  "identifier": "com.zipdev.agent",
+  "identifier": "com.cortex.agent",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "pnpm build:web",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Zipdev Agent",
+        "title": "Cortex",
         "width": 920,
         "height": 720,
         "minWidth": 480,
@@ -34,7 +34,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/zipdev/cortex-agent/releases/latest/download/latest.json"
+        "https://github.com/your-org/cortex-agent/releases/latest/download/latest.json"
       ],
       "pubkey": "REPLACE_AT_TASK_6"
     },

@@ -1,7 +1,7 @@
 -- Downloadable candidate presentations.
 --
 -- An MCP tool can only return text, so "send me her presentation" has to be
--- answered with a LINK. presentations.create_pdf asks the Zipdev matcher to
+-- answered with a LINK. presentations.create_pdf asks the Cortex matcher to
 -- render the stored write-up to PDF (its own Puppeteer/letterhead exporter —
 -- no second renderer), uploads the bytes to the private bucket below, and
 -- records a row here. The row IS the link: /api/files/presentation/<token>
@@ -13,7 +13,7 @@
 -- terms, and repointed if the bytes ever move.
 --
 -- Why the token is the whole credential: the link is clicked out of a Claude
--- conversation, Slack or email, where no Zipdev session cookie exists. A
+-- conversation, Slack or email, where no Cortex session cookie exists. A
 -- session check would make the deliverable unopenable. Compensating controls
 -- are 32 random bytes of entropy, a short expiry (7 days by default, written
 -- by the tool, not defaulted here), and a download counter. The full

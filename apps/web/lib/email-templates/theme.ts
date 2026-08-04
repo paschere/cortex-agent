@@ -17,33 +17,33 @@
 
 export const palette = {
   /** Brand plum — buttons, links, accents. */
-  primary: '#7E4390',
+  primary: "#7E4390",
   /** Lighter plum for gradients/secondary accents. */
-  primarySoft: '#9658A3',
+  primarySoft: "#9658A3",
   /** Body text. Deliberately not pure black. */
-  ink: '#241A2E',
+  ink: "#241A2E",
   /** Secondary text: labels, meta, footers. */
-  muted: '#5C4E68',
+  muted: "#5C4E68",
   /** Even quieter: legal-ish footer lines. */
-  faint: '#8A7C96',
+  faint: "#8A7C96",
   /** Hairlines, table borders, card edges. */
-  border: '#E6DDEE',
+  border: "#E6DDEE",
   /** Page background behind the card. */
-  surface: '#FAF8FC',
+  surface: "#FAF8FC",
   /** Card background. */
-  card: '#ffffff',
+  card: "#ffffff",
   /** Tinted fill: table headers, chips, quiet panels. */
-  chip: '#F3EBF8',
+  chip: "#F3EBF8",
   /** Zebra striping for table rows (must stay lighter than `chip`). */
-  zebra: '#FBF9FD',
+  zebra: "#FBF9FD",
 } as const;
 
 /** Status accents. Each tone is a text/background/border triple. */
 export const tones = {
-  info: { fg: '#6B3480', bg: '#F5EEF9', border: '#E1CFEA' },
-  success: { fg: '#0B6B4F', bg: '#ECFDF5', border: '#B7E4D0' },
-  warn: { fg: '#8A5A08', bg: '#FFF9EC', border: '#F3DDA8' },
-  danger: { fg: '#A3123C', bg: '#FFF1F4', border: '#F4C2CE' },
+  info: { fg: "#6B3480", bg: "#F5EEF9", border: "#E1CFEA" },
+  success: { fg: "#0B6B4F", bg: "#ECFDF5", border: "#B7E4D0" },
+  warn: { fg: "#8A5A08", bg: "#FFF9EC", border: "#F3DDA8" },
+  danger: { fg: "#A3123C", bg: "#FFF1F4", border: "#F4C2CE" },
   neutral: { fg: palette.muted, bg: palette.surface, border: palette.border },
 } as const;
 
@@ -57,7 +57,7 @@ export const MONO_STACK =
   "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',Courier,monospace";
 
 /** The Cortex mark, served from the production app so every client can load it. */
-export const CORTEX_ICON_URL = 'https://cortex-zipdev.vercel.app/icon.png';
+export const CORTEX_ICON_URL = "https://cortex-Cortex.vercel.app/icon.png";
 
 /** Body copy defaults, shared by the layout and the markdown converter. */
 export const BODY_STYLE = `font-family:${FONT_STACK};font-size:15px;line-height:1.6;color:${palette.ink};`;
@@ -71,12 +71,12 @@ export const BODY_STYLE = `font-family:${FONT_STACK};font-size:15px;line-height:
  * markdown decoration is layered on top.
  */
 export function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**

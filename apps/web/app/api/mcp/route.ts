@@ -23,7 +23,7 @@
  * Confirmation-gated tools (requiresConfirmation) cannot pop a UI over MCP.
  * Instead, an unconfirmed call returns a signed confirmation token (see
  * lib/mcp-confirm.ts) plus instructions; after the user explicitly approves,
- * Claude calls the virtual `zipdev_confirm_action` tool with that token and
+ * Claude calls the virtual `cortex_confirm_action` tool with that token and
  * the action executes with { confirmed: true } — same contract as
  * /api/chat/confirm on the web.
  *
@@ -61,16 +61,16 @@ const SERVER_VERSION = '0.2.0';
 
 /**
  * Served on `initialize` — this is the closest MCP gets to a system prompt,
- * and it is what makes Claude behave like a Zipdev agent instead of a generic
- * assistant with tools.
+ * and it is what makes Claude behave like the workspace's own agent instead of
+ * a generic assistant with tools.
  */
-const INSTRUCTIONS = `While these tools are active you take on the role of **Cortex** ⚡ — Zipdev's super-agent and newest teammate. Zipdev is a nearshore developer-talent company; this server is Cortex's brain and hands: its Knowledge Base, CRM, ATS, talent pool, rates engine, pipelines, and routines.
+const INSTRUCTIONS = `While these tools are active you take on the role of **Cortex** ⚡ — the workspace super-agent and newest teammate on the team. This server is Cortex's brain and hands: the company's Knowledge Base, CRM, ATS, talent pool, rates engine, pipelines, and routines.
 
-YOUR PERSONA (in effect whenever you do Zipdev work in this conversation):
-- You are Cortex, a teammate — not a generic assistant. When greeting or starting Zipdev work, introduce yourself as Cortex. Speak in first person about the work: "ya busqué en el talent pool", "te preparo el borrador".
+YOUR PERSONA (in effect whenever you do work for the company in this conversation):
+- You are Cortex, a teammate — not a generic assistant. When greeting or starting work, introduce yourself as Cortex. Speak in first person about the work: "ya busqué en el talent pool", "te preparo el borrador".
 - Personality: sharp, warm, direct. Numbers over adjectives. Lead with the answer, then the support. A touch of energy (an occasional ⚡ is fine, never more than one per message).
 - Match the user's language — Spanish in, Spanish out. Client-facing drafts go in the client's language.
-- If someone asks what you literally are, be honest (Claude acting as Cortex, Zipdev's agent) — never deceptive, but don't volunteer the machinery.
+- If someone asks what you literally are, be honest (Claude acting as Cortex, the workspace's agent) — never deceptive, but don't volunteer the machinery.
 
 HOW CORTEX SPEAKS (users are often non-technical):
 - Never mention tool names, function calls, ids/UUIDs, or jargon ("fire-and-forget", "sync status"). Describe actions in plain human terms and refer to things by name.
@@ -78,10 +78,10 @@ HOW CORTEX SPEAKS (users are often non-technical):
 - One question at a time. Short sentences. The mechanics stay invisible.
 
 HOW CORTEX WORKS:
-1. **Orient first.** Call \`zipdev_overview\` early to see connected integrations, agents, and Knowledge Base collections.
-2. **The KB is Zipdev's memory.** Before answering anything that could be covered by internal knowledge — clients, playbooks, rates, candidates, past proposals — search it with \`kb_search\` and ground your answer in the hits. Persist durable work products back with \`kb_create_document\`.
+1. **Orient first.** Call \`cortex_overview\` early to see connected integrations, agents, and Knowledge Base collections.
+2. **The KB is the company's memory.** Before answering anything that could be covered by internal knowledge — clients, playbooks, rates, candidates, past proposals — search it with \`kb_search\` and ground your answer in the hits. Persist durable work products back with \`kb_create_document\`.
 3. **Ground every claim in tool data.** Never invent a deal, contact, candidate, rate, or statistic. Fetch it this turn; cite human-verifiable references (deal names, \`ENG-45\`, \`owner/repo#123\`).
-4. **Writes are confirmation-gated.** Create/update/send/post tools do NOT execute on first call — they return a confirmation_id, the exact payload, and WHY the action is gated. Explain that in the user's language, show what will happen, get an explicit yes, then call \`zipdev_confirm_action\`. If the user declines, do nothing.
+4. **Writes are confirmation-gated.** Create/update/send/post tools do NOT execute on first call — they return a confirmation_id, the exact payload, and WHY the action is gated. Explain that in the user's language, show what will happen, get an explicit yes, then call \`cortex_confirm_action\`. If the user declines, do nothing.
 5. **Offload heavy reading.** For large documents, delegate with \`cortex_process\` instead of pulling the content into the conversation.`;
 
 // ---------------------------------------------------------------------------
@@ -333,19 +333,19 @@ function buildToolDefs(catalog: Map<string, CatalogEntry>) {
   // Virtual, MCP-only tools — not in the registry.
   defs.unshift(
     {
-      name: 'zipdev_overview',
+      name: 'cortex_overview',
       description:
-        "Orient yourself in the user's Zipdev workspace: which agents exist and what they can do, which integrations the user has connected (HubSpot, Google, GitHub, Linear, Slack, …), and which Knowledge Base collections are visible. Call this early in a session.",
+        "Orient yourself in the user's workspace: which agents exist and what they can do, which integrations the user has connected (HubSpot, Google, GitHub, Linear, Slack, …), and which Knowledge Base collections are visible. Call this early in a session.",
       inputSchema: { type: 'object', properties: {} },
       annotations: {
-        title: 'Zipdev · Workspace Overview',
+        title: 'Cortex · Workspace Overview',
         readOnlyHint: true,
         destructiveHint: false,
         openWorldHint: false,
       },
     },
     {
-      name: 'zipdev_confirm_action',
+      name: 'cortex_confirm_action',
       description:
         'Execute a previously proposed side-effect action AFTER the user has explicitly approved it. Pass the confirmation_id returned by the gated tool call (single-use, expires in 15 minutes). Never call this without showing the user the exact payload and receiving a clear yes.',
       inputSchema: {
@@ -362,7 +362,7 @@ function buildToolDefs(catalog: Map<string, CatalogEntry>) {
         },
       },
       annotations: {
-        title: 'Zipdev · Confirm Action',
+        title: 'Cortex · Confirm Action',
         readOnlyHint: false,
         destructiveHint: true,
         openWorldHint: true,
@@ -376,7 +376,7 @@ function buildToolDefs(catalog: Map<string, CatalogEntry>) {
 // ---------------------------------------------------------------------------
 // Session memory — MCP tool calls persist into `conversations`/`messages`
 // (surface 'mcp', keyed by Claude's Mcp-Session-Id via external_key) so work
-// done from claude.ai shows up in Zipdev OS like any other conversation.
+// done from claude.ai shows up in Cortex like any other conversation.
 // ---------------------------------------------------------------------------
 
 const MAX_PERSISTED_RESULT_CHARS = 20_000;
@@ -479,7 +479,7 @@ async function handleOverview(auth: AuthResult): Promise<unknown> {
   ]);
 
   return {
-    workspace: 'Zipdev',
+    workspace: 'Cortex',
     agents: agents.map((a) => ({
       slug: a.slug,
       name: a.name,
@@ -495,7 +495,7 @@ async function handleOverview(auth: AuthResult): Promise<unknown> {
       searchTool: 'kb_search',
     },
     confirmationProtocol:
-      'Write tools return a confirmation_id instead of executing. Show the payload to the user, get explicit approval, then call zipdev_confirm_action with that id.',
+      'Write tools return a confirmation_id instead of executing. Show the payload to the user, get explicit approval, then call cortex_confirm_action with that id.',
   };
 }
 
@@ -646,7 +646,7 @@ async function confirmationRequiredResult(
   const text = [
     `⏸️ CONFIRMATION REQUIRED — \`${toolTitle(err.toolId)}\` (\`${err.toolId}\`) was NOT executed.`,
     '',
-    `WHY THIS IS GATED: ${confirmationReason(err.toolId)} Zipdev policy: nothing important happens without the user's explicit approval, and every action is audited.`,
+    `WHY THIS IS GATED: ${confirmationReason(err.toolId)} Company policy: nothing important happens without the user's explicit approval, and every action is audited.`,
     '',
     'BEFORE asking for approval, explain to the user in your own words (their language):',
     '1. What exactly will happen and in which system — name the recipient/target and the key values from the payload below (who, what, amounts, titles).',
@@ -657,7 +657,7 @@ async function confirmationRequiredResult(
     '```json',
     JSON.stringify(err.input, null, 2),
     '```',
-    'If (and only if) the user explicitly approves, call `zipdev_confirm_action` with:',
+    'If (and only if) the user explicitly approves, call `cortex_confirm_action` with:',
     '```json',
     JSON.stringify({ confirmation_id: confirmationId }),
     '```',
@@ -680,14 +680,14 @@ interface PromptDef {
 const PROMPTS: PromptDef[] = [
   {
     name: 'draft-proposal',
-    description: 'Draft a complete client proposal for a Zipdev candidate role.',
+    description: 'Draft a complete client proposal for a candidate role.',
     arguments: [
       { name: 'role', description: 'e.g., "frontend", "fullstack"', required: true },
       { name: 'seniority', description: 'junior | mid | senior | lead', required: true },
       { name: 'companyId', description: 'Optional HubSpot company ID for context', required: false },
     ],
     render: (a) =>
-      `Draft a complete Zipdev client proposal for a ${a.seniority ?? ''} ${a.role ?? ''} role.` +
+      `Draft a complete client proposal for a ${a.seniority ?? ''} ${a.role ?? ''} role.` +
       (a.companyId ? ` Pull company context from HubSpot company ${a.companyId} first.` : '') +
       ' Search the Knowledge Base (kb_search) for prior proposals and rate guidance, estimate the rate with rate_estimate, and structure the proposal with scope, profile, rate, and next steps.',
   },
@@ -737,26 +737,26 @@ async function listResources(): Promise<Array<{ uri: string; name: string; mimeT
   const agents = await loadAllAgents();
   return [
     ...agents.map((a) => ({
-      uri: `zipdev://agents/${a.slug}/system-prompt`,
+      uri: `cortex://agents/${a.slug}/system-prompt`,
       name: `${a.name} — system prompt`,
       mimeType: 'text/markdown',
     })),
     // Back-compat alias for the original single-agent resource.
-    { uri: 'zipdev://agent/system-prompt', name: 'Sales agent system prompt', mimeType: 'text/markdown' },
+    { uri: 'cortex://agent/system-prompt', name: 'Sales agent system prompt', mimeType: 'text/markdown' },
     {
-      uri: 'zipdev://kb/spaces',
+      uri: 'cortex://kb/spaces',
       name: 'Knowledge Base spaces you can see',
       mimeType: 'application/json',
     },
-    { uri: 'zipdev://integrations/status', name: 'Connected integrations', mimeType: 'application/json' },
+    { uri: 'cortex://integrations/status', name: 'Connected integrations', mimeType: 'application/json' },
   ];
 }
 
 async function readResource(uri: string, auth: AuthResult): Promise<JsonRpcResponse['result'] | null> {
   const db = getSupabaseServiceClient();
 
-  const agentMatch = /^zipdev:\/\/agents\/([a-z0-9-]+)\/system-prompt$/.exec(uri);
-  if (agentMatch || uri === 'zipdev://agent/system-prompt') {
+  const agentMatch = /^cortex:\/\/agents\/([a-z0-9-]+)\/system-prompt$/.exec(uri);
+  if (agentMatch || uri === 'cortex://agent/system-prompt') {
     const slug = agentMatch ? agentMatch[1]! : 'sales';
     const agents = await loadAllAgents();
     const agent = agents.find((a) => a.slug === slug);
@@ -764,7 +764,7 @@ async function readResource(uri: string, auth: AuthResult): Promise<JsonRpcRespo
     return { contents: [{ uri, mimeType: 'text/markdown', text: agent.system_prompt }] };
   }
 
-  if (uri === 'zipdev://kb/spaces') {
+  if (uri === 'cortex://kb/spaces') {
     const spaces = await listVisibleSpaces(db, auth.userId);
     return {
       contents: [
@@ -777,7 +777,7 @@ async function readResource(uri: string, auth: AuthResult): Promise<JsonRpcRespo
     };
   }
 
-  if (uri === 'zipdev://integrations/status') {
+  if (uri === 'cortex://integrations/status') {
     const { data } = await db
       .from('integrations')
       .select('provider, scopes, expires_at')
@@ -804,14 +804,14 @@ async function dispatch(
     case 'initialize': {
       // Instructions = hardcoded persona/mechanics + the LIVE Cortex system
       // prompt from the DB: the team tunes Claude's behavior by editing the
-      // agent in Zipdev OS — no deploy needed. Best-effort: initialize must
+      // agent in Cortex — no deploy needed. Best-effort: initialize must
       // never fail because of this.
       let playbook = '';
       try {
         const agents = await loadAllAgents();
         const cortex = agents.find((a) => a.slug === 'cortex');
         if (cortex?.system_prompt) {
-          playbook = `\n\nCORTEX'S TEAM PLAYBOOK (live from Zipdev OS — follow it):\n${cortex.system_prompt}`;
+          playbook = `\n\nCORTEX'S TEAM PLAYBOOK (live from Cortex — follow it):\n${cortex.system_prompt}`;
         }
       } catch {
         // DB hiccup: serve the static instructions alone.
@@ -870,13 +870,13 @@ async function dispatch(
       const args = p.arguments ?? {};
 
       try {
-        if (mcpName === 'zipdev_overview') {
+        if (mcpName === 'cortex_overview') {
           const overview = await handleOverview(auth);
           return rpcOk(id, {
             content: [{ type: 'text', text: JSON.stringify(overview, null, 2) }],
           });
         }
-        if (mcpName === 'zipdev_confirm_action') {
+        if (mcpName === 'cortex_confirm_action') {
           return rpcOk(id, await handleConfirmAction(args, auth, sessionId));
         }
 

@@ -125,7 +125,7 @@ export default async function ToolsPage({
         ctx: { now: CATALOG_CLOCK },
         surface: 'web',
       });
-      // Second pass with an address outside zipdev.com in the payload. The
+      // Second pass with an address outside the company in the payload. The
       // classifier only promotes a tool to `external_send` when the policy has
       // declared it content-delivering, so this is a precise probe for "this
       // one can put something in front of an outsider" rather than a guess —
@@ -169,7 +169,7 @@ export default async function ToolsPage({
         blastRadius: classification.blastRadius as BlastRadius,
         canLeaveCompany,
         // Only meaningful when it differs from the baseline: what the guardrail
-        // scores the same call at once it is addressed outside Zipdev.
+        // scores the same call at once it is addressed outside the company.
         outboundRiskLevel:
           canLeaveCompany && outbound.riskLevel !== classification.riskLevel
             ? (outbound.riskLevel as RiskLevel)

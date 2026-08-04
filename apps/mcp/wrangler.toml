@@ -1,4 +1,4 @@
-name = "zipdev-mcp"
+name = "cortex-mcp"
 main = "src/index.ts"
 compatibility_date = "2024-12-18"
 compatibility_flags = ["nodejs_compat"]
@@ -16,5 +16,5 @@ NEXT_PUBLIC_SUPABASE_URL = ""  # set per env via wrangler secret
 # - PAYROLL_API_URL, PAYROLL_API_TOKEN  (optional; payroll internal/team-overview)
 
 [env.production]
-name = "zipdev-mcp-prod"
-route = "mcp.zipdev.com/*"
+name = "cortex-mcp-prod"
+route = "mcp.example.com/*"

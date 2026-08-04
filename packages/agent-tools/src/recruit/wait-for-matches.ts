@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { registerTool } from '../index';
-import { internalFetch, matcherFetch, qs } from './client';
+import { z } from "zod";
+import { registerTool } from "../index";
+import { internalFetch, matcherFetch, qs } from "./client";
 import {
   SOURCE,
   type ToolMeta,
@@ -8,7 +8,7 @@ import {
   matcherLink,
   metaSchema,
   provenanceFooter,
-} from './shape';
+} from "./shape";
 
 /**
  * Active waiting for the async matching run started by recruit.find_matches.
@@ -28,7 +28,7 @@ import {
  * half a shortlist presented as the whole one.
  *
  * The matching run already records its own state on the job row (syncStatus
- * ZIPDEV_MOTOR → COMPLETED/ERROR, plus a find_matches_completed step carrying
+ * Cortex_MOTOR → COMPLETED/ERROR, plus a find_matches_completed step carrying
  * the run's totals), so /api/internal/recruit/match-status answers "is it done"
  * definitively in a couple of cheap counts. Because each poll is now ~100 ms
  * instead of ~1.2 s, the interval drops from 8 s to 5 s: the same 40-second
@@ -40,13 +40,17 @@ const POLL_EVERY_MS = 5_000;
 const DEFAULT_MAX_WAIT_S = 40;
 
 interface MatchStatus {
-  state: 'idle' | 'running' | 'completed' | 'error';
+  state: "idle" | "running" | "completed" | "error";
   ready: boolean;
   progressText: string | null;
   startedAt: string | null;
   completedAt: string | null;
   error: string | null;
-  pool: { totalCandidates: number; scoredCandidates: number; withAiInsights: number };
+  pool: {
+    totalCandidates: number;
+    scoredCandidates: number;
+    withAiInsights: number;
+  };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   lastRun: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -56,7 +60,7 @@ interface MatchStatus {
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const t = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => {
+    signal?.addEventListener("abort", () => {
       clearTimeout(t);
       resolve();
     });
@@ -72,30 +76,32 @@ function renderMarkdown(
   meta: ToolMeta,
 ): string {
   const lines: string[] = [];
-  if (state === 'completed') {
+  if (state === "completed") {
     lines.push(
       `**Matching finished** — ${pool.scoredCandidates} of ${pool.totalCandidates} candidates scored.`,
     );
     if (lastRun?.recommended != null) {
       lines.push(
-        `The run recommended ${lastRun.recommended} candidate(s) out of ${lastRun.evaluated ?? '?'} evaluated.`,
+        `The run recommended ${lastRun.recommended} candidate(s) out of ${lastRun.evaluated ?? "?"} evaluated.`,
       );
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const top: any[] = Array.isArray(lastRun?.topCandidates) ? lastRun.topCandidates : [];
+    const top: any[] = Array.isArray(lastRun?.topCandidates)
+      ? lastRun.topCandidates
+      : [];
     if (top.length) {
-      lines.push('');
-      lines.push('| # | Candidate | Score | Matched skills |');
-      lines.push('| --- | --- | --- | --- |');
+      lines.push("");
+      lines.push("| # | Candidate | Score | Matched skills |");
+      lines.push("| --- | --- | --- | --- |");
       top.forEach((c, i) => {
         lines.push(
-          `| ${i + 1} | ${c.name ?? '—'} | ${typeof c.score === 'number' ? Math.round(c.score) : '—'} | ${c.matchedSkills ?? '—'} |`,
+          `| ${i + 1} | ${c.name ?? "—"} | ${typeof c.score === "number" ? Math.round(c.score) : "—"} | ${c.matchedSkills ?? "—"} |`,
         );
       });
     }
-  } else if (state === 'error') {
+  } else if (state === "error") {
     lines.push(`**Matching failed** after ${elapsed}s.`);
-  } else if (state === 'running') {
+  } else if (state === "running") {
     lines.push(
       `**Still matching** (${elapsed}s so far) — ${pool.scoredCandidates} of ${pool.totalCandidates} candidates scored.`,
     );
@@ -104,17 +110,17 @@ function renderMarkdown(
       `No matching run recorded for this requisition; the pool holds ${pool.totalCandidates} candidate(s).`,
     );
   }
-  lines.push('');
+  lines.push("");
   lines.push(provenanceFooter(meta));
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 export const recruitWaitForMatches = registerTool({
-  id: 'recruit.wait_for_matches',
+  id: "recruit.wait_for_matches",
   description:
     "Wait for candidate matching to finish (use right after recruit.find_matches). Polls the run's real status server-side for up to ~40 seconds and returns the pool when it is genuinely complete, together with the run's own top candidates. " +
     'Read `state`: "completed" means done — present the shortlist; "running" means call this tool again after telling the user in plain words that it is still working ("sigo puliendo la lista — ya hay N candidatos evaluados"); "error" means the run failed, say so; "idle" means no run has been recorded and any pool present came from the ATS sync instead. Never tell the user to check back themselves, and never present a "running" pool as the finished shortlist. ' +
-    'PROVENANCE: scores and rankings here are Zipdev AI scoring — derived, not Workable ATS data and not client feedback. Cite that, and cite meta.fetchedAt, when you present results.',
+    "PROVENANCE: scores and rankings here are Cortex AI scoring — derived, not Workable ATS data and not client feedback. Cite that, and cite meta.fetchedAt, when you present results.",
   inputSchema: z.object({
     jobId: z.string().min(1),
     maxWaitSeconds: z.number().int().min(5).max(45).default(DEFAULT_MAX_WAIT_S),
@@ -122,7 +128,7 @@ export const recruitWaitForMatches = registerTool({
     previousCount: z.number().int().min(0).default(0),
   }),
   outputSchema: z.object({
-    state: z.enum(['idle', 'running', 'completed', 'error']),
+    state: z.enum(["idle", "running", "completed", "error"]),
     ready: z.boolean(),
     elapsedSeconds: z.number(),
     totalCandidates: z.number(),
@@ -136,16 +142,17 @@ export const recruitWaitForMatches = registerTool({
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     const started = Date.now();
-    const deadline = started + (input.maxWaitSeconds ?? DEFAULT_MAX_WAIT_S) * 1000;
+    const deadline =
+      started + (input.maxWaitSeconds ?? DEFAULT_MAX_WAIT_S) * 1000;
     const elapsed = () => Math.round((Date.now() - started) / 1000);
 
     let pool = { totalCandidates: 0, scoredCandidates: 0, withAiInsights: 0 };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let lastRun: any = null;
-    let state: 'idle' | 'running' | 'completed' | 'error' = 'idle';
+    let state: "idle" | "running" | "completed" | "error" = "idle";
     let error: string | null = null;
     let leanAvailable = true;
-    let leanReason = '';
+    let leanReason = "";
 
     for (;;) {
       if (leanAvailable) {
@@ -157,7 +164,7 @@ export const recruitWaitForMatches = registerTool({
           pool = res.data.pool;
           lastRun = res.data.lastRun ?? null;
           error = res.data.error ?? null;
-          if (state !== 'running') break;
+          if (state !== "running") break;
         } else {
           leanAvailable = false;
           leanReason = res.reason;
@@ -169,20 +176,24 @@ export const recruitWaitForMatches = registerTool({
         // "scored count grew and cleared five" heuristic. It cannot see the
         // run's real state, so it can only report progress.
         try {
-          const data = await matcherFetch(`/api/jobs/${encodeURIComponent(input.jobId)}/insights`);
+          const data = await matcherFetch(
+            `/api/jobs/${encodeURIComponent(input.jobId)}/insights`,
+          );
           const s = data?.stats ?? {};
           pool = {
             totalCandidates: Number(s.totalCandidates ?? 0),
             scoredCandidates: Number(s.candidatesWithAI ?? 0),
             withAiInsights: Number(s.candidatesWithAI ?? 0),
           };
-          const settled = pool.totalCandidates > 0 && pool.scoredCandidates >= pool.totalCandidates;
+          const settled =
+            pool.totalCandidates > 0 &&
+            pool.scoredCandidates >= pool.totalCandidates;
           const grew = pool.scoredCandidates > (input.previousCount ?? 0);
           if (settled || (grew && pool.scoredCandidates >= 5)) {
-            state = 'completed';
+            state = "completed";
             break;
           }
-          state = 'running';
+          state = "running";
         } catch {
           // Transient matcher hiccup — keep polling until the window closes.
         }
@@ -194,22 +205,24 @@ export const recruitWaitForMatches = registerTool({
     }
 
     const meta = buildMeta({
-      endpoint: leanAvailable ? '/api/internal/recruit/match-status' : '/api/jobs/:id/insights',
+      endpoint: leanAvailable
+        ? "/api/internal/recruit/match-status"
+        : "/api/jobs/:id/insights",
       degraded: !leanAvailable,
       degradedReason: leanReason,
       returned: pool.scoredCandidates,
-      truncated: state === 'running',
+      truncated: state === "running",
       elapsedSeconds: elapsed(),
       links: { matcher: matcherLink(`/jobs/${input.jobId}`) },
       provenance: {
-        'state, lastRun.*': `${SOURCE.matcher} — written by the matching run itself onto the job record`,
-        'pool.*': `${SOURCE.matcher} — live counts over the job's application rows`,
-        'lastRun.topCandidates[].score': `${SOURCE.aiScoring} — derived, never an ATS field`,
+        "state, lastRun.*": `${SOURCE.matcher} — written by the matching run itself onto the job record`,
+        "pool.*": `${SOURCE.matcher} — live counts over the job's application rows`,
+        "lastRun.topCandidates[].score": `${SOURCE.aiScoring} — derived, never an ATS field`,
       },
       dataQuality: [
-        ...(state === 'running'
+        ...(state === "running"
           ? [
-              'Matching is still running — this pool is incomplete. Do not present it as the final shortlist.',
+              "Matching is still running — this pool is incomplete. Do not present it as the final shortlist.",
             ]
           : []),
         ...(!leanAvailable
@@ -222,7 +235,9 @@ export const recruitWaitForMatches = registerTool({
 
     return {
       state,
-      ready: state === 'completed' || (state === 'idle' && pool.scoredCandidates > 0),
+      ready:
+        state === "completed" ||
+        (state === "idle" && pool.scoredCandidates > 0),
       elapsedSeconds: elapsed(),
       totalCandidates: pool.totalCandidates,
       scoredCandidates: pool.scoredCandidates,

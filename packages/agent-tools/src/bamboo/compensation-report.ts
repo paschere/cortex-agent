@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { registerTool } from '../index';
-import { fetchReport } from './roster';
+import { z } from "zod";
+import { registerTool } from "../index";
+import { fetchReport } from "./roster";
 import {
   DATASET,
   FIELD,
@@ -17,7 +17,7 @@ import {
   sourceSchema,
   statusShape,
   str,
-} from './shape';
+} from "./shape";
 
 /**
  * THE GATED ONE.
@@ -39,7 +39,7 @@ const MAX_ROWS = 400;
 const lineSchema = z.object({
   name: z.string().nullable(),
   jobTitle: z.string().nullable(),
-  /** BambooHR's "department" — at Zipdev, the client the person is placed with. */
+  /** BambooHR's "department" — at Cortex, the client the person is placed with. */
   client: z.string().nullable(),
   division: z.string().nullable(),
   payRate: moneySchema,
@@ -51,37 +51,43 @@ const lineSchema = z.object({
 });
 
 const REPORT_FIELDS = [
-  'id',
-  'displayName',
-  'jobTitle',
-  'department',
-  'division',
-  'status',
-  'payRate',
-  'payPeriod',
-  'payFrequency',
+  "id",
+  "displayName",
+  "jobTitle",
+  "department",
+  "division",
+  "status",
+  "payRate",
+  "payPeriod",
+  "payFrequency",
   FIELD.billRate,
   FIELD.billRateEffectiveDate,
 ];
 
 export const bambooCompensationReport = registerTool({
-  id: 'bamboo.compensation_report',
+  id: "bamboo.compensation_report",
   description: [
     'Pull pay rates AND bill rates for a whole group of people at once from BambooHR — everyone on a client, everyone in a division, or the entire active roster — with the margin between the two worked out per person and in total. This is the only tool that answers "what is our margin on this account". It is a bulk compensation export: it needs a person to approve it before it runs, and it will not run unattended on a schedule. For one individual, use bamboo.get_employee instead; for the cost side of a client with expenses and trend, use payroll.client_report.',
     PAYROLL_BOUNDARY_NOTE,
-  ].join(' '),
+  ].join(" "),
   inputSchema: z.object({
     client: z
       .string()
       .max(120)
       .optional()
       .describe('Limit to one client or project, e.g. "Momentive Software"'),
-    division: z.string().max(120).optional().describe('Limit to one division, e.g. "Tech"'),
-    status: z.enum(['active', 'inactive', 'any']).default('active'),
+    division: z
+      .string()
+      .max(120)
+      .optional()
+      .describe('Limit to one division, e.g. "Tech"'),
+    status: z.enum(["active", "inactive", "any"]).default("active"),
     onlyMissingBillRate: z
       .boolean()
       .default(false)
-      .describe('Show only people who have no bill rate recorded — useful for finding gaps'),
+      .describe(
+        "Show only people who have no bill rate recorded — useful for finding gaps",
+      ),
     limit: z.number().int().min(1).max(MAX_ROWS).default(MAX_ROWS),
   }),
   outputSchema: z.object({
@@ -118,17 +124,17 @@ export const bambooCompensationReport = registerTool({
         marginPercent: number | null;
       }>,
       peopleWithoutBillRate: 0,
-      guidance: '',
+      guidance: "",
     };
 
     const res = await fetchReport(ctx, REPORT_FIELDS);
     if (!res.ok) return { ...empty, ...failureStatus(res) };
 
-    const wantStatus = input.status ?? 'active';
+    const wantStatus = input.status ?? "active";
     const rows = res.data.filter((row: ReportRow) => {
       const status = str(row.status);
-      if (wantStatus === 'active' && status !== 'Active') return false;
-      if (wantStatus === 'inactive' && status === 'Active') return false;
+      if (wantStatus === "active" && status !== "Active") return false;
+      if (wantStatus === "inactive" && status === "Active") return false;
       if (
         input.client &&
         !str(row.department)?.toLowerCase().includes(input.client.toLowerCase())
@@ -168,11 +174,18 @@ export const bambooCompensationReport = registerTool({
 
     // Summing MXN and USD into one number would be a fabricated total, so each
     // currency is reported on its own and rows with no rate are simply absent.
-    const buckets = new Map<string, { people: number; pay: number; bill: number }>();
+    const buckets = new Map<
+      string,
+      { people: number; pay: number; bill: number }
+    >();
     for (const l of selected) {
       const currency = l.billRate.currency ?? l.payRate.currency;
       if (!currency) continue;
-      if (l.payRate.currency && l.billRate.currency && l.payRate.currency !== l.billRate.currency) {
+      if (
+        l.payRate.currency &&
+        l.billRate.currency &&
+        l.payRate.currency !== l.billRate.currency
+      ) {
         continue;
       }
       const b = buckets.get(currency) ?? { people: 0, pay: 0, bill: 0 };
@@ -191,7 +204,9 @@ export const bambooCompensationReport = registerTool({
           totalPay: Math.round(b.pay * 100) / 100,
           totalBill: Math.round(b.bill * 100) / 100,
           totalMargin,
-          marginPercent: b.bill ? Math.round((totalMargin / b.bill) * 1000) / 10 : null,
+          marginPercent: b.bill
+            ? Math.round((totalMargin / b.bill) * 1000) / 10
+            : null,
         };
       })
       .sort((a, b) => b.people - a.people);
@@ -203,9 +218,11 @@ export const bambooCompensationReport = registerTool({
       );
     }
     notes.push(
-      'Pay frequencies differ between people (monthly, twice a month, hourly), so treat the totals as a comparison of recorded rates rather than a monthly cost figure.',
+      "Pay frequencies differ between people (monthly, twice a month, hourly), so treat the totals as a comparison of recorded rates rather than a monthly cost figure.",
     );
-    notes.push('This is compensation for many people at once — share it only with whoever asked.');
+    notes.push(
+      "This is compensation for many people at once — share it only with whoever asked.",
+    );
 
     return {
       ...OK_STATUS,
@@ -214,7 +231,7 @@ export const bambooCompensationReport = registerTool({
       totalPeople: selected.length,
       totalsByCurrency,
       peopleWithoutBillRate: missing,
-      guidance: notes.join(' '),
+      guidance: notes.join(" "),
     };
   },
 });

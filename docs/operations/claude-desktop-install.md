@@ -1,10 +1,10 @@
 # Claude Desktop Install Runbook
 
-Connect the zipdev MCP server to Claude Desktop so Claude can use zipdev tools directly.
+Connect the Cortex MCP server to Claude Desktop so Claude can use Cortex tools directly.
 
 ## Step 1: Generate a token
 
-1. Sign in at **https://app.zipdev.com**.
+1. Sign in at your deployment's public origin (e.g. **https://app.example.com**).
 2. Go to **MCP tokens** in the sidebar.
 3. Click **Issue new token**, name it (e.g., "My Claude Desktop").
 4. Copy the plaintext token — it is shown only once.
@@ -18,7 +18,7 @@ Connect the zipdev MCP server to Claude Desktop so Claude can use zipdev tools d
 
 If the file does not exist, create it.
 
-## Step 3: Add the zipdev MCP server entry
+## Step 3: Add the Cortex MCP server entry
 
 Open the config file and add the `cortex-agent` entry under `mcpServers`:
 
@@ -26,7 +26,7 @@ Open the config file and add the `cortex-agent` entry under `mcpServers`:
 {
   "mcpServers": {
     "cortex-agent": {
-      "url": "https://mcp.zipdev.com/sse",
+      "url": "https://mcp.example.com/sse",
       "headers": {
         "Authorization": "Bearer YOUR_TOKEN_HERE"
       }
@@ -43,7 +43,7 @@ Fully quit and reopen Claude Desktop for the config to take effect.
 
 ## Step 5: Verify
 
-In a new Claude conversation, ask: **"What zipdev tools do you have?"**
+In a new Claude conversation, ask: **"What Cortex tools do you have?"**
 
 Claude should list tools including `hubspot.search_companies`, `rate.estimate`, `kb.search`, and others.
 
@@ -53,11 +53,11 @@ Claude should list tools including `hubspot.search_companies`, `rate.estimate`, 
 |---|---|
 | `401 Unauthorized` errors | Token was revoked or expired — issue a new one (Step 1) |
 | "Tool not found" | Claude Desktop caches tool lists — fully quit and reopen |
-| Network errors | Check `https://mcp.zipdev.com/health` directly; contact ops if it returns non-200 |
+| Network errors | Check `https://mcp.example.com/health` directly; contact ops if it returns non-200 |
 
 ## Revoking a token
 
-1. Sign in at **https://app.zipdev.com**.
+1. Sign in at your deployment's public origin (e.g. **https://app.example.com**).
 2. Go to **MCP tokens** in the sidebar.
 3. Click **Revoke** next to the token.
 

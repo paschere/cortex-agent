@@ -1,4 +1,4 @@
-import { BASE, matcherFetch } from '../recruit/client';
+import { BASE, matcherFetch } from "../recruit/client";
 
 /**
  * Matcher access for the presentations family.
@@ -12,11 +12,11 @@ import { BASE, matcherFetch } from '../recruit/client';
  *
  * The export route is reachable service-to-service: the matcher's middleware
  * guards `/api/candidates` only when ENFORCE_API_AUTH is on, and it accepts
- * `Authorization: Bearer <ZIPDEV_AGENT_SERVICE_TOKEN>` — the same header
- * recruit/client.ts already sends as ZIPDEV_MATCHER_TOKEN. So no new matcher
- * endpoint was needed; the ZIPDEV-letterhead, Letter-format renderer in
+ * `Authorization: Bearer <Cortex_AGENT_SERVICE_TOKEN>` — the same header
+ * recruit/client.ts already sends as Cortex_MATCHER_TOKEN. So no new matcher
+ * endpoint was needed; the Cortex-letterhead, Letter-format renderer in
  * lib/pdf/generate-presentation-pdf.ts stays the single source of truth for
- * what a Zipdev presentation looks like.
+ * what a Cortex presentation looks like.
  *
  * What the export route does NOT return is metadata — it answers with bytes
  * and a filename, nothing about which version or author is inside them. That
@@ -40,12 +40,12 @@ function toStored(p: any): StoredPresentation | null {
   if (!p) return null;
   return {
     id: p.id ?? null,
-    version: typeof p.version === 'number' ? p.version : null,
+    version: typeof p.version === "number" ? p.version : null,
     createdBy: p.createdBy ?? null,
     lastEditedBy: p.lastEditedBy ?? null,
     createdAt: p.createdAt ?? null,
     updatedAt: p.updatedAt ?? null,
-    htmlChars: typeof p.htmlContent === 'string' ? p.htmlContent.length : 0,
+    htmlChars: typeof p.htmlContent === "string" ? p.htmlContent.length : 0,
   };
 }
 
@@ -59,7 +59,9 @@ function toStored(p: any): StoredPresentation | null {
  * for its metadata only and the body is dropped here, at the boundary, so the
  * markup never reaches a model's context.
  */
-export async function readPresentation(candidateId: string): Promise<StoredPresentation | null> {
+export async function readPresentation(
+  candidateId: string,
+): Promise<StoredPresentation | null> {
   const data = await matcherFetch(
     `/api/candidates/${encodeURIComponent(candidateId)}/presentation`,
   );
@@ -67,7 +69,9 @@ export async function readPresentation(candidateId: string): Promise<StoredPrese
 }
 
 /** Same as readPresentation, but never throws — used for best-effort lookups. */
-export async function tryReadPresentation(candidateId: string): Promise<StoredPresentation | null> {
+export async function tryReadPresentation(
+  candidateId: string,
+): Promise<StoredPresentation | null> {
   try {
     return await readPresentation(candidateId);
   } catch {
@@ -76,10 +80,12 @@ export async function tryReadPresentation(candidateId: string): Promise<StoredPr
 }
 
 /** Ask the matcher's AI to write (or rewrite) the presentation. Version-bumps. */
-export async function writePresentation(candidateId: string): Promise<StoredPresentation | null> {
+export async function writePresentation(
+  candidateId: string,
+): Promise<StoredPresentation | null> {
   const data = await matcherFetch(
     `/api/candidates/${encodeURIComponent(candidateId)}/presentation/generate`,
-    { method: 'POST' },
+    { method: "POST" },
   );
   return toStored(data?.presentation ?? null);
 }
@@ -94,7 +100,7 @@ export interface RenderedPdf {
 export class NoPresentationError extends Error {
   constructor(candidateId: string) {
     super(`No presentation exists yet for candidate ${candidateId}`);
-    this.name = 'NoPresentationError';
+    this.name = "NoPresentationError";
   }
 }
 
@@ -106,13 +112,16 @@ export class NoPresentationError extends Error {
  * Chromium launch is slow but not transient, so retrying a 5xx here would
  * queue a second 25-second render behind the first. One attempt, clear error.
  */
-export async function renderPdf(candidateId: string, jobId?: string): Promise<RenderedPdf> {
-  const token = process.env.ZIPDEV_MATCHER_TOKEN;
+export async function renderPdf(
+  candidateId: string,
+  jobId?: string,
+): Promise<RenderedPdf> {
+  const token = process.env.Cortex_MATCHER_TOKEN;
   const url = `${BASE()}/api/candidates/${encodeURIComponent(candidateId)}/presentation/export`;
   const res = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     // The route reads only the path param today; jobId is sent so that a
@@ -122,19 +131,27 @@ export async function renderPdf(candidateId: string, jobId?: string): Promise<Re
 
   if (res.status === 404) throw new NoPresentationError(candidateId);
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Zipdev matcher ${res.status} while exporting the PDF: ${body.slice(0, 300)}`);
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `Cortex matcher ${res.status} while exporting the PDF: ${body.slice(0, 300)}`,
+    );
   }
 
   const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.byteLength === 0) throw new Error('The matcher returned an empty PDF');
+  if (bytes.byteLength === 0)
+    throw new Error("The matcher returned an empty PDF");
 
-  return { bytes, filename: filenameFrom(res.headers.get('content-disposition'), candidateId) };
+  return {
+    bytes,
+    filename: filenameFrom(res.headers.get("content-disposition"), candidateId),
+  };
 }
 
 /** Pull `filename="…"` out of a Content-Disposition header (it is percent-encoded). */
 function filenameFrom(disposition: string | null, candidateId: string): string {
-  const match = disposition ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition) : null;
+  const match = disposition
+    ? /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
+    : null;
   if (match?.[1]) {
     try {
       return decodeURIComponent(match[1].trim());

@@ -1,6 +1,6 @@
-import { confirmationReason } from '@/lib/confirmation-notes';
-import type { ChatCardV2 } from '@/lib/google-chat';
-import { confirmationSummary, toolDisplayName } from '@/lib/tool-labels';
+import { confirmationReason } from "@/lib/confirmation-notes";
+import type { ChatCardV2 } from "@/lib/google-chat";
+import { confirmationSummary, toolDisplayName } from "@/lib/tool-labels";
 
 /**
  * The approval CARD Cortex posts in Google Chat.
@@ -31,47 +31,47 @@ import { confirmationSummary, toolDisplayName } from '@/lib/tool-labels';
  */
 
 /** The function name the buttons invoke; echoed back as `common.invokedFunction`. */
-export const APPROVAL_ACTION = 'cortex_approval_decision';
+export const APPROVAL_ACTION = "cortex_approval_decision";
 
 /** Parameter keys on the button. Read back in the CARD_CLICKED handler. */
-export const APPROVAL_ID_PARAM = 'approvalId';
-export const APPROVAL_DECISION_PARAM = 'decision';
+export const APPROVAL_ID_PARAM = "approvalId";
+export const APPROVAL_DECISION_PARAM = "decision";
 
 /** How much of the payload is worth putting on a phone screen. */
 const MAX_PAYLOAD_CHARS = 1200;
 
-export type ApprovalOrigin = 'mcp' | 'schedule' | 'web' | 'chat';
+export type ApprovalOrigin = "mcp" | "schedule" | "web" | "chat";
 
 const ORIGIN_LABEL: Record<ApprovalOrigin, string> = {
-  schedule: 'a scheduled routine',
-  mcp: 'your Claude conversation',
-  chat: 'Google Chat',
-  web: 'Zipdev OS',
+  schedule: "a scheduled routine",
+  mcp: "your Claude conversation",
+  chat: "Google Chat",
+  web: "Cortex OS",
 };
 
 /** Chat renders these literally, so they have to be neutralised. */
 function escapeHtml(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 /** A time a human recognises, in the timezone they actually live in. */
 export function formatClock(at: Date, timeZone: string): string {
   try {
-    return new Intl.DateTimeFormat('en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
+    return new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
       timeZone,
     }).format(at);
   } catch {
     // An unknown zone must not cost us the card.
-    return new Intl.DateTimeFormat('en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'UTC',
+    return new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
     }).format(at);
   }
 }
@@ -85,15 +85,15 @@ function payloadText(input: unknown): string {
   }
   const clipped =
     json.length > MAX_PAYLOAD_CHARS
-      ? `${json.slice(0, MAX_PAYLOAD_CHARS)}\n… (the rest is in Zipdev OS)`
+      ? `${json.slice(0, MAX_PAYLOAD_CHARS)}\n… (the rest is in Cortex OS)`
       : json;
-  return escapeHtml(clipped).replace(/\n/g, '<br>');
+  return escapeHtml(clipped).replace(/\n/g, "<br>");
 }
 
 /** Plain-English "what will happen", never a tool id. */
 function summaryOf(toolId: string, input: unknown): string {
   const record =
-    input && typeof input === 'object' && !Array.isArray(input)
+    input && typeof input === "object" && !Array.isArray(input)
       ? (input as Record<string, unknown>)
       : {};
   try {
@@ -106,7 +106,7 @@ function summaryOf(toolId: string, input: unknown): string {
 function decisionButton(opts: {
   text: string;
   approvalId: string;
-  decision: 'approve' | 'decline';
+  decision: "approve" | "decline";
   color?: { red: number; green: number; blue: number; alpha: number };
 }): Record<string, unknown> {
   return {
@@ -132,7 +132,7 @@ export interface ApprovalCardOptions {
   origin: ApprovalOrigin;
   /** The person's own timezone, so "expires at 14:47" means 14:47 to them. */
   timeZone: string;
-  /** Absolute base URL of Zipdev OS, for the escape hatch link. Optional. */
+  /** Absolute base URL of Cortex OS, for the escape hatch link. Optional. */
   appBaseUrl?: string;
 }
 
@@ -143,8 +143,8 @@ export function buildApprovalCard(opts: ApprovalCardOptions): ChatCardV2 {
       widgets: [
         {
           decoratedText: {
-            startIcon: { knownIcon: 'DESCRIPTION' },
-            topLabel: 'What I want to do',
+            startIcon: { knownIcon: "DESCRIPTION" },
+            topLabel: "What I want to do",
             text: escapeHtml(summaryOf(opts.toolId, opts.input)),
             wrapText: true,
           },
@@ -159,7 +159,7 @@ export function buildApprovalCard(opts: ApprovalCardOptions): ChatCardV2 {
       ],
     },
     {
-      header: 'Exactly what will run',
+      header: "Exactly what will run",
       collapsible: true,
       // Nothing shows until it is opened: the payload is reassurance, not the
       // headline, and on a phone it would otherwise bury the buttons.
@@ -170,7 +170,7 @@ export function buildApprovalCard(opts: ApprovalCardOptions): ChatCardV2 {
       widgets: [
         {
           decoratedText: {
-            startIcon: { knownIcon: 'CLOCK' },
+            startIcon: { knownIcon: "CLOCK" },
             text: `Expires at ${formatClock(opts.expiresAt, opts.timeZone)} — nothing runs unless you approve`,
             wrapText: true,
           },
@@ -179,15 +179,15 @@ export function buildApprovalCard(opts: ApprovalCardOptions): ChatCardV2 {
           buttonList: {
             buttons: [
               decisionButton({
-                text: 'Approve',
+                text: "Approve",
                 approvalId: opts.approvalId,
-                decision: 'approve',
+                decision: "approve",
                 color: { red: 0.06, green: 0.62, blue: 0.35, alpha: 1 },
               }),
               decisionButton({
-                text: 'Decline',
+                text: "Decline",
                 approvalId: opts.approvalId,
-                decision: 'decline',
+                decision: "decline",
               }),
             ],
           },
@@ -203,8 +203,12 @@ export function buildApprovalCard(opts: ApprovalCardOptions): ChatCardV2 {
           buttonList: {
             buttons: [
               {
-                text: 'Open in Zipdev OS',
-                onClick: { openLink: { url: `${opts.appBaseUrl.replace(/\/+$/, '')}/approvals` } },
+                text: "Open in Cortex OS",
+                onClick: {
+                  openLink: {
+                    url: `${opts.appBaseUrl.replace(/\/+$/, "")}/approvals`,
+                  },
+                },
               },
             ],
           },
@@ -217,7 +221,7 @@ export function buildApprovalCard(opts: ApprovalCardOptions): ChatCardV2 {
     // Stable per approval, so a redraw replaces the card instead of stacking.
     cardId: `approval-${opts.approvalId}`,
     card: {
-      header: { title: 'Approval needed', subtitle: label },
+      header: { title: "Approval needed", subtitle: label },
       sections,
     },
   };
@@ -244,7 +248,9 @@ export function buildResolvedCard(opts: ResolvedCardOptions): ChatCardV2 {
     { decoratedText: { text: escapeHtml(opts.headline), wrapText: true } },
   ];
   if (opts.detail) {
-    widgets.push({ textParagraph: { text: escapeHtml(opts.detail).replace(/\n/g, '<br>') } });
+    widgets.push({
+      textParagraph: { text: escapeHtml(opts.detail).replace(/\n/g, "<br>") },
+    });
   }
   return {
     cardId: `approval-${opts.approvalId}`,

@@ -23,7 +23,7 @@ pub fn setup_deep_link<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::R
                     // Use serde_json to safely produce an escaped JSON string literal,
                     // preventing injection via tokens containing quotes, backslashes, etc.
                     let payload = serde_json::json!({
-                        "type": "zipdev-auth",
+                        "type": "cortex-auth",
                         "session": session_token
                     });
                     let js = format!("window.postMessage({}, '*');", payload);

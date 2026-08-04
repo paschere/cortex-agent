@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { registerTool } from '../index';
-import { bambooFetch } from './client';
-import { resolveEmployee } from './roster';
+import { z } from "zod";
+import { registerTool } from "../index";
+import { bambooFetch } from "./client";
+import { resolveEmployee } from "./roster";
 import {
   DATASET,
   OK_STATUS,
@@ -10,7 +10,7 @@ import {
   sourceSchema,
   statusShape,
   str,
-} from './shape';
+} from "./shape";
 
 /**
  * Time off: who is away, what has been requested, and how much anyone has left.
@@ -38,7 +38,7 @@ function plusDays(from: string, days: number): string {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const dateInput = z.string().regex(DATE_RE, 'Use YYYY-MM-DD');
+const dateInput = z.string().regex(DATE_RE, "Use YYYY-MM-DD");
 
 // ---------------------------------------------------------------------------
 // Who's out
@@ -71,12 +71,16 @@ function daysBetween(start: string | null, end: string | null): number | null {
 }
 
 export const bambooWhosOut = registerTool({
-  id: 'bamboo.whos_out',
+  id: "bamboo.whos_out",
   description:
-    'See who is away from Zipdev over a date range, straight from BambooHR — holidays, sick days and any other approved leave, plus company holidays. Defaults to the next two weeks. This is the tool for "who is out this week?" or "is anyone off on Friday?".',
+    'See who is away from Cortex over a date range, straight from BambooHR — holidays, sick days and any other approved leave, plus company holidays. Defaults to the next two weeks. This is the tool for "who is out this week?" or "is anyone off on Friday?".',
   inputSchema: z.object({
-    start: dateInput.optional().describe('First day to check, YYYY-MM-DD. Defaults to today.'),
-    end: dateInput.optional().describe('Last day to check. Defaults to two weeks from the start.'),
+    start: dateInput
+      .optional()
+      .describe("First day to check, YYYY-MM-DD. Defaults to today."),
+    end: dateInput
+      .optional()
+      .describe("Last day to check. Defaults to two weeks from the start."),
   }),
   outputSchema: z.object({
     ...statusShape,
@@ -97,7 +101,7 @@ export const bambooWhosOut = registerTool({
       peopleOut: 0,
       start,
       end,
-      guidance: '',
+      guidance: "",
     };
 
     if ((daysBetween(start, end) ?? 0) > MAX_RANGE_DAYS) {
@@ -108,9 +112,14 @@ export const bambooWhosOut = registerTool({
       };
     }
 
-    const res = await bambooFetch<RawWhosOut[]>(ctx, 'GET', '/time_off/whos_out', {
-      params: { start, end },
-    });
+    const res = await bambooFetch<RawWhosOut[]>(
+      ctx,
+      "GET",
+      "/time_off/whos_out",
+      {
+        params: { start, end },
+      },
+    );
     if (!res.ok) return { ...empty, ...failureStatus(res) };
 
     const rows = Array.isArray(res.data) ? res.data : [];
@@ -122,10 +131,10 @@ export const bambooWhosOut = registerTool({
         kind: str(row.type),
         days: daysBetween(str(row.start), str(row.end)),
       }))
-      .sort((a, b) => (a.start ?? '').localeCompare(b.start ?? ''));
+      .sort((a, b) => (a.start ?? "").localeCompare(b.start ?? ""));
 
     const people = new Set(
-      absences.filter((a) => a.kind === 'timeOff' && a.name).map((a) => a.name),
+      absences.filter((a) => a.kind === "timeOff" && a.name).map((a) => a.name),
     );
 
     return {
@@ -134,7 +143,7 @@ export const bambooWhosOut = registerTool({
       absences,
       peopleOut: people.size,
       guidance: absences.length
-        ? `${people.size} ${people.size === 1 ? 'person is' : 'people are'} away between ${start} and ${end}. Company holidays appear here too, marked as holidays rather than a person's leave.`
+        ? `${people.size} ${people.size === 1 ? "person is" : "people are"} away between ${start} and ${end}. Company holidays appear here too, marked as holidays rather than a person's leave.`
         : `Nobody is booked off between ${start} and ${end}.`,
     };
   },
@@ -172,18 +181,37 @@ const requestSchema = z.object({
 const MAX_NOTE = 300;
 
 export const bambooTimeOffRequests = registerTool({
-  id: 'bamboo.time_off_requests',
+  id: "bamboo.time_off_requests",
   description:
     'List time-off requests from BambooHR over a date range — approved, still waiting for approval, denied or cancelled — with who asked, what kind of leave, how long, and any note they left. Use it for "what\'s waiting for approval?", "how much holiday has the team booked next month?" or to check one person\'s requests. Read-only: I can show requests but never approve, deny or cancel one.',
   inputSchema: z.object({
-    start: dateInput.optional().describe('First day of the range. Defaults to today.'),
-    end: dateInput.optional().describe('Last day. Defaults to 30 days after the start.'),
+    start: dateInput
+      .optional()
+      .describe("First day of the range. Defaults to today."),
+    end: dateInput
+      .optional()
+      .describe("Last day. Defaults to 30 days after the start."),
     status: z
-      .enum(['approved', 'denied', 'superseded', 'requested', 'canceled', 'any'])
-      .default('any')
+      .enum([
+        "approved",
+        "denied",
+        "superseded",
+        "requested",
+        "canceled",
+        "any",
+      ])
+      .default("any")
       .describe('"requested" means still waiting for a decision'),
-    name: z.string().max(120).optional().describe('Limit to one person, by name'),
-    email: z.string().max(160).optional().describe('Limit to one person, by work email'),
+    name: z
+      .string()
+      .max(120)
+      .optional()
+      .describe("Limit to one person, by name"),
+    email: z
+      .string()
+      .max(160)
+      .optional()
+      .describe("Limit to one person, by work email"),
     limit: z.number().int().min(1).max(200).default(50),
   }),
   outputSchema: z.object({
@@ -209,7 +237,7 @@ export const bambooTimeOffRequests = registerTool({
       start,
       end,
       candidates: [] as string[],
-      guidance: '',
+      guidance: "",
     };
 
     if ((daysBetween(start, end) ?? 0) > MAX_RANGE_DAYS) {
@@ -222,32 +250,47 @@ export const bambooTimeOffRequests = registerTool({
 
     let employeeId: string | undefined;
     if (input.name || input.email) {
-      const resolved = await resolveEmployee(ctx, { name: input.name, email: input.email });
+      const resolved = await resolveEmployee(ctx, {
+        name: input.name,
+        email: input.email,
+      });
       if (!resolved.ok) return { ...empty, ...failureStatus(resolved) };
       const r = resolved.data;
-      if (r.kind === 'none') return { ...empty, configured: true, reason: r.reason };
-      if (r.kind === 'ambiguous') {
-        return { ...empty, configured: true, reason: r.reason, candidates: r.candidates };
+      if (r.kind === "none")
+        return { ...empty, configured: true, reason: r.reason };
+      if (r.kind === "ambiguous") {
+        return {
+          ...empty,
+          configured: true,
+          reason: r.reason,
+          candidates: r.candidates,
+        };
       }
       employeeId = String(r.row.id);
     }
 
-    const wantStatus = input.status ?? 'any';
-    const res = await bambooFetch<RawRequest[]>(ctx, 'GET', '/time_off/requests', {
-      params: {
-        start,
-        end,
-        employeeId,
-        status: wantStatus === 'any' ? undefined : wantStatus,
+    const wantStatus = input.status ?? "any";
+    const res = await bambooFetch<RawRequest[]>(
+      ctx,
+      "GET",
+      "/time_off/requests",
+      {
+        params: {
+          start,
+          end,
+          employeeId,
+          status: wantStatus === "any" ? undefined : wantStatus,
+        },
       },
-    });
+    );
     if (!res.ok) return { ...empty, ...failureStatus(res) };
 
     const rows = Array.isArray(res.data) ? res.data : [];
     const requests = rows
       .map((row) => {
         const amount = row.amount?.amount;
-        const parsed = amount === undefined ? null : Number.parseFloat(String(amount));
+        const parsed =
+          amount === undefined ? null : Number.parseFloat(String(amount));
         const note = str(row.notes?.employee);
         return {
           name: str(row.name),
@@ -261,9 +304,9 @@ export const bambooTimeOffRequests = registerTool({
           employeeNote: note ? note.slice(0, MAX_NOTE) : null,
         };
       })
-      .sort((a, b) => (a.start ?? '').localeCompare(b.start ?? ''));
+      .sort((a, b) => (a.start ?? "").localeCompare(b.start ?? ""));
 
-    const pending = requests.filter((r) => r.status === 'requested').length;
+    const pending = requests.filter((r) => r.status === "requested").length;
 
     return {
       ...OK_STATUS,
@@ -274,8 +317,8 @@ export const bambooTimeOffRequests = registerTool({
       guidance: !requests.length
         ? `No time-off requests between ${start} and ${end}.`
         : pending
-          ? `${requests.length} request${requests.length === 1 ? '' : 's'} in that window, ${pending} still waiting for a decision. Approving them has to happen in BambooHR — I only read.`
-          : `${requests.length} request${requests.length === 1 ? '' : 's'} in that window, none awaiting approval.`,
+          ? `${requests.length} request${requests.length === 1 ? "" : "s"} in that window, ${pending} still waiting for a decision. Approving them has to happen in BambooHR — I only read.`
+          : `${requests.length} request${requests.length === 1 ? "" : "s"} in that window, none awaiting approval.`,
     };
   },
 });
@@ -310,7 +353,7 @@ function num(value: unknown): number | null {
 }
 
 export const bambooTimeOffBalance = registerTool({
-  id: 'bamboo.time_off_balance',
+  id: "bamboo.time_off_balance",
   description:
     'Show how much time off one person has left in BambooHR, by policy — holiday, sick days, unpaid days and anything else they are enrolled in — along with how much they have already used this year. Answers "how much holiday does she have left?". Balances are projected to the end of this year unless you ask for a different date.',
   inputSchema: z
@@ -320,10 +363,12 @@ export const bambooTimeOffBalance = registerTool({
       asOf: dateInput
         .optional()
         .describe(
-          'Project the balance to this date, YYYY-MM-DD. Defaults to the end of this year.',
+          "Project the balance to this date, YYYY-MM-DD. Defaults to the end of this year.",
         ),
     })
-    .refine((v) => !!(v.name || v.email), { message: 'Give me a name or a work email' }),
+    .refine((v) => !!(v.name || v.email), {
+      message: "Give me a name or a work email",
+    }),
   outputSchema: z.object({
     ...statusShape,
     source: sourceSchema,
@@ -344,22 +389,31 @@ export const bambooTimeOffBalance = registerTool({
       asOf,
       balances: [] as z.infer<typeof balanceSchema>[],
       candidates: [] as string[],
-      guidance: '',
+      guidance: "",
     };
 
-    const resolved = await resolveEmployee(ctx, { name: input.name, email: input.email });
+    const resolved = await resolveEmployee(ctx, {
+      name: input.name,
+      email: input.email,
+    });
     if (!resolved.ok) return { ...empty, ...failureStatus(resolved) };
     const r = resolved.data;
-    if (r.kind === 'none') return { ...empty, configured: true, reason: r.reason };
-    if (r.kind === 'ambiguous') {
-      return { ...empty, configured: true, reason: r.reason, candidates: r.candidates };
+    if (r.kind === "none")
+      return { ...empty, configured: true, reason: r.reason };
+    if (r.kind === "ambiguous") {
+      return {
+        ...empty,
+        configured: true,
+        reason: r.reason,
+        candidates: r.candidates,
+      };
     }
 
     // BambooHR's `/time_off/balance` route does not exist on this instance; the
     // calculator endpoint is the one that answers "how much is left".
     const res = await bambooFetch<RawBalance[]>(
       ctx,
-      'GET',
+      "GET",
       `/employees/${String(r.row.id)}/time_off/calculator`,
       { params: { end: asOf } },
     );
@@ -383,8 +437,8 @@ export const bambooTimeOffBalance = registerTool({
       employeeName: str(r.row.displayName),
       balances,
       guidance: !balances.length
-        ? 'This person is not enrolled in any time-off policy in BambooHR.'
-        : `Balances are projected to ${asOf}. ${withTime.length ? `${withTime.length} of ${balances.length} policies still have time on them.` : 'Nothing is left on any policy.'} Most Zipdev policies are counted in hours, not days.`,
+        ? "This person is not enrolled in any time-off policy in BambooHR."
+        : `Balances are projected to ${asOf}. ${withTime.length ? `${withTime.length} of ${balances.length} policies still have time on them.` : "Nothing is left on any policy."} Most Cortex policies are counted in hours, not days.`,
     };
   },
 });
@@ -398,21 +452,27 @@ interface RawTypes {
 }
 
 export const bambooTimeOffTypes = registerTool({
-  id: 'bamboo.time_off_types',
+  id: "bamboo.time_off_types",
   description:
-    'List the kinds of time off Zipdev offers in BambooHR — holiday, sick, parental, unpaid and so on — and whether each is counted in hours or days. Useful when someone asks what leave exists, or before interpreting a balance. Contains no personal data at all.',
+    "List the kinds of time off Cortex offers in BambooHR — holiday, sick, parental, unpaid and so on — and whether each is counted in hours or days. Useful when someone asks what leave exists, or before interpreting a balance. Contains no personal data at all.",
   inputSchema: z.object({}),
   outputSchema: z.object({
     ...statusShape,
     source: sourceSchema,
-    types: z.array(z.object({ name: z.string().nullable(), unit: z.string().nullable() })),
+    types: z.array(
+      z.object({ name: z.string().nullable(), unit: z.string().nullable() }),
+    ),
     guidance: z.string(),
   }),
   rateLimit: { perMinute: 10 },
   handler: async (_input, ctx) => {
-    const empty = { source: sourceOf(DATASET.timeOffTypes), types: [], guidance: '' };
+    const empty = {
+      source: sourceOf(DATASET.timeOffTypes),
+      types: [],
+      guidance: "",
+    };
 
-    const res = await bambooFetch<RawTypes>(ctx, 'GET', '/meta/time_off/types');
+    const res = await bambooFetch<RawTypes>(ctx, "GET", "/meta/time_off/types");
     if (!res.ok) return { ...empty, ...failureStatus(res) };
 
     const types = (res.data?.timeOffTypes ?? []).map((t) => ({
@@ -425,8 +485,8 @@ export const bambooTimeOffTypes = registerTool({
       ...empty,
       types,
       guidance: types.length
-        ? `Zipdev has ${types.length} kinds of time off set up in BambooHR.`
-        : 'No time-off policies are set up in BambooHR.',
+        ? `Cortex has ${types.length} kinds of time off set up in BambooHR.`
+        : "No time-off policies are set up in BambooHR.",
     };
   },
 });

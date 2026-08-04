@@ -5,7 +5,9 @@
  * That is deliberate — enforcement runs inside `runTool` on every single call
  * (web chat, MCP, scheduled jobs) and must never depend on the model choosing
  * to consult it. Keeping the classifier pure also makes the whole matrix
- * unit-testable without a database.
+ * unit-testable without a database. Its one ambient input is the workspace's
+ * own email domains (`INTERNAL_EMAIL_DOMAINS`) — static deployment config
+ * rather than request state, and overridable in a test with one assignment.
  *
  * POSTURE: flag first, block almost never. Cortex has to stay useful, so the
  * guardrail's job is to make risk visible and reviewable — not to stop people
@@ -31,6 +33,8 @@
  *                      anything client-facing)
  *     bulk           : bulk / whole-roster operation
  */
+
+import { isInternalEmailDomain } from '@cortex/core';
 
 export type Sensitivity = 'public' | 'internal' | 'client' | 'pii' | 'financial';
 export type BlastRadius = 'read' | 'internal_write' | 'external_send' | 'bulk';
@@ -61,11 +65,11 @@ export interface SecurityPolicy {
   /** trailing-hour budget for sensitive reads before `high-frequency` fires. */
   sensitiveReadsPerHour: number;
   /**
-   * When true (default), content addressed to someone outside zipdev.com asks
-   * for confirmation before it goes — at any risk level. One click, then it
-   * sends; emailing clients and candidates is the business, so this is a
-   * speed-bump, never a refusal. Turn it off and outbound sends are merely
-   * flagged.
+   * When true (default), content addressed to someone outside the company's
+   * own email domains asks for confirmation before it goes — at any risk
+   * level. One click, then it sends; emailing clients and candidates is the
+   * business, so this is a speed-bump, never a refusal. Turn it off and
+   * outbound sends are merely flagged.
    *
    * Note the other interactive speed-bump — a bulk export of compensation or
    * candidate data with a human present — always asks, independently of this
@@ -80,8 +84,15 @@ export const DEFAULT_POLICY: SecurityPolicy = {
   externalSendRequiresConfirmation: true,
 };
 
-/** Domains that count as "inside the company" for blast-radius purposes. */
-export const INTERNAL_DOMAINS = ['zipdev.com'];
+/**
+ * Domains that count as "inside the company" for blast-radius purposes, from
+ * `INTERNAL_EMAIL_DOMAINS`. Re-exported here because this is where the concept
+ * earns its keep; the empty-list posture (nobody is internal, so every
+ * recipient reads as external) is documented on the source in @cortex/core and
+ * is what keeps an unconfigured deployment erring toward asking rather than
+ * sending.
+ */
+export { internalEmailDomains } from '@cortex/core';
 
 /** limit/page-size at or above which a read is treated as a bulk export. */
 export const BULK_THRESHOLD = 200;
@@ -102,9 +113,10 @@ const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   payroll: 'financial',
   rate: 'financial',
   // BambooHR is the HR system of record: the roster, employment status,
-  // documents and — for every active person — both the pay rate Zipdev pays
-  // and the bill rate it charges. The family default is `pii` because most of
-  // the family is roster and time-off data about identifiable employees; every
+  // documents and — for every active person — both the pay rate the company
+  // pays and the bill rate it charges. The family default is `pii` because
+  // most of the family is roster and time-off data about identifiable
+  // employees; every
   // tool that actually carries a rate is pinned to `financial` in
   // TOOL_OVERRIDES below rather than being left to inherit.
   bamboo: 'pii',
@@ -113,8 +125,9 @@ const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   people: 'pii',
   gmail: 'pii',
   // Apollo hands back named individuals' work emails and phone numbers. It is
-  // bought-in data rather than Zipdev's own, but it is still personal data
-  // about identifiable people, so it is classified like any other PII source.
+  // bought-in data rather than the company's own, but it is still personal
+  // data about identifiable people, so it is classified like any other PII
+  // source.
   apollo: 'pii',
   hubspot: 'client',
   growth: 'client',
@@ -158,8 +171,8 @@ interface ToolOverride {
    */
   deliversContent?: boolean;
   /**
-   * Recipients are enumerable from the payload, so "everyone named is
-   * @zipdev.com" is a reliable signal that nothing is leaving. Lets an
+   * Recipients are enumerable from the payload, so "everyone named is on one
+   * of our own domains" is a reliable signal that nothing is leaving. Lets an
    * inherently-outbound tool relax back to an internal write. Not true of
    * channel-based destinations (a Slack channel may be shared with a client).
    */
@@ -386,8 +399,8 @@ const COMP_KEY_RE =
  * enable identity theft, not merely "this is about a person".
  *
  * Deliberately narrow. Names, emails and phone numbers are the everyday
- * substance of recruiting and must never trip this: Zipdev's whole business is
- * emailing candidates and clients about people. A passport or bank account
+ * substance of recruiting and must never trip this: emailing candidates and
+ * clients about people is the whole business. A passport or bank account
  * number leaving the company is a different thing entirely.
  */
 const PERSONAL_ID_RE =
@@ -445,19 +458,11 @@ function walk(input: unknown): Walked {
   return out;
 }
 
-function isInternalAddress(address: string): boolean {
-  const at = address.lastIndexOf('@');
-  const domain = (at === -1 ? address : address.slice(at + 1))
-    .toLowerCase()
-    .replace(/[.,;>)\]]+$/, '');
-  return INTERNAL_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
-}
-
 function hasExternalRecipient(w: Walked): boolean {
   for (const s of w.strings) {
     const matches = s.match(EMAIL_RE);
     if (matches) {
-      for (const m of matches) if (!isInternalAddress(m)) return true;
+      for (const m of matches) if (!isInternalEmailDomain(m)) return true;
     }
   }
   for (const d of w.domainish) {
@@ -468,7 +473,7 @@ function hasExternalRecipient(w: Walked): boolean {
         .toLowerCase()
         .replace(/^https?:\/\//, '')
         .split('/')[0] ?? '';
-    if (bare?.includes('.') && !isInternalAddress(bare)) return true;
+    if (bare?.includes('.') && !isInternalEmailDomain(bare)) return true;
   }
   return false;
 }
@@ -692,7 +697,7 @@ function subjectOf(c: Classification): string {
 export function explainBlock(c: Classification): string {
   const what = subjectOf(c);
   const why = c.signals.includes('external-recipient')
-    ? `it would send ${what} to someone outside Zipdev`
+    ? `it would send ${what} to someone outside the company`
     : c.signals.includes('unattended')
       ? `it would export ${what} automatically, with nobody reviewing it`
       : `it would move ${what} outside its normal boundary`;
@@ -700,7 +705,7 @@ export function explainBlock(c: Classification): string {
   return [
     `I can't run that one. It's blocked because ${why},`,
     "and that's not something I'm allowed to do on my own.",
-    'If this needs to happen, an org admin can review and run it directly from Zipdev OS —',
+    'If this needs to happen, an org admin can review and run it directly in Cortex —',
     "or tell me an internal-only version of the same request and I'll do that instead.",
   ].join(' ');
 }

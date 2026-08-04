@@ -1,8 +1,8 @@
-# Zipdev Agent v2 — Implementation Spec
+# Cortex Agent v2 — Implementation Spec
 
 ## Overview
 
-V2 transforms the Zipdev Sales AI Co-pilot from a read-only question-answering tool into a complete sales action platform. The current state is a functional skeleton: the agent runs on a 55-word seed prompt instead of the production system prompt, the proposal composite crashes on every invocation due to a Zod enum validation bug, KB citations are wired in the UI but never emitted by the API, the chat interface renders all LLM output as plain text, and salespeople cannot take any CRM action through the agent — only read. V2 fixes every confirmed crash, deploys the production system prompt, expands the tool surface to cover HubSpot writes and web research, and ships a production-quality chat interface with markdown rendering, streaming UX, and sales-specific affordances.
+V2 transforms the Cortex Sales AI Co-pilot from a read-only question-answering tool into a complete sales action platform. The current state is a functional skeleton: the agent runs on a 55-word seed prompt instead of the production system prompt, the proposal composite crashes on every invocation due to a Zod enum validation bug, KB citations are wired in the UI but never emitted by the API, the chat interface renders all LLM output as plain text, and salespeople cannot take any CRM action through the agent — only read. V2 fixes every confirmed crash, deploys the production system prompt, expands the tool surface to cover HubSpot writes and web research, and ships a production-quality chat interface with markdown rendering, streaming UX, and sales-specific affordances.
 
 The work is organized into four parallel tracks: UX Redesign, Agent Quality, Tool Expansion, and Dynamic MCP. Tracks 1–3 can be executed concurrently by a team or sequenced by a solo developer. Track 4 (Dynamic MCP) has a hard dependency on the atomic rate-limiter fix that ships in Track 3 and should start after that migration lands. The reviews identified and resolved several design conflicts: the multi-agent architecture proposal is dropped as premature (sub-agents have no capabilities the main agent lacks and add routing failure modes), per-conversation memory via rolling summaries is dropped (covered adequately by 20-message server-side rehydration), and citations are deferred until the backend emits structured annotation events.
 
@@ -53,22 +53,26 @@ Each task below is concrete and actionable. File paths are absolute from repo ro
 ### Track 1: UX Redesign
 
 #### T1.1 — Markdown rendering in MessageBubble
+
 **Priority**: Highest ROI, no API changes, no new routes. Ship first.
 
 **Description**: Replace the `whitespace-pre-wrap` div in `MessageBubble.tsx` with `react-markdown` configured with `remark-gfm` and `rehype-highlight`. Wrap output in `<div className="prose prose-sm dark:prose-invert max-w-none overflow-x-auto">` with Tailwind prose overrides to tighten spacing inside chat bubbles. Import a highlight.js CSS theme in `app/layout.tsx`.
 
 **Files to modify**:
+
 - `apps/web/components/chat/MessageBubble.tsx`
 - `apps/web/app/layout.tsx` — add `import 'highlight.js/styles/github-dark-dimmed.css'`
 - `apps/web/tailwind.config.ts` — add `require('@tailwindcss/typography')` to plugins
 
 **New dependencies to install**:
+
 ```
 pnpm add react-markdown@^9.0.1 remark-gfm@^4.0.0 rehype-highlight@^7.0.0 highlight.js
 pnpm add -D @tailwindcss/typography
 ```
 
 **Implementation notes**:
+
 - Do NOT add `rehype-raw` — default react-markdown sanitization is correct for LLM output.
 - Prose overrides to add alongside `prose-sm`: `prose-headings:mt-2 prose-p:mt-1 prose-p:mb-0 prose-li:my-0 prose-ul:my-1 prose-ol:my-1`
 - Wrap the prose container in `overflow-x-auto` to handle GFM tables in narrow bubbles.
@@ -79,15 +83,19 @@ pnpm add -D @tailwindcss/typography
 ---
 
 #### T1.2 — MessageList sticky scroll + TypingIndicator
+
 **Description**: Replace the `useEffect([messages.length, isLoading])` dependency array with a `ResizeObserver` on the scroll container's inner content div. Fire `scrollTop = scrollHeight` only if the user is within 120px of the bottom. Add a sticky chevron-down FAB when the user has scrolled away. Replace the `animate-pulse` thinking indicator with a `TypingIndicator` component (three dots with staggered `framer-motion` scale pulses).
 
 **Files to modify**:
+
 - `apps/web/components/chat/MessageList.tsx`
 
 **Files to create**:
+
 - `apps/web/components/chat/TypingIndicator.tsx`
 
 **Implementation notes**:
+
 - `TypingIndicator` renders when `isLoading && lastMessage?.role !== 'assistant'` (before first token arrives).
 - Streaming cursor: add `after:content-['▋'] after:animate-pulse after:ml-0.5 after:text-neutral-400` via a `data-streaming` attribute on the last assistant bubble while `isLoading`. Pure CSS, no JS re-animation.
 - Chevron FAB: `position: sticky`, `bottom-4`, renders inside `MessageList` scroll container.
@@ -97,16 +105,20 @@ pnpm add -D @tailwindcss/typography
 ---
 
 #### T1.3 — Sidebar in chat layout
+
 **Description**: Add the sidebar inside `(chat)/layout.tsx` as a flex sibling to the main chat column. On desktop (≥768px) render a 240px collapsible panel. On mobile render a `@radix-ui/react-dialog` drawer (already installed) triggered by a hamburger icon in the chat header. Populate with navigation links and a recent conversations list fetched via `useQuery`.
 
 **Files to modify**:
+
 - `apps/web/app/(chat)/layout.tsx` — change bare `h-screen flex-col` to `flex flex-row h-screen`; conditionally include `<Sidebar>`
 - `apps/web/components/nav/Sidebar.tsx` — full rewrite
 
 **Files to create**:
+
 - `apps/web/app/api/conversations/route.ts` — `GET` handler returning last 8 conversations ordered by `pinned DESC, updated_at DESC`; uses `requireSession()` and service-role client
 
 **Schema change** (run before this task):
+
 ```sql
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS pinned boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS conversations_user_pinned_idx
@@ -114,6 +126,7 @@ CREATE INDEX IF NOT EXISTS conversations_user_pinned_idx
 ```
 
 **Implementation notes**:
+
 - Sidebar state (collapsed/expanded) stored in `localStorage` key `sidebar_collapsed`.
 - `usePathname` drives active-link highlighting: `bg-neutral-100 dark:bg-neutral-800 font-medium` pill on matching route.
 - Recent conversations grouped by relative date ('Today', 'Yesterday', 'This week', 'Older') using `Intl.RelativeTimeFormat` — no date library.
@@ -125,23 +138,27 @@ CREATE INDEX IF NOT EXISTS conversations_user_pinned_idx
 ---
 
 #### T1.4 — EmptyState component
+
 **Description**: New component rendered when `messages.length === 0 && !isLoading`. Shows agent avatar, greeting, and 6 prompt suggestion cards. Cards animate in with Framer Motion staggered `fadeInUp`.
 
 **Files to create**:
+
 - `apps/web/components/chat/EmptyState.tsx`
 
 **Files to modify**:
+
 - `apps/web/components/chat/MessageList.tsx` — mount `EmptyState` when `messages.length === 0`
 
 **Static prompt cards**:
+
 ```tsx
 const SUGGESTIONS = [
-  { icon: 'BarChart2', text: 'Summarize my pipeline' },
-  { icon: 'FileText', text: 'Draft a proposal for Acme Corp' },
-  { icon: 'Calendar', text: 'Which deals close this month?' },
-  { icon: 'Search', text: 'Find contacts at [Company]' },
-  { icon: 'UserCheck', text: 'Qualify this lead: [paste]' },
-  { icon: 'Phone', text: 'Log a call with John Smith' },
+  { icon: "BarChart2", text: "Summarize my pipeline" },
+  { icon: "FileText", text: "Draft a proposal for Acme Corp" },
+  { icon: "Calendar", text: "Which deals close this month?" },
+  { icon: "Search", text: "Find contacts at [Company]" },
+  { icon: "UserCheck", text: "Qualify this lead: [paste]" },
+  { icon: "Phone", text: "Log a call with John Smith" },
 ];
 ```
 
@@ -152,58 +169,72 @@ Clicking a card sets the textarea value and focuses input.
 ---
 
 #### T1.5 — ToolCallCard humanization
+
 **Description**: Full rewrite of `ToolCallCard.tsx`. Map raw tool names to human strings and Lucide icons. Add status variants (amber spinner → green check → red alert). Add Framer Motion expand animation for args/result.
 
 **Files to create**:
+
 - `apps/web/lib/tool-labels.ts`
 
 **Files to modify**:
+
 - `apps/web/components/chat/ToolCallCard.tsx`
 
 **`tool-labels.ts` content** (partial, extend as tools are added):
+
 ```ts
 export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
-  'qualify_lead':                  { label: 'Qualify Lead',              icon: 'UserCheck' },
-  'hubspot_search_companies':      { label: 'Search HubSpot Companies',  icon: 'Building2' },
-  'hubspot_get_company':           { label: 'Get Company Details',        icon: 'Building2' },
-  'hubspot_search_deals':          { label: 'Search Deals',               icon: 'Briefcase' },
-  'hubspot_get_deal':              { label: 'Get Deal Details',           icon: 'Briefcase' },
-  'hubspot_search_contacts':       { label: 'Search Contacts',            icon: 'Users' },
-  'hubspot_get_contact':           { label: 'Get Contact Details',        icon: 'User' },
-  'hubspot_create_deal':           { label: 'Create Deal',                icon: 'PlusCircle' },
-  'hubspot_update_deal':           { label: 'Update Deal',                icon: 'Edit' },
-  'hubspot_create_contact':        { label: 'Create Contact',             icon: 'UserPlus' },
-  'hubspot_log_activity':          { label: 'Log Activity',               icon: 'ClipboardList' },
-  'hubspot_get_pipeline_summary':  { label: 'Get Pipeline Summary',       icon: 'BarChart2' },
-  'hubspot_list_recent_activities':{ label: 'List Recent Activities',     icon: 'Activity' },
-  'gmail_search':                  { label: 'Search Gmail',               icon: 'Mail' },
-  'gmail_read_thread':             { label: 'Read Email Thread',          icon: 'MailOpen' },
-  'gmail_draft':                   { label: 'Draft Email',                icon: 'Pencil' },
-  'gmail_send_draft':              { label: 'Send Email Draft',           icon: 'Send' },
-  'gmail_list_threads':            { label: 'List Email Threads',         icon: 'Inbox' },
-  'gcal_list_events':              { label: 'List Calendar Events',       icon: 'Calendar' },
-  'gcal_create_event':             { label: 'Create Calendar Event',      icon: 'CalendarPlus' },
-  'gsheets_read_range':            { label: 'Read Spreadsheet',           icon: 'Table' },
-  'gsheets_append_row':            { label: 'Append Row to Sheet',        icon: 'TableProperties' },
-  'kb_search':                     { label: 'Search Knowledge Base',      icon: 'BookOpen' },
-  'rate_estimate':                 { label: 'Estimate Rate',              icon: 'DollarSign' },
-  'sales_draft_proposal':          { label: 'Draft Proposal',             icon: 'FileText' },
-  'web_search':                    { label: 'Web Search',                 icon: 'Globe' },
-  'web_scrape':                    { label: 'Fetch Web Page',             icon: 'Link' },
-  'gdrive_search_files':           { label: 'Search Drive Files',         icon: 'FolderSearch' },
-  'gdrive_read_doc':               { label: 'Read Drive Document',        icon: 'FileSearch' },
+  qualify_lead: { label: "Qualify Lead", icon: "UserCheck" },
+  hubspot_search_companies: {
+    label: "Search HubSpot Companies",
+    icon: "Building2",
+  },
+  hubspot_get_company: { label: "Get Company Details", icon: "Building2" },
+  hubspot_search_deals: { label: "Search Deals", icon: "Briefcase" },
+  hubspot_get_deal: { label: "Get Deal Details", icon: "Briefcase" },
+  hubspot_search_contacts: { label: "Search Contacts", icon: "Users" },
+  hubspot_get_contact: { label: "Get Contact Details", icon: "User" },
+  hubspot_create_deal: { label: "Create Deal", icon: "PlusCircle" },
+  hubspot_update_deal: { label: "Update Deal", icon: "Edit" },
+  hubspot_create_contact: { label: "Create Contact", icon: "UserPlus" },
+  hubspot_log_activity: { label: "Log Activity", icon: "ClipboardList" },
+  hubspot_get_pipeline_summary: {
+    label: "Get Pipeline Summary",
+    icon: "BarChart2",
+  },
+  hubspot_list_recent_activities: {
+    label: "List Recent Activities",
+    icon: "Activity",
+  },
+  gmail_search: { label: "Search Gmail", icon: "Mail" },
+  gmail_read_thread: { label: "Read Email Thread", icon: "MailOpen" },
+  gmail_draft: { label: "Draft Email", icon: "Pencil" },
+  gmail_send_draft: { label: "Send Email Draft", icon: "Send" },
+  gmail_list_threads: { label: "List Email Threads", icon: "Inbox" },
+  gcal_list_events: { label: "List Calendar Events", icon: "Calendar" },
+  gcal_create_event: { label: "Create Calendar Event", icon: "CalendarPlus" },
+  gsheets_read_range: { label: "Read Spreadsheet", icon: "Table" },
+  gsheets_append_row: { label: "Append Row to Sheet", icon: "TableProperties" },
+  kb_search: { label: "Search Knowledge Base", icon: "BookOpen" },
+  rate_estimate: { label: "Estimate Rate", icon: "DollarSign" },
+  sales_draft_proposal: { label: "Draft Proposal", icon: "FileText" },
+  web_search: { label: "Web Search", icon: "Globe" },
+  web_scrape: { label: "Fetch Web Page", icon: "Link" },
+  gdrive_search_files: { label: "Search Drive Files", icon: "FolderSearch" },
+  gdrive_read_doc: { label: "Read Drive Document", icon: "FileSearch" },
 };
 
 export function toolLabel(toolId: string): { label: string; icon: string } {
-  return TOOL_LABELS[toolId] ?? { label: toTitleCase(toolId), icon: 'Wrench' };
+  return TOOL_LABELS[toolId] ?? { label: toTitleCase(toolId), icon: "Wrench" };
 }
 
 function toTitleCase(s: string): string {
-  return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 ```
 
 **Status color classes**:
+
 - `partial-call` / `call`: `bg-amber-50 dark:bg-amber-900/20` + `Loader2 animate-spin text-amber-600`
 - `result` (success): `bg-green-50 dark:bg-green-900/20` + `CheckCircle2 text-green-600`
 - `result` (error): `bg-red-50 dark:bg-red-900/20` + `AlertCircle text-red-600`
@@ -213,29 +244,35 @@ function toTitleCase(s: string): string {
 ---
 
 #### T1.6 — ConfirmationPrompt plain-English summary
+
 **Description**: Replace raw JSON display with a human-readable action summary above a collapsed detail.
 
 **Files to modify**:
+
 - `apps/web/components/chat/ConfirmationPrompt.tsx`
 - `apps/web/lib/tool-labels.ts` — add `CONFIRMATION_SUMMARIES`
 
 **`CONFIRMATION_SUMMARIES` function**:
+
 ```ts
-export function confirmationSummary(toolId: string, input: Record<string, unknown>): string {
+export function confirmationSummary(
+  toolId: string,
+  input: Record<string, unknown>,
+): string {
   switch (toolId) {
-    case 'hubspot_update_deal':
-      return `Update deal${input.dealstage ? ` stage to "${input.dealstage}"` : ''}${input.amount ? ` · amount $${input.amount}` : ''}`;
-    case 'hubspot_create_deal':
+    case "hubspot_update_deal":
+      return `Update deal${input.dealstage ? ` stage to "${input.dealstage}"` : ""}${input.amount ? ` · amount $${input.amount}` : ""}`;
+    case "hubspot_create_deal":
       return `Create deal "${input.dealname}" in stage "${input.dealstage}"`;
-    case 'hubspot_create_contact':
-      return `Create contact ${[input.firstName, input.lastName].filter(Boolean).join(' ')} <${input.email}>`;
-    case 'hubspot_log_activity':
+    case "hubspot_create_contact":
+      return `Create contact ${[input.firstName, input.lastName].filter(Boolean).join(" ")} <${input.email}>`;
+    case "hubspot_log_activity":
       return `Log ${input.type} "${input.subject}" on ${input.associatedObjectType} ${input.associatedObjectId}`;
-    case 'gmail_send_draft':
+    case "gmail_send_draft":
       return `Send Gmail draft ${input.draftId}`;
-    case 'gcal_create_event':
+    case "gcal_create_event":
       return `Create calendar event "${input.summary}" on ${input.start}`;
-    case 'gsheets_append_row':
+    case "gsheets_append_row":
       return `Append row to sheet "${input.spreadsheetId}"`;
     default:
       return `Run: ${toolLabel(toolId).label}`;
@@ -250,9 +287,11 @@ export function confirmationSummary(toolId: string, input: Record<string, unknow
 ---
 
 #### T1.7 — InputBar agent pill + send icon + char count
+
 **Description**: Move the agent selector from the chat header `<select>` into the input bar as a styled pill on the left. Replace the plain send button with a Lucide `ArrowUp` in a filled circle. Add character count when `text.length > 3500`. Omit file-on-first-message and slash popover (deferred).
 
 **Files to modify**:
+
 - `apps/web/components/chat/InputBar.tsx`
 - `apps/web/components/chat/ChatRoot.tsx` — pass agent info down
 
@@ -265,14 +304,17 @@ export function confirmationSummary(toolId: string, input: Record<string, unknow
 ---
 
 #### T1.8 — Mobile responsive layout
+
 **Description**: Three targeted Tailwind changes to the chat layout.
 
 **Files to modify**:
+
 - `apps/web/app/(chat)/layout.tsx` — outer flex container responsive classes
 - `apps/web/components/nav/Sidebar.tsx` — `hidden md:flex` on desktop, Dialog drawer on mobile
 - `apps/web/components/chat/InputBar.tsx` — `flex-wrap` on `< sm`
 
 **Changes**:
+
 1. Chat layout: outer wrapper `flex flex-row h-screen`. Sidebar: `hidden md:flex flex-col w-60 shrink-0 border-r`.
 2. Chat column: `flex-1 min-w-0 flex flex-col h-screen`. MessageList: `flex-1 overflow-y-auto`. `max-w-3xl mx-auto px-4 sm:px-6` retained for readability.
 3. InputBar: agent pill moves above textarea on `< sm` via `flex-wrap`.
@@ -282,9 +324,11 @@ export function confirmationSummary(toolId: string, input: Record<string, unknow
 ---
 
 #### T1.9 — ChatRoot: conversation title + tool history restore
+
 **Description**: Two targeted fixes.
 
 **Files to modify**:
+
 - `apps/web/components/chat/ChatRoot.tsx`
 - `apps/web/app/(chat)/chat/[conversationId]/page.tsx`
 
@@ -323,17 +367,20 @@ Verify the exact JSON shape written by `onFinish` in `/api/chat/route.ts` lines 
 ---
 
 #### T1.10 — Command palette (Ctrl+K)
+
 **Description**: `cmdk`-based command palette. Opens on `Ctrl+K` / `Cmd+K`.
 
 **New dependency**: `pnpm add cmdk@^1.0.0`
 
 **Files to create**:
+
 - `apps/web/components/chat/CommandPalette.tsx`
 - `apps/web/hooks/useGlobalHotkeys.ts`
 
 **Commands**: New Chat (navigate `/chat`), Go to Conversations, Go to KB, Go to Integrations, recent conversations (from `useQuery` cache), slash commands that append text to active chat input.
 
 **Hotkeys registered in `useGlobalHotkeys`** (mounted in `ChatRoot`):
+
 - `Ctrl+K` / `Cmd+K` → open command palette
 - `Ctrl+/` / `Cmd+/` → focus chat textarea
 - `Escape` → call `stop()` from `useChat`
@@ -345,9 +392,11 @@ Verify the exact JSON shape written by `onFinish` in `/api/chat/route.ts` lines 
 ---
 
 #### T1.11 — Message actions row (Copy + Regenerate only)
+
 **Description**: Hover-revealed action row below each assistant bubble. Copy and Regenerate only. Thumbs feedback and Log-to-CRM are deferred.
 
 **Files to modify**:
+
 - `apps/web/components/chat/MessageBubble.tsx`
 
 **Accessibility**: `opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity sm:opacity-0 opacity-40`. All icon-only buttons get `aria-label`. Hidden during streaming (`isLoading && isLastAssistant`).
@@ -360,24 +409,32 @@ Verify the exact JSON shape written by `onFinish` in `/api/chat/route.ts` lines 
 ---
 
 #### T1.12 — Conversation title auto-generation (backend)
+
 **Description**: After the first assistant message is saved, fire-and-forget title generation using a Gemini model.
 
 **Files to modify**:
+
 - `apps/web/app/api/chat/route.ts`
 
 **Implementation** (inside `onFinish` callback):
+
 ```ts
 // Only on first assistant turn (check messages.length === 1 for assistant role in this session)
 if (isFirstAssistantTurn) {
   void (async () => {
     try {
       const { text } = await generateText({
-        model: google('gemini-1.5-flash'),
+        model: google("gemini-1.5-flash"),
         prompt: `Summarize this sales conversation starter in 5 words or fewer, no punctuation: "${firstUserMessage}"`,
         maxTokens: 20,
       });
-      await db.from('conversations').update({ title: text.trim() }).eq('id', conversationId);
-    } catch { /* non-fatal */ }
+      await db
+        .from("conversations")
+        .update({ title: text.trim() })
+        .eq("id", conversationId);
+    } catch {
+      /* non-fatal */
+    }
   })();
 }
 ```
@@ -391,22 +448,26 @@ if (isFirstAssistantTurn) {
 ### Track 2: Agent Quality
 
 #### T2.1 — Deploy production system prompt to DB
+
 **Description**: Create migration `0016_sales_system_prompt.sql` that updates the sales agent row with the full production prompt. Update `packages/agents/src/sales/system-prompt.md` to match. Add a length-guard in `runtime.ts` to log a warning (not silently continue) if the DB prompt is under 200 characters.
 
 **Files to create**:
+
 - `infra/supabase/migrations/0016_sales_system_prompt.sql`
 
 **Files to modify**:
+
 - `packages/agents/src/sales/system-prompt.md`
 - `packages/agents/src/runtime.ts` — guard: `if (dbPrompt.length < 200) { logger.warn('Agent system_prompt suspiciously short', { agentId, length: dbPrompt.length }); }`
 
 **Migration**:
+
 ```sql
 UPDATE agents
 SET system_prompt = $PROMPT$
-You are **Zipdev Sales**, the AI co-pilot embedded in Zipdev's sales team.
+You are **Cortex Sales**, the AI co-pilot embedded in Cortex's sales team.
 
-Zipdev places engineers and operators from **Latin America** (Mexico, Colombia, Brazil, Argentina, Chile, Peru) with US and EU companies. Our value proposition: nearshore time zones (UTC-3 to UTC-7), English proficiency, strong technical universities, rates 30–55% below equivalent US hires, and cultural fit with US work style.
+Cortex places engineers and operators from **Latin America** (Mexico, Colombia, Brazil, Argentina, Chile, Peru) with US and EU companies. Our value proposition: nearshore time zones (UTC-3 to UTC-7), English proficiency, strong technical universities, rates 30–55% below equivalent US hires, and cultural fit with US work style.
 
 # Your job
 
@@ -439,7 +500,7 @@ Help salespeople win deals faster. You have access to their HubSpot CRM, Gmail, 
 - Log a deal to tracking sheet: `gsheets_append_row` — confirm row values first
 - Log a call or note to CRM: `hubspot_log_activity` — confirm before calling
 
-# Rate ranges reference (2026-Q1, Zipdev internal pricing)
+# Rate ranges reference (2026-Q1, Cortex internal pricing)
 
 Use these as sanity-check anchors only. Always call `rate_estimate` for precise ranges — do not fabricate numbers.
 
@@ -462,33 +523,42 @@ Hourly rate = monthly rate / 168.
 When producing a proposal, always output ALL sections in this order:
 
 ```
+
 ## Proposal — [Company Name]
+
 [Industry] · [Country] · Generated [date]
 
 ### Summary
+
 1–2 sentences: who the client is, what roles they need, proposed engagement start.
 
 ### Roles
-| Role | Seniority | Qty | Monthly (USD) | Hourly (USD) | Tech Stack |
-|---|---|---|---|---|---|
-| ... | ... | ... | $X–$Y | $A–$B | React, Node |
+
+| Role | Seniority | Qty | Monthly (USD) | Hourly (USD) | Tech Stack  |
+| ---- | --------- | --- | ------------- | ------------ | ----------- |
+| ...  | ...       | ... | $X–$Y         | $A–$B        | React, Node |
 
 **Total engagement:** $X–$Y/month
 
-### Why Zipdev
-2–3 bullets, each grounded in a KB case study or a specific Zipdev differentiator.
+### Why Cortex
+
+2–3 bullets, each grounded in a KB case study or a specific Cortex differentiator.
 Search kb_search for relevant case studies before writing this section.
 
 ### Deal context
+
 Stage: [HubSpot stage] · Deal value: $[amount] · Last activity: [date + type]
 
 ### Timeline & Next steps
+
 1. Send proposal for review — [suggested date]
 2. Discovery call to confirm tech stack — [suggested date]
 3. Kickoff if approved — [target start]
 
 ### Citations
-[^1]: *Document title* — excerpt...
+
+[^1]: _Document title_ — excerpt...
+
 ```
 
 # Tone
@@ -505,67 +575,143 @@ WHERE slug = 'sales';
 ---
 
 #### T2.2 — Fix role normalization crash in sales-draft-proposal.ts (CONFIRMED CRASH)
+
 **Description**: `rate.estimate` enforces a strict Zod enum on `role`. The composite passes free-text strings directly, causing `ZodError` on every composite call. Fix with a `normalizeRole()` function and derived `yearsExperience` / `region` mappings.
 
 **Files to modify**:
+
 - `packages/agent-tools/src/composite/sales-draft-proposal.ts`
 
 **Implementation**:
+
 ```ts
 const ROLE_KEYWORDS: Record<string, string[]> = {
-  frontend:  ['react','vue','angular','svelte','css','html','tailwind','next','nuxt','remix','ui','frontend','front-end','front end'],
-  backend:   ['node','express','django','rails','spring','laravel','fastapi','postgres','mysql','redis','api','backend','back-end','back end'],
-  fullstack: ['fullstack','full-stack','full stack'],
-  data:      ['sql','spark','ml','pandas','dbt','airflow','snowflake','bigquery','data engineer','data scientist','analytics'],
-  devops:    ['docker','k8s','kubernetes','terraform','ci/cd','github actions','sre','platform','infrastructure','devops'],
-  qa:        ['test','qa','cypress','playwright','selenium','jest','quality'],
-  pm:        ['scrum','jira','product','roadmap','agile','sprint','pm'],
-  designer:  ['figma','sketch','ux','ui design','designer','design system'],
+  frontend: [
+    "react",
+    "vue",
+    "angular",
+    "svelte",
+    "css",
+    "html",
+    "tailwind",
+    "next",
+    "nuxt",
+    "remix",
+    "ui",
+    "frontend",
+    "front-end",
+    "front end",
+  ],
+  backend: [
+    "node",
+    "express",
+    "django",
+    "rails",
+    "spring",
+    "laravel",
+    "fastapi",
+    "postgres",
+    "mysql",
+    "redis",
+    "api",
+    "backend",
+    "back-end",
+    "back end",
+  ],
+  fullstack: ["fullstack", "full-stack", "full stack"],
+  data: [
+    "sql",
+    "spark",
+    "ml",
+    "pandas",
+    "dbt",
+    "airflow",
+    "snowflake",
+    "bigquery",
+    "data engineer",
+    "data scientist",
+    "analytics",
+  ],
+  devops: [
+    "docker",
+    "k8s",
+    "kubernetes",
+    "terraform",
+    "ci/cd",
+    "github actions",
+    "sre",
+    "platform",
+    "infrastructure",
+    "devops",
+  ],
+  qa: ["test", "qa", "cypress", "playwright", "selenium", "jest", "quality"],
+  pm: ["scrum", "jira", "product", "roadmap", "agile", "sprint", "pm"],
+  designer: ["figma", "sketch", "ux", "ui design", "designer", "design system"],
 };
 
 const SENIORITY_TO_YEARS: Record<string, number> = {
-  junior: 1, mid: 3, senior: 6, lead: 10,
+  junior: 1,
+  mid: 3,
+  senior: 6,
+  lead: 10,
 };
 
 const COUNTRY_TO_REGION: Record<string, string> = {
-  MX: 'mx', BR: 'br', AR: 'ar', CO: 'co', CL: 'cl', PE: 'pe',
+  MX: "mx",
+  BR: "br",
+  AR: "ar",
+  CO: "co",
+  CL: "cl",
+  PE: "pe",
 };
 
 function normalizeRole(freeText: string): { role: string; confidence: number } {
   const lower = freeText.toLowerCase();
   // Exact enum match
-  const exact = ['frontend','backend','fullstack','data','devops','qa','pm','designer'];
+  const exact = [
+    "frontend",
+    "backend",
+    "fullstack",
+    "data",
+    "devops",
+    "qa",
+    "pm",
+    "designer",
+  ];
   if (exact.includes(lower)) return { role: lower, confidence: 1.0 };
   // Check fullstack first (both frontend+backend keywords)
-  const hasFE = ROLE_KEYWORDS.frontend.some(k => lower.includes(k));
-  const hasBE = ROLE_KEYWORDS.backend.some(k => lower.includes(k));
-  if (hasFE && hasBE) return { role: 'fullstack', confidence: 0.8 };
+  const hasFE = ROLE_KEYWORDS.frontend.some((k) => lower.includes(k));
+  const hasBE = ROLE_KEYWORDS.backend.some((k) => lower.includes(k));
+  if (hasFE && hasBE) return { role: "fullstack", confidence: 0.8 };
   // Keyword match
   for (const [role, keywords] of Object.entries(ROLE_KEYWORDS)) {
-    if (keywords.some(k => lower.includes(k))) return { role, confidence: 0.75 };
+    if (keywords.some((k) => lower.includes(k)))
+      return { role, confidence: 0.75 };
   }
   // Default
-  logger.warn('normalizeRole: no match, defaulting to fullstack', { freeText });
-  return { role: 'fullstack', confidence: 0.5 };
+  logger.warn("normalizeRole: no match, defaulting to fullstack", { freeText });
+  return { role: "fullstack", confidence: 0.5 };
 }
 ```
 
 Replace the hardcoded call in the composite:
+
 ```ts
 // Before (crash):
-const rateResult = await runTool('rate.estimate', ctx, {
-  role: r.role,           // free text — ZodError
+const rateResult = await runTool("rate.estimate", ctx, {
+  role: r.role, // free text — ZodError
   seniority: r.seniority,
-  yearsExperience: 5,     // hardcoded
-  region: 'latam',        // hardcoded
+  yearsExperience: 5, // hardcoded
+  region: "latam", // hardcoded
   confidence: 0.8,
 });
 
 // After:
 const { role: normalizedRole, confidence } = normalizeRole(r.role);
-const region = COUNTRY_TO_REGION[company.country?.toUpperCase() ?? ''] ?? 'latam';
+const region =
+  COUNTRY_TO_REGION[company.country?.toUpperCase() ?? ""] ?? "latam";
 const yearsExperience = SENIORITY_TO_YEARS[r.seniority] ?? 3;
-const rateResult = await runTool('rate.estimate', ctx, {
+const rateResult = await runTool("rate.estimate", ctx, {
   role: normalizedRole,
   seniority: r.seniority,
   yearsExperience,
@@ -579,14 +725,18 @@ const rateResult = await runTool('rate.estimate', ctx, {
 ---
 
 #### T2.3 — Conditional RAG with score threshold
+
 **Description**: Skip RAG for short/acknowledgment messages. Apply 0.65 minimum score threshold. Cap at 3 hits. Add relevance score to injected context. Restrict auto-RAG to `global` and `team:sales` scopes.
 
 **Files to modify**:
+
 - `apps/web/app/api/chat/route.ts`
 
 **Implementation**:
+
 ```ts
-const ACKNOWLEDGMENT_RE = /^(ok|yes|no|sure|thanks|got it|sounds good|proceed|continue|sí|claro|dale|perfecto|de acuerdo)[.!?]?$/i;
+const ACKNOWLEDGMENT_RE =
+  /^(ok|yes|no|sure|thanks|got it|sounds good|proceed|continue|sí|claro|dale|perfecto|de acuerdo)[.!?]?$/i;
 
 function shouldRunRag(message: string): boolean {
   const wordCount = message.trim().split(/\s+/).length;
@@ -596,19 +746,22 @@ function shouldRunRag(message: string): boolean {
 }
 
 // In route handler, replace unconditional RAG:
-let contextBlock = '';
+let contextBlock = "";
 if (shouldRunRag(lastUserMessage)) {
   const hits = await kbSearch({
     query: lastUserMessage,
-    scopes: ['global', 'team'],
+    scopes: ["global", "team"],
     teamId: agent.teamId,
     limit: 3,
   });
-  const relevant = hits.filter(h => h.score >= 0.65);
+  const relevant = hits.filter((h) => h.score >= 0.65);
   if (relevant.length > 0) {
-    contextBlock = relevant.map((h, i) =>
-      `[^${i + 1}] (relevance: ${h.score.toFixed(2)}) ${h.documentTitle} chunk ${h.chunkIndex}:\n${h.content}`
-    ).join('\n\n');
+    contextBlock = relevant
+      .map(
+        (h, i) =>
+          `[^${i + 1}] (relevance: ${h.score.toFixed(2)}) ${h.documentTitle} chunk ${h.chunkIndex}:\n${h.content}`,
+      )
+      .join("\n\n");
     contextBlock = `<context>\n${contextBlock}\n</context>`;
   }
 }
@@ -619,31 +772,37 @@ if (shouldRunRag(lastUserMessage)) {
 ---
 
 #### T2.4 — Server-side conversation rehydration
+
 **Description**: When `conversationId` is present, load the last 20 messages from DB and merge with client messages. Client messages take precedence (they may include the pending user message not yet saved).
 
 **Files to modify**:
+
 - `apps/web/app/api/chat/route.ts`
 
 **Implementation**:
+
 ```ts
 let coreMessages = parsed.data.messages;
 
 if (conversationId) {
   try {
     const { data: dbMessages } = await db
-      .from('messages')
-      .select('id, role, content, created_at')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: false })
+      .from("messages")
+      .select("id, role, content, created_at")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
       .limit(20);
 
     if (dbMessages && dbMessages.length > 0) {
       const dbSet = new Set(
-        dbMessages.map(m => `${m.role}::${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`)
+        dbMessages.map(
+          (m) =>
+            `${m.role}::${typeof m.content === "string" ? m.content : JSON.stringify(m.content)}`,
+        ),
       );
       // Keep client messages not already in DB (i.e., the pending user message)
-      const clientOnly = coreMessages.filter(m => {
-        const key = `${m.role}::${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`;
+      const clientOnly = coreMessages.filter((m) => {
+        const key = `${m.role}::${typeof m.content === "string" ? m.content : JSON.stringify(m.content)}`;
         return !dbSet.has(key);
       });
       // DB messages oldest-first + client-only messages appended
@@ -654,7 +813,10 @@ if (conversationId) {
       coreMessages = merged;
     }
   } catch (err) {
-    logger.warn('Failed to load DB messages for rehydration, using client history', { conversationId, err });
+    logger.warn(
+      "Failed to load DB messages for rehydration, using client history",
+      { conversationId, err },
+    );
   }
 }
 ```
@@ -664,9 +826,11 @@ if (conversationId) {
 ---
 
 #### T2.5 — Fix tool list consistency (gsheets.append_row)
+
 **Description**: Add `gsheets.append_row` to the static `salesAgent.allowedTools` and sync both seed files.
 
 **Files to modify**:
+
 - `packages/agents/src/sales/index.ts` — add `'gsheets.append_row'` to `allowedTools`
 - `infra/supabase/seed.sql` — add to tool list
 - `supabase/seed.sql` — add to tool list
@@ -676,9 +840,11 @@ if (conversationId) {
 ---
 
 #### T2.6 — Add /briefing slash command (replaces proactive auto-briefing)
+
 **Description**: Instead of automatically firing HubSpot lookups on every new conversation, surface deal briefing as an explicit user command. When the user types `/briefing [Company Name]`, pre-fill the textarea with `Fetch a deal health briefing for [Company Name]: search HubSpot for the company, get the most recent deal, list BANT signals present/missing, and summarize last 3 activities.`
 
 **Files to modify**:
+
 - `apps/web/components/chat/InputBar.tsx` — add slash-command detection for `/briefing`
 - `apps/web/components/chat/EmptyState.tsx` — add a "Get pipeline briefing" suggestion card
 
@@ -691,15 +857,19 @@ This requires no backend changes. The agent's tool selection guide already cover
 ### Track 3: Tool Expansion
 
 #### T3.1 — Atomic rate limiter (prerequisite for all new tools)
+
 **Description**: Fix the TOCTOU race in `consumeToken()`. This affects all existing tools and is the prerequisite for the external MCP proxy rate limiting in Track 4.
 
 **Files to create**:
+
 - `supabase/migrations/[timestamp]_consume_rate_limit_token.sql`
 
 **Files to modify**:
+
 - `packages/agent-tools/src/rate-limit.ts`
 
 **Migration SQL**:
+
 ```sql
 CREATE OR REPLACE FUNCTION consume_rate_limit_token(
   p_user_id  uuid,
@@ -739,6 +909,7 @@ $$;
 ```
 
 **`rate-limit.ts` update**:
+
 ```ts
 export async function consumeToken(
   db: SupabaseClient,
@@ -747,15 +918,21 @@ export async function consumeToken(
   perMinute: number,
 ): Promise<void> {
   try {
-    const { data, error } = await db.rpc('consume_rate_limit_token', {
+    const { data, error } = await db.rpc("consume_rate_limit_token", {
       p_user_id: userId,
       p_tool_id: toolId,
       p_per_minute: perMinute,
     });
     if (error) {
       // Fallback: if RPC function not yet deployed, use legacy non-atomic path
-      if (error.message?.includes('function') && error.message?.includes('does not exist')) {
-        logger.warn('consume_rate_limit_token RPC not found, using non-atomic fallback', { toolId });
+      if (
+        error.message?.includes("function") &&
+        error.message?.includes("does not exist")
+      ) {
+        logger.warn(
+          "consume_rate_limit_token RPC not found, using non-atomic fallback",
+          { toolId },
+        );
         return consumeTokenLegacy(db, userId, toolId, perMinute);
       }
       throw error;
@@ -763,7 +940,7 @@ export async function consumeToken(
     if (!data) throw new RateLimitError(toolId);
   } catch (err) {
     if (err instanceof RateLimitError) throw err;
-    logger.error('consumeToken error', { err, toolId });
+    logger.error("consumeToken error", { err, toolId });
     // Non-fatal on unexpected errors — allow the call through
   }
 }
@@ -774,12 +951,15 @@ export async function consumeToken(
 ---
 
 #### T3.2 — Add HubSpot write scopes to connect flow (DEPLOYMENT BLOCKER)
+
 **Description**: Without this, every write tool throws "Missing hubspot scopes". Must ship before any HubSpot write tool.
 
 **Files to modify**:
+
 - `apps/web/app/api/integrations/hubspot/route.ts`
 
 Add to the `SCOPES` array:
+
 ```
 crm.objects.contacts.write
 crm.objects.deals.write
@@ -794,43 +974,52 @@ This triggers re-authorization for all existing HubSpot-connected users on next 
 ---
 
 #### T3.3 — Shared output formatter module
+
 **Description**: Pure render functions used by all new tools. No I/O, no API calls.
 
 **Files to create**:
+
 - `packages/agent-tools/src/format/index.ts`
 
 ```ts
 export function renderDealCard(deal: DealOut): string {
   return [
     `**${deal.name}** (${deal.stage})`,
-    `Amount: $${deal.amount?.toLocaleString() ?? 'unknown'} · Close: ${deal.closeDate ?? 'TBD'}`,
-    `Owner: ${deal.ownerName ?? deal.ownerId ?? 'unassigned'}`,
-    deal.htmlLink ? `[View in HubSpot](${deal.htmlLink})` : '',
-  ].filter(Boolean).join('\n');
+    `Amount: $${deal.amount?.toLocaleString() ?? "unknown"} · Close: ${deal.closeDate ?? "TBD"}`,
+    `Owner: ${deal.ownerName ?? deal.ownerId ?? "unassigned"}`,
+    deal.htmlLink ? `[View in HubSpot](${deal.htmlLink})` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function renderContactCard(contact: ContactOut): string {
   return [
-    `**${[contact.firstName, contact.lastName].filter(Boolean).join(' ')}**`,
-    contact.email ? `📧 ${contact.email}` : '',
-    contact.jobTitle && contact.company ? `${contact.jobTitle} at ${contact.company}` : '',
-    contact.lastContacted ? `Last contacted: ${contact.lastContacted}` : '',
-  ].filter(Boolean).join('\n');
+    `**${[contact.firstName, contact.lastName].filter(Boolean).join(" ")}**`,
+    contact.email ? `📧 ${contact.email}` : "",
+    contact.jobTitle && contact.company
+      ? `${contact.jobTitle} at ${contact.company}`
+      : "",
+    contact.lastContacted ? `Last contacted: ${contact.lastContacted}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function renderActivityList(activities: ActivityOut[]): string {
-  return activities.map(a =>
-    `- **${a.type}** on ${a.date}: ${a.subject}`
-  ).join('\n');
+  return activities
+    .map((a) => `- **${a.type}** on ${a.date}: ${a.subject}`)
+    .join("\n");
 }
 
 export function renderPipelineSummary(stages: StageOut[]): string {
-  const header = '| Stage | Deals | Total USD | Probability |';
-  const divider = '|---|---|---|---|';
-  const rows = stages.map(s =>
-    `| ${s.label} | ${s.dealCount} | $${(s.totalAmount ?? 0).toLocaleString()} | ${Math.round((s.probability ?? 0) * 100)}% |`
+  const header = "| Stage | Deals | Total USD | Probability |";
+  const divider = "|---|---|---|---|";
+  const rows = stages.map(
+    (s) =>
+      `| ${s.label} | ${s.dealCount} | $${(s.totalAmount ?? 0).toLocaleString()} | ${Math.round((s.probability ?? 0) * 100)}% |`,
   );
-  return [header, divider, ...rows].join('\n');
+  return [header, divider, ...rows].join("\n");
 }
 
 export function renderThreadSummary(thread: ThreadOut): string {
@@ -843,12 +1032,16 @@ export function renderThreadSummary(thread: ThreadOut): string {
 ---
 
 #### T3.4 — hubspot.search_contacts (new tool)
+
 **Files to create**: `packages/agent-tools/src/hubspot/search-contacts.ts`  
 **Files to modify**: `packages/agent-tools/src/hubspot/index.ts`
 
 ```ts
 const inputSchema = z.object({
-  query: z.string().min(1).describe('Name, email, or partial name to search for'),
+  query: z
+    .string()
+    .min(1)
+    .describe("Name, email, or partial name to search for"),
   companyId: z.string().optional(),
   limit: z.number().int().min(1).max(20).default(10),
 });
@@ -858,31 +1051,66 @@ const outputSchema = z.object({
   markdown: z.string(),
 });
 
-export const searchContactsTool: ToolDef<typeof inputSchema, typeof outputSchema> = {
-  id: 'hubspot.search_contacts',
-  displayName: 'Search HubSpot Contacts',
-  icon: 'Users',
-  category: 'hubspot',
-  description: 'Search HubSpot contacts by name or email. Use before create_contact to avoid duplicates.',
+export const searchContactsTool: ToolDef<
+  typeof inputSchema,
+  typeof outputSchema
+> = {
+  id: "hubspot.search_contacts",
+  displayName: "Search HubSpot Contacts",
+  icon: "Users",
+  category: "hubspot",
+  description:
+    "Search HubSpot contacts by name or email. Use before create_contact to avoid duplicates.",
   requiresConfirmation: false,
   rateLimit: { perMinute: 30 },
   inputSchema,
   outputSchema,
   async execute(input, ctx) {
-    const token = await ctx.integrations.getAccessToken('hubspot');
-    const filterGroups = input.query.includes('@')
-      ? [{ filters: [{ propertyName: 'email', operator: 'EQ', value: input.query }] }]
+    const token = await ctx.integrations.getAccessToken("hubspot");
+    const filterGroups = input.query.includes("@")
+      ? [
+          {
+            filters: [
+              { propertyName: "email", operator: "EQ", value: input.query },
+            ],
+          },
+        ]
       : [
-          { filters: [{ propertyName: 'firstname', operator: 'CONTAINS_TOKEN', value: input.query }] },
-          { filters: [{ propertyName: 'lastname', operator: 'CONTAINS_TOKEN', value: input.query }] },
+          {
+            filters: [
+              {
+                propertyName: "firstname",
+                operator: "CONTAINS_TOKEN",
+                value: input.query,
+              },
+            ],
+          },
+          {
+            filters: [
+              {
+                propertyName: "lastname",
+                operator: "CONTAINS_TOKEN",
+                value: input.query,
+              },
+            ],
+          },
         ];
-    const res = await hubspotPost(token, '/crm/v3/objects/contacts/search', {
+    const res = await hubspotPost(token, "/crm/v3/objects/contacts/search", {
       filterGroups,
-      properties: ['firstname','lastname','email','phone','company','jobtitle','hubspot_owner_id','hs_lastcontacted'],
+      properties: [
+        "firstname",
+        "lastname",
+        "email",
+        "phone",
+        "company",
+        "jobtitle",
+        "hubspot_owner_id",
+        "hs_lastcontacted",
+      ],
       limit: input.limit,
     });
     const results = res.results.map(adaptContact);
-    return { results, markdown: results.map(renderContactCard).join('\n\n') };
+    return { results, markdown: results.map(renderContactCard).join("\n\n") };
   },
 };
 ```
@@ -893,12 +1121,13 @@ export const searchContactsTool: ToolDef<typeof inputSchema, typeof outputSchema
 ---
 
 #### T3.5 — hubspot.get_contact (new tool)
+
 **Files to create**: `packages/agent-tools/src/hubspot/get-contact.ts`  
 **Files to modify**: `packages/agent-tools/src/hubspot/index.ts`
 
 ```ts
 const inputSchema = z.object({
-  id: z.string().describe('HubSpot contact ID'),
+  id: z.string().describe("HubSpot contact ID"),
 });
 
 // GET /crm/v3/objects/contacts/{id}
@@ -915,16 +1144,19 @@ Returns `ContactDetail` (full ContactOut + `lifecycleStage`, `companyIds: string
 ---
 
 #### T3.6 — hubspot.create_deal (new write tool)
+
 **Files to create**: `packages/agent-tools/src/hubspot/create-deal.ts`  
 **Files to modify**: `packages/agent-tools/src/hubspot/index.ts`
 
 ```ts
 const inputSchema = z.object({
   dealname: z.string().min(1),
-  pipeline: z.string().default('default'),
-  dealstage: z.string().describe('Use hubspot_get_pipeline_summary to get valid stage IDs'),
+  pipeline: z.string().default("default"),
+  dealstage: z
+    .string()
+    .describe("Use hubspot_get_pipeline_summary to get valid stage IDs"),
   amount: z.number().optional(),
-  closedate: z.string().optional().describe('ISO date string YYYY-MM-DD'),
+  closedate: z.string().optional().describe("ISO date string YYYY-MM-DD"),
   companyId: z.string().optional(),
   contactId: z.string().optional(),
   ownerId: z.string().optional(),
@@ -947,21 +1179,25 @@ const inputSchema = z.object({
 ---
 
 #### T3.7 — hubspot.update_deal (new write tool)
+
 **Files to create**: `packages/agent-tools/src/hubspot/update-deal.ts`  
 **Files to modify**: `packages/agent-tools/src/hubspot/index.ts`
 
 ```ts
-const inputSchema = z.object({
-  id: z.string(),
-  dealstage: z.string().optional(),
-  amount: z.number().optional(),
-  closedate: z.string().optional(),
-  ownerId: z.string().optional(),
-  description: z.string().optional(),
-}).refine(
-  data => Object.values(data).filter((v, i) => i > 0 && v !== undefined).length > 0,
-  { message: 'At least one field to update must be provided' }
-);
+const inputSchema = z
+  .object({
+    id: z.string(),
+    dealstage: z.string().optional(),
+    amount: z.number().optional(),
+    closedate: z.string().optional(),
+    ownerId: z.string().optional(),
+    description: z.string().optional(),
+  })
+  .refine(
+    (data) =>
+      Object.values(data).filter((v, i) => i > 0 && v !== undefined).length > 0,
+    { message: "At least one field to update must be provided" },
+  );
 
 // PATCH /crm/v3/objects/deals/{id}
 ```
@@ -975,6 +1211,7 @@ Returns updated `DealOut` + `markdown` from `renderDealCard()`.
 ---
 
 #### T3.8 — hubspot.create_contact (new write tool)
+
 **Files to create**: `packages/agent-tools/src/hubspot/create-contact.ts`  
 **Files to modify**: `packages/agent-tools/src/hubspot/index.ts`
 
@@ -1002,18 +1239,19 @@ Description must note: "Call hubspot_search_contacts first to avoid duplicates �
 ---
 
 #### T3.9 — hubspot.log_activity (new write tool)
+
 **Files to create**: `packages/agent-tools/src/hubspot/log-activity.ts`  
 **Files to modify**: `packages/agent-tools/src/hubspot/index.ts`
 
 ```ts
 const inputSchema = z.object({
-  type: z.enum(['call', 'note', 'meeting']),
+  type: z.enum(["call", "note", "meeting"]),
   subject: z.string().min(1),
   body: z.string().optional(),
-  associatedObjectType: z.enum(['contact', 'company']),
+  associatedObjectType: z.enum(["contact", "company"]),
   associatedObjectId: z.string(),
-  durationMs: z.number().int().optional().describe('For calls only'),
-  meetingStartTime: z.string().optional().describe('ISO datetime for meetings'),
+  durationMs: z.number().int().optional().describe("For calls only"),
+  meetingStartTime: z.string().optional().describe("ISO datetime for meetings"),
 });
 
 // POST /crm/v3/objects/calls  (or /notes, /meetings)
@@ -1028,12 +1266,13 @@ const inputSchema = z.object({
 ---
 
 #### T3.10 — hubspot.get_pipeline_summary (new tool)
+
 **Files to create**: `packages/agent-tools/src/hubspot/get-pipeline-summary.ts`  
 **Files to modify**: `packages/agent-tools/src/hubspot/index.ts`
 
 ```ts
 const inputSchema = z.object({
-  pipelineId: z.string().default('default'),
+  pipelineId: z.string().default("default"),
 });
 
 // GET /crm/v3/pipelines/deals/{pipelineId}   → stage definitions
@@ -1050,6 +1289,7 @@ const inputSchema = z.object({
 ---
 
 #### T3.11 — hubspot.get_contact_timeline (new tool)
+
 **Files to create**: `packages/agent-tools/src/hubspot/get-contact-timeline.ts`  
 **Files to modify**: `packages/agent-tools/src/hubspot/index.ts`
 
@@ -1076,6 +1316,7 @@ const inputSchema = z.object({
 ---
 
 #### T3.12 — hubspot.search_companies domain-search fix + markdown
+
 **Files to modify**: `packages/agent-tools/src/hubspot/search-companies.ts`
 
 Fix: when `input.query` contains `.`, send two `filterGroups` (CONTAINS_TOKEN on `name` OR EQ on `domain`). Add `markdown: z.string().optional()` to output schema populated by `renderCompanyCard()`.
@@ -1085,12 +1326,13 @@ Fix: when `input.query` contains `.`, send two `filterGroups` (CONTAINS_TOKEN on
 ---
 
 #### T3.13 — gmail.send_draft (new write tool)
+
 **Files to create**: `packages/agent-tools/src/gmail/send-draft.ts`  
 **Files to modify**: `packages/agent-tools/src/gmail/index.ts`
 
 ```ts
 const inputSchema = z.object({
-  draftId: z.string().describe('ID returned by gmail_draft'),
+  draftId: z.string().describe("ID returned by gmail_draft"),
 });
 
 // POST https://gmail.googleapis.com/gmail/v1/users/me/drafts/send
@@ -1108,17 +1350,20 @@ The confirmation payload must include a pre-flight fetch of draft metadata (GET 
 ---
 
 #### T3.14 — gmail.list_threads (new tool, parallelized)
+
 **Files to create**: `packages/agent-tools/src/gmail/list-threads.ts`  
 **Files to modify**: `packages/agent-tools/src/gmail/index.ts`
 
 ```ts
-const inputSchema = z.object({
-  contactEmail: z.string().email().optional(),
-  query: z.string().optional(),
-  maxResults: z.number().int().min(1).max(20).default(10),
-}).refine(data => data.contactEmail || data.query, {
-  message: 'Provide either contactEmail or query',
-});
+const inputSchema = z
+  .object({
+    contactEmail: z.string().email().optional(),
+    query: z.string().optional(),
+    maxResults: z.number().int().min(1).max(20).default(10),
+  })
+  .refine((data) => data.contactEmail || data.query, {
+    message: "Provide either contactEmail or query",
+  });
 
 // Step 1: GET /gmail/v1/users/me/threads?q={...}&maxResults={maxResults}
 // Step 2: Promise.all — fetch all thread metadata in parallel
@@ -1132,6 +1377,7 @@ const inputSchema = z.object({
 ---
 
 #### T3.15 — gcal.create_event timezone fix
+
 **Files to modify**: `packages/agent-tools/src/gcal/create-event.ts`
 
 Add `timeZone: z.string().default('America/Mexico_City')` to input schema. Change `start: { dateTime: input.start }` to `start: { dateTime: input.start, timeZone: input.timeZone }` (same for `end`).
@@ -1141,7 +1387,9 @@ Add `timeZone: z.string().default('America/Mexico_City')` to input schema. Chang
 ---
 
 #### T3.16 — Google Drive module (search_files + read_doc)
+
 **Files to create**:
+
 - `packages/agent-tools/src/gdrive/client.ts`
 - `packages/agent-tools/src/gdrive/search-files.ts`
 - `packages/agent-tools/src/gdrive/read-doc.ts`
@@ -1150,18 +1398,23 @@ Add `timeZone: z.string().default('America/Mexico_City')` to input schema. Chang
 **Files to modify**: `packages/agent-tools/src/index.ts`
 
 **`search-files` schema**:
+
 ```ts
 const inputSchema = z.object({
   query: z.string().min(1),
-  mimeType: z.string().optional().describe(
-    'e.g. application/vnd.google-apps.document for Docs, application/vnd.google-apps.spreadsheet for Sheets'
-  ),
+  mimeType: z
+    .string()
+    .optional()
+    .describe(
+      "e.g. application/vnd.google-apps.document for Docs, application/vnd.google-apps.spreadsheet for Sheets",
+    ),
   limit: z.number().int().min(1).max(30).default(10),
 });
 // GET /drive/v3/files?q={encoded}&fields=files(id,name,mimeType,webViewLink,modifiedTime,owners)
 ```
 
 **`read-doc` schema**:
+
 ```ts
 const inputSchema = z.object({
   fileId: z.string(),
@@ -1179,7 +1432,9 @@ const inputSchema = z.object({
 ---
 
 #### T3.17 — web.search (Tavily)
+
 **Files to create**:
+
 - `packages/agent-tools/src/web/search.ts`
 - `packages/agent-tools/src/web/index.ts`
 
@@ -1188,7 +1443,7 @@ const inputSchema = z.object({
 ```ts
 const inputSchema = z.object({
   query: z.string().min(1),
-  searchDepth: z.enum(['basic', 'advanced']).default('basic'),
+  searchDepth: z.enum(["basic", "advanced"]).default("basic"),
   maxResults: z.number().int().min(1).max(10).default(5),
   includeAnswer: z.boolean().default(true),
 });
@@ -1199,6 +1454,7 @@ const inputSchema = z.object({
 ```
 
 **Wrangler binding** (add to `apps/mcp/wrangler.toml`):
+
 ```toml
 [vars]
 TAVILY_API_KEY = ""  # set via wrangler secret put TAVILY_API_KEY
@@ -1210,6 +1466,7 @@ TAVILY_API_KEY = ""  # set via wrangler secret put TAVILY_API_KEY
 ---
 
 #### T3.18 — web.scrape (Firecrawl / Jina fallback)
+
 **Files to create**: `packages/agent-tools/src/web/scrape.ts`  
 **Files to modify**: `packages/agent-tools/src/web/index.ts`, `packages/agent-tools/src/index.ts`
 
@@ -1220,10 +1477,14 @@ const inputSchema = z.object({
 });
 
 // SSRF guard (same isPrivateUrl from external-mcp.ts):
-if (isPrivateUrl(input.url)) throw new IntegrationError('URL not allowed', 'web');
+if (isPrivateUrl(input.url))
+  throw new IntegrationError("URL not allowed", "web");
 // LinkedIn guard:
-if (new URL(input.url).hostname.includes('linkedin.com')) {
-  throw new IntegrationError('LinkedIn URLs return a login wall — use web_search with the person\'s name instead', 'web');
+if (new URL(input.url).hostname.includes("linkedin.com")) {
+  throw new IntegrationError(
+    "LinkedIn URLs return a login wall — use web_search with the person's name instead",
+    "web",
+  );
 }
 
 // If FIRECRAWL_API_KEY set:
@@ -1233,6 +1494,7 @@ if (new URL(input.url).hostname.includes('linkedin.com')) {
 ```
 
 **Wrangler binding** (add to `apps/mcp/wrangler.toml`):
+
 ```toml
 FIRECRAWL_API_KEY = ""  # optional; Jina Reader is no-key fallback
 ```
@@ -1243,18 +1505,33 @@ FIRECRAWL_API_KEY = ""  # optional; Jina Reader is no-key fallback
 ---
 
 #### T3.19 — rate.estimate role enum expansion
+
 **Files to modify**:
+
 - `packages/agent-tools/src/rate/estimate.ts`
 - `packages/agent-tools/src/rate/estimate-from-document.ts`
 
 Expand role enum:
+
 ```ts
 z.enum([
-  'frontend','backend','fullstack','data','devops','qa','pm','designer',
+  "frontend",
+  "backend",
+  "fullstack",
+  "data",
+  "devops",
+  "qa",
+  "pm",
+  "designer",
   // New:
-  'mobile','ml_engineer','security','sre','technical_writer','product_analyst',
-  'other',  // requires openRole field
-])
+  "mobile",
+  "ml_engineer",
+  "security",
+  "sre",
+  "technical_writer",
+  "product_analyst",
+  "other", // requires openRole field
+]);
 ```
 
 Add `openRole: z.string().optional()` field. When `role === 'other'`, `openRole` is required (`.refine()`). Map `openRole` to nearest canonical role via the `normalizeRole()` function from T2.2 (extract it to a shared utility). Return the canonical role used in `notes` field.
@@ -1266,26 +1543,36 @@ Update `estimate-from-document.ts` heuristics to match new roles and handle `'fu
 ---
 
 #### T3.20 — Phased allowedTools update for sales agent
+
 **Description**: Ship new tools in three PRs to keep the active tool set under 20 at each phase.
 
 **Phase A** (with T3.17-T3.18 web tools):
+
 ```ts
 // Add to allowedTools:
-'web.search', 'web.scrape', 'gdrive.search_files', 'gdrive.read_doc'
+("web.search", "web.scrape", "gdrive.search_files", "gdrive.read_doc");
 ```
 
 **Phase B** (with T3.4-T3.5 HubSpot read tools):
+
 ```ts
 // Add to allowedTools:
-'hubspot.search_contacts', 'hubspot.get_contact', 'hubspot.get_pipeline_summary',
-'hubspot.get_contact_timeline'
+("hubspot.search_contacts",
+  "hubspot.get_contact",
+  "hubspot.get_pipeline_summary",
+  "hubspot.get_contact_timeline");
 ```
 
 **Phase C** (after T3.2 scope update + user re-auth window):
+
 ```ts
 // Add to allowedTools:
-'hubspot.create_deal', 'hubspot.update_deal', 'hubspot.create_contact',
-'hubspot.log_activity', 'gmail.send_draft', 'gmail.list_threads'
+("hubspot.create_deal",
+  "hubspot.update_deal",
+  "hubspot.create_contact",
+  "hubspot.log_activity",
+  "gmail.send_draft",
+  "gmail.list_threads");
 ```
 
 **Files to modify**: `packages/agents/src/sales/index.ts` (three PRs)  
@@ -1294,18 +1581,22 @@ Update `estimate-from-document.ts` heuristics to match new roles and handle `'fu
 ---
 
 #### T3.21 — ProposalCard frontend component
-**Description**: Structured React component for `sales_draft_proposal` tool results. **Prerequisite**: T2.2 composite hardening must ship first so the structured fields are complete (hourly rate, deal context, Why Zipdev section).
+
+**Description**: Structured React component for `sales_draft_proposal` tool results. **Prerequisite**: T2.2 composite hardening must ship first so the structured fields are complete (hourly rate, deal context, Why Cortex section).
 
 **Files to create**:
+
 - `apps/web/components/chat/ProposalCard.tsx`
 
 **Files to modify**:
+
 - `apps/web/components/chat/MessageBubble.tsx` — detect `toolName === 'sales_draft_proposal'` in tool result messages and render `ProposalCard` instead of markdown
 
 **`ProposalCard` sections**:
+
 - Header: company name + industry badge + country
 - Sortable rate table: role / seniority / qty / monthly / hourly / tech stack + total row
-- Collapsible "Why Zipdev" section (bullets from KB hits)
+- Collapsible "Why Cortex" section (bullets from KB hits)
 - Deal context banner (stage + amount + days-since-last-activity pill: green <14d, yellow 14-30d, red >30d)
 - Timeline section
 - "Copy as Markdown" button
@@ -1317,6 +1608,7 @@ Update `estimate-from-document.ts` heuristics to match new roles and handle `'fu
 ### Track 4: Dynamic MCP
 
 #### T4.1 — DB migration: user_mcp_servers + user_mcp_tools + key_version
+
 **Files to create**: `infra/supabase/migrations/0017_user_mcp_servers.sql`
 
 ```sql
@@ -1371,9 +1663,11 @@ CREATE POLICY "owner_update" ON public.user_mcp_servers
 ---
 
 #### T4.2 — Shared external-mcp module
+
 **Files to create**: `packages/agent-tools/src/external-mcp.ts`
 
 **`isPrivateUrl(url: string): boolean`**:
+
 ```ts
 const PRIVATE_PATTERNS = [
   /^localhost$/i,
@@ -1382,34 +1676,39 @@ const PRIVATE_PATTERNS = [
   /^10\./,
   /^172\.(1[6-9]|2\d|3[01])\./,
   /^192\.168\./,
-  /^169\.254\./,    // AWS/GCP metadata
+  /^169\.254\./, // AWS/GCP metadata
   /^::1$/,
-  /^fd[0-9a-f]{2}:/i,  // IPv6 ULA
-  /^fe80:/i,            // IPv6 link-local
+  /^fd[0-9a-f]{2}:/i, // IPv6 ULA
+  /^fe80:/i, // IPv6 link-local
 ];
 
 export function isPrivateUrl(rawUrl: string): boolean {
   let parsed: URL;
-  try { parsed = new URL(rawUrl); } catch { return true; } // malformed = block
-  if (!['http:', 'https:'].includes(parsed.protocol)) return true;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return true;
+  } // malformed = block
+  if (!["http:", "https:"].includes(parsed.protocol)) return true;
   if (parsed.username || parsed.password) return true; // credentials in URL
   const host = parsed.hostname;
-  return PRIVATE_PATTERNS.some(p => p.test(host));
+  return PRIVATE_PATTERNS.some((p) => p.test(host));
 }
 ```
 
 **Node-path DNS resolution check** (used in `apps/web/app/api/chat/route.ts` only, not Workers):
+
 ```ts
 // In route.ts, before callExternalTool:
-import { promises as dns } from 'dns';
+import { promises as dns } from "dns";
 async function assertNotPrivateResolved(hostname: string): Promise<void> {
   const [ipv4, ipv6] = await Promise.allSettled([
     dns.resolve4(hostname),
     dns.resolve6(hostname),
   ]);
   const allIps = [
-    ...(ipv4.status === 'fulfilled' ? ipv4.value : []),
-    ...(ipv6.status === 'fulfilled' ? ipv6.value : []),
+    ...(ipv4.status === "fulfilled" ? ipv4.value : []),
+    ...(ipv6.status === "fulfilled" ? ipv6.value : []),
   ];
   for (const ip of allIps) {
     if (isPrivateUrl(`http://${ip}`)) {
@@ -1436,13 +1735,15 @@ async function assertNotPrivateResolved(hostname: string): Promise<void> {
 ---
 
 #### T4.3 — Fix bridge.ts tool-name lookup (correctness fix)
+
 **Files to modify**: `apps/mcp/src/bridge.ts`
 
 Replace the fragile `toolName.replace('_', '.')` single-replace with a lookup map:
+
 ```ts
 // Build at the start of callTool:
 const builtinMap = new Map(
-  getAgentTools(agent).map(t => [t.id.replaceAll('.', '_'), t.id])
+  getAgentTools(agent).map((t) => [t.id.replaceAll(".", "_"), t.id]),
 );
 
 // In built-in dispatch:
@@ -1451,7 +1752,7 @@ if (builtinId) {
   return runBuiltinTool(builtinId, input, ctx);
 }
 // External tool dispatch:
-if (toolName.startsWith('mcp_')) {
+if (toolName.startsWith("mcp_")) {
   return dispatchExternalTool(toolName, input, ctx);
 }
 throw new Error(`Unknown tool: ${toolName}`);
@@ -1462,7 +1763,9 @@ throw new Error(`Unknown tool: ${toolName}`);
 ---
 
 #### T4.4 — bridge.ts + mcp-server.ts: Worker aggregation
+
 **Files to modify**:
+
 - `apps/mcp/src/bridge.ts`
 - `apps/mcp/src/mcp-server.ts`
 
@@ -1479,28 +1782,40 @@ Store `externalToolMap: Map<sdkName, {server, originalName}>` on `BridgeContext`
 ---
 
 #### T4.5 — Web chat route: inject external tools
+
 **Files to modify**: `apps/web/app/api/chat/route.ts`
 
 ```ts
 // After filterTools(agent.allowedTools):
 const externalServers = await fetchEnabledExternalTools(db, user.id);
-const externalToolMap = new Map<string, { server: UserMcpServer; originalName: string }>();
+const externalToolMap = new Map<
+  string,
+  { server: UserMcpServer; originalName: string }
+>();
 
 for (const { server, tools } of externalServers) {
   for (const t of tools) {
-    const sdkName = 'mcp_' + server.id.replace(/-/g, '').slice(0, 16) + '_' + t.tool_name;
+    const sdkName =
+      "mcp_" + server.id.replace(/-/g, "").slice(0, 16) + "_" + t.tool_name;
     externalToolMap.set(sdkName, { server, originalName: t.tool_name });
     aiTools[sdkName] = tool({
-      description: t.tool_description ?? '',
+      description: t.tool_description ?? "",
       parameters: jsonSchema(t.input_schema_json as JSONSchema7),
       execute: async (args, { abortSignal }) => {
         if (!server.trusted) {
           // Surface confirmation required — same pattern as built-in confirmation
-          return { __requires_confirmation: true, toolId: sdkName, input: args };
+          return {
+            __requires_confirmation: true,
+            toolId: sdkName,
+            input: args,
+          };
         }
         // DNS check for Node path
         await assertNotPrivateResolved(new URL(server.url).hostname);
-        return callExternalTool(server, t.tool_name, args, { ...toolCtx, signal: abortSignal });
+        return callExternalTool(server, t.tool_name, args, {
+          ...toolCtx,
+          signal: abortSignal,
+        });
       },
     });
   }
@@ -1512,12 +1827,15 @@ for (const { server, tools } of externalServers) {
 ---
 
 #### T4.6 — Web API routes: CRUD for user_mcp_servers
+
 **Files to create**:
+
 - `apps/web/app/api/mcp-servers/route.ts` — `GET` (list) + `POST` (create)
 - `apps/web/app/api/mcp-servers/[id]/route.ts` — `PATCH` (update) + `DELETE`
 - `apps/web/app/api/mcp-servers/[id]/refresh/route.ts` — `POST` (re-sync manifest)
 
 **POST `/api/mcp-servers`**:
+
 1. Validate body `{ name, url, authType, authValue? }`.
 2. `isPrivateUrl(url)` → 422 if blocked.
 3. Count existing servers for user → 422 if ≥ 5.
@@ -1541,6 +1859,7 @@ All routes: `requireSession()` + service-role client.
 ---
 
 #### T4.7 — Web UI: External MCP Servers section on /integrations
+
 **Files to modify**: `apps/web/app/(app)/integrations/page.tsx`
 
 **Files to create**: `apps/web/app/(app)/integrations/_components/AddMcpServerForm.tsx`
@@ -1576,12 +1895,12 @@ Track 2 bugs (T2.1–T2.5) are independent of everything else and can ship immed
 
 ### Parallel execution for a team (4 engineers)
 
-| Engineer | Tasks |
-|---|---|
-| Eng 1 | T2.1 → T2.2 → T2.3 → T2.4 → T2.5 → T2.6 (all Track 2) |
-| Eng 2 | T1.1 → T1.2 → T1.3 → T1.4 → T1.5 → T1.6 (Track 1, high-priority group) |
-| Eng 3 | T3.1 → T3.2 → T3.3 → T3.4–T3.12 (Track 3, infra + HubSpot) |
-| Eng 4 | T3.13–T3.18 (Track 3, Gmail/Drive/Web) → start T4.1 after T3.1 merges |
+| Engineer | Tasks                                                                  |
+| -------- | ---------------------------------------------------------------------- |
+| Eng 1    | T2.1 → T2.2 → T2.3 → T2.4 → T2.5 → T2.6 (all Track 2)                  |
+| Eng 2    | T1.1 → T1.2 → T1.3 → T1.4 → T1.5 → T1.6 (Track 1, high-priority group) |
+| Eng 3    | T3.1 → T3.2 → T3.3 → T3.4–T3.12 (Track 3, infra + HubSpot)             |
+| Eng 4    | T3.13–T3.18 (Track 3, Gmail/Drive/Web) → start T4.1 after T3.1 merges  |
 
 After the first sprint (2 weeks): Eng 1 and Eng 2 join Track 4. Eng 3 handles T3.19–T3.21 and phased `allowedTools` updates.
 

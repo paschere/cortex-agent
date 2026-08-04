@@ -38,15 +38,15 @@ Source of truth for the types: `apps/web/lib/dev-tasks/contract.ts`.
 Cortex can only work in a repo somebody registered here. There is no "any repo
 whose name I recognise" path.
 
-| column | meaning |
-| --- | --- |
-| `key` | short handle used everywhere a human names a repo (`payroll`). Lowercase. |
-| `clone_url`, `default_branch` | what the executor needs to start |
-| `allow_pull_requests` | a **second, separate grant**. Registering a repo lets Cortex work in it; this decides whether it may open a PR there. |
-| `is_active` | soft off-switch |
-| `linear_team_keys`, `linear_project_ids` | team/project → repo mapping (see below). Ship empty. |
+| column                                   | meaning                                                                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `key`                                    | short handle used everywhere a human names a repo (`payroll`). Lowercase.                                             |
+| `clone_url`, `default_branch`            | what the executor needs to start                                                                                      |
+| `allow_pull_requests`                    | a **second, separate grant**. Registering a repo lets Cortex work in it; this decides whether it may open a PR there. |
+| `is_active`                              | soft off-switch                                                                                                       |
+| `linear_team_keys`, `linear_project_ids` | team/project → repo mapping (see below). Ship empty.                                                                  |
 
-Seeded with `cortex-agent`, `zipdev-matcher` and `payroll`. Adding a fourth is
+Seeded with `cortex-agent`, `Cortex-matcher` and `payroll`. Adding a fourth is
 one `INSERT`; nothing in the code knows those three names.
 
 ### `dev_tasks` — one unit of work
@@ -73,11 +73,11 @@ This is where retry-idempotency is enforced. Outcome is `accepted`, `ignored`
 
 **Configured by `LINEAR_TRIGGER_MODE`:**
 
-| mode | fires when |
-| --- | --- |
-| `assignee` *(default)* | the issue is assigned to `LINEAR_CORTEX_USER_ID` (or `LINEAR_CORTEX_USER_EMAIL`) |
-| `label` | the issue carries `LINEAR_TRIGGER_LABEL` (default `cortex`) |
-| `either` | whichever happens first |
+| mode                   | fires when                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------- |
+| `assignee` _(default)_ | the issue is assigned to `LINEAR_CORTEX_USER_ID` (or `LINEAR_CORTEX_USER_EMAIL`) |
+| `label`                | the issue carries `LINEAR_TRIGGER_LABEL` (default `cortex`)                      |
+| `either`               | whichever happens first                                                          |
 
 **We chose `assignee` as the default.** Assignment is a single-owner, deliberate
 act with a person's name on it; it is what the company already means by "this is
@@ -91,8 +91,8 @@ the safe default.
 Three further guards, all in `apps/web/app/api/webhooks/linear/trigger.ts`:
 
 - **Edge-triggered, not level-triggered.** On an `update`, the trigger field must
-  appear in Linear's `updatedFrom` — i.e. the assignment (or label) changed *in
-  this event*. Otherwise every later edit to an assigned issue would look like a
+  appear in Linear's `updatedFrom` — i.e. the assignment (or label) changed _in
+  this event_. Otherwise every later edit to an assigned issue would look like a
   fresh pickup.
 - **Closed issues are ignored** (`state.type` of `completed` / `canceled`).
 - **An unconfigured trigger never fires.** With no Cortex identity set, "assigned
@@ -111,7 +111,7 @@ highest first (`apps/web/lib/dev-tasks/repository-rule.ts`):
 
 1. `Repo: <key>` on its own line in the issue description. Also accepted:
    `**Repo:** payroll`, `- repo = payroll`, `Repository: cortex-agent`,
-   `Repo: Zipdev-Team/payroll`. First match wins.
+   `Repo: Cortex-Team/payroll`. First match wins.
 2. A `repo:<key>` Linear label.
 3. The issue's Linear **project**, if a repo lists that project id in
    `linear_project_ids`.
@@ -142,10 +142,10 @@ Four independent defences, three of them in the database:
    configured → everything is rejected, in every environment (there is no
    local-dev bypass; this endpoint starts unattended code execution).
 2. **Replay window.** The signed `webhookTimestamp` must be within 60s (±60s of
-   skew). Checked *after* the signature, so it cannot be rewritten.
+   skew). Checked _after_ the signature, so it cannot be rewritten.
 3. **Delivery claim.** `dev_task_events` has `unique (source, event_key)` where
    `event_key` is a SHA-256 of the exact bytes Linear sent. Every delivery
-   INSERTs its claim first — the check *is* the insert, because a
+   INSERTs its claim first — the check _is_ the insert, because a
    read-then-insert still double-fires under concurrent retries. The loser gets
    `23505` and is answered `200` with no work done. If the enqueue afterwards
    fails, the claim is **released** so Linear's retry can succeed instead of
@@ -154,7 +154,7 @@ Four independent defences, three of them in the database:
    `dev_tasks_one_open_per_issue` on `(source, external_id)` where status is
    `queued`/`running`/`needs_review`. Un-assign-and-reassign, or relabel
    mid-run, cannot start a second agent on the same branch. Terminal rows are
-   excluded, so an issue *can* legitimately be picked up again after a failed or
+   excluded, so an issue _can_ legitimately be picked up again after a failed or
    cancelled attempt.
 
 Tests: `apps/web/app/api/webhooks/linear/verify.test.ts` and
@@ -170,28 +170,32 @@ it).
 
 ```ts
 interface DevTaskQueuedEvent {
-  taskId: string;            // dev_tasks.id
-  source: 'linear';
+  taskId: string; // dev_tasks.id
+  source: "linear";
   attempt: number;
   maxAttempts: number;
   repository: {
     id: string;
-    key: string;             // 'payroll'
-    provider: 'github';
+    key: string; // 'payroll'
+    provider: "github";
     cloneUrl: string;
     defaultBranch: string;
     allowPullRequests: boolean;
   };
   issue: {
-    id: string;              // Linear issue UUID, opaque
-    identifier: string;      // 'ENG-142' — good for branch names
+    id: string; // Linear issue UUID, opaque
+    identifier: string; // 'ENG-142' — good for branch names
     title: string;
     description: string | null;
     url: string | null;
     teamKey: string | null;
     projectId: string | null;
   };
-  requester: { name: string | null; email: string | null; externalId: string | null };
+  requester: {
+    name: string | null;
+    email: string | null;
+    externalId: string | null;
+  };
 }
 ```
 
@@ -203,11 +207,11 @@ allowlisted, and Linear has been told Cortex picked the issue up.
 ```ts
 interface DevTaskStatusEvent {
   taskId: string;
-  status: 'running' | 'needs_review' | 'done' | 'failed' | 'cancelled';
+  status: "running" | "needs_review" | "done" | "failed" | "cancelled";
   branchName?: string;
   prUrl?: string;
-  summary?: string;   // one short paragraph, English — posted to Linear
-  error?: string;     // when status is 'failed' — posted to Linear
+  summary?: string; // one short paragraph, English — posted to Linear
+  error?: string; // when status is 'failed' — posted to Linear
   attempt?: number;
 }
 ```
@@ -238,7 +242,7 @@ webhook route before the task row exists. Do not consume it.
    signing secret.
 3. Set `LINEAR_WEBHOOK_SECRET`, `LINEAR_CORTEX_USER_ID` (and optionally
    `LINEAR_TRIGGER_MODE`, `LINEAR_TRIGGER_LABEL`, `CORTEX_LINEAR_ACTOR_EMAIL`).
-4. Make sure at least one Zipdev account has connected Linear — that is whose
+4. Make sure at least one Cortex account has connected Linear — that is whose
    token the acknowledgement comments are posted with. Name it explicitly with
    `CORTEX_LINEAR_ACTOR_EMAIL`; otherwise the oldest connection is used and the
    audit trail attributes the comments to whoever that is.

@@ -23,7 +23,7 @@ import {
 /**
  * Apollo job postings — GET /api/v1/organizations/{id}/job_postings.
  *
- * The strongest buying signal Zipdev has: a company advertising six engineering
+ * The strongest buying signal we have: a company advertising six engineering
  * roles is a company already spending on hiring and already failing to fill it.
  *
  * This does NOT overlap `growth.find_signals`, which sweeps five public job

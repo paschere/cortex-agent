@@ -21,7 +21,7 @@ export interface Env {
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.get('/', (c) => c.text('zipdev-mcp ok'));
+app.get('/', (c) => c.text('cortex-mcp ok'));
 app.get('/health', (c) => c.json({ ok: true }));
 
 // All other routes require bearer auth

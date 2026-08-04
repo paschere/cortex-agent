@@ -1,7 +1,7 @@
 export const PROMPTS = [
   {
     name: 'draft-proposal',
-    description: 'Draft a complete client proposal for a Zipdev candidate role.',
+    description: 'Draft a complete client proposal for a candidate role.',
     arguments: [
       { name: 'role', description: 'e.g., "frontend", "fullstack"', required: true },
       { name: 'seniority', description: 'junior | mid | senior | lead', required: true },

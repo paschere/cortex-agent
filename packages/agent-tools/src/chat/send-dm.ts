@@ -10,7 +10,7 @@ import {
 import { CHAT_TEXT_LIMIT, flattenMarkdownForChat } from './webhook';
 
 /**
- * `chat.send_dm` — direct-message a Zipdev user as the Cortex Chat app.
+ * `chat.send_dm` — direct-message a workspace user as the Cortex Chat app.
  *
  * The sibling tool `chat.send_message` posts into a SPACE through a webhook the
  * person pasted into settings. This one posts into the 1:1 conversation between
@@ -41,9 +41,9 @@ export interface ChatDmLink {
 }
 
 /**
- * The DM space recorded for a Zipdev user, or null when they have never
+ * The DM space recorded for a workspace user, or null when they have never
  * messaged the Chat app. Most recent link wins — someone can have more than one
- * Google identity pointed at the same Zipdev account.
+ * Google identity pointed at the same Cortex account.
  */
 export async function findChatDmLink(
   ctx: Pick<ToolContext, 'db'>,
@@ -79,13 +79,13 @@ export function notLinkedExplanation(subject: 'you' | 'they' = 'they'): string {
 export const chatSendDm = registerTool({
   id: 'chat.send_dm',
   description:
-    'Send a private direct message to a Zipdev teammate through the Cortex app in Google Chat. Only that person sees it — use it for anything personal (their own digest, a reminder, a heads-up) instead of posting into a shared space. Markdown is accepted and converted automatically to what Google Chat renders; do not format for Chat yourself. It only works for people who have messaged the Cortex app at least once, because that is what creates the direct-message thread; for anyone else it reports back that they are not linked instead of failing, and you should tell them to say hi to Cortex in Google Chat. Leave userId out to message the person you are working for.',
+    'Send a private direct message to a teammate through the Cortex app in Google Chat. Only that person sees it — use it for anything personal (their own digest, a reminder, a heads-up) instead of posting into a shared space. Markdown is accepted and converted automatically to what Google Chat renders; do not format for Chat yourself. It only works for people who have messaged the Cortex app at least once, because that is what creates the direct-message thread; for anyone else it reports back that they are not linked instead of failing, and you should tell them to say hi to Cortex in Google Chat. Leave userId out to message the person you are working for.',
   inputSchema: z.object({
     userId: z
       .string()
       .uuid()
       .optional()
-      .describe('The Zipdev user to DM. Defaults to the person you are working for.'),
+      .describe('The user to DM. Defaults to the person you are working for.'),
     text: z
       .string()
       .min(1)

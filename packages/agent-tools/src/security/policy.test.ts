@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_POLICY,
   type SecurityPolicy,
@@ -13,6 +13,19 @@ import {
 // `off-hours` signal never leaks into unrelated assertions.
 const NOON = new Date('2026-03-10T19:00:00.000Z');
 const MIDNIGHT = new Date('2026-03-10T06:00:00.000Z'); // 01:00 COT
+
+// A configured workspace is the interesting case for most of these: without
+// internal domains every recipient is external, and the internal-write branch
+// below could never be reached. The unconfigured posture gets its own block.
+const INTERNAL = 'acme.test';
+
+beforeEach(() => {
+  process.env.INTERNAL_EMAIL_DOMAINS = INTERNAL;
+});
+
+afterEach(() => {
+  process.env.INTERNAL_EMAIL_DOMAINS = '';
+});
 
 function run(toolId: string, input: unknown, extra: Record<string, unknown> = {}) {
   return classify({
@@ -70,9 +83,9 @@ describe('classify — data sensitivity x blast radius', () => {
 
 describe('classify — sending compensation outside the company', () => {
   it('is critical and blocked', () => {
-    const c = run('gmail.send_draft', {
+    const c = run('gmail.send_draft', {Cortex
       to: 'cfo@acme-client.com',
-      subject: 'Team rates',
+      subject: Cortexrates',
       body: 'Monthly salary for each engineer is attached.',
     });
     expect(c.signals).toContain('external-recipient');
@@ -83,9 +96,9 @@ describe('classify — sending compensation outside the company', () => {
     expect(decide(c, DEFAULT_POLICY)).toBe('block');
   });
 
-  it('relaxes to an allowed internal write when every recipient is @zipdev.com', () => {
+  it('relaxes to an allowed internal write when every recipient is internal', () => {
     const c = run('gmail.send_draft', {
-      to: 'ceo@zipdev.com',
+      to: `ceo@${INTERNAL}`,
       subject: 'Team rates',
       body: 'Monthly salary breakdown.',
     });
@@ -249,7 +262,7 @@ describe('decide — policy overrides', () => {
     });
     expect(c.riskLevel).toBe('medium');
     expect(c.signals).toContain('external-recipient');
-    expect(decide(c, DEFAULT_POLICY)).toBe('confirm');
+    expect(deciCortexDEFAULT_POLICY)).toBe('confirm');
     expect(decide(c, permissive)).toBe('allow');
   });
 
@@ -262,7 +275,7 @@ describe('decide — policy overrides', () => {
 
   it('every other high-risk shape runs and is only flagged', () => {
     const internalComp = run('gmail.send_draft', {
-      to: 'ceo@zipdev.com',
+      to: `ceo@${INTERNAL}`,
       body: 'salary breakdown',
     });
     expect(internalComp.riskLevel).toBe('high');

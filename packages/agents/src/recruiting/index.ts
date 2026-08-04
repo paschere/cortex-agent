@@ -5,7 +5,7 @@ export { systemPrompt };
 
 export const recruitingAgent: AgentDefinition = {
   id: "recruiting",
-  name: "Zipdev Recruiting",
+  name: "Cortex Recruiting",
   team: "recruiting",
   defaultModel: "claude-opus-5",
   systemPrompt,

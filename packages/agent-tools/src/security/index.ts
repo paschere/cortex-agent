@@ -17,7 +17,7 @@ export {
   isSensitiveFamily,
   bogotaHour,
   DEFAULT_POLICY,
-  INTERNAL_DOMAINS,
+  internalEmailDomains,
   BULK_THRESHOLD,
   WORK_HOURS,
   SENSITIVE_FAMILIES,

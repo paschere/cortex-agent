@@ -119,7 +119,7 @@ delete from public.kb_collections where scope = 'conversation';
 -- This is the one visibility WIDENING in the migration and it is deliberate.
 -- A team bucket held company material — playbooks, rubrics, client notes —
 -- filed under a team for convenience, never under a person for privacy. Every
--- account here is on the company domain, so "the recruiting team" and "Zipdev"
+-- account here is on the company domain, so "the recruiting team" and "Cortex"
 -- differ in convenience, not in confidentiality. The alternative was stranding
 -- the documents in a scope with no UI, which is worse. `legacy_scope` records
 -- the original team so a specific bucket can be pulled back out by hand.

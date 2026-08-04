@@ -3,11 +3,11 @@
 This turns Cortex into a real Google Chat app: people DM it, @mention it in team
 spaces, and it can message them proactively (approvals, scheduled routine
 results). It answers with the same brain, the same tools, and the same audit
-trail as Zipdev OS.
+trail as the Cortex web app.
 
 Audience: a Google Workspace admin. You do not need to read any code.
 
-Endpoint (production): `https://cortex-zipdev.vercel.app/api/chat-app/google`
+Endpoint (production): `https://cortex.example.com/api/chat-app/google`
 
 ---
 
@@ -18,9 +18,9 @@ Set these in Vercel (Project → Settings → Environment Variables), for
 
 | Variable | Required | What it is | Example / where it comes from |
 | --- | --- | --- | --- |
-| `GOOGLE_CHAT_AUDIENCE` | **Yes** | The Google Cloud **project number** of the project hosting the Chat app. Every request Google Chat sends is a signed token whose audience is this value; the endpoint rejects anything else. Comma-separate to accept more than one (e.g. a project number *and* a custom audience URL). | `105834691535` (project `zipdev-matching`) — see §2, step 6 |
-| `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` | **Yes** | The service-account key the app uses to POST messages back into Chat. Accepts the raw JSON **or** base64 of it (base64 is strongly preferred in Vercel — a PEM with newlines does not survive the UI well). | base64 of the key for `zipdev-backend@zipdev-matching.iam.gserviceaccount.com` — see §3 |
-| `APP_BASE_URL` | Yes (already set) | Used for the `/approvals` link and the "see the full report in Zipdev OS" link when an answer exceeds Chat's length limit. | `https://cortex-zipdev.vercel.app` |
+| `GOOGLE_CHAT_AUDIENCE` | **Yes** | The Google Cloud **project number** of the project hosting the Chat app. Every request Google Chat sends is a signed token whose audience is this value; the endpoint rejects anything else. Comma-separate to accept more than one (e.g. a project number *and* a custom audience URL). | `105834691535` (the project hosting the Chat app) — see §2, step 6 |
+| `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` | **Yes** | The service-account key the app uses to POST messages back into Chat. Accepts the raw JSON **or** base64 of it (base64 is strongly preferred in Vercel — a PEM with newlines does not survive the UI well). | base64 of the key for `cortex-backend@<your-project>.iam.gserviceaccount.com` — see §3 |
+| `APP_BASE_URL` | Yes (already set) | Used for the `/approvals` link and the "see the full report in Cortex" link when an answer exceeds Chat's length limit. | your deployment's public origin, e.g. `https://cortex.example.com` |
 | `RESEND_API_KEY` | Optional (already set) | Email fallback when a sensitive answer has to leave a space but the person has no DM open with Cortex yet. | Resend dashboard |
 
 > **Missing `GOOGLE_CHAT_AUDIENCE` in production means every Chat request is
@@ -34,7 +34,7 @@ Set these in Vercel (Project → Settings → Environment Variables), for
 ## 1. Google Cloud project — enable the API
 
 1. Open <https://console.cloud.google.com/> and select the project that will own
-   the Chat app (ours: **zipdev-matching**).
+   the Chat app.
 2. **APIs & Services → Library** → search "Google Chat API" → **Enable**.
 
 ---
@@ -49,8 +49,8 @@ Fill in exactly:
 | Field | Value |
 | --- | --- |
 | **App name** | `Cortex` |
-| **Avatar URL** | `https://cortex-zipdev.vercel.app/icon.png` |
-| **Description** | `Zipdev's agent. Ask about the pipeline, candidates, rates, tickets and the Knowledge Base — answered with your own permissions.` |
+| **Avatar URL** | `https://cortex.example.com/icon.png` |
+| **Description** | `Your workspace's agent. Ask about the pipeline, candidates, rates, tickets and the Knowledge Base — answered with your own permissions.` |
 
 **Functionality** — tick BOTH:
 
@@ -61,7 +61,7 @@ Fill in exactly:
 **Connection settings**:
 
 - Select **HTTP endpoint URL**.
-- URL: `https://cortex-zipdev.vercel.app/api/chat-app/google`
+- URL: `https://cortex.example.com/api/chat-app/google`
 - (Not "Cloud Pub/Sub", not "Dialogflow", not "Apps Script".)
 
 **Slash commands** (optional — a plain @mention always works without these).
@@ -76,7 +76,7 @@ Add three, each of type *Slash command*, pointing at the same endpoint:
 **Where to find the project number** for `GOOGLE_CHAT_AUDIENCE`:
 Google Cloud Console → click the project picker → the **Project number** column,
 or **IAM & Admin → Settings → Project number**. It is a 12-digit number, *not*
-the project ID (`zipdev-matching`).
+the project ID.
 
 Click **Save**.
 
@@ -88,8 +88,8 @@ Cortex replies asynchronously and messages people proactively, so it needs to
 call the Chat API as itself.
 
 1. **IAM & Admin → Service Accounts → Create service account**.
-   - Name: `zipdev-backend` (ours already exists:
-     `zipdev-backend@zipdev-matching.iam.gserviceaccount.com`).
+   - Name: `cortex-backend` (the full address is then
+     `cortex-backend@<your-project>.iam.gserviceaccount.com`).
 2. **Grant this service account access to project: SKIP IT.** Do not assign any
    IAM role. The Chat app's identity and permissions come from the Chat API
    configuration in §2, not from project IAM. An unnecessary role here is pure
@@ -101,12 +101,12 @@ call the Chat API as itself.
    `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` in Vercel:
 
    ```bash
-   base64 -w0 zipdev-matching-xxxxx.json      # Linux
-   base64 -i zipdev-matching-xxxxx.json       # macOS
+   base64 -w0 service-account-xxxxx.json      # Linux
+   base64 -i service-account-xxxxx.json       # macOS
    ```
 
    ```powershell
-   [Convert]::ToBase64String([IO.File]::ReadAllBytes("zipdev-matching-xxxxx.json"))
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("service-account-xxxxx.json"))
    ```
 
    Raw JSON also works if you prefer it; the app detects which form it got.
@@ -122,7 +122,7 @@ The app requests exactly one scope: `https://www.googleapis.com/auth/chat.bot`.
 Still on the Chat API **Configuration** page:
 
 1. **Visibility** → tick **Make this Chat app available to specific people and
-   groups in <your domain>** and enter `zipdev.com`, **or** choose the
+   groups in <your domain>** and enter your own domain, **or** choose the
    organization-wide option to publish to everyone in the domain.
 2. **App status** → **LIVE — available to users**.
 3. Click **Save**.
@@ -151,11 +151,11 @@ read the room's other messages, and cannot. Ask it something with
 
 ## 6. How it behaves (read this before rolling it out)
 
-**Identity is per-person.** The actor is always the *sender*, matched to a Zipdev
-OS account by their work email. Tools run with that person's own integrations
+**Identity is per-person.** The actor is always the *sender*, matched to a Cortex
+account by their work email. Tools run with that person's own integrations
 and team permissions, and every audit row is attributed to them. Two people can
 @mention Cortex with the same question in the same space and get different
-answers — that is correct, not a bug. Someone without a Zipdev OS account gets a
+answers — that is correct, not a bug. Someone without a Cortex account gets a
 polite refusal and nothing runs.
 
 **Cortex acknowledges, then answers.** Google Chat gives an app about 5 seconds to
@@ -202,7 +202,7 @@ request has been sent to them.
 
 ### Where the conversation shows up
 
-Every Chat exchange is stored as an ordinary Zipdev OS conversation, so it
+Every Chat exchange is stored as an ordinary Cortex conversation, so it
 appears in **Conversations** alongside web and Claude sessions. A DM is one
 continuous conversation per person; each thread in a space is its own
 conversation, titled after the space.
@@ -218,7 +218,7 @@ Do these in order after deploying.
    *If nothing appears, the app is not live or not approved for your OU (§4).*
 2. **Ask something read-only.** e.g. `what do we know about Acme?` You should see
    `On it ⚡` within a second or two, then the real answer a few seconds later.
-3. **Check Zipdev OS.** Open `https://cortex-zipdev.vercel.app/conversations` —
+3. **Check Cortex.** Open `<your origin>/conversations` —
    the exchange should be there, titled `Chat · <your name>`.
 4. **Check the audit log.** `…/admin` → audit log. The tool calls must appear
    under **your** name, not a service account, with the tools you'd expect.
@@ -241,9 +241,9 @@ Do these in order after deploying.
 | 401s that started suddenly, having worked for months | Google rotated the signing certificates and the fetch failed. | The endpoint caches certs for an hour and refetches on an unknown key id; a persistent failure means outbound network trouble. Check logs for `could not fetch signing certificates`. |
 | **"Cortex isn't responding"** but the answer shows up seconds later anyway | Normal. This is the acknowledge-then-answer pattern (§6) and Chat occasionally races it. | Nothing to fix. |
 | Ack arrives (`On it ⚡`) but the real answer never does | Outbound is broken: `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` unset, malformed, or the key was revoked. | Re-create the key (§3). Look for `google-chat: token exchange failed` or `could not post the answer` in the logs. |
-| *"I don't see a Zipdev OS account for your address"* | The sender's Chat email has no matching Zipdev OS user. | Create the user in Zipdev OS with the same address, then message Cortex again. |
-| *"Google Chat isn't sharing your work address"* | An external / consumer account, or an app not restricted to the domain. | This app is for `zipdev.com` accounts only. Check the visibility settings in §4. |
-| Answers get cut off with *"See the full report in Zipdev OS"* | Google Chat hard-caps messages at ~4096 characters. | Expected. Follow the link, or ask for a shorter answer (`/brief`). |
+| *"I don't see a Cortex account for your address"* | The sender's Chat email has no matching Cortex user. | Create the user in Cortex with the same address, then message Cortex again. |
+| *"Google Chat isn't sharing your work address"* | An external / consumer account, or an app not restricted to the domain. | This app is for accounts in your own Workspace domain only. Check the visibility settings in §4. |
+| Answers get cut off with *"See the full report in Cortex"* | Google Chat hard-caps messages at ~4096 characters. | Expected. Follow the link, or ask for a shorter answer (`/brief`). |
 | Cortex ignores messages in a space | In spaces, Chat only delivers messages that **@mention** the app. | @mention it. If mentions still do nothing, "Join spaces and group conversations" is unticked in §2. |
 | A sensitive answer keeps going to DM when you wanted it in the room | Working as designed — see the DM-redirect rule in §6. | Ask for an aggregate instead (totals, counts, ranges), which posts normally. |
 | Chat replies land in a new thread instead of under the question | The originating thread was deleted, or the message came from a very old client. | Cosmetic; the reply still reaches the space. |

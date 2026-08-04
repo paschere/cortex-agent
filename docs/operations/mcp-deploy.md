@@ -45,16 +45,16 @@ wrangler dev
 
 ## Custom domain
 
-1. In the Cloudflare dashboard, go to **Workers & Pages → zipdev-mcp-prod → Settings → Triggers**.
-2. Under **Custom Domains**, add `mcp.zipdev.com`.
+1. In the Cloudflare dashboard, go to **Workers & Pages → cortex-mcp-prod → Settings → Triggers**.
+2. Under **Custom Domains**, add `mcp.example.com`.
 3. Cloudflare handles DNS and TLS automatically for domains on your account.
 
-Alternatively, configure a Worker Route in the dashboard: `mcp.zipdev.com/*` → `zipdev-mcp-prod`.
+Alternatively, configure a Worker Route in the dashboard: `mcp.example.com/*` → `cortex-mcp-prod`.
 
 ## Verify
 
 ```bash
-curl https://mcp.zipdev.com/health
+curl https://mcp.example.com/health
 # Expected: {"ok":true}
 ```
 
@@ -66,4 +66,4 @@ Cloudflare retains deploy history. To revert to a previous version:
 wrangler rollback
 ```
 
-Or use the Cloudflare dashboard: **Workers & Pages → zipdev-mcp-prod → Deployments** → select a prior deployment → **Rollback**.
+Or use the Cloudflare dashboard: **Workers & Pages → cortex-mcp-prod → Deployments** → select a prior deployment → **Rollback**.

@@ -1,18 +1,18 @@
-import { z } from 'zod';
-import { registerTool } from '../index';
-import { listVisibleSpaces } from './spaces';
+import { z } from "zod";
+import { registerTool } from "../index";
+import { listVisibleSpaces } from "./spaces";
 
 export const kbListSpaces = registerTool({
-  id: 'kb.list_spaces',
+  id: "kb.list_spaces",
   description:
-    'List the Knowledge Base spaces the person can reach: every company-wide space, plus their own personal ones. Use it before saving something, so you can say where it went, and when someone asks what Zipdev has on file. Never read the ids back to anyone — refer to spaces by name.',
+    "List the Knowledge Base spaces the person can reach: every company-wide space, plus their own personal ones. Use it before saving something, so you can say where it went, and when someone asks what Cortex has on file. Never read the ids back to anyone — refer to spaces by name.",
   inputSchema: z.object({}),
   outputSchema: z.object({
     spaces: z.array(
       z.object({
         id: z.string().uuid(),
         name: z.string(),
-        kind: z.enum(['global', 'personal']),
+        kind: z.enum(["global", "personal"]),
         description: z.string().nullable(),
         documents: z.number().int(),
       }),
@@ -26,10 +26,10 @@ export const kbListSpaces = registerTool({
     // One grouped count rather than a count per space: the list is short, but
     // it is fetched on most turns that touch the KB.
     const { data: docs, error } = await ctx.db
-      .from('kb_documents')
-      .select('collection_id')
+      .from("kb_documents")
+      .select("collection_id")
       .in(
-        'collection_id',
+        "collection_id",
         spaces.map((s) => s.id),
       );
     if (error) throw error;

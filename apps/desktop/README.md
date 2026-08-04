@@ -1,6 +1,6 @@
-# Zipdev Agent Desktop
+# Cortex Desktop
 
-Tauri 2.x desktop app wrapping the Zipdev Agent web UI.
+Tauri 2.x desktop app wrapping the Cortex web UI.
 
 ## Prerequisites
 
@@ -68,14 +68,14 @@ Produces platform-specific bundles in `src-tauri/target/release/bundle/`.
 
 ## Environment
 
-Set `ZIPDEV_WEB_URL` to point the desktop app at a Zipdev Agent web instance:
+Set `CORTEX_WEB_URL` to point the desktop app at a Cortex web instance:
 - Local dev: `http://localhost:3000` (default)
-- Production: `https://app.zipdev.com`
+- Production: your deployment's public origin, e.g. `https://app.example.com`
 
 The URL is baked in at build time via Vite. To change it, rebuild.
 
 ```bash
-ZIPDEV_WEB_URL=https://app.zipdev.com pnpm --filter @cortex/desktop build
+CORTEX_WEB_URL=https://app.example.com pnpm --filter @cortex/desktop build
 ```
 
 ## Plugins bundled

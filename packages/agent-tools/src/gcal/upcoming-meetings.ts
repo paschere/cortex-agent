@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { registerTool } from '../index';
-import { meetingTypeLabel } from './classify';
-import { collectUpcomingMeetings, type NormalizedMeeting } from './events';
+import { z } from "zod";
+import { registerTool } from "../index";
+import { meetingTypeLabel } from "./classify";
+import { collectUpcomingMeetings, type NormalizedMeeting } from "./events";
 
 /**
  * `gcal.upcoming_meetings` — the "what's on my plate" view.
@@ -33,7 +33,10 @@ const MeetingSchema = z.object({
   allDay: z.boolean(),
   durationMinutes: z.number(),
   myResponse: z.string().nullable(),
-  organizer: z.object({ email: z.string().nullable(), name: z.string().nullable() }),
+  organizer: z.object({
+    email: z.string().nullable(),
+    name: z.string().nullable(),
+  }),
   attendees: z.array(AttendeeSchema),
   externalAttendees: z.array(z.string()),
   externalDomains: z.array(z.string()),
@@ -41,7 +44,13 @@ const MeetingSchema = z.object({
   conferenceLink: z.string().nullable(),
   meetCode: z.string().nullable(),
   htmlLink: z.string().nullable(),
-  guessedType: z.enum(['interview', 'client', 'internal', 'personal', 'unknown']),
+  guessedType: z.enum([
+    "interview",
+    "client",
+    "internal",
+    "personal",
+    "unknown",
+  ]),
   typeConfidence: z.number(),
   typeReasons: z.array(z.string()),
 });
@@ -50,38 +59,45 @@ function renderMarkdown(meetings: NormalizedMeeting[], hours: number): string {
   if (meetings.length === 0) {
     return `Nothing on the calendar for the next ${hours} hour(s).`;
   }
-  const lines = [`**${meetings.length} meeting(s) in the next ${hours} hour(s)**`, ''];
+  const lines = [
+    `**${meetings.length} meeting(s) in the next ${hours} hour(s)**`,
+    "",
+  ];
   for (const m of meetings) {
     const guests = m.attendees.filter((a) => !a.self);
     const externals = guests.filter((a) => a.external);
     lines.push(`### ${m.title}`);
     lines.push(
-      `${m.startHuman} – ${m.endHuman} · ${m.allDay ? 'all day' : `${m.durationMinutes} min`} · ${meetingTypeLabel(m.guessedType)}`,
+      `${m.startHuman} – ${m.endHuman} · ${m.allDay ? "all day" : `${m.durationMinutes} min`} · ${meetingTypeLabel(m.guessedType)}`,
     );
     if (guests.length) {
       const shown = guests
         .slice(0, 8)
-        .map((a) => `${a.name ?? a.email}${a.external ? ' (outside Zipdev)' : ''}`)
-        .join(', ');
+        .map(
+          (a) => `${a.name ?? a.email}${a.external ? " (outside Cortex)" : ""}`,
+        )
+        .join(", ");
       lines.push(
-        `With: ${shown}${guests.length > 8 ? ` and ${guests.length - 8} more` : ''}`,
+        `With: ${shown}${guests.length > 8 ? ` and ${guests.length - 8} more` : ""}`,
       );
     } else {
-      lines.push('With: no other guests');
+      lines.push("With: no other guests");
     }
-    if (externals.length) lines.push(`Outside domains: ${m.externalDomains.join(', ')}`);
+    if (externals.length)
+      lines.push(`Outside domains: ${m.externalDomains.join(", ")}`);
     if (m.conferenceLink) lines.push(`Join: ${m.conferenceLink}`);
     else if (m.location) lines.push(`Where: ${m.location}`);
-    if (m.myResponse && m.myResponse !== 'accepted') lines.push(`Your reply: ${m.myResponse}`);
-    lines.push('');
+    if (m.myResponse && m.myResponse !== "accepted")
+      lines.push(`Your reply: ${m.myResponse}`);
+    lines.push("");
   }
-  return lines.join('\n').trimEnd();
+  return lines.join("\n").trimEnd();
 }
 
 export const gcalUpcomingMeetings = registerTool({
-  id: 'gcal.upcoming_meetings',
+  id: "gcal.upcoming_meetings",
   description:
-    "See what meetings are coming up on the user's calendar, ready to act on. For each one you get the title, when it starts and ends, how long it runs, who is invited (and which of them are outside Zipdev), the organizer, where it happens or the video link, and a best guess at what kind of conversation it is — an interview, a client call, something internal, or personal time. Use it to answer \"what's on my calendar today\", to pick the meeting someone is talking about, or as the first step before preparing a briefing. Looks 24 hours ahead by default and can reach up to two weeks.",
+    "See what meetings are coming up on the user's calendar, ready to act on. For each one you get the title, when it starts and ends, how long it runs, who is invited (and which of them are outside Cortex), the organizer, where it happens or the video link, and a best guess at what kind of conversation it is — an interview, a client call, something internal, or personal time. Use it to answer \"what's on my calendar today\", to pick the meeting someone is talking about, or as the first step before preparing a briefing. Looks 24 hours ahead by default and can reach up to two weeks.",
   inputSchema: z.object({
     hours: z
       .number()
@@ -89,12 +105,14 @@ export const gcalUpcomingMeetings = registerTool({
       .min(1)
       .max(336)
       .default(24)
-      .describe('How far ahead to look, in hours. 24 = the rest of today and tomorrow morning.'),
+      .describe(
+        "How far ahead to look, in hours. 24 = the rest of today and tomorrow morning.",
+      ),
     includeDeclined: z
       .boolean()
       .default(false)
-      .describe('Include meetings the user already declined'),
-    calendarId: z.string().default('primary'),
+      .describe("Include meetings the user already declined"),
+    calendarId: z.string().default("primary"),
     limit: z.number().int().min(1).max(50).default(25),
   }),
   outputSchema: z.object({
@@ -106,17 +124,21 @@ export const gcalUpcomingMeetings = registerTool({
     markdown: z.string(),
   }),
   requiredScopes: [
-    { provider: 'google', scopes: ['https://www.googleapis.com/auth/calendar.readonly'] },
+    {
+      provider: "google",
+      scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+    },
   ],
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     const hours = input.hours ?? 24;
-    const { meetings, windowStart, windowEnd, timeZone } = await collectUpcomingMeetings(ctx, {
-      calendarId: input.calendarId ?? 'primary',
-      hours,
-      includeDeclined: input.includeDeclined ?? false,
-      limit: input.limit ?? 25,
-    });
+    const { meetings, windowStart, windowEnd, timeZone } =
+      await collectUpcomingMeetings(ctx, {
+        calendarId: input.calendarId ?? "primary",
+        hours,
+        includeDeclined: input.includeDeclined ?? false,
+        limit: input.limit ?? 25,
+      });
 
     return {
       meetings: meetings.map((m) => ({

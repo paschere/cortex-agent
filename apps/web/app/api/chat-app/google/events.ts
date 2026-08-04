@@ -138,8 +138,8 @@ export function threadIdOf(threadName: string | undefined): string | null {
  * A DM is one continuous conversation with the app, so the whole space is the
  * key. A space thread is its own topic — and its own audience — so each thread
  * gets its own conversation row. Both live under `conversations.external_key`
- * next to `mcp:<session>`, which is what makes Chat history show up in Zipdev
- * OS like every other surface.
+ * next to `mcp:<session>`, which is what makes Chat history show up in Cortex
+ * like every other surface.
  */
 export function conversationKey(
   space: string,

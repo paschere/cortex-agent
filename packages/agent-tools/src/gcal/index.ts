@@ -3,7 +3,6 @@ export { gcalCreateEvent } from './create-event';
 export { gcalUpcomingMeetings } from './upcoming-meetings';
 
 export {
-  INTERNAL_DOMAIN,
   classifyMeeting,
   emailDomain,
   isExternalEmail,

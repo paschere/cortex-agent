@@ -7,14 +7,14 @@
  * needs only the Meet scope. No Drive access, no file hunting, no permission
  * surprises when the recording lives in someone else's My Drive.
  *
- * Mirrors the working client in zipdev-matcher (lib/google/meet-transcripts.ts),
+ * Mirrors the working client in Cortex-matcher (lib/google/meet-transcripts.ts),
  * adapted to ToolContext + ctx.integrations.getAccessToken('google').
  */
 
-import { IntegrationError } from '@cortex/core';
-import type { ToolContext } from '../types';
+import { IntegrationError } from "@cortex/core";
+import type { ToolContext } from "../types";
 
-const MEET_API = 'https://meet.googleapis.com/v2';
+const MEET_API = "https://meet.googleapis.com/v2";
 
 /**
  * `meetings.space.readonly` covers everything this family reads:
@@ -23,7 +23,8 @@ const MEET_API = 'https://meet.googleapis.com/v2';
  * narrower alternative (only spaces the app itself created) and would NOT
  * cover meetings created from Google Calendar, so it is not requested.
  */
-export const MEET_READONLY_SCOPE = 'https://www.googleapis.com/auth/meetings.space.readonly';
+export const MEET_READONLY_SCOPE =
+  "https://www.googleapis.com/auth/meetings.space.readonly";
 
 export interface ConferenceRecord {
   name: string; // "conferenceRecords/xxx"
@@ -45,22 +46,28 @@ export interface MeetParticipant {
 }
 
 async function meetGet<T>(ctx: ToolContext, path: string): Promise<T> {
-  const { token } = await ctx.integrations.getAccessToken('google');
+  const { token } = await ctx.integrations.getAccessToken("google");
   const r = await fetch(`${MEET_API}/${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal: ctx.signal,
   });
   if (!r.ok) {
-    throw new IntegrationError(`Meet ${r.status} ${path}: ${await r.text()}`, 'google');
+    throw new IntegrationError(
+      `Meet ${r.status} ${path}: ${await r.text()}`,
+      "google",
+    );
   }
   return r.json() as Promise<T>;
 }
 
 /** Google accepts the dashed code; some older invites carry it undashed. */
 export function meetCodeVariants(code: string): string[] {
-  const clean = code.trim().toLowerCase().replace(/^https?:\/\/meet\.google\.com\//, '');
+  const clean = code
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\/meet\.google\.com\//, "");
   const dashed = clean;
-  const undashed = clean.replace(/-/g, '');
+  const undashed = clean.replace(/-/g, "");
   return dashed === undashed ? [dashed] : [dashed, undashed];
 }
 
@@ -72,14 +79,19 @@ export async function listConferenceRecords(
   ctx: ToolContext,
   opts: { meetingCode?: string; startAfter?: Date; pageSize?: number } = {},
 ): Promise<ConferenceRecord[]> {
-  const codes = opts.meetingCode ? meetCodeVariants(opts.meetingCode) : [undefined];
+  const codes = opts.meetingCode
+    ? meetCodeVariants(opts.meetingCode)
+    : [undefined];
 
   for (const code of codes) {
     const clauses: string[] = [];
     if (code) clauses.push(`space.meeting_code = "${code}"`);
-    if (opts.startAfter) clauses.push(`start_time >= "${opts.startAfter.toISOString()}"`);
-    const params = new URLSearchParams({ pageSize: String(opts.pageSize ?? 25) });
-    if (clauses.length) params.set('filter', clauses.join(' AND '));
+    if (opts.startAfter)
+      clauses.push(`start_time >= "${opts.startAfter.toISOString()}"`);
+    const params = new URLSearchParams({
+      pageSize: String(opts.pageSize ?? 25),
+    });
+    if (clauses.length) params.set("filter", clauses.join(" AND "));
 
     const data = await meetGet<{ conferenceRecords?: ConferenceRecord[] }>(
       ctx,
@@ -88,7 +100,7 @@ export async function listConferenceRecords(
     const records = data.conferenceRecords ?? [];
     if (records.length > 0) {
       return [...records].sort(
-        (a, b) => Date.parse(b.startTime ?? '') - Date.parse(a.startTime ?? ''),
+        (a, b) => Date.parse(b.startTime ?? "") - Date.parse(a.startTime ?? ""),
       );
     }
   }
@@ -108,9 +120,13 @@ export async function listTranscripts(
 }
 
 /** A finished transcript is the only one worth reading; fall back to any. */
-export function pickTranscript(transcripts: TranscriptRef[]): TranscriptRef | null {
+export function pickTranscript(
+  transcripts: TranscriptRef[],
+): TranscriptRef | null {
   return (
-    transcripts.find((t) => t.state === 'ENDED' || t.state === 'FILE_GENERATED') ??
+    transcripts.find(
+      (t) => t.state === "ENDED" || t.state === "FILE_GENERATED",
+    ) ??
     transcripts[0] ??
     null
   );
@@ -124,8 +140,8 @@ export async function listParticipants(
   const out: MeetParticipant[] = [];
   let pageToken: string | undefined;
   for (let page = 0; page < 5; page++) {
-    const qs = new URLSearchParams({ pageSize: '250' });
-    if (pageToken) qs.set('pageToken', pageToken);
+    const qs = new URLSearchParams({ pageSize: "250" });
+    if (pageToken) qs.set("pageToken", pageToken);
     const data = await meetGet<{
       participants?: Array<{
         name: string;
@@ -178,8 +194,8 @@ export async function fetchTranscriptText(
   let pageToken: string | undefined;
 
   for (let page = 0; page < (opts.maxPages ?? 50); page++) {
-    const qs = new URLSearchParams({ pageSize: '1000' });
-    if (pageToken) qs.set('pageToken', pageToken);
+    const qs = new URLSearchParams({ pageSize: "1000" });
+    if (pageToken) qs.set("pageToken", pageToken);
     const data = await meetGet<{
       transcriptEntries?: Array<{ participant?: string; text?: string }>;
       nextPageToken?: string;
@@ -187,7 +203,9 @@ export async function fetchTranscriptText(
 
     for (const entry of data.transcriptEntries ?? []) {
       if (!entry.text) continue;
-      const speaker = entry.participant ? opts.speakers.get(entry.participant) : undefined;
+      const speaker = entry.participant
+        ? opts.speakers.get(entry.participant)
+        : undefined;
       const line = speaker ? `${speaker}: ${entry.text}` : entry.text;
       totalChars += line.length + 1;
       if (totalChars > opts.maxChars) {
@@ -201,7 +219,12 @@ export async function fetchTranscriptText(
     if (truncated) break;
   }
 
-  return { text: lines.join('\n'), truncated, totalChars, lineCount: lines.length };
+  return {
+    text: lines.join("\n"),
+    truncated,
+    totalChars,
+    lineCount: lines.length,
+  };
 }
 
 /** The joinable code for a space, used to label a conference record. */

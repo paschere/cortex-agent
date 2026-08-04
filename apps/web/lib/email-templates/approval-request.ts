@@ -1,5 +1,12 @@
-import { button, calloutBox, codeBlock, fineprint, keyValueTable, statusPill } from './components';
-import { type RenderedEmail, appBaseUrl, renderEmail } from './layout';
+import {
+  button,
+  calloutBox,
+  codeBlock,
+  fineprint,
+  keyValueTable,
+  statusPill,
+} from "./components";
+import { type RenderedEmail, appBaseUrl, renderEmail } from "./layout";
 
 /**
  * "Cortex needs your approval" email.
@@ -22,26 +29,30 @@ export interface ApprovalRequestEmailInput {
   expiresInMinutes?: number;
 }
 
-export function renderApprovalRequestEmail(input: ApprovalRequestEmailInput): RenderedEmail {
+export function renderApprovalRequestEmail(
+  input: ApprovalRequestEmailInput,
+): RenderedEmail {
   const base = appBaseUrl();
-  const approvalsUrl = base ? `${base}/approvals` : '';
+  const approvalsUrl = base ? `${base}/approvals` : "";
   const minutes = input.expiresInMinutes ?? 15;
-  const greeting = input.firstName ? `${input.firstName}, ` : '';
+  const greeting = input.firstName ? `${input.firstName}, ` : "";
   const subject = `Approval needed: ${input.toolLabel}`;
 
   const body = [
     calloutBox({
-      tone: 'warn',
-      title: 'Nothing has happened yet',
+      tone: "warn",
+      title: "Nothing has happened yet",
       text: `${greeting}Cortex stopped before doing this. It only runs if you approve it.`,
     }),
     keyValueTable([
-      { label: 'What', value: input.toolLabel },
-      { label: 'Where it came from', value: input.origin },
-      { label: 'Why it needs approval', value: input.reason },
+      { label: "What", value: input.toolLabel },
+      { label: "Where it came from", value: input.origin },
+      { label: "Why it needs approval", value: input.reason },
     ]),
-    codeBlock(input.payload, { label: 'Exactly what will run' }),
-    approvalsUrl ? button({ href: approvalsUrl, label: 'Review and approve' }) : '',
+    codeBlock(input.payload, { label: "Exactly what will run" }),
+    approvalsUrl
+      ? button({ href: approvalsUrl, label: "Review and approve" })
+      : "",
     fineprint(
       `This request expires ${minutes} minutes after it was created. If it expires, nothing runs — Cortex will ask again the next time it needs to.`,
     ),
@@ -50,27 +61,30 @@ export function renderApprovalRequestEmail(input: ApprovalRequestEmailInput): Re
   const html = renderEmail({
     title: `Approval needed: ${input.toolLabel}`,
     preheader: `${input.origin} asked Cortex to run this. Nothing happens until you approve — the request expires in ${minutes} minutes.`,
-    eyebrow: 'Waiting on you',
-    pillHtml: statusPill({ label: 'Action required', tone: 'warn' }),
-    bodyHtml: body.filter(Boolean).join(''),
-    footerNote: 'You receive approval requests for actions Cortex runs on your behalf.',
+    eyebrow: "Waiting on you",
+    pillHtml: statusPill({ label: "Action required", tone: "warn" }),
+    bodyHtml: body.filter(Boolean).join(""),
+    footerNote:
+      "You receive approval requests for actions Cortex runs on your behalf.",
   });
 
   const text = [
     `${greeting}Cortex needs your approval before it does this.`,
-    '',
+    "",
     `What: ${input.toolLabel}`,
     `Where it came from: ${input.origin}`,
-    '',
+    "",
     `Why it needs approval: ${input.reason}`,
-    '',
-    'Exactly what will run:',
+    "",
+    "Exactly what will run:",
     input.payload,
-    '',
-    approvalsUrl ? `Approve or decline: ${approvalsUrl}` : 'Approve or decline it in Zipdev OS.',
-    '',
+    "",
+    approvalsUrl
+      ? `Approve or decline: ${approvalsUrl}`
+      : "Approve or decline it in Cortex OS.",
+    "",
     `Nothing has happened yet — it only runs if you approve. The request expires in ${minutes} minutes.`,
-  ].join('\n');
+  ].join("\n");
 
   return { subject, html, text };
 }

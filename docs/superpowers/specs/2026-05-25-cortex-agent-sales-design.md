@@ -1,14 +1,14 @@
-# Zipdev Agent — Design Spec (Sales v1)
+# Cortex Agent — Design Spec (Sales v1)
 
 **Date:** 2026-05-25
 **Status:** Draft for review
-**Owner:** Zipdev
+**Owner:** Cortex
 
 ---
 
 ## 1. Summary
 
-`cortex-agent` is an internal AI agent platform for Zipdev (a LATAM staffing company). It exposes one or more specialized agents (Sales first; HR / Recruiter to follow) accessible from multiple surfaces — Claude Desktop via an MCP connector, a native desktop app, and (later) a Zipdev web app — all backed by a shared core: a tool layer, a 3-tier RAG knowledge base, agent definitions, and integrations to HubSpot, Google Workspace, and the existing Zipdev Rate Estimator.
+`cortex-agent` is an internal AI agent platform for Cortex (a LATAM staffing company). It exposes one or more specialized agents (Sales first; HR / Recruiter to follow) accessible from multiple surfaces — Claude Desktop via an MCP connector, a native desktop app, and (later) a Cortex web app — all backed by a shared core: a tool layer, a 3-tier RAG knowledge base, agent definitions, and integrations to HubSpot, Google Workspace, and the existing Cortex Rate Estimator.
 
 The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one job-to-be-done: prospect → pull HubSpot context → confirm roles → call the Rate Estimator → draft a proposal email in Gmail.
 
@@ -27,14 +27,14 @@ The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one j
 - Proactive alerts / event watchers
 - HubSpot write tools
 - Voice I/O, Slack/Teams surfaces, mobile app
-- Standalone branded Zipdev web app (chat lives in `apps/web` already; standalone is a later branding/auth choice)
+- Standalone branded Cortex web app (chat lives in `apps/web` already; standalone is a later branding/auth choice)
 - HR / Recruiter agents (architecture supports them; not shipped in v1)
 - Multi-language UI (agent replies in user's language naturally)
 
 ## 3. Users and success criteria
 
-- **Primary users:** 5 Zipdev salespeople
-- **Auth domain:** restricted to `@zipdev.com` Google Workspace via Supabase Auth
+- **Primary users:** 5 Cortex salespeople
+- **Auth domain:** restricted to `@Cortex.com` Google Workspace via Supabase Auth
 
 ### MVP success metrics (instrumented from day one)
 
@@ -57,7 +57,7 @@ The MVP ships the **Sales agent** for 5 pilot users over ~6–8 weeks. Day-one j
 
 ```
 ┌─────────────────┐       ┌──────────────────────┐
-│ Claude Desktop  │──MCP──│  zipdev-mcp-server   │
+│ Claude Desktop  │──MCP──│  Cortex-mcp-server   │
 │ / Claude.ai     │       │  (Cloudflare Worker) │
 └─────────────────┘       └──────────┬───────────┘
                                      │
@@ -104,7 +104,7 @@ cortex-agent/
 └── turbo.json
 ```
 
-**Rate Estimator integration:** add one internal endpoint (`POST /api/internal/estimate`, service-token authed) to the existing `zipdev-rate-estimator-master` repo. The estimator's UI is untouched.
+**Rate Estimator integration:** add one internal endpoint (`POST /api/internal/estimate`, service-token authed) to the existing `Cortex-rate-estimator-master` repo. The estimator's UI is untouched.
 
 ## 6. Data model
 
@@ -255,10 +255,10 @@ Each agent is a plain config:
 ```ts
 export const salesAgent: AgentDefinition = {
   id: "sales",
-  name: "Zipdev Sales",
+  name: "Cortex Sales",
   team: "sales",
   defaultModel: "gemini-3.1-flash-lite",
-  systemPrompt: `You are Zipdev's Sales co-pilot...`,
+  systemPrompt: `You are Cortex's Sales co-pilot...`,
   allowedTools: [
     "hubspot.*",
     "rate.*",
@@ -326,7 +326,7 @@ Cloudflare Worker exposing the shared tools to Claude.
 
 ### SSO (login)
 
-- Supabase Auth with Google provider, restricted to `@zipdev.com` (Workspace `hd` claim).
+- Supabase Auth with Google provider, restricted to `@Cortex.com` (Workspace `hd` claim).
 - First login creates a `users` row and assigns to a default team (admin-editable).
 - Roles: `member`, `team_admin`, `org_admin`.
 
@@ -392,7 +392,7 @@ Components:
 Salesperson in Claude Desktop: _"Acme Corp is asking for 2 Senior React devs and 1 SRE. Draft me a proposal."_
 
 ```
-1. Claude (with zipdev-mcp connected) calls sales.draft_proposal.
+1. Claude (with Cortex-mcp connected) calls sales.draft_proposal.
 2. Composite tool:
    a. hubspot.search_companies("Acme Corp") → company id
    b. hubspot.get_company(id) → industry, size, owner, past deals
@@ -476,4 +476,4 @@ Same flow runs in the desktop app, where Gemini 2.5 Flash drives the loop server
 - Slack / Teams surfaces
 - Mobile app
 - HR + Recruiter agents
-- Standalone Zipdev-branded web app
+- Standalone Cortex-branded web app

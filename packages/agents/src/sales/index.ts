@@ -5,7 +5,7 @@ export { systemPrompt };
 
 export const salesAgent: AgentDefinition = {
   id: 'sales',
-  name: 'Zipdev Sales',
+  name: 'Cortex Sales',
   team: 'sales',
   defaultModel: 'claude-opus-5',
   systemPrompt,

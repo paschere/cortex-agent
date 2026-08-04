@@ -6,7 +6,7 @@ use tauri::{
 
 pub fn setup<R: tauri::Runtime>(app: &App<R>) -> tauri::Result<()> {
     let open_item =
-        MenuItem::with_id(app, "open", "Open Zipdev Agent", true, None::<&str>)?;
+        MenuItem::with_id(app, "open", "Open Cortex", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,

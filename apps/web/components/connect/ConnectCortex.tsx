@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import { clsx } from 'clsx';
-import { Bot, Check, Copy, MessagesSquare, Plug, Terminal } from 'lucide-react';
-import { useState } from 'react';
+import { clsx } from "clsx";
+import { Bot, Check, Copy, MessagesSquare, Plug, Terminal } from "lucide-react";
+import { useState } from "react";
 
-type TargetId = 'claude' | 'chatgpt' | 'claude-code' | 'other';
+type TargetId = "claude" | "chatgpt" | "claude-code" | "other";
 
 const TARGET_ORDER = [
-  'claude',
-  'chatgpt',
-  'claude-code',
-  'other',
+  "claude",
+  "chatgpt",
+  "claude-code",
+  "other",
 ] as const satisfies readonly TargetId[];
 
 interface Target {
@@ -28,13 +28,16 @@ interface Target {
 }
 
 /** Splits `**bold**` markers into renderable, uniquely keyed segments. */
-function segments(text: string): { key: string; text: string; bold: boolean }[] {
+function segments(
+  text: string,
+): { key: string; text: string; bold: boolean }[] {
   const out: { key: string; text: string; bold: boolean }[] = [];
-  const parts = text.split('**');
+  const parts = text.split("**");
   let offset = 0;
   for (let i = 0; i < parts.length; i += 1) {
-    const chunk = parts[i] ?? '';
-    if (chunk) out.push({ key: `${offset}:${chunk}`, text: chunk, bold: i % 2 === 1 });
+    const chunk = parts[i] ?? "";
+    if (chunk)
+      out.push({ key: `${offset}:${chunk}`, text: chunk, bold: i % 2 === 1 });
     offset += chunk.length + 2;
   }
   return out;
@@ -64,7 +67,7 @@ function Step({ text }: { text: string }) {
  */
 export function CopyButton({
   text,
-  label = 'Copy',
+  label = "Copy",
   className,
 }: {
   text: string;
@@ -87,17 +90,21 @@ export function CopyButton({
     <button
       type="button"
       onClick={onCopy}
-      aria-label={copied ? 'Copied' : label}
+      aria-label={copied ? "Copied" : label}
       className={clsx(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors',
+        "inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors",
         copied
-          ? 'border-emerald/40 bg-emerald-soft text-emerald'
-          : 'border-border bg-surface text-ink-muted hover:border-primary/30 hover:text-primary',
+          ? "border-emerald/40 bg-emerald-soft text-emerald"
+          : "border-border bg-surface text-ink-muted hover:border-primary/30 hover:text-primary",
         className,
       )}
     >
-      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      {copied ? 'Copied' : label}
+      {copied ? (
+        <Check className="h-3.5 w-3.5" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+      {copied ? "Copied" : label}
     </button>
   );
 }
@@ -116,58 +123,58 @@ function CodeLine({ text }: { text: string }) {
 
 /** The connector URL, plus per-client setup steps. Single source of truth. */
 export function ConnectCortex({ url }: { url: string }) {
-  const [active, setActive] = useState<TargetId>('claude');
+  const [active, setActive] = useState<TargetId>("claude");
 
   const targets: Record<TargetId, Target> = {
     claude: {
-      id: 'claude',
-      label: 'Claude',
+      id: "claude",
+      label: "Claude",
       icon: <Bot className="h-3.5 w-3.5" />,
-      caption: 'Claude on web, desktop and mobile',
+      caption: "Claude on web, desktop and mobile",
       steps: [
-        'Open **Settings → Connectors**.',
-        'Choose **Add custom connector**.',
-        'Paste the connector URL above.',
-        'Sign in with your **@zipdev.com** Google account and hit **Approve**.',
+        "Open **Settings → Connectors**.",
+        "Choose **Add custom connector**.",
+        "Paste the connector URL above.",
+        "Sign in with your **@Cortex.com** Google account and hit **Approve**.",
       ],
-      note: 'Inside a chat, enable the connector from the tools menu so Cortex can use it.',
+      note: "Inside a chat, enable the connector from the tools menu so Cortex can use it.",
     },
     chatgpt: {
-      id: 'chatgpt',
-      label: 'ChatGPT',
+      id: "chatgpt",
+      label: "ChatGPT",
       icon: <MessagesSquare className="h-3.5 w-3.5" />,
-      caption: 'ChatGPT with connector support enabled',
+      caption: "ChatGPT with connector support enabled",
       steps: [
-        'Open **Settings → Connectors** — or a custom connector / developer mode, depending on your plan.',
-        'Add an MCP server pointing at the same URL above.',
-        'Authorize with your Google account when prompted.',
+        "Open **Settings → Connectors** — or a custom connector / developer mode, depending on your plan.",
+        "Add an MCP server pointing at the same URL above.",
+        "Authorize with your Google account when prompted.",
       ],
-      note: 'Availability depends on your ChatGPT plan, and the feature may still be labeled beta.',
+      note: "Availability depends on your ChatGPT plan, and the feature may still be labeled beta.",
     },
-    'claude-code': {
-      id: 'claude-code',
-      label: 'Claude Code',
+    "claude-code": {
+      id: "claude-code",
+      label: "Claude Code",
       icon: <Terminal className="h-3.5 w-3.5" />,
-      caption: 'The CLI, in any terminal',
+      caption: "The CLI, in any terminal",
       steps: [
-        'Run the command below once — it registers Cortex for your user.',
-        'Authorize in the browser window it opens.',
+        "Run the command below once — it registers Cortex for your user.",
+        "Authorize in the browser window it opens.",
       ],
       snippet: `claude mcp add --transport http cortex ${url}`,
-      note: 'Working inside the cortex-agent repo? It is picked up automatically from .mcp.json — no setup needed.',
+      note: "Working inside the cortex-agent repo? It is picked up automatically from .mcp.json — no setup needed.",
     },
     other: {
-      id: 'other',
-      label: 'Other clients',
+      id: "other",
+      label: "Other clients",
       icon: <Plug className="h-3.5 w-3.5" />,
-      caption: 'Cursor, Windsurf, or your own client',
+      caption: "Cursor, Windsurf, or your own client",
       steps: [
-        'Any client that supports **remote MCP servers with OAuth 2.1** works.',
-        'Register the same URL as a remote MCP server.',
-        'Complete the Google sign-in the client opens for you.',
+        "Any client that supports **remote MCP servers with OAuth 2.1** works.",
+        "Register the same URL as a remote MCP server.",
+        "Complete the Google sign-in the client opens for you.",
       ],
       snippet: url,
-      note: 'Discovery is automatic — the client reads the authorization metadata and the tool list from the URL itself.',
+      note: "Discovery is automatic — the client reads the authorization metadata and the tool list from the URL itself.",
     },
   };
 
@@ -195,8 +202,10 @@ export function ConnectCortex({ url }: { url: string }) {
             onClick={() => setActive(t.id)}
             aria-pressed={t.id === active}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold transition-all',
-              t.id === active ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink',
+              "inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold transition-all",
+              t.id === active
+                ? "bg-surface text-ink shadow-card"
+                : "text-ink-muted hover:text-ink",
             )}
           >
             {t.icon}

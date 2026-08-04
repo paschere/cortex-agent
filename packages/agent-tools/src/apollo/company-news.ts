@@ -25,7 +25,7 @@ import {
  *
  * A company that just closed a funding round is a company about to hire, and a
  * company that just announced a big contract is a company that needs delivery
- * capacity. Both are the opening line of a Zipdev outbound email.
+ * capacity. Both are the opening line of an outbound sales email.
  *
  * `web.search` can surface the same articles, but as unranked prose with no
  * date bound and no notion of what KIND of event happened. Apollo labels each

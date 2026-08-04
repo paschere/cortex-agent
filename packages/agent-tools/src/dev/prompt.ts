@@ -5,119 +5,138 @@
  * the tool contract is testable without a network round trip.
  */
 
-import type { CheckPlan } from './checks';
-import type { DevRepository, DevTask } from './types';
+import type { CheckPlan } from "./checks";
+import type { DevRepository, DevTask } from "./types";
 
 export const CODER_TOOLS = [
   {
-    name: 'list_files',
+    name: "list_files",
     description:
-      'List files under a directory in the checkout, recursively, respecting .gitignore. ' +
-      'Use this to orient yourself before reading.',
+      "List files under a directory in the checkout, recursively, respecting .gitignore. " +
+      "Use this to orient yourself before reading.",
     input_schema: {
-      type: 'object' as const,
+      type: "object" as const,
       properties: {
-        path: { type: 'string', description: 'Directory relative to the repo root. "." for root.' },
+        path: {
+          type: "string",
+          description: 'Directory relative to the repo root. "." for root.',
+        },
       },
-      required: ['path'],
+      required: ["path"],
       additionalProperties: false,
     },
   },
   {
-    name: 'search',
+    name: "search",
     description:
-      'Search file contents with a regular expression (ripgrep). Returns matching lines with ' +
-      'their file and line number. Prefer this over listing large directories.',
+      "Search file contents with a regular expression (ripgrep). Returns matching lines with " +
+      "their file and line number. Prefer this over listing large directories.",
     input_schema: {
-      type: 'object' as const,
+      type: "object" as const,
       properties: {
-        pattern: { type: 'string', description: 'Regular expression to search for.' },
-        path: { type: 'string', description: 'Directory to search. Defaults to the repo root.' },
-        glob: { type: 'string', description: 'Optional file glob filter, e.g. "**/*.ts".' },
+        pattern: {
+          type: "string",
+          description: "Regular expression to search for.",
+        },
+        path: {
+          type: "string",
+          description: "Directory to search. Defaults to the repo root.",
+        },
+        glob: {
+          type: "string",
+          description: 'Optional file glob filter, e.g. "**/*.ts".',
+        },
       },
-      required: ['pattern'],
+      required: ["pattern"],
       additionalProperties: false,
     },
   },
   {
-    name: 'read_file',
-    description: 'Read a file from the checkout. Returns the file with 1-based line numbers.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        path: { type: 'string', description: 'File path relative to the repo root.' },
-      },
-      required: ['path'],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: 'write_file',
+    name: "read_file",
     description:
-      'Write a file in the checkout, creating parent directories as needed. This replaces the ' +
-      'whole file, so read it first and send back the complete new contents.',
+      "Read a file from the checkout. Returns the file with 1-based line numbers.",
     input_schema: {
-      type: 'object' as const,
+      type: "object" as const,
       properties: {
-        path: { type: 'string', description: 'File path relative to the repo root.' },
-        content: { type: 'string', description: 'Complete new file contents.' },
+        path: {
+          type: "string",
+          description: "File path relative to the repo root.",
+        },
       },
-      required: ['path', 'content'],
+      required: ["path"],
       additionalProperties: false,
     },
   },
   {
-    name: 'bash',
+    name: "write_file",
     description:
-      'Run a shell command in the checkout. Use it for scoped things the other tools do not ' +
-      'cover — deleting a file, running one test file, inspecting a build artifact. Git commands ' +
-      'are refused: branching, committing and pushing are handled for you.',
+      "Write a file in the checkout, creating parent directories as needed. This replaces the " +
+      "whole file, so read it first and send back the complete new contents.",
     input_schema: {
-      type: 'object' as const,
+      type: "object" as const,
       properties: {
-        command: { type: 'string', description: 'The shell command to run.' },
+        path: {
+          type: "string",
+          description: "File path relative to the repo root.",
+        },
+        content: { type: "string", description: "Complete new file contents." },
       },
-      required: ['command'],
+      required: ["path", "content"],
       additionalProperties: false,
     },
   },
   {
-    name: 'run_checks',
+    name: "bash",
+    description:
+      "Run a shell command in the checkout. Use it for scoped things the other tools do not " +
+      "cover — deleting a file, running one test file, inspecting a build artifact. Git commands " +
+      "are refused: branching, committing and pushing are handled for you.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        command: { type: "string", description: "The shell command to run." },
+      },
+      required: ["command"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "run_checks",
     description:
       "Run the repository's own verification suite (install, typecheck, lint, tests, build) and " +
-      'return the results. This is the only evidence that counts. It is slow — make a coherent ' +
-      'set of changes first, then run it.',
+      "return the results. This is the only evidence that counts. It is slow — make a coherent " +
+      "set of changes first, then run it.",
     input_schema: {
-      type: 'object' as const,
+      type: "object" as const,
       properties: {},
       additionalProperties: false,
     },
   },
   {
-    name: 'finish',
+    name: "finish",
     description:
-      'End the run. Call this exactly once, when the work is done and verified, when the task ' +
-      'is too ambiguous to implement, or when you cannot make the checks pass.',
+      "End the run. Call this exactly once, when the work is done and verified, when the task " +
+      "is too ambiguous to implement, or when you cannot make the checks pass.",
     input_schema: {
-      type: 'object' as const,
+      type: "object" as const,
       properties: {
         outcome: {
-          type: 'string',
-          enum: ['complete', 'needs_input', 'blocked'],
+          type: "string",
+          enum: ["complete", "needs_input", "blocked"],
           description:
             '"complete" only when you changed code AND run_checks passed. "needs_input" when the ' +
             'task is ambiguous and a human must answer a question. "blocked" when you cannot ' +
-            'finish or cannot make the checks pass.',
+            "finish or cannot make the checks pass.",
         },
         summary: {
-          type: 'string',
+          type: "string",
           description:
             'For "complete": what you changed and why, and what the checks verified. For ' +
             '"needs_input": the specific question, with the options you considered. For ' +
             '"blocked": what you tried and what stopped you. Markdown, addressed to a reviewer.',
         },
       },
-      required: ['outcome', 'summary'],
+      required: ["outcome", "summary"],
       additionalProperties: false,
     },
   },
@@ -130,10 +149,10 @@ export function buildSystemPrompt(params: {
 }): string {
   const { repository, checkPlan, repoRoot } = params;
   const checkList = checkPlan.isConclusive
-    ? checkPlan.steps.map((s) => `\`${s.cmd} ${s.args.join(' ')}\``).join(', ')
-    : 'none detected';
+    ? checkPlan.steps.map((s) => `\`${s.cmd} ${s.args.join(" ")}\``).join(", ")
+    : "none detected";
 
-  return `You are Cortex, Zipdev's engineering agent. You have been handed one issue and a
+  return `You are Cortex, Cortexmpany's engineering agent. You have been handed one issue and a
 checkout of the \`${repository.key}\` repository at ${repoRoot}, on a fresh branch off
 \`${repository.default_branch}\`. Your job is to make the change and prove it works.
 
@@ -174,12 +193,13 @@ something load-bearing or change direction, nothing for routine steps.`;
 export function buildTaskMessage(task: DevTask): string {
   const lines = [
     `# ${task.external_identifier}: ${task.title}`,
-    '',
-    task.description?.trim() || '_The issue has no description beyond its title._',
+    "",
+    task.description?.trim() ||
+      "_The issue has no description beyond its title._",
   ];
-  if (task.external_url) lines.push('', `Linear issue: ${task.external_url}`);
+  if (task.external_url) lines.push("", `Linear issue: ${task.external_url}`);
   if (task.requester_name) lines.push(`Assigned by: ${task.requester_name}`);
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 /**
@@ -195,7 +215,8 @@ export function buildPullRequestBody(params: {
   tokens: number;
   durationMs: number;
 }): string {
-  const { task, summary, checkSummary, iterations, tokens, durationMs } = params;
+  const { task, summary, checkSummary, iterations, tokens, durationMs } =
+    params;
   const issueLine = task.external_url
     ? `Closes [${task.external_identifier}](${task.external_url})`
     : `Closes ${task.external_identifier}`;
@@ -212,8 +233,8 @@ ${checkSummary}
 
 ---
 
-<sub>Opened by Cortex for ${task.requester_name ?? 'an unattended run'} · ${iterations} model
-turns · ${tokens.toLocaleString('en-US')} tokens · ${Math.round(durationMs / 1000)}s ·
+<sub>Opened by Cortex for ${task.requester_name ?? "an unattended run"} · ${iterations} model
+turns · ${tokens.toLocaleString("en-US")} tokens · ${Math.round(durationMs / 1000)}s ·
 task \`${task.id}\`. Cortex cannot merge this; a human review is required.</sub>`;
 }
 

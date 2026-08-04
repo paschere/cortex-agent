@@ -1,4 +1,4 @@
-import type { DigestThread } from './gather';
+import type { DigestThread } from "./gather";
 
 /**
  * Rendering the digest for humans: a markdown version for chat/agent contexts
@@ -23,32 +23,34 @@ import type { DigestThread } from './gather';
 // --- Design tokens (mirror of apps/web/lib/email-templates/theme.ts) --------
 
 const C = {
-  primary: '#7E4390',
-  primarySoft: '#9658A3',
-  ink: '#241A2E',
-  muted: '#5C4E68',
-  faint: '#8A7C96',
-  border: '#E6DDEE',
-  surface: '#FAF8FC',
-  card: '#ffffff',
-  chip: '#F3EBF8',
-  zebra: '#FBF9FD',
-  warnFg: '#8A5A08',
-  warnBg: '#FFF9EC',
-  warnBorder: '#F3DDA8',
-  infoFg: '#6B3480',
+  primary: "#7E4390",
+  primarySoft: "#9658A3",
+  ink: "#241A2E",
+  muted: "#5C4E68",
+  faint: "#8A7C96",
+  border: "#E6DDEE",
+  surface: "#FAF8FC",
+  card: "#ffffff",
+  chip: "#F3EBF8",
+  zebra: "#FBF9FD",
+  warnFg: "#8A5A08",
+  warnBg: "#FFF9EC",
+  warnBorder: "#F3DDA8",
+  infoFg: "#6B3480",
 };
 
-const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
-const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',Courier,monospace";
-const CORTEX_ICON_URL = 'https://cortex-zipdev.vercel.app/icon.png';
+const FONT =
+  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+const MONO =
+  "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',Courier,monospace";
+const CORTEX_ICON_URL = "https://cortex-Cortex.vercel.app/icon.png";
 
 const S = {
   h2: `margin:26px 0 10px;font-family:${FONT};font-size:19px;line-height:1.3;font-weight:700;color:${C.ink};letter-spacing:-.01em;`,
   h3: `margin:22px 0 8px;font-family:${FONT};font-size:15px;line-height:1.35;font-weight:700;color:${C.primary};`,
   h4: `margin:18px 0 6px;font-family:${FONT};font-size:12px;line-height:1.4;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:${C.muted};`,
   p: `margin:0 0 12px;font-family:${FONT};font-size:15px;line-height:1.6;color:${C.ink};`,
-  list: 'margin:0 0 14px;padding:0 0 0 22px;',
+  list: "margin:0 0 14px;padding:0 0 0 22px;",
   li: `margin:0 0 7px;font-family:${FONT};font-size:15px;line-height:1.55;color:${C.ink};`,
   hr: `border:0;border-top:1px solid ${C.border};margin:22px 0;`,
   quote: `margin:0 0 14px;padding:10px 14px;background:${C.surface};border-left:3px solid ${C.primarySoft};color:${C.muted};font-family:${FONT};font-size:14.5px;line-height:1.55;`,
@@ -64,12 +66,12 @@ const S = {
 
 /** Every text node goes through this before any markup is layered on. */
 export function escapeHtml(s: string): string {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function safeHref(href: string): string | null {
@@ -80,8 +82,8 @@ function safeHref(href: string): string | null {
 
 // --- Inline markdown --------------------------------------------------------
 
-const CODE_OPEN = '\u0000c';
-const CODE_CLOSE = '\u0000';
+const CODE_OPEN = "\u0000c";
+const CODE_CLOSE = "\u0000";
 
 /** Inline markdown → inline HTML: code, links, bold, italic, strikethrough. */
 function inlineHtml(raw: string): string {
@@ -91,39 +93,46 @@ function inlineHtml(raw: string): string {
     return `${CODE_OPEN}${spans.length - 1}${CODE_CLOSE}`;
   });
 
-  s = s.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (match, label: string, href: string) => {
-    const safe = safeHref(href.replace(/&amp;/g, '&'));
-    return safe ? `<a href="${safe}" style="${S.link}">${label}</a>` : match;
-  });
-  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong style="font-weight:700;">$1</strong>');
-  s = s.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
-  s = s.replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:)!?]|$)/g, '$1<em>$2</em>');
-  s = s.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
+  s = s.replace(
+    /\[([^\]\n]+)\]\(([^)\s]+)\)/g,
+    (match, label: string, href: string) => {
+      const safe = safeHref(href.replace(/&amp;/g, "&"));
+      return safe ? `<a href="${safe}" style="${S.link}">${label}</a>` : match;
+    },
+  );
+  s = s.replace(
+    /\*\*([^*\n]+)\*\*/g,
+    '<strong style="font-weight:700;">$1</strong>',
+  );
+  s = s.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>");
+  s = s.replace(/(^|[\s(])_([^_\n]+)_(?=[\s.,;:)!?]|$)/g, "$1<em>$2</em>");
+  s = s.replace(/~~([^~\n]+)~~/g, "<s>$1</s>");
 
   return s.replace(
-    new RegExp(`${CODE_OPEN}(\\d+)${CODE_CLOSE}`, 'g'),
-    (_m, i: string) => `<code style="${S.code}">${spans[Number(i)] ?? ''}</code>`,
+    new RegExp(`${CODE_OPEN}(\\d+)${CODE_CLOSE}`, "g"),
+    (_m, i: string) =>
+      `<code style="${S.code}">${spans[Number(i)] ?? ""}</code>`,
   );
 }
 
 // --- Tables -----------------------------------------------------------------
 
-type Align = 'left' | 'center' | 'right';
+type Align = "left" | "center" | "right";
 
 function splitRow(line: string): string[] {
-  const body = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  const body = line.trim().replace(/^\|/, "").replace(/\|$/, "");
   const cells: string[] = [];
-  let current = '';
+  let current = "";
   for (let i = 0; i < body.length; i++) {
     const ch = body[i];
-    if (ch === '\\' && body[i + 1] === '|') {
-      current += '|';
+    if (ch === "\\" && body[i + 1] === "|") {
+      current += "|";
       i++;
       continue;
     }
-    if (ch === '|') {
+    if (ch === "|") {
       cells.push(current.trim());
-      current = '';
+      current = "";
       continue;
     }
     current += ch;
@@ -133,43 +142,47 @@ function splitRow(line: string): string[] {
 }
 
 function parseDelimiter(line: string): Align[] | null {
-  if (!line.includes('-') || !line.includes('|')) return null;
+  if (!line.includes("-") || !line.includes("|")) return null;
   const cells = splitRow(line);
   if (cells.length === 0) return null;
   const aligns: Align[] = [];
   for (const cell of cells) {
     if (!/^:?-{1,}:?$/.test(cell)) return null;
-    const left = cell.startsWith(':');
-    const right = cell.endsWith(':');
-    aligns.push(left && right ? 'center' : right ? 'right' : 'left');
+    const left = cell.startsWith(":");
+    const right = cell.endsWith(":");
+    aligns.push(left && right ? "center" : right ? "right" : "left");
   }
   return aligns;
 }
 
-function renderTable(header: string[], aligns: Align[], rows: string[][]): string {
+function renderTable(
+  header: string[],
+  aligns: Align[],
+  rows: string[][],
+): string {
   const width = Math.max(header.length, ...rows.map((r) => r.length), 1);
-  const at = (i: number): Align => aligns[i] ?? 'left';
+  const at = (i: number): Align => aligns[i] ?? "left";
   const head = Array.from(
     { length: width },
     (_, i) =>
-      `<th align="${at(i)}" style="${S.th}text-align:${at(i)};">${inlineHtml(header[i] ?? '')}</th>`,
-  ).join('');
+      `<th align="${at(i)}" style="${S.th}text-align:${at(i)};">${inlineHtml(header[i] ?? "")}</th>`,
+  ).join("");
   const body = rows
     .map((row, rowIndex) => {
-      const zebra = rowIndex % 2 === 1 ? `background-color:${C.zebra};` : '';
+      const zebra = rowIndex % 2 === 1 ? `background-color:${C.zebra};` : "";
       const cells = Array.from({ length: width }, (_, i) => {
-        const value = inlineHtml(row[i] ?? '');
-        return `<td align="${at(i)}" style="${S.td}text-align:${at(i)};${zebra}">${value || '&nbsp;'}</td>`;
-      }).join('');
+        const value = inlineHtml(row[i] ?? "");
+        return `<td align="${at(i)}" style="${S.td}text-align:${at(i)};${zebra}">${value || "&nbsp;"}</td>`;
+      }).join("");
       return `<tr>${cells}</tr>`;
     })
-    .join('');
+    .join("");
   return [
     '<div style="width:100%;overflow-x:auto;">',
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${S.table}">`,
     `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`,
-    '</table></div>',
-  ].join('');
+    "</table></div>",
+  ].join("");
 }
 
 // --- Lists ------------------------------------------------------------------
@@ -182,9 +195,13 @@ interface ListItem {
 
 const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 
-function renderList(items: ListItem[], start: number, depth: number): [string, number] {
+function renderList(
+  items: ListItem[],
+  start: number,
+  depth: number,
+): [string, number] {
   const ordered = items[start]?.ordered ?? false;
-  const tag = ordered ? 'ol' : 'ul';
+  const tag = ordered ? "ol" : "ul";
   const parts: string[] = [`<${tag} style="${S.list}">`];
   let i = start;
   while (i < items.length) {
@@ -201,7 +218,7 @@ function renderList(items: ListItem[], start: number, depth: number): [string, n
     i++;
   }
   parts.push(`</${tag}>`);
-  return [parts.join(''), i];
+  return [parts.join(""), i];
 }
 
 // --- Block-level markdown ---------------------------------------------------
@@ -209,7 +226,7 @@ function renderList(items: ListItem[], start: number, depth: number): [string, n
 function isBlockStart(line: string): boolean {
   const t = line.trim();
   return (
-    t === '' ||
+    t === "" ||
     /^#{1,6}\s/.test(t) ||
     /^```/.test(t) ||
     /^>/.test(t) ||
@@ -220,12 +237,12 @@ function isBlockStart(line: string): boolean {
 }
 
 function convert(markdown: string): string {
-  const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   const out: string[] = [];
   let i = 0;
 
   while (i < lines.length) {
-    const line = lines[i] ?? '';
+    const line = lines[i] ?? "";
     const trimmed = line.trim();
     if (!trimmed) {
       i++;
@@ -235,23 +252,23 @@ function convert(markdown: string): string {
     if (/^```/.test(trimmed)) {
       const body: string[] = [];
       i++;
-      while (i < lines.length && !/^\s*```/.test(lines[i] ?? '')) {
-        body.push(lines[i] ?? '');
+      while (i < lines.length && !/^\s*```/.test(lines[i] ?? "")) {
+        body.push(lines[i] ?? "");
         i++;
       }
       i++;
-      out.push(`<pre style="${S.pre}">${escapeHtml(body.join('\n'))}</pre>`);
+      out.push(`<pre style="${S.pre}">${escapeHtml(body.join("\n"))}</pre>`);
       continue;
     }
 
-    if (trimmed.startsWith('|')) {
-      const aligns = parseDelimiter(lines[i + 1] ?? '');
+    if (trimmed.startsWith("|")) {
+      const aligns = parseDelimiter(lines[i + 1] ?? "");
       if (aligns) {
         const header = splitRow(trimmed);
         const rows: string[][] = [];
         i += 2;
-        while (i < lines.length && (lines[i] ?? '').trim().startsWith('|')) {
-          rows.push(splitRow(lines[i] ?? ''));
+        while (i < lines.length && (lines[i] ?? "").trim().startsWith("|")) {
+          rows.push(splitRow(lines[i] ?? ""));
           i++;
         }
         out.push(renderTable(header, aligns, rows));
@@ -262,9 +279,9 @@ function convert(markdown: string): string {
     const heading = trimmed.match(/^(#{1,6})\s+(.*)$/);
     if (heading) {
       const level = heading[1]?.length ?? 1;
-      const text = inlineHtml((heading[2] ?? '').replace(/\s*#+\s*$/, ''));
+      const text = inlineHtml((heading[2] ?? "").replace(/\s*#+\s*$/, ""));
       const style = level <= 2 ? S.h2 : level === 3 ? S.h3 : S.h4;
-      const tag = level <= 2 ? 'h2' : level === 3 ? 'h3' : 'h4';
+      const tag = level <= 2 ? "h2" : level === 3 ? "h3" : "h4";
       out.push(`<${tag} style="${style}">${text}</${tag}>`);
       i++;
       continue;
@@ -276,26 +293,28 @@ function convert(markdown: string): string {
       continue;
     }
 
-    if (trimmed.startsWith('>')) {
+    if (trimmed.startsWith(">")) {
       const body: string[] = [];
-      while (i < lines.length && (lines[i] ?? '').trim().startsWith('>')) {
-        body.push((lines[i] ?? '').trim().replace(/^>\s?/, ''));
+      while (i < lines.length && (lines[i] ?? "").trim().startsWith(">")) {
+        body.push((lines[i] ?? "").trim().replace(/^>\s?/, ""));
         i++;
       }
-      out.push(`<blockquote style="${S.quote}">${inlineHtml(body.join(' '))}</blockquote>`);
+      out.push(
+        `<blockquote style="${S.quote}">${inlineHtml(body.join(" "))}</blockquote>`,
+      );
       continue;
     }
 
     if (LIST_RE.test(line)) {
       const items: ListItem[] = [];
-      while (i < lines.length && LIST_RE.test(lines[i] ?? '')) {
-        const m = (lines[i] ?? '').match(LIST_RE);
+      while (i < lines.length && LIST_RE.test(lines[i] ?? "")) {
+        const m = (lines[i] ?? "").match(LIST_RE);
         if (!m) break;
-        const indent = (m[1] ?? '').replace(/\t/g, '  ').length;
+        const indent = (m[1] ?? "").replace(/\t/g, "  ").length;
         items.push({
           depth: Math.min(Math.floor(indent / 2), 3),
-          ordered: /\d/.test(m[2] ?? ''),
-          text: m[3] ?? '',
+          ordered: /\d/.test(m[2] ?? ""),
+          text: m[3] ?? "",
         });
         i++;
       }
@@ -310,14 +329,14 @@ function convert(markdown: string): string {
     }
 
     const para: string[] = [];
-    while (i < lines.length && !isBlockStart(lines[i] ?? '')) {
-      para.push((lines[i] ?? '').trim());
+    while (i < lines.length && !isBlockStart(lines[i] ?? "")) {
+      para.push((lines[i] ?? "").trim());
       i++;
     }
-    out.push(`<p style="${S.p}">${para.map(inlineHtml).join('<br />')}</p>`);
+    out.push(`<p style="${S.p}">${para.map(inlineHtml).join("<br />")}</p>`);
   }
 
-  return out.join('');
+  return out.join("");
 }
 
 /**
@@ -326,10 +345,12 @@ function convert(markdown: string): string {
  * handle degrades to escaped preformatted text rather than an unsent email.
  */
 export function markdownToHtml(markdown: string): string {
-  const source = (markdown ?? '').trim();
-  if (!source) return '';
+  const source = (markdown ?? "").trim();
+  if (!source) return "";
   try {
-    return convert(source) || `<pre style="${S.pre}">${escapeHtml(source)}</pre>`;
+    return (
+      convert(source) || `<pre style="${S.pre}">${escapeHtml(source)}</pre>`
+    );
   } catch {
     return `<pre style="${S.pre}">${escapeHtml(source)}</pre>`;
   }
@@ -339,7 +360,7 @@ export function markdownToHtml(markdown: string): string {
 
 /** "3h" / "2d 4h" — how long the other side has been waiting. */
 export function humanAge(hours: number): string {
-  if (hours < 1) return 'under an hour';
+  if (hours < 1) return "under an hour";
   if (hours < 24) return `${Math.round(hours)}h`;
   const days = Math.floor(hours / 24);
   const rest = Math.round(hours - days * 24);
@@ -363,55 +384,55 @@ export interface DigestRenderInput {
 export function renderDigestMarkdown(input: DigestRenderInput): string {
   const lines = [
     `# Your inbox digest — ${input.dateLabel}`,
-    '',
-    `${input.needsYou.length} conversation${input.needsYou.length === 1 ? '' : 's'} waiting on you · ` +
+    "",
+    `${input.needsYou.length} conversation${input.needsYou.length === 1 ? "" : "s"} waiting on you · ` +
       `${input.waitingOnOthers.length} waiting on someone else · last ${input.windowHours}h`,
-    '',
+    "",
     input.summaryMarkdown.trim(),
-    '',
+    "",
   ];
 
   if (input.needsYou.length > 0) {
-    lines.push('## The threads themselves', '');
+    lines.push("## The threads themselves", "");
     for (const t of input.needsYou.slice(0, 12)) {
       lines.push(
         `- **${t.subject}** — ${t.lastFrom}, waiting ${humanAge(t.ageHours)} · [open](${t.permalink})`,
       );
     }
-    lines.push('');
+    lines.push("");
   }
 
   lines.push(
-    '---',
-    '',
-    `_Scanned ${input.scanned} recent conversation${input.scanned === 1 ? '' : 's'} from your own mailbox. ${input.excludedNote}_`,
+    "---",
+    "",
+    `_Scanned ${input.scanned} recent conversation${input.scanned === 1 ? "" : "s"} from your own mailbox. ${input.excludedNote}_`,
   );
-  if (input.focus) lines.push('', `_Prioritized around: ${input.focus}_`);
+  if (input.focus) lines.push("", `_Prioritized around: ${input.focus}_`);
 
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 /** A row of number+label tiles — mirrors `components.ts#statRow`. */
 function statRow(items: Array<{ label: string; value: string }>): string {
   const shown = items.filter((i) => i.value).slice(0, 4);
-  if (shown.length === 0) return '';
+  if (shown.length === 0) return "";
   const width = `${Math.floor(100 / shown.length)}%`;
   const cells = shown
     .map((item, index) =>
       [
-        `<td width="${width}" style="width:${width};padding:11px 12px;vertical-align:top;background-color:${C.surface};border:1px solid ${C.border};${index > 0 ? 'border-left:0;' : ''}">`,
+        `<td width="${width}" style="width:${width};padding:11px 12px;vertical-align:top;background-color:${C.surface};border:1px solid ${C.border};${index > 0 ? "border-left:0;" : ""}">`,
         `<div style="font-family:${FONT};font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:${C.faint};">${escapeHtml(item.label)}</div>`,
         `<div style="margin-top:4px;font-family:${FONT};font-size:14px;font-weight:600;line-height:1.35;color:${C.ink};word-break:break-word;">${escapeHtml(item.value)}</div>`,
-        '</td>',
-      ].join(''),
+        "</td>",
+      ].join(""),
     )
-    .join('');
+    .join("");
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin:0 0 20px;"><tr>${cells}</tr></table>`;
 }
 
 /** One thread line: subject as the link, sender/age/count underneath. */
-function threadRow(t: DigestThread, tone: 'you' | 'them'): string {
-  const accent = tone === 'you' ? C.warnFg : C.muted;
+function threadRow(t: DigestThread, tone: "you" | "them"): string {
+  const accent = tone === "you" ? C.warnFg : C.muted;
   const href = safeHref(t.permalink);
   const subject = escapeHtml(t.subject);
   return [
@@ -419,15 +440,15 @@ function threadRow(t: DigestThread, tone: 'you' | 'them'): string {
     href
       ? `<a href="${href}" style="font-family:${FONT};font-size:15px;font-weight:600;color:${C.ink};text-decoration:none;">${subject}</a>`
       : `<span style="font-family:${FONT};font-size:15px;font-weight:600;color:${C.ink};">${subject}</span>`,
-    `<div style="margin-top:3px;font-family:${FONT};font-size:12.5px;line-height:1.45;color:${accent};">${escapeHtml(t.lastFrom)} · ${escapeHtml(humanAge(t.ageHours))} ago · ${t.messageCount} message${t.messageCount === 1 ? '' : 's'}</div>`,
-    '</td></tr>',
-  ].join('');
+    `<div style="margin-top:3px;font-family:${FONT};font-size:12.5px;line-height:1.45;color:${accent};">${escapeHtml(t.lastFrom)} · ${escapeHtml(humanAge(t.ageHours))} ago · ${t.messageCount} message${t.messageCount === 1 ? "" : "s"}</div>`,
+    "</td></tr>",
+  ].join("");
 }
 
 function threadSection(
   title: string,
   threads: DigestThread[],
-  tone: 'you' | 'them',
+  tone: "you" | "them",
   empty: string,
 ): string {
   return [
@@ -437,11 +458,11 @@ function threadSection(
       : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;margin:0 0 18px;">${threads
           .slice(0, 12)
           .map((t) => threadRow(t, tone))
-          .join('')}</table>`,
-  ].join('');
+          .join("")}</table>`,
+  ].join("");
 }
 
-const PREHEADER_PADDING = '&#847;&zwnj;&nbsp;'.repeat(60);
+const PREHEADER_PADDING = "&#847;&zwnj;&nbsp;".repeat(60);
 
 /**
  * The digest as a complete, self-contained email document — same shell,
@@ -451,14 +472,17 @@ export function renderDigestHtml(input: DigestRenderInput): string {
   const title = `Your inbox digest — ${input.dateLabel}`;
   const preheader =
     input.needsYou.length > 0
-      ? `${input.needsYou.length} conversation${input.needsYou.length === 1 ? '' : 's'} waiting on your reply, oldest first.`
+      ? `${input.needsYou.length} conversation${input.needsYou.length === 1 ? "" : "s"} waiting on your reply, oldest first.`
       : `Nothing is waiting on you. Here is what moved in the last ${input.windowHours} hours.`;
 
   const body = [
     statRow([
-      { label: 'Waiting on you', value: String(input.needsYou.length) },
-      { label: 'Waiting on others', value: String(input.waitingOnOthers.length) },
-      { label: 'Window', value: `Last ${input.windowHours}h` },
+      { label: "Waiting on you", value: String(input.needsYou.length) },
+      {
+        label: "Waiting on others",
+        value: String(input.waitingOnOthers.length),
+      },
+      { label: "Window", value: `Last ${input.windowHours}h` },
     ]),
     input.focus
       ? [
@@ -466,29 +490,29 @@ export function renderDigestHtml(input: DigestRenderInput): string {
           `<tr><td style="padding:13px 16px;background-color:${C.warnBg};border:1px solid ${C.warnBorder};border-left:4px solid ${C.warnFg};">`,
           `<div style="margin:0 0 5px;font-family:${FONT};font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:${C.warnFg};">Prioritized around</div>`,
           `<div style="font-family:${FONT};font-size:14.5px;line-height:1.55;color:${C.ink};">${escapeHtml(input.focus)}</div>`,
-          '</td></tr></table>',
-        ].join('')
-      : '',
+          "</td></tr></table>",
+        ].join("")
+      : "",
     markdownToHtml(input.summaryMarkdown),
     threadSection(
-      'Waiting on you',
+      "Waiting on you",
       input.needsYou,
-      'you',
-      'Nothing is waiting on a reply from you.',
+      "you",
+      "Nothing is waiting on a reply from you.",
     ),
     threadSection(
-      'Waiting on someone else',
+      "Waiting on someone else",
       input.waitingOnOthers,
-      'them',
-      'You are not blocked on anyone right now.',
+      "them",
+      "You are not blocked on anyone right now.",
     ),
   ]
     .filter(Boolean)
-    .join('');
+    .join("");
 
   const footerNote = `Built by Cortex from your own mailbox — ${input.scanned} recent conversation${
-    input.scanned === 1 ? '' : 's'
-  } read and summarized on Zipdev's side. ${input.excludedNote} You asked for this digest in Settings and can turn it off there at any time.`;
+    input.scanned === 1 ? "" : "s"
+  } read and summarized on Cortex's side. ${input.excludedNote} You asked for this digest in Settings and can turn it off there at any time.`;
 
   return `<!doctype html>
 <html lang="en" style="color-scheme:light;supported-color-schemes:light;">

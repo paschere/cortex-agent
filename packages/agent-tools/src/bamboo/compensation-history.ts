@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { registerTool } from '../index';
-import { bambooFetch } from './client';
-import { resolveEmployee } from './roster';
+import { z } from "zod";
+import { registerTool } from "../index";
+import { bambooFetch } from "./client";
+import { resolveEmployee } from "./roster";
 import {
   DATASET,
   OK_STATUS,
@@ -17,14 +17,14 @@ import {
   sourceSchema,
   statusShape,
   str,
-} from './shape';
+} from "./shape";
 
 /**
  * One person's rate history — every raise and every bill-rate change, in order.
  *
  * BambooHR keeps these in two separate historical tables that nothing joins:
- * `compensation` (what Zipdev pays) and the custom `customBillRate1` (what
- * Zipdev charges). Answering "when was her last raise, and did we reprice the
+ * `compensation` (what Cortex pays) and the custom `customBillRate1` (what
+ * Cortex charges). Answering "when was her last raise, and did we reprice the
  * client?" means reading both and interleaving them by effective date.
  *
  * Only ever one person at a time. A whole-company rate history is the export
@@ -50,8 +50,8 @@ interface RawBillRow {
 
 const changeSchema = z.object({
   effectiveDate: z.string().nullable(),
-  /** 'pay' — what Zipdev pays them. 'bill' — what Zipdev charges the client. */
-  kind: z.enum(['pay', 'bill']),
+  /** 'pay' — what Cortex pays them. 'bill' — what Cortex charges the client. */
+  kind: z.enum(["pay", "bill"]),
   rate: moneySchema,
   reason: z.string().nullable(),
   note: z.string().nullable(),
@@ -61,17 +61,19 @@ const changeSchema = z.object({
 });
 
 export const bambooCompensationHistory = registerTool({
-  id: 'bamboo.compensation_history',
+  id: "bamboo.compensation_history",
   description: [
-    "Show one person's rate history from BambooHR: every change to the pay rate Zipdev pays them and every change to the bill rate Zipdev charges the client for them, in date order, with the reason recorded for each and the size of each change. Use it for questions like when someone last had a raise, how their rate has moved over time, or whether a pay rise was matched by a client reprice. One person at a time. This is the AGREED rate over time; payroll.employee_profile shows what was actually paid out each period, which is a different question and a different system.",
+    "Show one person's rate history from BambooHR: every change to the pay rate Cortex pays them and every change to the bill rate Cortex charges the client for them, in date order, with the reason recorded for each and the size of each change. Use it for questions like when someone last had a raise, how their rate has moved over time, or whether a pay rise was matched by a client reprice. One person at a time. This is the AGREED rate over time; payroll.employee_profile shows what was actually paid out each period, which is a different question and a different system.",
     PAYROLL_BOUNDARY_NOTE,
-  ].join(' '),
+  ].join(" "),
   inputSchema: z
     .object({
       name: z.string().max(120).optional(),
       email: z.string().max(160).optional(),
     })
-    .refine((v) => !!(v.name || v.email), { message: 'Give me a name or a work email' }),
+    .refine((v) => !!(v.name || v.email), {
+      message: "Give me a name or a work email",
+    }),
   outputSchema: z.object({
     ...statusShape,
     source: sourceSchema,
@@ -97,34 +99,52 @@ export const bambooCompensationHistory = registerTool({
       currentMarginPercent: null,
       lastPayRaiseDate: null,
       candidates: [] as string[],
-      guidance: '',
+      guidance: "",
     };
 
-    const resolved = await resolveEmployee(ctx, { name: input.name, email: input.email });
+    const resolved = await resolveEmployee(ctx, {
+      name: input.name,
+      email: input.email,
+    });
     if (!resolved.ok) return { ...empty, ...failureStatus(resolved) };
     const r = resolved.data;
-    if (r.kind === 'none') return { ...empty, configured: true, reason: r.reason };
-    if (r.kind === 'ambiguous') {
-      return { ...empty, configured: true, reason: r.reason, candidates: r.candidates };
+    if (r.kind === "none")
+      return { ...empty, configured: true, reason: r.reason };
+    if (r.kind === "ambiguous") {
+      return {
+        ...empty,
+        configured: true,
+        reason: r.reason,
+        candidates: r.candidates,
+      };
     }
 
     const id = String(r.row.id);
     const name = str(r.row.displayName);
 
     const [payRes, billRes] = await Promise.all([
-      bambooFetch<RawCompRow[]>(ctx, 'GET', `/employees/${id}/tables/${TABLE.compensation}`),
-      bambooFetch<RawBillRow[]>(ctx, 'GET', `/employees/${id}/tables/${TABLE.billRate}`),
+      bambooFetch<RawCompRow[]>(
+        ctx,
+        "GET",
+        `/employees/${id}/tables/${TABLE.compensation}`,
+      ),
+      bambooFetch<RawBillRow[]>(
+        ctx,
+        "GET",
+        `/employees/${id}/tables/${TABLE.billRate}`,
+      ),
     ]);
     if (!payRes.ok) return { ...empty, ...failureStatus(payRes) };
 
     const payRows = Array.isArray(payRes.data) ? payRes.data : [];
     // A missing bill-rate table is not a failure — it means nothing is on file.
-    const billRows = billRes.ok && Array.isArray(billRes.data) ? billRes.data : [];
+    const billRows =
+      billRes.ok && Array.isArray(billRes.data) ? billRes.data : [];
 
     const pay = payRows
       .map((row) => ({
         effectiveDate: dateStr(row.startDate),
-        kind: 'pay' as const,
+        kind: "pay" as const,
         rate: parseMoney(row.rate),
         reason: str(row.reason),
         note: str(row.comment),
@@ -134,20 +154,24 @@ export const bambooCompensationHistory = registerTool({
     const bill = billRows
       .map((row) => ({
         effectiveDate: dateStr(row.customBillRateEffectiveDate),
-        kind: 'bill' as const,
+        kind: "bill" as const,
         rate: parseMoney(row.customBillRate),
         reason: null,
         note: str(row.customComment),
       }))
       .filter((c) => c.rate.amount !== null);
 
-    const byDate = (a: { effectiveDate: string | null }, b: { effectiveDate: string | null }) =>
-      (a.effectiveDate ?? '').localeCompare(b.effectiveDate ?? '');
+    const byDate = (
+      a: { effectiveDate: string | null },
+      b: { effectiveDate: string | null },
+    ) => (a.effectiveDate ?? "").localeCompare(b.effectiveDate ?? "");
 
     pay.sort(byDate);
     bill.sort(byDate);
 
-    const withDeltas = <T extends { rate: ReturnType<typeof parseMoney> }>(rows: T[]) =>
+    const withDeltas = <T extends { rate: ReturnType<typeof parseMoney> }>(
+      rows: T[],
+    ) =>
       rows.map((row, i) => {
         const prev = i > 0 ? rows[i - 1]?.rate : undefined;
         const delta =
@@ -155,13 +179,15 @@ export const bambooCompensationHistory = registerTool({
             ? Math.round((row.rate.amount - prev.amount) * 100) / 100
             : null;
         const percent =
-          delta !== null && prev?.amount ? Math.round((delta / prev.amount) * 1000) / 10 : null;
+          delta !== null && prev?.amount
+            ? Math.round((delta / prev.amount) * 1000) / 10
+            : null;
         return {
           ...row,
           changeFromPrevious:
             delta === null
               ? { amount: null, currency: null, display: null }
-              : parseMoney(`${delta} ${row.rate.currency ?? ''}`.trim()),
+              : parseMoney(`${delta} ${row.rate.currency ?? ""}`.trim()),
           percentChange: percent,
         };
       });
@@ -169,23 +195,34 @@ export const bambooCompensationHistory = registerTool({
     const changes = [...withDeltas(pay), ...withDeltas(bill)].sort(byDate);
 
     const currentPay = pay.length ? (pay[pay.length - 1]?.rate ?? null) : null;
-    const currentBill = bill.length ? (bill[bill.length - 1]?.rate ?? null) : null;
+    const currentBill = bill.length
+      ? (bill[bill.length - 1]?.rate ?? null)
+      : null;
     const margin =
-      currentPay && currentBill ? computeMargin(currentPay, currentBill).marginPercent : null;
+      currentPay && currentBill
+        ? computeMargin(currentPay, currentBill).marginPercent
+        : null;
 
     // "Last raise" means the last time the number went UP, not the last edit —
     // a re-hire or a correction is not a raise.
     const raises = withDeltas(pay).filter(
-      (c) => c.changeFromPrevious.amount !== null && c.changeFromPrevious.amount > 0,
+      (c) =>
+        c.changeFromPrevious.amount !== null && c.changeFromPrevious.amount > 0,
     );
-    const lastRaise = raises.length ? (raises[raises.length - 1]?.effectiveDate ?? null) : null;
+    const lastRaise = raises.length
+      ? (raises[raises.length - 1]?.effectiveDate ?? null)
+      : null;
 
     const notes = [RATE_GLOSSARY];
     if (!bill.length) {
-      notes.push('No bill rate has ever been recorded for this person in BambooHR.');
+      notes.push(
+        "No bill rate has ever been recorded for this person in BambooHR.",
+      );
     }
     if (!pay.length) {
-      notes.push('No pay rate history is recorded for this person in BambooHR.');
+      notes.push(
+        "No pay rate history is recorded for this person in BambooHR.",
+      );
     }
 
     return {
@@ -198,7 +235,7 @@ export const bambooCompensationHistory = registerTool({
       currentBillRate: currentBill,
       currentMarginPercent: margin,
       lastPayRaiseDate: lastRaise,
-      guidance: notes.join(' '),
+      guidance: notes.join(" "),
     };
   },
 });

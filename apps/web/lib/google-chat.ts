@@ -1,7 +1,7 @@
-import 'server-only';
-import { createSign } from 'node:crypto';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { logger } from '@cortex/core';
+import "server-only";
+import { createSign } from "node:crypto";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { logger } from "@cortex/core";
 
 /**
  * Outbound Google Chat — posting messages AS the Cortex Chat app.
@@ -39,9 +39,9 @@ import { logger } from '@cortex/core';
 /** Google Chat rejects text messages longer than this. */
 export const CHAT_TEXT_LIMIT = 4096;
 
-const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
-const CHAT_API_BASE = 'https://chat.googleapis.com/v1';
-const CHAT_BOT_SCOPE = 'https://www.googleapis.com/auth/chat.bot';
+const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+const CHAT_API_BASE = "https://chat.googleapis.com/v1";
+const CHAT_BOT_SCOPE = "https://www.googleapis.com/auth/chat.bot";
 
 export interface ChatSendResult {
   sent: boolean;
@@ -82,9 +82,9 @@ interface ServiceAccountKey {
 function decodeServiceAccount(raw: string): ServiceAccountKey | null {
   const trimmed = raw.trim();
   let json = trimmed;
-  if (!trimmed.startsWith('{')) {
+  if (!trimmed.startsWith("{")) {
     try {
-      json = Buffer.from(trimmed, 'base64').toString('utf8');
+      json = Buffer.from(trimmed, "base64").toString("utf8");
     } catch {
       return null;
     }
@@ -95,8 +95,10 @@ function decodeServiceAccount(raw: string): ServiceAccountKey | null {
     return {
       client_email: parsed.client_email,
       // Env vars frequently carry the PEM with literal "\n" sequences.
-      private_key: parsed.private_key.replace(/\\n/g, '\n'),
-      ...(parsed.private_key_id ? { private_key_id: parsed.private_key_id } : {}),
+      private_key: parsed.private_key.replace(/\\n/g, "\n"),
+      ...(parsed.private_key_id
+        ? { private_key_id: parsed.private_key_id }
+        : {}),
     };
   } catch {
     return null;
@@ -111,13 +113,15 @@ function serviceAccount(): ServiceAccountKey | null {
   const raw = process.env.GOOGLE_CHAT_SERVICE_ACCOUNT_JSON;
   serviceAccountCache = raw ? decodeServiceAccount(raw) : null;
   if (raw && !serviceAccountCache) {
-    logger.error('google-chat: GOOGLE_CHAT_SERVICE_ACCOUNT_JSON is set but unparseable');
+    logger.error(
+      "google-chat: GOOGLE_CHAT_SERVICE_ACCOUNT_JSON is set but unparseable",
+    );
   }
   return serviceAccountCache;
 }
 
 function b64url(input: string): string {
-  return Buffer.from(input, 'utf8').toString('base64url');
+  return Buffer.from(input, "utf8").toString("base64url");
 }
 
 // Access tokens live an hour; cache and refresh a minute early.
@@ -129,13 +133,14 @@ let tokenCache: { token: string; expiresAt: number } | null = null;
  * posts the message.
  */
 async function getAccessToken(): Promise<string | null> {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.token;
+  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000)
+    return tokenCache.token;
 
   const key = serviceAccount();
   if (!key) return null;
 
   const now = Math.floor(Date.now() / 1000);
-  const header: Record<string, string> = { alg: 'RS256', typ: 'JWT' };
+  const header: Record<string, string> = { alg: "RS256", typ: "JWT" };
   if (key.private_key_id) header.kid = key.private_key_id;
   const claims = {
     iss: key.client_email,
@@ -148,12 +153,12 @@ async function getAccessToken(): Promise<string | null> {
   let assertion: string;
   try {
     const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`;
-    const signer = createSign('RSA-SHA256');
+    const signer = createSign("RSA-SHA256");
     signer.update(signingInput);
     signer.end();
-    assertion = `${signingInput}.${signer.sign(key.private_key, 'base64url')}`;
+    assertion = `${signingInput}.${signer.sign(key.private_key, "base64url")}`;
   } catch (err) {
-    logger.error('google-chat: could not sign the service-account assertion', {
+    logger.error("google-chat: could not sign the service-account assertion", {
       error: (err as Error).message,
     });
     return null;
@@ -161,22 +166,25 @@ async function getAccessToken(): Promise<string | null> {
 
   try {
     const res = await fetch(TOKEN_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
         assertion,
       }).toString(),
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      logger.error('google-chat: token exchange failed', {
+      const body = await res.text().catch(() => "");
+      logger.error("google-chat: token exchange failed", {
         status: res.status,
         body: body.slice(0, 300),
       });
       return null;
     }
-    const parsed = (await res.json()) as { access_token?: string; expires_in?: number };
+    const parsed = (await res.json()) as {
+      access_token?: string;
+      expires_in?: number;
+    };
     if (!parsed.access_token) return null;
     tokenCache = {
       token: parsed.access_token,
@@ -184,7 +192,9 @@ async function getAccessToken(): Promise<string | null> {
     };
     return tokenCache.token;
   } catch (err) {
-    logger.error('google-chat: token exchange threw', { error: (err as Error).message });
+    logger.error("google-chat: token exchange threw", {
+      error: (err as Error).message,
+    });
     return null;
   }
 }
@@ -195,9 +205,9 @@ async function getAccessToken(): Promise<string | null> {
 
 /** Accepts `spaces/AAAA` or a bare `AAAA`; rejects anything else. */
 function normalizeSpace(space: string): string | null {
-  const trimmed = space.trim().replace(/^\/+/, '');
+  const trimmed = space.trim().replace(/^\/+/, "");
   if (!trimmed) return null;
-  const name = trimmed.startsWith('spaces/') ? trimmed : `spaces/${trimmed}`;
+  const name = trimmed.startsWith("spaces/") ? trimmed : `spaces/${trimmed}`;
   return /^spaces\/[A-Za-z0-9_-]+$/.test(name) ? name : null;
 }
 
@@ -218,17 +228,21 @@ export async function sendChatMessage(opts: {
   /** Interactive card(s). `text` then only anchors the notification preview. */
   cards?: ChatCardV2[];
 }): Promise<ChatSendResult> {
-  const text = opts.text?.trim() ?? '';
+  const text = opts.text?.trim() ?? "";
   const cards = opts.cards ?? [];
   // A card-only message is valid to Chat; an empty one is not.
-  if (!text && cards.length === 0) return { sent: false, reason: 'empty message' };
+  if (!text && cards.length === 0)
+    return { sent: false, reason: "empty message" };
 
-  const space = normalizeSpace(opts.space ?? '');
-  if (!space) return { sent: false, reason: 'invalid space' };
+  const space = normalizeSpace(opts.space ?? "");
+  if (!space) return { sent: false, reason: "invalid space" };
 
   const token = await getAccessToken();
   if (!token) {
-    return { sent: false, reason: 'GOOGLE_CHAT_SERVICE_ACCOUNT_JSON not configured' };
+    return {
+      sent: false,
+      reason: "GOOGLE_CHAT_SERVICE_ACCOUNT_JSON not configured",
+    };
   }
 
   const url = new URL(`${CHAT_API_BASE}/${space}/messages`);
@@ -239,21 +253,27 @@ export async function sendChatMessage(opts: {
     body.thread = { name: opts.threadName };
   } else if (opts.threadKey) {
     body.thread = { threadKey: opts.threadKey };
-    url.searchParams.set('threadKey', opts.threadKey);
+    url.searchParams.set("threadKey", opts.threadKey);
   }
   if (opts.threadName || opts.threadKey) {
-    url.searchParams.set('messageReplyOption', 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD');
+    url.searchParams.set(
+      "messageReplyOption",
+      "REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD",
+    );
   }
 
   try {
     const res = await fetch(url.toString(), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const errBody = await res.text().catch(() => '');
-      logger.error('google-chat: message post failed', {
+      const errBody = await res.text().catch(() => "");
+      logger.error("google-chat: message post failed", {
         space,
         status: res.status,
         body: errBody.slice(0, 300),
@@ -261,13 +281,15 @@ export async function sendChatMessage(opts: {
       return { sent: false, reason: `chat ${res.status}` };
     }
     const created = (await res.json().catch(() => ({}))) as { name?: string };
-    return created.name ? { sent: true, messageName: created.name } : { sent: true };
+    return created.name
+      ? { sent: true, messageName: created.name }
+      : { sent: true };
   } catch (err) {
-    logger.error('google-chat: message post threw', {
+    logger.error("google-chat: message post threw", {
       space,
       error: (err as Error).message,
     });
-    return { sent: false, reason: 'network error' };
+    return { sent: false, reason: "network error" };
   }
 }
 
@@ -291,35 +313,47 @@ export async function updateChatMessage(opts: {
    */
   cards?: ChatCardV2[];
 }): Promise<ChatSendResult> {
-  const text = opts.text?.trim() ?? '';
-  if (!text && !opts.cards) return { sent: false, reason: 'empty message' };
-  if (!/^spaces\/[A-Za-z0-9_-]+\/messages\/[A-Za-z0-9_.-]+$/.test(opts.messageName)) {
-    return { sent: false, reason: 'invalid message name' };
+  const text = opts.text?.trim() ?? "";
+  if (!text && !opts.cards) return { sent: false, reason: "empty message" };
+  if (
+    !/^spaces\/[A-Za-z0-9_-]+\/messages\/[A-Za-z0-9_.-]+$/.test(
+      opts.messageName,
+    )
+  ) {
+    return { sent: false, reason: "invalid message name" };
   }
 
   const token = await getAccessToken();
   if (!token) {
-    return { sent: false, reason: 'GOOGLE_CHAT_SERVICE_ACCOUNT_JSON not configured' };
+    return {
+      sent: false,
+      reason: "GOOGLE_CHAT_SERVICE_ACCOUNT_JSON not configured",
+    };
   }
 
   // The mask decides what is REPLACED. A card left out of it survives the
   // update, so an approval that has been decided must name cardsV2 explicitly.
-  const mask = ['text', ...(opts.cards ? ['cardsV2'] : [])].join(',');
+  const mask = ["text", ...(opts.cards ? ["cardsV2"] : [])].join(",");
   const url = new URL(`${CHAT_API_BASE}/${opts.messageName}`);
-  url.searchParams.set('updateMask', mask);
+  url.searchParams.set("updateMask", mask);
 
-  const body: Record<string, unknown> = { text: text.slice(0, CHAT_TEXT_LIMIT) };
+  const body: Record<string, unknown> = {
+    text: text.slice(0, CHAT_TEXT_LIMIT),
+  };
   if (opts.cards) body.cardsV2 = opts.cards;
 
   try {
     const res = await fetch(url.toString(), {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const errBody = await res.text().catch(() => '');
-      logger.error('google-chat: message update failed', {
+      const errBody = await res.text().catch(() => "");
+      logger.error("google-chat: message update failed", {
         status: res.status,
         body: errBody.slice(0, 300),
       });
@@ -327,8 +361,10 @@ export async function updateChatMessage(opts: {
     }
     return { sent: true, messageName: opts.messageName };
   } catch (err) {
-    logger.error('google-chat: message update threw', { error: (err as Error).message });
-    return { sent: false, reason: 'network error' };
+    logger.error("google-chat: message update threw", {
+      error: (err as Error).message,
+    });
+    return { sent: false, reason: "network error" };
   }
 }
 
@@ -364,12 +400,12 @@ async function isPrivateBotDm(space: string): Promise<boolean> {
     };
     const ok =
       body.singleUserBotDm === true ||
-      (body.spaceType === 'DIRECT_MESSAGE' &&
+      (body.spaceType === "DIRECT_MESSAGE" &&
         body.membershipCount?.joinedDirectHumanUserCount === 1);
     dmCheckCache.set(space, { at: Date.now(), ok });
     return ok;
   } catch (err) {
-    logger.error('google-chat: could not confirm the space is a private DM', {
+    logger.error("google-chat: could not confirm the space is a private DM", {
       space,
       error: (err as Error).message,
     });
@@ -378,7 +414,7 @@ async function isPrivateBotDm(space: string): Promise<boolean> {
 }
 
 /**
- * DM a Zipdev user in Google Chat.
+ * DM a Cortex user in Google Chat.
  *
  * The DM space is discovered passively: it is recorded the first time the
  * person messages the app (see /api/chat-app/google). We cannot create a DM
@@ -392,19 +428,19 @@ export async function sendChatDm(opts: {
   /** Interactive card(s) — see sendChatMessage. */
   cards?: ChatCardV2[];
 }): Promise<ChatSendResult> {
-  if (!opts.userId) return { sent: false, reason: 'not linked' };
+  if (!opts.userId) return { sent: false, reason: "not linked" };
   try {
     const db = getSupabaseServiceClient();
     const { data } = await db
-      .from('google_chat_links')
-      .select('dm_space')
-      .eq('user_id', opts.userId)
-      .not('dm_space', 'is', null)
-      .order('last_seen_at', { ascending: false })
+      .from("google_chat_links")
+      .select("dm_space")
+      .eq("user_id", opts.userId)
+      .not("dm_space", "is", null)
+      .order("last_seen_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     const space = (data?.dm_space as string | null | undefined) ?? null;
-    if (!space) return { sent: false, reason: 'not linked' };
+    if (!space) return { sent: false, reason: "not linked" };
 
     // Confirm with Chat that this really is the 1:1 with the app before saying
     // anything private into it. Google labels a GROUP direct message
@@ -413,25 +449,31 @@ export async function sendChatDm(opts: {
     // went to a conversation with someone else in it. A wrong space is cleared
     // rather than kept, so the next 1:1 message relearns the right one.
     if (!(await isPrivateBotDm(space))) {
-      logger.warn('google-chat: stored DM space is not a private 1:1 — clearing it', { space });
+      logger.warn(
+        "google-chat: stored DM space is not a private 1:1 — clearing it",
+        { space },
+      );
       await db
-        .from('google_chat_links')
+        .from("google_chat_links")
         .update({ dm_space: null })
-        .eq('user_id', opts.userId)
-        .eq('dm_space', space);
-      return { sent: false, reason: 'not linked' };
+        .eq("user_id", opts.userId)
+        .eq("dm_space", space);
+      return { sent: false, reason: "not linked" };
     }
 
-    const payload: Parameters<typeof sendChatMessage>[0] = { space, text: opts.text };
+    const payload: Parameters<typeof sendChatMessage>[0] = {
+      space,
+      text: opts.text,
+    };
     if (opts.threadKey) payload.threadKey = opts.threadKey;
     if (opts.cards) payload.cards = opts.cards;
     return await sendChatMessage(payload);
   } catch (err) {
-    logger.error('google-chat: DM lookup failed', {
+    logger.error("google-chat: DM lookup failed", {
       userId: opts.userId,
       error: (err as Error).message,
     });
-    return { sent: false, reason: 'lookup failed' };
+    return { sent: false, reason: "lookup failed" };
   }
 }
 
@@ -440,17 +482,17 @@ export function isChatOutboundConfigured(): boolean {
   return serviceAccount() !== null;
 }
 
-/** Does this Zipdev user have a DM space with the Chat app? */
+/** Does this Cortex user have a DM space with the Chat app? */
 export async function getChatDmSpace(userId: string): Promise<string | null> {
   if (!userId) return null;
   try {
     const db = getSupabaseServiceClient();
     const { data } = await db
-      .from('google_chat_links')
-      .select('dm_space')
-      .eq('user_id', userId)
-      .not('dm_space', 'is', null)
-      .order('last_seen_at', { ascending: false })
+      .from("google_chat_links")
+      .select("dm_space")
+      .eq("user_id", userId)
+      .not("dm_space", "is", null)
+      .order("last_seen_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     return (data?.dm_space as string | null | undefined) ?? null;
@@ -472,10 +514,13 @@ export async function getChatDmSpace(userId: string): Promise<string | null> {
  * and a markdown table becomes a wall of pipes. Cortex writes ordinary markdown,
  * so everything it says is flattened through here before it reaches Chat.
  */
-export function toChatText(markdown: string, opts?: { limit?: number; moreUrl?: string }): string {
+export function toChatText(
+  markdown: string,
+  opts?: { limit?: number; moreUrl?: string },
+): string {
   const limit = opts?.limit ?? CHAT_TEXT_LIMIT;
-  const source = (markdown ?? '').replace(/\r\n/g, '\n');
-  const lines = source.split('\n');
+  const source = (markdown ?? "").replace(/\r\n/g, "\n");
+  const lines = source.split("\n");
   const out: string[] = [];
 
   let inFence = false;
@@ -509,7 +554,7 @@ export function toChatText(markdown: string, opts?: { limit?: number; moreUrl?: 
 
     // Horizontal rules are visual noise in a chat bubble.
     if (/^([-*_])\1{2,}$/.test(trimmed)) {
-      out.push('');
+      out.push("");
       continue;
     }
 
@@ -517,9 +562,10 @@ export function toChatText(markdown: string, opts?: { limit?: number; moreUrl?: 
     const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
     if (heading) {
       const level = heading[1]?.length ?? 1;
-      const text = inlineToChat(heading[2] ?? '');
+      const text = inlineToChat(heading[2] ?? "");
       if (text) {
-        if (level <= 2 && out.length > 0 && out[out.length - 1] !== '') out.push('');
+        if (level <= 2 && out.length > 0 && out[out.length - 1] !== "")
+          out.push("");
         out.push(`*${text}*`);
       }
       continue;
@@ -527,57 +573,63 @@ export function toChatText(markdown: string, opts?: { limit?: number; moreUrl?: 
 
     const bullet = /^(\s*)[-*+]\s+(.*)$/.exec(line);
     if (bullet) {
-      const indent = ' '.repeat(Math.min((bullet[1] ?? '').length, 8));
-      out.push(`${indent}• ${inlineToChat(bullet[2] ?? '')}`);
+      const indent = " ".repeat(Math.min((bullet[1] ?? "").length, 8));
+      out.push(`${indent}• ${inlineToChat(bullet[2] ?? "")}`);
       continue;
     }
 
     const numbered = /^(\s*)(\d+)[.)]\s+(.*)$/.exec(line);
     if (numbered) {
-      const indent = ' '.repeat(Math.min((numbered[1] ?? '').length, 8));
-      out.push(`${indent}${numbered[2] ?? ''}. ${inlineToChat(numbered[3] ?? '')}`);
+      const indent = " ".repeat(Math.min((numbered[1] ?? "").length, 8));
+      out.push(
+        `${indent}${numbered[2] ?? ""}. ${inlineToChat(numbered[3] ?? "")}`,
+      );
       continue;
     }
 
     const quote = /^>\s?(.*)$/.exec(trimmed);
     if (quote) {
-      out.push(inlineToChat(quote[1] ?? ''));
+      out.push(inlineToChat(quote[1] ?? ""));
       continue;
     }
 
-    out.push(trimmed ? inlineToChat(trimmed) : '');
+    out.push(trimmed ? inlineToChat(trimmed) : "");
   }
   flushTable();
 
   // Chat renders every blank line, so collapse runs of them.
   const collapsed: string[] = [];
   for (const line of out) {
-    if (line === '' && collapsed[collapsed.length - 1] === '') continue;
+    if (line === "" && collapsed[collapsed.length - 1] === "") continue;
     collapsed.push(line);
   }
-  const text = collapsed.join('\n').trim();
+  const text = collapsed.join("\n").trim();
   return capForChat(text, limit, opts?.moreUrl);
 }
 
 /**
  * Trim to Chat's length ceiling on a line boundary, pointing at the full
- * version in Zipdev OS rather than silently swallowing the tail.
+ * version in Cortex OS rather than silently swallowing the tail.
  */
-export function capForChat(text: string, limit = CHAT_TEXT_LIMIT, moreUrl?: string): string {
+export function capForChat(
+  text: string,
+  limit = CHAT_TEXT_LIMIT,
+  moreUrl?: string,
+): string {
   if (text.length <= limit) return text;
-  const base = (moreUrl ?? process.env.APP_BASE_URL ?? '').replace(/\/+$/, '');
+  const base = (moreUrl ?? process.env.APP_BASE_URL ?? "").replace(/\/+$/, "");
   const tail = base
-    ? `\n…\n<${base}|See the full report in Zipdev OS>`
-    : '\n…\n(See the full report in Zipdev OS.)';
+    ? `\n…\n<${base}|See the full report in Cortex OS>`
+    : "\n…\n(See the full report in Cortex OS.)";
   const room = Math.max(0, limit - tail.length);
   const cut = text.slice(0, room);
-  const lastBreak = cut.lastIndexOf('\n');
+  const lastBreak = cut.lastIndexOf("\n");
   return `${(lastBreak > room * 0.5 ? cut.slice(0, lastBreak) : cut).trimEnd()}${tail}`;
 }
 
 function isTableRow(line: string): boolean {
   const t = line.trim();
-  return t.startsWith('|') && t.endsWith('|') && t.length > 2;
+  return t.startsWith("|") && t.endsWith("|") && t.length > 2;
 }
 
 const SEPARATOR_CELL = /^:?-{2,}:?$/;
@@ -585,9 +637,9 @@ const SEPARATOR_CELL = /^:?-{2,}:?$/;
 function splitRow(line: string): string[] {
   return line
     .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
     .map((c) => c.trim());
 }
 
@@ -597,7 +649,9 @@ function splitRow(line: string): string[] {
  */
 function tableToBullets(rows: string[]): string[] {
   const cells = rows.map(splitRow);
-  const headerIdx = cells.findIndex((_, i) => cells[i + 1]?.every((c) => SEPARATOR_CELL.test(c)));
+  const headerIdx = cells.findIndex((_, i) =>
+    cells[i + 1]?.every((c) => SEPARATOR_CELL.test(c)),
+  );
   const header = headerIdx >= 0 ? (cells[headerIdx] ?? []) : [];
   const body = cells.filter(
     (row, i) => i !== headerIdx && !row.every((c) => SEPARATOR_CELL.test(c)),
@@ -605,17 +659,19 @@ function tableToBullets(rows: string[]): string[] {
   if (body.length === 0) return [];
 
   return body.map((row) => {
-    const label = inlineToChat(row[0] ?? '');
+    const label = inlineToChat(row[0] ?? "");
     const rest = row
       .slice(1)
       .map((value, i) => {
         const v = inlineToChat(value);
-        if (!v) return '';
+        if (!v) return "";
         const key = header[i + 1];
         return key ? `${inlineToChat(key)}: ${v}` : v;
       })
       .filter(Boolean);
-    return rest.length > 0 ? `• *${label}* — ${rest.join(' · ')}` : `• *${label}*`;
+    return rest.length > 0
+      ? `• *${label}* — ${rest.join(" · ")}`
+      : `• *${label}*`;
   });
 }
 
@@ -624,16 +680,19 @@ function inlineToChat(s: string): string {
   return (
     s
       // Images carry nothing in a text message — drop them before links match.
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-      .replace(/\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (_m, label: string, url: string) => {
-        const clean = label.trim();
-        return !clean || clean === url ? `<${url}>` : `<${url}|${clean}>`;
-      })
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(
+        /\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+        (_m, label: string, url: string) => {
+          const clean = label.trim();
+          return !clean || clean === url ? `<${url}>` : `<${url}|${clean}>`;
+        },
+      )
       // Chat has no bold+italic, so the strongest signal wins.
-      .replace(/\*\*\*([^*]+)\*\*\*/g, '*$1*')
-      .replace(/\*\*([^*]+)\*\*/g, '*$1*')
-      .replace(/__([^_]+)__/g, '*$1*')
-      .replace(/~~([^~]+)~~/g, '~$1~')
+      .replace(/\*\*\*([^*]+)\*\*\*/g, "*$1*")
+      .replace(/\*\*([^*]+)\*\*/g, "*$1*")
+      .replace(/__([^_]+)__/g, "*$1*")
+      .replace(/~~([^~]+)~~/g, "~$1~")
       .trim()
   );
 }

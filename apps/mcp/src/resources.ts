@@ -5,12 +5,12 @@ import type { BridgeContext } from './bridge';
 
 export const RESOURCES = [
   {
-    uri: 'zipdev://agent/system-prompt',
+    uri: 'cortex://agent/system-prompt',
     name: 'Current agent system prompt',
     mimeType: 'text/markdown',
   },
   {
-    uri: 'zipdev://kb/spaces',
+    uri: 'cortex://kb/spaces',
     name: 'Knowledge Base spaces you can see',
     mimeType: 'application/json',
   },
@@ -21,14 +21,14 @@ export async function readResource(ctx: BridgeContext, uri: string) {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  if (uri === 'zipdev://agent/system-prompt') {
+  if (uri === 'cortex://agent/system-prompt') {
     const agent = await loadAgent(sb, 'sales');
     return {
       contents: [{ uri, mimeType: 'text/markdown', text: agent.systemPrompt }],
     };
   }
 
-  if (uri === 'zipdev://kb/spaces') {
+  if (uri === 'cortex://kb/spaces') {
     // Same helper the tools use, so this surface cannot drift into showing a
     // space that retrieval would refuse to search.
     const spaces = await listVisibleSpaces(sb, ctx.userId);

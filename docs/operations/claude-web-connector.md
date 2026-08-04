@@ -1,7 +1,7 @@
 # claude.ai MCP Connector Runbook
 
 This is the in-app remote MCP connector served by the Next.js web app
-(`apps/web`). It lets a user add the Zipdev Agent as a custom connector inside
+(`apps/web`). It lets a user add Cortex as a custom connector inside
 claude.ai and call the agent's tools directly from a Claude conversation.
 
 The web app is both the **OAuth 2.1 authorization server** and the **MCP
@@ -14,10 +14,10 @@ In claude.ai go to **Settings → Connectors → Add custom connector** and past
 MCP endpoint URL, which is `<issuer>/api/mcp`:
 
 ```
-https://cortex-zipdev.vercel.app/api/mcp
+https://cortex.example.com/api/mcp
 ```
 
-(Replace `app.zipdev.com` with whatever public origin `BETTER_AUTH_URL` /
+(Replace `cortex.example.com` with whatever public origin `BETTER_AUTH_URL` /
 `APP_BASE_URL` resolve to in the target environment.)
 
 That is the only URL you paste. Everything else is auto-discovered.
@@ -25,12 +25,12 @@ That is the only URL you paste. Everything else is auto-discovered.
 ## Claude Code
 
 The repo ships a project-scoped `.mcp.json` pointing at
-`https://cortex-zipdev.vercel.app/mcp`, so anyone opening this repo in Claude Code gets
-the Zipdev tools after approving the server (Claude Code runs the same OAuth
+your deployment's public origin, so anyone opening this repo in Claude Code gets
+the Cortex tools after approving the server (Claude Code runs the same OAuth
 flow in the browser). To use it in any other project or globally:
 
 ```bash
-claude mcp add --transport http zipdev https://cortex-zipdev.vercel.app/mcp
+claude mcp add --transport http cortex https://cortex.example.com/mcp
 ```
 
 ## What happens after you paste the URL
@@ -44,7 +44,7 @@ claude mcp add --transport http zipdev https://cortex-zipdev.vercel.app/mcp
 4. claude.ai dynamically registers itself via `POST <issuer>/api/oauth/register`
    (RFC 7591 Dynamic Client Registration) as a public PKCE client.
 5. claude.ai opens `<issuer>/api/oauth/authorize`. The app requires a logged-in
-   `@zipdev.com` user (Google SSO via better-auth), then shows a consent screen.
+   user (better-auth), then shows a consent screen.
 6. After consent, the app mints a PKCE-bound authorization code and redirects
    back to claude.ai, which exchanges it at `<issuer>/api/oauth/token` for an
    access token (+ refresh token).
@@ -68,7 +68,7 @@ The end user only ever sees: paste URL → Google SSO → "Authorize" → done.
 ## Production requirements
 
 - **`BETTER_AUTH_URL` must be the public https origin** (e.g.
-  `https://cortex-zipdev.vercel.app`), never `localhost`. The OAuth issuer advertised in
+  your deployment's public origin), never `localhost`. The OAuth issuer advertised in
   the `/.well-known` metadata derives from this origin, and the `issuer` string
   must be byte-identical to the origin claude.ai used to fetch the metadata, or
   claude.ai rejects the connector. Keep `APP_BASE_URL` aligned to the same
@@ -109,8 +109,8 @@ The end user only ever sees: paste URL → Google SSO → "Authorize" → done.
 - **claude.ai rejects the connector after metadata fetch**: the `issuer` in the
   metadata does not match the origin claude.ai used. Fix `BETTER_AUTH_URL` /
   `APP_BASE_URL` to the exact public https origin.
-- **Authorize step loops or 500s**: confirm the user is signed in with a
-  `@zipdev.com` Google account and that migration 0025 is applied.
+- **Authorize step loops or 500s**: confirm the user is signed in and that
+  migration 0025 is applied.
 - **Tokens rejected on `/api/mcp`**: tokens are bound to the canonical resource
   audience (`<issuer>/mcp`); a mismatched issuer between authorize-time and
   call-time invalidates them. Re-check the origin config.

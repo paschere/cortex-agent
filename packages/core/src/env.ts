@@ -36,6 +36,45 @@ const schema = z.object({
 export type Env = z.infer<typeof schema>;
 export const envSchema = schema;
 
+/**
+ * Domains that count as "inside the company", parsed from
+ * `INTERNAL_EMAIL_DOMAINS` (comma-separated, e.g. `acme.com,acme.co.uk`).
+ *
+ * Empty by default, and empty deliberately means NOBODY is internal. Cortex is
+ * multi-tenant, so there is no single company domain left to hardcode — and the
+ * security classifier reads this list to decide whether a tool call is about to
+ * push data out of the company. Guessing in the "internal" direction would
+ * silently switch that check off, so an unconfigured deployment treats every
+ * address as external: noisier, but it never lets an outbound send pass
+ * unnoticed.
+ *
+ * Read from `process.env` on each call rather than cached at import time. It is
+ * a string split, the cost is irrelevant next to the calls that consult it, and
+ * it keeps the setting overridable per test without a module reset.
+ */
+export function internalEmailDomains(): string[] {
+  return (process.env.INTERNAL_EMAIL_DOMAINS ?? '')
+    .split(',')
+    .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
+    .filter((d) => d.length > 0);
+}
+
+/**
+ * True when an email address (or a bare domain) sits on a configured internal
+ * domain. Subdomains count: `mail.acme.com` is inside `acme.com`.
+ */
+export function isInternalEmailDomain(emailOrDomain: string | null | undefined): boolean {
+  if (!emailOrDomain) return false;
+  const domains = internalEmailDomains();
+  if (domains.length === 0) return false;
+  const at = emailOrDomain.lastIndexOf('@');
+  const domain = (at === -1 ? emailOrDomain : emailOrDomain.slice(at + 1))
+    .trim()
+    .toLowerCase()
+    .replace(/[.,;>)\]]+$/, '');
+  return domains.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
 let cached: Env | null = null;
 export function getEnv(): Env {
   if (cached) return cached;

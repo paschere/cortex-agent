@@ -9,12 +9,16 @@
  *
  * Signals, in order of trust:
  *   1. Title keywords ("interview", "kickoff", "1:1", "dentist").
- *   2. Attendee domains — anyone outside INTERNAL_DOMAIN turns a meeting
- *      outward: either a candidate (personal mailbox) or a client.
+ *   2. Attendee domains — anyone outside the workspace's own email domains
+ *      turns a meeting outward: either a candidate (personal mailbox) or a
+ *      client.
  *   3. Description hints (ATS links, "resume", "candidate").
+ *
+ * Which domains are "ours" comes from `INTERNAL_EMAIL_DOMAINS`; see
+ * `internalEmailDomains()` for why an unset list means nobody is internal.
  */
 
-export const INTERNAL_DOMAIN = 'zipdev.com';
+import { isInternalEmailDomain } from '@cortex/core';
 
 export type MeetingType = 'interview' | 'client' | 'internal' | 'personal' | 'unknown';
 
@@ -171,11 +175,18 @@ export function emailDomain(email: string | null | undefined): string | null {
   return domain.length > 0 ? domain : null;
 }
 
-/** True when the address is outside Zipdev (rooms and resources never count). */
+/**
+ * True when the address is outside the company (rooms and resources never
+ * count). With no `INTERNAL_EMAIL_DOMAINS` configured every human attendee
+ * reads as external, which pushes meetings toward the client/interview
+ * branches. That is the deliberate trade: over-classifying a standup as a
+ * client call costs a wrong briefing, while assuming an unknown domain is a
+ * colleague would hide the outside guest the briefing exists to prepare for.
+ */
 export function isExternalEmail(email: string | null | undefined): boolean {
   const domain = emailDomain(email);
   if (!domain) return false;
-  if (domain === INTERNAL_DOMAIN || domain.endsWith(`.${INTERNAL_DOMAIN}`)) return false;
+  if (isInternalEmailDomain(domain)) return false;
   // Google Workspace rooms/equipment come through as calendar resources.
   if (domain.endsWith('resource.calendar.google.com')) return false;
   if (domain.endsWith('group.calendar.google.com')) return false;
@@ -237,13 +248,13 @@ export function classifyMeeting(input: MeetingClassifyInput): MeetingClassificat
   const interviewHit = matched(title, INTERVIEW_KEYWORDS);
   if (interviewHit) {
     reasons.push(`The title mentions "${interviewHit}"`);
-    if (hasExternal) reasons.push(`${externalAttendees.length} guest(s) from outside Zipdev`);
+    if (hasExternal) reasons.push(`${externalAttendees.length} guest(s) from outside the company`);
     return finish('interview', hasExternal ? 0.92 : 0.72);
   }
 
-  // 2. Someone from outside Zipdev is in the room: candidate or client.
+  // 2. Someone from outside the company is in the room: candidate or client.
   if (hasExternal) {
-    reasons.push(`Guest(s) from outside Zipdev: ${externalDomains.join(', ')}`);
+    reasons.push(`Guest(s) from outside the company: ${externalDomains.join(', ')}`);
 
     const candidateHint = matched(description, CANDIDATE_DESCRIPTION_HINTS);
     if (candidateHint) {
@@ -292,19 +303,19 @@ export function classifyMeeting(input: MeetingClassifyInput): MeetingClassificat
 
   const internalHit = matched(title, INTERNAL_KEYWORDS);
   if (internalHit) {
-    reasons.push(`The title mentions "${internalHit}" and everyone invited works at Zipdev`);
+    reasons.push(`The title mentions "${internalHit}" and everyone invited is a colleague`);
     return finish('internal', 0.88);
   }
 
   const clientHit = matched(title, CLIENT_KEYWORDS);
   if (clientHit) {
     reasons.push(
-      `The title mentions "${clientHit}" but everyone invited works at Zipdev — an internal conversation about a client`,
+      `The title mentions "${clientHit}" but everyone invited is a colleague — an internal conversation about a client`,
     );
     return finish('internal', 0.6);
   }
 
-  reasons.push(`Everyone invited (${others}) works at Zipdev`);
+  reasons.push(`Everyone invited (${others}) is a colleague`);
   return finish('internal', 0.7);
 }
 

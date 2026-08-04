@@ -1,12 +1,12 @@
-import { IntegrationError } from '@cortex/core';
-import type { ToolContext } from '../types';
+import { IntegrationError } from "@cortex/core";
+import type { ToolContext } from "../types";
 
 export interface EstimateInput {
   role: string;
-  seniority: 'junior' | 'mid' | 'senior' | 'lead';
-  region: 'mx' | 'latam' | 'br' | 'ar' | 'co' | 'cl' | 'pe';
+  seniority: "junior" | "mid" | "senior" | "lead";
+  region: "mx" | "latam" | "br" | "ar" | "co" | "cl" | "pe";
   yearsExperience: number;
-  /** Percentage. Omitted lets the estimator apply Zipdev's standard margin. */
+  /** Percentage. Omitted lets the estimator apply Cortex's standard margin. */
   margin?: number;
 }
 
@@ -15,19 +15,25 @@ export interface EstimateOutput {
   notes: string;
 }
 
-export async function callEstimator(body: EstimateInput, ctx: ToolContext): Promise<EstimateOutput> {
+export async function callEstimator(
+  body: EstimateInput,
+  ctx: ToolContext,
+): Promise<EstimateOutput> {
   const url = `${process.env.RATE_ESTIMATOR_URL}/api/internal/estimate`;
   const r = await fetch(url, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.RATE_ESTIMATOR_SERVICE_TOKEN}`,
     },
     body: JSON.stringify(body),
     signal: ctx.signal,
   });
   if (!r.ok) {
-    throw new IntegrationError(`Rate estimator ${r.status}: ${await r.text()}`, 'rate-estimator');
+    throw new IntegrationError(
+      `Rate estimator ${r.status}: ${await r.text()}`,
+      "rate-estimator",
+    );
   }
   return r.json() as Promise<EstimateOutput>;
 }
