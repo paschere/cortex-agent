@@ -5,6 +5,20 @@ import type { Message } from 'ai';
 import { MessageBubble } from './MessageBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { EmptyState } from './EmptyState';
+import { toolDisplayName } from '@/lib/tool-labels';
+
+/**
+ * What the assistant is busy with, in the user's words.
+ *
+ * A turn that calls tools produces an assistant message with tool invocations
+ * and no text for as long as those calls take. Reporting the newest unfinished
+ * call — rather than the first — keeps the line moving through a chain of them.
+ */
+function busyLabel(message: Message | undefined): string | undefined {
+  const pending = message?.toolInvocations?.filter((inv) => inv.state !== 'result');
+  const current = pending?.[pending.length - 1];
+  return current ? `${toolDisplayName(current.toolName)}…` : undefined;
+}
 
 interface MessageListProps {
   messages: Message[];
@@ -59,7 +73,18 @@ export function MessageList({
               />
             );
           })}
-          {isLoading && messages[messages.length - 1]?.role !== 'assistant' && <TypingIndicator />}
+          {/*
+            Keep the indicator up while the assistant message exists but has no
+            text yet — during tool calls it is empty, and hiding the indicator
+            the moment it appears is what left the screen looking blank.
+          */}
+          {(() => {
+            const last = messages[messages.length - 1];
+            const assistantIsSilent =
+              last?.role === 'assistant' && !last.content?.trim();
+            if (!isLoading || (last?.role === 'assistant' && !assistantIsSilent)) return null;
+            return <TypingIndicator label={busyLabel(last)} />;
+          })()}
         </div>
       )}
     </div>

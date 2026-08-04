@@ -31,6 +31,15 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   schedule_create: { label: 'Create Scheduled Job', icon: 'AlarmClockPlus' },
   schedule_list: { label: 'List Scheduled Jobs', icon: 'AlarmClock' },
   schedule_update: { label: 'Update Scheduled Job', icon: 'AlarmClockCheck' },
+  // Vehicles. The two lookups name the registry they hit rather than the tool,
+  // because that is what the person waiting recognises — and a RUNT check runs
+  // for the better part of half a minute, so it is on screen a while.
+  vehicles_register: { label: 'Register Vehicle', icon: 'Car' },
+  vehicles_list: { label: 'List Vehicles', icon: 'Car' },
+  vehicles_get: { label: 'Get Vehicle', icon: 'Car' },
+  vehicles_check_runt: { label: 'Check RUNT (SOAT and inspection)', icon: 'ShieldCheck' },
+  vehicles_check_simit: { label: 'Check SIMIT (traffic fines)', icon: 'ReceiptText' },
+  vehicles_recently_changed: { label: 'Check Fleet Changes', icon: 'RefreshCw' },
 };
 
 function toTitleCase(s: string): string {
