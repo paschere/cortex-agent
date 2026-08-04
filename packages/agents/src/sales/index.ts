@@ -7,7 +7,7 @@ export const salesAgent: AgentDefinition = {
   id: 'sales',
   name: 'Zipdev Sales',
   team: 'sales',
-  defaultModel: 'gemini-3.1-flash-lite',
+  defaultModel: 'claude-opus-5',
   systemPrompt,
   allowedTools: [
     'hubspot.search_companies',

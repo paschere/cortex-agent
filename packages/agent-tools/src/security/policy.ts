@@ -128,6 +128,14 @@ const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   slack: 'internal',
   schedule: 'internal',
   pipeline: 'internal',
+  // Somebody's own plates, their SOAT/RTM dates and the tickets against them.
+  // It is personal bookkeeping rather than company data, and a plate is not an
+  // identity document — so the family is `internal`, which keeps a scheduled
+  // watch routine out of the sensitive-read budget it would otherwise burn
+  // every morning. The one tool that genuinely handles an identity document —
+  // registration, which takes the owner's cédula — is pinned to `pii` in
+  // TOOL_OVERRIDES rather than dragging the whole family up with it.
+  vehicles: 'internal',
   cortex: 'internal',
   security: 'internal',
   web: 'public',
@@ -245,6 +253,14 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // --- rate tools carry pay/bill rates but are calculators, not payroll ------
   'rate.estimate': { sensitivity: 'financial', blastRadius: 'read' },
   'rate.estimate_from_document': { sensitivity: 'financial', blastRadius: 'read' },
+
+  // --- vehicles: only registration carries an identity document -------------
+  // The owner's cédula (or passport, or NIT) is stored so RUNT will answer at
+  // all — RUNT refuses on a plate alone. That makes registration the one place
+  // in the family where a national identity number is in the payload, so it is
+  // classified as personal data. 'register' is also not in WRITE_VERBS, and it
+  // plainly writes, so the blast radius is declared here too.
+  'vehicles.register': { sensitivity: 'pii', blastRadius: 'internal_write' },
 
   // --- the security tools themselves are read-only introspection ------------
   'security.review_action': { sensitivity: 'internal', blastRadius: 'read' },

@@ -20,11 +20,18 @@ export interface Team {
   name: string;
 }
 
+/**
+ * Models an agent can answer with. Generation runs on Claude; embeddings still
+ * run on Gemini (Anthropic has no embedding endpoint, and the pgvector indexes
+ * are built for 768 dimensions) — see packages/agent-tools/src/model.ts.
+ */
+export type ModelId = "claude-opus-5" | "claude-sonnet-5";
+
 export interface AgentDefinition {
   id: string;
   name: string;
   team: string;
-  defaultModel: "gemini-3.1-flash-lite" | "gemini-2.5-pro";
+  defaultModel: ModelId;
   systemPrompt: string;
   allowedTools: string[];
   greeting: string;

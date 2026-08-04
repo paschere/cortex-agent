@@ -22,8 +22,10 @@ import { workableFetch } from './client';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Raw = any;
 
-/** Fast model by default; override for deeper reads via env. */
-export const RANKING_MODEL = () => process.env.ZIPDEV_RANKING_MODEL ?? 'gemini-3.1-flash-lite';
+import { CHAT_MODEL } from '../model';
+
+/** Cortex's default model; override for a cheaper or deeper read via env. */
+export const RANKING_MODEL = () => process.env.ZIPDEV_RANKING_MODEL ?? CHAT_MODEL;
 
 export const VERDICT_LABEL: Record<string, string> = {
   strong_match: 'strong match',

@@ -1,19 +1,20 @@
 import { IntegrationError, ValidationError } from '@cortex/core';
+import { generateText } from 'ai';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { getVisibleDocument } from '../kb/spaces';
+import { UTILITY_MODEL, utilityModel } from '../model';
 
 /**
- * cortex.process — server-side delegation to Cortex's own LLM (Gemini).
+ * cortex.process — server-side delegation to Cortex's own LLM.
  *
  * Context offloading: instead of pulling a large document (or blob of text)
  * into the CALLING model's context, the heavy content is processed here — on
- * Zipdev's side, with Zipdev's model and keys — and only the distilled result
- * travels back. From Claude's perspective it is one tool call; the tokens the
- * source material consumes never leave Cortex.
+ * Cortex's side, with Cortex's model and keys — and only the distilled result
+ * travels back. From the caller's perspective it is one tool call; the tokens
+ * the source material consumes never leave Cortex.
  */
 
-const GEMINI_MODEL = 'gemini-3.1-flash-lite';
 const MAX_SOURCE_CHARS = 400_000;
 
 export const cortexProcess = registerTool({
@@ -48,8 +49,8 @@ export const cortexProcess = registerTool({
   }),
   rateLimit: { perMinute: 6 },
   handler: async (input, ctx) => {
-    const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!key) throw new IntegrationError('GOOGLE_GENERATIVE_AI_API_KEY not configured', 'gemini');
+    if (!process.env.ANTHROPIC_API_KEY)
+      throw new IntegrationError('ANTHROPIC_API_KEY not configured', 'anthropic');
 
     let source = input.content ?? '';
     let documentTitle: string | null = null;
@@ -80,38 +81,33 @@ export const cortexProcess = registerTool({
     const sourceLabel = documentTitle ? ` (document: "${documentTitle}")` : '';
     const prompt = `You are Cortex, Zipdev's internal processing engine. Follow the instruction precisely and answer with ONLY the requested output — no preamble.\n\nINSTRUCTION:\n${input.instruction}\n\nSOURCE${sourceLabel}:\n${source}`;
 
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2 },
-        }),
-        signal: ctx.signal,
-      },
-    );
-    if (!r.ok)
-      throw new IntegrationError(`Gemini ${r.status}: ${(await r.text()).slice(0, 300)}`, 'gemini');
-
-    type GenerateResponse = {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const data = (await r.json()) as GenerateResponse;
-    const text = (data.candidates ?? [])
-      .flatMap((c) => c.content?.parts ?? [])
-      .map((p) => p.text ?? '')
-      .join('')
-      .trim();
-    if (!text) throw new IntegrationError('Gemini returned an empty response', 'gemini');
+    // No `temperature`: Claude Opus 5 rejects sampling parameters outright
+    // (400). Determinism comes from the instruction, not from the knob.
+    let text: string;
+    try {
+      const generated = await generateText({
+        model: utilityModel(),
+        prompt,
+        // The caller caps the answer in characters; give the model enough
+        // tokens to reach that cap, since thinking counts against the budget.
+        maxTokens: 8_000,
+        abortSignal: ctx.signal,
+      });
+      text = generated.text.trim();
+    } catch (err) {
+      throw new IntegrationError(
+        `Claude request failed: ${err instanceof Error ? err.message : String(err)}`,
+        'anthropic',
+      );
+    }
+    if (!text) throw new IntegrationError('Claude returned an empty response', 'anthropic');
 
     const max = input.maxOutputChars ?? 4000;
     return {
       result: text.length > max ? `${text.slice(0, max)}\n… [truncated]` : text,
       sourceChars: source.length,
       documentTitle,
-      model: GEMINI_MODEL,
+      model: UTILITY_MODEL,
     };
   },
 });

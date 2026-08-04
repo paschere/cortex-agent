@@ -58,6 +58,7 @@ const FAMILY_SYSTEM: Record<string, string> = {
   apollo: 'the Apollo prospecting database',
   bamboo: 'BambooHR, the HR system of record',
   kb: 'the shared Knowledge Base',
+  vehicles: 'the vehicle registry, and through it RUNT and SIMIT',
 };
 
 export function confirmationReason(toolId: string): string {

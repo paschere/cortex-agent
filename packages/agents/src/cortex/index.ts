@@ -39,7 +39,7 @@ export const cortexAgent: AgentDefinition = {
   id: 'cortex',
   name: 'Cortex',
   team: 'all',
-  defaultModel: 'gemini-2.5-pro',
+  defaultModel: 'claude-opus-5',
   systemPrompt,
   allowedTools: [
     'hubspot.*',

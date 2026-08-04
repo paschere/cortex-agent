@@ -4,7 +4,7 @@ import { renderRoutineResultEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { google } from '@ai-sdk/google';
+import { chatModel } from '@cortex/agent-tools';
 import { filterTools, getTool, runTool } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type CoreTool, generateText, tool } from 'ai';
@@ -175,7 +175,7 @@ UNATTENDED SCHEDULED RUN. You are executing the scheduled job "${job.name}" with
 
   try {
     const result = await generateText({
-      model: google(agent.default_model as string),
+      model: chatModel(agent.default_model as string),
       system,
       messages: [{ role: 'user', content: job.instruction ?? '' }],
       tools: aiTools,

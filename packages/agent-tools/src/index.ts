@@ -9,6 +9,7 @@
 // re-exports evaluated above the inlined `const REGISTRY`.
 export * from './registry';
 export * from './types';
+export * from './model';
 export { writeAuditEvent } from './audit';
 export { consumeToken } from './rate-limit';
 export { createIntegrationsClient } from './integrations';
@@ -32,6 +33,7 @@ export * from './slack';
 export * from './people';
 export * from './growth';
 export * from './apollo';
+export * from './vehicles';
 export * from './workable';
 export * from './pipeline';
 export * from './meetings';

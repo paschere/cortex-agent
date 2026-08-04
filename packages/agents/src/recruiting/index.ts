@@ -7,7 +7,7 @@ export const recruitingAgent: AgentDefinition = {
   id: "recruiting",
   name: "Zipdev Recruiting",
   team: "recruiting",
-  defaultModel: "gemini-3.1-flash-lite",
+  defaultModel: "claude-opus-5",
   systemPrompt,
   allowedTools: [
     "recruit.list_requisitions",

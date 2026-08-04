@@ -1,4 +1,4 @@
-import { google } from '@ai-sdk/google';
+import { chatModel } from '../model';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { registerTool } from '../index';
@@ -95,7 +95,7 @@ async function compareWithLlm(
     .join('\n');
 
   const { object } = await generateObject({
-    model: google(RANKING_MODEL()),
+    model: chatModel(RANKING_MODEL()),
     schema: llmCompareSchema,
     system,
     prompt,
