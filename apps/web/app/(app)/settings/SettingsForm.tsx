@@ -25,7 +25,17 @@ type Status =
   | { kind: 'saved' }
   | { kind: 'error'; message: string };
 
-/** A labelled switch — the same control the master opt-in and the channels use. */
+/**
+ * The document's own field styling: a ruled box, square corners, and the global
+ * focus outline left intact rather than swapped for a ring.
+ */
+const FIELD =
+  'w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary disabled:cursor-not-allowed disabled:opacity-60';
+
+/**
+ * A labelled switch — the same control the master opt-in and the channels use.
+ * Squared rather than pill-shaped: this is the box you tick on a form.
+ */
 function Toggle({
   checked,
   onChange,
@@ -36,7 +46,7 @@ function Toggle({
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
-  description?: string;
+  description?: React.ReactNode;
   disabled?: boolean;
 }) {
   return (
@@ -55,16 +65,15 @@ function Toggle({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={clsx(
-          'relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors',
-          'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15',
-          checked ? 'bg-primary' : 'bg-surface-2 border border-border',
+          'relative mt-0.5 h-6 w-11 shrink-0 rounded-card border transition-colors',
+          checked ? 'border-primary bg-primary' : 'border-border bg-surface-2',
           disabled && 'cursor-not-allowed opacity-50',
         )}
       >
         <span
           className={clsx(
-            'absolute top-1/2 h-[18px] w-[18px] -translate-y-1/2 rounded-full bg-white shadow-sm transition-[left]',
-            checked ? 'left-[23px]' : 'left-[3px]',
+            'absolute top-1/2 h-[18px] w-[18px] -translate-y-1/2 rounded-card border transition-[left]',
+            checked ? 'left-[22px] border-primary-strong bg-white' : 'left-[2px] border-border bg-surface',
           )}
         />
       </button>
@@ -183,7 +192,7 @@ export function SettingsForm({
           description="Once a day, Cortex reads your recent email and sends you a short summary: what is waiting on your reply, what you are waiting on from other people, and what is just worth knowing."
         />
 
-        <div className="mt-4 rounded-[12px] border border-border bg-surface-2 p-4">
+        <div className="mt-4 rounded-card border border-border bg-surface-2 p-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
             <Eyebrow>What Cortex reads, and what it does not</Eyebrow>
@@ -223,7 +232,7 @@ export function SettingsForm({
         <Eyebrow>When it arrives</Eyebrow>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="digest-time" className="mb-1 block text-xs font-medium text-ink-muted">
+            <label htmlFor="digest-time" className="field-label mb-1 block">
               Time
             </label>
             <input
@@ -232,11 +241,11 @@ export function SettingsForm({
               value={prefs.inboxDigestTime}
               disabled={!on}
               onChange={(e) => set('inboxDigestTime', e.target.value)}
-              className="w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className={clsx(FIELD, 'tabular')}
             />
           </div>
           <div>
-            <label htmlFor="digest-tz" className="mb-1 block text-xs font-medium text-ink-muted">
+            <label htmlFor="digest-tz" className="field-label mb-1 block">
               Time zone
             </label>
             <select
@@ -244,7 +253,7 @@ export function SettingsForm({
               value={prefs.timezone}
               disabled={!on}
               onChange={(e) => set('timezone', e.target.value)}
-              className="w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className={FIELD}
             >
               {TIMEZONES.map((tz) => (
                 <option key={tz.value} value={tz.value}>
@@ -264,13 +273,17 @@ export function SettingsForm({
         <Eyebrow>Where it goes</Eyebrow>
 
         <div className="mt-3 space-y-4">
-          <div className="rounded-[12px] border border-border p-4">
+          <div className="rounded-card border border-border p-4">
             <Toggle
               checked={prefs.deliverEmail}
               disabled={!on}
               onChange={(v) => set('deliverEmail', v)}
               label="Email"
-              description={`Sent to ${prefs.email}`}
+              description={
+                <>
+                  Sent to <span className="tabular text-ink">{prefs.email}</span>
+                </>
+              }
             />
             <div className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-faint">
               <Mail className="h-3.5 w-3.5" />
@@ -278,7 +291,7 @@ export function SettingsForm({
             </div>
           </div>
 
-          <div className="rounded-[12px] border border-border p-4">
+          <div className="rounded-card border border-border p-4">
             <Toggle
               checked={prefs.deliverChat}
               disabled={!on}
@@ -288,10 +301,7 @@ export function SettingsForm({
             />
 
             <div className="mt-3">
-              <label
-                htmlFor="chat-webhook"
-                className="mb-1 block text-xs font-medium text-ink-muted"
-              >
+              <label htmlFor="chat-webhook" className="field-label mb-1 block">
                 Webhook URL
               </label>
               <input
@@ -307,7 +317,7 @@ export function SettingsForm({
                   set('chatWebhookUrl', e.target.value);
                   setTestStatus({ kind: 'idle' });
                 }}
-                className="w-full rounded-[10px] border border-border bg-surface px-3 py-2 font-mono text-[12px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+                className={clsx(FIELD, 'font-mono text-[12px]')}
               />
 
               <ol className="mt-2.5 space-y-1 text-[12px] leading-relaxed text-ink-muted">
@@ -358,7 +368,7 @@ export function SettingsForm({
           </div>
 
           {/* ---- Google Chat, privately ------------------------------------ */}
-          <div className="rounded-[12px] border border-border p-4">
+          <div className="rounded-card border border-border p-4">
             <Toggle
               checked={prefs.deliverChatDm}
               disabled={!on || !chatDm.configured}
@@ -374,7 +384,7 @@ export function SettingsForm({
               {/* The link status is the whole point of this block: without it,
                   the toggle is a checkbox that can silently do nothing. */}
               {!chatDm.configured ? (
-                <div className="flex items-start gap-2 rounded-[10px] border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+                <div className="flex items-start gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     The Cortex Chat app is not set up on this environment yet, so direct messages
@@ -382,16 +392,18 @@ export function SettingsForm({
                   </span>
                 </div>
               ) : dmReady ? (
-                <div className="flex items-start gap-2 rounded-[10px] border border-border bg-emerald-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-emerald">
+                <div className="flex items-start gap-2 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-emerald">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     Connected as{' '}
-                    <strong className="font-semibold">{chatDm.displayName ?? prefs.email}</strong> —
-                    messages will arrive in your Cortex chat.
+                    <span className="tabular font-semibold">
+                      {chatDm.displayName ?? prefs.email}
+                    </span>{' '}
+                    — messages will arrive in your Cortex chat.
                   </span>
                 </div>
               ) : (
-                <div className="rounded-[10px] border border-border bg-amber-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+                <div className="rounded-card border border-amber/30 bg-amber-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
                   <div className="flex items-start gap-2 font-medium text-amber">
                     <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>Not connected yet — nothing can be delivered here.</span>
@@ -462,9 +474,9 @@ export function SettingsForm({
           rows={3}
           onChange={(e) => set('digestFocus', e.target.value)}
           placeholder="Clients first, then anything about open roles. Internal newsletters can go to the bottom."
-          className="mt-2.5 w-full resize-y rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
+          className={clsx(FIELD, 'mt-2.5 resize-y')}
         />
-        <div className="mt-1 text-right text-[11px] text-ink-faint">
+        <div className="tabular mt-1 text-right text-[11px] text-ink-faint">
           {prefs.digestFocus.length}/600
         </div>
       </Panel>

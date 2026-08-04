@@ -51,10 +51,14 @@ interface ProviderCard {
   connectHref?: string;
 }
 
-const STATE_PILL: Record<ConnState, { label: string; cls: string }> = {
-  workspace: { label: 'Connected · team', cls: 'bg-emerald-soft text-emerald' },
-  user: { label: 'Connected · you', cls: 'bg-emerald-soft text-emerald' },
-  disconnected: { label: 'Not connected', cls: 'bg-surface-2 text-ink-faint' },
+/**
+ * A connection is a document in force or one that never arrived. Amber, not
+ * grey, for the missing ones: it is something to act on, not a neutral fact.
+ */
+const STATE_TAG: Record<ConnState, { label: string; cls: string }> = {
+  workspace: { label: 'In force · team', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
+  user: { label: 'In force · you', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
+  disconnected: { label: 'Not connected', cls: 'border-amber/40 bg-amber-soft text-amber' },
 };
 
 function fmtDate(iso: string | null | undefined): string {
@@ -326,48 +330,43 @@ export default async function IntegrationsPage({
   const missing = providers.filter((p) => p.state === 'disconnected');
   const totalToolCount = Object.values(toolsByFamily).reduce((a, b) => a + b, 0);
 
+  /** The register header: what the organisation holds, counted in mono. */
   const stats = [
     {
-      label: 'Systems connected',
+      label: 'Systems in force',
       value: `${connected.length}/${providers.length}`,
       sub: 'Cortex can act in these',
       icon: CircleCheck,
-      tone: 'emerald' as const,
+      tone: 'text-emerald',
     },
     {
       label: 'Not connected',
       value: String(missing.length),
       sub: missing.length > 0 ? missing.map((p) => p.name).join(', ') : 'nothing missing',
       icon: TriangleAlert,
-      tone: missing.length > 0 ? ('amber' as const) : ('emerald' as const),
+      tone: missing.length > 0 ? 'text-amber' : 'text-emerald',
     },
     {
       label: 'Built-in tools',
       value: String(totalToolCount),
       sub: 'available to Cortex',
       icon: Wrench,
-      tone: 'primary' as const,
+      tone: 'text-ink',
     },
     {
       label: 'Tools you plugged in',
       value: String(totalMcpTools),
       sub: `${mcpServers.length} external MCP server${mcpServers.length === 1 ? '' : 's'}`,
       icon: Boxes,
-      tone: 'primary' as const,
+      tone: 'text-ink',
     },
   ];
-
-  const TONE: Record<'primary' | 'emerald' | 'amber', string> = {
-    primary: 'bg-primary-soft text-primary',
-    emerald: 'bg-emerald-soft text-emerald',
-    amber: 'bg-amber-soft text-amber',
-  };
 
   return (
     <>
       <PageHeader
         title="Integrations"
-        subtitle="What Cortex is connected to — the systems it can read and act in on your behalf."
+        subtitle="The systems this organisation has connected — what Cortex can read and act in on your behalf."
         icon={<Plug className="h-5 w-5" />}
       />
 
@@ -384,33 +383,30 @@ export default async function IntegrationsPage({
         </div>
       )}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {stats.map((s) => (
-          <Panel key={s.label} className="flex items-center gap-3 p-3.5">
-            <span
-              className={clsx(
-                'grid h-9 w-9 shrink-0 place-items-center rounded-[10px]',
-                TONE[s.tone],
-              )}
-            >
-              <s.icon className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-[15px] font-extrabold leading-tight text-ink">
+      {/* Hairlines come from the gap showing the border colour through, so the
+          rules stay correct at every breakpoint the grid reflows to. */}
+      <Panel className="mb-5 overflow-hidden bg-border">
+        <div className="grid grid-cols-2 gap-px lg:grid-cols-4">
+          {stats.map((s) => (
+            <div key={s.label} className="bg-surface p-4">
+              <div className="flex items-center gap-1.5">
+                <s.icon className={clsx('h-3.5 w-3.5', s.tone)} />
+                <span className="field-label">{s.label}</span>
+              </div>
+              <div className={clsx('stat-num mt-1.5 text-[26px] leading-none', s.tone)}>
                 {s.value}
               </div>
-              <div className="truncate text-[10.5px] text-ink-faint">{s.label}</div>
-              <div className="truncate text-[10.5px] text-ink-faint" title={s.sub}>
+              <div className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-ink-faint">
                 {s.sub}
               </div>
             </div>
-          </Panel>
-        ))}
-      </div>
+          ))}
+        </div>
+      </Panel>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {providers.map((p) => {
-          const pill = STATE_PILL[p.state];
+          const tag = STATE_TAG[p.state];
           const tools = famCount(p.families);
           const isOn = p.state !== 'disconnected';
           return (
@@ -418,7 +414,7 @@ export default async function IntegrationsPage({
               <div className="flex items-start justify-between gap-2">
                 <span
                   className={clsx(
-                    'grid h-10 w-10 shrink-0 place-items-center rounded-[12px]',
+                    'grid h-10 w-10 shrink-0 place-items-center rounded-card',
                     isOn ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-faint',
                   )}
                 >
@@ -426,11 +422,11 @@ export default async function IntegrationsPage({
                 </span>
                 <span
                   className={clsx(
-                    'rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
-                    pill.cls,
+                    'rounded-card border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]',
+                    tag.cls,
                   )}
                 >
-                  {pill.label}
+                  {tag.label}
                 </span>
               </div>
 
@@ -445,7 +441,7 @@ export default async function IntegrationsPage({
               </p>
 
               {!isOn && (
-                <p className="flex items-start gap-1.5 rounded-[10px] bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
+                <p className="flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
                   <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
                   <span>
                     <span className="font-semibold">While it is off: </span>
@@ -457,12 +453,18 @@ export default async function IntegrationsPage({
               <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2.5">
                 <span className="inline-flex items-center gap-1 text-[11px] text-ink-faint">
                   <Wrench className="h-3 w-3" />
-                  {tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : 'no tools yet'}
+                  {tools > 0 ? (
+                    <>
+                      <span className="tabular">{tools}</span> tool{tools === 1 ? '' : 's'}
+                    </>
+                  ) : (
+                    'no tools yet'
+                  )}
                 </span>
                 {p.connectHref && (
                   <Link
                     href={p.connectHref}
-                    className="rounded-pill bg-primary px-3 py-1 text-[11.5px] font-bold text-white hover:bg-primary-strong"
+                    className="rounded-card bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong"
                   >
                     Connect
                   </Link>
@@ -477,13 +479,11 @@ export default async function IntegrationsPage({
           tools — same direction as an integration, so they live here. */}
       <Panel className="mt-5 p-5">
         <div className="flex flex-wrap items-start gap-3">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-surface-2 text-ink-muted">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card bg-surface-2 text-ink-muted">
             <Server className="h-4 w-4" />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Advanced
-            </div>
+            <div className="field-label">Advanced</div>
             <h2 className="mt-0.5 text-[15px] font-bold tracking-tight text-ink">
               Extra tools you plug into Cortex
             </h2>
@@ -493,7 +493,8 @@ export default async function IntegrationsPage({
               only. Most people never need this.
             </p>
             <p className="mt-1 text-[11.5px] text-ink-faint">
-              Up to {MAX_MCP_SERVERS} servers and {MAX_MCP_TOOLS} tools in total. Looking for how to
+              Up to <span className="tabular">{MAX_MCP_SERVERS}</span> servers and{' '}
+              <span className="tabular">{MAX_MCP_TOOLS}</span> tools in total. Looking for how to
               use Cortex <em>from</em> Claude instead?{' '}
               <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
                 That is the other page
@@ -508,13 +509,14 @@ export default async function IntegrationsPage({
 
           {atServerCapacity && (
             <p className="mt-4 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
-              Max {MAX_MCP_SERVERS} servers reached. Delete one to add another.
+              You are at the limit of <span className="tabular">{MAX_MCP_SERVERS}</span> servers.
+              Delete one above to add another.
             </p>
           )}
           {atToolCapacity && (
             <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
-              {MAX_MCP_TOOLS}-tool total limit reached. New tools will not be synced until you
-              remove some.
+              You are at the limit of <span className="tabular">{MAX_MCP_TOOLS}</span> tools. Cortex
+              stops syncing new ones until you remove a server above.
             </p>
           )}
 

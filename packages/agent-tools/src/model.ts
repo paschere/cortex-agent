@@ -1,38 +1,61 @@
-import { anthropic } from '@ai-sdk/anthropic';
-
-type ClaudeModel = ReturnType<typeof anthropic>;
-type CallOptions = Parameters<ClaudeModel['doGenerate']>[0];
-
-/** Drop the three parameters Claude Opus 5 refuses to accept. */
-function withoutSamplingParams(options: CallOptions): CallOptions {
-  const { temperature: _t, topP: _p, topK: _k, ...rest } = options;
-  return rest as CallOptions;
-}
+import { createAnthropic } from '@ai-sdk/anthropic';
 
 /**
- * The Anthropic model, minus the sampling parameters.
+ * Two things have to be fixed on the wire, and neither can be expressed through
+ * the provider, so both happen in one custom `fetch`.
  *
- * AI SDK 4.0 sends `temperature: 0` whether or not a caller asked for it, and
- * Claude Opus 5 rejects `temperature` / `top_p` / `top_k` outright — every call
- * came back "`temperature` is deprecated for this model", which the chat stream
- * surfaced as a bare "An error occurred." Stripping them once here beats
- * auditing ~40 call sites, and keeps working for call sites written later.
+ * SAMPLING PARAMETERS. AI SDK 4 sends `temperature` whether or not a caller
+ * asked for it, and Claude Opus 5 rejects `temperature` / `top_p` / `top_k`
+ * outright. Every call came back "`temperature` is deprecated for this model",
+ * which the chat stream surfaced as a bare "An error occurred."
  *
- * Deliberately hand-rolled rather than `experimental_wrapLanguageModel`: this
- * module would then import from `ai`, and every existing test that mocks that
- * module wholesale (workable's, for one) would hand back an undefined wrapper
- * and silently fall through to the non-LLM path.
+ * THINKING. Opus 5 thinks by default but returns the reasoning empty unless the
+ * request asks for `display: "summarized"`. The pinned provider predates that:
+ * it only knows `thinking: {type: "enabled", budgetTokens}` and *requires* the
+ * budget — which Opus 5 rejects with a 400, budgets having been replaced by
+ * effort. So the provider cannot ask for what we need, and rewriting the body
+ * here is the honest way to do it rather than pinning a provider that fights
+ * the model.
  *
- * Steering that used to live in `temperature` belongs in the prompt now.
+ * Rewriting request bodies is a liberty, so it is confined to this file and
+ * these two fields.
  */
-function claude(id: string): ClaudeModel {
-  const model = anthropic(id);
-  return {
-    ...model,
-    doGenerate: (options) => model.doGenerate(withoutSamplingParams(options)),
-    doStream: (options) => model.doStream(withoutSamplingParams(options)),
+type ThinkingMode = 'summarized' | 'off';
+
+function bodyRewriter(mode: ThinkingMode) {
+  return async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {
+    if (typeof init?.body !== 'string') return fetch(input, init);
+
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(init.body) as Record<string, unknown>;
+    } catch {
+      // Not JSON we understand — send it untouched rather than guess.
+      return fetch(input, init);
+    }
+
+    body.temperature = undefined;
+    body.top_p = undefined;
+    body.top_k = undefined;
+    for (const key of ['temperature', 'top_p', 'top_k']) delete body[key];
+
+    body.thinking =
+      mode === 'summarized'
+        ? { type: 'adaptive', display: 'summarized' }
+        : // Disabled is only legal at effort `high` or below, which is the
+          // default. Short shape-constrained calls (titles, classification) get
+          // it so the token budget goes to the answer instead of the reasoning.
+          { type: 'disabled' };
+
+    return fetch(input, { ...init, body: JSON.stringify(body) });
   };
 }
+
+/** Conversation: reasoning is asked for, and shown to the user. */
+const thinkingProvider = createAnthropic({ fetch: bodyRewriter('summarized') });
+
+/** Short internal calls: no reasoning, all the budget on the answer. */
+const quietProvider = createAnthropic({ fetch: bodyRewriter('off') });
 
 /**
  * The one place that decides which LLM Cortex talks to.
@@ -67,27 +90,22 @@ export function resolveModelId(id?: string | null): string {
 
 /** The model an agent answers with, honouring its configured id. */
 export function chatModel(id?: string | null) {
-  return claude(resolveModelId(id));
+  return thinkingProvider(resolveModelId(id));
 }
 
 /** The model for short internal calls that never face the user directly. */
 export function utilityModel() {
-  return claude(UTILITY_MODEL);
+  return quietProvider(UTILITY_MODEL);
 }
 
 /**
- * Turns extended thinking off for a single call.
+ * Kept as a no-op so existing call sites keep compiling.
  *
- * Claude Opus 5 thinks by default, and `maxTokens` caps thinking AND response
- * text together — so a 20-token budget for "write a 5-word title" would be
- * spent entirely on reasoning and truncate before any answer. Short, shape-
- * constrained calls pass this and a maxTokens with real headroom.
+ * It never worked: the pinned provider does not forward a `disabled` thinking
+ * config, so passing this changed nothing on the wire. Whether a call thinks is
+ * now decided by which model helper you reach for — `utilityModel()` does not,
+ * `chatModel()` does — because that is a property of the job, not of one call.
  *
- * Only valid at effort `high` or below (the default); pairing disabled
- * thinking with xhigh/max effort is rejected with a 400.
- *
- * Pass as `providerOptions`.
+ * @deprecated Use `utilityModel()` for short calls that should not reason.
  */
-export const NO_THINKING = {
-  anthropic: { thinking: { type: 'disabled' as const } },
-} as const;
+export const NO_THINKING = {} as const;

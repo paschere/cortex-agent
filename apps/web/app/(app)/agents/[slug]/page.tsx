@@ -25,8 +25,9 @@ import {
   Contact,
   Wallet,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { Panel, PanelHead, Eyebrow } from "@/components/ui/panel";
+import { Eyebrow, Panel } from "@/components/ui/panel";
 
 // ---------------------------------------------------------------------------
 // Tool registry — full v2 surface, grouped with icons. `write` tools are
@@ -271,7 +272,7 @@ export default async function AgentDetailPage({
         actions={
           <Link
             href="/chat"
-            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-pop hover:bg-primary-strong"
+            className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-primary-strong"
           >
             <MessageSquare className="h-4 w-4" /> Open chat
           </Link>
@@ -281,34 +282,35 @@ export default async function AgentDetailPage({
       {/* Identity strip */}
       <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Panel className="flex items-center gap-3 p-4">
-          <span className="grid h-10 w-10 place-items-center rounded-[12px] bg-primary-soft text-primary">
+          <span className="grid h-10 w-10 place-items-center rounded-card bg-primary-soft text-primary">
             <Cpu className="h-5 w-5" />
           </span>
-          <div>
+          <div className="min-w-0">
             <Eyebrow>Model</Eyebrow>
-            <div className="mt-0.5 font-mono text-[13px] font-semibold text-ink">
+            <div className="tabular mt-0.5 truncate text-[13px] font-semibold text-ink">
               {agent.default_model}
             </div>
           </div>
         </Panel>
         <Panel className="flex items-center gap-3 p-4">
-          <span className="grid h-10 w-10 place-items-center rounded-[12px] bg-sky-soft text-sky">
+          <span className="grid h-10 w-10 place-items-center rounded-card bg-sky-soft text-sky">
             <Boxes className="h-5 w-5" />
           </span>
-          <div>
+          <div className="min-w-0">
             <Eyebrow>Slug</Eyebrow>
-            <div className="mt-0.5 font-mono text-[13px] font-semibold text-ink">
+            <div className="tabular mt-0.5 truncate text-[13px] font-semibold text-ink">
               {agent.slug}
             </div>
           </div>
         </Panel>
         <Panel className="flex items-center gap-3 p-4">
-          <span className="grid h-10 w-10 place-items-center rounded-[12px] bg-emerald-soft text-emerald">
+          <span className="grid h-10 w-10 place-items-center rounded-card bg-emerald-soft text-emerald">
             <ShieldCheck className="h-5 w-5" />
           </span>
-          <div>
+          <div className="min-w-0">
             <Eyebrow>Status</Eyebrow>
             <div className="mt-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+              {/* A status dot keeps its circle — it is a light, not a chip. */}
               <span className="h-1.5 w-1.5 rounded-full bg-emerald" /> Online
             </div>
           </div>
@@ -334,7 +336,7 @@ export default async function AgentDetailPage({
                   disabled={!isAdmin}
                   className="peer sr-only"
                 />
-                <span className="inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-4 py-2 font-mono text-[13px] text-ink-muted transition-colors peer-checked:border-primary/40 peer-checked:bg-primary-soft peer-checked:text-primary-ink peer-checked:font-semibold">
+                <span className="inline-flex items-center gap-2 rounded-card border border-border bg-surface px-4 py-2 font-mono text-[13px] text-ink-muted transition-colors peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:font-semibold peer-checked:text-primary-ink">
                   <Cpu className="h-3.5 w-3.5" />
                   {m}
                 </span>
@@ -347,7 +349,7 @@ export default async function AgentDetailPage({
         <Panel className="p-5">
           <div className="flex items-center justify-between">
             <Eyebrow>Capabilities</Eyebrow>
-            <span className="rounded-pill bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary-ink">
+            <span className="tabular rounded-card border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary-ink">
               {agent.allowed_tool_ids.length} / {TOTAL_TOOLS} enabled
             </span>
           </div>
@@ -358,13 +360,13 @@ export default async function AgentDetailPage({
               return (
                 <div key={group.label}>
                   <div className="mb-2 flex items-center gap-2">
-                    <span className="grid h-6 w-6 place-items-center rounded-[7px] bg-surface-2 text-ink-muted">
+                    <span className="grid h-6 w-6 place-items-center rounded-card bg-surface-2 text-ink-muted">
                       <Icon className="h-3.5 w-3.5" />
                     </span>
                     <span className="text-[13px] font-semibold text-ink">
                       {group.label}
                     </span>
-                    <span className="text-[11px] text-ink-faint">
+                    <span className="tabular text-[11px] text-ink-faint">
                       {on}/{group.tools.length}
                     </span>
                   </div>
@@ -383,15 +385,15 @@ export default async function AgentDetailPage({
                           disabled={!isAdmin}
                           className="peer sr-only"
                         />
-                        <span className="flex items-center justify-between gap-2 rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink-muted transition-colors hover:border-border-strong peer-checked:border-primary/40 peer-checked:bg-primary-soft peer-checked:text-ink peer-disabled:opacity-60">
+                        <span className="flex items-center justify-between gap-2 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink-muted transition-colors hover:border-border-strong peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:text-ink peer-disabled:opacity-60">
                           <span className="flex items-center gap-2">
-                            <span className="h-3.5 w-3.5 shrink-0 rounded-[5px] border border-border-strong bg-surface peer-checked:border-primary peer-checked:bg-primary" />
+                            <span className="h-3.5 w-3.5 shrink-0 rounded-card border border-border-strong bg-surface peer-checked:border-primary peer-checked:bg-primary" />
                             <span className="font-medium">
                               {shortName(t.id)}
                             </span>
                           </span>
                           {t.write && (
-                            <span className="rounded-pill bg-amber-soft px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber">
+                            <span className="rounded-card border border-amber/40 bg-amber-soft px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-amber">
                               Write
                             </span>
                           )}
@@ -410,7 +412,7 @@ export default async function AgentDetailPage({
           <div className="flex items-center justify-between">
             <Eyebrow>System prompt</Eyebrow>
             <span className="text-[11px] text-ink-faint">
-              {promptWords} words
+              <span className="tabular">{promptWords}</span> words
             </span>
           </div>
           {isAdmin ? (
@@ -419,10 +421,10 @@ export default async function AgentDetailPage({
               defaultValue={agent.system_prompt}
               rows={16}
               spellCheck={false}
-              className="scroll-slim mt-3 w-full resize-y rounded-[12px] border border-border bg-surface-2 p-3.5 font-mono text-[12.5px] leading-relaxed text-ink focus:border-primary/40 focus:bg-surface focus:outline-none focus:ring-4 focus:ring-primary/10"
+              className="scroll-slim mt-3 w-full resize-y rounded-card border border-border bg-surface-2 p-3.5 font-mono text-[12.5px] leading-relaxed text-ink focus:border-primary focus:bg-surface"
             />
           ) : (
-            <pre className="scroll-slim mt-3 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-[12px] border border-border bg-surface-2 p-3.5 font-mono text-[12.5px] leading-relaxed text-ink-muted">
+            <pre className="scroll-slim mt-3 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-card border border-border bg-surface-2 p-3.5 font-mono text-[12.5px] leading-relaxed text-ink-muted">
               {agent.system_prompt}
             </pre>
           )}
@@ -435,12 +437,9 @@ export default async function AgentDetailPage({
               <span className="text-[13px] text-ink-faint">
                 Changes apply to every conversation with this agent.
               </span>
-              <button
-                type="submit"
-                className="rounded-pill bg-primary px-6 py-2 text-[13px] font-semibold text-white shadow-pop hover:bg-primary-strong"
-              >
+              <Button type="submit" className="px-6">
                 Save changes
-              </button>
+              </Button>
             </div>
           </div>
         )}

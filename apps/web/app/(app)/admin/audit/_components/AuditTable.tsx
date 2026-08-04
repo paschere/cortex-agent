@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { toolLabel } from '@/lib/tool-labels';
 import { relativeTime } from '@/lib/relative-time';
 import type { AuditEventRow } from '@/app/api/admin/_lib/audit-filters';
-import { DecisionPill, RiskPill, StatusPill, SurfacePill } from './pills';
+import { DecisionTag, RiskTag, StatusTag, SurfaceTag } from './tags';
 import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from './format';
 import { AuditDetailDrawer } from './AuditDetailDrawer';
 
@@ -33,12 +33,12 @@ export function AuditTable({
     <>
       <div className="overflow-x-auto">
         <table className="w-full text-[12px]">
-          <thead className="border-b border-border bg-surface-2/60">
-            <tr className="text-left text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
+          <thead className="border-b border-border-strong bg-surface-2">
+            <tr className="text-left">
               {HEADERS.map((h) => (
                 <th
                   key={h}
-                  className={clsx('px-3 py-2.5 font-semibold', h === 'Latency' && 'text-right')}
+                  className={clsx('field-label px-3 py-2.5', h === 'Latency' && 'text-right')}
                 >
                   {h}
                 </th>
@@ -66,7 +66,7 @@ export function AuditTable({
                   )}
                 >
                   <td
-                    className="whitespace-nowrap px-3 py-2 text-ink-faint"
+                    className="tabular whitespace-nowrap px-3 py-2 text-ink-faint"
                     title={absoluteTime(e.created_at)}
                   >
                     {relativeTime(e.created_at)}
@@ -85,32 +85,34 @@ export function AuditTable({
                       {isAgentTurn(e.tool_id) ? 'Chat turn' : toolLabel(e.tool_id).label}
                     </div>
                     {!isAgentTurn(e.tool_id) && (
-                      <div className="truncate font-mono text-[10.5px] text-ink-faint">
+                      <div className="tabular truncate text-[10.5px] text-ink-faint">
                         {e.tool_id}
                       </div>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
-                    <SurfacePill surface={e.surface} />
+                    <SurfaceTag surface={e.surface} />
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
-                    <StatusPill status={e.status} />
+                    <StatusTag status={e.status} />
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     {e.risk_level ? (
-                      <RiskPill level={e.risk_level} />
+                      <RiskTag level={e.risk_level} />
                     ) : (
-                      <span className="text-ink-faint">—</span>
+                      <span className="tabular text-ink-faint">—</span>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     {e.decision && e.decision !== 'allowed' ? (
-                      <DecisionPill decision={e.decision} />
+                      <DecisionTag decision={e.decision} />
                     ) : (
-                      <span className="text-[10.5px] text-ink-faint">{e.decision ?? '—'}</span>
+                      <span className="tabular text-[10.5px] text-ink-faint">
+                        {e.decision ?? '—'}
+                      </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right text-ink-faint">
+                  <td className="tabular whitespace-nowrap px-3 py-2 text-right text-ink-faint">
                     {formatLatency(e.latency_ms)}
                   </td>
                   <td className="max-w-[300px] px-3 py-2 text-ink-muted">

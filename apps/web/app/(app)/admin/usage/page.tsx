@@ -4,7 +4,7 @@ import { BarChart3, Zap, AlertTriangle, Users, Timer, CheckCircle2, Cpu } from '
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
-import { LegendDot, RISK_BAR, SURFACE_BAR } from '../audit/_components/pills';
+import { LegendDot, RISK_BAR, SURFACE_BAR } from '../audit/_components/tags';
 import { formatTokens, turnTokens } from '../audit/_components/format';
 
 interface AuditEvent {

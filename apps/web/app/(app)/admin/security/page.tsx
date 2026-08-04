@@ -17,12 +17,12 @@ import { relativeTime } from '@/lib/relative-time';
 import { toolLabel } from '@/lib/tool-labels';
 import { fetchUserNames, riskSignals, SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
 import {
-  DecisionPill,
+  DecisionTag,
   LegendDot,
-  RiskPill,
+  RiskTag,
   SignalChip,
-  SurfacePill,
-} from '../audit/_components/pills';
+  SurfaceTag,
+} from '../audit/_components/tags';
 import { absoluteTime } from '../audit/_components/format';
 
 export const dynamic = 'force-dynamic';
@@ -281,7 +281,7 @@ export default async function SecurityPage() {
                         <span className="truncate font-semibold text-ink">
                           {toolLabel(toolId).label}
                         </span>
-                        <RiskPill level={t.worst} />
+                        <RiskTag level={t.worst} />
                       </span>
                       <span className="shrink-0 text-ink-faint">
                         {t.total}×{t.blocked > 0 && <span className="ml-1 text-rose">· {t.blocked} blocked</span>}
@@ -390,13 +390,13 @@ export default async function SecurityPage() {
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
-                          <SurfacePill surface={e.surface} />
+                          <SurfaceTag surface={e.surface} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
-                          <RiskPill level={e.risk_level} />
+                          <RiskTag level={e.risk_level} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
-                          <DecisionPill decision={e.decision} />
+                          <DecisionTag decision={e.decision} />
                         </td>
                         <td className="max-w-[260px] px-4 py-2 text-ink-muted">
                           <span className="line-clamp-2">{e.reason}</span>

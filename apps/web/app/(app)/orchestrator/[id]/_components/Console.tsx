@@ -1,6 +1,7 @@
 'use client';
 
 import { Panel } from '@/components/ui/panel';
+import { Provenance } from '@/components/ui/provenance';
 import {
   type ConsoleState,
   applyEvent,
@@ -12,13 +13,9 @@ import { clsx } from 'clsx';
 import {
   ArrowLeft,
   CircleStop,
-  FileText,
-  Layers,
   Loader2,
-  Network,
   RefreshCw,
   TriangleAlert,
-  Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -73,7 +70,7 @@ function CancelButton({ runId, onCancelled }: { runId: string; onCancelled: () =
       type="button"
       onClick={() => void cancel()}
       disabled={busy}
-      className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-rose shadow-card transition hover:bg-rose-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-rose disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-rose transition-colors hover:bg-rose-soft disabled:opacity-60"
     >
       {busy ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -94,7 +91,7 @@ function ConnectionDot({ connection, active }: { connection: Connection; active:
         ? 'Reconnecting…'
         : 'Disconnected';
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-faint">
+    <span className="field-label inline-flex items-center gap-1.5">
       <span
         className={clsx(
           'h-1.5 w-1.5 rounded-full',
@@ -224,57 +221,52 @@ export function Console({
         <ConnectionDot connection={connection} active={active} />
       </div>
 
-      <div className="mb-5 flex flex-wrap items-start gap-4">
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
-          <Network className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-[19px] font-extrabold leading-snug tracking-tight text-ink">
-            {run.objective}
-          </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-ink-faint">
+      {/* The run's masthead: objective, then its figures in a ruled meter strip. */}
+      <div className="rule-double mb-5 pt-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1 basis-[20rem]">
+            <div className="field-label">Objective</div>
+            <h1 className="mt-1 text-[19px] font-extrabold leading-snug tracking-tight text-ink">
+              {run.objective}
+            </h1>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             <RunStatusPill status={run.status} />
-            <span className="inline-flex items-center gap-1">
-              <Layers className="h-3 w-3" />
-              {tasks.length} sub-agent{tasks.length === 1 ? '' : 's'}
-            </span>
-            <span className="tabular-nums">{formatDuration(duration)}</span>
-            {toolCallCount > 0 && (
-              <span className="inline-flex items-center gap-1">
-                <Zap className="h-3 w-3" />
-                {toolCallCount} tool call{toolCallCount === 1 ? '' : 's'}
-              </span>
-            )}
-            {run.totalTokens > 0 && (
-              <span className="tabular-nums">{run.totalTokens.toLocaleString()} tokens</span>
+            {active && <CancelButton runId={run.id} onCancelled={markCancelled} />}
+            {!active && (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              >
+                <RefreshCw className="h-3.5 w-3.5" /> Refresh
+              </button>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {active && <CancelButton runId={run.id} onCancelled={markCancelled} />}
-          {!active && (
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted shadow-card transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-            >
-              <RefreshCw className="h-3.5 w-3.5" /> Refresh
-            </button>
-          )}
+
+        <div className="mt-3 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
+          <Meter label="Sub-agents" value={String(tasks.length)} />
+          <Meter label="Elapsed" value={formatDuration(duration)} />
+          <Meter label="Tool calls" value={toolCallCount.toLocaleString()} />
+          <Meter
+            label="Tokens"
+            value={run.totalTokens > 0 ? run.totalTokens.toLocaleString() : '—'}
+          />
         </div>
       </div>
 
       {tasks.length > 0 && (
         <div className="mb-5">
-          <div className="mb-1.5 flex items-center justify-between text-[11.5px] text-ink-faint">
-            <span>
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="field-label">
               {done} of {tasks.length} done
             </span>
-            <span className="tabular-nums">{progress}%</span>
+            <span className="tabular text-[11px] text-ink-muted">{progress}%</span>
           </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+          <div className="h-1.5 w-full overflow-hidden border border-border bg-surface-2">
             <div
-              className="h-full rounded-full bg-primary transition-[width] duration-500"
+              className="h-full bg-primary transition-[width] duration-500"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -282,10 +274,12 @@ export function Console({
       )}
 
       {state.error && (
-        <Panel className="mb-5 border-rose/30 bg-rose-soft px-4 py-3">
+        <Panel className="mb-5 border-rose/40 bg-rose-soft px-4 py-3">
           <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-rose">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-            <span className="min-w-0 break-words">{state.error}</span>
+            <span className="min-w-0 break-words">
+              {state.error} The sub-agents below show how far the run got before it stopped.
+            </span>
           </p>
         </Panel>
       )}
@@ -296,7 +290,7 @@ export function Console({
           <h2 className="text-[14px] font-bold text-ink">Working out the plan</h2>
           <p className="mx-auto mt-1 max-w-sm text-[12.5px] leading-relaxed text-ink-muted">
             Cortex is deciding which specialists this needs and which of them can work at the same
-            time. The board fills in the moment it decides.
+            time. The manifest below fills in the moment it decides.
           </p>
         </Panel>
       )}
@@ -305,33 +299,33 @@ export function Console({
         <Panel className="mb-5 px-6 py-12 text-center">
           <h2 className="text-[14px] font-bold text-ink">No sub-agents ran</h2>
           <p className="mx-auto mt-1 max-w-sm text-[12.5px] leading-relaxed text-ink-muted">
-            This run ended before any task started. The report below, if there is one, says why.
+            This run ended before the first task started, so there is nothing to inspect. Run the
+            objective again, or reword it if it was ambiguous.
           </p>
         </Panel>
       )}
 
+      {/*
+       * The manifest. One section per wave, because the single most useful fact
+       * while a run is live is which sub-agents are working at the same time —
+       * a stacked list of cards hides exactly that.
+       */}
       {grouped.map(([wave, waveTasks]) => {
         const parallel = waveTasks.length > 1;
         const runningHere = waveTasks.filter((t) => t.status === 'running').length;
         return (
           <section key={wave} className="mb-5">
-            <div className="mb-2 flex items-center gap-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
-                Wave {wave}
+            <div className="mb-2 flex items-center gap-2 border-b border-border-strong pb-1.5">
+              <div className="field-label text-ink-muted">Wave {wave}</div>
+              <div className="tabular text-[10px] uppercase tracking-[0.08em] text-ink-faint">
+                {parallel ? `${waveTasks.length} in parallel` : 'single agent'}
               </div>
-              {parallel && (
-                <span className="inline-flex items-center gap-1 rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-bold text-primary">
-                  <Layers className="h-3 w-3" />
-                  {waveTasks.length} in parallel
-                </span>
-              )}
               {runningHere > 0 && (
-                <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-faint">
+                <span className="tabular ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] text-primary">
                   <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
                   {runningHere} working
                 </span>
               )}
-              <div className="ml-1 h-px flex-1 bg-border" />
             </div>
             <div className={clsx('grid gap-3', parallel && 'lg:grid-cols-2')}>
               {waveTasks.map((task) => (
@@ -343,11 +337,18 @@ export function Console({
       })}
 
       <Panel className="overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-          <span className="grid h-7 w-7 place-items-center rounded-[9px] bg-primary-soft text-primary">
-            <FileText className="h-4 w-4" />
-          </span>
-          <div className="text-[13px] font-semibold text-ink">Final report</div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-strong px-4 py-3">
+          <div className="field-label">Final report</div>
+          {/* Real provenance: the report is Cortex's own assertion, and this
+              says which run produced it and when that run stopped. */}
+          {run.summary && run.finishedAt && (
+            <Provenance
+              source="Orchestrator"
+              readAt={stamp(run.finishedAt)}
+              detail={`${tasks.length} sub-agent${tasks.length === 1 ? '' : 's'}`}
+              tone={run.status === 'failed' ? 'seal' : 'stamp'}
+            />
+          )}
         </div>
         <div className="px-4 py-4">
           {run.summary ? (
@@ -355,16 +356,37 @@ export function Console({
           ) : active ? (
             <p className="flex items-center gap-2 text-[12.5px] text-ink-faint">
               <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-              Written once every sub-agent has finished.
+              Cortex writes this once every sub-agent has finished.
             </p>
           ) : (
-            <p className="text-[12.5px] text-ink-faint">
-              This run produced no report
-              {run.status === 'cancelled' ? ' — it was stopped early.' : '.'}
+            <p className="text-[12.5px] text-ink-muted">
+              {run.status === 'cancelled'
+                ? 'This run was stopped before a report was written. Each sub-agent above kept whatever it had found.'
+                : 'This run produced no report. The sub-agents above show what it did reach.'}
             </p>
           )}
         </div>
       </Panel>
     </>
   );
+}
+
+/** One cell of the run's meter strip: a named box with a monospaced figure. */
+function Meter({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-surface px-3 py-2">
+      <div className="field-label">{label}</div>
+      <div className="stat-num mt-0.5 truncate text-[16px] leading-none text-ink">{value}</div>
+    </div>
+  );
+}
+
+/** Compact absolute stamp for the provenance mark: "04 Aug 10:18". */
+function stamp(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }

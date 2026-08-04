@@ -1,8 +1,16 @@
 'use client';
 
-import { use, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { useRouter } from 'next/navigation';
+import { use, useState } from 'react';
+import {
+  AuthBody,
+  AuthDocument,
+  AuthError,
+  AuthMasthead,
+  AuthTitle,
+} from '../../_components/AuthDocument';
 
 /**
  * Landing page for organization invitation emails
@@ -24,7 +32,10 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
         ? await authClient.organization.acceptInvitation({ invitationId: id })
         : await authClient.organization.rejectInvitation({ invitationId: id });
     if (error) {
-      setErr(error.message ?? 'Something went wrong — the invitation may have expired.');
+      setErr(
+        error.message ??
+          'This invitation could not be answered — it may have expired. Ask for a new one.',
+      );
       setState('idle');
       return;
     }
@@ -33,35 +44,45 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <div className="w-full max-w-sm rounded-card border border-border bg-surface p-8 shadow-card">
-      <h1 className="text-xl font-extrabold tracking-tight">Workspace invitation</h1>
-      <p className="mt-2 text-[13px] leading-snug text-ink-muted">
-        You&apos;ve been invited to join a workspace on Cortex. Accepting links your account to the
-        organization and its shared agents, Brain Knowledge and integrations.
-      </p>
-      <div className="mt-6 flex gap-3">
-        <button
-          type="button"
-          disabled={state !== 'idle'}
-          onClick={() => respond('accept')}
-          className="flex-1 rounded-pill bg-primary py-2.5 font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
-        >
-          {state === 'working' ? 'Working…' : 'Accept'}
-        </button>
-        <button
-          type="button"
-          disabled={state !== 'idle'}
-          onClick={() => respond('reject')}
-          className="flex-1 rounded-pill border border-border py-2.5 font-semibold text-ink transition-colors hover:bg-primary-soft disabled:opacity-50"
-        >
-          Decline
-        </button>
-      </div>
-      {err && (
-        <p className="mt-4 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
-          {err}
-        </p>
-      )}
-    </div>
+    <AuthDocument>
+      <AuthMasthead />
+
+      <AuthBody>
+        <AuthTitle hint="Accepting links your account to the workspace and to its shared agents, Brain Knowledge and integrations.">
+          Workspace invitation
+        </AuthTitle>
+
+        {/* The invitation id is the one checkable fact on this screen — it is
+            what an admin needs if the invite has to be traced. */}
+        <div className="mb-5">
+          <div className="field-label">Invitation</div>
+          <div className="tabular mt-1 truncate text-[13px] text-ink" title={id}>
+            {id}
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <Button
+            type="button"
+            disabled={state !== 'idle'}
+            onClick={() => respond('accept')}
+            className="flex-1 py-2.5"
+          >
+            {state === 'working' ? 'Working…' : 'Accept'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={state !== 'idle'}
+            onClick={() => respond('reject')}
+            className="flex-1 py-2.5"
+          >
+            Decline
+          </Button>
+        </div>
+
+        {err && <AuthError>{err}</AuthError>}
+      </AuthBody>
+    </AuthDocument>
   );
 }

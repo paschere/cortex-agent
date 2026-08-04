@@ -80,7 +80,7 @@ export default async function SettingsPage() {
           className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-surface-2"
         >
           <div className="flex items-start gap-3">
-            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
+            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">
               <Brain className="h-4 w-4" />
             </span>
             <div>
@@ -88,10 +88,21 @@ export default async function SettingsPage() {
                 What Cortex remembers about you
               </div>
               <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
-                {activeMemories === 0
-                  ? 'Nothing yet — Cortex starts picking things up as you work together.'
-                  : `${activeMemories} ${activeMemories === 1 ? 'thing' : 'things'} it carries into every conversation.`}
-                {pendingMemories > 0 && ` ${pendingMemories} waiting for you to keep or drop.`}
+                {activeMemories === 0 ? (
+                  'Nothing yet — Cortex starts picking things up as you work together.'
+                ) : (
+                  <>
+                    <span className="tabular text-ink">{activeMemories}</span>{' '}
+                    {activeMemories === 1 ? 'thing' : 'things'} it carries into every conversation.
+                  </>
+                )}
+                {pendingMemories > 0 && (
+                  <>
+                    {' '}
+                    <span className="tabular text-ink">{pendingMemories}</span> waiting for you to
+                    keep or drop.
+                  </>
+                )}
               </p>
             </div>
           </div>

@@ -7,7 +7,7 @@ import { useState } from 'react';
 type AuthType = 'none' | 'bearer' | 'api_key';
 
 const FIELD =
-  'mt-1 w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-50';
+  'mt-1 w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary disabled:opacity-50';
 
 export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
   const router = useRouter();
@@ -42,7 +42,11 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
 
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: unknown };
-        setError(typeof data.error === 'string' ? data.error : 'Failed to add server');
+        setError(
+          typeof data.error === 'string'
+            ? data.error
+            : 'Cortex could not add that server. Check the URL and try again.',
+        );
         return;
       }
 
@@ -75,7 +79,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
       setAuthValue('');
       router.refresh();
     } catch {
-      setError('Network error — please try again');
+      setError('Could not reach Cortex. Check your connection and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -85,7 +89,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
     <form onSubmit={onSubmit} className="mt-3 space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="text-xs font-medium text-ink-muted">Name</span>
+          <span className="field-label">Name</span>
           <input
             type="text"
             value={name}
@@ -98,7 +102,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
           />
         </label>
         <label className="block">
-          <span className="text-xs font-medium text-ink-muted">Server URL (SSE)</span>
+          <span className="field-label">Server URL (SSE)</span>
           <input
             type="url"
             value={url}
@@ -107,13 +111,13 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
             maxLength={512}
             disabled={disabled}
             placeholder="https://mcp.example.com/sse"
-            className={FIELD}
+            className={`${FIELD} font-mono text-[12px]`}
           />
         </label>
       </div>
 
       <fieldset>
-        <legend className="text-xs font-medium text-ink-muted">Authentication</legend>
+        <legend className="field-label">Authentication</legend>
         <div className="mt-1.5 flex flex-wrap gap-4">
           {(['none', 'bearer', 'api_key'] as AuthType[]).map((t) => (
             <label key={t} className="flex items-center gap-1.5 text-[13px] text-ink">
@@ -134,9 +138,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
 
       {authType !== 'none' && (
         <label className="block">
-          <span className="text-xs font-medium text-ink-muted">
-            {authType === 'bearer' ? 'Bearer token' : 'API key'}
-          </span>
+          <span className="field-label">{authType === 'bearer' ? 'Bearer token' : 'API key'}</span>
           <input
             type="password"
             value={authValue}
@@ -153,14 +155,15 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
       )}
 
       {error && (
-        <p className="rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+        <p className="rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
           {error}
         </p>
       )}
       {result && (
-        <p className="rounded-[10px] border border-emerald/30 bg-emerald-soft px-3 py-2 text-[12.5px] text-emerald">
-          Server added — {result.toolCount} tool{result.toolCount === 1 ? '' : 's'} discovered.
-          {result.lastError ? ` (warning: ${result.lastError})` : ''}
+        <p className="rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-[12.5px] text-emerald">
+          Server added. Cortex found <span className="tabular">{result.toolCount}</span> tool
+          {result.toolCount === 1 ? '' : 's'}.
+          {result.lastError ? ` It also reported: ${result.lastError}` : ''}
         </p>
       )}
 

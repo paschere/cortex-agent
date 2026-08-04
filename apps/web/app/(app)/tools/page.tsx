@@ -193,82 +193,66 @@ export default async function ToolsPage({
   const restrictedCount = tools.filter((t) => t.restrictedSomewhere).length;
   const needsConnectionCount = tools.filter((t) => t.missingProviders.length > 0).length;
 
+  /**
+   * The header of an inventory, not a row of dashboard tiles: one ruled block,
+   * counts in mono, each column naming what the organisation actually holds.
+   */
   const stats = [
-    {
-      label: 'Tools',
-      value: String(total),
-      sub: 'in the live registry',
-      icon: Wrench,
-      tone: 'primary' as const,
-    },
+    { label: 'Tools', value: total, sub: 'in the live registry', icon: Wrench, tone: 'text-ink' },
     {
       label: 'Families',
-      value: String(familyCount),
-      sub: 'systems Cortex can reach',
+      value: familyCount,
+      sub: 'systems Cortex reaches',
       icon: Layers,
-      tone: 'sky' as const,
+      tone: 'text-ink',
     },
     {
       label: 'Need approval',
-      value: String(approvalCount),
-      sub: 'a human confirms first',
+      value: approvalCount,
+      sub: 'a person confirms first',
       icon: ShieldAlert,
-      tone: 'amber' as const,
+      tone: approvalCount > 0 ? 'text-amber' : 'text-ink',
     },
     {
       label: 'Restricted',
-      value: String(restrictedCount),
-      sub: restrictedCount > 0 ? 'denied to at least one team' : 'no team restrictions',
+      value: restrictedCount,
+      sub: restrictedCount > 0 ? 'denied to at least one team' : 'no team blocks any tool',
       icon: Lock,
-      tone: restrictedCount > 0 ? ('rose' as const) : ('emerald' as const),
+      tone: restrictedCount > 0 ? 'text-rose' : 'text-emerald',
     },
     {
-      label: 'Need a connection',
-      value: String(needsConnectionCount),
-      sub: needsConnectionCount > 0 ? 'integration not connected' : 'everything is connected',
+      label: 'Not connected',
+      value: needsConnectionCount,
+      sub: needsConnectionCount > 0 ? 'waiting on an integration' : 'every integration is linked',
       icon: PlugZap,
-      tone: needsConnectionCount > 0 ? ('amber' as const) : ('emerald' as const),
+      tone: needsConnectionCount > 0 ? 'text-amber' : 'text-emerald',
     },
   ];
-
-  const TONE: Record<'primary' | 'emerald' | 'amber' | 'sky' | 'rose', string> = {
-    primary: 'bg-primary-soft text-primary',
-    emerald: 'bg-emerald-soft text-emerald',
-    amber: 'bg-amber-soft text-amber',
-    sky: 'bg-sky-soft text-sky',
-    rose: 'bg-rose-soft text-rose',
-  };
 
   return (
     <>
       <PageHeader
         title="Tools"
-        subtitle="Everything Cortex can actually do, grouped by the system it touches. Access is granted per team; risky actions ask a human first."
+        subtitle="What this organisation has enabled Cortex to do, grouped by the system it touches. Access is granted per team; risky actions ask a person first."
         icon={<Wrench className="h-5 w-5" />}
       />
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        {stats.map((s) => (
-          <Panel key={s.label} className="flex items-center gap-3 p-3.5">
-            <span
-              className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] ${TONE[s.tone]}`}
-            >
-              <s.icon className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-[15px] font-extrabold leading-tight text-ink">
-                {s.value}
+      {/* Hairlines come from the gap showing the border colour through, so the
+          rules stay correct at every breakpoint the grid reflows to. */}
+      <Panel className="mb-5 overflow-hidden bg-border">
+        <div className="grid grid-cols-2 gap-px sm:grid-cols-3 lg:grid-cols-5">
+          {stats.map((s) => (
+            <div key={s.label} className="bg-surface p-4">
+              <div className="flex items-center gap-1.5">
+                <s.icon className={`h-3.5 w-3.5 ${s.tone}`} />
+                <span className="field-label">{s.label}</span>
               </div>
-              <div className="truncate text-[10.5px] text-ink-faint" title={s.label}>
-                {s.label}
-              </div>
-              <div className="truncate text-[10.5px] text-ink-faint" title={s.sub}>
-                {s.sub}
-              </div>
+              <div className={`stat-num mt-1.5 text-[26px] leading-none ${s.tone}`}>{s.value}</div>
+              <div className="mt-1.5 text-[11px] leading-snug text-ink-faint">{s.sub}</div>
             </div>
-          </Panel>
-        ))}
-      </div>
+          ))}
+        </div>
+      </Panel>
 
       <ToolsCatalog
         tools={tools}

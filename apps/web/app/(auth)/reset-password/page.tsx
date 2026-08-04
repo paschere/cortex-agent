@@ -1,9 +1,18 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { authClient } from '@/lib/auth-client';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { authClient } from '@/lib/auth-client';
+import { Suspense, useState } from 'react';
+import {
+  AuthBody,
+  AuthDocument,
+  AuthError,
+  AuthField,
+  AuthMasthead,
+  AuthTitle,
+} from '../_components/AuthDocument';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -16,7 +25,7 @@ function ResetPasswordForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!token) {
-      setErr('Missing or invalid reset token — request a new link.');
+      setErr('This link carries no reset token. Request a new one from Forgot password.');
       return;
     }
     setLoading(true);
@@ -24,45 +33,46 @@ function ResetPasswordForm() {
     const { error } = await authClient.resetPassword({ newPassword: password, token });
     setLoading(false);
     if (error) {
-      setErr(error.message ?? 'Reset failed — the link may have expired.');
+      setErr(
+        error.message ?? 'This link no longer works. Request a new one from Forgot password.',
+      );
       return;
     }
     router.push('/login');
   }
 
   return (
-    <div className="w-full max-w-sm rounded-card border border-border bg-surface p-8 shadow-card">
-      <h1 className="text-xl font-extrabold tracking-tight">Choose a new password</h1>
-      <form onSubmit={submit} className="mt-5 space-y-3">
-        <input
-          type="password"
-          required
-          minLength={10}
-          autoComplete="new-password"
-          placeholder="New password (10+ characters)"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-[10px] border border-border bg-transparent px-3 py-2.5 text-[13px] outline-none focus:border-primary"
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-pill bg-primary py-2.5 font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
-        >
-          {loading ? 'Saving…' : 'Set new password'}
-        </button>
-      </form>
-      <p className="mt-4 text-center text-[11.5px] text-ink-faint">
-        <Link href="/login" className="font-semibold text-primary hover:underline">
-          Back to sign in
-        </Link>
-      </p>
-      {err && (
-        <p className="mt-4 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
-          {err}
+    <AuthDocument>
+      <AuthMasthead />
+
+      <AuthBody>
+        <AuthTitle hint="Pick something you don't use anywhere else. It replaces the old password immediately.">
+          Choose a new password
+        </AuthTitle>
+        <form onSubmit={submit} className="space-y-3">
+          <AuthField
+            label="New password"
+            mono
+            type="password"
+            required
+            minLength={10}
+            autoComplete="new-password"
+            placeholder="10 characters or more"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <Button type="submit" disabled={loading} className="w-full py-2.5">
+            {loading ? 'Saving…' : 'Set new password'}
+          </Button>
+        </form>
+        <p className="mt-4 text-center text-[12px]">
+          <Link href="/login" className="font-semibold text-primary hover:underline">
+            Back to sign in
+          </Link>
         </p>
-      )}
-    </div>
+        {err && <AuthError>{err}</AuthError>}
+      </AuthBody>
+    </AuthDocument>
   );
 }
 

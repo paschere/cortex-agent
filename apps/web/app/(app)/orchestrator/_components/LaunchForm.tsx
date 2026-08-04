@@ -53,13 +53,8 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
   }
 
   return (
-    <div className="rounded-card border border-border bg-surface p-4 shadow-card md:p-5">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-[9px] bg-primary-soft text-primary">
-          <Sparkles className="h-4 w-4" />
-        </span>
-        <div className="text-[13px] font-semibold text-ink">What should the team work on?</div>
-      </div>
+    <div className="rounded-card border border-border bg-surface p-4 md:p-5">
+      <div className="field-label mb-2">Objective</div>
 
       <textarea
         value={objective}
@@ -76,18 +71,20 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
         maxLength={4000}
         disabled={busy}
         placeholder="Describe the outcome you want. Cortex breaks it into sub-agents, runs the independent ones in parallel, and writes you one report."
-        className="scroll-slim w-full resize-y rounded-[14px] border border-border bg-canvas px-3.5 py-3 text-[14px] leading-relaxed text-ink outline-none transition placeholder:text-ink-faint focus:border-primary/50 focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
+        className="scroll-slim w-full resize-y rounded-card border border-border bg-canvas px-3.5 py-3 text-[14px] leading-relaxed text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-border-strong disabled:opacity-60"
       />
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="field-label">Start from</span>
           {EXAMPLES.map((example, i) => (
             <button
               key={example}
               type="button"
               disabled={busy}
+              title={example}
               onClick={() => setObjective(example)}
-              className="rounded-pill border border-border bg-surface-2 px-2.5 py-1 text-[11.5px] font-medium text-ink-muted transition hover:border-border-strong hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50"
+              className="tabular rounded-card border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-50"
             >
               Example {i + 1}
             </button>
@@ -95,7 +92,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <span className="hidden text-[11px] text-ink-faint sm:inline">
+          <span className="tabular hidden text-[11px] text-ink-faint sm:inline">
             {objective.trim().length}/4000
           </span>
           <button
@@ -103,10 +100,9 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
             onClick={() => void launch()}
             disabled={busy || tooShort}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-pill px-4 py-2 text-[13px] font-semibold transition-colors',
-              'bg-primary text-white shadow-pop hover:bg-primary-strong',
-              'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15',
-              'disabled:opacity-50',
+              'inline-flex items-center gap-1.5 rounded-card px-4 py-2 text-[13px] font-semibold transition-colors',
+              'bg-primary text-white hover:bg-primary-strong',
+              'disabled:cursor-not-allowed disabled:opacity-45',
             )}
           >
             {busy ? (
@@ -124,9 +120,11 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
       </div>
 
       {error && (
-        <p className="mt-3 flex items-start gap-2 rounded-[12px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+        <p className="mt-3 flex items-start gap-2 rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          {error}
+          <span>
+            {error} Check the objective and run it again — nothing was started.
+          </span>
         </p>
       )}
     </div>

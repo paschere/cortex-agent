@@ -8,7 +8,7 @@ import { EditRoutineDialog } from './EditRoutineDialog';
 import type { ScheduledJob } from './types';
 
 const GHOST =
-  'inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-surface px-2.5 py-1.5 text-[12px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50';
+  'inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50';
 
 /**
  * The routine detail header's action row — the same four verbs the card offers
@@ -76,7 +76,7 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
               ? 'Run this routine now'
               : `Only active routines can be run (this one is ${job.status})`
           }
-          className="inline-flex items-center gap-1.5 rounded-[10px] bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-card bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
         >
           {running ? (
             <>
@@ -134,8 +134,8 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
       </div>
 
       {error && (
-        <p className="rounded-[10px] border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
-          {error}
+        <p className="rounded-card border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
+          {error} Nothing changed — try again.
         </p>
       )}
 

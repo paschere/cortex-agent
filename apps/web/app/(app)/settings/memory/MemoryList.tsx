@@ -150,7 +150,9 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
         <Panel>
           <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
             <Eyebrow>Waiting on you</Eyebrow>
-            <span className="text-[12px] text-ink-faint">{suggested.length} to decide</span>
+            <span className="text-[12px] text-ink-faint">
+              <span className="tabular">{suggested.length}</span> to decide
+            </span>
           </div>
           <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
             Cortex noticed these while you were working. Nothing here is in use yet — it only starts
@@ -191,7 +193,7 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
       <Panel>
         <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
           <Eyebrow>In every conversation</Eyebrow>
-          <span className="text-[12px] text-ink-faint">
+          <span className="tabular text-[12px] text-ink-faint">
             {active.length} of {MEMORY_LIMIT_VIEW}
           </span>
         </div>
@@ -202,10 +204,17 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
         {active.length === 0 ? (
           <div className="border-t border-border px-5 py-10 text-center">
             <Brain className="mx-auto h-6 w-6 text-ink-faint" />
-            <p className="mt-3 text-[13px] text-ink-muted">
-              Nothing yet. Tell Cortex &ldquo;remember that…&rdquo; in a conversation, or wait — it
-              will start suggesting things once it has worked with you for a few days.
+            <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-ink-muted">
+              Cortex is not carrying anything yet. Say &ldquo;remember that…&rdquo; in a
+              conversation, or leave it — it starts suggesting things once it has worked with you
+              for a few days.
             </p>
+            <Link href="/chat" className="mt-4 inline-block">
+              <Button variant="outline">
+                <MessageSquare className="h-3.5 w-3.5" />
+                Start a conversation
+              </Button>
+            </Link>
           </div>
         ) : (
           <div className="border-t border-border">
@@ -248,7 +257,8 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
             <Eyebrow>No longer in use</Eyebrow>
           </div>
           <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
-            You put these aside, or they dropped out when you hit {MEMORY_LIMIT_VIEW}. Cortex does
+            You put these aside, or they dropped out when you hit{' '}
+            <span className="tabular">{MEMORY_LIMIT_VIEW}</span>. Cortex does
             not use them — nothing is deleted behind your back.
           </p>
           <div className="border-t border-border">

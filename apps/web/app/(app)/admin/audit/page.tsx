@@ -32,17 +32,17 @@ function EmptyState({ filters }: { filters: AuditFilters }) {
     <div className="px-4 py-12 text-center">
       <ScrollText className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
       <p className="text-[13px] font-semibold text-ink">
-        {unfiltered ? 'Nothing has been recorded yet' : 'No events match these filters'}
+        {unfiltered ? 'Nothing has been recorded yet' : 'No event matches these filters'}
       </p>
-      <p className="mt-1 text-[12px] text-ink-faint">
+      <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
         {unfiltered
-          ? 'Every tool call, chat turn and scheduled run will show up here as it happens.'
-          : 'Try widening the date range or clearing a chip.'}
+          ? 'Every tool call, chat turn and scheduled run lands here as it happens, with who asked for it and what it returned.'
+          : 'Widen the range or drop a filter to see more of the record.'}
       </p>
       {!unfiltered && (
         <Link
           href="/admin/audit?range=all"
-          className="mt-3 inline-block rounded-pill bg-surface-2 px-3 py-1.5 text-[11.5px] font-semibold text-ink-muted hover:text-ink"
+          className="mt-4 inline-block rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
         >
           Clear all filters
         </Link>
@@ -97,7 +97,7 @@ export default async function AuditPage({
         actions={
           <a
             href={exportHref}
-            className="inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted shadow-card hover:text-ink"
+            className="inline-flex items-center gap-2 rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
           >
             <Download className="h-4 w-4" />
             Export CSV
@@ -132,12 +132,26 @@ export default async function AuditPage({
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-faint">
         <span>
-          Showing {rows.length}
-          {typeof total === 'number' && total > rows.length ? ` of ${total.toLocaleString()}` : ''}{' '}
+          Showing <span className="tabular">{rows.length}</span>
+          {typeof total === 'number' && total > rows.length ? (
+            <>
+              {' '}
+              of <span className="tabular">{total.toLocaleString()}</span>
+            </>
+          ) : (
+            ''
+          )}{' '}
           event{rows.length === 1 ? '' : 's'} · {describeAuditFilters(filters)}
-          {riskyCount > 0 ? ` · ${riskyCount} need a look` : ''}
+          {riskyCount > 0 ? (
+            <>
+              {' '}
+              · <span className="tabular text-amber">{riskyCount}</span> need a look
+            </>
+          ) : (
+            ''
+          )}
         </span>
-        <span>Click any row for the full record.</span>
+        <span>Open any row for the full record.</span>
       </div>
     </>
   );

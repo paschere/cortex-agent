@@ -1,14 +1,24 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { ShieldCheck, Workflow, BrainCircuit, Zap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { FileCheck2, Repeat2, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import { useState } from 'react';
+import {
+  AuthBody,
+  AuthDivider,
+  AuthDocument,
+  AuthError,
+  AuthField,
+  AuthMasthead,
+  AuthTitle,
+} from '../_components/AuthDocument';
 
-const HIGHLIGHTS = [
-  { icon: BrainCircuit, text: 'Every system your company runs, in one brain' },
-  { icon: Workflow, text: 'Reusable playbooks and unattended routines' },
-  { icon: ShieldCheck, text: 'You approve every write — everything is audited' },
+const CLAIMS = [
+  { icon: FileCheck2, text: 'Cada respuesta dice de qué sistema salió y cuándo se leyó' },
+  { icon: Repeat2, text: 'Flujos reutilizables y rutinas que corren sin que estés encima' },
+  { icon: ShieldCheck, text: 'Tú apruebas cada escritura, y toda acción queda registrada' },
 ];
 
 export default function LoginPage() {
@@ -27,7 +37,11 @@ export default function LoginPage() {
     try {
       await authClient.signIn.social({ provider: 'google', callbackURL: nextUrl() });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Sign in failed');
+      setErr(
+        e instanceof Error
+          ? e.message
+          : 'No se pudo abrir el ingreso con Google. Inténtalo de nuevo o entra con tu correo y contraseña.',
+      );
       setLoading(null);
     }
   }
@@ -42,99 +56,87 @@ export default function LoginPage() {
       callbackURL: nextUrl(),
     });
     if (error) {
-      setErr(error.message ?? 'Sign in failed');
+      setErr(
+        error.message ??
+          'Ese correo y esa contraseña no coinciden con ninguna cuenta. Revísalos e inténtalo de nuevo.',
+      );
       setLoading(null);
     }
   }
 
   return (
-    <div className="w-full max-w-sm overflow-hidden rounded-card border border-border bg-surface shadow-card">
-      <div className="hero-mesh relative px-8 py-9 text-white">
-        <span className="grid h-14 w-14 place-items-center rounded-[16px] bg-white/15 backdrop-blur">
-          {/* App icon lives at /icon.png (Next metadata) — same mark as the tab. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon.png" alt="" className="h-9 w-9" />
-        </span>
-        <h1 className="mt-5 text-3xl font-extrabold tracking-tight">Cortex</h1>
-        <p className="mt-1 text-[13px] font-medium text-white/80">
-          The AI super-agent for your whole company. It sells, recruits, runs ops, and never sleeps.
-        </p>
-      </div>
+    <AuthDocument>
+      <AuthMasthead />
 
-      <div className="p-8">
-        <ul className="mb-6 space-y-2.5">
-          {HIGHLIGHTS.map((h) => (
-            <li key={h.text} className="flex items-start gap-2.5 text-[12.5px] leading-snug text-ink-muted">
-              <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-[7px] bg-primary-soft text-primary">
-                <h.icon className="h-3 w-3" />
-              </span>
-              {h.text}
-            </li>
-          ))}
-        </ul>
+      <AuthBody>
+        <AuthTitle hint="Cortex responde con los sistemas que tu empresa ya usa, y te muestra de dónde salió cada dato.">
+          Iniciar sesión
+        </AuthTitle>
 
         <form onSubmit={signInEmail} className="space-y-3">
-          <input
+          <AuthField
+            label="Correo"
+            mono
             type="email"
             required
             autoComplete="email"
-            placeholder="you@company.com"
+            placeholder="tu@empresa.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-[10px] border border-border bg-transparent px-3 py-2.5 text-[13px] outline-none focus:border-primary"
           />
-          <input
+          <AuthField
+            label="Contraseña"
+            mono
             type="password"
             required
             autoComplete="current-password"
-            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-[10px] border border-border bg-transparent px-3 py-2.5 text-[13px] outline-none focus:border-primary"
           />
-          <button
-            type="submit"
-            disabled={loading !== null}
-            className="w-full rounded-pill bg-primary py-2.5 font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
-          >
-            {loading === 'email' ? 'Signing in…' : 'Sign in'}
-          </button>
+          <Button type="submit" disabled={loading !== null} className="w-full py-2.5">
+            {loading === 'email' ? 'Iniciando sesión…' : 'Iniciar sesión'}
+          </Button>
         </form>
 
-        <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-faint">
-          <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
-        </div>
+        <AuthDivider />
 
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={signInGoogle}
           disabled={loading !== null}
-          className="flex w-full items-center justify-center gap-2 rounded-pill border border-border py-2.5 font-semibold text-ink transition-colors hover:bg-primary-soft disabled:opacity-50"
+          className="w-full py-2.5"
         >
-          {loading === 'google' ? (
-            'Redirecting…'
-          ) : (
-            <>
-              <Zap className="h-4 w-4" /> Continue with Google
-            </>
-          )}
-        </button>
+          {loading === 'google' ? 'Redirigiendo…' : 'Continuar con Google'}
+        </Button>
 
-        <div className="mt-4 flex items-center justify-between text-[11.5px] text-ink-faint">
-          <Link href="/forgot-password" className="hover:text-ink-muted">
-            Forgot password?
+        <div className="mt-4 flex items-center justify-between gap-3 text-[12px]">
+          <Link href="/forgot-password" className="text-ink-faint hover:text-ink-muted">
+            ¿Olvidaste tu contraseña?
           </Link>
           <Link href="/signup" className="font-semibold text-primary hover:underline">
-            Create an account
+            Crear una cuenta
           </Link>
         </div>
 
-        {err && (
-          <p className="mt-4 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
-            {err}
-          </p>
-        )}
-      </div>
-    </div>
+        {err && <AuthError>{err}</AuthError>}
+      </AuthBody>
+
+      {/* The double rule is the one on a customs form that opens a new section.
+          Used once, here, to separate the act of signing in from what signing
+          in gets you. */}
+      <div className="rule-double mx-6 sm:mx-8" />
+      <ul className="divide-y divide-border px-6 pb-4 sm:px-8">
+        {CLAIMS.map((c) => (
+          <li
+            key={c.text}
+            className="flex items-start gap-2.5 py-2.5 text-[12.5px] leading-snug text-ink-muted"
+          >
+            <c.icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+            {c.text}
+          </li>
+        ))}
+      </ul>
+    </AuthDocument>
   );
 }

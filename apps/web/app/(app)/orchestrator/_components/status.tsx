@@ -1,3 +1,4 @@
+import { type StatusTone, CHIP_BASE, CHIP_TONE, DOT_TONE } from '@/lib/status-chip';
 import type { RunStatus, TaskStatus } from '@/lib/orchestrator/types';
 import { clsx } from 'clsx';
 import { Ban, Circle, CircleCheckBig, CircleSlash, CircleX, Loader2, Sparkles } from 'lucide-react';
@@ -7,84 +8,61 @@ import { Ban, Circle, CircleCheckBig, CircleSlash, CircleX, Loader2, Sparkles } 
  *
  * Imported by both the server pages and the live console, so it stays free of
  * hooks and of server-only imports.
+ *
+ * Blue is the system at work, green a run that finished, red one that did not,
+ * grey a run nothing has been asserted about yet.
  */
 
-export const RUN_TONE: Record<RunStatus, { label: string; chip: string; dot: string }> = {
-  planning: { label: 'Planning', chip: 'bg-sky-soft text-sky', dot: 'bg-sky' },
-  running: { label: 'Running', chip: 'bg-primary-soft text-primary', dot: 'bg-primary' },
-  completed: { label: 'Completed', chip: 'bg-emerald-soft text-emerald', dot: 'bg-emerald' },
-  failed: { label: 'Failed', chip: 'bg-rose-soft text-rose', dot: 'bg-rose' },
-  cancelled: { label: 'Cancelled', chip: 'bg-surface-2 text-ink-faint', dot: 'bg-ink-faint' },
+export const RUN_TONE: Record<RunStatus, { label: string; tone: StatusTone }> = {
+  planning: { label: 'Planning', tone: 'primary' },
+  running: { label: 'Running', tone: 'primary' },
+  completed: { label: 'Completed', tone: 'emerald' },
+  failed: { label: 'Failed', tone: 'rose' },
+  cancelled: { label: 'Stopped', tone: 'neutral' },
 };
 
 export const TASK_TONE: Record<
   TaskStatus,
-  { label: string; chip: string; ring: string; icon: typeof Circle }
+  { label: string; tone: StatusTone; ring: string; icon: typeof Circle }
 > = {
-  pending: {
-    label: 'Waiting',
-    chip: 'bg-surface-2 text-ink-faint',
-    ring: 'border-border',
-    icon: Circle,
-  },
-  running: {
-    label: 'Running',
-    chip: 'bg-primary-soft text-primary',
-    ring: 'border-primary/50',
-    icon: Loader2,
-  },
-  completed: {
-    label: 'Done',
-    chip: 'bg-emerald-soft text-emerald',
-    ring: 'border-emerald/40',
-    icon: CircleCheckBig,
-  },
-  failed: {
-    label: 'Failed',
-    chip: 'bg-rose-soft text-rose',
-    ring: 'border-rose/40',
-    icon: CircleX,
-  },
-  skipped: {
-    label: 'Skipped',
-    chip: 'bg-surface-2 text-ink-faint',
-    ring: 'border-border',
-    icon: CircleSlash,
-  },
+  pending: { label: 'Waiting', tone: 'neutral', ring: 'border-border', icon: Circle },
+  running: { label: 'Running', tone: 'primary', ring: 'border-primary', icon: Loader2 },
+  completed: { label: 'Done', tone: 'emerald', ring: 'border-emerald/50', icon: CircleCheckBig },
+  failed: { label: 'Failed', tone: 'rose', ring: 'border-rose/50', icon: CircleX },
+  skipped: { label: 'Skipped', tone: 'neutral', ring: 'border-border', icon: CircleSlash },
 };
 
 export function RunStatusPill({ status, className }: { status: RunStatus; className?: string }) {
-  const tone = RUN_TONE[status];
+  const { label, tone } = RUN_TONE[status];
   const live = status === 'planning' || status === 'running';
   return (
-    <span
-      className={clsx(
-        'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11.5px] font-bold',
-        tone.chip,
-        className,
-      )}
-    >
+    <span className={clsx(CHIP_BASE, CHIP_TONE[tone], className)}>
       <span className="relative flex h-1.5 w-1.5">
         {live && (
           <span
             className={clsx(
               'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 motion-reduce:animate-none',
-              tone.dot,
+              DOT_TONE[tone],
             )}
           />
         )}
-        <span className={clsx('relative inline-flex h-1.5 w-1.5 rounded-full', tone.dot)} />
+        <span className={clsx('relative inline-flex h-1.5 w-1.5 rounded-full', DOT_TONE[tone])} />
       </span>
-      {tone.label}
+      {label}
     </span>
   );
 }
 
+/** The task's state as a squared mark, sized to sit beside its sequence number. */
 export function TaskStatusIcon({ status }: { status: TaskStatus }) {
-  const tone = TASK_TONE[status];
-  const Icon = tone.icon;
+  const { tone, icon: Icon } = TASK_TONE[status];
   return (
-    <span className={clsx('grid h-7 w-7 shrink-0 place-items-center rounded-[9px]', tone.chip)}>
+    <span
+      className={clsx(
+        'grid h-7 w-7 shrink-0 place-items-center rounded-sm border',
+        CHIP_TONE[tone],
+      )}
+    >
       <Icon
         className={clsx(
           'h-4 w-4',

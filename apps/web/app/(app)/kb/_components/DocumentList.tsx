@@ -6,6 +6,7 @@ import { AudioLines, FolderSearch, Loader2, Upload, Video } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { deleteDocument, moveDocument } from '../actions';
+import { Provenance } from '@/components/ui/provenance';
 import type { SpaceKind } from './types';
 
 interface Doc {
@@ -21,12 +22,53 @@ interface Doc {
   transcript_status?: string | null;
   transcript_error?: string | null;
   speakers?: string[] | null;
+  recorded_at?: string | null;
 }
 
 function formatDuration(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const rest = Math.round(seconds % 60);
   return `${minutes}:${String(rest).padStart(2, '0')}`;
+}
+
+/** Short, local date. The exact clock time belongs on the detail, not the row. */
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+/**
+ * What a document can honestly say about its own origin.
+ *
+ * Returns null when there is nothing to attest to — an upload's provenance is
+ * the filename the person chose, which the row already shows.
+ */
+function provenanceOf(d: Doc): { source: string; readAt?: string; detail?: string } | null {
+  if (d.media_kind === 'meeting') {
+    const parts = [
+      d.duration_seconds ? formatDuration(d.duration_seconds) : null,
+      d.speakers?.length ? `${d.speakers.length} speakers` : null,
+    ].filter(Boolean);
+    return {
+      source: 'Google Meet',
+      readAt: d.recorded_at ? shortDate(d.recorded_at) : undefined,
+      detail: parts.length ? parts.join(' · ') : undefined,
+    };
+  }
+  if (d.media_kind === 'audio' && d.duration_seconds) {
+    return {
+      source: d.source === 'recording' ? 'Recorded here' : 'Audio',
+      readAt: d.recorded_at ? shortDate(d.recorded_at) : undefined,
+      detail: `${formatDuration(d.duration_seconds)}${d.speakers?.length ? ` · ${d.speakers.length} speakers` : ''}`,
+    };
+  }
+  if (d.source === 'gdrive') {
+    return { source: 'Google Drive', readAt: shortDate(d.created_at), detail: 'synced' };
+  }
+  return null;
 }
 
 async function fetchDocs(spaceId: string): Promise<Doc[]> {
@@ -136,6 +178,7 @@ export function DocumentList({
         const isMeeting = d.media_kind === 'meeting';
         const status = statusLabel(d.status);
         const working = busy === d.id;
+        const provenance = provenanceOf(d);
         return (
           <li key={d.id} className="py-2.5">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -144,7 +187,7 @@ export function DocumentList({
                   <span className="truncate text-[13px] font-medium text-ink">{d.title}</span>
                   <span
                     className={clsx(
-                      'inline-flex shrink-0 items-center gap-1 rounded-pill px-2 py-0.5 text-[10.5px] font-semibold',
+                      'inline-flex shrink-0 items-center gap-1 rounded-card px-2 py-0.5 text-[10.5px] font-semibold',
                       isDrive
                         ? 'bg-sky-soft text-sky'
                         : isMeeting
@@ -203,6 +246,23 @@ export function DocumentList({
                     </>
                   )}
                 </div>
+
+                {/*
+                  The stamp earns its place only where the document really came
+                  from somewhere: a call that happened on a date, a folder that
+                  syncs. An upload has no provenance beyond the filename already
+                  shown, so it gets none — an empty stamp would make every real
+                  one mean less.
+                */}
+                {provenance && (
+                  <div className="mt-2">
+                    <Provenance
+                      source={provenance.source}
+                      readAt={provenance.readAt}
+                      detail={provenance.detail}
+                    />
+                  </div>
+                )}
               </div>
 
               {canWrite && (
@@ -212,7 +272,7 @@ export function DocumentList({
                       value=""
                       disabled={working}
                       onChange={(e) => move(d, e.target.value)}
-                      className="h-7 rounded-pill border border-border bg-surface px-2.5 text-[11.5px] font-medium text-ink-muted focus:border-border-strong focus:outline-none disabled:opacity-50"
+                      className="h-7 rounded-card border border-border bg-surface px-2.5 text-[11.5px] font-medium text-ink-muted focus:border-border-strong focus:outline-none disabled:opacity-50"
                       aria-label={`Move ${d.title} to another space`}
                     >
                       <option value="">Move to…</option>
@@ -228,7 +288,7 @@ export function DocumentList({
                     type="button"
                     disabled={working}
                     onClick={() => setConfirming(confirming === d.id ? null : d.id)}
-                    className="rounded-pill px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
+                    className="rounded-card px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
                   >
                     {working ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Remove'}
                   </button>
@@ -237,7 +297,7 @@ export function DocumentList({
             </div>
 
             {confirming === d.id && (
-              <div className="mt-2 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2.5">
+              <div className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2.5">
                 <p className="text-[12px] leading-relaxed text-ink">
                   Removing <b>{d.title}</b> deletes it and everything Cortex learned from it.
                   Answers that cited it will stop citing it. This cannot be undone.
@@ -246,14 +306,14 @@ export function DocumentList({
                   <button
                     type="button"
                     onClick={() => remove(d)}
-                    className="rounded-pill bg-rose px-3 py-1 text-[11.5px] font-semibold text-white transition-opacity hover:opacity-90"
+                    className="rounded-card bg-rose px-3 py-1 text-[11.5px] font-semibold text-white transition-opacity hover:opacity-90"
                   >
                     Remove it
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirming(null)}
-                    className="rounded-pill px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+                    className="rounded-card px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:bg-surface hover:text-ink"
                   >
                     Keep it
                   </button>
@@ -262,12 +322,12 @@ export function DocumentList({
             )}
 
             {errors[d.id] && (
-              <p className="mt-2 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+              <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
                 {errors[d.id]}
               </p>
             )}
             {notes[d.id] && !errors[d.id] && (
-              <p className="mt-2 rounded-[10px] border border-border bg-surface-2 px-3 py-2 text-[11.5px] text-ink-muted">
+              <p className="mt-2 rounded-card border border-border bg-surface-2 px-3 py-2 text-[11.5px] text-ink-muted">
                 {notes[d.id]}
               </p>
             )}

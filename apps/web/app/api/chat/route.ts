@@ -437,6 +437,11 @@ export async function POST(req: NextRequest) {
 
   return result.toDataStreamResponse({
     headers: { 'X-Conversation-Id': conversationId },
+    // Send the model's reasoning to the client. Opus 5 thinks before it writes,
+    // and on a turn that calls tools that thinking is the only account of why it
+    // chose them — without it the user watches a long silence and then a result,
+    // with no way to judge whether the route taken was sensible.
+    sendReasoning: true,
     // An error part on the data stream makes useChat drop the assistant message
     // it was building, so a hiccup the model itself recovered from wiped the
     // whole answer from the screen — the reply was in the database and only

@@ -74,9 +74,11 @@ export function ToolPicker({
               key={id}
               title={t?.description ?? 'Unknown tool — not in the live registry'}
               className={clsx(
-                'inline-flex items-center gap-1 rounded-pill px-2 py-0.5 font-mono text-[10.5px] font-semibold',
-                write ? 'bg-amber-soft text-amber' : 'bg-primary-soft text-primary',
-                !t && 'bg-rose-soft text-rose',
+                'inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-[10.5px] font-semibold',
+                write
+                  ? 'border-amber/40 bg-amber-soft text-amber'
+                  : 'border-primary/30 bg-primary-soft text-primary',
+                !t && 'border-rose/40 bg-rose-soft text-rose',
               )}
             >
               {write && <ShieldAlert className="h-3 w-3" />}
@@ -97,7 +99,7 @@ export function ToolPicker({
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-pill border border-dashed border-border px-2 py-0.5 text-[10.5px] font-semibold text-ink-faint transition-colors hover:border-primary hover:text-primary"
+            className="inline-flex items-center gap-1 rounded-sm border border-dashed border-border-strong px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-muted transition-colors hover:border-primary hover:text-primary"
           >
             <Plus className="h-3 w-3" />
             Tool
@@ -118,13 +120,13 @@ export function ToolPicker({
               </div>
               <div className="max-h-[280px] overflow-y-auto p-1.5">
                 {groups.length === 0 && (
-                  <p className="px-2 py-4 text-center text-[12px] text-ink-faint">No tools match.</p>
+                  <p className="px-2 py-4 text-center text-[12px] text-ink-muted">
+                    No tool matches that. Clear the box to see the whole registry.
+                  </p>
                 )}
                 {groups.map(([family, list]) => (
                   <div key={family} className="mb-1">
-                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                      {familyLabel(family)}
-                    </div>
+                    <div className="field-label px-2 py-1">{familyLabel(family)}</div>
                     {list.map((t) => {
                       const on = selected.includes(t.id);
                       return (
@@ -134,7 +136,7 @@ export function ToolPicker({
                           onClick={() => toggle(t.id)}
                           disabled={!on && atCapacity}
                           className={clsx(
-                            'flex w-full items-start gap-2 rounded-[10px] px-2 py-1.5 text-left transition-colors',
+                            'flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left transition-colors',
                             on ? 'bg-primary-soft' : 'hover:bg-surface-2',
                             !on && atCapacity && 'cursor-not-allowed opacity-40',
                           )}
@@ -173,7 +175,7 @@ export function ToolPicker({
                     <span className="h-2 w-2 rounded-full bg-amber" /> confirmation-gated
                   </span>
                 </span>
-                <span>{selected.length}/8</span>
+                <span className="tabular">{selected.length}/8</span>
               </div>
             </div>
           )}

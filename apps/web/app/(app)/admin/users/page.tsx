@@ -4,6 +4,7 @@ import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { revalidatePath } from 'next/cache';
 import { ChevronRight, Flag, Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
@@ -22,10 +23,17 @@ interface User {
   created_at: string;
 }
 
-const ROLE_PILL: Record<Role, string> = {
-  org_admin: 'bg-primary-soft text-primary-ink',
-  team_admin: 'bg-sky-soft text-sky',
-  member: 'bg-surface-2 text-ink-muted',
+/** Roles as a person would name them, not as the column stores them. */
+const ROLE_LABEL: Record<Role, string> = {
+  org_admin: 'Admin de la organización',
+  team_admin: 'Admin de equipo',
+  member: 'Miembro',
+};
+
+const ROLE_TAG: Record<Role, string> = {
+  org_admin: 'border-primary/30 bg-primary-soft text-primary-ink',
+  team_admin: 'border-sky/40 bg-sky-soft text-sky',
+  member: 'border-border bg-surface-2 text-ink-muted',
 };
 
 async function setUserRole(formData: FormData) {
@@ -55,26 +63,32 @@ export default async function UsersPage() {
   return (
     <>
       <PageHeader
-        title="Users"
-        subtitle={`${users.length} member${users.length === 1 ? '' : 's'} · ${activeCount} active in the last ${WINDOW_DAYS} days`}
+        title="Personas"
+        subtitle={`${users.length} en la organización · ${activeCount} con actividad en los últimos ${WINDOW_DAYS} días`}
         icon={<Users className="h-5 w-5" />}
       />
 
       <Panel className="overflow-hidden">
         {users.length === 0 ? (
-          <p className="px-4 py-8 text-center text-[13px] text-ink-faint">No users found.</p>
+          <div className="px-4 py-12 text-center">
+            <Users className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
+            <p className="text-[13px] font-semibold text-ink">Todavía no hay nadie registrado</p>
+            <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
+              Las personas aparecen aquí la primera vez que entran a Cortex con su cuenta de Google.
+            </p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">
-              <thead className="border-b border-border bg-surface-2/60">
-                <tr className="text-left text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
-                  <th className="px-4 py-2.5 font-semibold">Teammate</th>
-                  <th className="px-4 py-2.5 font-semibold">Role</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Tool calls · 7d</th>
-                  <th className="px-4 py-2.5 font-semibold">Last active</th>
-                  <th className="px-4 py-2.5 font-semibold">Flags</th>
-                  <th className="px-4 py-2.5 font-semibold">Joined</th>
-                  <th className="px-4 py-2.5 font-semibold">Role change</th>
+              <thead className="border-b border-border-strong bg-surface-2">
+                <tr className="text-left">
+                  <th className="field-label px-4 py-2.5">Persona</th>
+                  <th className="field-label px-4 py-2.5">Rol</th>
+                  <th className="field-label px-4 py-2.5 text-right">Llamadas · 7d</th>
+                  <th className="field-label px-4 py-2.5">Última actividad</th>
+                  <th className="field-label px-4 py-2.5">Marcas</th>
+                  <th className="field-label px-4 py-2.5">Ingresó</th>
+                  <th className="field-label px-4 py-2.5">Cambiar el rol</th>
                 </tr>
               </thead>
               <tbody>
@@ -92,7 +106,7 @@ export default async function UsersPage() {
                               {u.name || u.email}
                             </span>
                             {u.name && (
-                              <span className="block truncate text-[11px] text-ink-faint">
+                              <span className="tabular block truncate text-[11px] text-ink-faint">
                                 {u.email}
                               </span>
                             )}
@@ -103,50 +117,48 @@ export default async function UsersPage() {
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
                           className={clsx(
-                            'rounded-pill px-2 py-0.5 text-[10.5px] font-bold uppercase',
-                            ROLE_PILL[u.role],
+                            'rounded-card border px-2 py-0.5 text-[11px] font-semibold',
+                            ROLE_TAG[u.role],
                           )}
                         >
-                          {u.role.replace('_', ' ')}
+                          {ROLE_LABEL[u.role]}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
                         {a.calls7d > 0 ? (
-                          <span className="font-semibold text-ink">
+                          <span className="tabular font-semibold text-ink">
                             {a.calls7d.toLocaleString()}
                           </span>
                         ) : (
-                          <span className="text-ink-faint">—</span>
+                          <span className="tabular text-ink-faint">—</span>
                         )}
                       </td>
                       <td
-                        className="whitespace-nowrap px-4 py-3 text-ink-muted"
+                        className="tabular whitespace-nowrap px-4 py-3 text-ink-muted"
                         title={a.lastActive ? absoluteTime(a.lastActive) : undefined}
                       >
                         {a.lastActive ? (
                           relativeTime(a.lastActive)
                         ) : (
-                          <span className="text-ink-faint">
-                            Quiet for {WINDOW_DAYS}d+
-                          </span>
+                          <span className="text-ink-faint">Sin actividad hace {WINDOW_DAYS}d+</span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         {a.flagged30d > 0 ? (
                           <Link
                             href={`/admin/users/${u.id}#security`}
-                            className="inline-flex items-center gap-1 rounded-pill bg-rose-soft px-2 py-0.5 text-[10.5px] font-bold uppercase text-rose transition-opacity hover:opacity-80"
-                            title={`${a.flagged30d} security event${a.flagged30d === 1 ? '' : 's'} in the last ${WINDOW_DAYS} days`}
+                            className="inline-flex items-center gap-1 rounded-card border border-rose/40 bg-rose-soft px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-rose transition-opacity hover:opacity-80"
+                            title={`${a.flagged30d} evento${a.flagged30d === 1 ? '' : 's'} de seguridad en los últimos ${WINDOW_DAYS} días`}
                           >
                             <Flag className="h-3 w-3" />
-                            {a.flagged30d} flagged
+                            {a.flagged30d} marcados
                           </Link>
                         ) : (
-                          <span className="text-[11px] text-ink-faint">clear</span>
+                          <span className="text-[11px] text-ink-faint">sin marcas</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-faint">
-                        {new Date(u.created_at).toLocaleDateString()}
+                      <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-ink-faint">
+                        {new Date(u.created_at).toLocaleDateString('es-CO')}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <form action={setUserRole} className="flex items-center gap-2">
@@ -154,18 +166,16 @@ export default async function UsersPage() {
                           <select
                             name="role"
                             defaultValue={u.role}
-                            className="rounded-[8px] border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                            aria-label={`Rol de ${u.name || u.email}`}
+                            className="rounded-card border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-primary"
                           >
-                            <option value="member">member</option>
-                            <option value="team_admin">team_admin</option>
-                            <option value="org_admin">org_admin</option>
+                            <option value="member">{ROLE_LABEL.member}</option>
+                            <option value="team_admin">{ROLE_LABEL.team_admin}</option>
+                            <option value="org_admin">{ROLE_LABEL.org_admin}</option>
                           </select>
-                          <button
-                            type="submit"
-                            className="rounded-pill bg-primary px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-primary-strong"
-                          >
-                            Save
-                          </button>
+                          <Button type="submit" variant="outline">
+                            Guardar
+                          </Button>
                         </form>
                       </td>
                     </tr>
@@ -177,15 +187,16 @@ export default async function UsersPage() {
         )}
       </Panel>
 
-      <p className="mt-2 text-[11px] text-ink-faint">
-        Activity is read from the audit log over the last {WINDOW_DAYS} days
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+        La actividad sale de la auditoría de los últimos <span className="tabular">{WINDOW_DAYS}</span>{' '}
+        días
         {activity.capped
-          ? ` (capped at ${AUDIT_ROW_CAP.toLocaleString()} events — busy weeks show a floor, not the exact total)`
+          ? ` (con tope de ${AUDIT_ROW_CAP.toLocaleString()} eventos: en semanas cargadas verás un piso, no el total exacto)`
           : ''}
         {flaggedCount > 0
-          ? ` · ${flaggedCount} teammate${flaggedCount === 1 ? '' : 's'} with something flagged`
-          : ' · nothing flagged for anyone'}
-        . Open a teammate for their full profile.
+          ? ` · ${flaggedCount} ${flaggedCount === 1 ? 'persona tiene' : 'personas tienen'} algo marcado`
+          : ' · nadie tiene nada marcado'}
+        . Abre a una persona para ver su perfil completo.
       </p>
     </>
   );

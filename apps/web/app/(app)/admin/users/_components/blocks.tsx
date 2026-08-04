@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { clsx } from 'clsx';
-import { LegendDot } from '../../audit/_components/pills';
+import { LegendDot } from '../../audit/_components/tags';
 import type { DayPoint } from '../_lib/user-activity';
 
 /** Shared presentation bits for the user profile. Pure, no data access. */
@@ -16,16 +16,22 @@ const TONE_CHIP: Record<Tone, string> = {
   neutral: 'bg-surface-2 text-ink-faint',
 };
 
+/** Border to match each tone, so a chip reads as ruled rather than filled. */
+const TONE_BORDER: Record<Tone, string> = {
+  primary: 'border-primary/30',
+  emerald: 'border-emerald/30',
+  amber: 'border-amber/30',
+  sky: 'border-sky/30',
+  rose: 'border-rose/30',
+  neutral: 'border-border',
+};
+
 export function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-      {children}
-    </div>
-  );
+  return <div className="field-label">{children}</div>;
 }
 
 export function EmptyNote({ children }: { children: ReactNode }) {
-  return <p className="text-[12.5px] text-ink-faint">{children}</p>;
+  return <p className="max-w-lg text-[12.5px] leading-relaxed text-ink-muted">{children}</p>;
 }
 
 /** Compact KPI: tinted icon square + big number + caption. */
@@ -43,14 +49,14 @@ export function StatTile({
   tone?: Tone;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-card border border-border bg-surface p-3.5 shadow-card">
+    <div className="flex items-center gap-3 rounded-card border border-border bg-surface p-3.5">
       <span
-        className={clsx('grid h-9 w-9 shrink-0 place-items-center rounded-[10px]', TONE_CHIP[tone])}
+        className={clsx('grid h-9 w-9 shrink-0 place-items-center rounded-card', TONE_CHIP[tone])}
       >
         {icon}
       </span>
       <div className="min-w-0">
-        <div className="truncate text-[15px] font-extrabold leading-tight text-ink" title={value}>
+        <div className="stat-num truncate text-[17px] leading-tight text-ink" title={value}>
           {value}
         </div>
         <div className="truncate text-[10.5px] text-ink-faint" title={sub ?? label}>
@@ -75,8 +81,9 @@ export function Chip({
     <span
       title={title}
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11.5px] font-semibold',
+        'inline-flex items-center gap-1.5 rounded-card border px-2.5 py-1 text-[11.5px] font-semibold',
         TONE_CHIP[tone],
+        TONE_BORDER[tone],
       )}
     >
       {children}
@@ -94,8 +101,8 @@ export function DayBars({ days }: { days: DayPoint[] }) {
 
   if (total === 0) {
     return (
-      <div className="flex h-28 items-center justify-center rounded-card bg-surface-2 text-[12.5px] text-ink-faint">
-        No activity recorded in this window.
+      <div className="flex h-28 items-center justify-center rounded-card border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
+        Sin actividad registrada en esta ventana.
       </div>
     );
   }
@@ -111,9 +118,9 @@ export function DayBars({ days }: { days: DayPoint[] }) {
             <div
               key={d.day}
               className="flex-1"
-              title={`${d.day}: ${dayTotal} event${dayTotal === 1 ? '' : 's'}${d.error > 0 ? ` (${d.error} error${d.error === 1 ? '' : 's'})` : ''}`}
+              title={`${d.day}: ${dayTotal} evento${dayTotal === 1 ? '' : 's'}${d.error > 0 ? ` (${d.error} con error)` : ''}`}
             >
-              <div className="flex h-28 flex-col justify-end overflow-hidden rounded-t-[4px]">
+              <div className="flex h-28 flex-col justify-end overflow-hidden">
                 <div className="w-full bg-rose" style={{ height: `${errH}%` }} />
                 <div
                   className="w-full bg-primary"
@@ -124,9 +131,9 @@ export function DayBars({ days }: { days: DayPoint[] }) {
           );
         })}
       </div>
-      <div className="mt-1.5 flex justify-between text-[10px] text-ink-faint">
+      <div className="tabular mt-1.5 flex justify-between text-[10px] text-ink-faint">
         <span>{days[0]?.day}</span>
-        <span>{total.toLocaleString()} events</span>
+        <span>{total.toLocaleString()} eventos</span>
         <span>{days[days.length - 1]?.day}</span>
       </div>
     </>
@@ -145,9 +152,9 @@ export function StackedBar({
   return (
     <div>
       {total === 0 ? (
-        <div className="h-3 w-full rounded-pill bg-surface-2" />
+        <div className="h-3 w-full rounded-card border border-border bg-surface-2" />
       ) : (
-        <div className="flex h-3 w-full overflow-hidden rounded-pill bg-surface-2">
+        <div className="flex h-3 w-full overflow-hidden rounded-card border border-border bg-surface-2">
           {visible.map((s) => (
             <div
               key={s.key}
@@ -179,9 +186,9 @@ export function StackedBar({
 /** Horizontal count bar used by the "top tools" list. */
 export function CountBar({ value, max, tone }: { value: number; max: number; tone: string }) {
   return (
-    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+    <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
       <div
-        className={clsx('h-full rounded-full', tone)}
+        className={clsx('h-full', tone)}
         style={{ width: `${Math.max(3, Math.round((value / Math.max(1, max)) * 100))}%` }}
       />
     </div>

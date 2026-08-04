@@ -1,8 +1,10 @@
 import { CopyButton } from '@/components/connect/ConnectCortex';
 import { Panel } from '@/components/ui/panel';
+import { Field } from '@/components/ui/provenance';
 import { getMcpUrl } from '@/lib/mcp-url';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
+import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { clsx } from 'clsx';
 import {
@@ -12,13 +14,10 @@ import {
   BookOpen,
   MessagesSquare,
   Plug,
-  Radar,
   ScrollText,
   ShieldCheck,
   Sparkles,
   Workflow,
-  Wrench,
-  Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -104,45 +103,31 @@ export default async function DashboardPage() {
 
   return (
     <>
-      {/* Greeting hero */}
+      {/* Masthead: the day's figures, read as a form header. */}
       <Panel className="animate-rise mb-4 p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
-              <Zap className="h-6 w-6" />
-            </span>
-            <div>
-              <h1 className="text-[22px] font-extrabold tracking-tight text-ink">
-                Hi, {firstName}
-              </h1>
-              <p className="mt-0.5 text-[13px] text-ink-muted">
-                Here is what happened while you were away ⚡
-              </p>
-            </div>
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+          <div className="min-w-0">
+            <div className="field-label">Workspace</div>
+            <h1 className="mt-1 text-[22px] font-extrabold tracking-tight text-ink">
+              Hi, {firstName}
+            </h1>
+            <p className="mt-0.5 text-[13px] text-ink-muted">
+              Here is what moved while you were away.
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <StatChip
-              icon={<Wrench className="h-3.5 w-3.5" />}
-              value={toolCallsToday}
-              label="tool calls today"
-            />
-            <StatChip
-              icon={<Radar className="h-3.5 w-3.5" />}
-              value={newSignals}
-              label="new signals"
-              tone={newSignals > 0 ? 'amber' : 'default'}
-            />
-            <StatChip
-              icon={<BadgeCheck className="h-3.5 w-3.5" />}
-              value={pendingApprovals}
-              label="to approve"
-              tone={pendingApprovals > 0 ? 'amber' : 'default'}
-            />
-            <StatChip
-              icon={<AlarmClock className="h-3.5 w-3.5" />}
-              value={activeRoutines}
-              label="active routines"
-            />
+          <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
+            <Field label="Tool calls today">{toolCallsToday.toLocaleString()}</Field>
+            <Field label="New signals">
+              <span className={newSignals > 0 ? 'text-amber' : undefined}>
+                {newSignals.toLocaleString()}
+              </span>
+            </Field>
+            <Field label="To approve">
+              <span className={pendingApprovals > 0 ? 'text-amber' : undefined}>
+                {pendingApprovals.toLocaleString()}
+              </span>
+            </Field>
+            <Field label="Active routines">{activeRoutines.toLocaleString()}</Field>
           </div>
         </div>
       </Panel>
@@ -151,21 +136,27 @@ export default async function DashboardPage() {
       {needsYou > 0 && (
         <Link
           href="/approvals"
-          className="group mb-4 flex items-center gap-3 rounded-card border border-amber/40 bg-amber-soft px-4 py-3 shadow-card transition-colors hover:border-amber/70"
+          className="group mb-4 flex items-center gap-3 rounded-card border border-amber/50 bg-amber-soft px-4 py-3 transition-colors hover:border-amber"
         >
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-amber text-white">
-            <BadgeCheck className="h-4 w-4" />
-          </span>
+          <BadgeCheck className="h-4 w-4 shrink-0 text-amber" />
           <div className="min-w-0 flex-1 text-[13px]">
-            <span className="font-semibold text-ink">Cortex needs you</span>
+            <span className="font-semibold text-ink">Cortex is waiting on you</span>
             <span className="text-ink-muted">
               {' '}
               —{' '}
-              {pendingApprovals > 0 &&
-                `${pendingApprovals} action${pendingApprovals === 1 ? '' : 's'} awaiting your OK`}
+              {pendingApprovals > 0 && (
+                <>
+                  <span className="tabular">{pendingApprovals}</span>
+                  {` action${pendingApprovals === 1 ? '' : 's'} to approve`}
+                </>
+              )}
               {pendingApprovals > 0 && newSignals > 0 && ' · '}
-              {newSignals > 0 &&
-                `${newSignals} growth signal${newSignals === 1 ? '' : 's'} to review`}
+              {newSignals > 0 && (
+                <>
+                  <span className="tabular">{newSignals}</span>
+                  {` growth signal${newSignals === 1 ? '' : 's'} to review`}
+                </>
+              )}
             </span>
           </div>
           <ArrowRight className="h-4 w-4 shrink-0 text-amber transition-transform group-hover:translate-x-0.5" />
@@ -176,18 +167,20 @@ export default async function DashboardPage() {
         {/* Latest routine runs */}
         <Panel className="p-4">
           <div className="mb-3 flex items-center justify-between">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Routines — latest runs
-            </div>
+            <div className="field-label">Routines — latest runs</div>
             <Link
               href="/schedules"
               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
             >
-              View routines <ArrowRight className="h-3 w-3" />
+              Open routines <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
           {runs.length === 0 ? (
-            <EmptyHint>No routine has run yet. Ask Cortex for one in the chat.</EmptyHint>
+            <Empty
+              title="No routine has run yet"
+              body="Routines are unattended jobs Cortex runs on a schedule. Ask for one in chat and its runs land here."
+              action={{ href: '/chat', label: 'Ask Cortex for a routine' }}
+            />
           ) : (
             <ul className="divide-y divide-border">
               {runs.map((r) => {
@@ -195,11 +188,11 @@ export default async function DashboardPage() {
                 return (
                   <li key={r.id} className="py-2.5 first:pt-0 last:pb-0">
                     <div className="flex items-center gap-2">
-                      <StatusPill status={r.status} />
+                      <RunStatusChip status={r.status} />
                       <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
-                        {relName(r.scheduled_jobs) ?? 'Rutina'}
+                        {relName(r.scheduled_jobs) ?? 'Routine'}
                       </span>
-                      <span className="shrink-0 text-xs text-ink-faint">
+                      <span className="tabular shrink-0 text-[11.5px] text-ink-faint">
                         {relativeTime(r.started_at)}
                       </span>
                     </div>
@@ -223,9 +216,7 @@ export default async function DashboardPage() {
         {/* Recent conversations */}
         <Panel className="p-4">
           <div className="mb-3 flex items-center justify-between">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Recent conversations
-            </div>
+            <div className="field-label">Recent conversations</div>
             <Link
               href="/chat"
               className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
@@ -234,16 +225,20 @@ export default async function DashboardPage() {
             </Link>
           </div>
           {conversations.length === 0 ? (
-            <EmptyHint>No conversations yet. Start one with Cortex.</EmptyHint>
+            <Empty
+              title="No conversations yet"
+              body="Everything you ask Cortex is kept here, with the tools it ran to answer."
+              action={{ href: '/chat', label: 'Start a chat' }}
+            />
           ) : (
             <ul className="divide-y divide-border">
               {conversations.map((c) => (
                 <li key={c.id}>
                   <Link
                     href={`/chat/${c.id}`}
-                    className="flex items-center gap-3 rounded-[10px] px-1.5 py-2.5 transition-colors hover:bg-surface-2"
+                    className="flex items-center gap-3 rounded-card px-1.5 py-2.5 transition-colors hover:bg-surface-2"
                   >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-ink-muted">
                       <MessagesSquare className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -254,7 +249,7 @@ export default async function DashboardPage() {
                         {relName(c.agents) ?? 'Cortex'}
                       </div>
                     </div>
-                    <span className="shrink-0 text-xs text-ink-faint">
+                    <span className="tabular shrink-0 text-[11.5px] text-ink-faint">
                       {relativeTime(c.updated_at)}
                     </span>
                   </Link>
@@ -267,9 +262,7 @@ export default async function DashboardPage() {
 
       {/* Quick actions */}
       <div className="mt-4">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-          Quick actions
-        </div>
+        <div className="field-label mb-2">Quick actions</div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <QuickAction href="/chat" icon={<Sparkles className="h-4 w-4" />} label="New chat" />
           <QuickAction
@@ -296,7 +289,7 @@ export default async function DashboardPage() {
       <Panel className="mt-4 p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-primary-soft text-primary">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-primary">
               <Plug className="h-4 w-4" />
             </span>
             <div className="min-w-0">
@@ -312,7 +305,7 @@ export default async function DashboardPage() {
           </div>
           <Link
             href="/mcp-tokens"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3.5 py-2 text-[12.5px] font-bold text-white shadow-pop transition-colors hover:bg-primary-strong"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-card bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
           >
             Set up a client
             <ArrowRight className="h-3.5 w-3.5" />
@@ -320,9 +313,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mt-4">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-            Connector URL
-          </div>
+          <div className="field-label">Connector URL</div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5">
             <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[13px] font-semibold text-ink">
               {mcpUrl}
@@ -391,55 +382,36 @@ function TrustItem({
   );
 }
 
-function EmptyHint({ children }: { children: React.ReactNode }) {
-  return <p className="py-6 text-center text-[13px] text-ink-faint">{children}</p>;
-}
-
-function StatChip({
-  icon,
-  value,
-  label,
-  tone = 'default',
+/** An empty panel says what belongs there and offers the control that fills it. */
+function Empty({
+  title,
+  body,
+  action,
 }: {
-  icon: React.ReactNode;
-  value: number;
-  label: string;
-  tone?: 'default' | 'amber';
+  title: string;
+  body: string;
+  action: { href: string; label: string };
 }) {
   return (
-    <span
-      className={clsx(
-        'inline-flex items-center gap-1.5 rounded-pill border px-3 py-1.5 text-xs',
-        tone === 'amber'
-          ? 'border-amber/40 bg-amber-soft text-amber'
-          : 'border-border bg-surface-2 text-ink-muted',
-      )}
-    >
-      {icon}
-      <span className={clsx('stat-num text-[13px]', tone === 'amber' ? 'text-amber' : 'text-ink')}>
-        {value.toLocaleString()}
-      </span>
-      {label}
-    </span>
+    <div className="px-2 py-6 text-center">
+      <p className="text-[13px] font-semibold text-ink">{title}</p>
+      <p className="mx-auto mt-1 max-w-xs text-[12px] leading-relaxed text-ink-muted">{body}</p>
+      <Link
+        href={action.href}
+        className="mt-3 inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-3 py-1.5 text-[12px] font-semibold text-ink transition-colors hover:bg-surface-2"
+      >
+        {action.label} <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
+    </div>
   );
 }
 
-function StatusPill({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    ok: 'bg-emerald-soft text-emerald',
-    error: 'bg-rose-soft text-rose',
-    running: 'bg-surface-2 text-ink-faint',
-  };
-  return (
-    <span
-      className={clsx(
-        'inline-flex shrink-0 items-center rounded-pill px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide',
-        styles[status] ?? 'bg-surface-2 text-ink-faint',
-      )}
-    >
-      {status}
-    </span>
-  );
+/** ok / error / running, in the shared status shape. */
+function RunStatusChip({ status }: { status: string }) {
+  const tone: StatusTone =
+    status === 'ok' ? 'emerald' : status === 'error' ? 'rose' : 'primary';
+  const label = status === 'ok' ? 'ok' : status === 'error' ? 'failed' : status;
+  return <span className={chipClass(tone)}>{label}</span>;
 }
 
 function QuickAction({
@@ -454,11 +426,9 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 py-3 shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-pop"
+      className="group flex items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 py-3 transition-colors hover:border-border-strong hover:bg-surface-2"
     >
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-primary-soft text-primary">
-        {icon}
-      </span>
+      <span className="shrink-0 text-primary">{icon}</span>
       <span className="truncate text-[13px] font-semibold text-ink">{label}</span>
       <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
     </Link>

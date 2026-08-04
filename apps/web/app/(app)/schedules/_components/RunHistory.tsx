@@ -1,17 +1,19 @@
 'use client';
 
+import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { Check, ChevronDown, Copy, History } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Field } from '@/components/ui/provenance';
 import { LiveRelative } from './LiveRelative';
 import { RunOutput } from './RunMarkdown';
 import { fmtLong, runDuration } from './format';
 import type { JobRun } from './types';
 
-const PILL: Record<JobRun['status'], string> = {
-  ok: 'bg-emerald-soft text-emerald',
-  error: 'bg-rose-soft text-rose',
-  running: 'bg-surface-2 text-ink-faint',
+const TONE: Record<JobRun['status'], StatusTone> = {
+  ok: 'emerald',
+  error: 'rose',
+  running: 'primary',
 };
 
 const LABEL: Record<JobRun['status'], string> = {
@@ -33,12 +35,12 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
 
   if (runs.length === 0) {
     return (
-      <div className="rounded-[12px] border border-dashed border-border px-4 py-8 text-center">
+      <div className="rounded-card border border-dashed border-border-strong px-4 py-8 text-center">
         <History className="mx-auto mb-2 h-6 w-6 text-ink-faint" />
         <p className="text-[13px] font-semibold text-ink">No runs yet</p>
-        <p className="mt-0.5 text-[12px] text-ink-faint">
-          Hit <span className="font-semibold text-ink-muted">Run now</span> to see what this routine
-          produces.
+        <p className="mt-0.5 text-[12px] text-ink-muted">
+          Hit <span className="font-semibold text-ink">Run now</span> above to see what this routine
+          produces without waiting for its schedule.
         </p>
       </div>
     );
@@ -53,30 +55,23 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
           <li
             key={run.id}
             id={`run-${run.id}`}
-            className="overflow-hidden rounded-[12px] border border-border bg-surface"
+            className="overflow-hidden rounded-card border border-border bg-surface"
           >
             <button
               type="button"
               onClick={() => setOpen((prev) => ({ ...prev, [run.id]: !expanded }))}
               aria-expanded={expanded}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <span
-                className={clsx(
-                  'rounded-pill px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
-                  PILL[run.status],
-                )}
-              >
-                {LABEL[run.status]}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[12px] text-ink-muted">
+              <span className={chipClass(TONE[run.status])}>{LABEL[run.status]}</span>
+              <span className="tabular min-w-0 flex-1 truncate text-[12px] text-ink-muted">
                 {fmtLong(run.started_at)}
                 <span className="text-ink-faint">
                   {' · '}
                   <LiveRelative ts={run.started_at} fallback="" />
                 </span>
               </span>
-              <span className="shrink-0 text-[11.5px] text-ink-faint" title="Run duration">
+              <span className="tabular shrink-0 text-[11.5px] text-ink-faint" title="Run duration">
                 {took ?? (run.status === 'running' ? 'in flight' : '—')}
               </span>
               <ChevronDown
@@ -88,44 +83,38 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
             </button>
 
             {expanded && (
-              <div className="border-t border-border bg-canvas/50 px-3 py-3">
+              <div className="border-t border-border bg-canvas px-3 py-3">
                 <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-faint">
-                    <span>
-                      <span className="font-semibold uppercase tracking-[0.14em]">Started</span>{' '}
-                      {fmtLong(run.started_at)}
-                    </span>
-                    <span>
-                      <span className="font-semibold uppercase tracking-[0.14em]">Finished</span>{' '}
+                  <div className="flex flex-wrap gap-x-5 gap-y-1">
+                    <Field label="Started">{fmtLong(run.started_at)}</Field>
+                    <Field label="Finished">
                       {run.finished_at ? fmtLong(run.finished_at) : 'still running'}
-                    </span>
-                    <span>
-                      <span className="font-semibold uppercase tracking-[0.14em]">Duration</span>{' '}
-                      {took ?? '—'}
-                    </span>
+                    </Field>
+                    <Field label="Duration">{took ?? '—'}</Field>
                   </div>
                   <CopyRaw text={run.error ?? run.output ?? ''} />
                 </div>
 
                 {run.error && (
                   <div className="mb-3">
-                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                      Error
-                    </div>
-                    <pre className="scroll-slim overflow-x-auto whitespace-pre-wrap rounded-[12px] border border-rose/30 bg-rose-soft px-3.5 py-2.5 text-[12.5px] leading-[1.6] text-rose">
+                    <div className="field-label mb-1.5">Error</div>
+                    <pre className="scroll-slim overflow-x-auto whitespace-pre-wrap rounded-card border border-rose/40 bg-rose-soft px-3.5 py-2.5 font-mono text-[12px] leading-[1.6] text-rose">
                       {run.error}
                     </pre>
                   </div>
                 )}
 
                 {run.output ? (
-                  <RunOutput text={run.output} className="rounded-[12px] bg-surface px-3.5 py-3" />
+                  <RunOutput
+                    text={run.output}
+                    className="rounded-card border border-border bg-surface px-3.5 py-3"
+                  />
                 ) : (
                   !run.error && (
-                    <p className="rounded-[12px] bg-surface px-3.5 py-3 text-[12.5px] text-ink-faint">
+                    <p className="rounded-card border border-border bg-surface px-3.5 py-3 text-[12.5px] text-ink-muted">
                       {run.status === 'running'
-                        ? 'This run is still in flight — results land here when it finishes.'
-                        : 'This run produced no output.'}
+                        ? 'Still in flight — the result lands here the moment it finishes.'
+                        : 'This run finished without writing anything.'}
                     </p>
                   )
                 )}
@@ -160,7 +149,7 @@ function CopyRaw({ text }: { text: string }) {
           setCopied(false);
         }
       }}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] border border-border bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
     >
       {copied ? (
         <>

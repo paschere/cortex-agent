@@ -19,7 +19,7 @@ const PROSE = clsx(
   'prose-strong:text-ink prose-strong:font-semibold',
   'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
   'prose-code:rounded prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-medium prose-code:text-primary-ink prose-code:before:content-[""] prose-code:after:content-[""]',
-  'prose-pre:rounded-[12px] prose-pre:border prose-pre:border-border',
+  'prose-pre:rounded-card prose-pre:border prose-pre:border-border',
   'prose-table:text-[13px] prose-th:text-ink prose-td:text-ink-muted',
 );
 
@@ -56,7 +56,7 @@ export function RunOutput({ text, className }: { text: string; className?: strin
         <button
           type="button"
           onClick={() => setFull(!full)}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-muted transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           {full ? (
             <>
@@ -65,7 +65,7 @@ export function RunOutput({ text, className }: { text: string; className?: strin
           ) : (
             <>
               <ChevronDown className="h-3.5 w-3.5" /> Show full output (
-              {Math.round(text.length / 1000)}k characters)
+              <span className="tabular">{Math.round(text.length / 1000)}k</span> characters)
             </>
           )}
         </button>

@@ -25,19 +25,17 @@ function ChipGroup({ label, chips }: { label: string; chips: Chip[] }) {
   if (chips.length <= 1) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="w-[62px] shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-        {label}
-      </span>
+      <span className="field-label w-[62px] shrink-0">{label}</span>
       {chips.map((c) => (
         <Link
           key={c.key}
           href={c.href}
           className={clsx(
-            'rounded-pill px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
+            'rounded-card border px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
             c.mono && 'font-mono',
             c.active
-              ? 'bg-primary text-white'
-              : 'bg-surface-2 text-ink-muted hover:text-ink',
+              ? 'border-primary bg-primary text-white'
+              : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
           )}
         >
           {c.label}
@@ -110,7 +108,7 @@ export function FilterBar({
   ];
 
   return (
-    <div className="mb-4 space-y-2 rounded-card border border-border bg-surface p-3 shadow-card">
+    <div className="mb-4 space-y-2 rounded-card border border-border bg-surface p-3">
       <ChipGroup label="Range" chips={rangeChips} />
       <ChipGroup label="Status" chips={statusChips} />
       <ChipGroup label="Surface" chips={surfaceChips} />
@@ -119,16 +117,14 @@ export function FilterBar({
       <ChipGroup label="Tool" chips={toolChips} />
       {filters.user && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="w-[62px] shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-            User
-          </span>
-          <span className="rounded-pill bg-primary-soft px-2.5 py-1 text-[11.5px] font-semibold text-primary-ink">
+          <span className="field-label w-[62px] shrink-0">User</span>
+          <span className="tabular rounded-card border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11.5px] font-semibold text-primary-ink">
             {userLabel ?? `${filters.user.slice(0, 8)}…`}
           </span>
           <Link
             href={auditHref(filters, { user: '' })}
             aria-label="Clear the user filter"
-            className="rounded-pill p-1 text-ink-faint hover:bg-surface-2 hover:text-ink"
+            className="rounded-card p-1 text-ink-faint hover:bg-surface-2 hover:text-ink"
           >
             <X className="h-3.5 w-3.5" />
           </Link>

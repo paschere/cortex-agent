@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { clsx } from 'clsx';
 import { RefreshCw, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -24,15 +25,15 @@ function authBadge(t: McpServer['auth_type']): string {
   return t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer' : 'No auth';
 }
 
-const SMALL_BUTTON =
-  'inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-50';
+/** A ruled tag on the row: squared, bordered, never a shadow. */
+const TAG = 'rounded-card border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]';
 
 export function McpServerList({ servers }: { servers: McpServer[] }) {
   if (servers.length === 0) {
     return (
-      <p className="text-[12.5px] text-ink-faint">
-        No external servers plugged in. Cortex runs on the integrations above — add one below only if
-        you have an MCP server of your own.
+      <p className="max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+        Nothing plugged in. Cortex runs on the integrations above — add a server below only if you
+        have an MCP server of your own.
       </p>
     );
   }
@@ -63,12 +64,12 @@ function McpServerRow({ server }: { server: McpServer }) {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        setError('Update failed');
+        setError('Could not save that change. Try again in a moment.');
         return;
       }
       router.refresh();
     } catch {
-      setError('Network error');
+      setError('Could not reach Cortex. Check your connection and try again.');
     } finally {
       setBusy(false);
     }
@@ -81,12 +82,12 @@ function McpServerRow({ server }: { server: McpServer }) {
     try {
       const res = await fetch(`/api/mcp-servers/${server.id}/refresh`, { method: 'POST' });
       if (!res.ok) {
-        setError('Refresh failed');
+        setError('Could not read this server\u2019s tools. Check that the URL is reachable.');
         return;
       }
       router.refresh();
     } catch {
-      setError('Network error');
+      setError('Could not reach Cortex. Check your connection and try again.');
     } finally {
       setBusy(false);
     }
@@ -100,12 +101,12 @@ function McpServerRow({ server }: { server: McpServer }) {
     try {
       const res = await fetch(`/api/mcp-servers/${server.id}`, { method: 'DELETE' });
       if (!res.ok && res.status !== 204) {
-        setError('Delete failed');
+        setError('Could not remove this server. Try again in a moment.');
         return;
       }
       router.refresh();
     } catch {
-      setError('Network error');
+      setError('Could not reach Cortex. Check your connection and try again.');
     } finally {
       setBusy(false);
     }
@@ -117,23 +118,18 @@ function McpServerRow({ server }: { server: McpServer }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[13.5px] font-bold text-ink">{server.name}</span>
-            <span className="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-faint">
+            <span className={clsx(TAG, 'border-border bg-surface text-ink-faint')}>
               {authBadge(server.auth_type)}
               {server.authConfigured ? ' · stored' : ''}
             </span>
-            <span className="rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-semibold text-primary">
+            <span className={clsx(TAG, 'border-primary/30 bg-primary-soft text-primary')}>
               {server.tool_count} tool{server.tool_count === 1 ? '' : 's'}
             </span>
             {!server.enabled && (
-              <span className="rounded-pill bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-faint">
-                Paused
-              </span>
+              <span className={clsx(TAG, 'border-amber/40 bg-amber-soft text-amber')}>Paused</span>
             )}
           </div>
-          <p
-            className="mt-0.5 max-w-md truncate font-mono text-[11px] text-ink-faint"
-            title={server.url}
-          >
+          <p className="tabular mt-1 max-w-md truncate text-[11px] text-ink-faint" title={server.url}>
             {server.url}
           </p>
         </div>
@@ -166,26 +162,28 @@ function McpServerRow({ server }: { server: McpServer }) {
       </div>
 
       {server.last_error && (
-        <p className="mt-2 rounded-[10px] border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
-          Last error: {server.last_error}
+        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
+          Cortex could not reach this server: {server.last_error}. Check the URL and the credential,
+          then refresh its tools.
         </p>
       )}
-      {error && <p className="mt-2 text-[11.5px] text-rose">{error}</p>}
+      {error && (
+        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
+          {error}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={refresh} disabled={busy} className={SMALL_BUTTON}>
+        <Button type="button" variant="outline" onClick={refresh} disabled={busy}>
           <RefreshCw className={clsx('h-3 w-3', busy && 'animate-spin')} />
           Refresh tools
-        </button>
-        <button
-          type="button"
-          onClick={remove}
-          disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-pill border border-rose/30 bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-rose transition-colors hover:bg-rose-soft disabled:opacity-50"
-        >
+        </Button>
+        {/* Removing a server takes its tools out of Cortex at once — it stops
+            something, so it takes the red. */}
+        <Button type="button" variant="danger" onClick={remove} disabled={busy}>
           <Trash2 className="h-3 w-3" />
           Remove
-        </button>
+        </Button>
         {server.tools.length > 0 && (
           <button
             type="button"
@@ -203,7 +201,7 @@ function McpServerRow({ server }: { server: McpServer }) {
         <ul className="mt-3 space-y-1 border-t border-border pt-2.5 text-[11.5px]">
           {server.tools.map((t) => (
             <li key={t.tool_name}>
-              <span className="font-mono text-ink">{t.tool_name}</span>
+              <span className="tabular text-ink">{t.tool_name}</span>
               {t.tool_description ? (
                 <span className="text-ink-faint"> — {t.tool_description}</span>
               ) : null}

@@ -32,10 +32,13 @@ export default async function AgentsPage() {
       />
 
       {agents.length === 0 ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-faint">
-          <Bot className="mx-auto mb-3 h-8 w-8 text-primary" />
-          <p className="mb-1 font-semibold text-ink">No agents configured</p>
-          <p className="mx-auto max-w-md">Agents will appear here once they are provisioned.</p>
+        <Panel className="p-10 text-center">
+          <Bot className="mx-auto mb-3 h-8 w-8 text-ink-faint" />
+          <p className="text-[13px] font-semibold text-ink">No agents are configured</p>
+          <p className="mx-auto mt-1 max-w-md text-[13px] leading-relaxed text-ink-muted">
+            An agent is a named model with a fixed tool list. Ops provisions them — ask an
+            administrator to add the first one.
+          </p>
         </Panel>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -43,40 +46,46 @@ export default async function AgentsPage() {
             const isCortex = a.slug === 'cortex';
             return (
               <Link key={a.id} href={`/agents/${a.slug}`} className="group block">
-                <Panel className="flex h-full flex-col gap-3 p-4 transition-all group-hover:-translate-y-0.5 group-hover:shadow-pop">
+                <Panel className="flex h-full flex-col gap-3 p-4 transition-colors group-hover:border-border-strong">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-[14px] font-bold text-ink">{a.name}</span>
                         {isCortex && (
-                          <span className="shrink-0 rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-bold uppercase text-primary-ink">
+                          <span className="shrink-0 rounded-card border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-primary-ink">
                             Super-agent
                           </span>
                         )}
                       </div>
                       <div className="truncate text-[11px] text-ink-faint">
-                        <span className="font-mono">{a.slug}</span> · {a.teams?.[0]?.name ?? 'No team'}
+                        <span className="tabular">{a.slug}</span> ·{' '}
+                        {a.teams?.[0]?.name ?? 'No team'}
                       </div>
                     </div>
-                    {isCortex ? (
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
+                    <span
+                      className={
+                        isCortex
+                          ? 'grid h-10 w-10 shrink-0 place-items-center rounded-card bg-primary text-white'
+                          : 'grid h-10 w-10 shrink-0 place-items-center rounded-card bg-primary-soft text-primary'
+                      }
+                    >
+                      {isCortex ? (
                         <Sparkles className="h-5 w-5" />
-                      </span>
-                    ) : (
-                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-primary-soft text-primary">
+                      ) : (
                         <Bot className="h-5 w-5" />
-                      </span>
-                    )}
+                      )}
+                    </span>
                   </div>
 
                   <div className="mt-auto flex items-center justify-between border-t border-border pt-2.5 text-[11.5px] text-ink-faint">
                     <span className="inline-flex items-center gap-1 truncate">
                       <Cpu className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate font-mono">{a.default_model}</span>
+                      <span className="tabular truncate">{a.default_model}</span>
                     </span>
                     <span className="inline-flex shrink-0 items-center gap-1">
                       <Wrench className="h-3.5 w-3.5" />
-                      {a.allowed_tool_ids.length} tool{a.allowed_tool_ids.length === 1 ? '' : 's'}
+                      <span className="tabular">{a.allowed_tool_ids.length}</span> tool
+                      {a.allowed_tool_ids.length === 1 ? '' : 's'}
                     </span>
                   </div>
                 </Panel>

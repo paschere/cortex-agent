@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { ArrowLeft, Archive, Hash, Play, UserCheck, Wrench, CheckCircle2, XCircle, CircleDashed } from 'lucide-react';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { chipClass } from '@/lib/status-chip';
 import { PipelineHeaderActions } from '../_components/PipelineHeaderActions';
 import { RunItPanel } from '../_components/RunItPanel';
 import type { ParamDef, StepDef } from '../_lib/playbook';
@@ -63,22 +64,24 @@ export default async function PipelineDetailPage({
       </div>
 
       {/* Header */}
-      <div className="mb-6 flex items-start gap-4">
-        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-[16px] bg-gradient-to-br from-primary to-primary-strong text-[26px] shadow-pop">
+      <div className="rule-double mb-6 flex flex-wrap items-start gap-4 pt-4">
+        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-[26px]">
           {(p.emoji as string) || '⚡'}
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-[18rem]">
           <h1 className="flex flex-wrap items-center gap-2 text-xl font-extrabold tracking-tight text-ink">
             {p.name as string}
             {archived && (
-              <span className="inline-flex items-center gap-1 rounded-pill bg-surface-2 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ink-faint">
+              <span className={`${chipClass('neutral')} gap-1`}>
                 <Archive className="h-3 w-3" /> Archived
               </span>
             )}
           </h1>
-          <p className="mt-0.5 text-[13px] text-ink-muted">{(p.description as string) || 'No description'}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-[11.5px] text-ink-faint">
-            <span className="font-mono">{p.slug as string}</span>
+          <p className="mt-0.5 text-[13px] text-ink-muted">
+            {(p.description as string) || 'No description yet — add one when you next edit it.'}
+          </p>
+          <div className="tabular mt-2 flex flex-wrap items-center gap-3 text-[11px] text-ink-faint">
+            <span>{p.slug as string}</span>
             <span className="inline-flex items-center gap-1">
               <Play className="h-3.5 w-3.5" /> {p.times_run as number} runs
             </span>
@@ -89,13 +92,11 @@ export default async function PipelineDetailPage({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        {/* Flow timeline — the deck's language: purple nodes = Cortex works, YOU = you decide */}
+        {/* The flow: numbered steps, amber nodes where a person has to decide. */}
         <Panel className="p-5">
-          <div className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-            The flow
-          </div>
+          <div className="field-label mb-4">The flow</div>
           {(p.intro as string) && (
-            <p className="mb-5 rounded-[12px] bg-surface-2 px-4 py-3 text-[13px] leading-relaxed text-ink-muted">
+            <p className="mb-5 rounded-card border border-border bg-surface-2 px-4 py-3 text-[13px] leading-relaxed text-ink-muted">
               {p.intro as string}
             </p>
           )}
@@ -122,19 +123,17 @@ export default async function PipelineDetailPage({
                     )}
                     {/* node */}
                     {s.checkpoint ? (
-                      <span className="z-10 grid h-9 w-9 shrink-0 place-items-center rounded-full border-2 border-amber bg-amber-soft">
+                      <span className="z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card border border-amber bg-amber-soft">
                         <UserCheck className="h-4 w-4 text-amber" />
                       </span>
                     ) : (
-                      <span className="z-10 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-primary-strong text-[13px] font-extrabold text-white shadow-pop">
-                        {i + 1}
+                      <span className="stat-num z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card bg-primary text-[13px] text-white">
+                        {String(i + 1).padStart(2, '0')}
                       </span>
                     )}
                     <div className="min-w-0 flex-1 pt-1">
                       {s.checkpoint && (
-                        <div className="mb-0.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-amber">
-                          Checkpoint · you decide
-                        </div>
+                        <div className="field-label mb-0.5 text-amber">Checkpoint · you decide</div>
                       )}
                       <div className="text-[13.5px] font-bold text-ink">{s.title}</div>
                       <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">{s.detail}</p>
@@ -143,7 +142,7 @@ export default async function PipelineDetailPage({
                           {(s.tools ?? []).map((t) => (
                             <span
                               key={t}
-                              className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 font-mono text-[10.5px] font-semibold text-primary"
+                              className="inline-flex items-center gap-1 rounded-sm border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-primary"
                             >
                               <Wrench className="h-3 w-3" />
                               {t}
@@ -166,13 +165,11 @@ export default async function PipelineDetailPage({
           {/* Params */}
           {pipelineParams.length > 0 && (
             <Panel className="p-4">
-              <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                Parameters
-              </div>
+              <div className="field-label mb-2.5">Parameters</div>
               <ul className="space-y-2">
                 {pipelineParams.map((param) => (
                   <li key={param.name} className="text-[12.5px]">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 font-mono text-[11px] font-semibold text-ink">
+                    <span className="inline-flex items-center gap-1 rounded-sm border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-ink">
                       <Hash className="h-3 w-3 text-primary" />
                       {param.name}
                       {param.required !== false && <span className="text-rose">*</span>}
@@ -188,11 +185,12 @@ export default async function PipelineDetailPage({
 
           {/* Run history */}
           <Panel className="p-4">
-            <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Recent runs
-            </div>
+            <div className="field-label mb-2.5">Recent runs</div>
             {runs.length === 0 ? (
-              <p className="text-[12px] text-ink-faint">Never run yet.</p>
+              <p className="text-[12px] leading-relaxed text-ink-muted">
+                Nobody has run this yet. Copy the prompt above and say it to Cortex — the run and
+                who started it show up here.
+              </p>
             ) : (
               <ul className="space-y-3">
                 {runs.map((r) => {
@@ -209,7 +207,7 @@ export default async function PipelineDetailPage({
                       <div className="min-w-0 flex-1">
                         <div className="text-[12px] font-semibold text-ink">
                           {u?.name || u?.email || 'Unknown'}{' '}
-                          <span className="font-normal text-ink-faint">
+                          <span className="tabular font-normal text-ink-faint">
                             · {relativeTime(r.started_at)}
                           </span>
                         </div>

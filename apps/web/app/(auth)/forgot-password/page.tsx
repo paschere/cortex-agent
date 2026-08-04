@@ -1,8 +1,17 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import Link from 'next/link';
+import { useState } from 'react';
+import {
+  AuthBody,
+  AuthDocument,
+  AuthError,
+  AuthField,
+  AuthMasthead,
+  AuthTitle,
+} from '../_components/AuthDocument';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -20,55 +29,60 @@ export default function ForgotPasswordPage() {
     });
     setLoading(false);
     if (error) {
-      setErr(error.message ?? 'Request failed');
+      setErr(error.message ?? 'The request did not go through. Check the address and try again.');
       return;
     }
     setSent(true);
   }
 
   return (
-    <div className="w-full max-w-sm rounded-card border border-border bg-surface p-8 shadow-card">
-      <h1 className="text-xl font-extrabold tracking-tight">Reset your password</h1>
-      {sent ? (
-        <p className="mt-2 text-[13px] leading-snug text-ink-muted">
-          If an account exists for <span className="font-semibold">{email}</span>, a reset link is on
-          its way. The link is valid for 1 hour.
+    <AuthDocument>
+      <AuthMasthead />
+
+      <AuthBody>
+        {sent ? (
+          <AuthTitle
+            hint={
+              <>
+                If an account exists for <span className="font-mono text-ink">{email}</span>, a
+                reset link is on its way. It stops working after{' '}
+                <span className="tabular">1 hour</span>.
+              </>
+            }
+          >
+            Check your inbox
+          </AuthTitle>
+        ) : (
+          <>
+            <AuthTitle hint="Give us the address on the account and we'll send a link to choose a new password.">
+              Reset your password
+            </AuthTitle>
+            <form onSubmit={submit} className="space-y-3">
+              <AuthField
+                label="Email"
+                mono
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <Button type="submit" disabled={loading} className="w-full py-2.5">
+                {loading ? 'Sending…' : 'Send reset link'}
+              </Button>
+            </form>
+          </>
+        )}
+
+        <p className="mt-4 text-center text-[12px]">
+          <Link href="/login" className="font-semibold text-primary hover:underline">
+            Back to sign in
+          </Link>
         </p>
-      ) : (
-        <>
-          <p className="mt-2 text-[13px] leading-snug text-ink-muted">
-            Enter your email and we&apos;ll send you a link to choose a new password.
-          </p>
-          <form onSubmit={submit} className="mt-5 space-y-3">
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-[10px] border border-border bg-transparent px-3 py-2.5 text-[13px] outline-none focus:border-primary"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-pill bg-primary py-2.5 font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
-            >
-              {loading ? 'Sending…' : 'Send reset link'}
-            </button>
-          </form>
-        </>
-      )}
-      <p className="mt-4 text-center text-[11.5px] text-ink-faint">
-        <Link href="/login" className="font-semibold text-primary hover:underline">
-          Back to sign in
-        </Link>
-      </p>
-      {err && (
-        <p className="mt-4 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
-          {err}
-        </p>
-      )}
-    </div>
+
+        {err && <AuthError>{err}</AuthError>}
+      </AuthBody>
+    </AuthDocument>
   );
 }

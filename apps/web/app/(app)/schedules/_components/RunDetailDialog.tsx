@@ -1,7 +1,8 @@
 'use client';
 
+import { Provenance } from '@/components/ui/provenance';
+import { type StatusTone, chipClass } from '@/lib/status-chip';
 import * as Dialog from '@radix-ui/react-dialog';
-import { clsx } from 'clsx';
 import { Check, Copy, MessageSquare, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -9,10 +10,10 @@ import { RunOutput } from './RunMarkdown';
 import { fmtLong, relative, runDuration } from './format';
 import type { JobRun } from './types';
 
-const RUN_STATUS_STYLES: Record<JobRun['status'], string> = {
-  ok: 'bg-emerald-soft text-emerald',
-  error: 'bg-rose-soft text-rose',
-  running: 'bg-surface-2 text-ink-faint',
+const RUN_STATUS_TONE: Record<JobRun['status'], StatusTone> = {
+  ok: 'emerald',
+  error: 'rose',
+  running: 'primary',
 };
 
 const RUN_STATUS_LABEL: Record<JobRun['status'], string> = {
@@ -69,21 +70,25 @@ export function RunDetailDialog({
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div className="min-w-0">
               <Dialog.Title className="truncate text-sm font-bold text-ink">{jobName}</Dialog.Title>
-              <Dialog.Description className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-faint">
-                <span
-                  className={clsx(
-                    'rounded-pill px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
-                    RUN_STATUS_STYLES[run.status],
-                  )}
-                >
+              <Dialog.Description className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-faint">
+                <span className={chipClass(RUN_STATUS_TONE[run.status])}>
                   {RUN_STATUS_LABEL[run.status]}
                 </span>
                 <span>Started {fmtLong(run.started_at)}</span>
                 {when && <span>· {when}</span>}
               </Dialog.Description>
+              {/* The run is the system of record for this output: say when it
+                  ran and how it ended, right above what it produced. */}
+              <Provenance
+                className="mt-2"
+                source="Routine run"
+                readAt={fmtLong(run.started_at)}
+                detail={took ? `${RUN_STATUS_LABEL[run.status]} in ${took}` : RUN_STATUS_LABEL[run.status]}
+                tone={run.status === 'error' ? 'seal' : 'stamp'}
+              />
             </div>
             <Dialog.Close
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-card text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -102,25 +107,24 @@ export function RunDetailDialog({
           <div className="scroll-slim min-h-0 flex-1 overflow-auto px-5 py-4">
             {run.error && (
               <div className="mb-4">
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                  Error
-                </div>
-                <p className="whitespace-pre-wrap rounded-[12px] border border-rose/30 bg-rose-soft px-3.5 py-2.5 text-[13px] leading-[1.65] text-rose">
+                <div className="field-label mb-1.5">Error</div>
+                <p className="whitespace-pre-wrap rounded-card border border-rose/40 bg-rose-soft px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.65] text-rose">
                   {run.error}
                 </p>
               </div>
             )}
 
-            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Output
-            </div>
+            <div className="field-label mb-1.5">Output</div>
             {body ? (
-              <RunOutput text={body} className="rounded-[12px] bg-surface-2 px-3.5 py-3" />
+              <RunOutput
+                text={body}
+                className="rounded-card border border-border bg-surface-2 px-3.5 py-3"
+              />
             ) : (
-              <p className="rounded-[12px] bg-surface-2 px-3.5 py-3 text-[13px] text-ink-faint">
+              <p className="rounded-card border border-border bg-surface-2 px-3.5 py-3 text-[13px] text-ink-muted">
                 {run.status === 'running'
-                  ? 'This run is still in flight — results land here when it finishes.'
-                  : 'This run produced no output.'}
+                  ? 'Still in flight — the result lands here the moment it finishes.'
+                  : 'This run finished without writing anything.'}
               </p>
             )}
           </div>
@@ -129,7 +133,7 @@ export function RunDetailDialog({
             {conversationId ? (
               <Link
                 href={`/chat/${conversationId}`}
-                className="inline-flex items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-semibold text-primary transition hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="inline-flex items-center gap-1.5 rounded-card px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <MessageSquare className="h-3.5 w-3.5" /> Open results conversation
               </Link>
@@ -142,7 +146,7 @@ export function RunDetailDialog({
               type="button"
               onClick={copyOutput}
               disabled={!body && !run.error}
-              className="inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-muted transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
             >
               {copied ? (
                 <>
@@ -164,10 +168,8 @@ export function RunDetailDialog({
 function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-surface px-5 py-2.5">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-        {label}
-      </div>
-      <div className="mt-0.5 truncate text-[12px] font-semibold text-ink" title={value}>
+      <div className="field-label">{label}</div>
+      <div className="tabular mt-0.5 truncate text-[12px] font-medium text-ink" title={value}>
         {value}
       </div>
     </div>

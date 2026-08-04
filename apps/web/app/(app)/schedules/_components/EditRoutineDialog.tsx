@@ -185,7 +185,7 @@ export function EditRoutineDialog({
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[min(560px,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-card border border-border bg-surface shadow-pop outline-none">
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div className="flex items-center gap-2.5">
-              <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-primary-soft text-primary">
+              <span className="grid h-8 w-8 place-items-center rounded-card border border-primary/30 bg-primary-soft text-primary">
                 <SlidersHorizontal className="h-4 w-4" />
               </span>
               <div>
@@ -196,7 +196,7 @@ export function EditRoutineDialog({
               </div>
             </div>
             <Dialog.Close
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-card text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -210,7 +210,7 @@ export function EditRoutineDialog({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={120}
-                className="w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                className="w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
                 placeholder="Friday client report"
               />
             </Field>
@@ -218,9 +218,7 @@ export function EditRoutineDialog({
             {isCron ? (
               <div>
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                    Schedule
-                  </span>
+                  <span className="field-label">Schedule</span>
                   <button
                     type="button"
                     onClick={() => {
@@ -228,7 +226,7 @@ export function EditRoutineDialog({
                       else setDraft(parseCron(rawCron) ?? draft);
                       setAdvanced(!advanced);
                     }}
-                    className="rounded-pill px-2 py-0.5 text-[11px] font-semibold text-primary transition hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="rounded-card px-2 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     {advanced ? 'Use the picker' : 'Advanced'}
                   </button>
@@ -240,21 +238,21 @@ export function EditRoutineDialog({
                     onChange={(e) => setRawCron(e.target.value)}
                     spellCheck={false}
                     placeholder="0 9 * * 1-5"
-                    className="w-full rounded-[10px] border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                    className="w-full rounded-card border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
                   />
                 ) : (
                   <div className="space-y-2">
-                    <div className="grid grid-cols-3 gap-1 rounded-[12px] bg-surface-2 p-1">
+                    <div className="grid grid-cols-3 gap-1 rounded-card border border-border bg-surface-2 p-1">
                       {(['daily', 'weekly', 'monthly'] as const).map((f) => (
                         <button
                           key={f}
                           type="button"
                           onClick={() => setDraft({ ...draft, frequency: f })}
                           className={clsx(
-                            'rounded-[9px] px-2 py-1.5 text-[12px] font-semibold capitalize transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                            'rounded-sm px-2 py-1.5 text-[12px] font-semibold capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                             draft.frequency === f
-                              ? 'bg-surface text-ink shadow-card'
-                              : 'text-ink-faint hover:text-ink',
+                              ? 'border border-border-strong bg-surface text-ink'
+                              : 'border border-transparent text-ink-muted hover:text-ink',
                           )}
                         >
                           {f}
@@ -263,21 +261,21 @@ export function EditRoutineDialog({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <label className="flex min-w-[120px] flex-1 flex-col gap-1">
-                        <span className="text-[11px] text-ink-faint">Time</span>
+                        <span className="field-label">Time</span>
                         <input
                           type="time"
                           value={draft.time}
                           onChange={(e) => setDraft({ ...draft, time: e.target.value })}
-                          className="rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                          className="tabular rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
                         />
                       </label>
                       {draft.frequency === 'weekly' && (
                         <label className="flex min-w-[140px] flex-1 flex-col gap-1">
-                          <span className="text-[11px] text-ink-faint">Weekday</span>
+                          <span className="field-label">Weekday</span>
                           <select
                             value={draft.weekday}
                             onChange={(e) => setDraft({ ...draft, weekday: e.target.value })}
-                            className="rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                            className="rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
                           >
                             {DOW.map((d, i) => (
                               <option key={d} value={String(i)}>
@@ -289,11 +287,11 @@ export function EditRoutineDialog({
                       )}
                       {draft.frequency === 'monthly' && (
                         <label className="flex min-w-[140px] flex-1 flex-col gap-1">
-                          <span className="text-[11px] text-ink-faint">Day of month</span>
+                          <span className="field-label">Day of month</span>
                           <select
                             value={draft.monthDay}
                             onChange={(e) => setDraft({ ...draft, monthDay: e.target.value })}
-                            className="rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                            className="tabular rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
                           >
                             {Array.from({ length: 28 }, (_, i) => String(i + 1)).map((d) => (
                               <option key={d} value={d}>
@@ -307,14 +305,15 @@ export function EditRoutineDialog({
                   </div>
                 )}
 
-                <p className="mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-ink-faint">
+                <p className="tabular mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-ink-faint">
                   <AlarmClock className="h-3.5 w-3.5 text-primary" />
                   {humanizeCron(composedCron || null, timezone)} · {timezone}
                 </p>
               </div>
             ) : (
-              <div className="rounded-[12px] bg-surface-2 px-3 py-2.5 text-[12px] text-ink-faint">
-                This routine runs once and can&apos;t be retimed here — create a new one from chat.
+              <div className="rounded-card border border-border bg-surface-2 px-3 py-2.5 text-[12px] text-ink-muted">
+                This routine runs once, so it cannot be retimed here. Ask Cortex in chat for a new
+                one at the time you want.
               </div>
             )}
 
@@ -323,7 +322,7 @@ export function EditRoutineDialog({
                 id="routine-timezone"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                className="w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
               >
                 {tzOptions.map((tz) => (
                   <option key={tz} value={tz}>
@@ -334,26 +333,24 @@ export function EditRoutineDialog({
             </Field>
 
             <div>
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                Delivery
-              </div>
+              <div className="field-label mb-2">Delivery</div>
               <button
                 type="button"
                 onClick={() => setNotifyEmail(!notifyEmail)}
-                className="flex w-full items-center justify-between gap-3 rounded-[12px] border border-border bg-surface px-3 py-2.5 text-left transition hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="flex w-full items-center justify-between gap-3 rounded-card border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
                   <Mail className="h-4 w-4 text-ink-faint" /> Email the results
                 </span>
                 <span
                   className={clsx(
-                    'relative h-5 w-9 shrink-0 rounded-pill transition',
-                    notifyEmail ? 'bg-primary' : 'bg-surface-2',
+                    'relative h-5 w-9 shrink-0 rounded-sm border transition-colors',
+                    notifyEmail ? 'border-primary bg-primary' : 'border-border bg-surface-2',
                   )}
                 >
                   <span
                     className={clsx(
-                      'absolute top-0.5 h-4 w-4 rounded-pill bg-surface shadow-card transition-all',
+                      'absolute top-0.5 h-3.5 w-3.5 rounded-sm bg-surface transition-all',
                       notifyEmail ? 'left-[1.125rem]' : 'left-0.5',
                     )}
                   />
@@ -361,7 +358,7 @@ export function EditRoutineDialog({
               </button>
 
               <div className="mt-2">
-                <div className="mb-1.5 text-[11.5px] text-ink-faint">
+                <div className="field-label mb-1.5">
                   Recipients {recipients.length === 0 && '— empty means the owner only'}
                 </div>
                 {recipients.length > 0 && (
@@ -369,13 +366,13 @@ export function EditRoutineDialog({
                     {recipients.map((r) => (
                       <span
                         key={r}
-                        className="inline-flex items-center gap-1 rounded-pill bg-primary-soft py-0.5 pl-2.5 pr-1 text-[11.5px] font-semibold text-primary"
+                        className="inline-flex items-center gap-1 rounded-sm border border-primary/30 bg-primary-soft py-0.5 pl-2 pr-1 font-mono text-[11px] font-semibold text-primary"
                       >
                         {r}
                         <button
                           type="button"
                           onClick={() => setRecipients(recipients.filter((x) => x !== r))}
-                          className="grid h-4 w-4 place-items-center rounded-pill transition hover:bg-primary hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          className="grid h-4 w-4 place-items-center rounded-sm transition-colors hover:bg-primary hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           aria-label={`Remove ${r}`}
                         >
                           <X className="h-3 w-3" />
@@ -397,12 +394,12 @@ export function EditRoutineDialog({
                     onBlur={() => recipientDraft.trim() && addRecipient()}
                     type="email"
                     placeholder="teammate@example.com"
-                    className="min-w-0 flex-1 rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
+                    className="min-w-0 flex-1 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
                   />
                   <button
                     type="button"
                     onClick={() => addRecipient()}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-[10px] border border-border bg-surface px-2.5 text-[12px] font-semibold text-ink-muted transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-card border border-border-strong bg-surface px-2.5 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <Plus className="h-3.5 w-3.5" /> Add
                   </button>
@@ -411,21 +408,21 @@ export function EditRoutineDialog({
             </div>
 
             {error && (
-              <div className="rounded-[12px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+              <div className="rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
                 {error}
               </div>
             )}
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-            <Dialog.Close className="rounded-[10px] px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <Dialog.Close className="rounded-card px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               Cancel
             </Dialog.Close>
             <button
               type="button"
               onClick={save}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 rounded-[10px] bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-card bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {saving ? 'Saving…' : 'Save changes'}
@@ -450,7 +447,7 @@ function Field({
     <div className="block">
       <label
         htmlFor={htmlFor}
-        className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint"
+        className="field-label mb-1.5 block"
       >
         {label}
       </label>

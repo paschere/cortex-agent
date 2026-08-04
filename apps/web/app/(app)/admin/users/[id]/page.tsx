@@ -35,13 +35,13 @@ import { relativeTime } from '@/lib/relative-time';
 import { toolLabel } from '@/lib/tool-labels';
 import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
 import {
-  DecisionPill,
-  RiskPill,
+  DecisionTag,
+  RiskTag,
   SignalChip,
-  StatusPill,
-  SurfacePill,
+  StatusTag,
+  SurfaceTag,
   SURFACE_BAR,
-} from '../../audit/_components/pills';
+} from '../../audit/_components/tags';
 import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from '../../audit/_components/format';
 import {
   Chip,
@@ -650,13 +650,13 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
-                          <SurfacePill surface={e.surface} />
+                          <SurfaceTag surface={e.surface} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
-                          <RiskPill level={e.risk_level} />
+                          <RiskTag level={e.risk_level} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
-                          <DecisionPill decision={e.decision} />
+                          <DecisionTag decision={e.decision} />
                         </td>
                         <td className="max-w-[260px] px-4 py-2 text-ink-muted">
                           <span className="line-clamp-2">{e.reason}</span>
@@ -823,7 +823,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                             {relativeTime(c.updated_at)}
                           </span>
                         </span>
-                        <SurfacePill surface={c.surface} />
+                        <SurfaceTag surface={c.surface} />
                       </Link>
                     </li>
                   ))}
@@ -1002,16 +1002,16 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                           )}
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
-                          <SurfacePill surface={e.surface} />
+                          <SurfaceTag surface={e.surface} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
-                          <StatusPill status={e.status} />
+                          <StatusTag status={e.status} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-2">
                           {e.risk_level ? (
                             <span className="flex items-center gap-1">
-                              <RiskPill level={e.risk_level} />
-                              <DecisionPill decision={e.decision} />
+                              <RiskTag level={e.risk_level} />
+                              <DecisionTag decision={e.decision} />
                             </span>
                           ) : (
                             <span className="text-ink-faint">—</span>

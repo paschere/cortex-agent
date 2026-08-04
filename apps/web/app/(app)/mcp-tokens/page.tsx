@@ -3,13 +3,18 @@ import { DirectionPair } from '@/components/connect/DirectionPair';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { Field } from '@/components/ui/provenance';
 import { getMcpUrl } from '@/lib/mcp-url';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { clsx } from 'clsx';
 import { Cable, KeyRound, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { issueToken, revokeToken } from './actions';
 
 export const dynamic = 'force-dynamic';
+
+const FIELD =
+  'w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary';
 
 interface AgentRow {
   id: string;
@@ -34,6 +39,38 @@ function fmt(iso: string | null): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+
+/**
+ * A token is a document: in force, lapsed, or stamped void. The register shows
+ * which, always — an unlabelled row would leave the reader counting dates.
+ */
+type TokenState = 'active' | 'expired' | 'revoked';
+
+function stateOf(t: TokenRow): TokenState {
+  if (t.revoked_at) return 'revoked';
+  if (t.expires_at && new Date(t.expires_at) < new Date()) return 'expired';
+  return 'active';
+}
+
+const STATE: Record<TokenState, { label: string; className: string }> = {
+  active: { label: 'In force', className: 'border-emerald/40 bg-emerald-soft text-emerald' },
+  expired: { label: 'Expired', className: 'border-amber/40 bg-amber-soft text-amber' },
+  revoked: { label: 'Revoked', className: 'border-rose/40 bg-rose-soft text-rose' },
+};
+
+function StateTag({ state }: { state: TokenState }) {
+  const s = STATE[state];
+  return (
+    <span
+      className={clsx(
+        'shrink-0 rounded-card border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]',
+        s.className,
+      )}
+    >
+      {s.label}
+    </span>
+  );
 }
 
 export default async function ConnectClientPage({
@@ -77,7 +114,7 @@ export default async function ConnectClientPage({
         {/* Primary path: OAuth. No token involved. */}
         <Panel className="p-5">
           <div className="flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-primary-soft text-primary">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">
               <ShieldCheck className="h-4 w-4" />
             </span>
             <div className="min-w-0">
@@ -98,13 +135,11 @@ export default async function ConnectClientPage({
         {/* Fallback path: static bearer tokens. */}
         <Panel className="p-5">
           <div className="flex items-start gap-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px] bg-surface-2 text-ink-muted">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card bg-surface-2 text-ink-muted">
               <KeyRound className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-                Advanced
-              </div>
+              <div className="field-label">Advanced</div>
               <h2 className="mt-0.5 text-[15px] font-bold tracking-tight text-ink">
                 Personal access tokens
               </h2>
@@ -115,7 +150,8 @@ export default async function ConnectClientPage({
               </p>
               {liveTokens > 0 && (
                 <p className="mt-1 text-[11.5px] text-ink-faint">
-                  {liveTokens} active token{liveTokens === 1 ? '' : 's'} on your account.
+                  <span className="tabular text-ink-muted">{liveTokens}</span> token
+                  {liveTokens === 1 ? '' : 's'} in force on your account.
                 </p>
               )}
             </div>
@@ -128,7 +164,7 @@ export default async function ConnectClientPage({
                 <TriangleAlert className="h-4 w-4" />
                 Copy this token now — it will not be shown again.
               </p>
-              <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-amber/30 bg-surface px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2 rounded-card border border-amber/30 bg-surface px-3 py-2">
                 <code className="min-w-0 flex-1 break-all font-mono text-xs text-ink">
                   {justIssued}
                 </code>
@@ -145,95 +181,92 @@ export default async function ConnectClientPage({
             {/* Issue */}
             <form action={issueToken} className="space-y-3">
               <div>
-                <label
-                  htmlFor="token-name"
-                  className="mb-1 block text-xs font-medium text-ink-muted"
-                >
-                  Token name <span className="text-ink-faint">(e.g. &quot;Work laptop&quot;)</span>
+                <label htmlFor="token-name" className="field-label mb-1 block">
+                  Token name
                 </label>
                 <input
                   id="token-name"
                   name="name"
                   required
                   maxLength={60}
-                  placeholder="My scripting client"
-                  className="w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                  placeholder="Work laptop"
+                  className={FIELD}
                 />
               </div>
               <div>
-                <label
-                  htmlFor="agent-select"
-                  className="mb-1 block text-xs font-medium text-ink-muted"
-                >
-                  Agent <span className="text-ink-faint">(optional — narrows the tool list)</span>
+                <label htmlFor="agent-select" className="field-label mb-1 block">
+                  Agent
                 </label>
-                <select
-                  id="agent-select"
-                  name="agentId"
-                  className="w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
-                >
-                  <option value="">— any agent —</option>
+                <select id="agent-select" name="agentId" className={FIELD}>
+                  <option value="">Any agent</option>
                   {agents.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-[11.5px] text-ink-faint">
+                  Pick one to narrow the token to that agent&apos;s tools.
+                </p>
               </div>
               <Button type="submit">Generate token</Button>
             </form>
 
-            {/* List */}
+            {/* The register: one row per token, every date and id in mono. */}
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
-                Your tokens
-              </div>
+              <div className="field-label">Your tokens</div>
               {tokens.length === 0 ? (
-                <p className="mt-3 text-[13px] text-ink-faint">
-                  No tokens yet — and most people never need one.
+                <p className="mt-3 max-w-md text-[13px] leading-relaxed text-ink-muted">
+                  No tokens issued. Name one on the left and generate it — though most people
+                  connect over OAuth above and never need one.
                 </p>
               ) : (
-                <ul className="mt-1 divide-y divide-border text-[13px]">
-                  {tokens.map((t) => (
-                    <li key={t.id} className="flex items-start justify-between gap-4 py-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-ink">{t.name}</span>
-                          {t.revoked_at && (
-                            <span className="rounded-pill bg-rose-soft px-2 py-0.5 text-[10.5px] font-bold uppercase text-rose">
-                              Revoked
+                <ul className="mt-2 divide-y divide-border border-t border-border">
+                  {tokens.map((t) => {
+                    const state = stateOf(t);
+                    return (
+                      <li key={t.id} className="py-3.5">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="text-[13px] font-semibold text-ink">{t.name}</span>
+                            <StateTag state={state} />
+                            {/* Prefix only — the token itself is stored hashed. */}
+                            <span className="tabular text-[12px] text-ink-muted">
+                              {t.prefix}…
                             </span>
-                          )}
-                          {!t.revoked_at && t.expires_at && new Date(t.expires_at) < new Date() && (
-                            <span className="rounded-pill bg-amber-soft px-2 py-0.5 text-[10.5px] font-bold uppercase text-amber">
-                              Expired
-                            </span>
+                          </div>
+                          {state !== 'revoked' && (
+                            <form action={revokeToken} className="shrink-0">
+                              <input type="hidden" name="tokenId" value={t.id} />
+                              <Button
+                                type="submit"
+                                variant="danger"
+                                title="Kills this token immediately, everywhere it is used"
+                              >
+                                Revoke
+                              </Button>
+                            </form>
                           )}
                         </div>
-                        {/* Prefix only — the token itself is stored hashed. */}
-                        <div className="mt-0.5 font-mono text-xs text-ink-muted">{t.prefix}…</div>
-                        <div className="mt-1 space-x-3 text-xs text-ink-faint">
-                          <span>Agent: {t.agents?.name ?? 'any'}</span>
-                          <span>Last used: {fmt(t.last_used_at)}</span>
-                          <span>Expires: {fmt(t.expires_at)}</span>
-                          <span>Created: {fmt(t.created_at)}</span>
-                          {t.revoked_at && <span>Revoked: {fmt(t.revoked_at)}</span>}
+                        <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-4">
+                          <Field label="Agent">
+                            <span className="text-[13px]">{t.agents?.name ?? 'Any'}</span>
+                          </Field>
+                          <Field label="Last used">
+                            <span className="text-[13px]">{fmt(t.last_used_at)}</span>
+                          </Field>
+                          <Field label="Created">
+                            <span className="text-[13px]">{fmt(t.created_at)}</span>
+                          </Field>
+                          <Field label={t.revoked_at ? 'Revoked' : 'Expires'}>
+                            <span className="text-[13px]">
+                              {fmt(t.revoked_at ?? t.expires_at)}
+                            </span>
+                          </Field>
                         </div>
-                      </div>
-                      {!t.revoked_at && (
-                        <form action={revokeToken} className="shrink-0">
-                          <input type="hidden" name="tokenId" value={t.id} />
-                          <button
-                            type="submit"
-                            title="Kills this token immediately, everywhere it is used"
-                            className="rounded-pill border border-rose/30 px-3 py-1.5 text-xs font-semibold text-rose transition-colors hover:bg-rose-soft"
-                          >
-                            Revoke
-                          </button>
-                        </form>
-                      )}
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

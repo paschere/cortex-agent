@@ -1,5 +1,7 @@
 'use client';
 
+import { Provenance } from '@/components/ui/provenance';
+import { type StatusTone, DOT_TONE, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -21,27 +23,28 @@ import Link from 'next/link';
 import { fmt, humanizeCron, relative, runDuration, stripMarkdown, untilNext } from './format';
 import type { JobRun, JobStatus, ScheduledJob } from './types';
 
-const STATUS_STYLES: Record<JobStatus, string> = {
-  active: 'bg-emerald-soft text-emerald',
-  paused: 'bg-amber-soft text-amber',
-  completed: 'bg-surface-2 text-ink-faint',
-  cancelled: 'bg-rose-soft text-rose',
+/** A routine in force is green; paused wants attention; cancelled is a red stamp. */
+const STATUS_TONE: Record<JobStatus, StatusTone> = {
+  active: 'emerald',
+  paused: 'amber',
+  completed: 'neutral',
+  cancelled: 'rose',
 };
 
-const RUN_DOT: Record<JobRun['status'], string> = {
-  ok: 'bg-emerald',
-  error: 'bg-rose',
-  running: 'bg-ink-faint',
+const RUN_TONE: Record<JobRun['status'], StatusTone> = {
+  ok: 'emerald',
+  error: 'rose',
+  running: 'primary',
 };
 
-const RUN_PILL: Record<JobRun['status'], string> = {
-  ok: 'bg-emerald-soft text-emerald',
-  error: 'bg-rose-soft text-rose',
-  running: 'bg-surface-2 text-ink-faint',
+const RUN_LABEL: Record<JobRun['status'], string> = {
+  ok: 'succeeded',
+  error: 'failed',
+  running: 'running',
 };
 
 const ICON_BTN =
-  'rounded-[10px] p-1.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50';
+  'rounded-card p-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50';
 
 /** Two or more consecutive failures at the head of the history. */
 function isFailing(runs: JobRun[]): boolean {
@@ -84,7 +87,7 @@ export function RoutineCard({
   const preview = lastRun?.error ?? (lastRun?.output ? stripMarkdown(lastRun.output) : null);
 
   return (
-    <section className="group overflow-hidden rounded-card border border-border bg-surface shadow-card transition hover:border-border-strong">
+    <section className="group overflow-hidden rounded-card border border-border bg-surface transition-colors hover:border-border-strong">
       <div className="relative flex flex-wrap items-start gap-3 p-4">
         {/*
          * Card-wide link, same trick the pipelines gallery uses: an absolutely
@@ -98,10 +101,10 @@ export function RoutineCard({
         />
         <span
           className={clsx(
-            'grid h-10 w-10 shrink-0 place-items-center rounded-[12px]',
+            'grid h-10 w-10 shrink-0 place-items-center rounded-card border',
             job.status === 'active'
-              ? 'bg-primary-soft text-primary'
-              : 'bg-surface-2 text-ink-faint',
+              ? 'border-primary/30 bg-primary-soft text-primary'
+              : 'border-border bg-surface-2 text-ink-faint',
           )}
         >
           {job.kind === 'tool' ? (
@@ -116,33 +119,23 @@ export function RoutineCard({
             <span className="text-[13.5px] font-bold text-ink transition-colors group-hover:text-primary">
               {job.name}
             </span>
-            <span
-              className={clsx(
-                'rounded-pill px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide',
-                STATUS_STYLES[job.status],
-              )}
-            >
-              {job.status}
-            </span>
+            <span className={chipClass(STATUS_TONE[job.status])}>{job.status}</span>
             {job.isGlobal && (
               <span
-                className="inline-flex items-center gap-1 rounded-pill bg-primary-soft px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-primary"
+                className={chipClass('primary')}
                 title="Team routine — runs for the whole workspace"
               >
                 <Globe className="h-3 w-3" /> global
               </span>
             )}
             {failing && (
-              <span
-                className="inline-flex items-center gap-1 rounded-pill bg-rose-soft px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-rose"
-                title="The last runs failed in a row"
-              >
+              <span className={chipClass('rose')} title="The last runs failed in a row">
                 <TriangleAlert className="h-3 w-3" /> failing
               </span>
             )}
             {job.allowUnattendedWrites && (
               <span
-                className="inline-flex items-center gap-1 rounded-pill bg-amber-soft px-2 py-0.5 text-[10.5px] font-bold text-amber"
+                className={chipClass('amber')}
                 title="This job may execute write tools without a human confirming each one"
               >
                 <ShieldAlert className="h-3 w-3" /> unattended writes
@@ -158,7 +151,7 @@ export function RoutineCard({
             )}
           </h3>
 
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-faint">
+          <div className="tabular mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint">
             <span className="inline-flex items-center gap-1 font-semibold text-ink-muted">
               <AlarmClock className="h-3.5 w-3.5 text-primary" />
               {job.scheduleKind === 'once'
@@ -166,11 +159,11 @@ export function RoutineCard({
                 : humanizeCron(job.cron, job.timezone)}
             </span>
             {next && job.status === 'active' && (
-              <span className="rounded-pill bg-primary-soft px-2 py-px font-semibold text-primary">
+              <span className="rounded-sm border border-primary/30 bg-primary-soft px-1.5 font-semibold text-primary">
                 next {next}
               </span>
             )}
-            <span>last: {fmt(job.lastRunAt)}</span>
+            <span>last {fmt(job.lastRunAt)}</span>
 
             {/* Run strip — newest first, hoverable, click to jump to the run. */}
             {job.runs.length > 0 && (
@@ -188,12 +181,12 @@ export function RoutineCard({
                         onClick={() => onSelectRun(r)}
                         aria-label={label}
                         className={clsx(
-                          'h-2.5 w-2.5 rounded-full transition hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                          RUN_DOT[r.status],
+                          'h-2.5 w-2.5 rounded-full transition-transform hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none',
+                          DOT_TONE[RUN_TONE[r.status]],
                         )}
                       />
                       {/* Below the dot on purpose: the card clips overflow. */}
-                      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-[8px] bg-ink px-2 py-1 text-[10.5px] font-semibold text-surface shadow-pop group-hover/dot:block group-focus-within/dot:block">
+                      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-[10.5px] font-semibold text-surface shadow-pop group-hover/dot:block group-focus-within/dot:block">
                         {label}
                       </span>
                     </span>
@@ -209,31 +202,49 @@ export function RoutineCard({
               title={job.recipients.join(', ')}
             >
               <Mail className="h-3 w-3 shrink-0" />
-              <span className="truncate">Emails: {job.recipients.join(', ')}</span>
+              <span className="truncate">Emails {job.recipients.join(', ')}</span>
             </div>
           )}
 
-          {/* Last result, right on the collapsed card. */}
+          {/*
+           * The last run, stamped. This is real provenance — the routine ran at
+           * a stated moment and produced a stated outcome — so it gets the mark.
+           */}
           {lastRun ? (
-            preview ? (
-              <button
-                type="button"
-                onClick={() => onOpenRun(lastRun)}
-                title="Open the full result"
-                className="relative z-10 mt-2 block w-full rounded-[10px] bg-surface-2 px-3 py-2 text-left transition hover:bg-canvas focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <span
-                  className={clsx(
-                    'line-clamp-2 text-[12px] leading-relaxed',
-                    lastRun.error ? 'text-rose' : 'text-ink-muted',
-                  )}
+            <div className="mt-2">
+              <Provenance
+                source="Last run"
+                readAt={fmt(lastRun.started_at)}
+                detail={
+                  runDuration(lastRun.started_at, lastRun.finished_at)
+                    ? `${RUN_LABEL[lastRun.status]} in ${runDuration(lastRun.started_at, lastRun.finished_at)}`
+                    : RUN_LABEL[lastRun.status]
+                }
+                tone={lastRun.status === 'error' ? 'seal' : 'stamp'}
+              />
+              {preview && (
+                <button
+                  type="button"
+                  onClick={() => onOpenRun(lastRun)}
+                  title="Open the full result"
+                  className="relative z-10 mt-1.5 block w-full rounded-card border border-border bg-surface-2 px-3 py-2 text-left transition-colors hover:bg-canvas focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  {preview}
-                </span>
-              </button>
-            ) : null
+                  <span
+                    className={clsx(
+                      'line-clamp-2 text-[12px] leading-relaxed',
+                      lastRun.error ? 'text-rose' : 'text-ink-muted',
+                    )}
+                  >
+                    {preview}
+                  </span>
+                </button>
+              )}
+            </div>
           ) : (
-            <p className="mt-2 text-[11.5px] italic text-ink-faint">Never run — try Run now.</p>
+            <p className="mt-2 text-[11.5px] text-ink-muted">
+              Never run. Hit <span className="font-semibold text-ink">Run now</span> to see what it
+              produces without waiting for the schedule.
+            </p>
           )}
         </div>
 
@@ -242,7 +253,7 @@ export function RoutineCard({
             type="button"
             disabled={running || job.status !== 'active'}
             onClick={onRunNow}
-            className="inline-flex items-center gap-1.5 rounded-[10px] bg-primary px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-card bg-primary px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
             title={
               job.status === 'active'
                 ? 'Run this routine now'
@@ -330,25 +341,28 @@ export function RoutineCard({
       </div>
 
       {expanded && (
-        <div className="space-y-3 border-t border-border bg-canvas/50 px-4 py-3.5">
+        <div className="space-y-3 border-t border-border bg-canvas px-4 py-3.5">
           {(job.instruction ?? job.toolId) && (
             <div>
-              <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              <h3 className="field-label mb-1">
                 {job.kind === 'agent' ? 'Instruction' : 'Tool'}
               </h3>
-              <p className="whitespace-pre-wrap rounded-[10px] bg-surface-2 px-3 py-2 text-[12.5px] leading-relaxed text-ink-muted">
+              <p
+                className={clsx(
+                  'whitespace-pre-wrap rounded-card border border-border bg-surface px-3 py-2 text-[12.5px] leading-relaxed text-ink-muted',
+                  job.kind === 'tool' && 'font-mono',
+                )}
+              >
                 {job.instruction ?? job.toolId}
               </p>
             </div>
           )}
           <div>
-            <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-              Recent runs
-            </h3>
+            <h3 className="field-label mb-1.5">Recent runs</h3>
             {job.runs.length === 0 ? (
-              <p className="text-[12.5px] text-ink-faint">
-                Never run yet — hit <span className="font-semibold text-ink-muted">Run now</span> to
-                see what it produces.
+              <p className="text-[12.5px] text-ink-muted">
+                No run recorded yet. Hit <span className="font-semibold text-ink">Run now</span> and
+                the result lands here.
               </p>
             ) : (
               <ul className="space-y-1.5">
@@ -361,20 +375,15 @@ export function RoutineCard({
                         type="button"
                         onClick={() => onOpenRun(run)}
                         className={clsx(
-                          'block w-full rounded-[10px] border bg-surface px-3 py-2 text-left text-[12px] transition hover:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                          'block w-full rounded-card border bg-surface px-3 py-2 text-left text-[12px] transition-colors hover:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                           highlightRunId === run.id
                             ? 'border-primary ring-2 ring-primary-soft'
                             : 'border-border',
                         )}
                       >
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={clsx(
-                              'rounded-pill px-1.5 py-0.5 text-[10px] font-bold uppercase',
-                              RUN_PILL[run.status],
-                            )}
-                          >
-                            {run.status}
+                        <span className="tabular flex flex-wrap items-center gap-2 text-[11px]">
+                          <span className={chipClass(RUN_TONE[run.status])}>
+                            {RUN_LABEL[run.status]}
                           </span>
                           <span className="text-ink-faint">{fmt(run.started_at)}</span>
                           {when && <span className="text-ink-faint">· {when}</span>}

@@ -14,6 +14,7 @@ import {
   qualifiedToolLabel,
   toolActionLabel,
 } from '@/lib/tool-taxonomy';
+import { Button } from '@/components/ui/button';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -56,6 +57,7 @@ import {
   Workflow,
   Wrench,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, useTransition } from 'react';
 
@@ -141,16 +143,24 @@ const TONE_CHIP: Record<FamilyTone, string> = {
 };
 
 const RISK_CHIP: Record<RiskLevel, string> = {
-  low: 'bg-surface-2 text-ink-muted',
-  medium: 'bg-sky-soft text-sky',
-  high: 'bg-amber-soft text-amber',
-  critical: 'bg-rose-soft text-rose',
+  low: 'border-border bg-surface-2 text-ink-muted',
+  medium: 'border-sky/30 bg-sky-soft text-sky',
+  high: 'border-amber/30 bg-amber-soft text-amber',
+  critical: 'border-rose/30 bg-rose-soft text-rose',
 };
+
+const NEUTRAL_CHIP = 'border-border bg-surface-2 text-ink-muted';
+const OK_CHIP = 'border-emerald/30 bg-emerald-soft text-emerald';
+const WARN_CHIP = 'border-amber/30 bg-amber-soft text-amber';
+const BLOCK_CHIP = 'border-rose/30 bg-rose-soft text-rose';
 
 type RiskFilter = 'all' | RiskLevel;
 type ConnectionFilter = 'all' | 'needs-connection' | 'no-integration';
 
-/** Small on/off switch used for both family and tool rows. */
+/**
+ * Small on/off switch used for both family and tool rows. Squared: this is the
+ * box an administrator ticks on the permissions sheet, not a consumer slider.
+ */
 function Toggle({
   on,
   disabled,
@@ -172,14 +182,14 @@ function Toggle({
       disabled={disabled}
       onClick={onClick}
       className={clsx(
-        'relative h-5 w-9 shrink-0 rounded-pill border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        'relative h-5 w-9 shrink-0 rounded-card border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
         on ? 'border-emerald bg-emerald' : 'border-border bg-surface-2',
       )}
     >
       <span
         className={clsx(
-          'absolute left-0.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-surface shadow-card transition-transform',
-          on && 'translate-x-4',
+          'absolute left-0.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-card border transition-transform',
+          on ? 'translate-x-4 border-emerald bg-surface' : 'border-border bg-surface',
         )}
       />
     </button>
@@ -201,10 +211,10 @@ function FilterChip({
       onClick={onClick}
       aria-pressed={active}
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
+        'inline-flex items-center gap-1.5 rounded-card border px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
         active
-          ? 'bg-primary text-white'
-          : 'bg-surface-2 text-ink-muted hover:bg-primary-soft hover:text-primary',
+          ? 'border-primary bg-primary text-white'
+          : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
       )}
     >
       {children}
@@ -212,6 +222,7 @@ function FilterChip({
   );
 }
 
+/** A ruled tag on the row: squared, bordered, and never a shadow. */
 function Badge({
   className,
   icon: Icon,
@@ -227,7 +238,7 @@ function Badge({
     <span
       title={title}
       className={clsx(
-        'inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10.5px] font-semibold',
+        'inline-flex items-center gap-1 rounded-card border px-2 py-0.5 text-[10.5px] font-semibold',
         className,
       )}
     >
@@ -362,7 +373,7 @@ export function ToolsCatalog({
       {isAdmin && (
         <Panel className="p-4">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="grid h-8 w-8 place-items-center rounded-[10px] bg-primary-soft text-primary">
+            <span className="grid h-8 w-8 place-items-center rounded-card bg-primary-soft text-primary">
               <UsersRound className="h-4 w-4" />
             </span>
             <div className="min-w-0">
@@ -377,9 +388,9 @@ export function ToolsCatalog({
                 value={selectedTeamId}
                 onChange={(e) => selectTeam(e.target.value)}
                 aria-label="Team to edit permissions for"
-                className="w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 sm:w-auto sm:min-w-[240px]"
+                className="w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary sm:w-auto sm:min-w-[240px]"
               >
-                <option value="">— browse only (no team selected) —</option>
+                <option value="">Browse only — no team selected</option>
                 {teams.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -387,9 +398,9 @@ export function ToolsCatalog({
                 ))}
               </select>
               {selectedTeam && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-ink-muted">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-card border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-ink-muted">
                   <Users2 className="h-3 w-3" />
-                  {selectedTeam.memberCount} member
+                  <span className="tabular">{selectedTeam.memberCount}</span> member
                   {selectedTeam.memberCount === 1 ? '' : 's'}
                 </span>
               )}
@@ -407,10 +418,18 @@ export function ToolsCatalog({
           )}
           {teams.length === 0 && (
             <p className="mt-2 text-[11.5px] text-ink-faint">
-              No teams yet — create one in Admin → Teams first.
+              There are no teams to grant access to yet.{' '}
+              <Link href="/admin/teams" className="font-semibold text-primary hover:underline">
+                Create one in Teams
+              </Link>
+              , then come back.
             </p>
           )}
-          {error && <p className="mt-2 text-[11.5px] font-semibold text-rose">{error}</p>}
+          {error && (
+            <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] font-semibold text-rose">
+              {error}
+            </p>
+          )}
         </Panel>
       )}
 
@@ -423,23 +442,21 @@ export function ToolsCatalog({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search by name, what it does, or the system it touches…"
-              className="h-9 w-full rounded-pill border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface focus:outline-none focus:ring-4 focus:ring-primary/10"
+              className="h-9 w-full rounded-card border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary focus:bg-surface"
             />
           </label>
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => setOpenFamilies(allOpen ? new Set() : new Set(grouped.map(([f]) => f)))}
             disabled={filtersActive}
-            className="rounded-pill border border-border bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
             {allOpen ? 'Collapse all' : 'Expand all'}
-          </button>
+          </Button>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
-            Filter
-          </span>
+          <span className="field-label mr-1">Filter</span>
           <FilterChip active={approvalOnly} onClick={() => setApprovalOnly((v) => !v)}>
             <ShieldAlert className="h-3 w-3" />
             Needs approval
@@ -468,9 +485,7 @@ export function ToolsCatalog({
           </FilterChip>
 
           <span className="mx-1 h-4 w-px bg-border" />
-          <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
-            Risk
-          </span>
+          <span className="field-label mr-1">Risk</span>
           {(['all', 'low', 'medium', 'high', 'critical'] as RiskFilter[]).map((level) => (
             <FilterChip key={level} active={risk === level} onClick={() => setRisk(level)}>
               {level === 'all' ? 'Any' : RISK_LABEL[level].replace(' risk', '')}
@@ -487,8 +502,25 @@ export function ToolsCatalog({
       </Panel>
 
       {grouped.length === 0 ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-faint">
-          No tools match your search.
+        <Panel className="p-10 text-center">
+          <p className="mx-auto max-w-sm text-[13px] leading-relaxed text-ink-muted">
+            No tool in the registry matches this search and these filters. Widen the search or clear
+            what is set.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-4"
+            onClick={() => {
+              setQuery('');
+              setApprovalOnly(false);
+              setRestrictedOnly(false);
+              setRisk('all');
+              setConnection('all');
+            }}
+          >
+            Clear filters
+          </Button>
         </Panel>
       ) : (
         <div className="flex flex-col gap-3">
@@ -512,7 +544,7 @@ export function ToolsCatalog({
                   >
                     <span
                       className={clsx(
-                        'grid h-9 w-9 shrink-0 place-items-center rounded-[10px]',
+                        'grid h-9 w-9 shrink-0 place-items-center rounded-card',
                         TONE_CHIP[meta.tone],
                       )}
                     >
@@ -521,20 +553,21 @@ export function ToolsCatalog({
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <span className="text-[14px] font-bold text-ink">{meta.name}</span>
-                        <span className="font-mono text-[10.5px] text-ink-faint">
+                        <span className="tabular text-[10.5px] text-ink-faint">
                           {familyPattern}
                         </span>
                         <span className="text-[10.5px] text-ink-faint">
-                          {list.length} tool{list.length === 1 ? '' : 's'}
+                          <span className="tabular">{list.length}</span> tool
+                          {list.length === 1 ? '' : 's'}
                         </span>
                         {approvals > 0 && (
                           <span className="text-[10.5px] font-semibold text-amber">
-                            {approvals} need approval
+                            <span className="tabular">{approvals}</span> need approval
                           </span>
                         )}
                         {restricted > 0 && (
                           <span className="text-[10.5px] font-semibold text-rose">
-                            {restricted} restricted
+                            <span className="tabular">{restricted}</span> restricted
                           </span>
                         )}
                       </span>
@@ -593,7 +626,7 @@ export function ToolsCatalog({
                               </span>
                               {/* Raw id kept as secondary detail: it is what the
                                   permission patterns and audit log speak. */}
-                              <code className="font-mono text-[11px] text-ink-faint">{t.id}</code>
+                              <code className="tabular text-[11px] text-ink-faint">{t.id}</code>
                             </div>
                             <p className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">
                               {t.description}
@@ -614,12 +647,12 @@ export function ToolsCatalog({
                                 {RISK_LABEL[t.riskLevel]}
                                 {t.outboundRiskLevel ? ' +' : ''}
                               </Badge>
-                              <Badge className="bg-surface-2 text-ink-muted">
+                              <Badge className={NEUTRAL_CHIP}>
                                 {SENSITIVITY_LABEL[t.sensitivity]}
                               </Badge>
                               {t.canLeaveCompany ? (
                                 <Badge
-                                  className="bg-rose-soft text-rose"
+                                  className={BLOCK_CHIP}
                                   icon={Send}
                                   title={
                                     t.outboundRiskLevel
@@ -630,18 +663,16 @@ export function ToolsCatalog({
                                   Can leave the company
                                 </Badge>
                               ) : (
-                                <Badge className="bg-surface-2 text-ink-muted">
+                                <Badge className={NEUTRAL_CHIP}>
                                   {BLAST_LABEL[t.blastRadius]}
                                 </Badge>
                               )}
                               {t.needsApproval ? (
-                                <Badge className="bg-amber-soft text-amber" icon={ShieldAlert}>
+                                <Badge className={WARN_CHIP} icon={ShieldAlert}>
                                   Needs approval
                                 </Badge>
                               ) : (
-                                <Badge className="bg-emerald-soft text-emerald">
-                                  Runs without approval
-                                </Badge>
+                                <Badge className={OK_CHIP}>Runs without approval</Badge>
                               )}
                               {t.providers.map((p) => {
                                 const missing = t.missingProviders.includes(p);
@@ -649,11 +680,7 @@ export function ToolsCatalog({
                                   <Badge
                                     key={p}
                                     icon={PlugZap}
-                                    className={
-                                      missing
-                                        ? 'bg-rose-soft text-rose'
-                                        : 'bg-emerald-soft text-emerald'
-                                    }
+                                    className={missing ? WARN_CHIP : OK_CHIP}
                                     title={
                                       missing
                                         ? `${providerLabel(p)} is not connected on your account — connect it in Integrations`
@@ -667,7 +694,7 @@ export function ToolsCatalog({
                               })}
                               {t.ratePerMinute != null && (
                                 <Badge
-                                  className="bg-surface-2 font-mono text-ink-faint"
+                                  className={clsx(NEUTRAL_CHIP, 'tabular')}
                                   icon={Gauge}
                                   title="Rate limit per user, per minute"
                                 >
@@ -677,7 +704,7 @@ export function ToolsCatalog({
                               {t.agents.map((name) => (
                                 <Badge
                                   key={name}
-                                  className="bg-primary-soft text-primary"
+                                  className="border-primary/30 bg-primary-soft text-primary"
                                   icon={Bot}
                                   title={`Exposed by the ${name} agent`}
                                 >
@@ -686,7 +713,7 @@ export function ToolsCatalog({
                               ))}
                               {t.restrictedFor.length > 0 ? (
                                 <Badge
-                                  className="bg-rose-soft text-rose"
+                                  className={BLOCK_CHIP}
                                   icon={Lock}
                                   title={`Blocked for ${t.restrictedFor.join(', ')}`}
                                 >
@@ -694,13 +721,13 @@ export function ToolsCatalog({
                                 </Badge>
                               ) : (
                                 isAdmin && (
-                                  <Badge className="bg-surface-2 text-ink-muted" icon={Users2}>
+                                  <Badge className={NEUTRAL_CHIP} icon={Users2}>
                                     All teams
                                   </Badge>
                                 )
                               )}
                               {!isAdmin && t.deniedForMe && (
-                                <Badge className="bg-rose-soft text-rose" icon={Lock}>
+                                <Badge className={BLOCK_CHIP} icon={Lock}>
                                   Not available to your team
                                 </Badge>
                               )}

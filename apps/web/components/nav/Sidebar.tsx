@@ -146,7 +146,7 @@ function ApprovalBadge({ count, active }: { count: number; active: boolean }) {
       <span
         aria-hidden="true"
         className={clsx(
-          'ml-auto shrink-0 rounded-pill px-1.5 py-0.5 text-[10.5px] font-bold tabular-nums',
+          'ml-auto shrink-0 rounded-sm px-1.5 py-0.5 text-[10.5px] font-bold tabular-nums',
           active ? 'bg-white/20 text-white' : 'bg-amber-soft text-amber',
         )}
       >
@@ -158,9 +158,10 @@ function ApprovalBadge({ count, active }: { count: number; active: boolean }) {
 }
 
 /**
- * One destination. The active row is the only saturated plum object anywhere in
- * the chrome, and the only one carrying shadow-pop — that is what makes "where
- * am I" answerable from the corner of the eye.
+ * One destination. The active row is the only saturated block of stamp blue
+ * anywhere in the chrome — that single exception is what makes "where am I"
+ * answerable from the corner of the eye. It is filled rather than raised: on a
+ * ruled page a drop shadow reads as a sticker laid on the form.
  */
 function NavLink({
   item,
@@ -189,13 +190,13 @@ function NavLink({
       aria-current={active ? 'page' : undefined}
       title={collapsed ? item.label : undefined}
       className={clsx(
-        'group relative flex items-center rounded-[10px] transition-colors',
+        'group relative flex items-center rounded-card transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         'motion-reduce:transition-none',
         collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5',
         !collapsed && (primary ? 'py-[9px]' : 'py-[7px]'),
         active
-          ? 'bg-primary font-semibold text-white shadow-pop'
+          ? 'bg-primary font-semibold text-white'
           : clsx(
               'hover:bg-surface hover:text-ink',
               primary ? 'font-medium text-ink' : 'font-medium text-ink-muted',
@@ -214,7 +215,7 @@ function NavLink({
           <span
             aria-hidden="true"
             className={clsx(
-              'absolute -right-1.5 -top-1.5 min-w-[15px] rounded-pill px-1 text-center text-[9.5px] font-bold leading-[15px] tabular-nums',
+              'absolute -right-1.5 -top-1.5 min-w-[15px] rounded-sm px-1 text-center text-[9.5px] font-bold leading-[15px] tabular-nums',
               active ? 'bg-white text-primary' : 'bg-amber text-white',
             )}
           >
@@ -272,7 +273,7 @@ function ThreadList({ onNavigate }: { onNavigate?: () => void }) {
               aria-current={active ? 'page' : undefined}
               title={c.title ?? 'Untitled'}
               className={clsx(
-                'block truncate rounded-[8px] py-1.5 pl-2 pr-7 text-[12.5px] transition-colors',
+                'block truncate rounded-card py-1.5 pl-2 pr-7 text-[12.5px] transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
                 'motion-reduce:transition-none',
                 active
@@ -286,7 +287,7 @@ function ThreadList({ onNavigate }: { onNavigate?: () => void }) {
               type="button"
               onClick={(e) => handleDelete(e, c.id)}
               aria-label={`Delete conversation ${c.title?.trim() || 'Untitled'}`}
-              className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded-[7px] p-1 text-ink-faint opacity-0 transition-opacity hover:bg-rose-soft hover:text-rose focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 group-hover/conv:opacity-100 motion-reduce:transition-none"
+              className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded-sm p-1 text-ink-faint opacity-0 transition-opacity hover:bg-rose-soft hover:text-rose focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 group-hover/conv:opacity-100 motion-reduce:transition-none"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -320,7 +321,7 @@ function GroupBlock({
         onClick={onToggle}
         aria-expanded={open}
         aria-controls={panelId}
-        className="flex w-full items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-faint transition-colors hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="flex w-full items-center gap-1.5 rounded-card px-2.5 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-faint transition-colors hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         <ChevronRight
           aria-hidden="true"
@@ -358,10 +359,14 @@ function Brand({ collapsed }: { collapsed: boolean }) {
       <img src="/icon.png" alt="Cortex" className="h-9 w-9 shrink-0" />
       {!collapsed && (
         <div className="leading-tight">
-          <div className="text-[15px] font-extrabold tracking-[-0.02em] text-ink">Cortex</div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-            by Vertix
-          </div>
+          {/*
+            The wordmark reads as printed on the document rather than set on a
+            screen: weight and a touch of tracking, no gradient. The maker's line
+            below uses the field-label treatment — it is the imprint at the foot
+            of a form, which is exactly what it is.
+          */}
+          <div className="text-[15px] font-bold tracking-[0.01em] text-ink">Cortex</div>
+          <div className="field-label">by Vertix</div>
         </div>
       )}
     </div>
@@ -536,7 +541,7 @@ export function Sidebar({
               type="button"
               onClick={toggleCollapsed}
               aria-label="Collapse sidebar"
-              className="rounded-[10px] p-1.5 text-ink-faint transition-colors hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+              className="rounded-card p-1.5 text-ink-faint transition-colors hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
             >
               <PanelLeftClose className="h-4 w-4" />
             </button>
@@ -547,7 +552,7 @@ export function Sidebar({
             type="button"
             onClick={toggleCollapsed}
             aria-label="Expand sidebar"
-            className="mx-auto mb-2 rounded-[10px] p-1.5 text-ink-faint transition-colors hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="mx-auto mb-2 rounded-card p-1.5 text-ink-faint transition-colors hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             <PanelLeftOpen className="h-4 w-4" />
           </button>
@@ -576,7 +581,7 @@ export function Sidebar({
               </Dialog.Title>
               <Dialog.Close
                 aria-label="Close menu"
-                className="rounded-[10px] p-1.5 text-ink-faint transition-colors hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+                className="rounded-card p-1.5 text-ink-faint transition-colors hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
               >
                 <X className="h-4 w-4" />
               </Dialog.Close>

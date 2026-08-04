@@ -2,7 +2,8 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { AlarmClock, CircleAlert, Globe, Hourglass, Play, Zap } from 'lucide-react';
+import { clsx } from 'clsx';
+import { AlarmClock } from 'lucide-react';
 import { RefreshButton } from './_components/RefreshButton';
 import { ScheduleList } from './_components/ScheduleList';
 import { relative } from './_components/format';
@@ -77,50 +78,33 @@ export default async function SchedulesPage() {
     )[0];
   const nextDueIn = nextDue ? (relative(nextDue.nextRunAt, Date.now()) ?? 'due now') : null;
 
-  const stats = [
+  // Colour only where the figure means something: green for routines in force,
+  // red for failures that need a look. A plain count stays in ink.
+  const stats: Array<{ label: string; value: string; sub: string; tone?: 'emerald' | 'rose' }> = [
     {
       label: 'Active routines',
       value: String(activeCount),
-      sub: `${jobs.length} total`,
-      icon: Play,
-      tone: 'primary' as const,
+      sub: `${jobs.length} in total`,
+      tone: activeCount > 0 ? 'emerald' : undefined,
     },
-    {
-      label: 'Global routines',
-      value: String(globalCount),
-      sub: 'shared with the team',
-      icon: Globe,
-      tone: 'primary' as const,
-    },
+    { label: 'Global routines', value: String(globalCount), sub: 'shared with the team' },
     {
       label: `Runs · ${WINDOW_DAYS}d`,
       value: String(recentRuns.length),
       sub: 'across visible routines',
-      icon: Zap,
-      tone: 'emerald' as const,
     },
     {
       label: `Failures · ${WINDOW_DAYS}d`,
       value: String(failures),
-      sub: failures > 0 ? 'needs a look' : 'all clean',
-      icon: CircleAlert,
-      tone: failures > 0 ? ('rose' as const) : ('emerald' as const),
+      sub: failures > 0 ? 'needs a look' : 'none',
+      tone: failures > 0 ? 'rose' : undefined,
     },
     {
       label: 'Next due',
       value: nextDueIn ?? '—',
       sub: nextDue?.name ?? 'nothing scheduled',
-      icon: Hourglass,
-      tone: 'amber' as const,
     },
   ];
-
-  const TONE: Record<'primary' | 'emerald' | 'amber' | 'rose', string> = {
-    primary: 'bg-primary-soft text-primary',
-    emerald: 'bg-emerald-soft text-emerald',
-    amber: 'bg-amber-soft text-amber',
-    rose: 'bg-rose-soft text-rose',
-  };
 
   return (
     <>
@@ -131,31 +115,27 @@ export default async function SchedulesPage() {
         actions={<RefreshButton />}
       />
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <Panel className="mb-5 grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-5">
         {stats.map((s) => (
-          <Panel key={s.label} className="flex items-center gap-3 p-3.5">
-            <span
-              className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] ${TONE[s.tone]}`}
-            >
-              <s.icon className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <div
-                className="truncate text-[15px] font-extrabold leading-tight text-ink"
-                title={s.value}
-              >
-                {s.value}
-              </div>
-              <div className="truncate text-[10.5px] text-ink-faint" title={s.label}>
-                {s.label}
-              </div>
-              <div className="truncate text-[10.5px] text-ink-faint" title={s.sub}>
-                {s.sub}
-              </div>
+          <div key={s.label} className="bg-surface px-4 py-3">
+            <div className="field-label truncate" title={s.label}>
+              {s.label}
             </div>
-          </Panel>
+            <div
+              className={clsx(
+                'stat-num mt-1 truncate text-[20px] leading-none',
+                s.tone === 'emerald' ? 'text-emerald' : s.tone === 'rose' ? 'text-rose' : 'text-ink',
+              )}
+              title={s.value}
+            >
+              {s.value}
+            </div>
+            <div className="mt-1 truncate text-[10.5px] text-ink-faint" title={s.sub}>
+              {s.sub}
+            </div>
+          </div>
         ))}
-      </div>
+      </Panel>
 
       <ScheduleList jobs={jobs} currentUserId={user.id} />
     </>

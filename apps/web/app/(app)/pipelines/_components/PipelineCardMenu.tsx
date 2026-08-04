@@ -61,7 +61,7 @@ export function PipelineCardMenu({
           type="button"
           aria-label="Pipeline actions"
           disabled={busy}
-          className="grid h-7 w-7 place-items-center rounded-[8px] bg-surface text-ink-faint shadow-card transition-colors hover:text-ink data-[state=open]:text-ink"
+          className="grid h-7 w-7 place-items-center rounded-card border border-border bg-surface text-ink-faint transition-colors hover:text-ink data-[state=open]:text-ink"
         >
           {busy ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -114,7 +114,7 @@ function Item({
         onSelect();
       }}
       className={clsx(
-        'flex cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[12.5px] font-semibold outline-none transition-colors',
+        'flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] font-semibold outline-none transition-colors',
         tone === 'rose'
           ? 'text-rose data-[highlighted]:bg-rose-soft'
           : 'text-ink-muted data-[highlighted]:bg-surface-2 data-[highlighted]:text-ink',

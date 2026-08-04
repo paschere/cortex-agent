@@ -5,6 +5,7 @@ import { Inbox, ShieldAlert, Radar, AlarmClockOff, ArrowRight } from 'lucide-rea
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { PendingActionCard } from './_components/PendingActionCard';
 import { SignalCard } from './_components/SignalCard';
 
@@ -61,18 +62,13 @@ function SectionLabel({
   icon: React.ReactNode;
   children: React.ReactNode;
   count: number;
-  tone: 'amber' | 'primary' | 'rose';
+  tone: StatusTone;
 }) {
-  const badge = {
-    amber: 'bg-amber-soft text-amber',
-    primary: 'bg-primary-soft text-primary',
-    rose: 'bg-rose-soft text-rose',
-  }[tone];
   return (
-    <div className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+    <div className="field-label mb-2.5 flex items-center gap-2 border-b border-border-strong pb-1.5">
       {icon}
       {children}
-      <span className={`rounded-pill px-1.5 py-0.5 text-[10px] font-bold ${badge}`}>{count}</span>
+      <span className={chipClass(tone)}>{count}</span>
     </div>
   );
 }
@@ -118,18 +114,18 @@ export default async function ApprovalsPage() {
   return (
     <>
       <PageHeader
-        title="Approvals"
-        subtitle="Every decision and confirmation waiting on you, in one queue"
+        title="Aprobaciones"
+        subtitle="Todo lo que espera una decisión tuya, en una sola fila"
         icon={<Inbox className="h-5 w-5" />}
       />
 
       {nothingPending ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-faint">
-          <Inbox className="mx-auto mb-3 h-8 w-8 text-primary" />
-          <p className="mb-1 font-semibold text-ink">All clear — Cortex keeps working ⚡</p>
-          <p className="mx-auto max-w-md">
-            When Cortex needs your sign-off — a gated action, a fresh growth signal, or a routine
-            that hit an error — it shows up here.
+        <Panel className="p-10 text-center text-[13px] text-ink-muted">
+          <Inbox className="mx-auto mb-3 h-7 w-7 text-primary" />
+          <p className="mb-1 text-[15px] font-bold text-ink">No hay nada pendiente</p>
+          <p className="mx-auto max-w-md leading-relaxed">
+            Aquí aparece todo lo que necesita tu visto bueno: una acción que Cortex no ejecuta sin
+            permiso, un prospecto nuevo por revisar o una rutina que falló.
           </p>
         </Panel>
       ) : (
@@ -142,7 +138,7 @@ export default async function ApprovalsPage() {
                 count={pending.length}
                 tone="amber"
               >
-                Pending confirmations
+                Confirmaciones pendientes
               </SectionLabel>
               <div className="space-y-3">
                 {[...pending, ...decided].map((p) => (
@@ -169,7 +165,7 @@ export default async function ApprovalsPage() {
                 count={signals.length}
                 tone="primary"
               >
-                New growth signals
+                Prospectos nuevos
               </SectionLabel>
               <div className="grid gap-3 sm:grid-cols-2">
                 {signals.map((s) => (
@@ -195,7 +191,7 @@ export default async function ApprovalsPage() {
                 count={failing.length}
                 tone="rose"
               >
-                Failing routines
+                Rutinas que fallan
               </SectionLabel>
               <div className="grid gap-3 sm:grid-cols-2">
                 {failing.map((j) => {
@@ -205,18 +201,16 @@ export default async function ApprovalsPage() {
                   return (
                     <Panel key={j.id} className="flex flex-col gap-2 p-4">
                       <div className="flex items-start gap-3">
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-rose-soft text-rose">
-                          <AlarmClockOff className="h-4 w-4" />
-                        </span>
+                        <AlarmClockOff className="mt-0.5 h-4 w-4 shrink-0 text-rose" />
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[13.5px] font-bold text-ink">{j.name}</div>
-                          <div className="text-[11.5px] text-ink-faint">
-                            last run failed {relativeTime(run.started_at)}
+                          <div className="tabular text-[11px] text-ink-faint">
+                            La última ejecución falló {relativeTime(run.started_at)}
                           </div>
                         </div>
                       </div>
                       {excerpt && (
-                        <p className="rounded-[8px] border border-rose/20 bg-rose-soft px-2.5 py-1.5 font-mono text-[11px] leading-snug text-rose">
+                        <p className="rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 font-mono text-[11px] leading-snug text-rose">
                           {excerpt}
                         </p>
                       )}
@@ -224,7 +218,7 @@ export default async function ApprovalsPage() {
                         href="/schedules"
                         className="mt-auto inline-flex items-center gap-1 text-[12px] font-semibold text-primary hover:text-primary-strong"
                       >
-                        Review in Routines <ArrowRight className="h-3.5 w-3.5" />
+                        Revisar en Rutinas <ArrowRight className="h-3.5 w-3.5" />
                       </Link>
                     </Panel>
                   );

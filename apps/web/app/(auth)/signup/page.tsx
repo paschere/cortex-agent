@@ -1,9 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { Zap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import Link from 'next/link';
+import { useState } from 'react';
+import {
+  AuthBody,
+  AuthDivider,
+  AuthDocument,
+  AuthError,
+  AuthField,
+  AuthMasthead,
+  AuthTitle,
+} from '../_components/AuthDocument';
 
 export default function SignupPage() {
   const [name, setName] = useState('');
@@ -19,7 +28,11 @@ export default function SignupPage() {
     try {
       await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Sign up failed');
+      setErr(
+        e instanceof Error
+          ? e.message
+          : 'No se pudo abrir el registro con Google. Inténtalo de nuevo o usa tu correo y contraseña.',
+      );
       setLoading(null);
     }
   }
@@ -35,7 +48,7 @@ export default function SignupPage() {
       callbackURL: '/',
     });
     if (error) {
-      setErr(error.message ?? 'Sign up failed');
+      setErr(error.message ?? 'No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.');
       setLoading(null);
       return;
     }
@@ -54,102 +67,98 @@ export default function SignupPage() {
 
   if (done) {
     return (
-      <div className="w-full max-w-sm rounded-card border border-border bg-surface p-8 shadow-card">
-        <h1 className="text-xl font-extrabold tracking-tight">Check your inbox</h1>
-        <p className="mt-2 text-[13px] leading-snug text-ink-muted">
-          We sent a verification link to <span className="font-semibold">{email}</span>. Click it to
-          activate your Cortex account.
-        </p>
-        <Link
-          href="/login"
-          className="mt-6 block w-full rounded-pill bg-primary py-2.5 text-center font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong"
-        >
-          Back to sign in
-        </Link>
-      </div>
+      <AuthDocument>
+        <AuthMasthead />
+        <AuthBody>
+          <AuthTitle
+            hint={
+              <>
+                El enlace de verificación salió para{' '}
+                <span className="font-mono text-ink">{email}</span>. Ábrelo para activar la cuenta.
+              </>
+            }
+          >
+            Revisa tu correo
+          </AuthTitle>
+          {/* A link, not a Button, because it navigates — nesting a button
+              inside an anchor is invalid and breaks keyboard activation. */}
+          <Link
+            href="/login"
+            className="inline-flex w-full items-center justify-center rounded-card border border-border-strong bg-surface px-3.5 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
+          >
+            Volver a iniciar sesión
+          </Link>
+        </AuthBody>
+      </AuthDocument>
     );
   }
 
   return (
-    <div className="w-full max-w-sm overflow-hidden rounded-card border border-border bg-surface shadow-card">
-      <div className="hero-mesh relative px-8 py-7 text-white">
-        <h1 className="text-2xl font-extrabold tracking-tight">Create your Cortex account</h1>
-        <p className="mt-1 text-[13px] font-medium text-white/80">
-          Start free. Invite your team to a shared workspace when you&apos;re ready.
-        </p>
-      </div>
+    <AuthDocument>
+      <AuthMasthead />
 
-      <div className="p-8">
+      <AuthBody>
+        <AuthTitle hint="Empieza gratis. Invita a tu equipo a un espacio compartido cuando quieras.">
+          Crea tu cuenta
+        </AuthTitle>
+
         <form onSubmit={signUpEmail} className="space-y-3">
-          <input
+          <AuthField
+            label="Nombre completo"
             type="text"
             required
             autoComplete="name"
-            placeholder="Full name"
+            placeholder="Ana Restrepo"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-[10px] border border-border bg-transparent px-3 py-2.5 text-[13px] outline-none focus:border-primary"
           />
-          <input
+          <AuthField
+            label="Correo"
+            mono
             type="email"
             required
             autoComplete="email"
-            placeholder="you@company.com"
+            placeholder="tu@empresa.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-[10px] border border-border bg-transparent px-3 py-2.5 text-[13px] outline-none focus:border-primary"
           />
-          <input
+          <AuthField
+            label="Contraseña"
+            mono
             type="password"
             required
             minLength={10}
             autoComplete="new-password"
-            placeholder="Password (10+ characters)"
+            placeholder="10 caracteres o más"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-[10px] border border-border bg-transparent px-3 py-2.5 text-[13px] outline-none focus:border-primary"
           />
-          <button
-            type="submit"
-            disabled={loading !== null}
-            className="w-full rounded-pill bg-primary py-2.5 font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
-          >
-            {loading === 'email' ? 'Creating account…' : 'Create account'}
-          </button>
+          <Button type="submit" disabled={loading !== null} className="w-full py-2.5">
+            {loading === 'email' ? 'Creando cuenta…' : 'Crear cuenta'}
+          </Button>
         </form>
 
-        <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-wide text-ink-faint">
-          <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
-        </div>
+        <AuthDivider />
 
-        <button
+        <Button
           type="button"
+          variant="outline"
           onClick={signUpGoogle}
           disabled={loading !== null}
-          className="flex w-full items-center justify-center gap-2 rounded-pill border border-border py-2.5 font-semibold text-ink transition-colors hover:bg-primary-soft disabled:opacity-50"
+          className="w-full py-2.5"
         >
-          {loading === 'google' ? (
-            'Redirecting…'
-          ) : (
-            <>
-              <Zap className="h-4 w-4" /> Continue with Google
-            </>
-          )}
-        </button>
+          {loading === 'google' ? 'Redirigiendo…' : 'Continuar con Google'}
+        </Button>
 
-        <p className="mt-4 text-center text-[11.5px] text-ink-faint">
-          Already have an account?{' '}
+        <p className="mt-4 text-center text-[12px] text-ink-faint">
+          ¿Ya tienes cuenta?{' '}
           <Link href="/login" className="font-semibold text-primary hover:underline">
-            Sign in
+            Inicia sesión
           </Link>
         </p>
 
-        {err && (
-          <p className="mt-4 rounded-[10px] border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
-            {err}
-          </p>
-        )}
-      </div>
-    </div>
+        {err && <AuthError>{err}</AuthError>}
+      </AuthBody>
+    </AuthDocument>
   );
 }
