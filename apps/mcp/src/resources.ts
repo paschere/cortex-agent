@@ -11,7 +11,7 @@ export const RESOURCES = [
   },
   {
     uri: 'cortex://kb/spaces',
-    name: 'Knowledge Base spaces you can see',
+    name: 'Brain Knowledge spaces you can see',
     mimeType: 'application/json',
   },
 ];

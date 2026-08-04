@@ -54,7 +54,7 @@ const FAMILY_LABELS: Record<string, string> = {
   bamboo: 'BambooHR',
   people: 'the team roster',
   rate: 'the rate calculator',
-  kb: 'the Knowledge Base',
+  kb: 'Brain Knowledge',
   apollo: 'prospect research',
   pipeline: 'pipelines',
   schedule: 'routines',

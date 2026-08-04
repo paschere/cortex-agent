@@ -43,7 +43,13 @@ const config: Config = {
         pop: 'var(--shadow-pop)',
       },
       fontFamily: {
-        sans: ['var(--font-jakarta)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Reach for this on anything the user might check, quote or copy.
+        mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
+      letterSpacing: {
+        // For the small uppercase labels that name a field on a form.
+        field: '0.12em',
       },
     },
   },

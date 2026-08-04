@@ -222,11 +222,11 @@ export default async function IntegrationsPage({
       families: ['kb', 'pipeline', 'schedule', 'inbox', 'security'],
       state: brainOn ? 'workspace' : 'disconnected',
       unlocks:
-        'Knowledge Base search and memory, pipelines, routines and the inbox digest — Cortex’s own reasoning.',
-      offline: 'The core stops: no Knowledge Base, no pipelines, no routines.',
+        'Brain Knowledge search and memory, pipelines, routines and the inbox digest — Cortex’s own reasoning.',
+      offline: 'The core stops: no Brain Knowledge, no pipelines, no routines.',
       owner:
         brainOn && !semanticSearchOn
-          ? 'Set up by ops · no embedding key, so the Knowledge Base only matches keywords'
+          ? 'Set up by ops · no embedding key, so Brain Knowledge only matches keywords'
           : opsOwner(brainOn, 'the model API key is missing'),
     },
     {

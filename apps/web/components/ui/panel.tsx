@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 import { clsx } from 'clsx';
 
-/** A white hairline card — the base surface of the dashboard. */
+/**
+ * The document itself: white, ruled, flat.
+ *
+ * Definition comes from the hairline rule, not from a shadow — a form is drawn
+ * with lines, and reserving elevation for things that genuinely float (menus,
+ * dialogs) keeps it meaningful when it does appear.
+ */
 export function Panel({
   className,
   children,
@@ -9,7 +15,7 @@ export function Panel({
 }: { className?: string; children: ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={clsx('rounded-card border border-border bg-surface shadow-card', className)}
+      className={clsx('rounded-card border border-border bg-surface', className)}
       {...rest}
     >
       {children}
@@ -52,7 +58,7 @@ const TONE: Record<Tone, { chip: string; icon: string }> = {
 export function IconChip({ tone = 'primary', children }: { tone?: Tone; children: ReactNode }) {
   const t = TONE[tone];
   return (
-    <span className={clsx('grid h-8 w-8 place-items-center rounded-[10px]', t.chip, t.icon)}>
+    <span className={clsx('grid h-8 w-8 place-items-center rounded-card', t.chip, t.icon)}>
       {children}
     </span>
   );
@@ -76,7 +82,7 @@ export function StatCard({
 }) {
   return (
     <div
-      className="animate-rise rounded-card border border-border bg-surface p-5 shadow-card"
+      className="animate-rise rounded-card border border-border bg-surface p-5"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-start justify-between">

@@ -247,7 +247,7 @@ A good memory is:
 
 Do NOT propose:
 - anything about a single task, deal, candidate or day ("wants the Acme proposal by Friday") — that is not durable;
-- company-wide facts everyone already knows or should ("we work with nearshore teams", "our standard margin is 35%") — those belong in the shared Knowledge Base, not in one person's memory;
+- company-wide facts everyone already knows or should ("we work with nearshore teams", "our standard margin is 35%") — those belong in shared Brain Knowledge, not in one person's memory;
 - anything sensitive: passwords, keys, tokens, pay or salary figures, email addresses, phone numbers, ID numbers;
 - anything you inferred from Cortex's own replies rather than from what the person said;
 - guesses. If the messages do not clearly show it, leave it out.

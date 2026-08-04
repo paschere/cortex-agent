@@ -57,7 +57,7 @@ const PENDING_ACTION_TTL_MS = 15 * 60_000;
  *     gmail.*                                               → personal data
  *   - anything the security classifier rates high/critical  → everything else
  *
- * Aggregates and ordinary answers (CRM, Linear, GitHub, the KB, the web) post
+ * Aggregates and ordinary answers (CRM, Linear, GitHub, Brain Knowledge, the web) post
  * normally: the guard exists to stop leaks, not to make the bot useless.
  *
  * A FOURTH REASON, added with user memories (migration 0051): the answer

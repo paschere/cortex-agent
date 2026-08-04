@@ -44,7 +44,7 @@ export function getPromptDefinition(
             role: 'user' as const,
             content: {
               type: 'text' as const,
-              text: `Use the sales.draft_proposal tool to create a proposal for a ${args.seniority} ${args.role}${args.companyId ? ` for HubSpot company ${args.companyId}` : ''}. Pull recent deal context if available, get a rate estimate, search the KB for relevant case studies, and produce a polished markdown proposal with citations.`,
+              text: `Use the sales.draft_proposal tool to create a proposal for a ${args.seniority} ${args.role}${args.companyId ? ` for HubSpot company ${args.companyId}` : ''}. Pull recent deal context if available, get a rate estimate, search Brain Knowledge for relevant case studies, and produce a polished markdown proposal with citations.`,
             },
           },
         ],
@@ -57,7 +57,7 @@ export function getPromptDefinition(
             role: 'user' as const,
             content: {
               type: 'text' as const,
-              text: `Look up HubSpot deal ${args.dealId} (use hubspot.get_deal then hubspot.get_company on the associated company). Pull recent activities. Then summarize the qualifying signals: budget, timeline, decision-maker, fit. Cite KB sources for qualification criteria.`,
+              text: `Look up HubSpot deal ${args.dealId} (use hubspot.get_deal then hubspot.get_company on the associated company). Pull recent activities. Then summarize the qualifying signals: budget, timeline, decision-maker, fit. Cite Brain Knowledge sources for qualification criteria.`,
             },
           },
         ],

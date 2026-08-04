@@ -135,7 +135,7 @@ const FAMILY_LABELS: Record<string, string> = {
   hubspot: 'HubSpot',
   recruit: 'Recruiting',
   workable: 'Workable',
-  kb: 'Knowledge Base',
+  kb: 'Brain Knowledge',
   gmail: 'Gmail',
   gcal: 'Google Calendar',
   gsheets: 'Google Sheets',

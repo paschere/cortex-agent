@@ -18,7 +18,7 @@ import type {
  * user id INSIDE the database, so there is no function a caller could reach for
  * that takes "which memories" as an argument. A table query here would put the
  * rule back in the caller's hands, which is exactly the drift that migration
- * 0049 removed from Knowledge Base retrieval.
+ * 0049 removed from Brain Knowledge retrieval.
  *
  * Consequence worth stating: a caller that has lost track of who it is asking
  * for retrieves nothing, not everything.

@@ -37,7 +37,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
       <h1 className="text-xl font-extrabold tracking-tight">Workspace invitation</h1>
       <p className="mt-2 text-[13px] leading-snug text-ink-muted">
         You&apos;ve been invited to join a workspace on Cortex. Accepting links your account to the
-        organization and its shared agents, knowledge base and integrations.
+        organization and its shared agents, Brain Knowledge and integrations.
       </p>
       <div className="mt-6 flex gap-3">
         <button

@@ -10,7 +10,6 @@ import {
   BookOpen,
   Bot,
   Cable,
-  Calculator,
   ChevronRight,
   Hammer,
   Inbox,
@@ -61,6 +60,10 @@ const PRIMARY: NavItem[] = [
   { href: '/approvals', label: 'Approvals', icon: Inbox, signal: 'approvals' },
   { href: '/prospects', label: 'Prospects', icon: Radar },
   { href: '/conversations', label: 'Conversations', icon: MessagesSquare },
+  // Promoted out of the old KNOWLEDGE group: once the rate calculator moved back
+  // into the chat, that group held a single link, and "Knowledge › Brain
+  // Knowledge" was a disclosure wrapped around one destination people open daily.
+  { href: '/kb', label: 'Brain Knowledge', icon: BookOpen },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 ];
 
@@ -79,16 +82,6 @@ const GROUPS: NavGroup[] = [
       // One name per thing.
       { href: '/schedules', label: 'Routines', icon: AlarmClock },
       { href: '/tools', label: 'Tools', icon: Wrench },
-    ],
-  },
-  {
-    // Both are "ask Cortex something it already knows" — the corpus it reads from
-    // and the pricing model it reasons with.
-    id: 'knowledge',
-    label: 'Knowledge',
-    items: [
-      { href: '/kb', label: 'Knowledge Base', icon: BookOpen },
-      { href: '/chat?tool=rate', label: 'Rate Calculator', icon: Calculator },
     ],
   },
   {
@@ -139,9 +132,9 @@ async function fetchConversations(): Promise<Conversation[]> {
 }
 
 function isActive(pathname: string, href: string): boolean {
-  // Query-bearing entries (Rate Calculator is /chat?tool=rate) are deliberately
-  // never matched: reading the query would need useSearchParams, and matching on
-  // the path alone would light them up at the same time as Chat.
+  // Query-bearing entries are deliberately never matched: reading the query
+  // would need useSearchParams, and matching on the path alone would light them
+  // up at the same time as the entry for the bare path.
   if (href.includes('?')) return false;
   if (href === '/dashboard') return pathname === '/dashboard';
   return pathname === href || pathname.startsWith(`${href}/`);

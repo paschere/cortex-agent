@@ -89,12 +89,16 @@ where d.status <> 'pending'
 -- ---------------------------------------------------------------------------
 -- Two changes to `kb_search_scoped` from 0049, both forced by the switch:
 --
---   1. `p_query_embedding` is vector(1024). Postgres does not carry the typmod
---      in a function's signature, so this REPLACES the 0049 definition rather
---      than overloading it — but pgvector still enforces the dimension at call
---      time, so a stray 768-dim caller fails loudly instead of returning
---      nonsense. Any later migration that redefines this function must keep
---      1024 or the KB stops answering.
+--   1. `p_query_embedding` is declared vector(1024). Postgres does not keep a
+--      parameter's type modifier, so this REPLACES the 0049 definition rather
+--      than overloading it, and the dimension is documentation here rather than
+--      a check — the real enforcement is on `kb_chunks.embedding`, where a
+--      768-dim write is rejected outright. The declaration is still written out
+--      because the next person to read this function should not have to go
+--      looking for which model it expects.
+--      Replaced rather than dropped and recreated on purpose: re-running this
+--      migration on a database that a LATER migration has already reshaped
+--      should fail loudly, not silently reinstate this older definition.
 --   2. The embedding is nullable and the vector arm is skipped when it is null.
 --      That covers both halves of the transition: a deployment without a Voyage
 --      key still gets keyword search instead of an error, and chunks awaiting

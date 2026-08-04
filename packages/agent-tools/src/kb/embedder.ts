@@ -1,5 +1,5 @@
 /**
- * Knowledge Base embeddings — Voyage AI (`voyage-3-large`, 1024 dimensions).
+ * Brain Knowledge embeddings — Voyage AI (`voyage-3-large`, 1024 dimensions).
  *
  * WHY VOYAGE AND NOT GEMINI. Generation moved to Claude a while ago, but the
  * embeddings stayed on `gemini-embedding-001` for one reason only: Anthropic
@@ -63,7 +63,7 @@ export interface EmbedFailure {
 export type EmbedResult<T> = { ok: true; data: T } | EmbedFailure;
 
 export const NOT_CONFIGURED_REASON =
-  'The Knowledge Base cannot be indexed or searched by meaning right now — this deployment has no Voyage API key (VOYAGE_API_KEY), so nothing can be turned into an embedding. Someone on the ops team needs to add it; until then only keyword matching works.';
+  'Brain Knowledge cannot be indexed or searched by meaning right now — this deployment has no Voyage API key (VOYAGE_API_KEY), so nothing can be turned into an embedding. Someone on the ops team needs to add it; until then only keyword matching works.';
 
 interface VoyageResponse {
   data?: Array<{ embedding?: number[]; index?: number }>;
@@ -71,7 +71,7 @@ interface VoyageResponse {
 
 function describeHttpFailure(status: number, body: string): string {
   if (status === 401 || status === 403) {
-    return 'Voyage rejected our API key. It has most likely been rotated or revoked — ops needs to refresh VOYAGE_API_KEY before the Knowledge Base can be embedded again.';
+    return 'Voyage rejected our API key. It has most likely been rotated or revoked — ops needs to refresh VOYAGE_API_KEY before Brain Knowledge can be embedded again.';
   }
   if (status === 402 || /quota|credit|billing|payment/i.test(body)) {
     return 'The Voyage account is out of credit, so it will not embed anything until someone tops it up. Search still works on keywords in the meantime.';

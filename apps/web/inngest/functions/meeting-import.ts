@@ -16,7 +16,7 @@ import { logger } from '@cortex/core';
  * Nobody remembers to file the call where the important thing was said — that
  * is precisely the call that gets lost. So this sweeps recent Google Meet
  * conferences every half hour and imports the ones that produced a transcript
- * and are not in the Knowledge Base yet.
+ * and are not in Brain Knowledge yet.
  *
  * WHOSE GOOGLE ACCOUNT, AND WHY IT HAS TO BE PER USER. `drive-sync` resolves
  * this from `gdrive_sync_state.owner_user_id`: a synced folder has an owner, and

@@ -20,7 +20,7 @@ const NAVIGATION: Entry[] = [
   { href: '/chat', label: 'New Chat', keywords: 'cortex ask' },
   { href: '/conversations', label: 'Conversations', keywords: 'history threads' },
   { href: '/approvals', label: 'Approvals', keywords: 'pending confirm' },
-  { href: '/kb', label: 'Knowledge Base', keywords: 'kb docs brain search' },
+  { href: '/kb', label: 'Brain Knowledge', keywords: 'kb knowledge base docs brain search' },
   { href: '/pipelines', label: 'Pipelines', keywords: 'playbooks workflows' },
   { href: '/schedules', label: 'Routines', keywords: 'scheduled jobs cron' },
   { href: '/settings', label: 'Settings', keywords: 'preferences digest timezone' },

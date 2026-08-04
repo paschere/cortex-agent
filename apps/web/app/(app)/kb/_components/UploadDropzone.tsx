@@ -31,7 +31,7 @@ export function UploadDropzone({ spaceId, spaceName }: { spaceId: string; spaceN
     },
     // The ceiling is the audio one; the server still holds documents to 10 MB.
     // Rejecting a 30 MB recording in the browser for being "too big" would be
-    // a lie about a file the Knowledge Base accepts.
+    // a lie about a file Brain Knowledge accepts.
     maxSize: 200 * 1024 * 1024,
     onDrop: async (files) => {
       setBusy(true);

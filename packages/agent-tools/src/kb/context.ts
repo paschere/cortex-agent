@@ -29,7 +29,7 @@ const MIN_SCORE = 0.55;
 export const kbContext = registerTool({
   id: 'kb.context',
   description:
-    "Build a grounded context briefing on a topic from the company's Knowledge Base. Give it the topic (and optionally a few related angles) and it searches the brain from every angle, removes duplicates, groups the findings per source document, and returns a citation-ready block plus the structured sources. Use this before writing anything that should reflect what the company already knows — a proposal, a client email, a rate answer, an internal explanation — instead of running several separate searches. If it returns nothing, say plainly that the Knowledge Base has no material on the topic rather than inventing an answer.",
+    "Build a grounded context briefing on a topic from the company's Brain Knowledge. Give it the topic (and optionally a few related angles) and it searches the brain from every angle, removes duplicates, groups the findings per source document, and returns a citation-ready block plus the structured sources. Use this before writing anything that should reflect what the company already knows — a proposal, a client email, a rate answer, an internal explanation — instead of running several separate searches. If it returns nothing, say plainly that Brain Knowledge has no material on the topic rather than inventing an answer.",
   inputSchema: z.object({
     topic: z.string().min(3).max(400).describe('The subject you need context about'),
     angles: z
@@ -126,7 +126,7 @@ export const kbContext = registerTool({
       sources.length === 0
         ? ''
         : [
-            `Knowledge Base context for: ${input.topic}`,
+            `Brain Knowledge context for: ${input.topic}`,
             '',
             ...sources.map((s) =>
               [
@@ -138,7 +138,7 @@ export const kbContext = registerTool({
               ].join('\n'),
             ),
             '',
-            'Cite these as [1], [2], … when you use them. Anything not covered above is NOT in the Knowledge Base.',
+            'Cite these as [1], [2], … when you use them. Anything not covered above is NOT in Brain Knowledge.',
           ].join('\n');
 
     return {

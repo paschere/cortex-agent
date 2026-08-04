@@ -11,7 +11,7 @@ import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
- * The Knowledge Base page's window onto imported meetings.
+ * The Brain Knowledge page's window onto imported meetings.
  *
  * GET  — what has been imported into this space, and whether Google is even
  *        connected with permission to read Meet.

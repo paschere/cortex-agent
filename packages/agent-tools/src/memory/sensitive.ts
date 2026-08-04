@@ -5,7 +5,7 @@ import { MEMORY_MAX_CHARS } from './types';
  *
  * A memory is injected into EVERY prompt, so it lands in every provider request
  * and every log line, forever, for as long as the person keeps it. That is a
- * completely different exposure profile from a Knowledge Base document, which
+ * completely different exposure profile from a Brain Knowledge document, which
  * is read only when a question happens to look like it. So the bar for what
  * gets in is much higher than "is it true".
  *
@@ -75,12 +75,12 @@ const MESSAGES: Record<MemoryRejection, string> = {
   credential:
     "I won't keep that as a memory — it looks like a secret, and memories go into every single conversation I have. Store credentials in the integration that needs them, never in something I recite.",
   compensation:
-    "I won't keep a pay figure as a memory. Memories ride along in every conversation, and compensation shouldn't. If it's a rate the team should be able to look up, save it to a Knowledge Base space instead.",
+    "I won't keep a pay figure as a memory. Memories ride along in every conversation, and compensation shouldn't. If it's a rate the team should be able to look up, save it to a Brain Knowledge space instead.",
   'contact-detail':
     "I won't keep an email address or phone number as a memory — that would carry someone's contact details into every conversation I have. Tell me the person or the account instead and I'll look them up when I need them.",
   identifier:
     "I won't keep an ID number as a memory. Memories are part of every conversation, and identity documents shouldn't be.",
-  'too-long': `That's longer than a memory should be — keep it under ${MEMORY_MAX_CHARS} characters. If it needs more room than that, it's a document, and it belongs in the Knowledge Base where I can look it up when it's relevant.`,
+  'too-long': `That's longer than a memory should be — keep it under ${MEMORY_MAX_CHARS} characters. If it needs more room than that, it's a document, and it belongs in Brain Knowledge where I can look it up when it's relevant.`,
   'too-short': "That's too short for me to make sense of later. Give me a full sentence.",
 };
 

@@ -57,7 +57,7 @@ const FAMILY_SYSTEM: Record<string, string> = {
   recruit: 'the recruiting system',
   apollo: 'the Apollo prospecting database',
   bamboo: 'BambooHR, the HR system of record',
-  kb: 'the shared Knowledge Base',
+  kb: 'the shared Brain Knowledge',
   vehicles: 'the vehicle registry, and through it RUNT and SIMIT',
 };
 

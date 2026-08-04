@@ -81,7 +81,7 @@ export default async function KnowledgeBasePage() {
   return (
     <>
       <PageHeader
-        title="Knowledge Base"
+        title="Brain Knowledge"
         subtitle="What Cortex knows. Company spaces answer everyone's questions; your own spaces answer only yours."
         icon={<BookOpen className="h-5 w-5" />}
       />

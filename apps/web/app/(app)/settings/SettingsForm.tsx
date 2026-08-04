@@ -198,7 +198,7 @@ export function SettingsForm({
             <li>
               <strong className="text-ink">Summarized on our side.</strong> The messages are
               condensed on our servers into the digest you receive. The mail itself is never stored,
-              never added to the Knowledge Base, and never handed to the assistant you chat with.
+              never added to Brain Knowledge, and never handed to the assistant you chat with.
             </li>
             <li>
               <strong className="text-ink">Delivered only to you.</strong> The digest goes to your

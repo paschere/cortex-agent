@@ -3,7 +3,7 @@ import { ForbiddenError, NotFoundError } from '@cortex/core';
 import { embedQuery } from './embedder';
 
 /**
- * The Knowledge Base access boundary. Everything that reads or writes KB
+ * The Brain Knowledge access boundary. Everything that reads or writes KB
  * content — the tools, the web routes, both MCP servers — goes through here.
  *
  * WHY IT IS ONE MODULE. Before spaces, every caller worked out for itself which
@@ -301,12 +301,12 @@ export async function getVisibleDocument(
     .eq('id', documentId)
     .maybeSingle();
   if (error) throw error;
-  if (!data) throw new NotFoundError('That document is no longer in the Knowledge Base.');
+  if (!data) throw new NotFoundError('That document is no longer in Brain Knowledge.');
 
   // Throws NotFoundError when the space is someone else's, which is what the
   // caller should see: the document is not theirs to know about.
   const space = await getVisibleSpace(db, userId, data.collection_id as string).catch(() => {
-    throw new NotFoundError('That document is no longer in the Knowledge Base.');
+    throw new NotFoundError('That document is no longer in Brain Knowledge.');
   });
 
   return {

@@ -26,7 +26,7 @@ const PATH = '/kb';
  * someone else's private space exists.
  */
 function describe(err: unknown, fallback: string): string {
-  if (err instanceof NotFoundError) return 'That is no longer in the Knowledge Base.';
+  if (err instanceof NotFoundError) return 'That is no longer in Brain Knowledge.';
   if (err instanceof ForbiddenError) return err.message;
   const message = err instanceof Error ? err.message : '';
   if (/duplicate key|unique/i.test(message)) {

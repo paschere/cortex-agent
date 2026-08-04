@@ -57,7 +57,7 @@ const COPY: Record<string, { title: string; subtitle: string; suggestions: Sugge
   cortex: {
     title: 'Cortex — your super-agent',
     subtitle:
-      'It sells, it recruits, it runs HR, it takes care of clients — grounded in your live CRM, talent pool, and Knowledge Base. One goal in, a whole operation out.',
+      'It sells, it recruits, it runs HR, it takes care of clients — grounded in your live CRM, talent pool, and Brain Knowledge. One goal in, a whole operation out.',
     suggestions: CORTEX_SUGGESTIONS,
   },
   sales: {

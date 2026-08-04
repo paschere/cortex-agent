@@ -64,7 +64,7 @@ const SERVER_VERSION = '0.2.0';
  * and it is what makes Claude behave like the workspace's own agent instead of
  * a generic assistant with tools.
  */
-const INSTRUCTIONS = `While these tools are active you take on the role of **Cortex** ⚡ — the workspace super-agent and newest teammate on the team. This server is Cortex's brain and hands: the company's Knowledge Base, CRM, ATS, talent pool, rates engine, pipelines, and routines.
+const INSTRUCTIONS = `While these tools are active you take on the role of **Cortex** ⚡ — the workspace super-agent and newest teammate on the team. This server is Cortex's brain and hands: the company's Brain Knowledge, CRM, ATS, talent pool, rates engine, pipelines, and routines.
 
 YOUR PERSONA (in effect whenever you do work for the company in this conversation):
 - You are Cortex, a teammate — not a generic assistant. When greeting or starting work, introduce yourself as Cortex. Speak in first person about the work: "ya busqué en el talent pool", "te preparo el borrador".
@@ -78,8 +78,8 @@ HOW CORTEX SPEAKS (users are often non-technical):
 - One question at a time. Short sentences. The mechanics stay invisible.
 
 HOW CORTEX WORKS:
-1. **Orient first.** Call \`cortex_overview\` early to see connected integrations, agents, and Knowledge Base collections.
-2. **The KB is the company's memory.** Before answering anything that could be covered by internal knowledge — clients, playbooks, rates, candidates, past proposals — search it with \`kb_search\` and ground your answer in the hits. Persist durable work products back with \`kb_create_document\`.
+1. **Orient first.** Call \`cortex_overview\` early to see connected integrations, agents, and Brain Knowledge spaces.
+2. **Brain Knowledge is the company's memory.** Before answering anything that could be covered by internal knowledge — clients, playbooks, rates, candidates, past proposals — search it with \`kb_search\` and ground your answer in the hits. Persist durable work products back with \`kb_create_document\`.
 3. **Ground every claim in tool data.** Never invent a deal, contact, candidate, rate, or statistic. Fetch it this turn; cite human-verifiable references (deal names, \`ENG-45\`, \`owner/repo#123\`).
 4. **Writes are confirmation-gated.** Create/update/send/post tools do NOT execute on first call — they return a confirmation_id, the exact payload, and WHY the action is gated. Explain that in the user's language, show what will happen, get an explicit yes, then call \`cortex_confirm_action\`. If the user declines, do nothing.
 5. **Offload heavy reading.** For large documents, delegate with \`cortex_process\` instead of pulling the content into the conversation.`;
@@ -275,7 +275,7 @@ async function buildCatalog(userId?: string): Promise<Map<string, CatalogEntry>>
 
 const FAMILY_TITLES: Record<string, string> = {
   hubspot: 'HubSpot',
-  kb: 'Knowledge Base',
+  kb: 'Brain Knowledge',
   gmail: 'Gmail',
   gcal: 'Google Calendar',
   gsheets: 'Google Sheets',
@@ -332,7 +332,7 @@ function buildToolDefs(catalog: Map<string, CatalogEntry>) {
     {
       name: 'cortex_overview',
       description:
-        "Orient yourself in the user's workspace: which agents exist and what they can do, which integrations the user has connected (HubSpot, Google, GitHub, Linear, Slack, …), and which Knowledge Base collections are visible. Call this early in a session.",
+        "Orient yourself in the user's workspace: which agents exist and what they can do, which integrations the user has connected (HubSpot, Google, GitHub, Linear, Slack, …), and which Brain Knowledge spaces are visible. Call this early in a session.",
       inputSchema: { type: 'object', properties: {} },
       annotations: {
         title: 'Cortex · Workspace Overview',
@@ -693,14 +693,14 @@ const PROMPTS: PromptDef[] = [
     render: (a) =>
       `Draft a complete client proposal for a ${a.seniority ?? ''} ${a.role ?? ''} role.` +
       (a.companyId ? ` Pull company context from HubSpot company ${a.companyId} first.` : '') +
-      ' Search the Knowledge Base (kb_search) for prior proposals and rate guidance, estimate the rate with rate_estimate, and structure the proposal with scope, profile, rate, and next steps.',
+      ' Search Brain Knowledge (kb_search) for prior proposals and rate guidance, estimate the rate with rate_estimate, and structure the proposal with scope, profile, rate, and next steps.',
   },
   {
     name: 'qualify-lead',
     description: 'Walk through qualifying a sales lead from HubSpot data.',
     arguments: [{ name: 'dealId', description: 'HubSpot deal ID', required: true }],
     render: (a) =>
-      `Qualify HubSpot deal ${a.dealId ?? ''}: fetch the deal, its company and recent activities, check the Knowledge Base for prior interactions, and give a BANT-style assessment with a clear go/no-go recommendation.`,
+      `Qualify HubSpot deal ${a.dealId ?? ''}: fetch the deal, its company and recent activities, check Brain Knowledge for prior interactions, and give a BANT-style assessment with a clear go/no-go recommendation.`,
   },
   {
     name: 'rate-question',
@@ -715,7 +715,7 @@ const PROMPTS: PromptDef[] = [
   },
   {
     name: 'document-repo',
-    description: 'Read a GitHub repository and persist Markdown docs to the Knowledge Base.',
+    description: 'Read a GitHub repository and persist Markdown docs to Brain Knowledge.',
     arguments: [{ name: 'repo', description: 'owner/name of the repository', required: true }],
     render: (a) =>
       `Document the GitHub repository ${a.repo ?? ''}: check kb_search for existing docs first, read the repo structure and key files with the github tools, synthesize concise Markdown documentation (purpose, architecture, setup, key modules), and save it with kb_create_document.`,
@@ -749,7 +749,7 @@ async function listResources(): Promise<Array<{ uri: string; name: string; mimeT
     },
     {
       uri: 'cortex://kb/spaces',
-      name: 'Knowledge Base spaces you can see',
+      name: 'Brain Knowledge spaces you can see',
       mimeType: 'application/json',
     },
     {

@@ -14,7 +14,7 @@ import {
  * What these tests are actually protecting.
  *
  * 1. IDEMPOTENCE. The cron sweep re-reads the same two days every thirty
- *    minutes. If re-importing duplicated documents, the Knowledge Base would
+ *    minutes. If re-importing duplicated documents, Brain Knowledge would
  *    fill with copies of Tuesday's standup and every copy would cost an
  *    embedding. The unique index in migration 0059 is the mechanism; this test
  *    is the proof that the code actually leans on it.

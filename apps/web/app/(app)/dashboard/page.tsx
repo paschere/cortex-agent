@@ -304,7 +304,7 @@ export default async function DashboardPage() {
                 Connect Cortex anywhere
               </h2>
               <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-                The same brain — every tool, the Knowledge Base, pipelines and routines — inside
+                The same brain — every tool, Brain Knowledge, pipelines and routines — inside
                 Claude, Claude Code, ChatGPT or any MCP client. It runs with your own permissions
                 and every action stays audited.
               </p>

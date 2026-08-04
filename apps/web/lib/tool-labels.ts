@@ -21,7 +21,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   gcal_create_event: { label: 'Create Calendar Event', icon: 'CalendarPlus' },
   gsheets_read_range: { label: 'Read Spreadsheet', icon: 'Table' },
   gsheets_append_row: { label: 'Append Row to Sheet', icon: 'TableProperties' },
-  kb_search: { label: 'Search Knowledge Base', icon: 'BookOpen' },
+  kb_search: { label: 'Search Brain Knowledge', icon: 'BookOpen' },
   rate_estimate: { label: 'Estimate Rate', icon: 'DollarSign' },
   sales_draft_proposal: { label: 'Draft Proposal', icon: 'FileText' },
   web_search: { label: 'Web Search', icon: 'Globe' },

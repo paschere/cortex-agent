@@ -1,6 +1,6 @@
 # Cortex
 
-**Cortex** is a multi-tenant AI agent SaaS platform (formerly Zippy, an internal company agent). Teams sign up, create a workspace (organization), invite members, and get an AI super-agent with access to HubSpot CRM, Google Workspace, and a shared knowledge base — from a web chat interface, Claude Desktop (MCP), and a native desktop app.
+**Cortex** is a multi-tenant AI agent SaaS platform (formerly Zippy, an internal company agent). Teams sign up, create a workspace (organization), invite members, and get an AI super-agent with access to HubSpot CRM, Google Workspace, and shared Brain Knowledge — from a web chat interface, Claude Desktop (MCP), and a native desktop app.
 
 Accounts are powered by [better-auth](https://better-auth.com): email + password (with verification and reset), Google SSO, multi-tenant organizations with role-based membership and email invitations, a platform admin layer (ban / impersonate / session management), and TOTP two-factor with backup codes.
 

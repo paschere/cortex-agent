@@ -24,7 +24,7 @@ import {
 } from './client';
 
 /**
- * Turning a Google Meet call into something the Knowledge Base remembers.
+ * Turning a Google Meet call into something Brain Knowledge remembers.
  *
  * THE PROBLEM. `meetings.get_transcript` reads a call and hands the text to the
  * model for one turn, and then it is gone. Everything this company agrees to
@@ -34,7 +34,7 @@ import {
  * the call a document: chunked by who was speaking, stamped with when they said
  * it, and searchable next to everything else Cortex knows, months later.
  *
- * WHY IT REUSES THE AUDIO PATH. 0058 taught the Knowledge Base to hold spoken
+ * WHY IT REUSES THE AUDIO PATH. 0058 taught Brain Knowledge to hold spoken
  * material: `kb_documents` gained `recorded_at` / `duration_seconds` /
  * `speakers`, `kb_chunks.metadata` gained `{speaker, startMs, endMs}`, and
  * `kb_search_scoped` started returning that metadata so a hit can be cited as
@@ -97,7 +97,7 @@ export interface ImportMeetingOptions {
   /** How far back to look when resolving a meeting code to a sitting. */
   lookbackDays?: number;
   /**
-   * Name of the Knowledge Base space to file it in. Omitted means "the
+   * Name of the Brain Knowledge space to file it in. Omitted means "the
    * importer's own space" — see `resolveDestination`.
    */
   spaceName?: string;
@@ -488,7 +488,7 @@ function emptyResult(outcome: MeetingImportOutcome, note: string): MeetingImport
 }
 
 /**
- * Import one Google Meet conference into the Knowledge Base.
+ * Import one Google Meet conference into Brain Knowledge.
  *
  * IDEMPOTENT BY SCHEMA, not by good intentions. `meeting_imports` has a unique
  * index on the conference record (migration 0059), and this function looks the
@@ -893,7 +893,7 @@ async function recordImport(
 export const meetingsImportTranscript = registerTool({
   id: 'meetings.import_transcript',
   description:
-    'Save a past Google Meet call into the Knowledge Base for good, so it can be searched and quoted months later. Use it whenever a call is worth remembering — a client agreeing to something, a decision nobody wrote down, a handover — or when someone asks you to "remember this meeting", "file that call" or "add the transcript to the knowledge base". It stores the conversation split by speaking turn, each passage tagged with who said it and how far into the call, so later answers can cite the person and the minute. It files the meeting in the caller\'s own private space unless another space is named. Do NOT use it just to read or summarise a call — `meetings.get_transcript` does that without storing anything. Running it twice on the same meeting updates the saved copy instead of making a second one.',
+    'Save a past Google Meet call into Brain Knowledge for good, so it can be searched and quoted months later. Use it whenever a call is worth remembering — a client agreeing to something, a decision nobody wrote down, a handover — or when someone asks you to "remember this meeting", "file that call" or "add the transcript to Brain Knowledge". It stores the conversation split by speaking turn, each passage tagged with who said it and how far into the call, so later answers can cite the person and the minute. It files the meeting in the caller\'s own private space unless another space is named. Do NOT use it just to read or summarise a call — `meetings.get_transcript` does that without storing anything. Running it twice on the same meeting updates the saved copy instead of making a second one.',
   inputSchema: z
     .object({
       meetCode: z
@@ -919,7 +919,7 @@ export const meetingsImportTranscript = registerTool({
         .string()
         .optional()
         .describe(
-          "Knowledge Base space to file it in, by name. Leave empty to keep it in the caller's own private space — only pass this when the person explicitly asked to share the meeting somewhere, since a company space is readable by everyone.",
+          "Brain Knowledge space to file it in, by name. Leave empty to keep it in the caller's own private space — only pass this when the person explicitly asked to share the meeting somewhere, since a company space is readable by everyone.",
         ),
     })
     .refine((v) => Boolean(v.meetCode || v.conferenceRecord), {
@@ -955,9 +955,9 @@ export const meetingsImportTranscript = registerTool({
       switch (result.outcome) {
         case 'imported':
         case 'updated':
-          return `The meeting is now part of what Cortex knows. Ask about it by what was discussed, not by its filename — searching the Knowledge Base will return the exact passage with the speaker and the offset. It is in ${result.spaceName ?? 'the space it was filed in'}, which ${result.spaceName === null ? 'may be private' : 'is where it can be read from'}; to let the whole company ask about it, move it to a company space on the Knowledge Base page.`;
+          return `The meeting is now part of what Cortex knows. Ask about it by what was discussed, not by its filename — searching Brain Knowledge will return the exact passage with the speaker and the offset. It is in ${result.spaceName ?? 'the space it was filed in'}, which ${result.spaceName === null ? 'may be private' : 'is where it can be read from'}; to let the whole company ask about it, move it to a company space on the Brain Knowledge page.`;
         case 'unchanged':
-          return 'Already saved and unchanged, so nothing was re-indexed. Search the Knowledge Base to quote from it.';
+          return 'Already saved and unchanged, so nothing was re-indexed. Search Brain Knowledge to quote from it.';
         case 'unavailable':
           return 'Nothing was stored and nothing broke. If the call has only just finished, try again in a few minutes; if transcription was never switched on, there is genuinely nothing to save and the notes would have to come from a person.';
         case 'unauthorized':

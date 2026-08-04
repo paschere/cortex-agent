@@ -4,7 +4,7 @@ import { embedDocuments } from '@cortex/agent-tools/src/kb/embedder';
 import { logger } from '@cortex/core';
 
 /**
- * Re-vectorises Knowledge Base chunks that have no embedding.
+ * Re-vectorises Brain Knowledge chunks that have no embedding.
  *
  * WHAT PUTS A CHUNK HERE. Migration 0057 cleared every Gemini vector when the
  * column moved to 1024 dimensions, and the ingestion paths deliberately store
@@ -75,7 +75,7 @@ export const reindexEmbeddings = inngest.createFunction(
 
     if (pending === 0) return { pending: 0, embedded: 0 };
 
-    logger.info('kb-reindex: starting', { pending });
+    logger.info({ pending }, 'kb-reindex: starting');
 
     let embedded = 0;
     let halted: string | null = null;
@@ -132,7 +132,7 @@ export const reindexEmbeddings = inngest.createFunction(
       }
       if (result.done === 0) break;
       embedded += result.done;
-      logger.info('kb-reindex: batch complete', { embedded, of: pending });
+      logger.info({ embedded, of: pending }, 'kb-reindex: batch complete');
     }
 
     // A document is only searchable again once every one of its chunks has a
@@ -160,7 +160,7 @@ export const reindexEmbeddings = inngest.createFunction(
       });
     }
 
-    logger.info('kb-reindex: finished', { embedded, readied, remaining, halted });
+    logger.info({ embedded, readied, remaining, halted }, 'kb-reindex: finished');
     return { pending, embedded, documentsReady: readied, remaining, halted };
   },
 );

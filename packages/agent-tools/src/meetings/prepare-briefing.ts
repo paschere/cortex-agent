@@ -20,7 +20,7 @@ import { meetingsListTranscripts } from './list-transcripts';
  *   interview → the candidate's file: stage, role applied to, profile facts
  *   client    → the account: company, open deals, recent activity
  *   internal  → no CRM/ATS noise, just the agenda and the last transcript
- * and, for every type, the Knowledge Base plus the transcript of the last call
+ * and, for every type, Brain Knowledge plus the transcript of the last call
  * with the same people.
  *
  * Two rules make the output trustworthy:
@@ -208,7 +208,7 @@ async function resolveMeeting(
 export const meetingsPrepareBriefing = registerTool({
   id: 'meetings.prepare_briefing',
   description:
-    "Prepare everything the user needs to walk into a meeting well-informed, tailored to what kind of meeting it is. For an interview it pulls the candidate's file — where they are in the process, which role they applied to, the highlights of their profile. For a client call it pulls the account — the company, open deals and what happened recently. For internal meetings it sticks to the agenda and the last conversation. In every case it adds what the company's Knowledge Base knows about the topic and the transcript of the previous call with the same people. Give it the calendar entry (or just the meeting title and time) and it returns the briefing as text and as a ready-to-send email, with a short list of suggested talking points and a footnote saying where each fact came from and how fresh it is. Anything it could not find is stated plainly rather than guessed.",
+    "Prepare everything the user needs to walk into a meeting well-informed, tailored to what kind of meeting it is. For an interview it pulls the candidate's file — where they are in the process, which role they applied to, the highlights of their profile. For a client call it pulls the account — the company, open deals and what happened recently. For internal meetings it sticks to the agenda and the last conversation. In every case it adds what the company's Brain Knowledge knows about the topic and the transcript of the previous call with the same people. Give it the calendar entry (or just the meeting title and time) and it returns the briefing as text and as a ready-to-send email, with a short list of suggested talking points and a footnote saying where each fact came from and how fresh it is. Anything it could not find is stated plainly rather than guessed.",
   inputSchema: z
     .object({
       eventId: z.string().optional().describe('Calendar entry id for the meeting'),
@@ -651,9 +651,9 @@ export const meetingsPrepareBriefing = registerTool({
       }
     }
 
-    // ---- Knowledge Base (always) -----------------------------------------
+    // ---- Brain Knowledge (always) ----------------------------------------
     const topicParts = [m.title, ...m.externalDomains].filter(Boolean);
-    const kb = await attempt(ctx, gaps, "the company's Knowledge Base", async () =>
+    const kb = await attempt(ctx, gaps, "the company's Brain Knowledge", async () =>
       call<{
         sources: Array<{
           ref: number;
@@ -680,7 +680,7 @@ export const meetingsPrepareBriefing = registerTool({
     const kbSources = kb.value?.sources ?? [];
     if (kbSources.length) {
       const ref = sources.add(
-        'Cortex Knowledge Base',
+        'Cortex Brain Knowledge',
         `${kbSources.length} document(s) on "${m.title}"`,
         'checked just now',
       );
@@ -697,7 +697,7 @@ export const meetingsPrepareBriefing = registerTool({
         sourceRefs: [ref],
       });
     } else if (kb.ok) {
-      gaps.push('The Knowledge Base has nothing on this topic.');
+      gaps.push('Brain Knowledge has nothing on this topic.');
     }
 
     // ---- Last conversation with the same people (always) ------------------

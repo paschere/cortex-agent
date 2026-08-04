@@ -1,6 +1,6 @@
 /**
  * Deepgram transcription — the step that turns a recording into something the
- * Knowledge Base can answer from.
+ * Brain Knowledge can answer from.
  *
  * Like the Apollo client and unlike everything else in this package, this
  * module NEVER THROWS. A missing key, an exhausted balance and a file Deepgram

@@ -38,7 +38,7 @@ export interface AgentDefinition {
 }
 
 /**
- * A Knowledge Base space. `scope` is the visibility: 'global' (everyone) or
+ * A Brain Knowledge space. `scope` is the visibility: 'global' (everyone) or
  * 'user' (one person, named by scope_id). The 'team' and 'conversation' values
  * of CollectionScope are retired — migration 0049 converted the last rows and
  * added a check constraint refusing new ones.

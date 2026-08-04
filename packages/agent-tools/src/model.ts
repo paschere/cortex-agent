@@ -37,10 +37,11 @@ function claude(id: string): ClaudeModel {
 /**
  * The one place that decides which LLM Cortex talks to.
  *
- * Generation runs on Claude. Embeddings do NOT: Anthropic ships no embedding
- * endpoint, and the pgvector indexes in infra/supabase are built for the 768
- * dimensions Gemini returns — swapping the embedder would require re-embedding
- * the whole knowledge base. See packages/agent-tools/src/kb/embedder.ts.
+ * Generation runs on Claude. Embeddings do not, and cannot: Anthropic ships no
+ * embedding endpoint. They run on Voyage at 1024 dimensions — see
+ * packages/agent-tools/src/kb/embedder.ts, which is the only place that knows
+ * it. Changing embedding provider means re-embedding every chunk, so it is a
+ * migration rather than a config change.
  */
 
 /** Conversation, tool calling, long-horizon agent work. */

@@ -50,7 +50,7 @@ Fill in exactly:
 | --- | --- |
 | **App name** | `Cortex` |
 | **Avatar URL** | `https://cortex.example.com/icon.png` |
-| **Description** | `Your workspace's agent. Ask about the pipeline, candidates, rates, tickets and the Knowledge Base — answered with your own permissions.` |
+| **Description** | `Your workspace's agent. Ask about the pipeline, candidates, rates, tickets and Brain Knowledge — answered with your own permissions.` |
 
 **Functionality** — tick BOTH:
 
@@ -188,7 +188,7 @@ the thread —
 opened a DM with Cortex, it falls back to **email** rather than posting or
 dropping it.
 
-Ordinary answers (HubSpot, Linear, GitHub, the Knowledge Base, the web,
+Ordinary answers (HubSpot, Linear, GitHub, Brain Knowledge, the web,
 aggregates and rollups) post normally in the space.
 
 ### Approvals in a space

@@ -75,7 +75,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   },
   sales: {
     name: 'Sales',
-    blurb: 'Client-facing proposal drafting, grounded in CRM and Knowledge Base context.',
+    blurb: 'Client-facing proposal drafting, grounded in CRM and Brain Knowledge context.',
     tone: 'amber',
     icon: 'Handshake',
   },
@@ -101,7 +101,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     icon: 'Calculator',
   },
   kb: {
-    name: 'Knowledge Base',
+    name: 'Brain Knowledge',
     blurb: "The company's memory — search internal documents and write new ones back.",
     tone: 'sky',
     icon: 'BookOpen',

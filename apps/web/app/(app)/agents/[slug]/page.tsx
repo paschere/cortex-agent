@@ -172,7 +172,7 @@ const TOOL_GROUPS: ToolGroup[] = [
     tools: [{ id: "payroll.team_overview" }],
   },
   {
-    label: "Knowledge Base",
+    label: "Brain Knowledge",
     icon: BookOpen,
     tools: [
       { id: "kb.search" },

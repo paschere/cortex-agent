@@ -5,7 +5,7 @@ import { listVisibleSpaces } from './spaces';
 export const kbListSpaces = registerTool({
   id: 'kb.list_spaces',
   description:
-    'List the Knowledge Base spaces the person can reach: every company-wide space, plus their own personal ones. Use it before saving something, so you can say where it went, and when someone asks what the company has on file. Never read the ids back to anyone — refer to spaces by name.',
+    'List the Brain Knowledge spaces the person can reach: every company-wide space, plus their own personal ones. Use it before saving something, so you can say where it went, and when someone asks what the company has on file. Never read the ids back to anyone — refer to spaces by name.',
   inputSchema: z.object({}),
   outputSchema: z.object({
     spaces: z.array(

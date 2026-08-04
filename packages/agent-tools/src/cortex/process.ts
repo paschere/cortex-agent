@@ -20,7 +20,7 @@ const MAX_SOURCE_CHARS = 400_000;
 export const cortexProcess = registerTool({
   id: 'cortex.process',
   description:
-    "Delegate heavy text processing to Cortex's own server-side LLM instead of doing it yourself: summarize, extract structured data, classify, translate, or answer questions about a large source WITHOUT loading it into your context. Provide either documentId (a Knowledge Base document — Cortex reads all its chunks server-side) or content (raw text). Returns only the distilled result. Use this whenever the source material is large and you only need the analysis.",
+    "Delegate heavy text processing to Cortex's own server-side LLM instead of doing it yourself: summarize, extract structured data, classify, translate, or answer questions about a large source WITHOUT loading it into your context. Provide either documentId (a Brain Knowledge document — Cortex reads all its chunks server-side) or content (raw text). Returns only the distilled result. Use this whenever the source material is large and you only need the analysis.",
   inputSchema: z.object({
     instruction: z
       .string()
@@ -56,7 +56,7 @@ export const cortexProcess = registerTool({
     let documentTitle: string | null = null;
 
     if (input.documentId) {
-      // This is a second door into the Knowledge Base: it reads a document's
+      // This is a second door into Brain Knowledge: it reads a document's
       // ENTIRE text from an id, without going through search. Search hits hand
       // out document ids, so without this check an id seen once would be enough
       // to read a document out of a space the caller cannot see. getVisibleDocument

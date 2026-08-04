@@ -131,7 +131,7 @@ function AskPanel({
     <Panel className="p-5">
       <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
         <Sparkles className="h-3.5 w-3.5 text-primary" />
-        Ask the Knowledge Base
+        Ask Brain Knowledge
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -182,9 +182,9 @@ function AskPanel({
         <div className="mt-4 space-y-2.5">
           {results.length === 0 ? (
             <p className="text-[12.5px] leading-relaxed text-ink-muted">
-              Nothing on that{scopeName ? ` in ${scopeName}` : ''} yet. The Knowledge Base only
-              knows what has been put into it — add a document to a space and Cortex can answer from
-              it a minute later.
+              Nothing on that{scopeName ? ` in ${scopeName}` : ''} yet. Brain Knowledge only knows
+              what has been put into it — add a document to a space and Cortex can answer from it a
+              minute later.
             </p>
           ) : (
             results.map((r) => (
@@ -369,10 +369,10 @@ function FirstRun({ isAdmin, onCreate }: { isAdmin: boolean; onCreate: () => voi
       </span>
       <p className="mb-1 text-[15px] font-bold text-ink">Nothing in here yet</p>
       <p className="mx-auto max-w-lg text-[13px] leading-relaxed text-ink-muted">
-        The Knowledge Base is where Cortex remembers things: how a client likes to be pitched, what
-        we charge for a senior back-end developer, the proposal that won last quarter. Put a
-        document in, and Cortex can answer from it the next time anyone asks — with the document
-        named, so you can check.
+        Brain Knowledge is where Cortex remembers things: how a client likes to be pitched, what we
+        charge for a senior back-end developer, the proposal that won last quarter. Put a document
+        in, and Cortex can answer from it the next time anyone asks — with the document named, so
+        you can check.
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <button

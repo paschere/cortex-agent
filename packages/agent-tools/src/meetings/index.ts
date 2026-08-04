@@ -12,7 +12,7 @@ export { meetingsPrepareBriefing } from './prepare-briefing';
 export { meetingsScheduleBriefings } from './schedule-briefings';
 
 // The importer's engine, for the callers that are not a model turn: the Inngest
-// sweep and the Knowledge Base page's manual import button.
+// sweep and the Brain Knowledge page's manual import button.
 export {
   buildChunks,
   buildHeader,
