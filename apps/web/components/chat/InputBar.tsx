@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useState, useRef, useEffect } from "react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ArrowUp, ChevronDown, Bot } from "lucide-react";
-import { clsx } from "clsx";
-import { FileDropZone } from "./FileDropZone";
+import { useState, useRef, useEffect } from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { ArrowUp, ChevronDown, Bot } from 'lucide-react';
+import { clsx } from 'clsx';
+import { FileDropZone } from './FileDropZone';
 
 interface AgentInfo {
   slug: string;
@@ -24,7 +24,7 @@ interface InputBarProps {
 }
 
 const CHAR_COUNT_THRESHOLD = 3500;
-const BRIEFING_COMMAND = "/briefing";
+const BRIEFING_COMMAND = '/briefing';
 
 function expandBriefingCommand(value: string): string | null {
   const trimmed = value.trim();
@@ -44,7 +44,7 @@ export function InputBar({
   draft,
   onDraftConsumed,
 }: InputBarProps) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const [showBriefingHint, setShowBriefingHint] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -62,7 +62,7 @@ export function InputBar({
       const ta = textareaRef.current;
       if (ta) {
         ta.focus();
-        ta.style.height = "auto";
+        ta.style.height = 'auto';
         ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
         ta.setSelectionRange(ta.value.length, ta.value.length);
       }
@@ -77,13 +77,13 @@ export function InputBar({
     const trimmed = (expanded ?? text).trim();
     if (!trimmed || disabled) return;
     onSend(trimmed);
-    setText("");
+    setText('');
     setShowBriefingHint(false);
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit(e as unknown as React.FormEvent);
     }
@@ -94,7 +94,7 @@ export function InputBar({
     setText(value);
     setShowBriefingHint(value.toLowerCase().startsWith(BRIEFING_COMMAND));
     const ta = e.target;
-    ta.style.height = "auto";
+    ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }
 
@@ -109,18 +109,16 @@ export function InputBar({
 
         {showBriefingHint && (
           <div className="mb-1.5 px-2 text-xs text-ink-faint">
-            <span className="font-mono text-primary">/briefing [Company]</span>{" "}
-            — pulls a deal health briefing from HubSpot
+            <span className="font-mono text-primary">/briefing [Company]</span> — pulls a deal
+            health briefing from HubSpot
           </div>
         )}
 
         <form
           onSubmit={handleSubmit}
           className={clsx(
-            "rounded-[20px] border bg-surface shadow-card transition-colors",
-            focused
-              ? "border-primary/40 ring-4 ring-primary/10"
-              : "border-border",
+            'rounded-[20px] border bg-surface shadow-card transition-colors',
+            focused ? 'border-primary/40 ring-4 ring-primary/10' : 'border-border',
           )}
         >
           <textarea
@@ -144,7 +142,7 @@ export function InputBar({
                 className="inline-flex items-center gap-1.5 rounded-pill bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-ink-faint"
               >
                 <Bot className="h-3.5 w-3.5" />
-                {activeAgent?.name ?? "Agent"}
+                {activeAgent?.name ?? 'Agent'}
               </span>
             ) : (
               <DropdownMenu.Root>
@@ -154,7 +152,7 @@ export function InputBar({
                     className="inline-flex items-center gap-1.5 rounded-pill border border-border px-2.5 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none"
                   >
                     <Bot className="h-3.5 w-3.5 text-primary" />
-                    {activeAgent?.name ?? "Agent"}
+                    {activeAgent?.name ?? 'Agent'}
                     <ChevronDown size={12} className="opacity-60" />
                   </button>
                 </DropdownMenu.Trigger>
@@ -186,9 +184,7 @@ export function InputBar({
 
             <div className="flex items-center gap-2">
               {text.length > CHAR_COUNT_THRESHOLD && (
-                <span className="text-[10px] tabular-nums text-ink-faint">
-                  {text.length}
-                </span>
+                <span className="text-[10px] tabular-nums text-ink-faint">{text.length}</span>
               )}
               <button
                 type="submit"

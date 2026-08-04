@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { registerTool, runTool } from "../index";
-import { kbSearch } from "./search";
+import { z } from 'zod';
+import { registerTool, runTool } from '../index';
+import { kbSearch } from './search';
 
 /**
  * kb.context — one call that turns a topic into a briefing.
@@ -19,7 +19,7 @@ const SourceSchema = z.object({
   documentId: z.string(),
   documentTitle: z.string(),
   space: z.string(),
-  spaceKind: z.enum(["global", "personal"]),
+  spaceKind: z.enum(['global', 'personal']),
   bestScore: z.number(),
   excerpts: z.array(z.string()),
 });
@@ -27,15 +27,11 @@ const SourceSchema = z.object({
 const MIN_SCORE = 0.55;
 
 export const kbContext = registerTool({
-  id: "kb.context",
+  id: 'kb.context',
   description:
     "Build a grounded context briefing on a topic from the company's Knowledge Base. Give it the topic (and optionally a few related angles) and it searches the brain from every angle, removes duplicates, groups the findings per source document, and returns a citation-ready block plus the structured sources. Use this before writing anything that should reflect what the company already knows — a proposal, a client email, a rate answer, an internal explanation — instead of running several separate searches. If it returns nothing, say plainly that the Knowledge Base has no material on the topic rather than inventing an answer.",
   inputSchema: z.object({
-    topic: z
-      .string()
-      .min(3)
-      .max(400)
-      .describe("The subject you need context about"),
+    topic: z.string().min(3).max(400).describe('The subject you need context about'),
     angles: z
       .array(z.string().min(3).max(200))
       .max(4)
@@ -61,7 +57,7 @@ export const kbContext = registerTool({
       documentId: string;
       documentTitle: string;
       space: string;
-      spaceKind: "global" | "personal";
+      spaceKind: 'global' | 'personal';
       chunkIndex: number;
       content: string;
       score: number;
@@ -69,11 +65,7 @@ export const kbContext = registerTool({
     // Dedupe by document+chunk, keeping the best score across queries.
     const byChunk = new Map<string, Hit>();
     for (const q of queries) {
-      const res = await runTool(
-        kbSearch,
-        { query: q, limit: input.perQueryLimit ?? 5 },
-        ctx,
-      );
+      const res = await runTool(kbSearch, { query: q, limit: input.perQueryLimit ?? 5 }, ctx);
       for (const h of res.hits as Hit[]) {
         if (h.score < MIN_SCORE) continue;
         const key = `${h.documentId}#${h.chunkIndex}`;
@@ -88,7 +80,7 @@ export const kbContext = registerTool({
       {
         title: string;
         space: string;
-        spaceKind: "global" | "personal";
+        spaceKind: 'global' | 'personal';
         best: number;
         hits: Hit[];
       }
@@ -119,30 +111,28 @@ export const kbContext = registerTool({
         excerpts: entry.hits
           .sort((a, b) => a.chunkIndex - b.chunkIndex)
           .map((h) =>
-            h.content.length > maxChars
-              ? `${h.content.slice(0, maxChars)}…`
-              : h.content,
+            h.content.length > maxChars ? `${h.content.slice(0, maxChars)}…` : h.content,
           ),
       }));
 
     const contextBlock =
       sources.length === 0
-        ? ""
+        ? ''
         : [
             `Knowledge Base context for: ${input.topic}`,
-            "",
+            '',
             ...sources.map((s) =>
               [
                 // The space is part of the citation because it changes what the
                 // finding is worth: a company-wide space is what the company has
                 // agreed on, a personal one is one person's working note.
-                `[${s.ref}] ${s.documentTitle} — ${s.space}${s.spaceKind === "personal" ? " (your own notes)" : ""}`,
-                ...s.excerpts.map((e) => `    ${e.replace(/\s+/g, " ")}`),
-              ].join("\n"),
+                `[${s.ref}] ${s.documentTitle} — ${s.space}${s.spaceKind === 'personal' ? ' (your own notes)' : ''}`,
+                ...s.excerpts.map((e) => `    ${e.replace(/\s+/g, ' ')}`),
+              ].join('\n'),
             ),
-            "",
-            "Cite these as [1], [2], … when you use them. Anything not covered above is NOT in the Knowledge Base.",
-          ].join("\n");
+            '',
+            'Cite these as [1], [2], … when you use them. Anything not covered above is NOT in the Knowledge Base.',
+          ].join('\n');
 
     return {
       topic: input.topic,

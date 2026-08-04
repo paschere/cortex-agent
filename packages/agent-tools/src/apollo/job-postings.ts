@@ -45,8 +45,8 @@ const MAX_PAGE = 10;
 export const apolloCompanyJobPostings = registerTool({
   id: 'apollo.company_job_postings',
   description:
-    "See every role a company is advertising right now — job title, where it is based, and when it was posted. A company with several engineering roles open is actively spending on hiring, which is the clearest sign it is worth approaching. Costs one Apollo credit per page of results, plus one extra credit if you name the company by web domain instead of by the reference the company search tools return. " +
-    'Use this when you already have a company in mind — one on today\'s call, one in the CRM, one someone just named. It cannot discover companies. growth.find_signals does the opposite: it sweeps public job boards for a ROLE and turns up companies nobody had thought of, free of Apollo credits, and files them for review. Neither replaces the other.',
+    'See every role a company is advertising right now — job title, where it is based, and when it was posted. A company with several engineering roles open is actively spending on hiring, which is the clearest sign it is worth approaching. Costs one Apollo credit per page of results, plus one extra credit if you name the company by web domain instead of by the reference the company search tools return. ' +
+    "Use this when you already have a company in mind — one on today's call, one in the CRM, one someone just named. It cannot discover companies. growth.find_signals does the opposite: it sweeps public job boards for a ROLE and turns up companies nobody had thought of, free of Apollo credits, and files them for review. Neither replaces the other.",
   inputSchema: z
     .object({
       ...companyRefFields,

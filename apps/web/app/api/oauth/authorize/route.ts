@@ -1,5 +1,5 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { getOptionalSession } from "@/lib/session";
+import { NextResponse, type NextRequest } from 'next/server';
+import { getOptionalSession } from '@/lib/session';
 import {
   getClient,
   isAllowedRedirectUri,
@@ -7,10 +7,10 @@ import {
   issuer,
   mcpResource,
   MCP_SCOPE,
-} from "@/lib/oauth";
+} from '@/lib/oauth';
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
  * OAuth 2.1 authorization endpoint (authorization_code + PKCE + RFC 8707).
@@ -34,21 +34,21 @@ interface AuthParams {
 
 function readParams(sp: URLSearchParams): AuthParams {
   return {
-    responseType: sp.get("response_type") ?? "",
-    clientId: sp.get("client_id") ?? "",
-    redirectUri: sp.get("redirect_uri") ?? "",
-    codeChallenge: sp.get("code_challenge") ?? "",
-    codeChallengeMethod: sp.get("code_challenge_method") ?? "",
-    state: sp.get("state") ?? "",
-    scope: sp.get("scope") ?? MCP_SCOPE,
-    resource: sp.get("resource") ?? "",
+    responseType: sp.get('response_type') ?? '',
+    clientId: sp.get('client_id') ?? '',
+    redirectUri: sp.get('redirect_uri') ?? '',
+    codeChallenge: sp.get('code_challenge') ?? '',
+    codeChallengeMethod: sp.get('code_challenge_method') ?? '',
+    state: sp.get('state') ?? '',
+    scope: sp.get('scope') ?? MCP_SCOPE,
+    resource: sp.get('resource') ?? '',
   };
 }
 
 function badRequest(message: string): NextResponse {
   return new NextResponse(`Invalid authorization request: ${message}`, {
     status: 400,
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
 }
 
@@ -60,10 +60,10 @@ function errorRedirect(
   description?: string,
 ): NextResponse {
   const url = new URL(redirectUri);
-  url.searchParams.set("error", error);
-  if (description) url.searchParams.set("error_description", description);
-  if (state) url.searchParams.set("state", state);
-  url.searchParams.set("iss", issuer());
+  url.searchParams.set('error', error);
+  if (description) url.searchParams.set('error_description', description);
+  if (state) url.searchParams.set('state', state);
+  url.searchParams.set('iss', issuer());
   // 303: the consent screen submits via POST; the client's callback only
   // accepts GET. Default redirect (307) preserves POST → 405 at claude.ai.
   return NextResponse.redirect(url, 303);
@@ -76,39 +76,36 @@ function errorRedirect(
  */
 async function validate(
   p: AuthParams,
-): Promise<
-  { ok: true; clientName: string } | { ok: false; res: NextResponse }
-> {
-  if (!p.clientId) return { ok: false, res: badRequest("missing client_id") };
-  if (!p.redirectUri)
-    return { ok: false, res: badRequest("missing redirect_uri") };
+): Promise<{ ok: true; clientName: string } | { ok: false; res: NextResponse }> {
+  if (!p.clientId) return { ok: false, res: badRequest('missing client_id') };
+  if (!p.redirectUri) return { ok: false, res: badRequest('missing redirect_uri') };
 
   const client = await getClient(p.clientId);
-  if (!client) return { ok: false, res: badRequest("unknown client_id") };
+  if (!client) return { ok: false, res: badRequest('unknown client_id') };
   if (!isAllowedRedirectUri(client, p.redirectUri)) {
-    return { ok: false, res: badRequest("redirect_uri not registered") };
+    return { ok: false, res: badRequest('redirect_uri not registered') };
   }
 
   // redirect_uri is now trusted: spec violations go back as error redirects.
-  if (p.responseType !== "code") {
+  if (p.responseType !== 'code') {
     return {
       ok: false,
       res: errorRedirect(
         p.redirectUri,
-        "unsupported_response_type",
+        'unsupported_response_type',
         p.state,
-        "only response_type=code is supported",
+        'only response_type=code is supported',
       ),
     };
   }
-  if (!p.codeChallenge || p.codeChallengeMethod !== "S256") {
+  if (!p.codeChallenge || p.codeChallengeMethod !== 'S256') {
     return {
       ok: false,
       res: errorRedirect(
         p.redirectUri,
-        "invalid_request",
+        'invalid_request',
         p.state,
-        "PKCE with code_challenge_method=S256 is required",
+        'PKCE with code_challenge_method=S256 is required',
       ),
     };
   }
@@ -116,31 +113,23 @@ async function validate(
   return { ok: true, clientName: client.client_name };
 }
 
-function consentHtml(
-  p: AuthParams,
-  clientName: string,
-  userEmail: string,
-): string {
+function consentHtml(p: AuthParams, clientName: string, userEmail: string): string {
   // The original query string is preserved as hidden inputs and re-submitted.
   const fields: [string, string][] = [
-    ["response_type", p.responseType],
-    ["client_id", p.clientId],
-    ["redirect_uri", p.redirectUri],
-    ["code_challenge", p.codeChallenge],
-    ["code_challenge_method", p.codeChallengeMethod],
-    ["state", p.state],
-    ["scope", p.scope],
-    ["resource", p.resource],
+    ['response_type', p.responseType],
+    ['client_id', p.clientId],
+    ['redirect_uri', p.redirectUri],
+    ['code_challenge', p.codeChallenge],
+    ['code_challenge_method', p.codeChallengeMethod],
+    ['state', p.state],
+    ['scope', p.scope],
+    ['resource', p.resource],
   ];
   const esc = (s: string) =>
-    s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const hidden = fields
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(v)}" />`)
-    .join("\n");
+    .join('\n');
 
   return `<!doctype html>
 <html lang="en">
@@ -224,7 +213,7 @@ function consentHtml(
     <div class="logos">
       <img class="cortex" src="/icon.png" alt="Cortex" />
       <span class="link">⇄</span>
-      <span class="client" aria-hidden="true">${esc((clientName[0] ?? "C").toUpperCase())}</span>
+      <span class="client" aria-hidden="true">${esc((clientName[0] ?? 'C').toUpperCase())}</span>
     </div>
     <h1>Connect ${esc(clientName)} to Cortex</h1>
     <p class="sub">Signed in as <strong>${esc(userEmail)}</strong></p>
@@ -261,14 +250,14 @@ export async function GET(req: NextRequest) {
   if (!session) {
     // Send the user through login, returning to this exact authorize URL.
     const next = url.pathname + url.search;
-    const login = new URL("/login", issuer());
-    login.searchParams.set("next", next);
+    const login = new URL('/login', issuer());
+    login.searchParams.set('next', next);
     return NextResponse.redirect(login);
   }
 
   return new NextResponse(consentHtml(p, v.clientName, session.email), {
     status: 200,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
 }
 
@@ -276,10 +265,10 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const sp = new URLSearchParams();
   for (const [k, val] of form.entries()) {
-    if (typeof val === "string") sp.set(k, val);
+    if (typeof val === 'string') sp.set(k, val);
   }
   const p = readParams(sp);
-  const decision = sp.get("decision");
+  const decision = sp.get('decision');
 
   const v = await validate(p);
   if (!v.ok) return v.res;
@@ -288,17 +277,17 @@ export async function POST(req: NextRequest) {
   if (!session) {
     // Session expired between render and submit — bounce through login.
     const next = `/api/oauth/authorize?${sp.toString()}`;
-    const login = new URL("/login", issuer());
-    login.searchParams.set("next", next);
+    const login = new URL('/login', issuer());
+    login.searchParams.set('next', next);
     return NextResponse.redirect(login, 303);
   }
 
-  if (decision !== "approve") {
+  if (decision !== 'approve') {
     return errorRedirect(
       p.redirectUri,
-      "access_denied",
+      'access_denied',
       p.state,
-      "The user denied the authorization request",
+      'The user denied the authorization request',
     );
   }
 
@@ -313,9 +302,9 @@ export async function POST(req: NextRequest) {
   });
 
   const redirect = new URL(p.redirectUri);
-  redirect.searchParams.set("code", code);
-  if (p.state) redirect.searchParams.set("state", p.state);
-  redirect.searchParams.set("iss", issuer());
+  redirect.searchParams.set('code', code);
+  if (p.state) redirect.searchParams.set('state', p.state);
+  redirect.searchParams.set('iss', issuer());
   // 303 (not the 307 default): browsers must follow with GET — claude.ai's
   // auth_callback rejects POST with 405.
   return NextResponse.redirect(redirect, 303);

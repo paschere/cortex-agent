@@ -65,10 +65,7 @@ export function placeholderSources(intro: string, steps: StepDef[]): string[] {
 
 /** Mirrors `render()` in pipeline.run: unknown args stay as {{name}}. */
 export function renderText(text: string, args: Record<string, string>): string {
-  return text.replace(
-    placeholderRegex(),
-    (_, p: string) => args[p] ?? `{{${p}}}`,
-  );
+  return text.replace(placeholderRegex(), (_, p: string) => args[p] ?? `{{${p}}}`);
 }
 
 export const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,48}$/;
@@ -78,7 +75,7 @@ const COMBINING_MARKS = /\p{M}/gu;
 
 /** "Weekly Client Report!" -> "weekly-client-report" (slug grammar of pipeline.create). */
 export function slugify(name: string): string {
-  return slugifyInput(name).replace(/-+$/, "");
+  return slugifyInput(name).replace(/-+$/, '');
 }
 
 /**
@@ -88,10 +85,10 @@ export function slugify(name: string): string {
 export function slugifyInput(value: string): string {
   return value
     .toLowerCase()
-    .normalize("NFD")
-    .replace(COMBINING_MARKS, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+/, "")
+    .normalize('NFD')
+    .replace(COMBINING_MARKS, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+/, '')
     .slice(0, 49);
 }
 
@@ -109,9 +106,9 @@ export function renderPlaybook(opts: {
   runId?: string;
 }): string {
   const args = opts.args ?? {};
-  const emoji = opts.emoji || "⚡";
-  const intro = renderText(opts.intro ?? "", args);
-  const runId = opts.runId ?? "<runId>";
+  const emoji = opts.emoji || '⚡';
+  const intro = renderText(opts.intro ?? '', args);
+  const runId = opts.runId ?? '<runId>';
 
   const renderedSteps = opts.steps
     .map((s, i) => {
@@ -119,55 +116,51 @@ export function renderPlaybook(opts: {
         ? `⛔ STEP ${i + 1} — CHECKPOINT: ${renderText(s.title, args)}`
         : `▪ STEP ${i + 1}: ${renderText(s.title, args)}`;
       const toolsLine =
-        (s.tools ?? []).length > 0
-          ? `\n   Tools: ${(s.tools ?? []).join(", ")}`
-          : "";
+        (s.tools ?? []).length > 0 ? `\n   Tools: ${(s.tools ?? []).join(', ')}` : '';
       const gate = s.checkpoint
         ? "\n   HARD STOP: present your findings and WAIT for the user's explicit decision before continuing."
-        : "";
+        : '';
       return `${head}\n   ${renderText(s.detail, args)}${toolsLine}${gate}`;
     })
-    .join("\n\n");
+    .join('\n\n');
 
   const tail = `Execute now, step by step, reporting progress after each step. Confirmation-gated tools still require approval. When finished (or if the user abandons), call pipeline.finish_run with runId="${runId}" and a one-line outcome summary.`;
 
   return `${emoji} PIPELINE: ${opts.name} (run #${opts.runNumber})\n\n${
-    intro ? `${intro}\n\n` : ""
+    intro ? `${intro}\n\n` : ''
   }${renderedSteps}\n\n${tail}`;
 }
 
 const FAMILY_LABELS: Record<string, string> = {
-  hubspot: "HubSpot",
-  recruit: "Recruiting",
-  workable: "Workable",
-  kb: "Knowledge Base",
-  gmail: "Gmail",
-  gcal: "Google Calendar",
-  gsheets: "Google Sheets",
-  gdrive: "Google Drive",
-  github: "GitHub",
-  linear: "Linear",
-  slack: "Slack",
-  rate: "Rates",
-  payroll: "Payroll",
-  web: "Web",
-  format: "Formatting",
-  people: "People",
-  growth: "Growth Signals",
-  pipeline: "Pipelines",
-  schedule: "Schedules",
-  sales: "Sales",
-  cortex: "Cortex",
+  hubspot: 'HubSpot',
+  recruit: 'Recruiting',
+  workable: 'Workable',
+  kb: 'Knowledge Base',
+  gmail: 'Gmail',
+  gcal: 'Google Calendar',
+  gsheets: 'Google Sheets',
+  gdrive: 'Google Drive',
+  github: 'GitHub',
+  linear: 'Linear',
+  slack: 'Slack',
+  rate: 'Rates',
+  payroll: 'Payroll',
+  web: 'Web',
+  format: 'Formatting',
+  people: 'People',
+  growth: 'Growth Signals',
+  pipeline: 'Pipelines',
+  schedule: 'Schedules',
+  sales: 'Sales',
+  cortex: 'Cortex',
 };
 
 export function familyOf(id: string): string {
-  return id.split(".")[0] ?? id;
+  return id.split('.')[0] ?? id;
 }
 
 export function familyLabel(family: string): string {
-  return (
-    FAMILY_LABELS[family] ?? family.charAt(0).toUpperCase() + family.slice(1)
-  );
+  return FAMILY_LABELS[family] ?? family.charAt(0).toUpperCase() + family.slice(1);
 }
 
 /** The sentence a user says to Cortex to launch this pipeline. */
@@ -177,9 +170,7 @@ export function runSentence(
   values: Record<string, string>,
 ): string {
   const parts = params
-    .filter(
-      (p) => p.required !== false || (values[p.name] ?? "").trim().length > 0,
-    )
-    .map((p) => `${p.name}: ${(values[p.name] ?? "").trim() || "…"}`);
-  return `Run the "${slug}" pipeline${parts.length > 0 ? ` with ${parts.join(", ")}` : ""}`;
+    .filter((p) => p.required !== false || (values[p.name] ?? '').trim().length > 0)
+    .map((p) => `${p.name}: ${(values[p.name] ?? '').trim() || '…'}`);
+  return `Run the "${slug}" pipeline${parts.length > 0 ? ` with ${parts.join(', ')}` : ''}`;
 }

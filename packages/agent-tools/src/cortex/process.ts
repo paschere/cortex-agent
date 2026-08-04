@@ -1,9 +1,9 @@
-import { IntegrationError, ValidationError } from "@cortex/core";
-import { generateText } from "ai";
-import { z } from "zod";
-import { registerTool } from "../index";
-import { getVisibleDocument } from "../kb/spaces";
-import { UTILITY_MODEL, utilityModel } from "../model";
+import { IntegrationError, ValidationError } from '@cortex/core';
+import { generateText } from 'ai';
+import { z } from 'zod';
+import { registerTool } from '../index';
+import { getVisibleDocument } from '../kb/spaces';
+import { UTILITY_MODEL, utilityModel } from '../model';
 
 /**
  * cortex.process — server-side delegation to Cortex's own LLM.
@@ -18,7 +18,7 @@ import { UTILITY_MODEL, utilityModel } from "../model";
 const MAX_SOURCE_CHARS = 400_000;
 
 export const cortexProcess = registerTool({
-  id: "cortex.process",
+  id: 'cortex.process',
   description:
     "Delegate heavy text processing to Cortex's own server-side LLM instead of doing it yourself: summarize, extract structured data, classify, translate, or answer questions about a large source WITHOUT loading it into your context. Provide either documentId (a Knowledge Base document — Cortex reads all its chunks server-side) or content (raw text). Returns only the distilled result. Use this whenever the source material is large and you only need the analysis.",
   inputSchema: z.object({
@@ -33,12 +33,12 @@ export const cortexProcess = registerTool({
       .string()
       .uuid()
       .optional()
-      .describe("KB document id — Cortex loads its full text server-side"),
+      .describe('KB document id — Cortex loads its full text server-side'),
     content: z
       .string()
       .max(MAX_SOURCE_CHARS)
       .optional()
-      .describe("Raw text to process (alternative to documentId)"),
+      .describe('Raw text to process (alternative to documentId)'),
     maxOutputChars: z.number().int().min(100).max(20000).default(4000),
   }),
   outputSchema: z.object({
@@ -50,12 +50,9 @@ export const cortexProcess = registerTool({
   rateLimit: { perMinute: 6 },
   handler: async (input, ctx) => {
     if (!process.env.ANTHROPIC_API_KEY)
-      throw new IntegrationError(
-        "ANTHROPIC_API_KEY not configured",
-        "anthropic",
-      );
+      throw new IntegrationError('ANTHROPIC_API_KEY not configured', 'anthropic');
 
-    let source = input.content ?? "";
+    let source = input.content ?? '';
     let documentTitle: string | null = null;
 
     if (input.documentId) {
@@ -64,29 +61,24 @@ export const cortexProcess = registerTool({
       // out document ids, so without this check an id seen once would be enough
       // to read a document out of a space the caller cannot see. getVisibleDocument
       // reports someone else's document as missing rather than as forbidden.
-      const doc = await getVisibleDocument(
-        ctx.db,
-        ctx.userId,
-        input.documentId,
-      );
+      const doc = await getVisibleDocument(ctx.db, ctx.userId, input.documentId);
       documentTitle = doc.title;
 
       const { data: chunks, error } = await ctx.db
-        .from("kb_chunks")
-        .select("content, chunk_index")
-        .eq("document_id", input.documentId)
-        .order("chunk_index", { ascending: true });
+        .from('kb_chunks')
+        .select('content, chunk_index')
+        .eq('document_id', input.documentId)
+        .order('chunk_index', { ascending: true });
       if (error) throw new Error(`Failed to load chunks: ${error.message}`);
-      source = (chunks ?? []).map((c) => c.content as string).join("\n\n");
+      source = (chunks ?? []).map((c) => c.content as string).join('\n\n');
     }
 
     if (!source.trim()) {
-      throw new ValidationError("Provide documentId or non-empty content.");
+      throw new ValidationError('Provide documentId or non-empty content.');
     }
-    if (source.length > MAX_SOURCE_CHARS)
-      source = source.slice(0, MAX_SOURCE_CHARS);
+    if (source.length > MAX_SOURCE_CHARS) source = source.slice(0, MAX_SOURCE_CHARS);
 
-    const sourceLabel = documentTitle ? ` (document: "${documentTitle}")` : "";
+    const sourceLabel = documentTitle ? ` (document: "${documentTitle}")` : '';
     const prompt = `You are Cortex, the company's internal processing engine. Follow the instruction precisely and answer with ONLY the requested output — no preamble.\n\nINSTRUCTION:\n${input.instruction}\n\nSOURCE${sourceLabel}:\n${source}`;
 
     // No `temperature`: Claude Opus 5 rejects sampling parameters outright
@@ -105,14 +97,10 @@ export const cortexProcess = registerTool({
     } catch (err) {
       throw new IntegrationError(
         `Claude request failed: ${err instanceof Error ? err.message : String(err)}`,
-        "anthropic",
+        'anthropic',
       );
     }
-    if (!text)
-      throw new IntegrationError(
-        "Claude returned an empty response",
-        "anthropic",
-      );
+    if (!text) throw new IntegrationError('Claude returned an empty response', 'anthropic');
 
     const max = input.maxOutputChars ?? 4000;
     return {

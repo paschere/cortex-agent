@@ -11,10 +11,10 @@
  * The whole workflow, and the same four values `growth.update_signal` accepts.
  * There is no fifth state: a signal is waiting, kept, dropped, or done.
  */
-export type SignalStatus = "new" | "qualified" | "rejected" | "contacted";
+export type SignalStatus = 'new' | 'qualified' | 'rejected' | 'contacted';
 
 /** How much the identified contact can be trusted. `inferred` is a guess. */
-export type ContactConfidence = "found" | "inferred" | "unknown";
+export type ContactConfidence = 'found' | 'inferred' | 'unknown';
 
 export interface Prospect {
   id: string;

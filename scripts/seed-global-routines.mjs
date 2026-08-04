@@ -398,7 +398,9 @@ try {
   if (ownerRes.rows.length === 0) throw new Error('No users found — cannot own the routines.');
   const owner = ownerRes.rows[0];
 
-  const agentRes = await client.query(`select id, name from public.agents where slug = 'cortex' limit 1`);
+  const agentRes = await client.query(
+    `select id, name from public.agents where slug = 'cortex' limit 1`,
+  );
   if (agentRes.rows.length === 0) throw new Error("No agent with slug 'cortex' — cannot schedule.");
   const agent = agentRes.rows[0];
 
@@ -416,10 +418,14 @@ try {
 
     if (DRY_RUN) {
       console.log(`── ${p.emoji}  ${p.name} (${p.slug})`);
-      console.log(`   pipeline : ${p.steps.length} steps, tools: ${[
-        ...new Set(p.steps.flatMap((s) => s.tools)),
-      ].join(', ')}`);
-      console.log(`   job      : "${routine.job.name}"  cron="${routine.job.cron}"  next=${nextRun.toISOString()}`);
+      console.log(
+        `   pipeline : ${p.steps.length} steps, tools: ${[
+          ...new Set(p.steps.flatMap((s) => s.tools)),
+        ].join(', ')}`,
+      );
+      console.log(
+        `   job      : "${routine.job.name}"  cron="${routine.job.cron}"  next=${nextRun.toISOString()}`,
+      );
       console.log(`   recipients: ${RECIPIENTS.join(', ')}`);
       console.log(`   instruction: ${instruction}\n`);
       summary.push({ slug: p.slug, job: routine.job.name, cron: routine.job.cron, next: nextRun });
@@ -508,7 +514,9 @@ try {
       hour12: false,
     }).format(d);
   const w = (s, n) => String(s).padEnd(n);
-  console.log(`\n${w('PIPELINE SLUG', 28)}${w('JOB NAME', 42)}${w('CRON', 14)}NEXT RUN (${TIMEZONE})`);
+  console.log(
+    `\n${w('PIPELINE SLUG', 28)}${w('JOB NAME', 42)}${w('CRON', 14)}NEXT RUN (${TIMEZONE})`,
+  );
   console.log('-'.repeat(120));
   for (const r of summary) {
     console.log(`${w(r.slug, 28)}${w(r.job, 42)}${w(r.cron, 14)}${fmt(r.next)}`);

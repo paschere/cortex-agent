@@ -1,10 +1,10 @@
-import { DirectionPair } from "@/components/connect/DirectionPair";
-import { PageHeader } from "@/components/ui/page-header";
-import { Panel } from "@/components/ui/panel";
-import { requireSession } from "@/lib/session";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { listTools } from "@cortex/agent-tools";
-import { clsx } from "clsx";
+import { DirectionPair } from '@/components/connect/DirectionPair';
+import { PageHeader } from '@/components/ui/page-header';
+import { Panel } from '@/components/ui/panel';
+import { requireSession } from '@/lib/session';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { listTools } from '@cortex/agent-tools';
+import { clsx } from 'clsx';
 import {
   Boxes,
   Brain,
@@ -24,16 +24,16 @@ import {
   Users,
   Wallet,
   Wrench,
-} from "lucide-react";
-import Link from "next/link";
-import { AddMcpServerForm } from "./_components/AddMcpServerForm";
-import { type McpServer, McpServerList } from "./_components/McpServerList";
+} from 'lucide-react';
+import Link from 'next/link';
+import { AddMcpServerForm } from './_components/AddMcpServerForm';
+import { type McpServer, McpServerList } from './_components/McpServerList';
 
 const MAX_MCP_SERVERS = 5;
 const MAX_MCP_TOOLS = 50;
 
 /** Connected for the whole team, connected by this person, or not at all. */
-type ConnState = "workspace" | "user" | "disconnected";
+type ConnState = 'workspace' | 'user' | 'disconnected';
 
 interface ProviderCard {
   key: string;
@@ -52,16 +52,16 @@ interface ProviderCard {
 }
 
 const STATE_PILL: Record<ConnState, { label: string; cls: string }> = {
-  workspace: { label: "Connected · team", cls: "bg-emerald-soft text-emerald" },
-  user: { label: "Connected · you", cls: "bg-emerald-soft text-emerald" },
-  disconnected: { label: "Not connected", cls: "bg-surface-2 text-ink-faint" },
+  workspace: { label: 'Connected · team', cls: 'bg-emerald-soft text-emerald' },
+  user: { label: 'Connected · you', cls: 'bg-emerald-soft text-emerald' },
+  disconnected: { label: 'Not connected', cls: 'bg-surface-2 text-ink-faint' },
 };
 
 function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
   });
 }
 
@@ -77,8 +77,8 @@ export default async function IntegrationsPage({
   // Every OAuth row, not just this user's: "who connected it" is part of the
   // answer, and a team-sized table makes this a cheap read.
   const { data: integrationRows } = await db
-    .from("integrations")
-    .select("provider, scopes, updated_at, user_id")
+    .from('integrations')
+    .select('provider, scopes, updated_at, user_id')
     .limit(1000);
 
   const rows = (integrationRows ?? []) as Array<{
@@ -100,27 +100,25 @@ export default async function IntegrationsPage({
     const own = mine[provider];
     if (own) {
       const when = fmtDate(own.updated_at);
-      return when ? `Connected by you · ${when}` : "Connected by you";
+      return when ? `Connected by you · ${when}` : 'Connected by you';
     }
     const n = teammates[provider] ?? 0;
     if (n > 0) {
-      return `${n} teammate${n === 1 ? "" : "s"} connected it — your account has not`;
+      return `${n} teammate${n === 1 ? '' : 's'} connected it — your account has not`;
     }
-    return "Nobody has connected this yet";
+    return 'Nobody has connected this yet';
   }
 
   /** Owner line for a workspace credential provisioned by ops. */
   function opsOwner(connected: boolean, what: string): string {
-    return connected
-      ? "Set up by ops · shared by the whole team"
-      : `Waiting on ops — ${what}`;
+    return connected ? 'Set up by ops · shared by the whole team' : `Waiting on ops — ${what}`;
   }
 
   // Tool counts per family, straight from the live registry.
   const toolsByFamily: Record<string, number> = {};
   for (const t of listTools()) {
-    if (t.id.startsWith("test.")) continue;
-    const fam = t.id.split(".")[0] ?? "";
+    if (t.id.startsWith('test.')) continue;
+    const fam = t.id.split('.')[0] ?? '';
     toolsByFamily[fam] = (toolsByFamily[fam] ?? 0) + 1;
   }
   const famCount = (families: string[]) =>
@@ -139,177 +137,154 @@ export default async function IntegrationsPage({
 
   const providers: ProviderCard[] = [
     {
-      key: "google",
-      name: "Google Workspace",
+      key: 'google',
+      name: 'Google Workspace',
       icon: Mail,
-      families: ["gmail", "gcal", "gsheets", "gdrive", "meetings", "chat"],
-      state: mine.google ? "user" : "disconnected",
+      families: ['gmail', 'gcal', 'gsheets', 'gdrive', 'meetings', 'chat'],
+      state: mine.google ? 'user' : 'disconnected',
       unlocks:
-        "Read and draft your email, see and create calendar events, open Docs, Sheets and Drive files, and pull meeting transcripts.",
+        'Read and draft your email, see and create calendar events, open Docs, Sheets and Drive files, and pull meeting transcripts.',
       offline:
-        "No inbox, no calendar, no Drive and no meeting notes — Cortex cannot see your day at all.",
+        'No inbox, no calendar, no Drive and no meeting notes — Cortex cannot see your day at all.',
       owner: mine.google
-        ? `Connected by you${googleScopes ? ` · ${googleScopes} scopes granted` : ""}`
-        : "Granted when you sign in — connect below if it was skipped",
-      connectHref: mine.google
-        ? undefined
-        : "/api/integrations/google?preset=all",
+        ? `Connected by you${googleScopes ? ` · ${googleScopes} scopes granted` : ''}`
+        : 'Granted when you sign in — connect below if it was skipped',
+      connectHref: mine.google ? undefined : '/api/integrations/google?preset=all',
     },
     {
-      key: "hubspot",
-      name: "HubSpot",
+      key: 'hubspot',
+      name: 'HubSpot',
       icon: Building2,
-      families: ["hubspot"],
-      state: hubspotWorkspace
-        ? "workspace"
-        : mine.hubspot
-          ? "user"
-          : "disconnected",
+      families: ['hubspot'],
+      state: hubspotWorkspace ? 'workspace' : mine.hubspot ? 'user' : 'disconnected',
       unlocks:
-        "Deals, companies, contacts, pipeline health and recent activity — the sales system of record.",
-      offline:
-        "No deal, pipeline or contact answers — the whole sales side goes dark.",
+        'Deals, companies, contacts, pipeline health and recent activity — the sales system of record.',
+      offline: 'No deal, pipeline or contact answers — the whole sales side goes dark.',
       owner: hubspotWorkspace
-        ? "Set up by ops · one private app for the whole team"
-        : personalOwner("hubspot"),
-      connectHref:
-        !hubspotWorkspace && !mine.hubspot
-          ? "/api/integrations/hubspot"
-          : undefined,
+        ? 'Set up by ops · one private app for the whole team'
+        : personalOwner('hubspot'),
+      connectHref: !hubspotWorkspace && !mine.hubspot ? '/api/integrations/hubspot' : undefined,
     },
     {
-      key: "workable",
-      name: "Workable",
+      key: 'workable',
+      name: 'Workable',
       icon: Users,
-      families: ["workable"],
-      state: workableOn ? "workspace" : "disconnected",
+      families: ['workable'],
+      state: workableOn ? 'workspace' : 'disconnected',
       unlocks:
-        "The ATS ground truth: jobs, candidates, stages, screening answers and recent activity.",
-      offline:
-        "Cortex cannot see any real job or candidate — it would be guessing about pipeline.",
-      owner: opsOwner(
-        workableOn,
-        "no Workable service token on this environment",
-      ),
+        'The ATS ground truth: jobs, candidates, stages, screening answers and recent activity.',
+      offline: 'Cortex cannot see any real job or candidate — it would be guessing about pipeline.',
+      owner: opsOwner(workableOn, 'no Workable service token on this environment'),
     },
     {
-      key: "matcher",
-      name: "Talent Pool",
+      key: 'matcher',
+      name: 'Talent Pool',
       icon: Sparkles,
-      families: ["recruit", "people", "rate", "presentations", "sales"],
-      state: matcherOn ? "workspace" : "disconnected",
+      families: ['recruit', 'people', 'rate', 'presentations', 'sales'],
+      state: matcherOn ? 'workspace' : 'disconnected',
       unlocks:
-        "Candidate matching and scoring, side-by-side comparisons, client presentations and rate estimates.",
-      offline:
-        "No matching, no scoring, no presentations and no rate estimates.",
-      owner: opsOwner(matcherOn, "the matcher service URL is not configured"),
+        'Candidate matching and scoring, side-by-side comparisons, client presentations and rate estimates.',
+      offline: 'No matching, no scoring, no presentations and no rate estimates.',
+      owner: opsOwner(matcherOn, 'the matcher service URL is not configured'),
     },
     {
-      key: "bamboo",
-      name: "BambooHR",
+      key: 'bamboo',
+      name: 'BambooHR',
       icon: Contact,
-      families: ["bamboo"],
-      state: bambooOn ? "workspace" : "disconnected",
+      families: ['bamboo'],
+      state: bambooOn ? 'workspace' : 'disconnected',
       unlocks:
-        "The HR system of record: the roster, job and employment history, time off, hours logged, documents on file, and both the pay rate the company pays and the bill rate it charges the client.",
+        'The HR system of record: the roster, job and employment history, time off, hours logged, documents on file, and both the pay rate the company pays and the bill rate it charges the client.',
       offline:
-        "Cortex cannot see who actually works here — no roster, no time off, no tenure and no rates.",
-      owner: opsOwner(bambooOn, "no BambooHR API key on this environment"),
+        'Cortex cannot see who actually works here — no roster, no time off, no tenure and no rates.',
+      owner: opsOwner(bambooOn, 'no BambooHR API key on this environment'),
     },
     {
-      key: "payroll",
-      name: "Payroll",
+      key: 'payroll',
+      name: 'Payroll',
       icon: Wallet,
-      families: ["payroll"],
-      state: payrollOn ? "workspace" : "disconnected",
+      families: ['payroll'],
+      state: payrollOn ? 'workspace' : 'disconnected',
       unlocks:
-        "Who is assigned to which client, payroll and expense reports, and forward-looking cost projections.",
-      offline: "No team cost, assignment or expense answers.",
-      owner: opsOwner(payrollOn, "no payroll API URL on this environment"),
+        'Who is assigned to which client, payroll and expense reports, and forward-looking cost projections.',
+      offline: 'No team cost, assignment or expense answers.',
+      owner: opsOwner(payrollOn, 'no payroll API URL on this environment'),
     },
     {
-      key: "brain",
-      name: "Cortex Brain",
+      key: 'brain',
+      name: 'Cortex Brain',
       icon: Brain,
-      families: ["kb", "pipeline", "schedule", "inbox", "security"],
-      state: brainOn ? "workspace" : "disconnected",
+      families: ['kb', 'pipeline', 'schedule', 'inbox', 'security'],
+      state: brainOn ? 'workspace' : 'disconnected',
       unlocks:
-        "Knowledge Base search and memory, pipelines, routines and the inbox digest — Cortex’s own reasoning.",
-      offline: "The core stops: no Knowledge Base, no pipelines, no routines.",
-      owner: opsOwner(brainOn, "the model API key is missing"),
+        'Knowledge Base search and memory, pipelines, routines and the inbox digest — Cortex’s own reasoning.',
+      offline: 'The core stops: no Knowledge Base, no pipelines, no routines.',
+      owner: opsOwner(brainOn, 'the model API key is missing'),
     },
     {
-      key: "web",
-      name: "Web Research",
+      key: 'web',
+      name: 'Web Research',
       icon: Globe,
-      families: ["web", "growth"],
-      state: webOn ? "workspace" : "disconnected",
-      unlocks:
-        "Live web search and page reading for prospect research and growth signals.",
-      offline:
-        "Cortex is limited to what it already knows — no fresh research on companies.",
-      owner: opsOwner(webOn, "no search API key on this environment"),
+      families: ['web', 'growth'],
+      state: webOn ? 'workspace' : 'disconnected',
+      unlocks: 'Live web search and page reading for prospect research and growth signals.',
+      offline: 'Cortex is limited to what it already knows — no fresh research on companies.',
+      owner: opsOwner(webOn, 'no search API key on this environment'),
     },
     {
-      key: "slack",
-      name: "Slack",
+      key: 'slack',
+      name: 'Slack',
       icon: MessageSquare,
-      families: ["slack"],
-      state: slackOn ? "workspace" : "disconnected",
-      unlocks:
-        "Post updates, reports and routine results straight into team channels.",
-      offline: "Results stay in the app and in email — nothing reaches Slack.",
-      owner: opsOwner(slackOn, "the bot token is not provisioned yet"),
+      families: ['slack'],
+      state: slackOn ? 'workspace' : 'disconnected',
+      unlocks: 'Post updates, reports and routine results straight into team channels.',
+      offline: 'Results stay in the app and in email — nothing reaches Slack.',
+      owner: opsOwner(slackOn, 'the bot token is not provisioned yet'),
     },
     {
-      key: "github",
-      name: "GitHub",
+      key: 'github',
+      name: 'GitHub',
       icon: GitBranch,
-      families: ["github"],
-      state: mine.github ? "user" : "disconnected",
-      unlocks:
-        "Repositories, issues, pull requests and engineering activity metrics.",
-      offline:
-        "No repo, issue or PR visibility — engineering questions go unanswered.",
+      families: ['github'],
+      state: mine.github ? 'user' : 'disconnected',
+      unlocks: 'Repositories, issues, pull requests and engineering activity metrics.',
+      offline: 'No repo, issue or PR visibility — engineering questions go unanswered.',
       owner: mine.github
-        ? personalOwner("github")
-        : `${personalOwner("github")} · ops provisions it`,
+        ? personalOwner('github')
+        : `${personalOwner('github')} · ops provisions it`,
     },
     {
-      key: "linear",
-      name: "Linear",
+      key: 'linear',
+      name: 'Linear',
       icon: ListTodo,
-      families: ["linear"],
-      state: mine.linear ? "user" : "disconnected",
-      unlocks:
-        "Projects, cycles, issues and team workload for roadmap visibility.",
-      offline:
-        "No roadmap or workload answers — Cortex cannot see what the team is building.",
+      families: ['linear'],
+      state: mine.linear ? 'user' : 'disconnected',
+      unlocks: 'Projects, cycles, issues and team workload for roadmap visibility.',
+      offline: 'No roadmap or workload answers — Cortex cannot see what the team is building.',
       owner: mine.linear
-        ? personalOwner("linear")
-        : `${personalOwner("linear")} · ops provisions it`,
+        ? personalOwner('linear')
+        : `${personalOwner('linear')} · ops provisions it`,
     },
     {
-      key: "apollo",
-      name: "Apollo",
+      key: 'apollo',
+      name: 'Apollo',
       icon: Rocket,
-      families: ["apollo"],
-      state: apolloOn ? "workspace" : "disconnected",
+      families: ['apollo'],
+      state: apolloOn ? 'workspace' : 'disconnected',
       unlocks:
-        "Prospecting and contact enrichment for outbound — who works where, their verified work email, and firmographics on the companies worth targeting.",
-      offline:
-        "Growth signals stop at the company: Cortex cannot identify the person to contact.",
-      owner: opsOwner(apolloOn, "no Apollo API key on this environment"),
+        'Prospecting and contact enrichment for outbound — who works where, their verified work email, and firmographics on the companies worth targeting.',
+      offline: 'Growth signals stop at the company: Cortex cannot identify the person to contact.',
+      owner: opsOwner(apolloOn, 'no Apollo API key on this environment'),
     },
   ];
 
   const { data: mcpRows } = await db
-    .from("user_mcp_servers")
+    .from('user_mcp_servers')
     .select(
-      "id, name, url, auth_type, auth_value_encrypted, enabled, trusted, tool_count, last_checked_at, last_error, user_mcp_tools(tool_name, tool_description)",
+      'id, name, url, auth_type, auth_value_encrypted, enabled, trusted, tool_count, last_checked_at, last_error, user_mcp_tools(tool_name, tool_description)',
     )
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true });
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true });
 
   const mcpServers: McpServer[] = (mcpRows ?? []).map((r) => {
     const row = r as Record<string, unknown> & {
@@ -323,7 +298,7 @@ export default async function IntegrationsPage({
       id: row.id as string,
       name: row.name as string,
       url: row.url as string,
-      auth_type: row.auth_type as McpServer["auth_type"],
+      auth_type: row.auth_type as McpServer['auth_type'],
       enabled: row.enabled as boolean,
       trusted: row.trusted as boolean,
       tool_count: (row.tool_count as number) ?? 0,
@@ -339,51 +314,45 @@ export default async function IntegrationsPage({
   const totalMcpTools = mcpServers.reduce((sum, s) => sum + s.tool_count, 0);
   const atToolCapacity = totalMcpTools >= MAX_MCP_TOOLS;
 
-  const connected = providers.filter((p) => p.state !== "disconnected");
-  const missing = providers.filter((p) => p.state === "disconnected");
-  const totalToolCount = Object.values(toolsByFamily).reduce(
-    (a, b) => a + b,
-    0,
-  );
+  const connected = providers.filter((p) => p.state !== 'disconnected');
+  const missing = providers.filter((p) => p.state === 'disconnected');
+  const totalToolCount = Object.values(toolsByFamily).reduce((a, b) => a + b, 0);
 
   const stats = [
     {
-      label: "Systems connected",
+      label: 'Systems connected',
       value: `${connected.length}/${providers.length}`,
-      sub: "Cortex can act in these",
+      sub: 'Cortex can act in these',
       icon: CircleCheck,
-      tone: "emerald" as const,
+      tone: 'emerald' as const,
     },
     {
-      label: "Not connected",
+      label: 'Not connected',
       value: String(missing.length),
-      sub:
-        missing.length > 0
-          ? missing.map((p) => p.name).join(", ")
-          : "nothing missing",
+      sub: missing.length > 0 ? missing.map((p) => p.name).join(', ') : 'nothing missing',
       icon: TriangleAlert,
-      tone: missing.length > 0 ? ("amber" as const) : ("emerald" as const),
+      tone: missing.length > 0 ? ('amber' as const) : ('emerald' as const),
     },
     {
-      label: "Built-in tools",
+      label: 'Built-in tools',
       value: String(totalToolCount),
-      sub: "available to Cortex",
+      sub: 'available to Cortex',
       icon: Wrench,
-      tone: "primary" as const,
+      tone: 'primary' as const,
     },
     {
-      label: "Tools you plugged in",
+      label: 'Tools you plugged in',
       value: String(totalMcpTools),
-      sub: `${mcpServers.length} external MCP server${mcpServers.length === 1 ? "" : "s"}`,
+      sub: `${mcpServers.length} external MCP server${mcpServers.length === 1 ? '' : 's'}`,
       icon: Boxes,
-      tone: "primary" as const,
+      tone: 'primary' as const,
     },
   ];
 
-  const TONE: Record<"primary" | "emerald" | "amber", string> = {
-    primary: "bg-primary-soft text-primary",
-    emerald: "bg-emerald-soft text-emerald",
-    amber: "bg-amber-soft text-amber",
+  const TONE: Record<'primary' | 'emerald' | 'amber', string> = {
+    primary: 'bg-primary-soft text-primary',
+    emerald: 'bg-emerald-soft text-emerald',
+    amber: 'bg-amber-soft text-amber',
   };
 
   return (
@@ -412,7 +381,7 @@ export default async function IntegrationsPage({
           <Panel key={s.label} className="flex items-center gap-3 p-3.5">
             <span
               className={clsx(
-                "grid h-9 w-9 shrink-0 place-items-center rounded-[10px]",
+                'grid h-9 w-9 shrink-0 place-items-center rounded-[10px]',
                 TONE[s.tone],
               )}
             >
@@ -422,13 +391,8 @@ export default async function IntegrationsPage({
               <div className="truncate text-[15px] font-extrabold leading-tight text-ink">
                 {s.value}
               </div>
-              <div className="truncate text-[10.5px] text-ink-faint">
-                {s.label}
-              </div>
-              <div
-                className="truncate text-[10.5px] text-ink-faint"
-                title={s.sub}
-              >
+              <div className="truncate text-[10.5px] text-ink-faint">{s.label}</div>
+              <div className="truncate text-[10.5px] text-ink-faint" title={s.sub}>
                 {s.sub}
               </div>
             </div>
@@ -440,23 +404,21 @@ export default async function IntegrationsPage({
         {providers.map((p) => {
           const pill = STATE_PILL[p.state];
           const tools = famCount(p.families);
-          const isOn = p.state !== "disconnected";
+          const isOn = p.state !== 'disconnected';
           return (
             <Panel key={p.key} className="flex h-full flex-col gap-3 p-4">
               <div className="flex items-start justify-between gap-2">
                 <span
                   className={clsx(
-                    "grid h-10 w-10 shrink-0 place-items-center rounded-[12px]",
-                    isOn
-                      ? "bg-primary-soft text-primary"
-                      : "bg-surface-2 text-ink-faint",
+                    'grid h-10 w-10 shrink-0 place-items-center rounded-[12px]',
+                    isOn ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-faint',
                   )}
                 >
                   <p.icon className="h-5 w-5" />
                 </span>
                 <span
                   className={clsx(
-                    "rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                    'rounded-pill px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide',
                     pill.cls,
                   )}
                 >
@@ -466,9 +428,7 @@ export default async function IntegrationsPage({
 
               <div>
                 <div className="text-[13.5px] font-bold text-ink">{p.name}</div>
-                <p className="mt-0.5 text-[12px] leading-snug text-ink-muted">
-                  {p.unlocks}
-                </p>
+                <p className="mt-0.5 text-[12px] leading-snug text-ink-muted">{p.unlocks}</p>
               </div>
 
               <p className="flex items-start gap-1.5 text-[11px] leading-snug text-ink-faint">
@@ -489,9 +449,7 @@ export default async function IntegrationsPage({
               <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2.5">
                 <span className="inline-flex items-center gap-1 text-[11px] text-ink-faint">
                   <Wrench className="h-3 w-3" />
-                  {tools > 0
-                    ? `${tools} tool${tools === 1 ? "" : "s"}`
-                    : "no tools yet"}
+                  {tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : 'no tools yet'}
                 </span>
                 {p.connectHref && (
                   <Link
@@ -522,18 +480,14 @@ export default async function IntegrationsPage({
               Extra tools you plug into Cortex
             </h2>
             <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-              Point Cortex at your own Model Context Protocol server — Notion, a
-              vendor’s hosted server, something you self-host — and its tools
-              join the list above for your account only. Most people never need
-              this.
+              Point Cortex at your own Model Context Protocol server — Notion, a vendor’s hosted
+              server, something you self-host — and its tools join the list above for your account
+              only. Most people never need this.
             </p>
             <p className="mt-1 text-[11.5px] text-ink-faint">
-              Up to {MAX_MCP_SERVERS} servers and {MAX_MCP_TOOLS} tools in
-              total. Looking for how to use Cortex <em>from</em> Claude instead?{" "}
-              <Link
-                href="/mcp-tokens"
-                className="font-semibold text-primary hover:underline"
-              >
+              Up to {MAX_MCP_SERVERS} servers and {MAX_MCP_TOOLS} tools in total. Looking for how to
+              use Cortex <em>from</em> Claude instead?{' '}
+              <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
                 That is the other page
               </Link>
               .
@@ -551,16 +505,14 @@ export default async function IntegrationsPage({
           )}
           {atToolCapacity && (
             <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
-              {MAX_MCP_TOOLS}-tool total limit reached. New tools will not be
-              synced until you remove some.
+              {MAX_MCP_TOOLS}-tool total limit reached. New tools will not be synced until you
+              remove some.
             </p>
           )}
 
           {!atServerCapacity && (
             <div className="mt-4 border-t border-border pt-4">
-              <h3 className="text-[12.5px] font-semibold text-ink">
-                Add a server
-              </h3>
+              <h3 className="text-[12.5px] font-semibold text-ink">Add a server</h3>
               <AddMcpServerForm disabled={atServerCapacity} />
             </div>
           )}

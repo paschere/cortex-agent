@@ -171,7 +171,10 @@ export function emailDomain(email: string | null | undefined): string | null {
   if (!email) return null;
   const at = email.lastIndexOf('@');
   if (at < 0) return null;
-  const domain = email.slice(at + 1).trim().toLowerCase();
+  const domain = email
+    .slice(at + 1)
+    .trim()
+    .toLowerCase();
   return domain.length > 0 ? domain : null;
 }
 
@@ -278,7 +281,9 @@ export function classifyMeeting(input: MeetingClassifyInput): MeetingClassificat
     const allPersonalMail =
       externalDomains.length > 0 && externalDomains.every((d) => PERSONAL_MAIL_DOMAINS.has(d));
     if (allPersonalMail) {
-      reasons.push('The outside guest uses a personal email address, which usually means a candidate');
+      reasons.push(
+        'The outside guest uses a personal email address, which usually means a candidate',
+      );
       return finish('interview', 0.6);
     }
 

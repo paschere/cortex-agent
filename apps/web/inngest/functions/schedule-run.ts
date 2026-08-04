@@ -1,13 +1,13 @@
-import { buildToolContext } from "@/lib/agent";
-import { sendEmail } from "@/lib/email";
-import { renderRoutineResultEmail } from "@/lib/email-templates";
-import { sendChatDm, toChatText } from "@/lib/google-chat";
-import { inngest } from "@/lib/inngest";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { chatModel } from "@cortex/agent-tools";
-import { filterTools, getTool, runTool } from "@cortex/agent-tools";
-import { logger } from "@cortex/core";
-import { type CoreTool, generateText, tool } from "ai";
+import { buildToolContext } from '@/lib/agent';
+import { sendEmail } from '@/lib/email';
+import { renderRoutineResultEmail } from '@/lib/email-templates';
+import { sendChatDm, toChatText } from '@/lib/google-chat';
+import { inngest } from '@/lib/inngest';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { chatModel } from '@cortex/agent-tools';
+import { filterTools, getTool, runTool } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
+import { type CoreTool, generateText, tool } from 'ai';
 
 const MAX_OUTPUT_CHARS = 8000;
 
@@ -16,11 +16,11 @@ interface JobRow {
   user_id: string;
   agent_id: string;
   name: string;
-  kind: "tool" | "agent";
+  kind: 'tool' | 'agent';
   tool_id: string | null;
   tool_input: Record<string, unknown> | null;
   instruction: string | null;
-  schedule_kind: "once" | "cron";
+  schedule_kind: 'once' | 'cron';
   status: string;
   allow_unattended_writes: boolean;
   notify_conversation: boolean;
@@ -43,9 +43,7 @@ interface ExecResult {
 }
 
 function truncate(s: string): string {
-  return s.length > MAX_OUTPUT_CHARS
-    ? `${s.slice(0, MAX_OUTPUT_CHARS)}\n… (truncated)`
-    : s;
+  return s.length > MAX_OUTPUT_CHARS ? `${s.slice(0, MAX_OUTPUT_CHARS)}\n… (truncated)` : s;
 }
 
 /**
@@ -54,15 +52,15 @@ function truncate(s: string): string {
  * link back to the full run in Cortex.
  */
 function buildChatBody(job: JobRow, result: ExecResult): string {
-  const base = (process.env.APP_BASE_URL ?? "").replace(/\/+$/, "");
+  const base = (process.env.APP_BASE_URL ?? '').replace(/\/+$/, '');
   const body = [
-    `**${result.ok ? "✅" : "⚠️"} ${job.name}**`,
-    "",
+    `**${result.ok ? '✅' : '⚠️'} ${job.name}**`,
+    '',
     result.ok
-      ? result.output || "(no output)"
-      : `The routine failed:\n\n${result.error ?? "Unknown error"}`,
-    base ? `\n[View this routine in Cortex](${base}/schedules)` : "",
-  ].join("\n");
+      ? result.output || '(no output)'
+      : `The routine failed:\n\n${result.error ?? 'Unknown error'}`,
+    base ? `\n[View this routine in Cortex](${base}/schedules)` : '',
+  ].join('\n');
   return toChatText(body, base ? { moreUrl: `${base}/schedules` } : {});
 }
 
@@ -81,10 +79,10 @@ async function chatDmUserIds(job: JobRow): Promise<string[]> {
 
   if (job.recipients.length > 0) {
     const { data } = await db
-      .from("users")
-      .select("id")
+      .from('users')
+      .select('id')
       .in(
-        "email",
+        'email',
         job.recipients.map((r) => r.trim().toLowerCase()),
       );
     candidates = ((data ?? []) as Array<{ id: string }>).map((u) => u.id);
@@ -94,18 +92,17 @@ async function chatDmUserIds(job: JobRow): Promise<string[]> {
   if (candidates.length === 0) return [];
 
   const { data: prefs } = await db
-    .from("user_preferences")
-    .select("user_id")
-    .in("user_id", candidates)
-    .eq("deliver_chat_dm", true);
+    .from('user_preferences')
+    .select('user_id')
+    .in('user_id', candidates)
+    .eq('deliver_chat_dm', true);
   return ((prefs ?? []) as Array<{ user_id: string }>).map((p) => p.user_id);
 }
 
 /** Run the job's fixed tool call. Never throws — errors become the result. */
 async function executeToolJob(job: JobRow): Promise<ExecResult> {
-  const toolDef = getTool(job.tool_id ?? "");
-  if (!toolDef)
-    return { ok: false, output: "", error: `Unknown tool: ${job.tool_id}` };
+  const toolDef = getTool(job.tool_id ?? '');
+  if (!toolDef) return { ok: false, output: '', error: `Unknown tool: ${job.tool_id}` };
   const ctx = buildToolContext({ userId: job.user_id, agentId: job.agent_id });
   try {
     const result = await runTool(toolDef, job.tool_input ?? {}, ctx, {
@@ -115,7 +112,7 @@ async function executeToolJob(job: JobRow): Promise<ExecResult> {
   } catch (err) {
     return {
       ok: false,
-      output: "",
+      output: '',
       error: (err as Error).message.slice(0, 2000),
     };
   }
@@ -129,19 +126,18 @@ async function executeToolJob(job: JobRow): Promise<ExecResult> {
 async function executeAgentJob(job: JobRow): Promise<ExecResult> {
   const db = getSupabaseServiceClient();
   const { data: agent, error } = await db
-    .from("agents")
-    .select("id, system_prompt, default_model, allowed_tool_ids")
-    .eq("id", job.agent_id)
+    .from('agents')
+    .select('id, system_prompt, default_model, allowed_tool_ids')
+    .eq('id', job.agent_id)
     .single();
-  if (error || !agent)
-    return { ok: false, output: "", error: `Agent ${job.agent_id} not found` };
+  if (error || !agent) return { ok: false, output: '', error: `Agent ${job.agent_id} not found` };
 
   const ctx = buildToolContext({ userId: job.user_id, agentId: job.agent_id });
   const allowed = filterTools(agent.allowed_tool_ids as string[]);
 
   const aiTools: Record<string, CoreTool> = Object.fromEntries(
     allowed.map((t) => [
-      t.id.replaceAll(".", "_"),
+      t.id.replaceAll('.', '_'),
       tool({
         description: t.description,
         parameters: t.inputSchema,
@@ -151,7 +147,7 @@ async function executeAgentJob(job: JobRow): Promise<ExecResult> {
               __skipped: true,
               tool: t.id,
               reason:
-                "This tool requires human confirmation and the job does not allow unattended writes. Report this to the user instead.",
+                'This tool requires human confirmation and the job does not allow unattended writes. Report this to the user instead.',
             } as unknown as never;
           }
           try {
@@ -185,53 +181,49 @@ UNATTENDED SCHEDULED RUN. You are executing the scheduled job "${job.name}" with
     const result = await generateText({
       model: chatModel(agent.default_model as string),
       system,
-      messages: [{ role: "user", content: job.instruction ?? "" }],
+      messages: [{ role: 'user', content: job.instruction ?? '' }],
       tools: aiTools,
-      toolChoice: "auto",
+      toolChoice: 'auto',
       maxSteps: 12,
     });
     const text = result.text.trim();
-    if (!text)
-      return { ok: false, output: "", error: "Agent produced no final text" };
+    if (!text) return { ok: false, output: '', error: 'Agent produced no final text' };
     return { ok: true, output: truncate(text) };
   } catch (err) {
     return {
       ok: false,
-      output: "",
+      output: '',
       error: (err as Error).message.slice(0, 2000),
     };
   }
 }
 
 export const scheduleRun = inngest.createFunction(
-  { id: "schedule-run", concurrency: { limit: 5 } },
-  { event: "scheduled/job.run" },
+  { id: 'schedule-run', concurrency: { limit: 5 } },
+  { event: 'scheduled/job.run' },
   async ({ event, step }) => {
     const jobId = event.data.jobId as string;
     const scheduledFor = event.data.scheduledFor as string;
 
-    const job = await step.run("load-job", async (): Promise<JobRow | null> => {
+    const job = await step.run('load-job', async (): Promise<JobRow | null> => {
       const db = getSupabaseServiceClient();
       const { data, error } = await db
-        .from("scheduled_jobs")
+        .from('scheduled_jobs')
         .select(
-          "id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id, recipients, is_global, timezone, next_run_at",
+          'id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id, recipients, is_global, timezone, next_run_at',
         )
-        .eq("id", jobId)
+        .eq('id', jobId)
         .maybeSingle();
-      if (error)
-        throw new Error(`Failed to load job ${jobId}: ${error.message}`);
+      if (error) throw new Error(`Failed to load job ${jobId}: ${error.message}`);
       if (!data) return null;
       const { data: user } = await db
-        .from("users")
-        .select("email")
-        .eq("id", data.user_id as string)
+        .from('users')
+        .select('email')
+        .eq('id', data.user_id as string)
         .maybeSingle();
       return {
         ...data,
-        recipients: ((data.recipients as string[] | null) ?? []).filter(
-          Boolean,
-        ),
+        recipients: ((data.recipients as string[] | null) ?? []).filter(Boolean),
         is_global: (data.is_global as boolean | null) ?? false,
         user_email: (user?.email as string | null) ?? null,
         timezone: (data.timezone as string | null) ?? null,
@@ -240,85 +232,73 @@ export const scheduleRun = inngest.createFunction(
     });
 
     // Cancelled/paused between dispatch and execution — do nothing.
-    if (!job) return { skipped: "job not found" };
-    if (job.status !== "active") return { skipped: `job is ${job.status}` };
+    if (!job) return { skipped: 'job not found' };
+    if (job.status !== 'active') return { skipped: `job is ${job.status}` };
 
-    const runId = await step.run("create-run", async () => {
+    const runId = await step.run('create-run', async () => {
       const db = getSupabaseServiceClient();
       const { data, error } = await db
-        .from("scheduled_job_runs")
+        .from('scheduled_job_runs')
         .insert({
           job_id: job.id,
-          status: "running",
+          status: 'running',
           metadata: { scheduledFor },
         })
-        .select("id")
+        .select('id')
         .single();
-      if (error || !data)
-        throw new Error(`Failed to create run row: ${error?.message}`);
+      if (error || !data) throw new Error(`Failed to create run row: ${error?.message}`);
       return data.id as string;
     });
 
     // Execution never throws: failures are captured in the result so Inngest
     // does not retry (and possibly double-execute) side-effectful work.
-    const result = await step.run("execute", async (): Promise<ExecResult> => {
+    const result = await step.run('execute', async (): Promise<ExecResult> => {
       const startedAt = Date.now();
-      const exec =
-        job.kind === "tool"
-          ? await executeToolJob(job)
-          : await executeAgentJob(job);
+      const exec = job.kind === 'tool' ? await executeToolJob(job) : await executeAgentJob(job);
       return { ...exec, durationMs: Date.now() - startedAt };
     });
 
     if (job.notify_conversation) {
-      await step.run("deliver-conversation", async () => {
+      await step.run('deliver-conversation', async () => {
         const db = getSupabaseServiceClient();
         let conversationId = job.conversation_id;
         if (!conversationId) {
           const { data: conv, error } = await db
-            .from("conversations")
+            .from('conversations')
             .insert({
               user_id: job.user_id,
               agent_id: job.agent_id,
-              surface: "web",
+              surface: 'web',
               title: `⏱ ${job.name}`.slice(0, 60),
             })
-            .select("id")
+            .select('id')
             .single();
-          if (error || !conv)
-            throw new Error(`Failed to create conversation: ${error?.message}`);
+          if (error || !conv) throw new Error(`Failed to create conversation: ${error?.message}`);
           conversationId = conv.id as string;
           await db
-            .from("scheduled_jobs")
+            .from('scheduled_jobs')
             .update({ conversation_id: conversationId })
-            .eq("id", job.id);
+            .eq('id', job.id);
         }
         const content = result.ok
           ? `**Scheduled run — ${job.name}**\n\n${result.output}`
           : `**Scheduled run — ${job.name}** failed:\n\n${result.error}`;
-        const { error: msgErr } = await db
-          .from("messages")
-          .insert({
-            conversation_id: conversationId,
-            role: "assistant",
-            content,
-          });
-        if (msgErr)
-          throw new Error(`Failed to insert message: ${msgErr.message}`);
+        const { error: msgErr } = await db.from('messages').insert({
+          conversation_id: conversationId,
+          role: 'assistant',
+          content,
+        });
+        if (msgErr) throw new Error(`Failed to insert message: ${msgErr.message}`);
         return conversationId;
       });
     }
 
     // Explicit recipient list wins; otherwise fall back to the job owner.
     const emailTo =
-      job.recipients.length > 0
-        ? job.recipients
-        : job.user_email
-          ? [job.user_email]
-          : [];
+      job.recipients.length > 0 ? job.recipients : job.user_email ? [job.user_email] : [];
 
     if (job.notify_email && emailTo.length > 0) {
-      await step.run("deliver-email", async () => {
+      await step.run('deliver-email', async () => {
         // Delivery is best-effort: a mail failure must never fail the run.
         try {
           const mail = renderRoutineResultEmail({
@@ -339,7 +319,7 @@ export const scheduleRun = inngest.createFunction(
             html: mail.html,
           });
         } catch (err) {
-          logger.error("schedule-run: email delivery failed", {
+          logger.error('schedule-run: email delivery failed', {
             jobId: job.id,
             error: (err as Error).message,
           });
@@ -351,19 +331,17 @@ export const scheduleRun = inngest.createFunction(
     // Google Chat DM — in ADDITION to the email, for people who opted in.
     // Wrapped whole so neither the preference lookup nor a Chat outage can
     // fail the run: the routine already did its work.
-    await step.run("deliver-chat-dm", async () => {
+    await step.run('deliver-chat-dm', async () => {
       try {
         const userIds = await chatDmUserIds(job);
         if (userIds.length === 0) return { sent: 0 };
         const text = buildChatBody(job, result);
         const outcomes = await Promise.all(
-          userIds.map((userId) =>
-            sendChatDm({ userId, text, threadKey: `job-${job.id}` }),
-          ),
+          userIds.map((userId) => sendChatDm({ userId, text, threadKey: `job-${job.id}` })),
         );
         const sent = outcomes.filter((o) => o.sent).length;
         if (sent < userIds.length) {
-          logger.warn("schedule-run: some Chat DMs were not delivered", {
+          logger.warn('schedule-run: some Chat DMs were not delivered', {
             jobId: job.id,
             wanted: userIds.length,
             sent,
@@ -371,7 +349,7 @@ export const scheduleRun = inngest.createFunction(
         }
         return { sent };
       } catch (err) {
-        logger.error("schedule-run: Chat DM delivery failed", {
+        logger.error('schedule-run: Chat DM delivery failed', {
           jobId: job.id,
           error: (err as Error).message,
         });
@@ -379,34 +357,34 @@ export const scheduleRun = inngest.createFunction(
       }
     });
 
-    await step.run("finalize", async () => {
+    await step.run('finalize', async () => {
       const db = getSupabaseServiceClient();
       const { error: runErr } = await db
-        .from("scheduled_job_runs")
+        .from('scheduled_job_runs')
         .update({
-          status: result.ok ? "ok" : "error",
+          status: result.ok ? 'ok' : 'error',
           finished_at: new Date().toISOString(),
           output: result.ok ? result.output : null,
           error: result.ok ? null : result.error,
         })
-        .eq("id", runId);
+        .eq('id', runId);
       if (runErr) throw new Error(`Failed to finalize run: ${runErr.message}`);
 
       await db
-        .from("scheduled_jobs")
+        .from('scheduled_jobs')
         .update({
           last_run_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
-        .eq("id", job.id);
+        .eq('id', job.id);
       // One-offs are done after their single run (guarded so a cancel that
       // happened mid-run is not clobbered back to completed).
-      if (job.schedule_kind === "once") {
+      if (job.schedule_kind === 'once') {
         await db
-          .from("scheduled_jobs")
-          .update({ status: "completed" })
-          .eq("id", job.id)
-          .eq("status", "active");
+          .from('scheduled_jobs')
+          .update({ status: 'completed' })
+          .eq('id', job.id)
+          .eq('status', 'active');
       }
     });
 

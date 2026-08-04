@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { Panel } from "@/components/ui/panel";
+import { Panel } from '@/components/ui/panel';
 import {
   BLAST_LABEL,
   type BlastRadius,
@@ -13,8 +13,8 @@ import {
   providerLabel,
   qualifiedToolLabel,
   toolActionLabel,
-} from "@/lib/tool-taxonomy";
-import { clsx } from "clsx";
+} from '@/lib/tool-taxonomy';
+import { clsx } from 'clsx';
 import {
   AlarmClock,
   BookOpen,
@@ -55,9 +55,9 @@ import {
   Wallet,
   Workflow,
   Wrench,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 
 /**
  * Plain serialisable shape resolved by the server page. Nothing here may be
@@ -133,22 +133,22 @@ const FAMILY_ICONS: Record<string, typeof Wrench> = {
 };
 
 const TONE_CHIP: Record<FamilyTone, string> = {
-  primary: "bg-primary-soft text-primary",
-  emerald: "bg-emerald-soft text-emerald",
-  amber: "bg-amber-soft text-amber",
-  sky: "bg-sky-soft text-sky",
-  rose: "bg-rose-soft text-rose",
+  primary: 'bg-primary-soft text-primary',
+  emerald: 'bg-emerald-soft text-emerald',
+  amber: 'bg-amber-soft text-amber',
+  sky: 'bg-sky-soft text-sky',
+  rose: 'bg-rose-soft text-rose',
 };
 
 const RISK_CHIP: Record<RiskLevel, string> = {
-  low: "bg-surface-2 text-ink-muted",
-  medium: "bg-sky-soft text-sky",
-  high: "bg-amber-soft text-amber",
-  critical: "bg-rose-soft text-rose",
+  low: 'bg-surface-2 text-ink-muted',
+  medium: 'bg-sky-soft text-sky',
+  high: 'bg-amber-soft text-amber',
+  critical: 'bg-rose-soft text-rose',
 };
 
-type RiskFilter = "all" | RiskLevel;
-type ConnectionFilter = "all" | "needs-connection" | "no-integration";
+type RiskFilter = 'all' | RiskLevel;
+type ConnectionFilter = 'all' | 'needs-connection' | 'no-integration';
 
 /** Small on/off switch used for both family and tool rows. */
 function Toggle({
@@ -172,14 +172,14 @@ function Toggle({
       disabled={disabled}
       onClick={onClick}
       className={clsx(
-        "relative h-5 w-9 shrink-0 rounded-pill border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        on ? "border-emerald bg-emerald" : "border-border bg-surface-2",
+        'relative h-5 w-9 shrink-0 rounded-pill border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        on ? 'border-emerald bg-emerald' : 'border-border bg-surface-2',
       )}
     >
       <span
         className={clsx(
-          "absolute left-0.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-surface shadow-card transition-transform",
-          on && "translate-x-4",
+          'absolute left-0.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full bg-surface shadow-card transition-transform',
+          on && 'translate-x-4',
         )}
       />
     </button>
@@ -201,10 +201,10 @@ function FilterChip({
       onClick={onClick}
       aria-pressed={active}
       className={clsx(
-        "inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
+        'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
         active
-          ? "bg-primary text-white"
-          : "bg-surface-2 text-ink-muted hover:bg-primary-soft hover:text-primary",
+          ? 'bg-primary text-white'
+          : 'bg-surface-2 text-ink-muted hover:bg-primary-soft hover:text-primary',
       )}
     >
       {children}
@@ -227,7 +227,7 @@ function Badge({
     <span
       title={title}
       className={clsx(
-        "inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10.5px] font-semibold",
+        'inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[10.5px] font-semibold',
         className,
       )}
     >
@@ -253,11 +253,11 @@ export function ToolsCatalog({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [approvalOnly, setApprovalOnly] = useState(false);
   const [restrictedOnly, setRestrictedOnly] = useState(false);
-  const [risk, setRisk] = useState<RiskFilter>("all");
-  const [connection, setConnection] = useState<ConnectionFilter>("all");
+  const [risk, setRisk] = useState<RiskFilter>('all');
+  const [connection, setConnection] = useState<ConnectionFilter>('all');
   const [openFamilies, setOpenFamilies] = useState<Set<string>>(new Set());
   const [denied, setDenied] = useState<string[]>(initialTeamDenied);
   const [savingPattern, setSavingPattern] = useState<string | null>(null);
@@ -270,22 +270,16 @@ export function ToolsCatalog({
   }, [initialTeamDenied]);
 
   const filtersActive =
-    query.trim() !== "" ||
-    approvalOnly ||
-    restrictedOnly ||
-    risk !== "all" ||
-    connection !== "all";
+    query.trim() !== '' || approvalOnly || restrictedOnly || risk !== 'all' || connection !== 'all';
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tools.filter((t) => {
       if (approvalOnly && !t.needsApproval) return false;
       if (restrictedOnly && !t.restrictedSomewhere) return false;
-      if (risk !== "all" && t.riskLevel !== risk) return false;
-      if (connection === "needs-connection" && t.missingProviders.length === 0)
-        return false;
-      if (connection === "no-integration" && t.providers.length > 0)
-        return false;
+      if (risk !== 'all' && t.riskLevel !== risk) return false;
+      if (connection === 'needs-connection' && t.missingProviders.length === 0) return false;
+      if (connection === 'no-integration' && t.providers.length > 0) return false;
       if (!q) return true;
       const meta = familyMeta(t.family);
       return (
@@ -311,12 +305,9 @@ export function ToolsCatalog({
     );
   }, [filtered]);
 
-  const selectedTeam = isAdmin
-    ? (teams.find((t) => t.id === selectedTeamId) ?? null)
-    : null;
+  const selectedTeam = isAdmin ? (teams.find((t) => t.id === selectedTeamId) ?? null) : null;
   const deniedSet = useMemo(() => new Set(denied), [denied]);
-  const allOpen =
-    grouped.length > 0 && grouped.every(([f]) => openFamilies.has(f));
+  const allOpen = grouped.length > 0 && grouped.every(([f]) => openFamilies.has(f));
 
   // A search or filter is a request to see what matched — collapsed sections
   // would hide exactly the thing the user just asked for.
@@ -334,7 +325,7 @@ export function ToolsCatalog({
   function selectTeam(id: string) {
     setError(null);
     startTransition(() => {
-      router.replace(id ? `/tools?team=${encodeURIComponent(id)}` : "/tools", {
+      router.replace(id ? `/tools?team=${encodeURIComponent(id)}` : '/tools', {
         scroll: false,
       });
     });
@@ -346,25 +337,21 @@ export function ToolsCatalog({
     const prev = denied;
     setError(null);
     setSavingPattern(pattern);
-    setDenied(
-      allowed
-        ? prev.filter((p) => p !== pattern)
-        : [...new Set([...prev, pattern])],
-    );
+    setDenied(allowed ? prev.filter((p) => p !== pattern) : [...new Set([...prev, pattern])]);
     try {
-      const res = await fetch("/api/tools/permissions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/tools/permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           teamId: selectedTeam.id,
           toolPattern: pattern,
           allowed,
         }),
       });
-      if (!res.ok) throw new Error("save failed");
+      if (!res.ok) throw new Error('save failed');
     } catch {
       setDenied(prev);
-      setError("Could not save the change. Please try again.");
+      setError('Could not save the change. Please try again.');
     } finally {
       setSavingPattern(null);
     }
@@ -379,12 +366,10 @@ export function ToolsCatalog({
               <UsersRound className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <div className="text-[13px] font-semibold text-ink">
-                Team access
-              </div>
+              <div className="text-[13px] font-semibold text-ink">Team access</div>
               <div className="text-[11.5px] text-ink-faint">
-                Access is granted per team, never per person. Pick a team to
-                block whole families or individual tools for everyone in it.
+                Access is granted per team, never per person. Pick a team to block whole families or
+                individual tools for everyone in it.
               </div>
             </div>
             <div className="ml-auto flex w-full items-center gap-2 sm:w-auto">
@@ -405,23 +390,19 @@ export function ToolsCatalog({
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-pill bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-ink-muted">
                   <Users2 className="h-3 w-3" />
                   {selectedTeam.memberCount} member
-                  {selectedTeam.memberCount === 1 ? "" : "s"}
+                  {selectedTeam.memberCount === 1 ? '' : 's'}
                 </span>
               )}
             </div>
           </div>
           {selectedTeam && (
             <p className="mt-2 text-[11.5px] text-ink-faint">
-              Toggles control what{" "}
-              <span className="font-semibold text-ink-muted">
-                {selectedTeam.name}
-              </span>{" "}
-              can use. Off blocks the tool for every member of the team; on
-              removes the block and restores the agent default. Teams only ever
-              subtract — a second team cannot restore what this one denies.
-              {isPending && (
-                <span className="ml-2 text-primary">Loading permissions…</span>
-              )}
+              Toggles control what{' '}
+              <span className="font-semibold text-ink-muted">{selectedTeam.name}</span> can use. Off
+              blocks the tool for every member of the team; on removes the block and restores the
+              agent default. Teams only ever subtract — a second team cannot restore what this one
+              denies.
+              {isPending && <span className="ml-2 text-primary">Loading permissions…</span>}
             </p>
           )}
           {teams.length === 0 && (
@@ -429,11 +410,7 @@ export function ToolsCatalog({
               No teams yet — create one in Admin → Teams first.
             </p>
           )}
-          {error && (
-            <p className="mt-2 text-[11.5px] font-semibold text-rose">
-              {error}
-            </p>
-          )}
+          {error && <p className="mt-2 text-[11.5px] font-semibold text-rose">{error}</p>}
         </Panel>
       )}
 
@@ -451,15 +428,11 @@ export function ToolsCatalog({
           </label>
           <button
             type="button"
-            onClick={() =>
-              setOpenFamilies(
-                allOpen ? new Set() : new Set(grouped.map(([f]) => f)),
-              )
-            }
+            onClick={() => setOpenFamilies(allOpen ? new Set() : new Set(grouped.map(([f]) => f)))}
             disabled={filtersActive}
             className="rounded-pill border border-border bg-surface px-3 py-1.5 text-[11.5px] font-semibold text-ink-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {allOpen ? "Collapse all" : "Expand all"}
+            {allOpen ? 'Collapse all' : 'Expand all'}
           </button>
         </div>
 
@@ -467,37 +440,27 @@ export function ToolsCatalog({
           <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
             Filter
           </span>
-          <FilterChip
-            active={approvalOnly}
-            onClick={() => setApprovalOnly((v) => !v)}
-          >
+          <FilterChip active={approvalOnly} onClick={() => setApprovalOnly((v) => !v)}>
             <ShieldAlert className="h-3 w-3" />
             Needs approval
           </FilterChip>
-          <FilterChip
-            active={restrictedOnly}
-            onClick={() => setRestrictedOnly((v) => !v)}
-          >
+          <FilterChip active={restrictedOnly} onClick={() => setRestrictedOnly((v) => !v)}>
             <Lock className="h-3 w-3" />
             Restricted for a team
           </FilterChip>
           <FilterChip
-            active={connection === "needs-connection"}
+            active={connection === 'needs-connection'}
             onClick={() =>
-              setConnection((v) =>
-                v === "needs-connection" ? "all" : "needs-connection",
-              )
+              setConnection((v) => (v === 'needs-connection' ? 'all' : 'needs-connection'))
             }
           >
             <PlugZap className="h-3 w-3" />
             Integration not connected
           </FilterChip>
           <FilterChip
-            active={connection === "no-integration"}
+            active={connection === 'no-integration'}
             onClick={() =>
-              setConnection((v) =>
-                v === "no-integration" ? "all" : "no-integration",
-              )
+              setConnection((v) => (v === 'no-integration' ? 'all' : 'no-integration'))
             }
           >
             <Sparkles className="h-3 w-3" />
@@ -508,28 +471,18 @@ export function ToolsCatalog({
           <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-ink-faint">
             Risk
           </span>
-          {(["all", "low", "medium", "high", "critical"] as RiskFilter[]).map(
-            (level) => (
-              <FilterChip
-                key={level}
-                active={risk === level}
-                onClick={() => setRisk(level)}
-              >
-                {level === "all"
-                  ? "Any"
-                  : RISK_LABEL[level].replace(" risk", "")}
-              </FilterChip>
-            ),
-          )}
+          {(['all', 'low', 'medium', 'high', 'critical'] as RiskFilter[]).map((level) => (
+            <FilterChip key={level} active={risk === level} onClick={() => setRisk(level)}>
+              {level === 'all' ? 'Any' : RISK_LABEL[level].replace(' risk', '')}
+            </FilterChip>
+          ))}
         </div>
 
         <p className="text-[11px] leading-relaxed text-ink-faint">
-          Risk is the baseline the guardrail assigns to a tool from what it
-          touches and how far it reaches. The real call can be scored higher —
-          compensation figures in the payload, a recipient outside the company,
-          or a bulk export all raise it, and only the genuinely dangerous
-          combinations are refused outright. Everything else runs and is
-          recorded.
+          Risk is the baseline the guardrail assigns to a tool from what it touches and how far it
+          reaches. The real call can be scored higher — compensation figures in the payload, a
+          recipient outside the company, or a bulk export all raise it, and only the genuinely
+          dangerous combinations are refused outright. Everything else runs and is recorded.
         </p>
       </Panel>
 
@@ -559,7 +512,7 @@ export function ToolsCatalog({
                   >
                     <span
                       className={clsx(
-                        "grid h-9 w-9 shrink-0 place-items-center rounded-[10px]",
+                        'grid h-9 w-9 shrink-0 place-items-center rounded-[10px]',
                         TONE_CHIP[meta.tone],
                       )}
                     >
@@ -567,14 +520,12 @@ export function ToolsCatalog({
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span className="text-[14px] font-bold text-ink">
-                          {meta.name}
-                        </span>
+                        <span className="text-[14px] font-bold text-ink">{meta.name}</span>
                         <span className="font-mono text-[10.5px] text-ink-faint">
                           {familyPattern}
                         </span>
                         <span className="text-[10.5px] text-ink-faint">
-                          {list.length} tool{list.length === 1 ? "" : "s"}
+                          {list.length} tool{list.length === 1 ? '' : 's'}
                         </span>
                         {approvals > 0 && (
                           <span className="text-[10.5px] font-semibold text-amber">
@@ -593,8 +544,8 @@ export function ToolsCatalog({
                     </span>
                     <ChevronDown
                       className={clsx(
-                        "mt-1 h-4 w-4 shrink-0 text-ink-faint transition-transform",
-                        open && "rotate-180",
+                        'mt-1 h-4 w-4 shrink-0 text-ink-faint transition-transform',
+                        open && 'rotate-180',
                       )}
                     />
                   </button>
@@ -603,18 +554,16 @@ export function ToolsCatalog({
                       <Toggle
                         on={!familyBlocked}
                         disabled={savingPattern === familyPattern}
-                        label={`${familyBlocked ? "Allow" : "Block"} the whole ${meta.name} family for ${selectedTeam.name}`}
-                        onClick={() =>
-                          setPermission(familyPattern, familyBlocked)
-                        }
+                        label={`${familyBlocked ? 'Allow' : 'Block'} the whole ${meta.name} family for ${selectedTeam.name}`}
+                        onClick={() => setPermission(familyPattern, familyBlocked)}
                       />
                       <span
                         className={clsx(
-                          "text-[9.5px] font-semibold uppercase tracking-[0.08em]",
-                          familyBlocked ? "text-rose" : "text-ink-faint",
+                          'text-[9.5px] font-semibold uppercase tracking-[0.08em]',
+                          familyBlocked ? 'text-rose' : 'text-ink-faint',
                         )}
                       >
-                        {familyBlocked ? "Family blocked" : "Whole family"}
+                        {familyBlocked ? 'Family blocked' : 'Whole family'}
                       </span>
                     </div>
                   )}
@@ -625,23 +574,16 @@ export function ToolsCatalog({
                     {list.map((t, i) => {
                       const toolBlocked = deniedSet.has(t.id);
                       const blocked = toolBlocked || familyBlocked;
-                      const unavailable = selectedTeam
-                        ? blocked
-                        : t.deniedForMe;
+                      const unavailable = selectedTeam ? blocked : t.deniedForMe;
                       return (
                         <div
                           key={t.id}
                           className={clsx(
-                            "flex items-start gap-4 px-4 py-3",
-                            i > 0 && "border-t border-border",
+                            'flex items-start gap-4 px-4 py-3',
+                            i > 0 && 'border-t border-border',
                           )}
                         >
-                          <div
-                            className={clsx(
-                              "min-w-0 flex-1",
-                              unavailable && "opacity-60",
-                            )}
-                          >
+                          <div className={clsx('min-w-0 flex-1', unavailable && 'opacity-60')}>
                             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                               <span
                                 className="text-[13.5px] font-semibold text-ink"
@@ -651,9 +593,7 @@ export function ToolsCatalog({
                               </span>
                               {/* Raw id kept as secondary detail: it is what the
                                   permission patterns and audit log speak. */}
-                              <code className="font-mono text-[11px] text-ink-faint">
-                                {t.id}
-                              </code>
+                              <code className="font-mono text-[11px] text-ink-faint">{t.id}</code>
                             </div>
                             <p className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">
                               {t.description}
@@ -669,10 +609,10 @@ export function ToolsCatalog({
                                     : null,
                                 ]
                                   .filter(Boolean)
-                                  .join(" — ")}
+                                  .join(' — ')}
                               >
                                 {RISK_LABEL[t.riskLevel]}
-                                {t.outboundRiskLevel ? " +" : ""}
+                                {t.outboundRiskLevel ? ' +' : ''}
                               </Badge>
                               <Badge className="bg-surface-2 text-ink-muted">
                                 {SENSITIVITY_LABEL[t.sensitivity]}
@@ -684,7 +624,7 @@ export function ToolsCatalog({
                                   title={
                                     t.outboundRiskLevel
                                       ? `Scored ${RISK_LABEL[t.outboundRiskLevel].toLowerCase()} once it is addressed to someone outside the company`
-                                      : "Content reaches people outside the company"
+                                      : 'Content reaches people outside the company'
                                   }
                                 >
                                   Can leave the company
@@ -695,10 +635,7 @@ export function ToolsCatalog({
                                 </Badge>
                               )}
                               {t.needsApproval ? (
-                                <Badge
-                                  className="bg-amber-soft text-amber"
-                                  icon={ShieldAlert}
-                                >
+                                <Badge className="bg-amber-soft text-amber" icon={ShieldAlert}>
                                   Needs approval
                                 </Badge>
                               ) : (
@@ -714,8 +651,8 @@ export function ToolsCatalog({
                                     icon={PlugZap}
                                     className={
                                       missing
-                                        ? "bg-rose-soft text-rose"
-                                        : "bg-emerald-soft text-emerald"
+                                        ? 'bg-rose-soft text-rose'
+                                        : 'bg-emerald-soft text-emerald'
                                     }
                                     title={
                                       missing
@@ -724,7 +661,7 @@ export function ToolsCatalog({
                                     }
                                   >
                                     {providerLabel(p)}
-                                    {missing ? " not connected" : ""}
+                                    {missing ? ' not connected' : ''}
                                   </Badge>
                                 );
                               })}
@@ -751,25 +688,19 @@ export function ToolsCatalog({
                                 <Badge
                                   className="bg-rose-soft text-rose"
                                   icon={Lock}
-                                  title={`Blocked for ${t.restrictedFor.join(", ")}`}
+                                  title={`Blocked for ${t.restrictedFor.join(', ')}`}
                                 >
-                                  Blocked for {t.restrictedFor.join(", ")}
+                                  Blocked for {t.restrictedFor.join(', ')}
                                 </Badge>
                               ) : (
                                 isAdmin && (
-                                  <Badge
-                                    className="bg-surface-2 text-ink-muted"
-                                    icon={Users2}
-                                  >
+                                  <Badge className="bg-surface-2 text-ink-muted" icon={Users2}>
                                     All teams
                                   </Badge>
                                 )
                               )}
                               {!isAdmin && t.deniedForMe && (
-                                <Badge
-                                  className="bg-rose-soft text-rose"
-                                  icon={Lock}
-                                >
+                                <Badge className="bg-rose-soft text-rose" icon={Lock}>
                                   Not available to your team
                                 </Badge>
                               )}
@@ -786,10 +717,8 @@ export function ToolsCatalog({
                             <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
                               <Toggle
                                 on={!blocked}
-                                disabled={
-                                  familyBlocked || savingPattern === t.id
-                                }
-                                label={`${blocked ? "Allow" : "Block"} ${qualifiedToolLabel(t.id)} for ${selectedTeam.name}`}
+                                disabled={familyBlocked || savingPattern === t.id}
+                                label={`${blocked ? 'Allow' : 'Block'} ${qualifiedToolLabel(t.id)} for ${selectedTeam.name}`}
                                 onClick={() => setPermission(t.id, toolBlocked)}
                               />
                               {familyBlocked ? (

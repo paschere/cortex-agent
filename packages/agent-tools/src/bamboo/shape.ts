@@ -1,5 +1,5 @@
-import { z } from "zod";
-import type { BambooFailure } from "./client";
+import { z } from 'zod';
+import type { BambooFailure } from './client';
 
 /**
  * Shared shaping for the BambooHR tools — the same two jobs the Apollo family's
@@ -18,33 +18,33 @@ import type { BambooFailure } from "./client";
 
 /** Stamped on every result so Cortex can cite where a fact came from. */
 export const sourceSchema = z.object({
-  provider: z.literal("BambooHR"),
+  provider: z.literal('BambooHR'),
   dataset: z.string(),
   retrievedAt: z.string(),
 });
 
 /** Human names for the BambooHR datasets — never an endpoint path or a field id. */
 export const DATASET = {
-  roster: "BambooHR employee roster",
-  employee: "BambooHR employee record",
-  compensation: "BambooHR compensation record",
-  compensationHistory: "BambooHR compensation history",
-  employmentHistory: "BambooHR job and employment history",
-  orgChart: "BambooHR reporting lines",
-  headcount: "BambooHR headcount summary",
-  changed: "BambooHR recently changed employees",
-  timeOff: "BambooHR time off",
-  timeOffBalance: "BambooHR time off balances",
-  timeOffTypes: "BambooHR time off policies",
-  timesheets: "BambooHR time tracking",
-  projects: "BambooHR time tracking projects",
-  documents: "BambooHR employee documents",
-  fields: "BambooHR field catalogue",
+  roster: 'BambooHR employee roster',
+  employee: 'BambooHR employee record',
+  compensation: 'BambooHR compensation record',
+  compensationHistory: 'BambooHR compensation history',
+  employmentHistory: 'BambooHR job and employment history',
+  orgChart: 'BambooHR reporting lines',
+  headcount: 'BambooHR headcount summary',
+  changed: 'BambooHR recently changed employees',
+  timeOff: 'BambooHR time off',
+  timeOffBalance: 'BambooHR time off balances',
+  timeOffTypes: 'BambooHR time off policies',
+  timesheets: 'BambooHR time tracking',
+  projects: 'BambooHR time tracking projects',
+  documents: 'BambooHR employee documents',
+  fields: 'BambooHR field catalogue',
 } as const;
 
 export function sourceOf(dataset: string): z.infer<typeof sourceSchema> {
   return {
-    provider: "BambooHR",
+    provider: 'BambooHR',
     dataset,
     retrievedAt: new Date().toISOString(),
   };
@@ -70,42 +70,42 @@ export function failureStatus(f: BambooFailure): {
 }
 
 // ---------------------------------------------------------------------------
-// Cortex's BambooHR instance: the field ids that have no alias
+// The company's BambooHR instance: the field ids that have no alias
 // ---------------------------------------------------------------------------
 
 /**
  * BambooHR gives its built-in fields a stable alias (`payRate`, `hireDate`)
  * but custom fields only have a numeric id, so custom fields must be requested
  * by number. These numbers were read from this instance's own `/meta/fields`
- * and `/meta/tables`; they are Cortex-specific and would differ in another
+ * and `/meta/tables`; they are instance-specific and would differ in another
  * BambooHR account.
  *
  * BILL RATE IS REAL. It is custom field 4631 ("Bill Rate", currency), sitting
  * in the custom historical table `customBillRate1` alongside its effective date
  * (4630) and a comment (4632). Every currently-active employee has one. This
- * matters because the payroll app only ever syncs `payRate` — what Cortex PAYS
+ * matters because the payroll app only ever syncs `payRate` — what the company PAYS
  * the person — and that is a cost, not a bill rate. The two are different
  * numbers about the same person and must never be relabelled into each other.
  */
 export const FIELD = {
-  billRate: "4631",
-  billRateEffectiveDate: "4630",
-  billRateComment: "4632",
-  managerName: "4625",
-  managerEmail: "4627",
-  clientProject: "4626",
-  internalPod: "4707",
-  assignedCsm: "4708",
-  assignedTsp: "4709",
+  billRate: '4631',
+  billRateEffectiveDate: '4630',
+  billRateComment: '4632',
+  managerName: '4625',
+  managerEmail: '4627',
+  clientProject: '4626',
+  internalPod: '4707',
+  assignedCsm: '4708',
+  assignedTsp: '4709',
 } as const;
 
 /** Custom historical tables in this instance, addressed by alias. */
 export const TABLE = {
-  billRate: "customBillRate1",
-  managerInfo: "customManagerInformation",
-  compensation: "compensation",
-  jobInfo: "jobInfo",
-  employmentStatus: "employmentStatus",
+  billRate: 'customBillRate1',
+  managerInfo: 'customManagerInformation',
+  compensation: 'compensation',
+  jobInfo: 'jobInfo',
+  employmentStatus: 'employmentStatus',
 } as const;
 
 /**
@@ -158,15 +158,14 @@ export const NO_MONEY: Money = { amount: null, currency: null, display: null };
 export function parseMoney(raw: unknown): Money {
   if (raw === null || raw === undefined) return NO_MONEY;
 
-  if (typeof raw === "object") {
+  if (typeof raw === 'object') {
     const o = raw as { value?: unknown; currency?: unknown };
     const amount = toNumber(o.value);
-    const currency =
-      typeof o.currency === "string" && o.currency ? o.currency : null;
+    const currency = typeof o.currency === 'string' && o.currency ? o.currency : null;
     return { amount, currency, display: renderMoney(amount, currency) };
   }
 
-  if (typeof raw === "number") {
+  if (typeof raw === 'number') {
     return {
       amount: Number.isFinite(raw) ? raw : null,
       currency: null,
@@ -174,7 +173,7 @@ export function parseMoney(raw: unknown): Money {
     };
   }
 
-  if (typeof raw !== "string") return NO_MONEY;
+  if (typeof raw !== 'string') return NO_MONEY;
 
   const trimmed = raw.trim();
   if (!trimmed) return NO_MONEY;
@@ -188,20 +187,17 @@ export function parseMoney(raw: unknown): Money {
 }
 
 function toNumber(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value !== "string") return null;
-  const cleaned = value.replace(/[,\s]/g, "");
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/[,\s]/g, '');
   if (!cleaned || !/^-?\d*\.?\d+$/.test(cleaned)) return null;
   const n = Number.parseFloat(cleaned);
   return Number.isFinite(n) ? n : null;
 }
 
-function renderMoney(
-  amount: number | null,
-  currency: string | null,
-): string | null {
+function renderMoney(amount: number | null, currency: string | null): string | null {
   if (amount === null) return null;
-  const formatted = amount.toLocaleString("en-US", {
+  const formatted = amount.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -213,7 +209,7 @@ function renderMoney(
 // ---------------------------------------------------------------------------
 
 export function str(value: unknown): string | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== 'string') return null;
   const t = value.trim();
   return t ? t : null;
 }
@@ -221,21 +217,17 @@ export function str(value: unknown): string | null {
 /** BambooHR writes "0000-00-00" for an unset date. */
 export function dateStr(value: unknown): string | null {
   const s = str(value);
-  if (!s || s.startsWith("0000")) return null;
+  if (!s || s.startsWith('0000')) return null;
   return s;
 }
 
 /** Whole months between two ISO dates, or null if the start is unusable. */
-export function monthsBetween(
-  from: string | null,
-  to: Date = new Date(),
-): number | null {
+export function monthsBetween(from: string | null, to: Date = new Date()): number | null {
   if (!from) return null;
   const start = new Date(`${from}T00:00:00Z`);
   if (Number.isNaN(start.getTime())) return null;
   const months =
-    (to.getUTCFullYear() - start.getUTCFullYear()) * 12 +
-    (to.getUTCMonth() - start.getUTCMonth());
+    (to.getUTCFullYear() - start.getUTCFullYear()) * 12 + (to.getUTCMonth() - start.getUTCMonth());
   const adjusted = to.getUTCDate() < start.getUTCDate() ? months - 1 : months;
   return adjusted < 0 ? null : adjusted;
 }
@@ -246,9 +238,9 @@ export function describeTenure(months: number | null): string | null {
   const years = Math.floor(months / 12);
   const rest = months % 12;
   const parts: string[] = [];
-  if (years) parts.push(`${years} year${years === 1 ? "" : "s"}`);
-  if (rest || !years) parts.push(`${rest} month${rest === 1 ? "" : "s"}`);
-  return parts.join(", ");
+  if (years) parts.push(`${years} year${years === 1 ? '' : 's'}`);
+  if (rest || !years) parts.push(`${rest} month${rest === 1 ? '' : 's'}`);
+  return parts.join(', ');
 }
 
 // ---------------------------------------------------------------------------
@@ -256,10 +248,10 @@ export function describeTenure(months: number | null): string | null {
 // ---------------------------------------------------------------------------
 
 /**
- * In Cortex's instance the BambooHR "department" field holds the CLIENT the
+ * In this BambooHR instance the "department" field holds the CLIENT the
  * person is placed with, not an internal department — the roster is full of
  * client names. "Division" is the internal grouping (Tech, Non-tech, Internal,
- * Cortex, LatAm Staff). Projecting `department` under a `client` label would be
+ * LatAm Staff, and so on). Projecting `department` under a `client` label would be
  * guessing, so both are exposed under names that say what they literally are,
  * and the tool descriptions explain the convention.
  */
@@ -269,7 +261,7 @@ export const employeeSchema = z.object({
   name: z.string().nullable(),
   workEmail: z.string().nullable(),
   jobTitle: z.string().nullable(),
-  /** BambooHR's "Department" — at Cortex this is the client or project name. */
+  /** BambooHR's "Department" — here this is the client or project name. */
   department: z.string().nullable(),
   /** BambooHR's "Division" — the internal grouping. */
   division: z.string().nullable(),
@@ -291,7 +283,7 @@ export type ReportRow = Record<string, unknown>;
 export function adaptEmployee(row: ReportRow): Employee {
   const hireDate = dateStr(row.hireDate);
   return {
-    employeeId: String(row.id ?? ""),
+    employeeId: String(row.id ?? ''),
     name: str(row.displayName),
     workEmail: str(row.workEmail),
     jobTitle: str(row.jobTitle),
@@ -309,18 +301,18 @@ export function adaptEmployee(row: ReportRow): Employee {
 
 /** Fields every roster-shaped read asks for. Kept in one place so they cannot drift. */
 export const ROSTER_FIELDS = [
-  "id",
-  "displayName",
-  "workEmail",
-  "jobTitle",
-  "department",
-  "division",
-  "location",
-  "status",
-  "employmentHistoryStatus",
-  "hireDate",
-  "terminationDate",
-  "reportsTo",
+  'id',
+  'displayName',
+  'workEmail',
+  'jobTitle',
+  'department',
+  'division',
+  'location',
+  'status',
+  'employmentHistoryStatus',
+  'hireDate',
+  'terminationDate',
+  'reportsTo',
 ];
 
 // ---------------------------------------------------------------------------
@@ -330,8 +322,8 @@ export const ROSTER_FIELDS = [
 /**
  * The truthful compensation shape.
  *
- * `payRate` is what Cortex PAYS the person — a cost.
- * `billRate` is what Cortex CHARGES the client for them — revenue.
+ * `payRate` is what the company PAYS the person — a cost.
+ * `billRate` is what the company CHARGES the client for them — revenue.
  *
  * They are separate fields in BambooHR and they are separate numbers. Every
  * name and description in this family keeps them apart, and `margin` is only
@@ -366,8 +358,7 @@ export function computeMargin(
   }
   const diff = bill.amount - pay.amount;
   const currency = bill.currency ?? pay.currency;
-  const percent =
-    bill.amount === 0 ? null : Math.round((diff / bill.amount) * 1000) / 10;
+  const percent = bill.amount === 0 ? null : Math.round((diff / bill.amount) * 1000) / 10;
   return {
     grossMargin: {
       amount: Math.round(diff * 100) / 100,
@@ -385,7 +376,7 @@ export function computeMargin(
  * a price.
  */
 export const RATE_GLOSSARY =
-  "Pay rate is what Cortex pays the person (a cost). Bill rate is what Cortex charges the client for them (revenue). They are different fields in BambooHR — never quote one as the other.";
+  'Pay rate is what the company pays the person (a cost). Bill rate is what the company charges the client for them (revenue). They are different fields in BambooHR — never quote one as the other.';
 
 /**
  * BambooHR and the payroll service are two systems, not one system read twice.
@@ -397,4 +388,4 @@ export const RATE_GLOSSARY =
  * report both figures and name the source rather than average them or pick one.
  */
 export const PAYROLL_BOUNDARY_NOTE =
-  "SOURCE: BambooHR. The payroll service (payroll.*) is a separate system covering the same people, and holds what was actually paid out plus expenses. The two can hold different figures for the same person. If you have numbers from both and they disagree, give both and say which came from where — never average them or silently pick one.";
+  'SOURCE: BambooHR. The payroll service (payroll.*) is a separate system covering the same people, and holds what was actually paid out plus expenses. The two can hold different figures for the same person. If you have numbers from both and they disagree, give both and say which came from where — never average them or silently pick one.';

@@ -11,7 +11,7 @@
  * is false — which the orchestrator treats as "cannot verify", never as "pass".
  */
 
-export type PackageManager = "pnpm" | "yarn" | "npm";
+export type PackageManager = 'pnpm' | 'yarn' | 'npm';
 
 export interface CheckStep {
   /** Stable id used in the transcript and the PR body. */
@@ -39,13 +39,13 @@ export interface CheckPlan {
 /** Script names we know how to interpret, most specific first. */
 const KNOWN_SCRIPTS: Array<{ id: string; label: string; names: string[] }> = [
   {
-    id: "typecheck",
-    label: "typecheck",
-    names: ["typecheck", "type-check", "tsc"],
+    id: 'typecheck',
+    label: 'typecheck',
+    names: ['typecheck', 'type-check', 'tsc'],
   },
-  { id: "lint", label: "lint", names: ["lint", "check"] },
-  { id: "test", label: "tests", names: ["test", "test:unit"] },
-  { id: "build", label: "build", names: ["build"] },
+  { id: 'lint', label: 'lint', names: ['lint', 'check'] },
+  { id: 'test', label: 'tests', names: ['test', 'test:unit'] },
+  { id: 'build', label: 'build', names: ['build'] },
 ];
 
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
@@ -55,28 +55,23 @@ export function detectPackageManager(files: {
   hasYarnLock: boolean;
   packageManagerField?: string | null;
 }): PackageManager {
-  const field = files.packageManagerField ?? "";
-  if (field.startsWith("pnpm")) return "pnpm";
-  if (field.startsWith("yarn")) return "yarn";
-  if (files.hasPnpmLock) return "pnpm";
-  if (files.hasYarnLock) return "yarn";
-  return "npm";
+  const field = files.packageManagerField ?? '';
+  if (field.startsWith('pnpm')) return 'pnpm';
+  if (field.startsWith('yarn')) return 'yarn';
+  if (files.hasPnpmLock) return 'pnpm';
+  if (files.hasYarnLock) return 'yarn';
+  return 'npm';
 }
 
-function runScript(
-  pm: PackageManager,
-  script: string,
-): { cmd: string; args: string[] } {
-  if (pm === "npm") return { cmd: "npm", args: ["run", script] };
-  return { cmd: pm, args: ["run", script] };
+function runScript(pm: PackageManager, script: string): { cmd: string; args: string[] } {
+  if (pm === 'npm') return { cmd: 'npm', args: ['run', script] };
+  return { cmd: pm, args: ['run', script] };
 }
 
 function installArgs(pm: PackageManager): { cmd: string; args: string[] } {
-  if (pm === "pnpm")
-    return { cmd: "pnpm", args: ["install", "--frozen-lockfile"] };
-  if (pm === "yarn")
-    return { cmd: "yarn", args: ["install", "--frozen-lockfile"] };
-  return { cmd: "npm", args: ["ci"] };
+  if (pm === 'pnpm') return { cmd: 'pnpm', args: ['install', '--frozen-lockfile'] };
+  if (pm === 'yarn') return { cmd: 'yarn', args: ['install', '--frozen-lockfile'] };
+  return { cmd: 'npm', args: ['ci'] };
 }
 
 /**
@@ -103,9 +98,7 @@ export function buildCheckPlan(params: {
 
   const steps: CheckStep[] = [];
   for (const known of KNOWN_SCRIPTS) {
-    const name = known.names.find(
-      (n) => typeof scripts[n] === "string" && scripts[n] !== "",
-    );
+    const name = known.names.find((n) => typeof scripts[n] === 'string' && scripts[n] !== '');
     if (!name) continue;
     const { cmd, args } = runScript(pm, name);
     steps.push({
@@ -121,8 +114,8 @@ export function buildCheckPlan(params: {
   return {
     packageManager: pm,
     install: {
-      id: "install",
-      label: "install dependencies",
+      id: 'install',
+      label: 'install dependencies',
       cmd: install.cmd,
       args: install.args,
       timeoutMs: FIFTEEN_MINUTES,
@@ -147,10 +140,8 @@ export function allChecksPassed(outcomes: CheckOutcome[]): boolean {
 
 /** One line per check, for the PR body's "what was verified" section. */
 export function formatCheckSummary(outcomes: CheckOutcome[]): string {
-  if (outcomes.length === 0) return "_No verification steps were run._";
+  if (outcomes.length === 0) return '_No verification steps were run._';
   return outcomes
-    .map(
-      (o) => `- ${o.passed ? "✅" : "❌"} \`${o.label}\` (exit ${o.exitCode})`,
-    )
-    .join("\n");
+    .map((o) => `- ${o.passed ? '✅' : '❌'} \`${o.label}\` (exit ${o.exitCode})`)
+    .join('\n');
 }

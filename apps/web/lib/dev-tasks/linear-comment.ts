@@ -1,7 +1,7 @@
-import { buildToolContext } from "@/lib/agent";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { getTool, runTool } from "@cortex/agent-tools";
-import { logger } from "@cortex/core";
+import { buildToolContext } from '@/lib/agent';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getTool, runTool } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 
 /**
  * Talking back to the human on the Linear issue.
@@ -37,25 +37,20 @@ async function resolveActor(): Promise<Actor | null> {
   if (cachedActor) return cachedActor;
   const db = getSupabaseServiceClient();
 
-  const { data: agent } = await db
-    .from("agents")
-    .select("id")
-    .eq("slug", "cortex")
-    .maybeSingle();
+  const { data: agent } = await db.from('agents').select('id').eq('slug', 'cortex').maybeSingle();
   const agentId = agent?.id as string | undefined;
   if (!agentId) {
     logger.error('dev-tasks: no "cortex" agent row — cannot post to Linear');
     return null;
   }
 
-  const configured =
-    process.env.CORTEX_LINEAR_ACTOR_EMAIL?.trim().toLowerCase();
+  const configured = process.env.CORTEX_LINEAR_ACTOR_EMAIL?.trim().toLowerCase();
   if (configured) {
     const { data: user } = await db
-      .from("users")
-      .select("id")
+      .from('users')
+      .select('id')
       .ilike(
-        "email",
+        'email',
         configured.replace(/[%_]/g, (m) => `\\${m}`),
       )
       .maybeSingle();
@@ -63,22 +58,18 @@ async function resolveActor(): Promise<Actor | null> {
       cachedActor = { userId: user.id as string, agentId };
       return cachedActor;
     }
-    logger.warn(
-      `dev-tasks: CORTEX_LINEAR_ACTOR_EMAIL "${configured}" matches no Cortex user`,
-    );
+    logger.warn(`dev-tasks: CORTEX_LINEAR_ACTOR_EMAIL "${configured}" matches no Cortex user`);
   }
 
   const { data: integration } = await db
-    .from("integrations")
-    .select("user_id")
-    .eq("provider", "linear")
-    .order("created_at", { ascending: true })
+    .from('integrations')
+    .select('user_id')
+    .eq('provider', 'linear')
+    .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
   if (!integration?.user_id) {
-    logger.error(
-      "dev-tasks: nobody has connected Linear — cannot post to Linear",
-    );
+    logger.error('dev-tasks: nobody has connected Linear — cannot post to Linear');
     return null;
   }
   cachedActor = { userId: integration.user_id as string, agentId };
@@ -93,16 +84,13 @@ async function resolveActor(): Promise<Actor | null> {
  * never containing a token or anything the requester did not already see on
  * their own issue.
  */
-export async function commentOnIssue(
-  issueId: string,
-  body: string,
-): Promise<boolean> {
+export async function commentOnIssue(issueId: string, body: string): Promise<boolean> {
   try {
     const actor = await resolveActor();
     if (!actor) return false;
-    const tool = getTool("linear.create_comment");
+    const tool = getTool('linear.create_comment');
     if (!tool) {
-      logger.error("dev-tasks: linear.create_comment is not registered");
+      logger.error('dev-tasks: linear.create_comment is not registered');
       return false;
     }
     const ctx = buildToolContext({
@@ -112,7 +100,7 @@ export async function commentOnIssue(
     await runTool(tool, { issueId, body }, ctx, { confirmed: true });
     return true;
   } catch (err) {
-    logger.error("dev-tasks: could not comment on the Linear issue", {
+    logger.error('dev-tasks: could not comment on the Linear issue', {
       issueId,
       error: (err as Error).message,
     });

@@ -187,17 +187,14 @@ function resourceMetadataUrl(): string {
 
 /** 401 with a WWW-Authenticate header per the MCP OAuth spec. */
 function unauthorized(): NextResponse {
-  return new NextResponse(
-    JSON.stringify(rpcErr(null, INVALID_REQUEST, 'Unauthorized')),
-    {
-      status: 401,
-      headers: {
-        ...CORS_HEADERS,
-        'Content-Type': 'application/json',
-        'WWW-Authenticate': `Bearer resource_metadata="${resourceMetadataUrl()}", scope="read write"`,
-      },
+  return new NextResponse(JSON.stringify(rpcErr(null, INVALID_REQUEST, 'Unauthorized')), {
+    status: 401,
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': 'application/json',
+      'WWW-Authenticate': `Bearer resource_metadata="${resourceMetadataUrl()}", scope="read write"`,
     },
-  );
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -624,7 +621,10 @@ async function confirmationRequiredResult(
   if (error || !pending) {
     return {
       content: [
-        { type: 'text', text: `Could not stage the action for confirmation: ${error?.message ?? 'unknown error'}` },
+        {
+          type: 'text',
+          text: `Could not stage the action for confirmation: ${error?.message ?? 'unknown error'}`,
+        },
       ],
     };
   }
@@ -684,7 +684,11 @@ const PROMPTS: PromptDef[] = [
     arguments: [
       { name: 'role', description: 'e.g., "frontend", "fullstack"', required: true },
       { name: 'seniority', description: 'junior | mid | senior | lead', required: true },
-      { name: 'companyId', description: 'Optional HubSpot company ID for context', required: false },
+      {
+        name: 'companyId',
+        description: 'Optional HubSpot company ID for context',
+        required: false,
+      },
     ],
     render: (a) =>
       `Draft a complete client proposal for a ${a.seniority ?? ''} ${a.role ?? ''} role.` +
@@ -712,18 +716,14 @@ const PROMPTS: PromptDef[] = [
   {
     name: 'document-repo',
     description: 'Read a GitHub repository and persist Markdown docs to the Knowledge Base.',
-    arguments: [
-      { name: 'repo', description: 'owner/name of the repository', required: true },
-    ],
+    arguments: [{ name: 'repo', description: 'owner/name of the repository', required: true }],
     render: (a) =>
       `Document the GitHub repository ${a.repo ?? ''}: check kb_search for existing docs first, read the repo structure and key files with the github tools, synthesize concise Markdown documentation (purpose, architecture, setup, key modules), and save it with kb_create_document.`,
   },
   {
     name: 'project-status',
     description: 'Summarize the current status of a Linear project with real metrics.',
-    arguments: [
-      { name: 'project', description: 'Linear project name or ID', required: true },
-    ],
+    arguments: [{ name: 'project', description: 'Linear project name or ID', required: true }],
     render: (a) =>
       `Report the status of Linear project "${a.project ?? ''}": fetch the project, its issues by state, cycle stats, and per-person workload. Lead with a one-line health verdict, then the numbers, then risks. Cite issue ids inline.`,
   },
@@ -742,17 +742,28 @@ async function listResources(): Promise<Array<{ uri: string; name: string; mimeT
       mimeType: 'text/markdown',
     })),
     // Back-compat alias for the original single-agent resource.
-    { uri: 'cortex://agent/system-prompt', name: 'Sales agent system prompt', mimeType: 'text/markdown' },
+    {
+      uri: 'cortex://agent/system-prompt',
+      name: 'Sales agent system prompt',
+      mimeType: 'text/markdown',
+    },
     {
       uri: 'cortex://kb/spaces',
       name: 'Knowledge Base spaces you can see',
       mimeType: 'application/json',
     },
-    { uri: 'cortex://integrations/status', name: 'Connected integrations', mimeType: 'application/json' },
+    {
+      uri: 'cortex://integrations/status',
+      name: 'Connected integrations',
+      mimeType: 'application/json',
+    },
   ];
 }
 
-async function readResource(uri: string, auth: AuthResult): Promise<JsonRpcResponse['result'] | null> {
+async function readResource(
+  uri: string,
+  auth: AuthResult,
+): Promise<JsonRpcResponse['result'] | null> {
   const db = getSupabaseServiceClient();
 
   const agentMatch = /^cortex:\/\/agents\/([a-z0-9-]+)\/system-prompt$/.exec(uri);
@@ -890,7 +901,11 @@ async function dispatch(
         }
 
         const conversationId = await resolveMcpConversation(auth, sessionId, entry.agentId);
-        const ctx = buildToolContext({ userId: auth.userId, agentId: entry.agentId, conversationId });
+        const ctx = buildToolContext({
+          userId: auth.userId,
+          agentId: entry.agentId,
+          conversationId,
+        });
         try {
           const result = await runTool(entry.tool, args, ctx);
           if (conversationId) {
@@ -1062,7 +1077,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!auth) return unauthorized();
   return new NextResponse(JSON.stringify(rpcErr(null, METHOD_NOT_FOUND, 'No SSE stream')), {
     status: 405,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json', Allow: 'POST, DELETE, OPTIONS' },
+    headers: {
+      ...CORS_HEADERS,
+      'Content-Type': 'application/json',
+      Allow: 'POST, DELETE, OPTIONS',
+    },
   });
 }
 

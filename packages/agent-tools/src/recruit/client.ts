@@ -8,7 +8,7 @@
  * has moved.
  */
 export const BASE = () =>
-  process.env.MATCHER_URL ?? process.env.ZIPDEV_MATCHER_URL ?? "http://localhost:3100";
+  process.env.MATCHER_URL ?? process.env.ZIPDEV_MATCHER_URL ?? 'http://localhost:3100';
 
 export function matcherToken(): string | undefined {
   return process.env.MATCHER_TOKEN ?? process.env.ZIPDEV_MATCHER_TOKEN;
@@ -29,10 +29,7 @@ function authHeaders(): Record<string, string> {
  * with backoff ride out the wake-up instead of failing the whole job.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function matcherFetch(
-  path: string,
-  init?: RequestInit,
-): Promise<any> {
+export async function matcherFetch(path: string, init?: RequestInit): Promise<any> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= RETRIES; attempt++) {
@@ -43,17 +40,15 @@ export async function matcherFetch(
       const res = await fetch(BASE() + path, {
         ...init,
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           ...authHeaders(),
           ...(init?.headers ?? {}),
         },
       });
       if (res.ok) return res.json();
 
-      const body = await res.text().catch(() => "");
-      lastError = new Error(
-        `matcher ${res.status} ${path}: ${body.slice(0, 300)}`,
-      );
+      const body = await res.text().catch(() => '');
+      lastError = new Error(`matcher ${res.status} ${path}: ${body.slice(0, 300)}`);
       // Retry only transient upstream failures; 4xx are real answers.
       if (res.status < 500) throw lastError;
     } catch (err) {
@@ -66,7 +61,7 @@ export async function matcherFetch(
       if (/^matcher [1-4]\d\d /.test(lastError.message)) throw lastError;
     }
   }
-  throw lastError ?? new Error("matcher request failed");
+  throw lastError ?? new Error('matcher request failed');
 }
 
 /**
@@ -75,9 +70,7 @@ export async function matcherFetch(
  * on every environment yet, so callers get an explicit "not available here"
  * instead of an exception, and fall back to the older public endpoints.
  */
-export type InternalResult<T> =
-  | { available: true; data: T }
-  | { available: false; reason: string };
+export type InternalResult<T> = { available: true; data: T } | { available: false; reason: string };
 
 /**
  * GET a lean internal endpoint.
@@ -93,17 +86,16 @@ export async function internalFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<InternalResult<T>> {
-  let lastReason = "unknown error";
+  let lastReason = 'unknown error';
 
   for (let attempt = 0; attempt <= RETRIES; attempt++) {
-    if (attempt > 0)
-      await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt - 1] ?? 2000));
+    if (attempt > 0) await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt - 1] ?? 2000));
     let res: Response;
     try {
       res = await fetch(BASE() + path, {
         ...init,
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           ...authHeaders(),
           ...(init?.headers ?? {}),
         },
@@ -115,25 +107,23 @@ export async function internalFetch<T>(
 
     if (res.ok) return { available: true, data: (await res.json()) as T };
 
-    const body = await res.text().catch(() => "");
-    const isJson = body.trimStart().startsWith("{");
+    const body = await res.text().catch(() => '');
+    const isJson = body.trimStart().startsWith('{');
 
     if (res.status === 401 || res.status === 403) {
       return {
         available: false,
-        reason: "MATCHER_TOKEN is not set, or the matcher rejected it",
+        reason: 'MATCHER_TOKEN is not set, or the matcher rejected it',
       };
     }
     if (res.status === 404 && !isJson) {
       return {
         available: false,
-        reason: "lean internal endpoint is not deployed on this matcher",
+        reason: 'lean internal endpoint is not deployed on this matcher',
       };
     }
     if (res.status < 500) {
-      throw new Error(
-        `matcher ${res.status} ${path}: ${body.slice(0, 300)}`,
-      );
+      throw new Error(`matcher ${res.status} ${path}: ${body.slice(0, 300)}`);
     }
     lastReason = `matcher ${res.status}: ${body.slice(0, 200)}`;
   }
@@ -142,14 +132,12 @@ export async function internalFetch<T>(
 }
 
 /** Build a query string, dropping undefined/null/empty values. */
-export function qs(
-  params: Record<string, string | number | boolean | null | undefined>,
-): string {
+export function qs(params: Record<string, string | number | boolean | null | undefined>): string {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
-    if (v === undefined || v === null || v === "") continue;
+    if (v === undefined || v === null || v === '') continue;
     sp.set(k, String(v));
   }
   const s = sp.toString();
-  return s ? `?${s}` : "";
+  return s ? `?${s}` : '';
 }

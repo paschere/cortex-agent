@@ -1,10 +1,10 @@
-import { z } from "zod";
-import { registerTool } from "../index";
-import { workableFetch } from "./client";
+import { z } from 'zod';
+import { registerTool } from '../index';
+import { workableFetch } from './client';
 
 /**
  * Direct Workable tools (SPI v3). These complement the recruit.* tools (which
- * go through Cortex-matcher's enriched data): Workable is the ground-truth
+ * go through the matcher's enriched data): Workable is the ground-truth
  * ATS, so req-status and stage moves come straight from here.
  */
 
@@ -21,9 +21,9 @@ const JobSummary = z.object({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toJobSummary(j: any): z.infer<typeof JobSummary> {
   return {
-    shortcode: j.shortcode ?? "",
-    title: j.title ?? "",
-    state: j.state ?? "",
+    shortcode: j.shortcode ?? '',
+    title: j.title ?? '',
+    state: j.state ?? '',
     department: j.department ?? null,
     location: j.location?.location_str ?? j.location?.city ?? null,
     createdAt: j.created_at ?? null,
@@ -32,19 +32,19 @@ function toJobSummary(j: any): z.infer<typeof JobSummary> {
 }
 
 export const workableListJobs = registerTool({
-  id: "workable.list_jobs",
+  id: 'workable.list_jobs',
   description:
-    "List jobs (reqs) in Workable, the ground-truth ATS. Filter by state: published (open), draft, closed, or archived. Returns shortcodes used by the other workable.* tools. " +
-    "recruit.list_requisitions lists the same roles as the Cortex matcher holds them — richer (client, days open, stage breakdown, assigned recruiter) but a synced copy that can lag. Use this one when the question is what Workable says right now, or when you need a shortcode; use that one for reporting on the pipeline. If the two disagree about a role, Workable is the source of truth and the matcher copy is stale — say so rather than picking quietly.",
+    'List jobs (reqs) in Workable, the ground-truth ATS. Filter by state: published (open), draft, closed, or archived. Returns shortcodes used by the other workable.* tools. ' +
+    'recruit.list_requisitions lists the same roles as the matcher service holds them — richer (client, days open, stage breakdown, assigned recruiter) but a synced copy that can lag. Use this one when the question is what Workable says right now, or when you need a shortcode; use that one for reporting on the pipeline. If the two disagree about a role, Workable is the source of truth and the matcher copy is stale — say so rather than picking quietly.',
   inputSchema: z.object({
-    state: z.enum(["published", "draft", "closed", "archived"]).optional(),
+    state: z.enum(['published', 'draft', 'closed', 'archived']).optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }),
   outputSchema: z.object({ jobs: z.array(JobSummary) }),
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     const params = new URLSearchParams({ limit: String(input.limit ?? 50) });
-    if (input.state) params.set("state", input.state);
+    if (input.state) params.set('state', input.state);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = await workableFetch<{ jobs: any[] }>(`/jobs?${params}`, {
       signal: ctx.signal,
@@ -54,9 +54,9 @@ export const workableListJobs = registerTool({
 });
 
 export const workableGetJob = registerTool({
-  id: "workable.get_job",
+  id: 'workable.get_job',
   description:
-    "Get full details for one Workable job by shortcode: description, requirements, benefits, hiring team, and creation date. This is the tool for the wording of the posting itself. For how the role is DOING, use workable.job_candidates_summary; for the equivalent record in the Cortex matcher with client, seats, budget and top candidates, use recruit.get_requisition.",
+    'Get full details for one Workable job by shortcode: description, requirements, benefits, hiring team, and creation date. This is the tool for the wording of the posting itself. For how the role is DOING, use workable.job_candidates_summary; for the equivalent record in the matcher service with client, seats, budget and top candidates, use recruit.get_requisition.',
   inputSchema: z.object({ shortcode: z.string().min(1) }),
   outputSchema: z.object({
     job: z.object({
@@ -82,8 +82,8 @@ export const workableGetJob = registerTool({
     const strip = (s: string | null | undefined) =>
       s
         ? s
-            .replace(/<[^>]+>/g, " ")
-            .replace(/\s+/g, " ")
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
             .trim()
             .slice(0, 6000)
         : null;
@@ -113,8 +113,8 @@ const CandidateSummary = z.object({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toCandidate(c: any): z.infer<typeof CandidateSummary> {
   return {
-    id: String(c.id ?? ""),
-    name: c.name ?? [c.firstname, c.lastname].filter(Boolean).join(" "),
+    id: String(c.id ?? ''),
+    name: c.name ?? [c.firstname, c.lastname].filter(Boolean).join(' '),
     stage: c.stage ?? null,
     jobShortcode: c.job?.shortcode ?? null,
     jobTitle: c.job?.title ?? null,
@@ -126,43 +126,34 @@ function toCandidate(c: any): z.infer<typeof CandidateSummary> {
 }
 
 export const workableListCandidates = registerTool({
-  id: "workable.list_candidates",
+  id: 'workable.list_candidates',
   description:
-    "A flat list of candidates in Workable, optionally filtered by job shortcode and/or stage name — name, current stage, and how fresh the activity is (updatedAt). Use it when you want the raw names, or a single stage of one job. " +
-    "Do NOT use it to work out how a req is doing by counting rows yourself: workable.job_candidates_summary already returns the per-stage counts, the disqualifications and the newest activity for a job in one call, and workable.top_candidates ranks them with reasons.",
+    'A flat list of candidates in Workable, optionally filtered by job shortcode and/or stage name — name, current stage, and how fresh the activity is (updatedAt). Use it when you want the raw names, or a single stage of one job. ' +
+    'Do NOT use it to work out how a req is doing by counting rows yourself: workable.job_candidates_summary already returns the per-stage counts, the disqualifications and the newest activity for a job in one call, and workable.top_candidates ranks them with reasons.',
   inputSchema: z.object({
-    shortcode: z
-      .string()
-      .optional()
-      .describe("Job shortcode from workable.list_jobs"),
-    stage: z
-      .string()
-      .optional()
-      .describe('Stage slug/name, e.g. "phone screen"'),
+    shortcode: z.string().optional().describe('Job shortcode from workable.list_jobs'),
+    stage: z.string().optional().describe('Stage slug/name, e.g. "phone screen"'),
     limit: z.number().int().min(1).max(100).default(100),
   }),
   outputSchema: z.object({ candidates: z.array(CandidateSummary) }),
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     const params = new URLSearchParams({ limit: String(input.limit ?? 100) });
-    if (input.shortcode) params.set("shortcode", input.shortcode);
-    if (input.stage) params.set("stage", input.stage);
+    if (input.shortcode) params.set('shortcode', input.shortcode);
+    if (input.stage) params.set('stage', input.stage);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = await workableFetch<{ candidates: any[] }>(
-      `/candidates?${params}`,
-      {
-        signal: ctx.signal,
-      },
-    );
+    const data = await workableFetch<{ candidates: any[] }>(`/candidates?${params}`, {
+      signal: ctx.signal,
+    });
     return { candidates: (data.candidates ?? []).map(toCandidate) };
   },
 });
 
 export const workableGetCandidate = registerTool({
-  id: "workable.get_candidate",
+  id: 'workable.get_candidate',
   description:
-    "Get one Workable candidate by id: profile, current stage, job, contact info, and source — exactly what the ATS holds, nothing added. " +
-    "recruit.get_candidate covers the same person in the Cortex matcher and adds AI scores, interview and assessment signals and every job they applied to; those are Cortex-derived, not ATS facts. Use this tool when the question is what Workable actually says.",
+    'Get one Workable candidate by id: profile, current stage, job, contact info, and source — exactly what the ATS holds, nothing added. ' +
+    'recruit.get_candidate covers the same person in the matcher service and adds AI scores, interview and assessment signals and every job they applied to; those are Cortex-derived, not ATS facts. Use this tool when the question is what Workable actually says.',
   inputSchema: z.object({ candidateId: z.string().min(1) }),
   outputSchema: z.object({
     candidate: CandidateSummary.extend({
@@ -185,27 +176,21 @@ export const workableGetCandidate = registerTool({
         ...toCandidate(c),
         phone: c.phone ?? null,
         source: c.source ?? null,
-        coverLetter: (c.cover_letter ?? "").slice(0, 4000) || null,
-        summary: (c.summary ?? "").slice(0, 4000) || null,
+        coverLetter: (c.cover_letter ?? '').slice(0, 4000) || null,
+        summary: (c.summary ?? '').slice(0, 4000) || null,
       },
     };
   },
 });
 
 export const workableMoveCandidate = registerTool({
-  id: "workable.move_candidate",
+  id: 'workable.move_candidate',
   description:
     'Move a Workable candidate to another stage of their job pipeline (e.g. from "Applied" to "Phone screen"). Confirmation-gated: show the candidate, current stage, and target stage before executing.',
   inputSchema: z.object({
     candidateId: z.string().min(1),
-    targetStage: z
-      .string()
-      .min(1)
-      .describe("Target stage slug/name as shown in Workable"),
-    memberId: z
-      .string()
-      .optional()
-      .describe("Workable member id performing the move"),
+    targetStage: z.string().min(1).describe('Target stage slug/name as shown in Workable'),
+    memberId: z.string().optional().describe('Workable member id performing the move'),
   }),
   outputSchema: z.object({
     ok: z.boolean(),
@@ -215,17 +200,14 @@ export const workableMoveCandidate = registerTool({
   requiresConfirmation: true,
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
-    await workableFetch(
-      `/candidates/${encodeURIComponent(input.candidateId)}/move`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          target_stage: input.targetStage,
-          ...(input.memberId ? { member_id: input.memberId } : {}),
-        }),
-        signal: ctx.signal,
-      },
-    );
+    await workableFetch(`/candidates/${encodeURIComponent(input.candidateId)}/move`, {
+      method: 'POST',
+      body: JSON.stringify({
+        target_stage: input.targetStage,
+        ...(input.memberId ? { member_id: input.memberId } : {}),
+      }),
+      signal: ctx.signal,
+    });
     return {
       ok: true,
       candidateId: input.candidateId,
@@ -235,32 +217,26 @@ export const workableMoveCandidate = registerTool({
 });
 
 export const workableCreateComment = registerTool({
-  id: "workable.create_comment",
+  id: 'workable.create_comment',
   description:
-    "Leave a comment/note on a Workable candidate profile (visible to the hiring team). Confirmation-gated: show the exact note text before executing.",
+    'Leave a comment/note on a Workable candidate profile (visible to the hiring team). Confirmation-gated: show the exact note text before executing.',
   inputSchema: z.object({
     candidateId: z.string().min(1),
     body: z.string().min(1).max(4000),
-    memberId: z
-      .string()
-      .optional()
-      .describe("Workable member id authoring the note"),
+    memberId: z.string().optional().describe('Workable member id authoring the note'),
   }),
   outputSchema: z.object({ ok: z.boolean(), candidateId: z.string() }),
   requiresConfirmation: true,
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
-    await workableFetch(
-      `/candidates/${encodeURIComponent(input.candidateId)}/comments`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          comment: { body: input.body },
-          ...(input.memberId ? { member_id: input.memberId } : {}),
-        }),
-        signal: ctx.signal,
-      },
-    );
+    await workableFetch(`/candidates/${encodeURIComponent(input.candidateId)}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({
+        comment: { body: input.body },
+        ...(input.memberId ? { member_id: input.memberId } : {}),
+      }),
+      signal: ctx.signal,
+    });
     return { ok: true, candidateId: input.candidateId };
   },
 });

@@ -1,6 +1,6 @@
-import { inngest } from "@/lib/inngest";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { utilityModel } from "@cortex/agent-tools";
+import { inngest } from '@/lib/inngest';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { utilityModel } from '@cortex/agent-tools';
 import {
   type AuditSignalRow,
   type MemoryCandidate,
@@ -8,9 +8,9 @@ import {
   listMemories,
   rememberMemory,
   usableCandidates,
-} from "@cortex/agent-tools";
-import { logger } from "@cortex/core";
-import { generateText } from "ai";
+} from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
+import { generateText } from 'ai';
 
 /**
  * The derived path: overnight, Cortex looks at how each person actually worked
@@ -41,7 +41,7 @@ import { generateText } from "ai";
  */
 
 /** 02:00 in Bogotá, where most of the team is — well clear of the working day. */
-const DERIVE_CRON = "0 7 * * *";
+const DERIVE_CRON = '0 7 * * *';
 
 /** How far back a first run looks. Later runs start from the high-water mark. */
 const FIRST_RUN_WINDOW_DAYS = 7;
@@ -70,34 +70,29 @@ interface RecentMessage {
 // ---------------------------------------------------------------------------
 
 export const memoryDeriveDispatch = inngest.createFunction(
-  { id: "memory-derive-dispatch" },
+  { id: 'memory-derive-dispatch' },
   { cron: DERIVE_CRON },
   async ({ step }) => {
-    const userIds = await step.run("find-active-people", async () => {
+    const userIds = await step.run('find-active-people', async () => {
       const db = getSupabaseServiceClient();
       const since = new Date(Date.now() - DAY_MS).toISOString();
       // Somebody who did nothing yesterday has nothing new to learn from, and
       // the point of scanning audit (rather than every user row) is that a
       // workspace of dormant accounts costs nothing to skip.
       const { data, error } = await db
-        .from("audit_events")
-        .select("user_id")
-        .gte("created_at", since)
+        .from('audit_events')
+        .select('user_id')
+        .gte('created_at', since)
         .limit(5000);
-      if (error)
-        throw new Error(`Failed to scan recent activity: ${error.message}`);
-      return [
-        ...new Set(
-          ((data ?? []) as Array<{ user_id: string }>).map((r) => r.user_id),
-        ),
-      ];
+      if (error) throw new Error(`Failed to scan recent activity: ${error.message}`);
+      return [...new Set(((data ?? []) as Array<{ user_id: string }>).map((r) => r.user_id))];
     });
 
     if (userIds.length > 0) {
       await step.sendEvent(
-        "derive-per-user",
+        'derive-per-user',
         userIds.map((userId) => ({
-          name: "memory/derive.user" as const,
+          name: 'memory/derive.user' as const,
           data: { userId },
         })),
       );
@@ -111,21 +106,21 @@ export const memoryDeriveDispatch = inngest.createFunction(
 // ---------------------------------------------------------------------------
 
 export const memoryDeriveUser = inngest.createFunction(
-  { id: "memory-derive-user", concurrency: { limit: 5 } },
-  { event: "memory/derive.user" },
+  { id: 'memory-derive-user', concurrency: { limit: 5 } },
+  { event: 'memory/derive.user' },
   async ({ event, step }) => {
     const userId = event.data.userId as string;
-    if (!userId) return { skipped: "no user id" };
+    if (!userId) return { skipped: 'no user id' };
 
-    const proposed = await step.run("propose", async () => {
+    const proposed = await step.run('propose', async () => {
       const db = getSupabaseServiceClient();
 
       const { data: prefs } = await db
-        .from("user_preferences")
-        .select("timezone, memories_derived_at")
-        .eq("user_id", userId)
+        .from('user_preferences')
+        .select('timezone, memories_derived_at')
+        .eq('user_id', userId)
         .maybeSingle();
-      const timezone = (prefs?.timezone as string | null) ?? "America/Bogota";
+      const timezone = (prefs?.timezone as string | null) ?? 'America/Bogota';
       const highWater = prefs?.memories_derived_at as string | null;
       const languageSince = new Date(
         Math.max(
@@ -138,11 +133,8 @@ export const memoryDeriveUser = inngest.createFunction(
       // Every status, so a rejected sentence is never proposed twice and an
       // archived one is not re-offered as a discovery.
       const known = existing.map((m) => m.content);
-      if (
-        existing.filter((m) => m.status === "suggested").length >=
-        MAX_SUGGESTIONS_PER_RUN
-      ) {
-        return { candidates: 0, written: 0, reason: "queue already full" };
+      if (existing.filter((m) => m.status === 'suggested').length >= MAX_SUGGESTIONS_PER_RUN) {
+        return { candidates: 0, written: 0, reason: 'queue already full' };
       }
 
       const [audit, recent] = await Promise.all([
@@ -155,11 +147,7 @@ export const memoryDeriveUser = inngest.createFunction(
         ...(await languageCandidates(recent)),
       ];
 
-      const usable = usableCandidates(
-        candidates,
-        known,
-        MAX_SUGGESTIONS_PER_RUN,
-      );
+      const usable = usableCandidates(candidates, known, MAX_SUGGESTIONS_PER_RUN);
       let written = 0;
       for (const candidate of usable) {
         const id = await rememberMemory(db, {
@@ -167,7 +155,7 @@ export const memoryDeriveUser = inngest.createFunction(
           content: candidate.content,
           kind: candidate.kind,
           source: candidate.source,
-          status: "suggested",
+          status: 'suggested',
           conversationId: candidate.conversationId ?? null,
           note: candidate.note,
         });
@@ -175,10 +163,10 @@ export const memoryDeriveUser = inngest.createFunction(
       }
 
       await db
-        .from("user_preferences")
+        .from('user_preferences')
         .upsert(
           { user_id: userId, memories_derived_at: new Date().toISOString() },
-          { onConflict: "user_id" },
+          { onConflict: 'user_id' },
         )
         .then(undefined, () => undefined);
 
@@ -195,15 +183,13 @@ export const memoryDeriveUser = inngest.createFunction(
 
 async function loadAuditSignals(userId: string): Promise<AuditSignalRow[]> {
   const db = getSupabaseServiceClient();
-  const since = new Date(
-    Date.now() - BEHAVIOUR_WINDOW_DAYS * DAY_MS,
-  ).toISOString();
+  const since = new Date(Date.now() - BEHAVIOUR_WINDOW_DAYS * DAY_MS).toISOString();
   const { data, error } = await db
-    .from("audit_events")
-    .select("tool_id, status, created_at")
-    .eq("user_id", userId)
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
+    .from('audit_events')
+    .select('tool_id, status, created_at')
+    .eq('user_id', userId)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
     .limit(3000);
   if (error) return [];
   return (data ?? []) as AuditSignalRow[];
@@ -219,32 +205,29 @@ async function loadAuditSignals(userId: string): Promise<AuditSignalRow[]> {
  * Cortex's own output is how a model's assumptions become a person's stored
  * "facts".
  */
-async function loadRecentMessages(
-  userId: string,
-  since: string,
-): Promise<RecentMessage[]> {
+async function loadRecentMessages(userId: string, since: string): Promise<RecentMessage[]> {
   const db = getSupabaseServiceClient();
   const { data: convs, error: convErr } = await db
-    .from("conversations")
-    .select("id")
-    .eq("user_id", userId)
-    .gte("updated_at", since)
-    .order("updated_at", { ascending: false })
+    .from('conversations')
+    .select('id')
+    .eq('user_id', userId)
+    .gte('updated_at', since)
+    .order('updated_at', { ascending: false })
     .limit(25);
   if (convErr || !convs || convs.length === 0) return [];
 
   const ids = (convs as Array<{ id: string }>).map((c) => c.id);
   const { data, error } = await db
-    .from("messages")
-    .select("conversation_id, content")
-    .in("conversation_id", ids)
-    .eq("role", "user")
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
+    .from('messages')
+    .select('conversation_id, content')
+    .in('conversation_id', ids)
+    .eq('role', 'user')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
     .limit(200);
   if (error) return [];
   return ((data ?? []) as Array<{ conversation_id: string; content: string }>)
-    .filter((m) => typeof m.content === "string" && m.content.trim().length > 0)
+    .filter((m) => typeof m.content === 'string' && m.content.trim().length > 0)
     .map((m) => ({
       conversationId: m.conversation_id,
       content: m.content.trim().slice(0, 800),
@@ -281,35 +264,29 @@ interface ExtractedMemory {
 }
 
 function parseExtraction(raw: string): ExtractedMemory[] {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
   if (start === -1 || end <= start) return [];
   try {
     const parsed = JSON.parse(raw.slice(start, end + 1)) as {
       memories?: unknown;
     };
-    return Array.isArray(parsed.memories)
-      ? (parsed.memories as ExtractedMemory[])
-      : [];
+    return Array.isArray(parsed.memories) ? (parsed.memories as ExtractedMemory[]) : [];
   } catch {
     return [];
   }
 }
 
-const KINDS = new Set(["instruction", "preference", "vocabulary", "fact"]);
+const KINDS = new Set(['instruction', 'preference', 'vocabulary', 'fact']);
 
-async function languageCandidates(
-  messages: RecentMessage[],
-): Promise<MemoryCandidate[]> {
+async function languageCandidates(messages: RecentMessage[]): Promise<MemoryCandidate[]> {
   if (messages.length < MIN_MESSAGES) return [];
 
   // Oldest first so the model reads the week the way it happened.
   const ordered = [...messages].reverse();
-  const transcript = ordered
-    .map((m, i) => `[${i + 1}] ${m.content}`)
-    .join("\n");
+  const transcript = ordered.map((m, i) => `[${i + 1}] ${m.content}`).join('\n');
 
-  let text = "";
+  let text = '';
   try {
     const result = await generateText({
       model: utilityModel(),
@@ -319,37 +296,31 @@ async function languageCandidates(
     });
     text = result.text;
   } catch (err) {
-    logger.error("memory-derive: extraction failed", {
+    logger.error('memory-derive: extraction failed', {
       error: (err as Error).message,
     });
     return [];
   }
 
   return parseExtraction(text).flatMap((raw): MemoryCandidate[] => {
-    const content = typeof raw.content === "string" ? raw.content.trim() : "";
+    const content = typeof raw.content === 'string' ? raw.content.trim() : '';
     if (!content) return [];
-    const kind =
-      typeof raw.kind === "string" && KINDS.has(raw.kind) ? raw.kind : "fact";
-    const quote =
-      typeof raw.quote === "string" ? raw.quote.trim().slice(0, 300) : "";
+    const kind = typeof raw.kind === 'string' && KINDS.has(raw.kind) ? raw.kind : 'fact';
+    const quote = typeof raw.quote === 'string' ? raw.quote.trim().slice(0, 300) : '';
 
     // The evidence link is only worth showing if the quote can be traced back
     // to a real message; an unmatched quote is the model's paraphrase and would
     // send the person to a conversation that does not contain it.
     const origin = quote
-      ? ordered.find((m) =>
-          m.content.toLowerCase().includes(quote.toLowerCase().slice(0, 40)),
-        )
+      ? ordered.find((m) => m.content.toLowerCase().includes(quote.toLowerCase().slice(0, 40)))
       : undefined;
 
     return [
       {
         content,
-        kind: kind as MemoryCandidate["kind"],
-        source: "derived",
-        note: quote
-          ? `You wrote: "${quote}"`
-          : "Noticed across your recent conversations.",
+        kind: kind as MemoryCandidate['kind'],
+        source: 'derived',
+        note: quote ? `You wrote: "${quote}"` : 'Noticed across your recent conversations.',
         conversationId: origin?.conversationId ?? null,
       },
     ];

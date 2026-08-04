@@ -1,7 +1,7 @@
-import { z } from "zod";
-import { registerTool } from "../index";
-import { bambooFetch } from "./client";
-import { resolveEmployee } from "./roster";
+import { z } from 'zod';
+import { registerTool } from '../index';
+import { bambooFetch } from './client';
+import { resolveEmployee } from './roster';
 import {
   DATASET,
   OK_STATUS,
@@ -12,10 +12,10 @@ import {
   sourceSchema,
   statusShape,
   str,
-} from "./shape";
+} from './shape';
 
 /**
- * One person's career at Cortex: every client move, title change, manager
+ * One person's career at the company: every client move, title change, manager
  * change and status change, in order.
  *
  * The roster only shows today. "How long has she been on that account?" and
@@ -48,7 +48,7 @@ interface RawStatusRow {
 const jobChangeSchema = z.object({
   effectiveDate: z.string().nullable(),
   jobTitle: z.string().nullable(),
-  /** BambooHR's "department" — at Cortex, the client the person was placed with. */
+  /** BambooHR's "department" — here, the client the person was placed with. */
   client: z.string().nullable(),
   division: z.string().nullable(),
   location: z.string().nullable(),
@@ -67,16 +67,16 @@ const statusChangeSchema = z.object({
 });
 
 export const bambooEmploymentHistory = registerTool({
-  id: "bamboo.employment_history",
+  id: 'bamboo.employment_history',
   description:
-    "Show one person's history at Cortex from BambooHR: every time they changed client or project, job title, division, location or manager, plus every change to their employment status (hired, terminated, re-hired, moved to bench, contractor). Answers questions like how long someone has been on their current account, how often they have been moved, or why and when they left. Contains no pay or bill rates.",
+    "Show one person's history at the company from BambooHR: every time they changed client or project, job title, division, location or manager, plus every change to their employment status (hired, terminated, re-hired, moved to bench, contractor). Answers questions like how long someone has been on their current account, how often they have been moved, or why and when they left. Contains no pay or bill rates.",
   inputSchema: z
     .object({
       name: z.string().max(120).optional(),
       email: z.string().max(160).optional(),
     })
     .refine((v) => !!(v.name || v.email), {
-      message: "Give me a name or a work email",
+      message: 'Give me a name or a work email',
     }),
   outputSchema: z.object({
     ...statusShape,
@@ -101,7 +101,7 @@ export const bambooEmploymentHistory = registerTool({
       currentClientSince: null,
       clientsWorkedWith: [] as string[],
       candidates: [] as string[],
-      guidance: "",
+      guidance: '',
     };
 
     const resolved = await resolveEmployee(ctx, {
@@ -110,9 +110,8 @@ export const bambooEmploymentHistory = registerTool({
     });
     if (!resolved.ok) return { ...empty, ...failureStatus(resolved) };
     const r = resolved.data;
-    if (r.kind === "none")
-      return { ...empty, configured: true, reason: r.reason };
-    if (r.kind === "ambiguous") {
+    if (r.kind === 'none') return { ...empty, configured: true, reason: r.reason };
+    if (r.kind === 'ambiguous') {
       return {
         ...empty,
         configured: true,
@@ -124,16 +123,8 @@ export const bambooEmploymentHistory = registerTool({
     const id = String(r.row.id);
 
     const [jobRes, statusRes] = await Promise.all([
-      bambooFetch<RawJobRow[]>(
-        ctx,
-        "GET",
-        `/employees/${id}/tables/${TABLE.jobInfo}`,
-      ),
-      bambooFetch<RawStatusRow[]>(
-        ctx,
-        "GET",
-        `/employees/${id}/tables/${TABLE.employmentStatus}`,
-      ),
+      bambooFetch<RawJobRow[]>(ctx, 'GET', `/employees/${id}/tables/${TABLE.jobInfo}`),
+      bambooFetch<RawStatusRow[]>(ctx, 'GET', `/employees/${id}/tables/${TABLE.employmentStatus}`),
     ]);
     if (!jobRes.ok) return { ...empty, ...failureStatus(jobRes) };
 
@@ -146,27 +137,23 @@ export const bambooEmploymentHistory = registerTool({
         location: str(row.location),
         reportsTo: str(row.reportsTo),
       }))
-      .sort((a, b) =>
-        (a.effectiveDate ?? "").localeCompare(b.effectiveDate ?? ""),
-      );
+      .sort((a, b) => (a.effectiveDate ?? '').localeCompare(b.effectiveDate ?? ''));
 
     const jobChanges = jobRows.map((row, i) => {
       const prev = i > 0 ? jobRows[i - 1] : undefined;
       const whatChanged: string[] = [];
-      if (!prev) whatChanged.push("first record");
+      if (!prev) whatChanged.push('first record');
       else {
-        if (prev.client !== row.client) whatChanged.push("client");
-        if (prev.jobTitle !== row.jobTitle) whatChanged.push("job title");
-        if (prev.division !== row.division) whatChanged.push("division");
-        if (prev.location !== row.location) whatChanged.push("location");
-        if (prev.reportsTo !== row.reportsTo) whatChanged.push("manager");
+        if (prev.client !== row.client) whatChanged.push('client');
+        if (prev.jobTitle !== row.jobTitle) whatChanged.push('job title');
+        if (prev.division !== row.division) whatChanged.push('division');
+        if (prev.location !== row.location) whatChanged.push('location');
+        if (prev.reportsTo !== row.reportsTo) whatChanged.push('manager');
       }
       return { ...row, whatChanged };
     });
 
-    const statusChanges = (
-      statusRes.ok && Array.isArray(statusRes.data) ? statusRes.data : []
-    )
+    const statusChanges = (statusRes.ok && Array.isArray(statusRes.data) ? statusRes.data : [])
       .map((row) => ({
         effectiveDate: dateStr(row.date),
         employmentType: str(row.employmentStatus),
@@ -175,13 +162,9 @@ export const bambooEmploymentHistory = registerTool({
         terminationType: str(row.terminationTypeId),
         eligibleForRehire: str(row.terminationRehireId),
       }))
-      .sort((a, b) =>
-        (a.effectiveDate ?? "").localeCompare(b.effectiveDate ?? ""),
-      );
+      .sort((a, b) => (a.effectiveDate ?? '').localeCompare(b.effectiveDate ?? ''));
 
-    const currentClient = jobRows.length
-      ? jobRows[jobRows.length - 1]?.client
-      : null;
+    const currentClient = jobRows.length ? jobRows[jobRows.length - 1]?.client : null;
     // Walk back while the client is unchanged: a title change on the same
     // account must not reset "on this client since".
     let currentClientSince: string | null = null;
@@ -205,8 +188,8 @@ export const bambooEmploymentHistory = registerTool({
       currentClientSince,
       clientsWorkedWith,
       guidance: jobChanges.length
-        ? `${jobChanges.length} job record${jobChanges.length === 1 ? "" : "s"} and ${statusChanges.length} status change${statusChanges.length === 1 ? "" : "s"} on file. Remember BambooHR's "department" here is the client they were placed with.`
-        : "BambooHR has no job history rows for this person beyond their current record.",
+        ? `${jobChanges.length} job record${jobChanges.length === 1 ? '' : 's'} and ${statusChanges.length} status change${statusChanges.length === 1 ? '' : 's'} on file. Remember BambooHR's "department" here is the client they were placed with.`
+        : 'BambooHR has no job history rows for this person beyond their current record.',
     };
   },
 });

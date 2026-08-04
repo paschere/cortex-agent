@@ -1,6 +1,6 @@
-import "server-only";
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { getEnv } from "@cortex/core";
+import 'server-only';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { getEnv } from '@cortex/core';
 
 /**
  * Stateless confirmation tokens for the MCP surface.
@@ -19,13 +19,13 @@ import { getEnv } from "@cortex/core";
  * user who triggered the call, and verification re-checks the user binding.
  */
 
-const TOKEN_VERSION = "v1";
+const TOKEN_VERSION = 'v1';
 const TOKEN_TTL_MS = 15 * 60_000;
 // Changing this tag re-derives the signing key, so tokens minted under the old
 // tag stop verifying. That is acceptable here: nothing is persisted and the TTL
 // above is 15 minutes, so the blast radius is the handful of approvals in
 // flight across a single deploy.
-const HMAC_DOMAIN = "cortex-mcp-confirm";
+const HMAC_DOMAIN = 'cortex-mcp-confirm';
 
 export interface ConfirmationPayload {
   userId: string;
@@ -36,14 +36,14 @@ export interface ConfirmationPayload {
 }
 
 function signingKey(): Buffer {
-  const master = Buffer.from(getEnv().TOKEN_ENCRYPTION_KEY, "base64");
-  return createHmac("sha256", master).update(HMAC_DOMAIN).digest();
+  const master = Buffer.from(getEnv().TOKEN_ENCRYPTION_KEY, 'base64');
+  return createHmac('sha256', master).update(HMAC_DOMAIN).digest();
 }
 
 function sign(payloadB64: string): string {
-  return createHmac("sha256", signingKey())
+  return createHmac('sha256', signingKey())
     .update(`${TOKEN_VERSION}.${payloadB64}`)
-    .digest("base64url");
+    .digest('base64url');
 }
 
 export function mintConfirmationToken(input: {
@@ -59,7 +59,7 @@ export function mintConfirmationToken(input: {
     input: input.input,
     expiresAt: Date.now() + TOKEN_TTL_MS,
   };
-  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${TOKEN_VERSION}.${payloadB64}.${sign(payloadB64)}`;
 }
 
@@ -71,7 +71,7 @@ export function verifyConfirmationToken(
   token: string,
   expectedUserId: string,
 ): ConfirmationPayload | null {
-  const parts = token.split(".");
+  const parts = token.split('.');
   if (parts.length !== 3 || parts[0] !== TOKEN_VERSION) return null;
   const [, payloadB64, sig] = parts as [string, string, string];
 
@@ -82,12 +82,11 @@ export function verifyConfirmationToken(
 
   let payload: ConfirmationPayload;
   try {
-    payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
   } catch {
     return null;
   }
-  if (typeof payload.expiresAt !== "number" || payload.expiresAt <= Date.now())
-    return null;
+  if (typeof payload.expiresAt !== 'number' || payload.expiresAt <= Date.now()) return null;
   if (payload.userId !== expectedUserId) return null;
   return payload;
 }

@@ -1,12 +1,8 @@
-import { PageHeader } from "@/components/ui/page-header";
-import { Eyebrow, Panel } from "@/components/ui/panel";
-import {
-  DEV_REPO_COLUMNS,
-  isMissingTable,
-  toDevRepository,
-} from "@/lib/dev-work";
-import { requireSession } from "@/lib/session";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { PageHeader } from '@/components/ui/page-header';
+import { Eyebrow, Panel } from '@/components/ui/panel';
+import { DEV_REPO_COLUMNS, isMissingTable, toDevRepository } from '@/lib/dev-work';
+import { requireSession } from '@/lib/session';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   ArrowLeft,
   FolderGit2,
@@ -16,11 +12,11 @@ import {
   ShieldCheck,
   Trash2,
   TriangleAlert,
-} from "lucide-react";
-import { revalidatePath } from "next/cache";
-import Link from "next/link";
+} from 'lucide-react';
+import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 /**
  * The blast radius.
@@ -39,74 +35,70 @@ export const dynamic = "force-dynamic";
 const FULL_NAME = /^[\w.-]+\/[\w.-]+$/;
 
 async function addRepository(formData: FormData) {
-  "use server";
+  'use server';
   const user = await requireSession();
-  if (user.role !== "org_admin") throw new Error("forbidden");
+  if (user.role !== 'org_admin') throw new Error('forbidden');
 
-  const fullName = (formData.get("fullName") as string | null)?.trim();
+  const fullName = (formData.get('fullName') as string | null)?.trim();
   if (!fullName || !FULL_NAME.test(fullName)) return;
-  const description =
-    (formData.get("description") as string | null)?.trim() || null;
-  const defaultBranch =
-    (formData.get("defaultBranch") as string | null)?.trim() || "main";
+  const description = (formData.get('description') as string | null)?.trim() || null;
+  const defaultBranch = (formData.get('defaultBranch') as string | null)?.trim() || 'main';
 
   const sb = getSupabaseServiceClient();
-  await sb.from("dev_repositories").insert({
-    name: fullName.split("/")[1],
+  await sb.from('dev_repositories').insert({
+    name: fullName.split('/')[1],
     full_name: fullName,
     description,
     default_branch: defaultBranch,
     enabled: true,
     added_by: user.id,
   });
-  revalidatePath("/dev-work/repositories");
+  revalidatePath('/dev-work/repositories');
 }
 
 async function setEnabled(formData: FormData) {
-  "use server";
+  'use server';
   const user = await requireSession();
-  if (user.role !== "org_admin") throw new Error("forbidden");
+  if (user.role !== 'org_admin') throw new Error('forbidden');
 
-  const id = (formData.get("id") as string | null)?.trim();
-  const enabled = formData.get("enabled") === "true";
+  const id = (formData.get('id') as string | null)?.trim();
+  const enabled = formData.get('enabled') === 'true';
   if (!id) return;
 
   const sb = getSupabaseServiceClient();
-  await sb.from("dev_repositories").update({ enabled }).eq("id", id);
-  revalidatePath("/dev-work/repositories");
+  await sb.from('dev_repositories').update({ enabled }).eq('id', id);
+  revalidatePath('/dev-work/repositories');
 }
 
 async function removeRepository(formData: FormData) {
-  "use server";
+  'use server';
   const user = await requireSession();
-  if (user.role !== "org_admin") throw new Error("forbidden");
+  if (user.role !== 'org_admin') throw new Error('forbidden');
 
-  const id = (formData.get("id") as string | null)?.trim();
+  const id = (formData.get('id') as string | null)?.trim();
   if (!id) return;
 
   const sb = getSupabaseServiceClient();
-  await sb.from("dev_repositories").delete().eq("id", id);
-  revalidatePath("/dev-work/repositories");
+  await sb.from('dev_repositories').delete().eq('id', id);
+  revalidatePath('/dev-work/repositories');
 }
 
 export default async function DevRepositoriesPage() {
   const user = await requireSession();
-  const isAdmin = user.role === "org_admin";
+  const isAdmin = user.role === 'org_admin';
   const sb = getSupabaseServiceClient();
 
   const [repoRes, taskRes] = await Promise.all([
-    sb.from("dev_repositories").select(DEV_REPO_COLUMNS).order("name"),
-    sb.from("dev_tasks").select("repository_id"),
+    sb.from('dev_repositories').select(DEV_REPO_COLUMNS).order('name'),
+    sb.from('dev_tasks').select('repository_id'),
   ]);
 
   const notReady = isMissingTable(repoRes.error);
-  const repos = (
-    (repoRes.data ?? []) as unknown as Record<string, unknown>[]
-  ).map(toDevRepository);
+  const repos = ((repoRes.data ?? []) as unknown as Record<string, unknown>[]).map(toDevRepository);
 
-  const runsByRepo = (
-    (taskRes.data ?? []) as { repository_id: string | null }[]
-  ).reduce<Record<string, number>>((acc, t) => {
+  const runsByRepo = ((taskRes.data ?? []) as { repository_id: string | null }[]).reduce<
+    Record<string, number>
+  >((acc, t) => {
     if (t.repository_id) acc[t.repository_id] = (acc[t.repository_id] ?? 0) + 1;
     return acc;
   }, {});
@@ -133,12 +125,10 @@ export default async function DevRepositoriesPage() {
       {notReady ? (
         <Panel className="p-10 text-center text-[13px] text-ink-faint">
           <FolderGit2 className="mx-auto mb-3 h-8 w-8 text-primary" />
-          <p className="mb-1 font-semibold text-ink">
-            Not switched on in this environment yet
-          </p>
+          <p className="mb-1 font-semibold text-ink">Not switched on in this environment yet</p>
           <p className="mx-auto max-w-md">
-            Cortex has no repositories of its own here, and cannot get any until
-            the groundwork is installed.
+            Cortex has no repositories of its own here, and cannot get any until the groundwork is
+            installed.
           </p>
         </Panel>
       ) : (
@@ -150,20 +140,16 @@ export default async function DevRepositoriesPage() {
             <p className="min-w-0 flex-1 text-[12.5px] text-ink-muted">
               {enabled.length === 0 ? (
                 <>
-                  Cortex currently cannot change{" "}
-                  <span className="font-semibold text-ink">any</span> code.
-                  Nothing here is switched on.
+                  Cortex currently cannot change <span className="font-semibold text-ink">any</span>{' '}
+                  code. Nothing here is switched on.
                 </>
               ) : (
                 <>
-                  Cortex can open pull requests in{" "}
+                  Cortex can open pull requests in{' '}
                   <span className="font-semibold text-ink">
-                    {enabled.length === 1
-                      ? "one repository"
-                      : `${enabled.length} repositories`}
+                    {enabled.length === 1 ? 'one repository' : `${enabled.length} repositories`}
                   </span>
-                  . It never merges anything on its own — a person always
-                  approves.
+                  . It never merges anything on its own — a person always approves.
                 </>
               )}
             </p>
@@ -173,13 +159,10 @@ export default async function DevRepositoriesPage() {
             <Panel className="p-5">
               <Eyebrow>Allow a new repository</Eyebrow>
               <p className="mt-1.5 text-[12.5px] text-ink-muted">
-                Adding one widens what Cortex can change. Only add repositories
-                you are willing to have it open pull requests against.
+                Adding one widens what Cortex can change. Only add repositories you are willing to
+                have it open pull requests against.
               </p>
-              <form
-                action={addRepository}
-                className="mt-3 flex flex-wrap items-center gap-2"
-              >
+              <form action={addRepository} className="mt-3 flex flex-wrap items-center gap-2">
                 <input
                   name="fullName"
                   required
@@ -222,8 +205,8 @@ export default async function DevRepositoriesPage() {
                       <span
                         className={`grid h-9 w-9 shrink-0 place-items-center rounded-[10px] ${
                           repo.enabled
-                            ? "bg-emerald-soft text-emerald"
-                            : "bg-surface-2 text-ink-faint"
+                            ? 'bg-emerald-soft text-emerald'
+                            : 'bg-surface-2 text-ink-faint'
                         }`}
                       >
                         <FolderGit2 className="h-4 w-4" />
@@ -237,27 +220,25 @@ export default async function DevRepositoriesPage() {
                           <span
                             className={`rounded-pill px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${
                               repo.enabled
-                                ? "bg-emerald-soft text-emerald"
-                                : "bg-surface-2 text-ink-faint"
+                                ? 'bg-emerald-soft text-emerald'
+                                : 'bg-surface-2 text-ink-faint'
                             }`}
                           >
-                            {repo.enabled ? "Cortex may edit" : "Switched off"}
+                            {repo.enabled ? 'Cortex may edit' : 'Switched off'}
                           </span>
                         </div>
                         {repo.description && (
-                          <p className="mt-1 text-[12.5px] text-ink-muted">
-                            {repo.description}
-                          </p>
+                          <p className="mt-1 text-[12.5px] text-ink-muted">{repo.description}</p>
                         )}
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink-faint">
                           <span className="inline-flex items-center gap-1.5">
                             <GitBranch className="h-3.5 w-3.5" />
-                            branches from {repo.defaultBranch ?? "main"}
+                            branches from {repo.defaultBranch ?? 'main'}
                           </span>
                           <span>
                             {runs === 0
-                              ? "no runs yet"
-                              : `${runs} run${runs === 1 ? "" : "s"} so far`}
+                              ? 'no runs yet'
+                              : `${runs} run${runs === 1 ? '' : 's'} so far`}
                           </span>
                         </div>
                       </div>
@@ -269,23 +250,23 @@ export default async function DevRepositoriesPage() {
                             <input
                               type="hidden"
                               name="enabled"
-                              value={repo.enabled ? "false" : "true"}
+                              value={repo.enabled ? 'false' : 'true'}
                             />
                             <button
                               type="submit"
                               className={`inline-flex items-center gap-1.5 rounded-[10px] border border-border bg-surface px-2.5 py-1.5 text-[12px] font-semibold shadow-card transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                                 repo.enabled
-                                  ? "text-amber hover:bg-amber-soft"
-                                  : "text-emerald hover:bg-emerald-soft"
+                                  ? 'text-amber hover:bg-amber-soft'
+                                  : 'text-emerald hover:bg-emerald-soft'
                               }`}
                               title={
                                 repo.enabled
-                                  ? "Cortex stops picking up work here. History is kept."
-                                  : "Let Cortex work here again."
+                                  ? 'Cortex stops picking up work here. History is kept.'
+                                  : 'Let Cortex work here again.'
                               }
                             >
                               <Power className="h-3.5 w-3.5" />
-                              {repo.enabled ? "Switch off" : "Switch on"}
+                              {repo.enabled ? 'Switch off' : 'Switch on'}
                             </button>
                           </form>
                           <form action={removeRepository}>
@@ -310,8 +291,7 @@ export default async function DevRepositoriesPage() {
           {!isAdmin && (
             <p className="flex items-start gap-2 px-1 text-[12px] text-ink-faint">
               <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Only a workspace admin can change this list. Anyone can stop a run
-              in progress.
+              Only a workspace admin can change this list. Anyone can stop a run in progress.
             </p>
           )}
         </div>

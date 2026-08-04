@@ -1,7 +1,7 @@
-import { z } from "zod";
-import { registerTool } from "../index";
-import { bambooFetch } from "./client";
-import { fetchReport, resolveEmployee } from "./roster";
+import { z } from 'zod';
+import { registerTool } from '../index';
+import { bambooFetch } from './client';
+import { fetchReport, resolveEmployee } from './roster';
 import {
   DATASET,
   OK_STATUS,
@@ -11,7 +11,7 @@ import {
   sourceSchema,
   statusShape,
   str,
-} from "./shape";
+} from './shape';
 
 /**
  * Time tracking — hours logged against clients.
@@ -43,7 +43,7 @@ interface RawEntry {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const dateInput = z.string().regex(DATE_RE, "Use YYYY-MM-DD");
+const dateInput = z.string().regex(DATE_RE, 'Use YYYY-MM-DD');
 
 // A quarter is as much as anyone asks about, and it keeps the upstream response
 // to something that can be aggregated inside a request.
@@ -90,29 +90,15 @@ const projectHoursSchema = z.object({
 });
 
 export const bambooTimesheetSummary = registerTool({
-  id: "bamboo.timesheet_summary",
+  id: 'bamboo.timesheet_summary',
   description:
     'Add up the hours logged in BambooHR time tracking over a date range — totals per person and per project, how many days each person logged, and how much is still unapproved. Defaults to the last two weeks. Use it for "how many hours did the team bill to X last month?", "who has not logged their time?" or "what is still waiting to be approved?". Only people with time tracking switched on appear here.',
   inputSchema: z.object({
-    start: dateInput
-      .optional()
-      .describe("First day, YYYY-MM-DD. Defaults to 14 days ago."),
-    end: dateInput.optional().describe("Last day. Defaults to today."),
-    name: z
-      .string()
-      .max(120)
-      .optional()
-      .describe("Limit to one person, by name"),
-    email: z
-      .string()
-      .max(160)
-      .optional()
-      .describe("Limit to one person, by work email"),
-    client: z
-      .string()
-      .max(120)
-      .optional()
-      .describe("Limit to people placed with one client"),
+    start: dateInput.optional().describe('First day, YYYY-MM-DD. Defaults to 14 days ago.'),
+    end: dateInput.optional().describe('Last day. Defaults to today.'),
+    name: z.string().max(120).optional().describe('Limit to one person, by name'),
+    email: z.string().max(160).optional().describe('Limit to one person, by work email'),
+    client: z.string().max(120).optional().describe('Limit to people placed with one client'),
     limit: z.number().int().min(1).max(150).default(60),
   }),
   outputSchema: z.object({
@@ -142,7 +128,7 @@ export const bambooTimesheetSummary = registerTool({
       byProject: [] as z.infer<typeof projectHoursSchema>[],
       unapprovedHours: 0,
       candidates: [] as string[],
-      guidance: "",
+      guidance: '',
     };
 
     const span = rangeDays(start, end);
@@ -150,8 +136,7 @@ export const bambooTimesheetSummary = registerTool({
       return {
         ...empty,
         configured: true,
-        reason:
-          "That date range does not make sense — the end has to be on or after the start.",
+        reason: 'That date range does not make sense — the end has to be on or after the start.',
       };
     }
     if (span > MAX_RANGE_DAYS) {
@@ -170,9 +155,8 @@ export const bambooTimesheetSummary = registerTool({
       });
       if (!resolved.ok) return { ...empty, ...failureStatus(resolved) };
       const r = resolved.data;
-      if (r.kind === "none")
-        return { ...empty, configured: true, reason: r.reason };
-      if (r.kind === "ambiguous") {
+      if (r.kind === 'none') return { ...empty, configured: true, reason: r.reason };
+      if (r.kind === 'ambiguous') {
         return {
           ...empty,
           configured: true,
@@ -184,16 +168,15 @@ export const bambooTimesheetSummary = registerTool({
     }
 
     const [entryRes, rosterRes] = await Promise.all([
-      bambooFetch<RawEntry[]>(ctx, "GET", "/time_tracking/timesheet_entries", {
+      bambooFetch<RawEntry[]>(ctx, 'GET', '/time_tracking/timesheet_entries', {
         params: { start, end, employeeIds },
       }),
-      fetchReport(ctx, ["id", "displayName", "department", "status"]),
+      fetchReport(ctx, ['id', 'displayName', 'department', 'status']),
     ]);
     if (!entryRes.ok) return { ...empty, ...failureStatus(entryRes) };
 
     const byId = new Map<string, ReportRow>();
-    if (rosterRes.ok)
-      for (const row of rosterRes.data) byId.set(String(row.id), row);
+    if (rosterRes.ok) for (const row of rosterRes.data) byId.set(String(row.id), row);
 
     const entries = Array.isArray(entryRes.data) ? entryRes.data : [];
 
@@ -210,17 +193,12 @@ export const bambooTimesheetSummary = registerTool({
     let unapprovedTotal = 0;
 
     for (const e of entries) {
-      const id = String(e.employeeId ?? "");
+      const id = String(e.employeeId ?? '');
       const row = byId.get(id);
       const client = row ? str(row.department) : null;
-      if (
-        input.client &&
-        !client?.toLowerCase().includes(input.client.toLowerCase())
-      )
-        continue;
+      if (input.client && !client?.toLowerCase().includes(input.client.toLowerCase())) continue;
 
-      const hours =
-        typeof e.hours === "number" && Number.isFinite(e.hours) ? e.hours : 0;
+      const hours = typeof e.hours === 'number' && Number.isFinite(e.hours) ? e.hours : 0;
       const acc =
         people.get(id) ??
         ({
@@ -241,7 +219,7 @@ export const bambooTimesheetSummary = registerTool({
       if (day) acc.days.add(day);
       people.set(id, acc);
 
-      const project = str(e.projectInfo?.project?.name) ?? "No project";
+      const project = str(e.projectInfo?.project?.name) ?? 'No project';
       const p = projects.get(project) ?? {
         hours: 0,
         people: new Set<string>(),
@@ -272,9 +250,7 @@ export const bambooTimesheetSummary = registerTool({
       .sort((a, b) => b.hours - a.hours)
       .slice(0, input.limit ?? 60);
 
-    const totalHours = round(
-      [...people.values()].reduce((s, a) => s + a.hours, 0),
-    );
+    const totalHours = round([...people.values()].reduce((s, a) => s + a.hours, 0));
 
     return {
       ...OK_STATUS,
@@ -286,7 +262,7 @@ export const bambooTimesheetSummary = registerTool({
       unapprovedHours: round(unapprovedTotal),
       guidance: !entries.length
         ? `No hours were logged between ${start} and ${end}. Only people with time tracking switched on log hours in BambooHR — most salaried staff do not.`
-        : `${totalHours} hours from ${people.size} ${people.size === 1 ? "person" : "people"} between ${start} and ${end}${unapprovedTotal ? `, of which ${round(unapprovedTotal)} are not approved yet` : ""}. Approving timesheets has to happen in BambooHR — I only read them.`,
+        : `${totalHours} hours from ${people.size} ${people.size === 1 ? 'person' : 'people'} between ${start} and ${end}${unapprovedTotal ? `, of which ${round(unapprovedTotal)} are not approved yet` : ''}. Approving timesheets has to happen in BambooHR — I only read them.`,
     };
   },
 });
@@ -310,21 +286,19 @@ const MAX_NOTE = 200;
 const MAX_ENTRY_RANGE_DAYS = 45;
 
 export const bambooTimesheetEntries = registerTool({
-  id: "bamboo.timesheet_entries",
+  id: 'bamboo.timesheet_entries',
   description:
     "Show one person's individual time-tracking entries in BambooHR for a date range — each day, how many hours, against which project and task, any note they left, and whether it has been approved. Use it when a summary is not enough and someone needs to see the actual days. One person at a time, up to about six weeks.",
   inputSchema: z
     .object({
       name: z.string().max(120).optional(),
       email: z.string().max(160).optional(),
-      start: dateInput
-        .optional()
-        .describe("First day, YYYY-MM-DD. Defaults to 14 days ago."),
-      end: dateInput.optional().describe("Last day. Defaults to today."),
+      start: dateInput.optional().describe('First day, YYYY-MM-DD. Defaults to 14 days ago.'),
+      end: dateInput.optional().describe('Last day. Defaults to today.'),
       limit: z.number().int().min(1).max(200).default(100),
     })
     .refine((v) => !!(v.name || v.email), {
-      message: "Give me a name or a work email",
+      message: 'Give me a name or a work email',
     }),
   outputSchema: z.object({
     ...statusShape,
@@ -353,7 +327,7 @@ export const bambooTimesheetEntries = registerTool({
       totalHours: 0,
       daysLogged: 0,
       candidates: [] as string[],
-      guidance: "",
+      guidance: '',
     };
 
     const span = rangeDays(start, end);
@@ -371,9 +345,8 @@ export const bambooTimesheetEntries = registerTool({
     });
     if (!resolved.ok) return { ...empty, ...failureStatus(resolved) };
     const r = resolved.data;
-    if (r.kind === "none")
-      return { ...empty, configured: true, reason: r.reason };
-    if (r.kind === "ambiguous") {
+    if (r.kind === 'none') return { ...empty, configured: true, reason: r.reason };
+    if (r.kind === 'ambiguous') {
       return {
         ...empty,
         configured: true,
@@ -382,14 +355,9 @@ export const bambooTimesheetEntries = registerTool({
       };
     }
 
-    const res = await bambooFetch<RawEntry[]>(
-      ctx,
-      "GET",
-      "/time_tracking/timesheet_entries",
-      {
-        params: { start, end, employeeIds: String(r.row.id) },
-      },
-    );
+    const res = await bambooFetch<RawEntry[]>(ctx, 'GET', '/time_tracking/timesheet_entries', {
+      params: { start, end, employeeIds: String(r.row.id) },
+    });
     if (!res.ok) return { ...empty, ...failureStatus(res) };
 
     const rows = Array.isArray(res.data) ? res.data : [];
@@ -398,10 +366,7 @@ export const bambooTimesheetEntries = registerTool({
         const note = str(e.note);
         return {
           date: str(e.date),
-          hours:
-            typeof e.hours === "number" && Number.isFinite(e.hours)
-              ? round(e.hours)
-              : null,
+          hours: typeof e.hours === 'number' && Number.isFinite(e.hours) ? round(e.hours) : null,
           project: str(e.projectInfo?.project?.name),
           task: str(e.projectInfo?.task?.name),
           note: note ? note.slice(0, MAX_NOTE) : null,
@@ -409,7 +374,7 @@ export const bambooTimesheetEntries = registerTool({
           kind: str(e.type),
         };
       })
-      .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
+      .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''));
 
     const totalHours = round(entries.reduce((s, e) => s + (e.hours ?? 0), 0));
     const days = new Set(entries.map((e) => e.date).filter(Boolean));
@@ -423,8 +388,8 @@ export const bambooTimesheetEntries = registerTool({
       totalHours,
       daysLogged: days.size,
       guidance: entries.length
-        ? `${totalHours} hours across ${days.size} day${days.size === 1 ? "" : "s"} between ${start} and ${end}.`
-        : `They logged no hours between ${start} and ${end}. If they never do, time tracking is probably switched off for them — most salaried staff at Cortex do not clock time.`,
+        ? `${totalHours} hours across ${days.size} day${days.size === 1 ? '' : 's'} between ${start} and ${end}.`
+        : `They logged no hours between ${start} and ${end}. If they never do, time tracking is probably switched off for them — most salaried staff do not clock time.`,
     };
   },
 });
@@ -441,25 +406,23 @@ interface RawProject {
 }
 
 export const bambooEmployeeProjects = registerTool({
-  id: "bamboo.employee_projects",
+  id: 'bamboo.employee_projects',
   description:
-    "List the time-tracking projects one person is allowed to log hours against in BambooHR. Useful for checking someone is set up on the right client before chasing missing hours. Contains no pay or personal data beyond the project names.",
+    'List the time-tracking projects one person is allowed to log hours against in BambooHR. Useful for checking someone is set up on the right client before chasing missing hours. Contains no pay or personal data beyond the project names.',
   inputSchema: z
     .object({
       name: z.string().max(120).optional(),
       email: z.string().max(160).optional(),
     })
     .refine((v) => !!(v.name || v.email), {
-      message: "Give me a name or a work email",
+      message: 'Give me a name or a work email',
     }),
   outputSchema: z.object({
     ...statusShape,
     source: sourceSchema,
     found: z.boolean(),
     employeeName: z.string().nullable(),
-    projects: z.array(
-      z.object({ name: z.string().nullable(), hasTasks: z.boolean() }),
-    ),
+    projects: z.array(z.object({ name: z.string().nullable(), hasTasks: z.boolean() })),
     guidance: z.string(),
     candidates: z.array(z.string()),
   }),
@@ -470,7 +433,7 @@ export const bambooEmployeeProjects = registerTool({
       found: false,
       employeeName: null,
       projects: [] as Array<{ name: string | null; hasTasks: boolean }>,
-      guidance: "",
+      guidance: '',
       candidates: [] as string[],
     };
 
@@ -480,9 +443,8 @@ export const bambooEmployeeProjects = registerTool({
     });
     if (!resolved.ok) return { ...empty, ...failureStatus(resolved) };
     const r = resolved.data;
-    if (r.kind === "none")
-      return { ...empty, configured: true, reason: r.reason };
-    if (r.kind === "ambiguous") {
+    if (r.kind === 'none') return { ...empty, configured: true, reason: r.reason };
+    if (r.kind === 'ambiguous') {
       return {
         ...empty,
         configured: true,
@@ -493,7 +455,7 @@ export const bambooEmployeeProjects = registerTool({
 
     const res = await bambooFetch<RawProject[]>(
       ctx,
-      "GET",
+      'GET',
       `/time_tracking/employee/${String(r.row.id)}/projects`,
     );
     if (!res.ok) return { ...empty, ...failureStatus(res) };
@@ -511,8 +473,8 @@ export const bambooEmployeeProjects = registerTool({
       employeeName: str(r.row.displayName),
       projects,
       guidance: projects.length
-        ? `They can log time against ${projects.length} project${projects.length === 1 ? "" : "s"}.`
-        : "They are not set up on any time-tracking project, which usually means they do not clock time at all.",
+        ? `They can log time against ${projects.length} project${projects.length === 1 ? '' : 's'}.`
+        : 'They are not set up on any time-tracking project, which usually means they do not clock time at all.',
     };
   },
 });

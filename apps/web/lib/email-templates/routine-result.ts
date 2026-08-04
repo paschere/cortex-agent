@@ -1,18 +1,6 @@
-import {
-  button,
-  calloutBox,
-  codeBlock,
-  fineprint,
-  statRow,
-  statusPill,
-} from "./components";
-import {
-  MAX_EMAIL_HTML_CHARS,
-  type RenderedEmail,
-  appBaseUrl,
-  renderEmail,
-} from "./layout";
-import { clampMarkdown, markdownToEmailHtml } from "./markdown";
+import { button, calloutBox, codeBlock, fineprint, statRow, statusPill } from './components';
+import { MAX_EMAIL_HTML_CHARS, type RenderedEmail, appBaseUrl, renderEmail } from './layout';
+import { clampMarkdown, markdownToEmailHtml } from './markdown';
 
 /**
  * "Your routine ran" email.
@@ -28,13 +16,13 @@ const TIGHT_REPORT_CHARS = 5_000;
 
 function formatMoment(date: Date, timeZone: string): string {
   try {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
+    return new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
       timeZone,
     }).format(date);
   } catch {
-    return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+    return `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
   }
 }
 
@@ -61,62 +49,49 @@ export interface RoutineResultEmailInput {
   timeZone?: string | null;
 }
 
-export function renderRoutineResultEmail(
-  input: RoutineResultEmailInput,
-): RenderedEmail {
-  const zone = input.timeZone || "UTC";
+export function renderRoutineResultEmail(input: RoutineResultEmailInput): RenderedEmail {
+  const zone = input.timeZone || 'UTC';
   const base = appBaseUrl();
-  const detailUrl = base ? `${base}/schedules/${input.jobId}` : "";
-  const subject = `${input.jobName} — ${input.ok ? "completed" : "failed"}`;
+  const detailUrl = base ? `${base}/schedules/${input.jobId}` : '';
+  const subject = `${input.jobName} — ${input.ok ? 'completed' : 'failed'}`;
 
   const stats = [
     {
-      label: "Ran at",
-      value: `${formatMoment(input.ranAt, zone)}${zone === "UTC" ? " UTC" : ""}`,
+      label: 'Ran at',
+      value: `${formatMoment(input.ranAt, zone)}${zone === 'UTC' ? ' UTC' : ''}`,
     },
     {
-      label: "Took",
-      value:
-        typeof input.durationMs === "number"
-          ? formatDuration(input.durationMs)
-          : "—",
+      label: 'Took',
+      value: typeof input.durationMs === 'number' ? formatDuration(input.durationMs) : '—',
     },
     {
-      label: "Next run",
-      value: input.nextRunAt
-        ? formatMoment(input.nextRunAt, zone)
-        : "No further runs",
+      label: 'Next run',
+      value: input.nextRunAt ? formatMoment(input.nextRunAt, zone) : 'No further runs',
     },
   ];
 
-  const errorText = (input.errorMessage ?? "").trim() || "Unknown error";
+  const errorText = (input.errorMessage ?? '').trim() || 'Unknown error';
 
   const build = (reportBudget: number): string => {
-    const clamped = clampMarkdown(input.outputMarkdown ?? "", reportBudget);
+    const clamped = clampMarkdown(input.outputMarkdown ?? '', reportBudget);
     const body = input.ok
       ? [
           statRow(stats),
           markdownToEmailHtml(clamped.markdown),
           clamped.truncated
-            ? fineprint(
-                "This report was shortened for email. See the full result in Cortex.",
-              )
-            : "",
-          detailUrl
-            ? button({ href: detailUrl, label: "Open in Cortex" })
-            : "",
+            ? fineprint('This report was shortened for email. See the full result in Cortex.')
+            : '',
+          detailUrl ? button({ href: detailUrl, label: 'Open in Cortex' }) : '',
         ]
       : [
           statRow(stats),
           calloutBox({
-            tone: "danger",
-            title: "The routine did not finish",
-            text: "Nothing further was delivered from this run. The error is below exactly as it was reported.",
+            tone: 'danger',
+            title: 'The routine did not finish',
+            text: 'Nothing further was delivered from this run. The error is below exactly as it was reported.',
           }),
-          codeBlock(errorText, { label: "Error" }),
-          detailUrl
-            ? button({ href: detailUrl, label: "Open in Cortex" })
-            : "",
+          codeBlock(errorText, { label: 'Error' }),
+          detailUrl ? button({ href: detailUrl, label: 'Open in Cortex' }) : '',
         ];
 
     return renderEmail({
@@ -124,12 +99,12 @@ export function renderRoutineResultEmail(
       preheader: input.ok
         ? `Your routine finished at ${formatMoment(input.ranAt, zone)}. Here is what it found.`
         : `Your routine failed at ${formatMoment(input.ranAt, zone)}. ${errorText.slice(0, 90)}`,
-      eyebrow: "Scheduled routine",
+      eyebrow: 'Scheduled routine',
       pillHtml: statusPill({
-        label: input.ok ? "Completed" : "Failed",
-        tone: input.ok ? "success" : "danger",
+        label: input.ok ? 'Completed' : 'Failed',
+        tone: input.ok ? 'success' : 'danger',
       }),
-      bodyHtml: body.filter(Boolean).join(""),
+      bodyHtml: body.filter(Boolean).join(''),
       footerNote: `You are on the recipient list for the "${input.jobName}" routine. Change or pause it in Cortex.`,
     });
   };
@@ -143,31 +118,22 @@ export function renderRoutineResultEmail(
   // The text part has to read on its own — it is what text-only clients,
   // notification previews and corporate gateways show. `null` marks a line
   // that does not apply; empty strings are real blank lines and stay.
-  const textReport = clampMarkdown(
-    input.outputMarkdown ?? "",
-    MAX_REPORT_CHARS,
-  );
+  const textReport = clampMarkdown(input.outputMarkdown ?? '', MAX_REPORT_CHARS);
   const text = [
-    `${input.jobName} — ${input.ok ? "Completed" : "Failed"}`,
-    `Ran at: ${formatMoment(input.ranAt, zone)}${zone === "UTC" ? " UTC" : ""}`,
-    typeof input.durationMs === "number"
-      ? `Took: ${formatDuration(input.durationMs)}`
-      : null,
+    `${input.jobName} — ${input.ok ? 'Completed' : 'Failed'}`,
+    `Ran at: ${formatMoment(input.ranAt, zone)}${zone === 'UTC' ? ' UTC' : ''}`,
+    typeof input.durationMs === 'number' ? `Took: ${formatDuration(input.durationMs)}` : null,
     input.nextRunAt ? `Next run: ${formatMoment(input.nextRunAt, zone)}` : null,
-    "",
-    "----------------------------------------",
-    "",
-    input.ok
-      ? textReport.markdown || "(no output)"
-      : `The routine failed:\n\n${errorText}`,
-    textReport.truncated
-      ? "\n(Shortened for email — see the full result in Cortex.)"
-      : null,
-    "",
+    '',
+    '----------------------------------------',
+    '',
+    input.ok ? textReport.markdown || '(no output)' : `The routine failed:\n\n${errorText}`,
+    textReport.truncated ? '\n(Shortened for email — see the full result in Cortex.)' : null,
+    '',
     detailUrl ? `Open in Cortex: ${detailUrl}` : null,
   ]
     .filter((line): line is string => line !== null)
-    .join("\n");
+    .join('\n');
 
   return { subject, html, text };
 }

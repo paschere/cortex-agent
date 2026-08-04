@@ -1,8 +1,8 @@
-import "server-only";
-import { Sandbox } from "@vercel/sandbox";
-import { type CheckStep, assertPushable } from "@cortex/agent-tools";
-import { logger } from "@cortex/core";
-import { type RepoRef, redact } from "./github-token";
+import 'server-only';
+import { Sandbox } from '@vercel/sandbox';
+import { type CheckStep, assertPushable } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
+import { type RepoRef, redact } from './github-token';
 
 /**
  * The sandbox is both the executor and the run's durable state.
@@ -23,7 +23,7 @@ import { type RepoRef, redact } from "./github-token";
  * own default working directory, which is exactly where a `source: git` clone
  * lands — so there is no copying or relocating to get wrong.
  */
-export const REPO_ROOT = "/vercel/sandbox";
+export const REPO_ROOT = '/vercel/sandbox';
 /** Run state the model is not allowed to touch (see `resolveRepoPath`). */
 const STATE_DIR = `${REPO_ROOT}/.cortex`;
 const TRANSCRIPT_PATH = `${STATE_DIR}/transcript.json`;
@@ -73,7 +73,7 @@ export async function createRunSandbox(params: {
 
   const sandbox = await Sandbox.create({
     name,
-    runtime: "node24",
+    runtime: 'node24',
     timeout: params.timeoutMs,
     resources: { vcpus: 4 },
     // Persistent, because the run is sliced across invocations: if the VM is
@@ -84,11 +84,11 @@ export async function createRunSandbox(params: {
     persistent: true,
     snapshotExpiration: 24 * 60 * 60 * 1000,
     keepLastSnapshots: { count: 1 },
-    tags: { purpose: "dev-task", task: params.taskId.slice(0, 32) },
+    tags: { purpose: 'dev-task', task: params.taskId.slice(0, 32) },
     source: {
-      type: "git",
+      type: 'git',
       url: params.cloneUrl,
-      username: "x-access-token",
+      username: 'x-access-token',
       password: params.token,
       revision: params.defaultBranch,
       // Enough history for a readable `git log` while keeping startup quick.
@@ -99,14 +99,12 @@ export async function createRunSandbox(params: {
   // Fail loudly here rather than letting the model wander an empty directory
   // and report a mysterious inability to find anything.
   const cloned = await run(sandbox, {
-    cmd: "git",
-    args: ["rev-parse", "--is-inside-work-tree"],
+    cmd: 'git',
+    args: ['rev-parse', '--is-inside-work-tree'],
     cwd: REPO_ROOT,
   });
   if (cloned.exitCode !== 0) {
-    throw new Error(
-      `The repository did not clone into the sandbox: ${cloned.output}`,
-    );
+    throw new Error(`The repository did not clone into the sandbox: ${cloned.output}`);
   }
 
   await configureGit(sandbox, params.branch, params.defaultBranch);
@@ -115,8 +113,8 @@ export async function createRunSandbox(params: {
   // the repository's own .gitignore. Appended, not written: .git/info/exclude
   // is a real file with existing content in most repos.
   await run(sandbox, {
-    cmd: "bash",
-    args: ["-lc", `printf '\\n.cortex/\\n' >> ${REPO_ROOT}/.git/info/exclude`],
+    cmd: 'bash',
+    args: ['-lc', `printf '\\n.cortex/\\n' >> ${REPO_ROOT}/.git/info/exclude`],
     cwd: REPO_ROOT,
   });
 
@@ -133,18 +131,18 @@ async function configureGit(
   assertPushable({ branch, defaultBranch });
 
   await run(sandbox, {
-    cmd: "git",
-    args: ["config", "user.name", "Cortex"],
+    cmd: 'git',
+    args: ['config', 'user.name', 'Cortex'],
     cwd: REPO_ROOT,
   });
   await run(sandbox, {
-    cmd: "git",
-    args: ["config", "user.email", "cortex@example.com"],
+    cmd: 'git',
+    args: ['config', 'user.email', 'cortex@example.com'],
     cwd: REPO_ROOT,
   });
   const created = await run(sandbox, {
-    cmd: "git",
-    args: ["checkout", "-b", branch],
+    cmd: 'git',
+    args: ['checkout', '-b', branch],
     cwd: REPO_ROOT,
   });
   if (created.exitCode !== 0) {
@@ -172,13 +170,10 @@ export async function run(
     cwd: params.cwd,
     timeoutMs: params.timeoutMs ?? 120_000,
   });
-  const [stdout, stderr] = await Promise.all([
-    finished.stdout(),
-    finished.stderr(),
-  ]);
+  const [stdout, stderr] = await Promise.all([finished.stdout(), finished.stderr()]);
   return {
     exitCode: finished.exitCode,
-    output: truncateOutput([stdout, stderr].filter(Boolean).join("\n").trim()),
+    output: truncateOutput([stdout, stderr].filter(Boolean).join('\n').trim()),
   };
 }
 
@@ -190,10 +185,7 @@ export async function run(
  * orchestrator. A later Inngest step re-attaches and polls. This is what makes
  * a 15-minute build survive a function that must return in under five.
  */
-export async function startDetached(
-  sandbox: Sandbox,
-  step: CheckStep,
-): Promise<{ cmdId: string }> {
+export async function startDetached(sandbox: Sandbox, step: CheckStep): Promise<{ cmdId: string }> {
   const command = await sandbox.runCommand({
     cmd: step.cmd,
     args: step.args,
@@ -204,54 +196,42 @@ export async function startDetached(
   return { cmdId: command.cmdId };
 }
 
-export type PollResult =
-  | { finished: false }
-  | { finished: true; exitCode: number; output: string };
+export type PollResult = { finished: false } | { finished: true; exitCode: number; output: string };
 
-export async function pollDetached(
-  sandbox: Sandbox,
-  cmdId: string,
-): Promise<PollResult> {
+export async function pollDetached(sandbox: Sandbox, cmdId: string): Promise<PollResult> {
   const command = await sandbox.getCommand(cmdId);
   if (command.exitCode === null) return { finished: false };
-  const [stdout, stderr] = await Promise.all([
-    command.stdout(),
-    command.stderr(),
-  ]);
+  const [stdout, stderr] = await Promise.all([command.stdout(), command.stderr()]);
   return {
     finished: true,
     exitCode: command.exitCode,
-    output: truncateOutput([stdout, stderr].filter(Boolean).join("\n").trim()),
+    output: truncateOutput([stdout, stderr].filter(Boolean).join('\n').trim()),
   };
 }
 
 /** True when the checkout has changes worth committing. */
 export async function hasChanges(sandbox: Sandbox): Promise<boolean> {
   const status = await run(sandbox, {
-    cmd: "git",
-    args: ["status", "--porcelain"],
+    cmd: 'git',
+    args: ['status', '--porcelain'],
     cwd: REPO_ROOT,
   });
   return status.output.trim().length > 0;
 }
 
-export async function commitAll(
-  sandbox: Sandbox,
-  message: string,
-): Promise<void> {
+export async function commitAll(sandbox: Sandbox, message: string): Promise<void> {
   const added = await run(sandbox, {
-    cmd: "git",
-    args: ["add", "-A"],
+    cmd: 'git',
+    args: ['add', '-A'],
     cwd: REPO_ROOT,
   });
   if (added.exitCode !== 0) throw new Error(`git add failed: ${added.output}`);
   const committed = await run(sandbox, {
-    cmd: "git",
-    args: ["commit", "-m", message],
+    cmd: 'git',
+    args: ['commit', '-m', message],
     cwd: REPO_ROOT,
   });
-  if (committed.exitCode !== 0)
-    throw new Error(`git commit failed: ${committed.output}`);
+  if (committed.exitCode !== 0) throw new Error(`git commit failed: ${committed.output}`);
 }
 
 /**
@@ -280,66 +260,53 @@ export async function pushBranch(
   // if the push throws, the token must still be scrubbed, or it would survive
   // in the checkout — and in the snapshot taken when the sandbox stops.
   const authenticated = params.cloneUrl.replace(
-    "https://",
+    'https://',
     `https://x-access-token:${params.token}@`,
   );
   const setUrl = await run(sandbox, {
-    cmd: "git",
-    args: ["remote", "set-url", "origin", authenticated],
+    cmd: 'git',
+    args: ['remote', 'set-url', 'origin', authenticated],
     cwd: REPO_ROOT,
   });
-  if (setUrl.exitCode !== 0)
-    throw new Error(`git remote set-url failed: ${setUrl.output}`);
+  if (setUrl.exitCode !== 0) throw new Error(`git remote set-url failed: ${setUrl.output}`);
 
   try {
     const pushed = await run(sandbox, {
-      cmd: "git",
+      cmd: 'git',
       args: argv,
       cwd: REPO_ROOT,
       timeoutMs: 180_000,
     });
     if (pushed.exitCode !== 0) {
       // Scrub before the message can reach a log line, a task row or Linear.
-      throw new Error(
-        `git push failed: ${redact(pushed.output, params.token)}`,
-      );
+      throw new Error(`git push failed: ${redact(pushed.output, params.token)}`);
     }
   } finally {
     await run(sandbox, {
-      cmd: "git",
-      args: ["remote", "set-url", "origin", params.cloneUrl],
+      cmd: 'git',
+      args: ['remote', 'set-url', 'origin', params.cloneUrl],
       cwd: REPO_ROOT,
     });
   }
 }
 
-export async function readTranscript(
-  sandbox: Sandbox,
-): Promise<unknown[] | null> {
+export async function readTranscript(sandbox: Sandbox): Promise<unknown[] | null> {
   const buffer = await sandbox.readFileToBuffer({ path: TRANSCRIPT_PATH });
   if (!buffer) return null;
   try {
-    const parsed = JSON.parse(buffer.toString("utf8")) as unknown;
+    const parsed = JSON.parse(buffer.toString('utf8')) as unknown;
     return Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
   }
 }
 
-export async function writeTranscript(
-  sandbox: Sandbox,
-  messages: unknown[],
-): Promise<void> {
-  await sandbox.writeFiles([
-    { path: TRANSCRIPT_PATH, content: JSON.stringify(messages) },
-  ]);
+export async function writeTranscript(sandbox: Sandbox, messages: unknown[]): Promise<void> {
+  await sandbox.writeFiles([{ path: TRANSCRIPT_PATH, content: JSON.stringify(messages) }]);
 }
 
 /** Best effort: a stop that fails must never mask the run's real outcome. */
-export async function stopSandbox(
-  taskId: string,
-  repo?: RepoRef,
-): Promise<void> {
+export async function stopSandbox(taskId: string, repo?: RepoRef): Promise<void> {
   try {
     const sandbox = await Sandbox.get({
       name: sandboxNameForTask(taskId),
@@ -347,7 +314,7 @@ export async function stopSandbox(
     });
     await sandbox.stop();
   } catch (err) {
-    logger.warn("dev-task: failed to stop sandbox", {
+    logger.warn('dev-task: failed to stop sandbox', {
       taskId,
       repo: repo ? `${repo.owner}/${repo.repo}` : undefined,
       error: (err as Error).message,

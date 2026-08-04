@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useMemo, useState } from "react";
+import { useMemo, useState } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -10,7 +10,7 @@ import {
   Clock,
   Copy,
   Sparkles,
-} from "lucide-react";
+} from 'lucide-react';
 
 /**
  * Structured render of a `sales.draft_proposal` (a.k.a. `sales_draft_proposal`)
@@ -79,11 +79,11 @@ export interface ProposalResult {
 const HOURS_PER_MONTH = 160;
 
 function formatUsd(n: number): string {
-  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
 function formatRange(range?: { min: number; max: number } | null): string {
-  if (!range) return "—";
+  if (!range) return '—';
   if (range.min === range.max) return `$${formatUsd(range.min)}`;
   return `$${formatUsd(range.min)}–$${formatUsd(range.max)}`;
 }
@@ -112,48 +112,42 @@ function activityPill(days: number): { label: string; className: string } {
   if (days < 14) {
     return {
       label: `${days}d since last activity`,
-      className:
-        "bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300",
+      className: 'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300',
     };
   }
   if (days <= 30) {
     return {
       label: `${days}d since last activity`,
-      className:
-        "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
+      className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300',
     };
   }
   return {
     label: `${days}d since last activity`,
-    className: "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300",
+    className: 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300',
   };
 }
 
 /** Build a Markdown fallback if the tool did not supply one. */
 function buildMarkdown(p: ProposalResult): string {
   const lines: string[] = [];
-  lines.push(`# Proposal — ${p.company.name ?? "Unknown"}`);
-  const meta = [p.company.industry, p.company.country]
-    .filter(Boolean)
-    .join(" · ");
+  lines.push(`# Proposal — ${p.company.name ?? 'Unknown'}`);
+  const meta = [p.company.industry, p.company.country].filter(Boolean).join(' · ');
   if (meta) lines.push(`*${meta}*`);
-  lines.push("");
-  lines.push("## Roles");
-  lines.push(
-    "| Role | Seniority | Qty | Monthly (USD) | Hourly (USD) | Stack |",
-  );
-  lines.push("|---|---|---:|---:|---:|---|");
+  lines.push('');
+  lines.push('## Roles');
+  lines.push('| Role | Seniority | Qty | Monthly (USD) | Hourly (USD) | Stack |');
+  lines.push('|---|---|---:|---:|---:|---|');
   for (const r of p.roles) {
     const hourly = r.hourlyRange ?? hourlyFromMonthly(r.monthlyRange);
     lines.push(
-      `| ${r.role} | ${r.seniority} | ${r.qty} | ${formatRange(r.monthlyRange)} | ${formatRange(hourly)} | ${(r.techStack ?? []).join(", ")} |`,
+      `| ${r.role} | ${r.seniority} | ${r.qty} | ${formatRange(r.monthlyRange)} | ${formatRange(hourly)} | ${(r.techStack ?? []).join(', ')} |`,
     );
   }
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
-type SortKey = "role" | "seniority" | "qty" | "monthly" | "hourly";
-type SortDir = "asc" | "desc";
+type SortKey = 'role' | 'seniority' | 'qty' | 'monthly' | 'hourly';
+type SortDir = 'asc' | 'desc';
 
 export function ProposalCard({ result }: { result: ProposalResult }) {
   const [copied, setCopied] = useState(false);
@@ -164,7 +158,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
 
   const roles = useMemo(() => {
     if (!sort) return rawRoles;
-    const dir = sort.dir === "asc" ? 1 : -1;
+    const dir = sort.dir === 'asc' ? 1 : -1;
     const monthlyMid = (r: ProposalRole) =>
       r.monthlyRange ? (r.monthlyRange.min + r.monthlyRange.max) / 2 : 0;
     const hourlyMid = (r: ProposalRole) => {
@@ -173,15 +167,15 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
     };
     return [...rawRoles].sort((a, b) => {
       switch (sort.key) {
-        case "role":
+        case 'role':
           return dir * a.role.localeCompare(b.role);
-        case "seniority":
+        case 'seniority':
           return dir * a.seniority.localeCompare(b.seniority);
-        case "qty":
+        case 'qty':
           return dir * (a.qty - b.qty);
-        case "monthly":
+        case 'monthly':
           return dir * (monthlyMid(a) - monthlyMid(b));
-        case "hourly":
+        case 'hourly':
           return dir * (hourlyMid(a) - hourlyMid(b));
         default:
           return 0;
@@ -191,22 +185,20 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
 
   const toggleSort = (key: SortKey) =>
     setSort((prev) =>
-      prev?.key === key
-        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
-        : { key, dir: "asc" },
+      prev?.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
     );
 
   // Derive "Why us" bullets from explicit field or KB similar cases.
   const whyBullets = useMemo(() => {
     if (result.whyUs?.length) return result.whyUs;
     return (result.similarCases ?? []).map(
-      (c) => `${c.title}: ${c.excerpt.replace(/\s+/g, " ").trim()}`,
+      (c) => `${c.title}: ${c.excerpt.replace(/\s+/g, ' ').trim()}`,
     );
   }, [result.whyUs, result.similarCases]);
 
   // Days since last activity: explicit on deal, else from most recent activity.
   const daysLast = useMemo(() => {
-    if (typeof result.deal?.daysSinceLastActivity === "number") {
+    if (typeof result.deal?.daysSinceLastActivity === 'number') {
       return result.deal.daysSinceLastActivity;
     }
     const activities = result.recentActivity ?? [];
@@ -248,8 +240,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
   // the T2.2 composite hardening. Show the banner whenever any of them exist.
   const hasDealContext =
     daysLast != null ||
-    (!!result.deal &&
-      (result.deal.stage != null || result.deal.amount != null));
+    (!!result.deal && (result.deal.stage != null || result.deal.amount != null));
 
   return (
     <div className="not-prose w-full max-w-2xl overflow-hidden rounded-xl border border-neutral-200 bg-white text-neutral-900 shadow-sm dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100">
@@ -261,7 +252,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
           </div>
           <div>
             <h3 className="text-sm font-semibold leading-tight">
-              {result.company.name ?? "Untitled company"}
+              {result.company.name ?? 'Untitled company'}
             </h3>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {result.company.industry && (
@@ -270,9 +261,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
                 </span>
               )}
               {result.company.country && (
-                <span className="text-[11px] text-neutral-500">
-                  {result.company.country}
-                </span>
+                <span className="text-[11px] text-neutral-500">{result.company.country}</span>
               )}
             </div>
           </div>
@@ -288,7 +277,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
           ) : (
             <Copy className="h-3.5 w-3.5" />
           )}
-          {copied ? "Copied" : "Copy as Markdown"}
+          {copied ? 'Copied' : 'Copy as Markdown'}
         </button>
       </div>
 
@@ -324,32 +313,32 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
               <tr className="border-b border-neutral-200 text-left text-[11px] uppercase tracking-wide text-neutral-400 dark:border-neutral-700">
                 {(
                   [
-                    { key: "role", label: "Role", align: "left" },
-                    { key: "seniority", label: "Seniority", align: "left" },
-                    { key: "qty", label: "Qty", align: "right" },
-                    { key: "monthly", label: "Monthly", align: "right" },
-                    { key: "hourly", label: "Hourly", align: "right" },
+                    { key: 'role', label: 'Role', align: 'left' },
+                    { key: 'seniority', label: 'Seniority', align: 'left' },
+                    { key: 'qty', label: 'Qty', align: 'right' },
+                    { key: 'monthly', label: 'Monthly', align: 'right' },
+                    { key: 'hourly', label: 'Hourly', align: 'right' },
                   ] as Array<{
                     key: SortKey;
                     label: string;
-                    align: "left" | "right";
+                    align: 'left' | 'right';
                   }>
                 ).map((col) => {
                   const active = sort?.key === col.key;
                   return (
                     <th
                       key={col.key}
-                      className={`py-1.5 pr-3 font-medium ${col.align === "right" ? "text-right" : ""}`}
+                      className={`py-1.5 pr-3 font-medium ${col.align === 'right' ? 'text-right' : ''}`}
                     >
                       <button
                         type="button"
                         onClick={() => toggleSort(col.key)}
-                        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-neutral-700 dark:hover:text-neutral-200 ${active ? "text-neutral-700 dark:text-neutral-200" : ""} ${col.align === "right" ? "flex-row-reverse" : ""}`}
+                        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-neutral-700 dark:hover:text-neutral-200 ${active ? 'text-neutral-700 dark:text-neutral-200' : ''} ${col.align === 'right' ? 'flex-row-reverse' : ''}`}
                         aria-label={`Sort by ${col.label}`}
                       >
                         {col.label}
                         {active &&
-                          (sort?.dir === "asc" ? (
+                          (sort?.dir === 'asc' ? (
                             <ArrowUp className="h-3 w-3" />
                           ) : (
                             <ArrowDown className="h-3 w-3" />
@@ -363,22 +352,17 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
             </thead>
             <tbody>
               {roles.map((r, i) => {
-                const hourly =
-                  r.hourlyRange ?? hourlyFromMonthly(r.monthlyRange);
+                const hourly = r.hourlyRange ?? hourlyFromMonthly(r.monthlyRange);
                 return (
                   <tr
                     key={`${r.role}-${r.seniority}-${i}`}
                     className="border-b border-neutral-100 last:border-0 dark:border-neutral-800"
                   >
-                    <td className="py-2 pr-3 font-medium capitalize">
-                      {r.role}
-                    </td>
+                    <td className="py-2 pr-3 font-medium capitalize">{r.role}</td>
                     <td className="py-2 pr-3 capitalize text-neutral-600 dark:text-neutral-300">
                       {r.seniority}
                     </td>
-                    <td className="py-2 pr-3 text-right tabular-nums">
-                      {r.qty}
-                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{r.qty}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">
                       {formatRange(r.monthlyRange)}
                     </td>
@@ -407,9 +391,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
                   <td className="py-2 pr-3" colSpan={3}>
                     Total monthly
                   </td>
-                  <td className="py-2 pr-3 text-right tabular-nums">
-                    {formatRange(totals)}
-                  </td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{formatRange(totals)}</td>
                   <td className="py-2 pr-3" />
                   <td className="py-2" />
                 </tr>
@@ -430,7 +412,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
             <Sparkles className="h-3.5 w-3.5 text-neutral-400" />
             <span className="flex-1">Why us</span>
             <ChevronDown
-              className={`h-3.5 w-3.5 text-neutral-400 transition-transform ${whyOpen ? "rotate-180" : ""}`}
+              className={`h-3.5 w-3.5 text-neutral-400 transition-transform ${whyOpen ? 'rotate-180' : ''}`}
             />
           </button>
           {whyOpen && (

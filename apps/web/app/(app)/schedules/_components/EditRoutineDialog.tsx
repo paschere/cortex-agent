@@ -1,30 +1,23 @@
-"use client";
+'use client';
 
-import * as Dialog from "@radix-ui/react-dialog";
-import { clsx } from "clsx";
-import {
-  AlarmClock,
-  Loader2,
-  Mail,
-  Plus,
-  SlidersHorizontal,
-  X,
-} from "lucide-react";
-import { useEffect, useState } from "react";
-import { DOW, humanizeCron } from "./format";
-import type { RoutinePatch, ScheduledJob } from "./types";
+import * as Dialog from '@radix-ui/react-dialog';
+import { clsx } from 'clsx';
+import { AlarmClock, Loader2, Mail, Plus, SlidersHorizontal, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { DOW, humanizeCron } from './format';
+import type { RoutinePatch, ScheduledJob } from './types';
 
-type Frequency = "daily" | "weekly" | "monthly";
+type Frequency = 'daily' | 'weekly' | 'monthly';
 
 /** Short, deliberately opinionated list — the timezones this team actually uses. */
 const TIMEZONES = [
-  "America/Bogota",
-  "America/Mexico_City",
-  "America/New_York",
-  "America/Los_Angeles",
-  "America/Argentina/Buenos_Aires",
-  "Europe/Madrid",
-  "UTC",
+  'America/Bogota',
+  'America/Mexico_City',
+  'America/New_York',
+  'America/Los_Angeles',
+  'America/Argentina/Buenos_Aires',
+  'Europe/Madrid',
+  'UTC',
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -37,10 +30,10 @@ interface CronDraft {
 }
 
 const DEFAULT_DRAFT: CronDraft = {
-  frequency: "daily",
-  time: "09:00",
-  weekday: "1",
-  monthDay: "1",
+  frequency: 'daily',
+  time: '09:00',
+  weekday: '1',
+  monthDay: '1',
 };
 
 /** Read a 5-field cron back into the friendly picker. Null when it's too exotic. */
@@ -48,24 +41,16 @@ function parseCron(cron: string | null): CronDraft | null {
   if (!cron) return null;
   const parts = cron.trim().split(/\s+/);
   if (parts.length !== 5) return null;
-  const [min, hour, dom, month, dow] = parts as [
-    string,
-    string,
-    string,
-    string,
-    string,
-  ];
-  if (!/^\d{1,2}$/.test(min) || !/^\d{1,2}$/.test(hour) || month !== "*")
-    return null;
-  const time = `${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
-  if (dom === "*" && dow === "*")
-    return { ...DEFAULT_DRAFT, frequency: "daily", time };
-  if (dom === "*" && /^[0-6]$/.test(dow))
-    return { ...DEFAULT_DRAFT, frequency: "weekly", time, weekday: dow };
-  if (/^\d{1,2}$/.test(dom) && dow === "*")
+  const [min, hour, dom, month, dow] = parts as [string, string, string, string, string];
+  if (!/^\d{1,2}$/.test(min) || !/^\d{1,2}$/.test(hour) || month !== '*') return null;
+  const time = `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
+  if (dom === '*' && dow === '*') return { ...DEFAULT_DRAFT, frequency: 'daily', time };
+  if (dom === '*' && /^[0-6]$/.test(dow))
+    return { ...DEFAULT_DRAFT, frequency: 'weekly', time, weekday: dow };
+  if (/^\d{1,2}$/.test(dom) && dow === '*')
     return {
       ...DEFAULT_DRAFT,
-      frequency: "monthly",
+      frequency: 'monthly',
       time,
       monthDay: String(Number(dom)),
     };
@@ -74,13 +59,11 @@ function parseCron(cron: string | null): CronDraft | null {
 
 /** Compose the 5-field expression the picker can express. */
 function buildCron(draft: CronDraft): string {
-  const [hh = "9", mm = "0"] = draft.time.split(":");
+  const [hh = '9', mm = '0'] = draft.time.split(':');
   const hour = String(Number(hh));
   const min = String(Number(mm));
-  if (draft.frequency === "weekly")
-    return `${min} ${hour} * * ${draft.weekday}`;
-  if (draft.frequency === "monthly")
-    return `${min} ${hour} ${draft.monthDay} * *`;
+  if (draft.frequency === 'weekly') return `${min} ${hour} * * ${draft.weekday}`;
+  if (draft.frequency === 'monthly') return `${min} ${hour} ${draft.monthDay} * *`;
   return `${min} ${hour} * * *`;
 }
 
@@ -97,14 +80,14 @@ export function EditRoutineDialog({
   onClose: () => void;
   onSaved: (patch: RoutinePatch) => void;
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState('');
   const [draft, setDraft] = useState<CronDraft>(DEFAULT_DRAFT);
   const [advanced, setAdvanced] = useState(false);
-  const [rawCron, setRawCron] = useState("");
-  const [timezone, setTimezone] = useState("UTC");
+  const [rawCron, setRawCron] = useState('');
+  const [timezone, setTimezone] = useState('UTC');
   const [notifyEmail, setNotifyEmail] = useState(false);
   const [recipients, setRecipients] = useState<string[]>([]);
-  const [recipientDraft, setRecipientDraft] = useState("");
+  const [recipientDraft, setRecipientDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,43 +99,38 @@ export function EditRoutineDialog({
     const parsed = parseCron(job.cron);
     setName(job.name);
     setDraft(parsed ?? DEFAULT_DRAFT);
-    setAdvanced(job.scheduleKind === "cron" && !parsed);
-    setRawCron(job.cron ?? "");
+    setAdvanced(job.scheduleKind === 'cron' && !parsed);
+    setRawCron(job.cron ?? '');
     setTimezone(job.timezone);
     setNotifyEmail(job.notifyEmail);
     setRecipients(job.recipients);
-    setRecipientDraft("");
+    setRecipientDraft('');
     setError(null);
     setSaving(false);
   }, [job]);
 
   if (!job || !jobId) return null;
 
-  const isCron = job.scheduleKind === "cron";
+  const isCron = job.scheduleKind === 'cron';
   const composedCron = advanced ? rawCron.trim() : buildCron(draft);
-  const tzOptions = TIMEZONES.includes(timezone)
-    ? TIMEZONES
-    : [timezone, ...TIMEZONES];
+  const tzOptions = TIMEZONES.includes(timezone) ? TIMEZONES : [timezone, ...TIMEZONES];
 
   function addRecipient(raw?: string) {
-    const value = (raw ?? recipientDraft)
-      .trim()
-      .toLowerCase()
-      .replace(/,$/, "");
+    const value = (raw ?? recipientDraft).trim().toLowerCase().replace(/,$/, '');
     if (!value) return;
     if (!EMAIL_RE.test(value)) {
       setError(`"${value}" doesn't look like an email address`);
       return;
     }
     setRecipients((prev) => (prev.includes(value) ? prev : [...prev, value]));
-    setRecipientDraft("");
+    setRecipientDraft('');
     setError(null);
   }
 
   async function save() {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Give the routine a name");
+      setError('Give the routine a name');
       return;
     }
     if (isCron && composedCron.trim().split(/\s+/).length !== 5) {
@@ -167,9 +145,7 @@ export function EditRoutineDialog({
         setError(`"${pending}" doesn't look like an email address`);
         return;
       }
-      finalRecipients = recipients.includes(pending)
-        ? recipients
-        : [...recipients, pending];
+      finalRecipients = recipients.includes(pending) ? recipients : [...recipients, pending];
     }
 
     const patch: RoutinePatch = {
@@ -184,8 +160,8 @@ export function EditRoutineDialog({
     setError(null);
     try {
       const res = await fetch(`/api/schedules/${jobId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ patch }),
       });
       if (!res.ok) {
@@ -213,12 +189,9 @@ export function EditRoutineDialog({
                 <SlidersHorizontal className="h-4 w-4" />
               </span>
               <div>
-                <Dialog.Title className="text-sm font-bold text-ink">
-                  Edit routine
-                </Dialog.Title>
+                <Dialog.Title className="text-sm font-bold text-ink">Edit routine</Dialog.Title>
                 <Dialog.Description className="text-[11.5px] text-ink-faint">
-                  Name, timing and who hears about it. Change the instruction
-                  from chat.
+                  Name, timing and who hears about it. Change the instruction from chat.
                 </Dialog.Description>
               </div>
             </div>
@@ -257,7 +230,7 @@ export function EditRoutineDialog({
                     }}
                     className="rounded-pill px-2 py-0.5 text-[11px] font-semibold text-primary transition hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
-                    {advanced ? "Use the picker" : "Advanced"}
+                    {advanced ? 'Use the picker' : 'Advanced'}
                   </button>
                 </div>
 
@@ -272,16 +245,16 @@ export function EditRoutineDialog({
                 ) : (
                   <div className="space-y-2">
                     <div className="grid grid-cols-3 gap-1 rounded-[12px] bg-surface-2 p-1">
-                      {(["daily", "weekly", "monthly"] as const).map((f) => (
+                      {(['daily', 'weekly', 'monthly'] as const).map((f) => (
                         <button
                           key={f}
                           type="button"
                           onClick={() => setDraft({ ...draft, frequency: f })}
                           className={clsx(
-                            "rounded-[9px] px-2 py-1.5 text-[12px] font-semibold capitalize transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                            'rounded-[9px] px-2 py-1.5 text-[12px] font-semibold capitalize transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                             draft.frequency === f
-                              ? "bg-surface text-ink shadow-card"
-                              : "text-ink-faint hover:text-ink",
+                              ? 'bg-surface text-ink shadow-card'
+                              : 'text-ink-faint hover:text-ink',
                           )}
                         >
                           {f}
@@ -294,22 +267,16 @@ export function EditRoutineDialog({
                         <input
                           type="time"
                           value={draft.time}
-                          onChange={(e) =>
-                            setDraft({ ...draft, time: e.target.value })
-                          }
+                          onChange={(e) => setDraft({ ...draft, time: e.target.value })}
                           className="rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
                         />
                       </label>
-                      {draft.frequency === "weekly" && (
+                      {draft.frequency === 'weekly' && (
                         <label className="flex min-w-[140px] flex-1 flex-col gap-1">
-                          <span className="text-[11px] text-ink-faint">
-                            Weekday
-                          </span>
+                          <span className="text-[11px] text-ink-faint">Weekday</span>
                           <select
                             value={draft.weekday}
-                            onChange={(e) =>
-                              setDraft({ ...draft, weekday: e.target.value })
-                            }
+                            onChange={(e) => setDraft({ ...draft, weekday: e.target.value })}
                             className="rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
                           >
                             {DOW.map((d, i) => (
@@ -320,21 +287,15 @@ export function EditRoutineDialog({
                           </select>
                         </label>
                       )}
-                      {draft.frequency === "monthly" && (
+                      {draft.frequency === 'monthly' && (
                         <label className="flex min-w-[140px] flex-1 flex-col gap-1">
-                          <span className="text-[11px] text-ink-faint">
-                            Day of month
-                          </span>
+                          <span className="text-[11px] text-ink-faint">Day of month</span>
                           <select
                             value={draft.monthDay}
-                            onChange={(e) =>
-                              setDraft({ ...draft, monthDay: e.target.value })
-                            }
+                            onChange={(e) => setDraft({ ...draft, monthDay: e.target.value })}
                             className="rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-soft"
                           >
-                            {Array.from({ length: 28 }, (_, i) =>
-                              String(i + 1),
-                            ).map((d) => (
+                            {Array.from({ length: 28 }, (_, i) => String(i + 1)).map((d) => (
                               <option key={d} value={d}>
                                 {d}
                               </option>
@@ -353,8 +314,7 @@ export function EditRoutineDialog({
               </div>
             ) : (
               <div className="rounded-[12px] bg-surface-2 px-3 py-2.5 text-[12px] text-ink-faint">
-                This routine runs once and can&apos;t be retimed here — create a
-                new one from chat.
+                This routine runs once and can&apos;t be retimed here — create a new one from chat.
               </div>
             )}
 
@@ -367,7 +327,7 @@ export function EditRoutineDialog({
               >
                 {tzOptions.map((tz) => (
                   <option key={tz} value={tz}>
-                    {tz.replace(/_/g, " ")}
+                    {tz.replace(/_/g, ' ')}
                   </option>
                 ))}
               </select>
@@ -387,14 +347,14 @@ export function EditRoutineDialog({
                 </span>
                 <span
                   className={clsx(
-                    "relative h-5 w-9 shrink-0 rounded-pill transition",
-                    notifyEmail ? "bg-primary" : "bg-surface-2",
+                    'relative h-5 w-9 shrink-0 rounded-pill transition',
+                    notifyEmail ? 'bg-primary' : 'bg-surface-2',
                   )}
                 >
                   <span
                     className={clsx(
-                      "absolute top-0.5 h-4 w-4 rounded-pill bg-surface shadow-card transition-all",
-                      notifyEmail ? "left-[1.125rem]" : "left-0.5",
+                      'absolute top-0.5 h-4 w-4 rounded-pill bg-surface shadow-card transition-all',
+                      notifyEmail ? 'left-[1.125rem]' : 'left-0.5',
                     )}
                   />
                 </span>
@@ -402,8 +362,7 @@ export function EditRoutineDialog({
 
               <div className="mt-2">
                 <div className="mb-1.5 text-[11.5px] text-ink-faint">
-                  Recipients{" "}
-                  {recipients.length === 0 && "— empty means the owner only"}
+                  Recipients {recipients.length === 0 && '— empty means the owner only'}
                 </div>
                 {recipients.length > 0 && (
                   <div className="mb-2 flex flex-wrap gap-1.5">
@@ -415,9 +374,7 @@ export function EditRoutineDialog({
                         {r}
                         <button
                           type="button"
-                          onClick={() =>
-                            setRecipients(recipients.filter((x) => x !== r))
-                          }
+                          onClick={() => setRecipients(recipients.filter((x) => x !== r))}
                           className="grid h-4 w-4 place-items-center rounded-pill transition hover:bg-primary hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           aria-label={`Remove ${r}`}
                         >
@@ -432,7 +389,7 @@ export function EditRoutineDialog({
                     value={recipientDraft}
                     onChange={(e) => setRecipientDraft(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === ",") {
+                      if (e.key === 'Enter' || e.key === ',') {
                         e.preventDefault();
                         addRecipient();
                       }
@@ -471,7 +428,7 @@ export function EditRoutineDialog({
               className="inline-flex items-center gap-1.5 rounded-[10px] bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {saving ? "Saving…" : "Save changes"}
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         </Dialog.Content>

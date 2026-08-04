@@ -44,7 +44,11 @@ app.get('/mcp/tools', async (c) => {
   return c.json({
     tools: builtins.map((t) => ({ id: t.id, description: t.description })),
     externals: externals.flatMap(({ server, tools }) =>
-      tools.map((t) => ({ serverId: server.id, name: t.tool_name, description: t.tool_description })),
+      tools.map((t) => ({
+        serverId: server.id,
+        name: t.tool_name,
+        description: t.tool_description,
+      })),
     ),
   });
 });

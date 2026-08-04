@@ -1,20 +1,20 @@
-import { z } from "zod";
-import { registerTool } from "../index";
-import { hsFetch } from "./client";
+import { z } from 'zod';
+import { registerTool } from '../index';
+import { hsFetch } from './client';
 
 const ActivityOut = z.object({
   id: z.string(),
-  type: z.enum(["email", "call", "note", "meeting", "task"]),
+  type: z.enum(['email', 'call', 'note', 'meeting', 'task']),
   subject: z.string().nullable(),
   body: z.string().nullable(),
   createdAt: z.string(),
 });
 
 export const listRecentActivities = registerTool({
-  id: "hubspot.list_recent_activities",
+  id: 'hubspot.list_recent_activities',
   description:
-    "List recent engagements (emails, calls, notes, meetings, tasks) logged against a HubSpot COMPANY, newest first — everything anyone on the team did with that account, whoever they spoke to. " +
-    "For one named person rather than the whole account, use hubspot.get_contact_timeline; it is the same kind of history keyed to a contact. Calling both for the same account duplicates most rows.",
+    'List recent engagements (emails, calls, notes, meetings, tasks) logged against a HubSpot COMPANY, newest first — everything anyone on the team did with that account, whoever they spoke to. ' +
+    'For one named person rather than the whole account, use hubspot.get_contact_timeline; it is the same kind of history keyed to a contact. Calling both for the same account duplicates most rows.',
   inputSchema: z.object({
     companyId: z.string(),
     days: z.number().int().min(1).max(365).default(30),
@@ -23,20 +23,20 @@ export const listRecentActivities = registerTool({
   outputSchema: z.object({ results: z.array(ActivityOut) }),
   requiredScopes: [
     {
-      provider: "hubspot",
-      scopes: ["crm.objects.companies.read", "sales-email-read"],
+      provider: 'hubspot',
+      scopes: ['crm.objects.companies.read', 'sales-email-read'],
     },
   ],
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     const days = input.days ?? 30;
     const since = new Date(Date.now() - days * 86_400_000).toISOString();
-    const types: Array<z.infer<typeof ActivityOut>["type"]> = [
-      "email",
-      "call",
-      "note",
-      "meeting",
-      "task",
+    const types: Array<z.infer<typeof ActivityOut>['type']> = [
+      'email',
+      'call',
+      'note',
+      'meeting',
+      'task',
     ];
     const all: Array<z.infer<typeof ActivityOut>> = [];
     for (const t of types) {
@@ -47,37 +47,37 @@ export const listRecentActivities = registerTool({
         }>;
       };
       const data = await hsFetch<R>(ctx, `/crm/v3/objects/${t}s/search`, {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify({
           filterGroups: [
             {
               filters: [
                 {
-                  propertyName: "associations.company",
-                  operator: "EQ",
+                  propertyName: 'associations.company',
+                  operator: 'EQ',
                   value: input.companyId,
                 },
                 {
-                  propertyName: "hs_createdate",
-                  operator: "GTE",
+                  propertyName: 'hs_createdate',
+                  operator: 'GTE',
                   value: since,
                 },
               ],
             },
           ],
           properties: [
-            "hs_email_subject",
-            "hs_email_text",
-            "hs_call_title",
-            "hs_call_body",
-            "hs_note_body",
-            "hs_meeting_title",
-            "hs_meeting_body",
-            "hs_task_subject",
-            "hs_task_body",
-            "hs_createdate",
+            'hs_email_subject',
+            'hs_email_text',
+            'hs_call_title',
+            'hs_call_body',
+            'hs_note_body',
+            'hs_meeting_title',
+            'hs_meeting_body',
+            'hs_task_subject',
+            'hs_task_body',
+            'hs_createdate',
           ],
-          sorts: [{ propertyName: "hs_createdate", direction: "DESCENDING" }],
+          sorts: [{ propertyName: 'hs_createdate', direction: 'DESCENDING' }],
           limit: input.limit,
         }),
       });
@@ -105,9 +105,7 @@ export const listRecentActivities = registerTool({
       }
     }
     return {
-      results: all
-        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-        .slice(0, input.limit),
+      results: all.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, input.limit),
     };
   },
 });

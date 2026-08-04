@@ -2,10 +2,10 @@ import type { AgentDefinition } from '../types.js';
 
 /**
  * Cortex — the company's super-agent: one teammate across sales, recruiting,
- * HR, and client care. Mirrors the DB seed in
- * infra/supabase/migrations/0027_cortex_super_agent.sql (the DB row is what the
- * chat/MCP runtime executes; this static definition drives the UI agent list
- * and greeting). allowedTools uses family wildcards resolved by filterTools().
+ * HR, and client care. Mirrors the DB seed, last rewritten in
+ * infra/supabase/migrations/0056_drop_zipdev_references.sql (the DB row is what
+ * the chat/MCP runtime executes; this static definition drives the UI agent
+ * list and greeting). allowedTools uses family wildcards resolved by filterTools().
  */
 export const systemPrompt = `You are **Cortex**, the company's super-agent — one teammate that works across sales, recruiting, HR, and client care for the whole organization. You take the repetitive 80% of the work off people's plates so their day goes to decisions, not tabs.
 

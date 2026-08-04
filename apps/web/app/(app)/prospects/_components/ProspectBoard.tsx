@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import { Eyebrow, Panel } from "@/components/ui/panel";
-import { clsx } from "clsx";
-import { Radar, Search, SearchX } from "lucide-react";
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import { setProspectStatus } from "../actions";
-import { ProspectCard } from "./ProspectCard";
-import { STATUS_META } from "./status";
-import type { Prospect, SignalStatus } from "./types";
+import { Eyebrow, Panel } from '@/components/ui/panel';
+import { clsx } from 'clsx';
+import { Radar, Search, SearchX } from 'lucide-react';
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
+import { setProspectStatus } from '../actions';
+import { ProspectCard } from './ProspectCard';
+import { STATUS_META } from './status';
+import type { Prospect, SignalStatus } from './types';
 
 /** The funnel reads left to right; rejected sits at the end, off the path. */
-const FUNNEL: SignalStatus[] = ["new", "qualified", "contacted", "rejected"];
+const FUNNEL: SignalStatus[] = ['new', 'qualified', 'contacted', 'rejected'];
 
-const ANY = "all";
+const ANY = 'all';
 
 export function ProspectBoard({
   prospects,
@@ -25,10 +25,10 @@ export function ProspectBoard({
   apolloAvailable: boolean;
 }) {
   // The default view is the work, not the archive.
-  const [status, setStatus] = useState<SignalStatus | typeof ANY>("new");
+  const [status, setStatus] = useState<SignalStatus | typeof ANY>('new');
   const [region, setRegion] = useState<string>(ANY);
   const [source, setSource] = useState<string>(ANY);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
 
   /**
    * Optimistic layer. A status change paints immediately and is reverted in
@@ -36,10 +36,7 @@ export function ProspectBoard({
    * truth, so the layer is dropped.
    */
   const [moved, setMoved] = useState<
-    Record<
-      string,
-      { status: SignalStatus; reviewerName: string; reviewedAt: string }
-    >
+    Record<string, { status: SignalStatus; reviewerName: string; reviewedAt: string }>
   >({});
   const [busy, setBusy] = useState<Record<string, SignalStatus>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -90,12 +87,7 @@ export function ProspectBoard({
   }, [merged]);
 
   const regions = useMemo(
-    () =>
-      [
-        ...new Set(
-          prospects.map((p) => p.region).filter((r): r is string => !!r),
-        ),
-      ].sort(),
+    () => [...new Set(prospects.map((p) => p.region).filter((r): r is string => !!r))].sort(),
     [prospects],
   );
   const sources = useMemo(
@@ -103,7 +95,7 @@ export function ProspectBoard({
     [prospects],
   );
 
-  const filtersActive = region !== ANY || source !== ANY || query.trim() !== "";
+  const filtersActive = region !== ANY || source !== ANY || query.trim() !== '';
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -125,7 +117,7 @@ export function ProspectBoard({
       ...m,
       [prospect.id]: {
         status: next,
-        reviewerName: "you",
+        reviewerName: 'you',
         reviewedAt: new Date().toISOString(),
       },
     }));
@@ -150,8 +142,8 @@ export function ProspectBoard({
       ...m,
       [prospect.id]: {
         status: previous,
-        reviewerName: prospect.reviewerName ?? "",
-        reviewedAt: prospect.reviewedAt ?? "",
+        reviewerName: prospect.reviewerName ?? '',
+        reviewedAt: prospect.reviewedAt ?? '',
       },
     }));
     setPinned((s) => {
@@ -176,10 +168,10 @@ export function ProspectBoard({
             type="button"
             onClick={() => refilter(() => setStatus(ANY))}
             className={clsx(
-              "rounded-pill px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
+              'rounded-pill px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
               status === ANY
-                ? "bg-primary-soft text-primary"
-                : "text-ink-faint hover:bg-surface-2 hover:text-ink-muted",
+                ? 'bg-primary-soft text-primary'
+                : 'text-ink-faint hover:bg-surface-2 hover:text-ink-muted',
             )}
           >
             Show all {total}
@@ -200,50 +192,40 @@ export function ProspectBoard({
                 onClick={() => refilter(() => setStatus(stage))}
                 aria-pressed={active}
                 className={clsx(
-                  "rounded-card bg-surface p-3 text-left transition-all",
+                  'rounded-card bg-surface p-3 text-left transition-all',
                   active
                     ? `border border-transparent shadow-pop ring-2 ${meta.ring}`
-                    : "border border-border hover:border-border-strong",
+                    : 'border border-border hover:border-border-strong',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11.5px] font-semibold text-ink-muted">
-                    {meta.label}
-                  </span>
+                  <span className="text-[11.5px] font-semibold text-ink-muted">{meta.label}</span>
                   <span
-                    className={clsx(
-                      "grid h-6 w-6 place-items-center rounded-[8px]",
-                      meta.chip,
-                    )}
+                    className={clsx('grid h-6 w-6 place-items-center rounded-[8px]', meta.chip)}
                   >
                     <Icon className="h-3.5 w-3.5" />
                   </span>
                 </div>
-                <div className="stat-num mt-1.5 text-[26px] leading-none text-ink">
-                  {count}
-                </div>
+                <div className="stat-num mt-1.5 text-[26px] leading-none text-ink">{count}</div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-canvas">
                   <div
                     className={clsx(
-                      "h-full rounded-full transition-[width] duration-500",
+                      'h-full rounded-full transition-[width] duration-500',
                       meta.bar,
                     )}
                     style={{ width: `${Math.max(pct, count > 0 ? 5 : 0)}%` }}
                   />
                 </div>
-                <div className="mt-1.5 truncate text-[10.5px] text-ink-faint">
-                  {meta.blurb}
-                </div>
+                <div className="mt-1.5 truncate text-[10.5px] text-ink-faint">{meta.blurb}</div>
               </button>
             );
           })}
         </div>
 
         <p className="mt-3 text-[11.5px] leading-relaxed text-ink-faint">
-          Cortex sweeps the job boards weekly and drops what it finds into{" "}
-          <b>New</b>. From there it only ever moves — a rejected company keeps
-          its place under Rejected so nobody spends an afternoon researching it
-          a second time.
+          Cortex sweeps the job boards weekly and drops what it finds into <b>New</b>. From there it
+          only ever moves — a rejected company keeps its place under Rejected so nobody spends an
+          afternoon researching it a second time.
         </p>
       </Panel>
 
@@ -279,7 +261,7 @@ export function ProspectBoard({
               refilter(() => {
                 setRegion(ANY);
                 setSource(ANY);
-                setQuery("");
+                setQuery('');
               })
             }
             className="rounded-pill px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
@@ -290,7 +272,7 @@ export function ProspectBoard({
 
         <span className="ml-auto text-[11.5px] text-ink-faint">
           {visible.length} shown
-          {truncated && " · older prospects not loaded"}
+          {truncated && ' · older prospects not loaded'}
         </span>
       </Panel>
 
@@ -304,7 +286,7 @@ export function ProspectBoard({
               setStatus(ANY);
               setRegion(ANY);
               setSource(ANY);
-              setQuery("");
+              setQuery('');
             })
           }
         />
@@ -317,9 +299,7 @@ export function ProspectBoard({
               busyWith={busy[p.id] ?? null}
               error={errors[p.id] ?? null}
               apolloAvailable={apolloAvailable}
-              filedAway={
-                pinned.has(p.id) && status !== ANY && p.status !== status
-              }
+              filedAway={pinned.has(p.id) && status !== ANY && p.status !== status}
               onMove={(next) => move(p, next)}
             />
           ))}
@@ -369,9 +349,8 @@ function NothingFoundYet() {
       </span>
       <p className="mb-1 text-[15px] font-bold text-ink">No prospects yet</p>
       <p className="mx-auto max-w-lg text-[13px] leading-relaxed text-ink-muted">
-        Cortex sweeps the public job boards once a week looking for companies
-        hiring the kind of people your team places, and everything it finds
-        lands here.
+        Cortex sweeps the public job boards once a week looking for companies hiring the kind of
+        people your team places, and everything it finds lands here.
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <Link
@@ -388,8 +367,8 @@ function NothingFoundYet() {
         </Link>
       </div>
       <p className="mx-auto mt-3 max-w-lg text-[11.5px] text-ink-faint">
-        In chat, something like: “Sweep the job boards for senior fullstack and
-        QA roles at US companies hiring remote.”
+        In chat, something like: “Sweep the job boards for senior fullstack and QA roles at US
+        companies hiring remote.”
       </p>
     </Panel>
   );
@@ -406,14 +385,14 @@ function NothingMatches({
 }) {
   const stage = status !== ANY ? STATUS_META[status] : null;
   const message = filtersActive
-    ? "No company matches those filters. They are still on file — widen the search."
-    : status === "new"
-      ? "Nothing new to review. Everything Cortex has found has been dealt with — the next sweep will bring more."
-      : status === "qualified"
-        ? "Nothing qualified yet. Work through the new ones and keep the companies worth approaching."
-        : status === "contacted"
-          ? "Nobody has been marked as contacted yet. Once you reach out, mark them here so the team can see it."
-          : "Nothing rejected yet.";
+    ? 'No company matches those filters. They are still on file — widen the search.'
+    : status === 'new'
+      ? 'Nothing new to review. Everything Cortex has found has been dealt with — the next sweep will bring more.'
+      : status === 'qualified'
+        ? 'Nothing qualified yet. Work through the new ones and keep the companies worth approaching.'
+        : status === 'contacted'
+          ? 'Nobody has been marked as contacted yet. Once you reach out, mark them here so the team can see it.'
+          : 'Nothing rejected yet.';
 
   return (
     <Panel className="p-10 text-center">
@@ -421,13 +400,9 @@ function NothingMatches({
         <SearchX className="h-5 w-5" />
       </span>
       <p className="mb-1 text-[14px] font-bold text-ink">
-        {stage
-          ? `No ${stage.label.toLowerCase()} prospects here`
-          : "Nothing to show"}
+        {stage ? `No ${stage.label.toLowerCase()} prospects here` : 'Nothing to show'}
       </p>
-      <p className="mx-auto max-w-md text-[12.5px] leading-relaxed text-ink-muted">
-        {message}
-      </p>
+      <p className="mx-auto max-w-md text-[12.5px] leading-relaxed text-ink-muted">{message}</p>
       <button
         type="button"
         onClick={onClear}

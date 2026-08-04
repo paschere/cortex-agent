@@ -1,20 +1,13 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { chatModel, utilityModel, NO_THINKING } from "@cortex/agent-tools";
-import {
-  streamText,
-  generateText,
-  tool,
-  jsonSchema,
-  type CoreMessage,
-  type CoreTool,
-} from "ai";
-import { z } from "zod";
-import { requireSession } from "@/lib/session";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { buildToolContext } from "@/lib/agent";
-import { buildSystemPrompt } from "@/lib/system-prompt";
-import { deniedToolPatterns, isToolDenied } from "@/lib/tool-access";
-import { loadAgent } from "@cortex/agents";
+import { NextResponse, type NextRequest } from 'next/server';
+import { chatModel, utilityModel, NO_THINKING } from '@cortex/agent-tools';
+import { streamText, generateText, tool, jsonSchema, type CoreMessage, type CoreTool } from 'ai';
+import { z } from 'zod';
+import { requireSession } from '@/lib/session';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { buildToolContext } from '@/lib/agent';
+import { buildSystemPrompt } from '@/lib/system-prompt';
+import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
+import { loadAgent } from '@cortex/agents';
 import {
   filterTools,
   runTool,
@@ -22,10 +15,10 @@ import {
   fetchEnabledExternalTools,
   callExternalTool,
   type ExternalServerRow,
-} from "@cortex/agent-tools";
-import { ConfirmationRequiredError, logger } from "@cortex/core";
+} from '@cortex/agent-tools';
+import { ConfirmationRequiredError, logger } from '@cortex/core';
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 const ACKNOWLEDGMENT_RE =
@@ -43,65 +36,72 @@ function shouldRunRag(message: string): boolean {
  * on every message measurably degrades its tool selection ("dumb" picks) and
  * adds latency. Core families are always available; situational families are
  * included only when the recent conversation mentions them.
+ *
+ * ⚠️ EVERY tool family must appear in CORE_FAMILIES or FAMILY_TRIGGERS below.
+ * A family listed in neither is filtered out of every request once the catalogue
+ * passes 40 tools — the model never sees it and answers that it has no such
+ * capability, which reads exactly like a missing grant or a broken tool. The
+ * vehicles family shipped this way: registered, granted, and invisible.
  */
 const CORE_FAMILIES = new Set([
-  "kb",
-  "rate",
-  "sales",
-  "web",
-  "pipeline",
-  "schedule",
-  "cortex",
-  "format",
+  'kb',
+  'rate',
+  'sales',
+  'web',
+  'pipeline',
+  'schedule',
+  'cortex',
+  'format',
 ]);
 
 const FAMILY_TRIGGERS: Array<{ family: string; re: RegExp }> = [
   {
-    family: "hubspot",
+    family: 'hubspot',
     re: /hubspot|deal|pipeline de ventas|crm|prospect|client|cliente|company|empresa|contact/i,
   },
   {
-    family: "recruit",
+    family: 'recruit',
     re: /candidat|recruit|reclut|talent|shortlist|score|entrevista|interview|requisition|vacante/i,
   },
-  { family: "workable", re: /workable|ats|stage|etapa|req\b/i },
+  { family: 'workable', re: /workable|ats|stage|etapa|req\b/i },
   {
-    family: "gmail",
+    family: 'gmail',
     re: /email|correo|mail|inbox|draft|enviar|send|responder|reply/i,
   },
   {
-    family: "gcal",
+    family: 'gcal',
     re: /calendar|calendario|meeting|reuni[oó]n|agenda|invite|evento|event|schedule a call/i,
   },
   {
-    family: "gsheets",
+    family: 'gsheets',
     re: /sheet|hoja de c[aá]lculo|spreadsheet|excel|fila|row/i,
   },
-  { family: "gdrive", re: /drive|documento|document|doc\b|archivo|file/i },
+  { family: 'gdrive', re: /drive|documento|document|doc\b|archivo|file/i },
   {
-    family: "github",
+    family: 'github',
     re: /github|repo|pull request|\bpr\b|issue|commit|c[oó]digo|code/i,
   },
-  { family: "linear", re: /linear|sprint|cycle|ticket|roadmap|eng-\d+/i },
-  { family: "slack", re: /slack|canal|channel|mensaje al equipo/i },
+  { family: 'linear', re: /linear|sprint|cycle|ticket|roadmap|eng-\d+/i },
+  { family: 'slack', re: /slack|canal|channel|mensaje al equipo/i },
   {
-    family: "growth",
+    family: 'growth',
     re: /signal|se[ñn]al|outreach|lead|prospecc|job post|growth|cold email/i,
   },
-  { family: "payroll", re: /payroll|n[oó]mina|salar|pay rate|bill rate|pago/i },
-  { family: "people", re: /team member|equipo asignado|roster|staff/i },
+  { family: 'payroll', re: /payroll|n[oó]mina|salar|pay rate|bill rate|pago/i },
+  { family: 'people', re: /team member|equipo asignado|roster|staff/i },
+  {
+    family: 'vehicles',
+    re: /veh[ií]culo|vehicle|carro|moto|placa|plate|runt|simit|soat|rtm|tecnomec[aá]nica|comparendo|multa|fine|matr[ií]cula|c[eé]dula/i,
+  },
 ];
 
-function scopeTools<T extends { id: string }>(
-  tools: T[],
-  recentText: string,
-): T[] {
+function scopeTools<T extends { id: string }>(tools: T[], recentText: string): T[] {
   if (tools.length <= 40) return tools;
   const active = new Set(CORE_FAMILIES);
   for (const { family, re } of FAMILY_TRIGGERS) {
     if (re.test(recentText)) active.add(family);
   }
-  const scoped = tools.filter((t) => active.has(t.id.split(".")[0] ?? ""));
+  const scoped = tools.filter((t) => active.has(t.id.split('.')[0] ?? ''));
   // Safety net: never scope below a useful floor.
   return scoped.length >= 10 ? scoped : tools;
 }
@@ -114,12 +114,12 @@ function scopeTools<T extends { id: string }>(
 function toToolErrorMessage(err: unknown): string {
   let msg = err instanceof Error ? err.message : String(err);
   // Many Google APIs throw with the raw JSON body as the message.
-  const brace = msg.indexOf("{");
+  const brace = msg.indexOf('{');
   if (brace !== -1) {
     try {
       const parsed = JSON.parse(msg.slice(brace));
       const inner = parsed?.error?.message ?? parsed?.message;
-      if (typeof inner === "string" && inner.length > 0) msg = inner;
+      if (typeof inner === 'string' && inner.length > 0) msg = inner;
     } catch {
       // not JSON — keep the original string
     }
@@ -128,12 +128,12 @@ function toToolErrorMessage(err: unknown): string {
 }
 
 const MessageSchema = z.object({
-  role: z.enum(["user", "assistant", "system"]),
+  role: z.enum(['user', 'assistant', 'system']),
   content: z.string(),
 });
 
 const Body = z.object({
-  agentSlug: z.string().default("cortex"),
+  agentSlug: z.string().default('cortex'),
   conversationId: z.string().uuid().optional(),
   messages: z.array(MessageSchema).min(1),
 });
@@ -145,15 +145,12 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
   const parsed = Body.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.flatten() },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   const { agentSlug, messages } = parsed.data;
@@ -165,44 +162,36 @@ export async function POST(req: NextRequest) {
   try {
     agent = await loadAgent(db, agentSlug);
   } catch {
-    return NextResponse.json(
-      { error: `Agent '${agentSlug}' not found` },
-      { status: 404 },
-    );
+    return NextResponse.json({ error: `Agent '${agentSlug}' not found` }, { status: 404 });
   }
 
   // Resolve or create conversation
   let conversationId = parsed.data.conversationId;
-  const lastUserMessage = [...messages]
-    .reverse()
-    .find((m) => m.role === "user");
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
 
   if (!conversationId) {
-    const title = (lastUserMessage?.content ?? "New conversation").slice(0, 60);
+    const title = (lastUserMessage?.content ?? 'New conversation').slice(0, 60);
     const { data: conv, error: convErr } = await db
-      .from("conversations")
+      .from('conversations')
       .insert({
         user_id: user.id,
         agent_id: agent.id,
-        surface: "web",
+        surface: 'web',
         title,
       })
-      .select("id")
+      .select('id')
       .single();
     if (convErr || !conv) {
-      return NextResponse.json(
-        { error: "Failed to create conversation" },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: 'Failed to create conversation' }, { status: 500 });
     }
     conversationId = conv.id as string;
   }
 
   // Persist the user's last message
   if (lastUserMessage) {
-    await db.from("messages").insert({
+    await db.from('messages').insert({
       conversation_id: conversationId,
-      role: "user",
+      role: 'user',
       content: lastUserMessage.content,
     });
   }
@@ -216,16 +205,14 @@ export async function POST(req: NextRequest) {
   // RAG prepend: kb.search top 3 on the last user message (conditional).
   // Skipped entirely while the KB has no indexed chunks — saves an embedding
   // round-trip per message on fresh workspaces.
-  const ragQuery = lastUserMessage?.content ?? "";
-  let ragBlock = "";
+  const ragQuery = lastUserMessage?.content ?? '';
+  let ragBlock = '';
   const { count: chunkCount } = await db
-    .from("kb_chunks")
-    .select("id", { count: "exact", head: true });
+    .from('kb_chunks')
+    .select('id', { count: 'exact', head: true });
   if ((chunkCount ?? 0) > 0 && shouldRunRag(ragQuery)) {
     const ragOut = ragQuery
-      ? await runTool(kbSearch, { query: ragQuery, limit: 3 }, ctx).catch(
-          () => ({ hits: [] }),
-        )
+      ? await runTool(kbSearch, { query: ragQuery, limit: 3 }, ctx).catch(() => ({ hits: [] }))
       : { hits: [] };
     const relevant = (
       ragOut.hits as Array<{
@@ -237,37 +224,35 @@ export async function POST(req: NextRequest) {
     ).filter((h) => (h.score ?? 1) >= 0.65);
     if (relevant.length > 0) {
       ragBlock =
-        "<context>\n" +
+        '<context>\n' +
         relevant
           .map(
             (h, i) =>
               `[^${i + 1}] (${(h.score ?? 0).toFixed(2)}) ${h.documentTitle} chunk ${h.chunkIndex}:\n${h.content}`,
           )
-          .join("\n\n") +
-        "\n</context>";
+          .join('\n\n') +
+        '\n</context>';
     }
   }
 
   const recentText = messages
-    .filter((m) => m.role === "user")
+    .filter((m) => m.role === 'user')
     .slice(-4)
     .map((m) => m.content)
-    .join("\n");
+    .join('\n');
   const scoped = scopeTools(filterTools(agent.allowedTools), recentText);
   // Team tool permissions are a deny-list layered on the agent's tools:
   // anything blocked by ANY of the user's teams never reaches the model.
   const deniedPatterns = await deniedToolPatterns(db, user.id);
   const allowed =
-    deniedPatterns.length > 0
-      ? scoped.filter((t) => !isToolDenied(t.id, deniedPatterns))
-      : scoped;
+    deniedPatterns.length > 0 ? scoped.filter((t) => !isToolDenied(t.id, deniedPatterns)) : scoped;
 
   // AI SDK requires tool names matching ^[a-zA-Z0-9_-]+$ — replace dots with underscores
   // Build reverse map to find original tool by its AI SDK name
   const toolNameToId = new Map<string, string>();
   const aiTools: Record<string, CoreTool> = Object.fromEntries(
     allowed.map((t) => {
-      const sdkName = t.id.replaceAll(".", "_");
+      const sdkName = t.id.replaceAll('.', '_');
       toolNameToId.set(sdkName, t.id);
       return [
         sdkName,
@@ -303,18 +288,16 @@ export async function POST(req: NextRequest) {
 
   // Inject per-user external (dynamic) MCP tools. Failures here must never
   // break the chat turn, so the whole fetch is best-effort.
-  const externalServers = await fetchEnabledExternalTools(db, user.id).catch(
-    () => [],
-  );
+  const externalServers = await fetchEnabledExternalTools(db, user.id).catch(() => []);
   for (const { server, tools } of externalServers) {
     for (const t of tools) {
-      const prefix = "mcp_" + server.id.replace(/-/g, "").slice(0, 16) + "_";
+      const prefix = 'mcp_' + server.id.replace(/-/g, '').slice(0, 16) + '_';
       const sdkName = (prefix + t.tool_name).slice(0, 64);
       aiTools[sdkName] = tool({
-        description: (t.tool_description ?? "").slice(0, 500),
+        description: (t.tool_description ?? '').slice(0, 500),
         parameters: jsonSchema(
           (t.input_schema_json ?? {
-            type: "object",
+            type: 'object',
             properties: {},
           }) as Parameters<typeof jsonSchema>[0],
         ),
@@ -350,17 +333,17 @@ export async function POST(req: NextRequest) {
   }
 
   let coreMessages: CoreMessage[] = messages.map((m) => ({
-    role: m.role as "user" | "assistant" | "system",
+    role: m.role as 'user' | 'assistant' | 'system',
     content: m.content,
   }));
 
   if (conversationId) {
     try {
       const { data: dbMessages } = await db
-        .from("messages")
-        .select("role, content")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: false })
+        .from('messages')
+        .select('role, content')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
         .limit(20);
       if (dbMessages && dbMessages.length > 0) {
         const dbSet = new Set(dbMessages.map((m) => `${m.role}::${m.content}`));
@@ -368,12 +351,10 @@ export async function POST(req: NextRequest) {
           (m) => !dbSet.has(`${m.role}::${String(m.content)}`),
         );
         coreMessages = [
-          ...dbMessages
-            .reverse()
-            .map((m) => ({
-              role: m.role as "user" | "assistant" | "system",
-              content: m.content as string,
-            })),
+          ...dbMessages.reverse().map((m) => ({
+            role: m.role as 'user' | 'assistant' | 'system',
+            content: m.content as string,
+          })),
           ...clientOnly,
         ];
       }
@@ -395,20 +376,19 @@ export async function POST(req: NextRequest) {
     system,
     messages: coreMessages,
     tools: aiTools,
-    toolChoice: "auto",
+    toolChoice: 'auto',
     maxSteps: 12,
     onFinish: async ({ text, toolCalls, toolResults, usage }) => {
       try {
-        await db.from("messages").insert({
+        await db.from('messages').insert({
           conversation_id: conversationId,
-          role: "assistant",
+          role: 'assistant',
           content: text,
           tool_calls: toolCalls as unknown as object,
           tool_results: toolResults as unknown as object,
         });
         // Auto-generate title on first turn
-        const isFirstTurn =
-          coreMessages.filter((m) => m.role === "assistant").length <= 1;
+        const isFirstTurn = coreMessages.filter((m) => m.role === 'assistant').length <= 1;
         if (isFirstTurn && lastUserMessage) {
           void (async () => {
             try {
@@ -422,21 +402,21 @@ export async function POST(req: NextRequest) {
                 maxTokens: 256,
               });
               await db
-                .from("conversations")
+                .from('conversations')
                 .update({ title: titleText.trim() })
-                .eq("id", conversationId);
+                .eq('id', conversationId);
             } catch {
               /* non-fatal */
             }
           })();
         }
-        await db.from("audit_events").insert({
+        await db.from('audit_events').insert({
           user_id: user.id,
           agent_id: agent.id,
           conversation_id: conversationId,
-          tool_id: "__agent_turn",
-          input_hash: "turn",
-          status: "ok",
+          tool_id: '__agent_turn',
+          input_hash: 'turn',
+          status: 'ok',
           latency_ms: 0,
           metadata: {
             model: agent.defaultModel,
@@ -451,7 +431,7 @@ export async function POST(req: NextRequest) {
   });
 
   return result.toDataStreamResponse({
-    headers: { "X-Conversation-Id": conversationId },
+    headers: { 'X-Conversation-Id': conversationId },
     // An error part on the data stream makes useChat drop the assistant message
     // it was building, so a hiccup the model itself recovered from wiped the
     // whole answer from the screen — the reply was in the database and only
@@ -459,7 +439,7 @@ export async function POST(req: NextRequest) {
     // "An error occurred." into something both the user and we can act on.
     getErrorMessage: (error) => {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error("chat stream error", { message });
+      logger.error('chat stream error', { message });
       return message.slice(0, 300);
     },
   });

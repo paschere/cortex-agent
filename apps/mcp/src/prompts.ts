@@ -5,15 +5,17 @@ export const PROMPTS = [
     arguments: [
       { name: 'role', description: 'e.g., "frontend", "fullstack"', required: true },
       { name: 'seniority', description: 'junior | mid | senior | lead', required: true },
-      { name: 'companyId', description: 'Optional HubSpot company ID for context', required: false },
+      {
+        name: 'companyId',
+        description: 'Optional HubSpot company ID for context',
+        required: false,
+      },
     ],
   },
   {
     name: 'qualify-lead',
     description: 'Walk through qualifying a sales lead from HubSpot data.',
-    arguments: [
-      { name: 'dealId', description: 'HubSpot deal ID', required: true },
-    ],
+    arguments: [{ name: 'dealId', description: 'HubSpot deal ID', required: true }],
   },
   {
     name: 'rate-question',

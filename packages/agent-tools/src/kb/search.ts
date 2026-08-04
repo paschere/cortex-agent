@@ -1,13 +1,13 @@
-import { ValidationError } from "@cortex/core";
-import { z } from "zod";
-import { registerTool } from "../index";
-import { listVisibleSpaces, resolveSpaceByName, searchSpaces } from "./spaces";
+import { ValidationError } from '@cortex/core';
+import { z } from 'zod';
+import { registerTool } from '../index';
+import { listVisibleSpaces, resolveSpaceByName, searchSpaces } from './spaces';
 
 const HitSchema = z.object({
   documentId: z.string().uuid(),
   documentTitle: z.string(),
   space: z.string(),
-  spaceKind: z.enum(["global", "personal"]),
+  spaceKind: z.enum(['global', 'personal']),
   chunkIndex: z.number().int(),
   content: z.string(),
   score: z.number(),
@@ -22,10 +22,10 @@ const HitSchema = z.object({
  * already see.
  */
 export const kbSearch = registerTool({
-  id: "kb.search",
+  id: 'kb.search',
   description:
     "Search the company's Knowledge Base — client notes, playbooks, rates, past proposals, anything saved to it. ONE query in, raw matching excerpts out. Searches every company-wide space plus the asker's own personal spaces, and nobody else's. Pass `space` with a space name to look in just one. Each result says which space it came from, so you can tell the person whether what you found is company knowledge or their own note. " +
-    "Use this to look one specific thing up. When you are about to WRITE something that should reflect what the company knows — a proposal, a client email, a rate answer — use kb.context instead: it runs several angles at once and hands back grouped, citable sources. Do not call this three times in a row to do that by hand.",
+    'Use this to look one specific thing up. When you are about to WRITE something that should reflect what the company knows — a proposal, a client email, a rate answer — use kb.context instead: it runs several angles at once and hands back grouped, citable sources. Do not call this three times in a row to do that by hand.',
   inputSchema: z.object({
     query: z.string().min(1),
     space: z
@@ -33,9 +33,7 @@ export const kbSearch = registerTool({
       .min(1)
       .max(200)
       .optional()
-      .describe(
-        'Name of a single space to search in, e.g. "Rates" — omit to search everything',
-      ),
+      .describe('Name of a single space to search in, e.g. "Rates" — omit to search everything'),
     limit: z.number().int().min(1).max(20).default(5),
   }),
   outputSchema: z.object({
@@ -48,12 +46,10 @@ export const kbSearch = registerTool({
     if (input.space) {
       const space = await resolveSpaceByName(ctx.db, ctx.userId, input.space);
       if (!space) {
-        const names = (await listVisibleSpaces(ctx.db, ctx.userId)).map(
-          (s) => s.name,
-        );
+        const names = (await listVisibleSpaces(ctx.db, ctx.userId)).map((s) => s.name);
         throw new ValidationError(
           names.length > 0
-            ? `There is no space called "${input.space}". You can search: ${names.join(", ")}.`
+            ? `There is no space called "${input.space}". You can search: ${names.join(', ')}.`
             : `There is no space called "${input.space}", and nothing has been shared with you yet.`,
         );
       }

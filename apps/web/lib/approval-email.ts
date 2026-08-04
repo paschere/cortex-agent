@@ -1,17 +1,17 @@
-import "server-only";
+import 'server-only';
 import {
   type ApprovalOrigin,
   approvalNotificationText,
   buildApprovalCard,
-} from "@/lib/approval-card";
-import { approvalTimeZone } from "@/lib/approvals/decide";
-import { confirmationReason } from "@/lib/confirmation-notes";
-import { sendEmail } from "@/lib/email";
-import { renderApprovalRequestEmail } from "@/lib/email-templates";
-import { sendChatDm, toChatText } from "@/lib/google-chat";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { humanizeToolId } from "@/lib/tool-labels";
-import { logger } from "@cortex/core";
+} from '@/lib/approval-card';
+import { approvalTimeZone } from '@/lib/approvals/decide';
+import { confirmationReason } from '@/lib/confirmation-notes';
+import { sendEmail } from '@/lib/email';
+import { renderApprovalRequestEmail } from '@/lib/email-templates';
+import { sendChatDm, toChatText } from '@/lib/google-chat';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { humanizeToolId } from '@/lib/tool-labels';
+import { logger } from '@cortex/core';
 
 /**
  * "Cortex needs your approval" notification.
@@ -60,38 +60,37 @@ export async function sendApprovalRequestEmail(opts: {
   try {
     const db = getSupabaseServiceClient();
     const { data: user } = await db
-      .from("users")
-      .select("email, name")
-      .eq("id", opts.userId)
+      .from('users')
+      .select('email, name')
+      .eq('id', opts.userId)
       .maybeSingle();
     const to = user?.email as string | undefined;
     if (!to) return;
 
-    const base = (
-      process.env.APP_BASE_URL ??
-      process.env.BETTER_AUTH_URL ??
-      ""
-    ).replace(/\/+$/, "");
+    const base = (process.env.APP_BASE_URL ?? process.env.BETTER_AUTH_URL ?? '').replace(
+      /\/+$/,
+      '',
+    );
     let payload = JSON.stringify(opts.input, null, 2);
     if (payload.length > MAX_PAYLOAD_CHARS) {
       payload = `${payload.slice(0, MAX_PAYLOAD_CHARS)}\n… (truncated — see the full payload in the app)`;
     }
 
     const where =
-      opts.surface === "schedule"
-        ? "a scheduled routine"
-        : opts.surface === "mcp"
-          ? "your Claude conversation"
-          : opts.surface === "chat"
-            ? "Google Chat"
-            : "Cortex";
+      opts.surface === 'schedule'
+        ? 'a scheduled routine'
+        : opts.surface === 'mcp'
+          ? 'your Claude conversation'
+          : opts.surface === 'chat'
+            ? 'Google Chat'
+            : 'Cortex';
 
     const mail = renderApprovalRequestEmail({
       toolLabel: humanizeToolId(opts.toolId),
       origin: where,
       reason: confirmationReason(opts.toolId),
       payload,
-      firstName: user?.name ? String(user.name).split(" ")[0] : null,
+      firstName: user?.name ? String(user.name).split(' ')[0] : null,
       expiresInMinutes: 15,
     });
 
@@ -102,7 +101,7 @@ export async function sendApprovalRequestEmail(opts: {
       html: mail.html,
     });
     if (!result.sent) {
-      logger.warn("approval email not sent", {
+      logger.warn('approval email not sent', {
         reason: result.reason,
         toolId: opts.toolId,
       });
@@ -118,7 +117,7 @@ export async function sendApprovalRequestEmail(opts: {
         toolId: opts.toolId,
         input: opts.input,
         expiresAt: opts.expiresAt ?? new Date(Date.now() + APPROVAL_TTL_MS),
-        origin: opts.surface ?? "web",
+        origin: opts.surface ?? 'web',
         timeZone: await approvalTimeZone(opts.userId),
         ...(base ? { appBaseUrl: base } : {}),
       });
@@ -128,10 +127,10 @@ export async function sendApprovalRequestEmail(opts: {
         cards: [card],
       });
       if (carded.sent) return;
-      if (carded.reason !== "not linked") {
+      if (carded.reason !== 'not linked') {
         // The card was rejected (a malformed widget, a Chat outage). Fall
         // through to the text DM rather than leaving Chat with nothing.
-        logger.warn("approval Chat card not sent", {
+        logger.warn('approval Chat card not sent', {
           reason: carded.reason,
           toolId: opts.toolId,
         });
@@ -143,31 +142,31 @@ export async function sendApprovalRequestEmail(opts: {
     const chatText = toChatText(
       [
         `⏸️ **Approval needed — ${humanizeToolId(opts.toolId)}**`,
-        "",
+        '',
         `Where it came from: ${where}`,
         `Why it needs approval: ${confirmationReason(opts.toolId)}`,
-        "",
-        "Exactly what will run:",
-        "```",
+        '',
+        'Exactly what will run:',
+        '```',
         payload,
-        "```",
-        "",
+        '```',
+        '',
         base
           ? `Approve or decline: [${base}/approvals](${base}/approvals)`
-          : "Approve or decline it in Cortex.",
-        "",
-        "Nothing has happened yet — it only runs if you approve. The request expires in 15 minutes.",
-      ].join("\n"),
+          : 'Approve or decline it in Cortex.',
+        '',
+        'Nothing has happened yet — it only runs if you approve. The request expires in 15 minutes.',
+      ].join('\n'),
     );
     const chat = await sendChatDm({ userId: opts.userId, text: chatText });
-    if (!chat.sent && chat.reason !== "not linked") {
-      logger.warn("approval Chat DM not sent", {
+    if (!chat.sent && chat.reason !== 'not linked') {
+      logger.warn('approval Chat DM not sent', {
         reason: chat.reason,
         toolId: opts.toolId,
       });
     }
   } catch (err) {
-    logger.error("approval notification failed", {
+    logger.error('approval notification failed', {
       error: (err as Error).message,
     });
   }

@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { motion } from "framer-motion";
+import { motion } from 'framer-motion';
 import {
   BarChart2,
   FileText,
@@ -14,7 +14,7 @@ import {
   Calculator,
   AlarmClock,
   HeartHandshake,
-} from "lucide-react";
+} from 'lucide-react';
 
 interface Suggestion {
   icon: typeof BarChart2;
@@ -30,43 +30,40 @@ interface AgentInfo {
 }
 
 const SALES_SUGGESTIONS: Suggestion[] = [
-  { icon: BarChart2, text: "Summarize my pipeline" },
-  { icon: Activity, text: "Get a deal briefing", value: "/briefing " },
-  { icon: FileText, text: "Draft a proposal for a new client" },
-  { icon: Calendar, text: "Which deals close this month?" },
-  { icon: Search, text: "Research a prospect on the web" },
-  { icon: Mail, text: "Draft a follow-up email" },
-  { icon: UserCheck, text: "Qualify this lead" },
+  { icon: BarChart2, text: 'Summarize my pipeline' },
+  { icon: Activity, text: 'Get a deal briefing', value: '/briefing ' },
+  { icon: FileText, text: 'Draft a proposal for a new client' },
+  { icon: Calendar, text: 'Which deals close this month?' },
+  { icon: Search, text: 'Research a prospect on the web' },
+  { icon: Mail, text: 'Draft a follow-up email' },
+  { icon: UserCheck, text: 'Qualify this lead' },
 ];
 
 // One suggestion per front (sales, recruiting, rates, HR, clients, routines) —
 // the point of the empty state is to show Cortex's breadth in one glance.
 const CORTEX_SUGGESTIONS: Suggestion[] = [
-  { icon: BarChart2, text: "Summarize my pipeline and flag stuck deals" },
-  { icon: Users, text: "Find candidates for a senior React role" },
-  { icon: Calculator, text: "What would 2 senior QAs and a DevOps lead cost?" },
-  { icon: HeartHandshake, text: "Prep me for my next client call" },
+  { icon: BarChart2, text: 'Summarize my pipeline and flag stuck deals' },
+  { icon: Users, text: 'Find candidates for a senior React role' },
+  { icon: Calculator, text: 'What would 2 senior QAs and a DevOps lead cost?' },
+  { icon: HeartHandshake, text: 'Prep me for my next client call' },
   {
     icon: AlarmClock,
-    text: "Every Friday at 4, send each client their active-candidates report",
+    text: 'Every Friday at 4, send each client their active-candidates report',
   },
-  { icon: Mail, text: "Draft a follow-up email in my voice" },
+  { icon: Mail, text: 'Draft a follow-up email in my voice' },
 ];
 
-const COPY: Record<
-  string,
-  { title: string; subtitle: string; suggestions: Suggestion[] }
-> = {
+const COPY: Record<string, { title: string; subtitle: string; suggestions: Suggestion[] }> = {
   cortex: {
-    title: "Cortex — your super-agent",
+    title: 'Cortex — your super-agent',
     subtitle:
-      "It sells, it recruits, it runs HR, it takes care of clients — grounded in your live CRM, talent pool, and Knowledge Base. One goal in, a whole operation out.",
+      'It sells, it recruits, it runs HR, it takes care of clients — grounded in your live CRM, talent pool, and Knowledge Base. One goal in, a whole operation out.',
     suggestions: CORTEX_SUGGESTIONS,
   },
   sales: {
-    title: "Cortex Sales co-pilot",
+    title: 'Cortex Sales co-pilot',
     subtitle:
-      "Ask about your pipeline, draft proposals, research prospects, or send follow-ups — grounded in your live CRM and inbox.",
+      'Ask about your pipeline, draft proposals, research prospects, or send follow-ups — grounded in your live CRM and inbox.',
     suggestions: SALES_SUGGESTIONS,
   },
 };
@@ -96,12 +93,8 @@ export function EmptyState({
         <span className="grid h-14 w-14 place-items-center rounded-[18px] bg-gradient-to-br from-primary to-primary-strong text-white shadow-pop">
           <Sparkles className="h-7 w-7" />
         </span>
-        <h2 className="mt-5 text-xl font-extrabold tracking-tight text-ink">
-          {copy.title}
-        </h2>
-        <p className="mt-1 max-w-sm text-[13px] text-ink-muted">
-          {copy.subtitle}
-        </p>
+        <h2 className="mt-5 text-xl font-extrabold tracking-tight text-ink">{copy.title}</h2>
+        <p className="mt-1 max-w-sm text-[13px] text-ink-muted">{copy.subtitle}</p>
       </motion.div>
       <div className="grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
         {copy.suggestions.map((s, i) => (

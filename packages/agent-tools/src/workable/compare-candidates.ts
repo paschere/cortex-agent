@@ -1,8 +1,8 @@
-import { chatModel } from "../model";
-import { generateObject } from "ai";
-import { z } from "zod";
-import { registerTool } from "../index";
-import { workableFetch } from "./client";
+import { chatModel } from '../model';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+import { registerTool } from '../index';
+import { workableFetch } from './client';
 import {
   type EvidenceCandidate,
   RANKING_MODEL,
@@ -12,7 +12,7 @@ import {
   buildJobContext,
   fetchCandidateDetail,
   fetchTestGorillaSignals,
-} from "./evaluate";
+} from './evaluate';
 
 /**
  * workable.compare_candidates — head-to-head comparison of 2-5 named
@@ -35,25 +35,19 @@ const llmCompareSchema = z.object({
     z.object({
       candidateId: z.string(),
       score: z.number().min(0).max(100),
-      verdict: z.enum(["strong_match", "good_match", "possible", "weak"]),
-      fitSummary: z
-        .string()
-        .describe("1-2 sentences on their fit for THIS job, citing the data"),
+      verdict: z.enum(['strong_match', 'good_match', 'possible', 'weak']),
+      fitSummary: z.string().describe('1-2 sentences on their fit for THIS job, citing the data'),
       strengths: z.array(z.string()).max(4),
       concerns: z
         .array(z.string())
         .max(3)
-        .describe(
-          'Risks or gaps, including missing data ("no dated work history")',
-        ),
+        .describe('Risks or gaps, including missing data ("no dated work history")'),
     }),
   ),
   winner: z.object({
     candidateId: z.string(),
-    margin: z.enum(["clear", "narrow", "toss_up"]),
-    rationale: z
-      .string()
-      .describe("Why they win, grounded in the compared evidence"),
+    margin: z.enum(['clear', 'narrow', 'toss_up']),
+    rationale: z.string().describe('Why they win, grounded in the compared evidence'),
   }),
   tradeoffs: z
     .array(z.string())
@@ -63,9 +57,7 @@ const llmCompareSchema = z.object({
     ),
   recommendation: z
     .string()
-    .describe(
-      "1-2 sentences: what the recruiter should do next with these candidates",
-    ),
+    .describe('1-2 sentences: what the recruiter should do next with these candidates'),
 });
 
 type LlmCompare = z.infer<typeof llmCompareSchema>;
@@ -78,31 +70,29 @@ async function compareWithLlm(
   signal?: AbortSignal,
 ): Promise<LlmCompare> {
   const system = [
-    "You are a senior technical recruiter at Cortex comparing finalists for one job.",
-    "STRICT GROUNDING RULES:",
-    "- Use ONLY the candidate cards and job description provided. Never invent skills, employers, dates, or outcomes.",
-    "- Every strength, concern and trade-off must be traceable to the provided data; missing/unclear data is itself a valid concern.",
+    'You are a senior technical recruiter comparing finalists for one job.',
+    'STRICT GROUNDING RULES:',
+    '- Use ONLY the candidate cards and job description provided. Never invent skills, employers, dates, or outcomes.',
+    '- Every strength, concern and trade-off must be traceable to the provided data; missing/unclear data is itself a valid concern.',
     "- Scores are relative to THIS job's requirements.",
-    "- TestGorilla lines are verified assessment results — weigh them above self-reported skills; a missing TestGorilla is not a negative, but a low completed score is.",
-    "- Judge only professional signal. Ignore and never mention name origin, gender, age, or photos.",
+    '- TestGorilla lines are verified assessment results — weigh them above self-reported skills; a missing TestGorilla is not a negative, but a low completed score is.',
+    '- Judge only professional signal. Ignore and never mention name origin, gender, age, or photos.',
     '- Declare margin "toss_up" when the evidence genuinely does not separate them — do not force a winner.',
-    "Return every candidate exactly once in `perCandidate`.",
-  ].join("\n");
+    'Return every candidate exactly once in `perCandidate`.',
+  ].join('\n');
 
   const prompt = [
     `JOB: ${jobTitle}`,
-    mustHaves.length
-      ? `MUST-HAVE SKILLS (per the recruiter): ${mustHaves.join(", ")}`
-      : null,
+    mustHaves.length ? `MUST-HAVE SKILLS (per the recruiter): ${mustHaves.join(', ')}` : null,
     `JOB POSTING (trimmed): ${jobText.slice(0, 2_500)}`,
-    "",
+    '',
     `CANDIDATES TO COMPARE (${candidates.length}):`,
     ...candidates.map((c, i) => `--- Candidate ${i + 1} ---\n${c.card}`),
-    "",
-    "Compare them head-to-head for this job: individual verdicts, the winner (or toss_up), the trade-offs between them, and what to do next.",
+    '',
+    'Compare them head-to-head for this job: individual verdicts, the winner (or toss_up), the trade-offs between them, and what to do next.',
   ]
     .filter((v) => v != null)
-    .join("\n");
+    .join('\n');
 
   const { object } = await generateObject({
     model: chatModel(RANKING_MODEL()),
@@ -115,29 +105,24 @@ async function compareWithLlm(
 }
 
 export const workableCompareCandidates = registerTool({
-  id: "workable.compare_candidates",
+  id: 'workable.compare_candidates',
   description:
     'Head-to-head comparison of 2-5 specific Workable candidates for one job, LIVE from the ATS — use when the user asks "who is better between X and Y (for this role)?", "compare the finalists", or must pick who advances. Fetches the job posting and each full profile fresh (a handful of ATS calls), builds deterministic evidence per person (skills in the posting, role fit, experience years, stage, and TestGorilla verified-assessment scores batched in from the matcher by email), then a SINGLE batched LLM evaluation judges them against each other: per-candidate score/verdict/strengths/concerns, a winner with margin (clear/narrow/toss_up — a toss-up is a legitimate answer), the concrete trade-offs between them, and a next-step recommendation. ' +
-    "Candidate ids come from workable.top_candidates, workable.list_candidates or workable.search_candidates. Pass mustHaveSkills when the user names what matters. " +
-    "If the LLM is unavailable it degrades to the deterministic evidence comparison and meta.dataQuality says so. Note: recruit.compare_candidates compares matcher-DB records instead (interviews, TestGorilla, stored AI scores) — prefer THIS tool for live ATS truth, that one when the deep enriched history matters. " +
+    'Candidate ids come from workable.top_candidates, workable.list_candidates or workable.search_candidates. Pass mustHaveSkills when the user names what matters. ' +
+    'If the LLM is unavailable it degrades to the deterministic evidence comparison and meta.dataQuality says so. Note: recruit.compare_candidates compares matcher-DB records instead (interviews, TestGorilla, stored AI scores) — prefer THIS tool for live ATS truth, that one when the deep enriched history matters. ' +
     "HOW TO PHRASE IT: plain human terms, no tool names or ids. Lead with the verdict and the trade-off ('Entre los dos, María: cubre AWS que Juan no muestra; Juan solo gana en años totales — y va empatado en etapa').",
   inputSchema: z.object({
-    shortcode: z
-      .string()
-      .min(1)
-      .describe("Workable job shortcode the comparison is against"),
+    shortcode: z.string().min(1).describe('Workable job shortcode the comparison is against'),
     candidateIds: z
       .array(z.string().min(1))
       .min(2)
       .max(MAX_CANDIDATES)
-      .describe("2-5 Workable candidate ids to compare"),
+      .describe('2-5 Workable candidate ids to compare'),
     mustHaveSkills: z
       .array(z.string().min(2))
       .max(15)
       .optional()
-      .describe(
-        "Skills the role truly requires; when set, evidence scores coverage of this list",
-      ),
+      .describe('Skills the role truly requires; when set, evidence scores coverage of this list'),
   }),
   outputSchema: z.object({
     job: z.object({
@@ -150,7 +135,7 @@ export const workableCompareCandidates = registerTool({
       .object({
         candidateId: z.string(),
         name: z.string().nullable(),
-        margin: z.enum(["clear", "narrow", "toss_up"]),
+        margin: z.enum(['clear', 'narrow', 'toss_up']),
         rationale: z.string().nullable(),
       })
       .nullable(),
@@ -176,9 +161,7 @@ export const workableCompareCandidates = registerTool({
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     const ids = [...new Set(input.candidateIds)];
-    const mustHaves = (input.mustHaveSkills ?? [])
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const mustHaves = (input.mustHaveSkills ?? []).map((s) => s.trim()).filter(Boolean);
     let apiCalls = 0;
 
     // 1. The job posting the comparison is anchored to.
@@ -198,9 +181,7 @@ export const workableCompareCandidates = registerTool({
         apiCalls++;
         details.push(await fetchCandidateDetail(id, ctx.signal));
       } catch (err) {
-        loadErrors.push(
-          `${id}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        loadErrors.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
       }
       await new Promise((r) => setTimeout(r, FETCH_GAP_MS));
     }
@@ -208,22 +189,20 @@ export const workableCompareCandidates = registerTool({
     // 2.5 TestGorilla in one batch — fed by its own integration into the
     //     matcher DB (keyed by email), trustworthy even when the Workable
     //     sync is stale. Optional: on failure the comparison proceeds.
-    const tg = await fetchTestGorillaSignals(
-      details.map((d) => String(d?.email ?? "")),
-    );
+    const tg = await fetchTestGorillaSignals(details.map((d) => String(d?.email ?? '')));
     const loaded: EvidenceCandidate[] = details.map((detail) =>
       buildEvidence(
         detail,
         detail,
         jobCtx,
         mustHaves,
-        tg.byEmail.get(String(detail?.email ?? "").toLowerCase()) ?? null,
+        tg.byEmail.get(String(detail?.email ?? '').toLowerCase()) ?? null,
       ),
     );
 
     if (loaded.length < 2) {
       throw new Error(
-        `Could not load enough profiles to compare (loaded ${loaded.length} of ${ids.length}). ${loadErrors.join("; ")}`,
+        `Could not load enough profiles to compare (loaded ${loaded.length} of ${ids.length}). ${loadErrors.join('; ')}`,
       );
     }
 
@@ -231,13 +210,7 @@ export const workableCompareCandidates = registerTool({
     let llm: LlmCompare | null = null;
     let llmError: string | null = null;
     try {
-      llm = await compareWithLlm(
-        jobCtx.title,
-        jobCtx.text,
-        mustHaves,
-        loaded,
-        ctx.signal,
-      );
+      llm = await compareWithLlm(jobCtx.title, jobCtx.text, mustHaves, loaded, ctx.signal);
     } catch (err) {
       llmError = err instanceof Error ? err.message : String(err);
     }
@@ -248,7 +221,7 @@ export const workableCompareCandidates = registerTool({
     let winner: {
       candidateId: string;
       name: string | null;
-      margin: "clear" | "narrow" | "toss_up";
+      margin: 'clear' | 'narrow' | 'toss_up';
       rationale: string | null;
     } | null = null;
     let tradeoffs: string[] = [];
@@ -258,10 +231,7 @@ export const workableCompareCandidates = registerTool({
       const seen = new Set<string>();
       candidates = llm.perCandidate
         .filter(
-          (r) =>
-            byId.has(r.candidateId) &&
-            !seen.has(r.candidateId) &&
-            seen.add(r.candidateId),
+          (r) => byId.has(r.candidateId) && !seen.has(r.candidateId) && seen.add(r.candidateId),
         )
         .map((r) => {
           const c = byId.get(r.candidateId) as EvidenceCandidate;
@@ -269,7 +239,7 @@ export const workableCompareCandidates = registerTool({
           return {
             ...rest,
             score: Math.round(r.score),
-            scoreSource: "llm",
+            scoreSource: 'llm',
             verdict: r.verdict,
             fitSummary: r.fitSummary,
             strengths: r.strengths,
@@ -295,7 +265,7 @@ export const workableCompareCandidates = registerTool({
         return {
           ...rest,
           score: preScore,
-          scoreSource: "deterministic",
+          scoreSource: 'deterministic',
           verdict: null,
           fitSummary: null,
           strengths: [],
@@ -309,7 +279,7 @@ export const workableCompareCandidates = registerTool({
         winner = {
           candidateId: first.id,
           name: first.name,
-          margin: gap > 12 ? "clear" : gap > 4 ? "narrow" : "toss_up",
+          margin: gap > 12 ? 'clear' : gap > 4 ? 'narrow' : 'toss_up',
           rationale: null,
         };
       }
@@ -318,7 +288,7 @@ export const workableCompareCandidates = registerTool({
     const dataQuality: string[] = [];
     if (loadErrors.length) {
       dataQuality.push(
-        `${loadErrors.length} candidate(s) could not be loaded and are missing from the comparison: ${loadErrors.join("; ")}`,
+        `${loadErrors.length} candidate(s) could not be loaded and are missing from the comparison: ${loadErrors.join('; ')}`,
       );
     }
     if (tg.note) {
@@ -326,13 +296,13 @@ export const workableCompareCandidates = registerTool({
     }
     if (llmError) {
       dataQuality.push(
-        "AI comparison unavailable for this call (the evaluation model failed) — ranking and margin come from the deterministic evidence only; verdicts, trade-offs and the recommendation are missing, not zero.",
+        'AI comparison unavailable for this call (the evaluation model failed) — ranking and margin come from the deterministic evidence only; verdicts, trade-offs and the recommendation are missing, not zero.',
       );
     }
     dataQuality.push(
       llm
-        ? "Scores, verdicts, trade-offs and the recommendation are Cortex AI output computed just now over live Workable data — not ATS fields and not client feedback. `evidence` lines are deterministic and verifiable in the profile."
-        : "This comparison is deterministic keyword/date evidence computed live from Workable — not ATS fields and not client feedback.",
+        ? 'Scores, verdicts, trade-offs and the recommendation are Cortex AI output computed just now over live Workable data — not ATS fields and not client feedback. `evidence` lines are deterministic and verifiable in the profile.'
+        : 'This comparison is deterministic keyword/date evidence computed live from Workable — not ATS fields and not client feedback.',
     );
 
     const meta = {
@@ -343,59 +313,55 @@ export const workableCompareCandidates = registerTool({
       apiCalls,
       aiRanking: { used: !!llm, model: llm ? RANKING_MODEL() : null },
       source: {
-        system: "Workable ATS (live, SPI v3)",
-        endpoint: "/jobs/:shortcode + /candidates/:id",
+        system: 'Workable ATS (live, SPI v3)',
+        endpoint: '/jobs/:shortcode + /candidates/:id',
       },
       dataQuality,
     };
 
     const marginLabel: Record<string, string> = {
-      clear: "clear margin",
-      narrow: "narrow margin",
-      toss_up: "toss-up",
+      clear: 'clear margin',
+      narrow: 'narrow margin',
+      toss_up: 'toss-up',
     };
     const lines: string[] = [];
     lines.push(
-      `**Comparison for "${jobCtx.title}"** — ${loaded.length} candidates, live from Workable${llm ? ", AI-evaluated in one pass" : ""}`,
+      `**Comparison for "${jobCtx.title}"** — ${loaded.length} candidates, live from Workable${llm ? ', AI-evaluated in one pass' : ''}`,
     );
-    lines.push("");
-    lines.push(
-      "| Candidate | Score | Verdict | Exp | Skills matched | TestGorilla | Stage |",
-    );
-    lines.push("| --- | --- | --- | --- | --- | --- | --- |");
+    lines.push('');
+    lines.push('| Candidate | Score | Verdict | Exp | Skills matched | TestGorilla | Stage |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- |');
     for (const c of candidates) {
       lines.push(
-        `| ${c.name} | ${Math.round(c.score)}/100 | ${c.verdict ? (VERDICT_LABEL[c.verdict] ?? c.verdict) : "—"} | ${c.experienceYears != null ? `≈${c.experienceYears}y` : "—"} | ${c.matchedSkills.length} | ${c.testGorilla?.avgScore != null ? `${c.testGorilla.avgScore} (${c.testGorilla.tests})` : "—"} | ${c.stage ?? "—"} |`,
+        `| ${c.name} | ${Math.round(c.score)}/100 | ${c.verdict ? (VERDICT_LABEL[c.verdict] ?? c.verdict) : '—'} | ${c.experienceYears != null ? `≈${c.experienceYears}y` : '—'} | ${c.matchedSkills.length} | ${c.testGorilla?.avgScore != null ? `${c.testGorilla.avgScore} (${c.testGorilla.tests})` : '—'} | ${c.stage ?? '—'} |`,
       );
     }
-    lines.push("");
+    lines.push('');
     if (winner) {
       lines.push(
-        `**Winner:** ${winner.name ?? winner.candidateId} (${marginLabel[winner.margin]})${winner.rationale ? ` — ${winner.rationale}` : ""}`,
+        `**Winner:** ${winner.name ?? winner.candidateId} (${marginLabel[winner.margin]})${winner.rationale ? ` — ${winner.rationale}` : ''}`,
       );
     }
     if (tradeoffs.length) {
-      lines.push("");
-      lines.push("**Trade-offs:**");
+      lines.push('');
+      lines.push('**Trade-offs:**');
       for (const t of tradeoffs) lines.push(`- ${t}`);
     }
     if (recommendation) {
-      lines.push("");
+      lines.push('');
       lines.push(`**Recommendation:** ${recommendation}`);
     }
-    lines.push("");
+    lines.push('');
     for (const c of candidates) {
       lines.push(`**${c.name}** — ${Math.round(c.score)}/100`);
       if (c.fitSummary) lines.push(`- Fit: ${c.fitSummary}`);
-      if (c.strengths?.length)
-        lines.push(`- Strengths: ${c.strengths.join("; ")}`);
-      if (c.concerns?.length)
-        lines.push(`- Concerns: ${c.concerns.join("; ")}`);
+      if (c.strengths?.length) lines.push(`- Strengths: ${c.strengths.join('; ')}`);
+      if (c.concerns?.length) lines.push(`- Concerns: ${c.concerns.join('; ')}`);
       for (const e of c.evidence) lines.push(`- Evidence: ${e}`);
-      lines.push("");
+      lines.push('');
     }
     lines.push(
-      `_source: Workable ATS live · read ${meta.fetchedAt}${llm ? ` · AI evaluation: one batched pass (${RANKING_MODEL()})` : " · deterministic evidence comparison"}_`,
+      `_source: Workable ATS live · read ${meta.fetchedAt}${llm ? ` · AI evaluation: one batched pass (${RANKING_MODEL()})` : ' · deterministic evidence comparison'}_`,
     );
     for (const note of dataQuality) lines.push(`> ⚠️ ${note}`);
 
@@ -410,7 +376,7 @@ export const workableCompareCandidates = registerTool({
       tradeoffs,
       recommendation,
       meta,
-      markdown: lines.join("\n"),
+      markdown: lines.join('\n'),
     };
   },
 });

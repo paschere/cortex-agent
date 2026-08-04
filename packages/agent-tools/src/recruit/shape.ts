@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { BASE } from "./client";
+import { z } from 'zod';
+import { BASE } from './client';
 
 /**
  * Shared response shaping for the recruit tools.
@@ -23,12 +23,12 @@ import { BASE } from "./client";
 /** Real systems behind the matcher's data — keep in sync with the matcher's
  *  lib/internal/recruit-provenance.ts. Never invent a label. */
 export const SOURCE = {
-  workable: "Workable ATS",
-  matcher: "Matcher service DB",
-  aiScoring: "Cortex AI scoring",
-  testGorilla: "TestGorilla",
-  interviewAnalysis: "Interview analysis (AI)",
-  recruiterRatings: "Recruiter ratings (human)",
+  workable: 'Workable ATS',
+  matcher: 'Matcher service DB',
+  aiScoring: 'Cortex AI scoring',
+  testGorilla: 'TestGorilla',
+  interviewAnalysis: 'Interview analysis (AI)',
+  recruiterRatings: 'Recruiter ratings (human)',
 } as const;
 
 /**
@@ -42,7 +42,7 @@ export const SOURCE = {
  * the matcher fills the field in.
  */
 export function clientOrNull(company: unknown): string | null {
-  if (typeof company !== "string" || !company.trim()) return null;
+  if (typeof company !== 'string' || !company.trim()) return null;
   const placeholder = process.env.MATCHER_UNLINKED_COMPANY?.trim();
   return placeholder && company === placeholder ? null : company;
 }
@@ -69,22 +69,20 @@ export interface MetaInput {
 /** Build a `meta` block for a tool response. */
 export function buildMeta(input: MetaInput): ToolMeta {
   const { endpoint, degraded, degradedReason, ...rest } = input;
-  const dataQuality: string[] = Array.isArray(rest.dataQuality)
-    ? [...rest.dataQuality]
-    : [];
+  const dataQuality: string[] = Array.isArray(rest.dataQuality) ? [...rest.dataQuality] : [];
   if (degraded) {
     dataQuality.unshift(
-      `Served from the matcher's legacy public endpoint (${degradedReason ?? "lean endpoint unavailable"}); ` +
-        "pipeline status, stage breakdowns and last-activity timestamps may be missing or approximate.",
+      `Served from the matcher's legacy public endpoint (${degradedReason ?? 'lean endpoint unavailable'}); ` +
+        'pipeline status, stage breakdowns and last-activity timestamps may be missing or approximate.',
     );
   }
   return {
     fetchedAt: new Date().toISOString(),
     source: {
-      system: "Matcher service",
+      system: 'Matcher service',
       baseUrl: BASE(),
       endpoint,
-      mode: degraded ? "legacy-public-endpoint" : "lean-internal-endpoint",
+      mode: degraded ? 'legacy-public-endpoint' : 'lean-internal-endpoint',
     },
     ...rest,
     dataQuality,
@@ -103,11 +101,9 @@ export function metaFromServer(serverMeta: any, endpoint: string): ToolMeta {
     source: {
       ...(serverMeta?.source ?? {}),
       baseUrl: BASE(),
-      mode: "lean-internal-endpoint",
+      mode: 'lean-internal-endpoint',
     },
-    dataQuality: Array.isArray(serverMeta?.dataQuality)
-      ? serverMeta.dataQuality
-      : [],
+    dataQuality: Array.isArray(serverMeta?.dataQuality) ? serverMeta.dataQuality : [],
   } as ToolMeta;
 }
 
@@ -120,22 +116,20 @@ export function provenanceFooter(meta: ToolMeta): string {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const m = meta as any;
   const bits: string[] = [];
-  bits.push(
-    `source: ${m.source?.system ?? "Matcher service"} (${m.source?.endpoint ?? "n/a"})`,
-  );
+  bits.push(`source: ${m.source?.system ?? 'Matcher service'} (${m.source?.endpoint ?? 'n/a'})`);
   bits.push(`read ${meta.fetchedAt}`);
   if (m.cache?.hit) bits.push(`cached ${m.cache.ageSeconds ?? 0}s ago`);
-  if (typeof m.totalAvailable === "number" && typeof m.returned === "number") {
+  if (typeof m.totalAvailable === 'number' && typeof m.returned === 'number') {
     bits.push(`showing ${m.returned} of ${m.totalAvailable}`);
   }
-  lines.push(`_${bits.join(" · ")}_`);
+  lines.push(`_${bits.join(' · ')}_`);
   if (m.truncated) {
     lines.push(
       `_More records exist — re-run with offset=${(m.offset ?? 0) + (m.returned ?? 0)} to continue._`,
     );
   }
   for (const note of meta.dataQuality ?? []) lines.push(`> ⚠️ ${note}`);
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /** Plain-text, length-capped extract of an HTML or prose field. */
@@ -143,21 +137,20 @@ export function shortSummary(
   raw: string | null | undefined,
   maxChars = 240,
 ): { text: string; truncated: boolean; originalChars: number } {
-  if (!raw) return { text: "", truncated: false, originalChars: 0 };
+  if (!raw) return { text: '', truncated: false, originalChars: 0 };
   const plain = raw
-    .replace(/<br\s*\/?>/gi, " ")
-    .replace(/<\/(p|li|div|h[1-6])>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/(p|li|div|h[1-6])>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
     .replace(/&#39;|&rsquo;/gi, "'")
     .replace(/&quot;|&ldquo;|&rdquo;/gi, '"')
-    .replace(/\s+/g, " ")
+    .replace(/\s+/g, ' ')
     .trim();
-  if (plain.length <= maxChars)
-    return { text: plain, truncated: false, originalChars: raw.length };
+  if (plain.length <= maxChars) return { text: plain, truncated: false, originalChars: raw.length };
   const cut = plain.slice(0, maxChars);
-  const lastSpace = cut.lastIndexOf(" ");
+  const lastSpace = cut.lastIndexOf(' ');
   return {
     text: `${(lastSpace > maxChars * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`,
     truncated: true,
@@ -170,15 +163,13 @@ export function shortSummary(
  * default worth guessing: an invented subdomain would send a recruiter to a
  * stranger's ATS.
  */
-const WORKABLE_SUBDOMAIN = () => process.env.WORKABLE_SUBDOMAIN?.trim() ?? "";
+const WORKABLE_SUBDOMAIN = () => process.env.WORKABLE_SUBDOMAIN?.trim() ?? '';
 
 /**
  * `Job.workableId` holds the Workable shortcode, which keys the backend UI.
  * Null when no subdomain is configured — no link beats a wrong one.
  */
-export function workableJobUrl(
-  shortcode: string | null | undefined,
-): string | null {
+export function workableJobUrl(shortcode: string | null | undefined): string | null {
   const subdomain = WORKABLE_SUBDOMAIN();
   return shortcode && subdomain
     ? `https://${subdomain}.workable.com/backend/jobs/${shortcode}`
@@ -186,7 +177,7 @@ export function workableJobUrl(
 }
 
 export function matcherLink(path: string): string {
-  return `${BASE().replace(/\/$/, "")}${path}`;
+  return `${BASE().replace(/\/$/, '')}${path}`;
 }
 
 export function daysSince(iso: string | null | undefined): number | null {
@@ -217,10 +208,10 @@ export function requisitionFromLegacyJob(j: any): Record<string, unknown> {
   const byStage: Record<string, number> = (j?.statusCounts as any) ?? {};
   return {
     id: j?.id ?? null,
-    title: j?.title ?? "(untitled)",
+    title: j?.title ?? '(untitled)',
     client: linked ? (j?.company ?? null) : null,
     clientId: j?.companyId ?? null,
-    clientAttribution: linked ? "linked" : "unlinked",
+    clientAttribution: linked ? 'linked' : 'unlinked',
     status: null,
     atsStatus: j?.status ?? null,
     archived: !!j?.archived,
@@ -232,7 +223,7 @@ export function requisitionFromLegacyJob(j: any): Record<string, unknown> {
         ? {
             min: j?.budgetMin ?? null,
             max: j?.budgetMax ?? null,
-            currency: "USD",
+            currency: 'USD',
           }
         : null,
     openedAt,
@@ -240,25 +231,19 @@ export function requisitionFromLegacyJob(j: any): Record<string, unknown> {
     deadline: j?.deadline ?? null,
     lastActivityAt: j?.updatedAt ?? null,
     owner: {
-      recruiter: j?.recruiterId
-        ? { id: j.recruiterId, name: j?.recruiterName ?? null }
-        : null,
-      sourcer: j?.sourcerId
-        ? { id: j.sourcerId, name: j?.sourcerName ?? null }
-        : null,
+      recruiter: j?.recruiterId ? { id: j.recruiterId, name: j?.recruiterName ?? null } : null,
+      sourcer: j?.sourcerId ? { id: j.sourcerId, name: j?.sourcerName ?? null } : null,
     },
     candidates: {
-      total: typeof j?.candidates === "number" ? j.candidates : 0,
-      active: typeof j?.shortlisted === "number" ? j.shortlisted : null,
+      total: typeof j?.candidates === 'number' ? j.candidates : 0,
+      active: typeof j?.shortlisted === 'number' ? j.shortlisted : null,
       hired: byStage.HIRED ?? null,
-      rejected: typeof j?.rejected === "number" ? j.rejected : null,
+      rejected: typeof j?.rejected === 'number' ? j.rejected : null,
       presentedToClient: null,
       byStage,
     },
     skills: {
-      required: Array.isArray(j?.requiredSkills)
-        ? j.requiredSkills.slice(0, 12)
-        : [],
+      required: Array.isArray(j?.requiredSkills) ? j.requiredSkills.slice(0, 12) : [],
     },
     summary: summary.text || null,
     summaryTruncated: summary.truncated,
@@ -289,33 +274,24 @@ export function requisitionFromLegacyJob(j: any): Record<string, unknown> {
  * `llmRationale`, which together were 99% of that payload.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function candidateFromLegacy(
-  c: any,
-  jobId: string,
-): Record<string, unknown> {
-  const summary = shortSummary(
-    c?.insights?.executiveSummary ?? c?.llmRationale,
-    240,
-  );
+export function candidateFromLegacy(c: any, jobId: string): Record<string, unknown> {
+  const summary = shortSummary(c?.insights?.executiveSummary ?? c?.llmRationale, 240);
   return {
     candidateId: c?.id ?? null,
     applicationId: null,
-    name:
-      c?.name ?? [c?.firstName, c?.lastName].filter(Boolean).join(" ") ?? null,
+    name: c?.name ?? [c?.firstName, c?.lastName].filter(Boolean).join(' ') ?? null,
     email: c?.email ?? null,
     stage: c?.status ?? null,
     disqualified: null,
     experienceYears: c?.totalExperienceYears ?? null,
     topSkills: Array.isArray(c?.skills)
       ? c.skills
-          .map((s: unknown) =>
-            typeof s === "string" ? s : (s as { name?: string })?.name,
-          )
+          .map((s: unknown) => (typeof s === 'string' ? s : (s as { name?: string })?.name))
           .filter(Boolean)
           .slice(0, 10)
       : [],
     scores: {
-      combined: typeof c?.matchScore === "number" ? c.matchScore : null,
+      combined: typeof c?.matchScore === 'number' ? c.matchScore : null,
       initialMatch: null,
       aiMatch: c?.insights?.overallMatchScore ?? null,
       confidence: c?.insights?.confidenceLevel ?? null,
@@ -324,21 +300,15 @@ export function candidateFromLegacy(
     },
     signals: {
       interviews: {
-        count: Array.isArray(c?.interviewAnalyses)
-          ? c.interviewAnalyses.length
-          : 0,
+        count: Array.isArray(c?.interviewAnalyses) ? c.interviewAnalyses.length : 0,
         source: SOURCE.interviewAnalysis,
       },
       recruiterRatings: {
-        count: Array.isArray(c?.recruiterRatings)
-          ? c.recruiterRatings.length
-          : 0,
+        count: Array.isArray(c?.recruiterRatings) ? c.recruiterRatings.length : 0,
         source: SOURCE.recruiterRatings,
       },
       testGorilla: {
-        tests: Array.isArray(c?.testGorillaResults)
-          ? c.testGorillaResults.length
-          : 0,
+        tests: Array.isArray(c?.testGorillaResults) ? c.testGorillaResults.length : 0,
         source: SOURCE.testGorilla,
       },
     },
