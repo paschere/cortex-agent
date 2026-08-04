@@ -4,8 +4,7 @@ import { hsFetch } from './client';
 
 export const getDeal = registerTool({
   id: 'hubspot.get_deal',
-  description:
-    'Get a HubSpot deal by id with full properties and associations (company, contacts).',
+  description: 'Get a HubSpot deal by id with full properties and associations (company, contacts).',
   inputSchema: z.object({ id: z.string() }),
   outputSchema: z.object({
     id: z.string(),

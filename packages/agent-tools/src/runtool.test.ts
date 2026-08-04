@@ -1,11 +1,11 @@
+import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
 import {
   ConfirmationRequiredError,
   RateLimitError,
   UnauthorizedError,
   ValidationError,
 } from '@cortex/core';
-import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 import { runTool } from './index';
 import type { ToolContext, ToolDef } from './types';
 
@@ -105,10 +105,12 @@ describe('runTool', () => {
     const bad: ToolDef<{ msg: string }, { echo: string }> = {
       ...echoTool,
       id: 'test.bad',
-      handler: async () => ({ echo: 123 }) as unknown as { echo: string },
+      handler: async () => ({ echo: 123 } as unknown as { echo: string }),
     };
     const ctx = makeCtx();
-    await expect(runTool(bad, { msg: 'hi' }, ctx)).rejects.toThrow(/Invalid output from test\.bad/);
+    await expect(runTool(bad, { msg: 'hi' }, ctx)).rejects.toThrow(
+      /Invalid output from test\.bad/,
+    );
     // Confirm the thrown error message does NOT contain the rejected value (123)
     try {
       await runTool(bad, { msg: 'hi' }, ctx);

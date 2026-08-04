@@ -130,9 +130,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
                 disabled={disabled}
                 className="accent-primary"
               />
-              <span>
-                {t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer token' : 'Ninguna'}
-              </span>
+              <span>{t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer token' : 'Ninguna'}</span>
             </label>
           ))}
         </div>

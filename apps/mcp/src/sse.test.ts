@@ -5,18 +5,13 @@
  * without starting a real Worker or connecting to Supabase.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { handleSseGet, handleSsePost } from './sse';
 
 // Minimal MCP Server stub — just enough for transport.connect() to work.
 function makeServerStub() {
   return {
-    async connect(transport: {
-      start(): Promise<void>;
-      onmessage?: unknown;
-      onerror?: unknown;
-      onclose?: unknown;
-    }) {
+    async connect(transport: { start(): Promise<void>; onmessage?: unknown; onerror?: unknown; onclose?: unknown }) {
       await transport.start();
     },
   } as Parameters<typeof handleSseGet>[0] extends () => infer S ? S : never;

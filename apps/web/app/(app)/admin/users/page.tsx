@@ -1,15 +1,15 @@
+import Link from 'next/link';
+import { clsx } from 'clsx';
+import { requireSession } from '@/lib/session';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { revalidatePath } from 'next/cache';
+import { ChevronRight, Flag, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
-import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { clsx } from 'clsx';
-import { ChevronRight, Flag, Users } from 'lucide-react';
-import { revalidatePath } from 'next/cache';
-import Link from 'next/link';
 import { absoluteTime } from '../audit/_components/format';
-import { AUDIT_ROW_CAP, WINDOW_DAYS, fetchRosterActivity, rosterFor } from './_lib/user-activity';
+import { AUDIT_ROW_CAP, fetchRosterActivity, rosterFor, WINDOW_DAYS } from './_lib/user-activity';
 
 export const dynamic = 'force-dynamic';
 
@@ -188,8 +188,8 @@ export default async function UsersPage() {
       </Panel>
 
       <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
-        La actividad sale de la auditoría de los últimos{' '}
-        <span className="tabular">{WINDOW_DAYS}</span> días
+        La actividad sale de la auditoría de los últimos <span className="tabular">{WINDOW_DAYS}</span>{' '}
+        días
         {activity.capped
           ? ` (con tope de ${AUDIT_ROW_CAP.toLocaleString()} eventos: en semanas cargadas verás un piso, no el total exacto)`
           : ''}

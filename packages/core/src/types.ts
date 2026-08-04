@@ -1,10 +1,10 @@
 export type UUID = string;
 
-export type Role = 'member' | 'team_admin' | 'org_admin';
-export type CollectionScope = 'global' | 'team' | 'user' | 'conversation';
-export type Surface = 'web' | 'desktop' | 'mcp';
-export type IntegrationProvider = 'google' | 'hubspot' | 'github' | 'linear';
-export type DocumentStatus = 'pending' | 'ingesting' | 'ready' | 'failed';
+export type Role = "member" | "team_admin" | "org_admin";
+export type CollectionScope = "global" | "team" | "user" | "conversation";
+export type Surface = "web" | "desktop" | "mcp";
+export type IntegrationProvider = "google" | "hubspot" | "github" | "linear";
+export type DocumentStatus = "pending" | "ingesting" | "ready" | "failed";
 
 export interface User {
   id: UUID;
@@ -25,7 +25,7 @@ export interface Team {
  * Voyage (Anthropic has no embedding endpoint) — see
  * packages/agent-tools/src/kb/embedder.ts.
  */
-export type ModelId = 'claude-opus-5' | 'claude-sonnet-5';
+export type ModelId = "claude-opus-5" | "claude-sonnet-5";
 
 export interface AgentDefinition {
   id: string;

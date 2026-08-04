@@ -84,7 +84,9 @@ export default async function SettingsPage() {
               <Brain className="h-4 w-4" />
             </span>
             <div>
-              <div className="text-[13px] font-semibold text-ink">Lo que Cortex recuerda de ti</div>
+              <div className="text-[13px] font-semibold text-ink">
+                Lo que Cortex recuerda de ti
+              </div>
               <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
                 {activeMemories === 0 ? (
                   'Todavía nada. Cortex va anotando cosas a medida que trabajan juntos.'

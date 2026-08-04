@@ -1,7 +1,7 @@
-import { encryptToken } from '@cortex/core';
 import { betterAuth } from 'better-auth';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { Pool } from 'pg';
+import { encryptToken } from '@cortex/core';
 import { sendEmail } from './email';
 
 /**
@@ -34,7 +34,8 @@ import { sendEmail } from './email';
  */
 
 const connectionString =
-  process.env.SUPABASE_DB_URL ?? 'postgresql://placeholder:placeholder@localhost:5432/placeholder';
+  process.env.SUPABASE_DB_URL ??
+  'postgresql://placeholder:placeholder@localhost:5432/placeholder';
 
 // Serverless discipline: every lambda instance gets its own Pool, so the pool
 // must stay tiny or Supabase's pooler client limit is exhausted as instances
@@ -50,10 +51,9 @@ const connectionString =
 // ssl config wins over the explicit `ssl` option — so strip sslmode from the
 // URL and pass the ssl object ourselves. Deterministic, no precedence games.
 const isRemoteDb = /sslmode=/.test(connectionString);
-const cleanConnectionString = connectionString
-  .replace(/[?&]sslmode=[^&]*/g, (m) => (m.startsWith('?') ? '?' : ''))
-  .replace(/\?&/, '?')
-  .replace(/\?$/, '');
+const cleanConnectionString = connectionString.replace(/[?&]sslmode=[^&]*/g, (m) =>
+  m.startsWith('?') ? '?' : '',
+).replace(/\?&/, '?').replace(/\?$/, '');
 
 // Exported so the workspace helpers in lib/organization.ts write through the
 // same connection better-auth owns, rather than opening a second pool.
@@ -79,7 +79,8 @@ if (
   throw new Error('BETTER_AUTH_SECRET must be set in production');
 }
 
-const baseURL = process.env.BETTER_AUTH_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000';
+const baseURL =
+  process.env.BETTER_AUTH_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000';
 
 /**
  * Every Google scope the agent tools use. Requested at SSO login so one
@@ -240,8 +241,7 @@ export const auth = betterAuth({
           subject: `You've been invited to ${data.organization.name} on Cortex`,
           text: `${data.inviter.user.name || data.inviter.user.email} invited you to join "${data.organization.name}" on Cortex.\n\nAccept the invitation:\n\n${inviteUrl}\n\nThis invitation expires in 48 hours.`,
         });
-        if (!result.sent)
-          console.info(`[auth:dev] invitation link for ${data.email}: ${inviteUrl}`);
+        if (!result.sent) console.info(`[auth:dev] invitation link for ${data.email}: ${inviteUrl}`);
       },
     }),
     // Platform-level administration: list/ban users, revoke sessions,

@@ -8,8 +8,8 @@
  */
 
 import type { ToolContext } from '../types';
-import { type MeetingType, classifyMeeting, isExternalEmail } from './classify';
 import { gcalFetch } from './client';
+import { classifyMeeting, isExternalEmail, type MeetingType } from './classify';
 
 export interface RawGCalEvent {
   id: string;

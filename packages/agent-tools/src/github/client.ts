@@ -3,11 +3,7 @@ import type { ToolContext } from '../types';
 
 const BASE = 'https://api.github.com';
 
-export async function githubFetch<T>(
-  ctx: ToolContext,
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+export async function githubFetch<T>(ctx: ToolContext, path: string, init?: RequestInit): Promise<T> {
   const { token } = await ctx.integrations.getAccessToken('github');
   const r = await fetch(`${BASE}${path}`, {
     ...init,

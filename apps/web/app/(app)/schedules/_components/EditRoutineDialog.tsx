@@ -203,7 +203,7 @@ export function EditRoutineDialog({
             </div>
             <Dialog.Close
               className="grid h-8 w-8 shrink-0 place-items-center rounded-card text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              aria-label="Cerrar"
+              aria-label="Close"
             >
               <X className="h-4 w-4" />
             </Dialog.Close>
@@ -451,7 +451,10 @@ function Field({
 }) {
   return (
     <div className="block">
-      <label htmlFor={htmlFor} className="field-label mb-1.5 block">
+      <label
+        htmlFor={htmlFor}
+        className="field-label mb-1.5 block"
+      >
         {label}
       </label>
       {children}

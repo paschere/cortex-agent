@@ -35,4 +35,6 @@ const config = {
   },
 };
 
-export default process.env.SENTRY_DSN ? withSentryConfig(config, { silent: true }) : config;
+export default process.env.SENTRY_DSN
+  ? withSentryConfig(config, { silent: true })
+  : config;

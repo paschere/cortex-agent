@@ -62,7 +62,8 @@ export const logActivity = registerTool({
       body: JSON.stringify({ properties }),
     });
 
-    const associationTypeId = ASSOCIATION_TYPE_ID[input.type][input.associatedObjectType];
+    const associationTypeId =
+      ASSOCIATION_TYPE_ID[input.type][input.associatedObjectType];
     await hsFetch(
       ctx,
       `/crm/v4/associations/${input.type}s/${activity.id}/${input.associatedObjectType}s/batch/create`,

@@ -1,8 +1,8 @@
+import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { requireSession } from '@/lib/session';
 import { getEnv } from '@cortex/core';
 import { cookies } from 'next/headers';
-import { type NextRequest, NextResponse } from 'next/server';
 
 const ALL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',

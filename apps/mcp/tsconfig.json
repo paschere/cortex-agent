@@ -8,5 +8,8 @@
     "noEmit": true,
     "outDir": "dist"
   },
-  "include": ["src/**/*", "../../packages/agent-tools/src/kb/pdf-parse.d.ts"]
+  "include": [
+    "src/**/*",
+    "../../packages/agent-tools/src/kb/pdf-parse.d.ts"
+  ]
 }

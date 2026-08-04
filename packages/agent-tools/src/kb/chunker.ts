@@ -21,10 +21,7 @@ export function approxTokens(text: string): number {
  * then falls back to sentence boundaries for paragraphs that exceed targetTokens.
  */
 function splitIntoSegments(text: string, targetTokens: number): string[] {
-  const paras = text
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean);
+  const paras = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   const segments: string[] = [];
 
   for (const para of paras) {

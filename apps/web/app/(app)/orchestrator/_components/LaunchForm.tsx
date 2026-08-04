@@ -44,8 +44,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
         runId?: string;
         error?: string;
       } | null;
-      if (!res.ok || !body?.runId)
-        throw new Error(body?.error ?? 'No se pudo iniciar la ejecución.');
+      if (!res.ok || !body?.runId) throw new Error(body?.error ?? 'No se pudo iniciar la ejecución.');
       router.push(`/orchestrator/${body.runId}`);
     } catch (err) {
       setError((err as Error).message);

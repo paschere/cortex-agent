@@ -11,8 +11,8 @@ import {
   toDevTask,
 } from '@/lib/dev-work';
 import { requireSession } from '@/lib/session';
-import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { Hammer, Hourglass, Loader, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
@@ -133,7 +133,9 @@ export default async function DevWorkPage() {
           label: 'Repositorios',
           value: String(enabledRepos),
           sub:
-            enabledRepos === 1 ? 'Cortex puede editar uno' : `Cortex puede editar ${enabledRepos}`,
+            enabledRepos === 1
+              ? 'Cortex puede editar uno'
+              : `Cortex puede editar ${enabledRepos}`,
         },
   ];
 
@@ -163,8 +165,8 @@ export default async function DevWorkPage() {
             Todavía no está activo en este ambiente
           </p>
           <p className="mx-auto max-w-md leading-relaxed">
-            Aquí Cortex no puede tomar trabajo de desarrollo porque falta instalar la base de datos
-            que lo soporta. Cuando esté, cada ejecución aparece en esta página mientras pasa.
+            Aquí Cortex no puede tomar trabajo de desarrollo porque falta instalar la base de
+            datos que lo soporta. Cuando esté, cada ejecución aparece en esta página mientras pasa.
           </p>
         </Panel>
       ) : (
@@ -178,11 +180,7 @@ export default async function DevWorkPage() {
                 <div
                   className={clsx(
                     'stat-num mt-1 truncate text-[20px] leading-none',
-                    s.tone === 'amber'
-                      ? 'text-amber'
-                      : s.tone === 'rose'
-                        ? 'text-rose'
-                        : 'text-ink',
+                    s.tone === 'amber' ? 'text-amber' : s.tone === 'rose' ? 'text-rose' : 'text-ink',
                   )}
                   title={s.value}
                 >
@@ -198,9 +196,7 @@ export default async function DevWorkPage() {
           {tasks.length === 0 ? (
             <Panel className="p-10 text-center text-[13px] text-ink-muted">
               <Hammer className="mx-auto mb-3 h-7 w-7 text-primary" />
-              <p className="mb-1 text-[15px] font-bold text-ink">
-                Nadie le ha pedido nada a Cortex
-              </p>
+              <p className="mb-1 text-[15px] font-bold text-ink">Nadie le ha pedido nada a Cortex</p>
               <p className="mx-auto max-w-md leading-relaxed">
                 Asígnale un issue de Linear a Cortex y aparece aquí. Vas a verlo tomar el trabajo, y
                 puedes detenerlo en cualquier momento.

@@ -1,14 +1,14 @@
 'use client';
 
-import type { AuditEventRow } from '@/app/api/admin/_lib/audit-filters';
-import { relativeTime } from '@/lib/relative-time';
-import { toolLabel } from '@/lib/tool-labels';
 import { clsx } from 'clsx';
 import Link from 'next/link';
 import { useState } from 'react';
-import { AuditDetailDrawer } from './AuditDetailDrawer';
-import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from './format';
+import { toolLabel } from '@/lib/tool-labels';
+import { relativeTime } from '@/lib/relative-time';
+import type { AuditEventRow } from '@/app/api/admin/_lib/audit-filters';
 import { DECISION_LABEL, DecisionTag, RiskTag, StatusTag, SurfaceTag } from './tags';
+import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from './format';
+import { AuditDetailDrawer } from './AuditDetailDrawer';
 
 const HEADERS = [
   'Cuándo',

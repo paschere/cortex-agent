@@ -1,8 +1,8 @@
-import { ValidationError } from '@cortex/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ValidationError } from '@cortex/core';
 import { runTool } from '../index';
-import type { ToolContext } from '../types';
 import { gmailSearch } from './search';
+import type { ToolContext } from '../types';
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   const insertResult = { data: null, error: null };
@@ -134,9 +134,9 @@ describe('gmail.search', () => {
 
   it('empty query → ValidationError', async () => {
     const ctx = makeCtx();
-    await expect(runTool(gmailSearch, { query: '', maxResults: 10 }, ctx)).rejects.toBeInstanceOf(
-      ValidationError,
-    );
+    await expect(
+      runTool(gmailSearch, { query: '', maxResults: 10 }, ctx),
+    ).rejects.toBeInstanceOf(ValidationError);
   });
 
   it('no threads returned → empty array', async () => {

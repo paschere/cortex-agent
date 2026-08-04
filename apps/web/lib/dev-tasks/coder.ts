@@ -1,5 +1,6 @@
 import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
+import type { Sandbox } from '@vercel/sandbox';
 import {
   CODER_TOOLS,
   type CheckOutcome,
@@ -14,7 +15,6 @@ import {
 } from '@cortex/agent-tools';
 import type { DevRepository, DevTask } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
-import type { Sandbox } from '@vercel/sandbox';
 import { REPO_ROOT, readTranscript, run, truncateOutput, writeTranscript } from './sandbox';
 
 /**

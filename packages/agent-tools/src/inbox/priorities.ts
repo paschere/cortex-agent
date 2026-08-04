@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { cortexProcess } from '../cortex/process';
 import { registerTool, runTool } from '../index';
+import { cortexProcess } from '../cortex/process';
 import { summarizeExclusions } from './filters';
 import { type DigestThread, gatherThreads } from './gather';
 import { loadDigestPreferences } from './preferences';

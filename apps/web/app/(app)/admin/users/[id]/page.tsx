@@ -1,10 +1,6 @@
-import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
-import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
-import { relativeTime } from '@/lib/relative-time';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { toolLabel } from '@/lib/tool-labels';
-import { listTools } from '@cortex/agent-tools';
+import type { ReactNode } from 'react';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { clsx } from 'clsx';
 import {
   Activity,
@@ -31,23 +27,22 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import type { ReactNode } from 'react';
-import {
-  absoluteTime,
-  eventDetail,
-  formatLatency,
-  isAgentTurn,
-} from '../../audit/_components/format';
+import { listTools } from '@cortex/agent-tools';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { PageHeader } from '@/components/ui/page-header';
+import { Panel } from '@/components/ui/panel';
+import { relativeTime } from '@/lib/relative-time';
+import { toolLabel } from '@/lib/tool-labels';
+import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
 import {
   DecisionTag,
   RiskTag,
-  SURFACE_BAR,
   SignalChip,
   StatusTag,
   SurfaceTag,
+  SURFACE_BAR,
 } from '../../audit/_components/tags';
+import { absoluteTime, eventDetail, formatLatency, isAgentTurn } from '../../audit/_components/format';
 import {
   Chip,
   CountBar,
@@ -60,9 +55,9 @@ import {
 import { countdown } from '../_lib/countdown';
 import {
   AUDIT_ROW_CAP,
-  WINDOW_DAYS,
   fetchUserSecurity,
   fetchUserUsage,
+  WINDOW_DAYS,
 } from '../_lib/user-activity';
 
 export const dynamic = 'force-dynamic';
@@ -235,12 +230,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       .gt('expires_at', nowIso),
   ]);
 
-  const teams = (
-    (membershipRes.data ?? []) as unknown as Array<{
-      team_id: string;
-      teams: { id: string; name: string } | { id: string; name: string }[] | null;
-    }>
-  )
+  const teams = ((membershipRes.data ?? []) as unknown as Array<{
+    team_id: string;
+    teams: { id: string; name: string } | { id: string; name: string }[] | null;
+  }>)
     .map((m) => {
       const t = firstEmbed(m.teams);
       return { id: t?.id ?? m.team_id, name: t?.name ?? 'Equipo sin nombre' };
@@ -461,8 +454,8 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             )}
             {integrations.some((i) => !!i.expires_at && i.expires_at <= nowIso) && (
               <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] leading-relaxed text-rose">
-                Un token vencido es la razón más común de que las herramientas dejen de responder de
-                un momento a otro. Pídele que vuelva a conectar esa cuenta en Integraciones.
+                Un token vencido es la razón más común de que las herramientas dejen de responder
+                de un momento a otro. Pídele que vuelva a conectar esa cuenta en Integraciones.
               </p>
             )}
           </div>
@@ -808,8 +801,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         <span
                           className={clsx(
                             'shrink-0 rounded-card border px-2 py-0.5 text-[10.5px] font-semibold',
-                            JOB_STATUS_TONE[j.status] ??
-                              'border-border bg-surface-2 text-ink-faint',
+                            JOB_STATUS_TONE[j.status] ?? 'border-border bg-surface-2 text-ink-faint',
                           )}
                         >
                           {JOB_STATUS_LABEL[j.status] ?? j.status}
@@ -875,14 +867,14 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           ) : denials.length === 0 ? (
             <p className="mt-3 flex items-start gap-2 text-[12.5px] text-ink-muted">
               <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald" />
-              {teams.length === 1
-                ? 'Su equipo no le bloquea nada'
-                : 'Sus equipos no le bloquean nada'}
+              {teams.length === 1 ? 'Su equipo no le bloquea nada' : 'Sus equipos no le bloquean nada'}
               : puede usar todas las herramientas que le permita su agente.
             </p>
           ) : (
             <div className="mt-3">
-              <div className="text-[11.5px] font-semibold text-ink">Bloqueado por sus equipos</div>
+              <div className="text-[11.5px] font-semibold text-ink">
+                Bloqueado por sus equipos
+              </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {denials.map((d) => {
                   const team = teams.find((t) => d.teams.includes(t.name));
@@ -923,8 +915,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             </div>
             <div>
               <div className="text-[11px] font-semibold text-amber">
-                Parcialmente restringidas (<span className="tabular">{partialFamilies.length}</span>
-                )
+                Parcialmente restringidas (<span className="tabular">{partialFamilies.length}</span>)
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {partialFamilies.length === 0 ? (

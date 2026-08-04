@@ -1,14 +1,14 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
-  CallToolRequestSchema,
-  GetPromptRequestSchema,
-  ListPromptsRequestSchema,
-  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  CallToolRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  ListResourcesRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { type BridgeContext, callTool, externalSdkName, listToolsForAuth } from './bridge';
+import { listToolsForAuth, callTool, externalSdkName, type BridgeContext } from './bridge';
 import { PROMPTS, getPromptDefinition } from './prompts';
 import { RESOURCES, readResource } from './resources';
 
@@ -48,7 +48,11 @@ export function buildMcpServer(ctx: BridgeContext): Server {
 
   // call_tool
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const result = await callTool(ctx, req.params.name, req.params.arguments ?? {});
+    const result = await callTool(
+      ctx,
+      req.params.name,
+      req.params.arguments ?? {},
+    );
     if (result.ok) {
       return {
         content: [{ type: 'text', text: JSON.stringify(result.result, null, 2) }],

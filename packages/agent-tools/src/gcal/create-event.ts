@@ -24,9 +24,7 @@ export const gcalCreateEvent = registerTool({
     }),
   }),
   requiresConfirmation: true,
-  requiredScopes: [
-    { provider: 'google', scopes: ['https://www.googleapis.com/auth/calendar.events'] },
-  ],
+  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/calendar.events'] }],
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     type R = { id: string; summary: string; htmlLink: string };
@@ -40,14 +38,10 @@ export const gcalCreateEvent = registerTool({
       attendees: (input.attendees ?? []).map((email) => ({ email })),
     };
 
-    const r = await gcalFetch<R>(
-      ctx,
-      `/calendars/${calendarId}/events?sendUpdates=${input.sendUpdates ?? 'none'}`,
-      {
-        method: 'POST',
-        body: JSON.stringify(body),
-      },
-    );
+    const r = await gcalFetch<R>(ctx, `/calendars/${calendarId}/events?sendUpdates=${input.sendUpdates ?? 'none'}`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
     return { event: { id: r.id, summary: r.summary, htmlLink: r.htmlLink } };
   },
 });

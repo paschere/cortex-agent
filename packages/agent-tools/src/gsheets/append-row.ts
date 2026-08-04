@@ -14,9 +14,7 @@ export const sheetsAppendRow = registerTool({
     updatedRange: z.string(),
   }),
   requiresConfirmation: true,
-  requiredScopes: [
-    { provider: 'google', scopes: ['https://www.googleapis.com/auth/spreadsheets'] },
-  ],
+  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/spreadsheets'] }],
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     type R = { updates: { updatedRange: string; updatedRows: number } };

@@ -110,9 +110,7 @@ export const payrollStats = registerTool({
     }
 
     lines.push('');
-    lines.push(
-      '_Payroll cost is confidential — do not share externally without explicit confirmation._',
-    );
+    lines.push('_Payroll cost is confidential — do not share externally without explicit confirmation._');
 
     return { stats: data, markdown: lines.join('\n') };
   },

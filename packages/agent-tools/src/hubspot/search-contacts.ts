@@ -30,9 +30,7 @@ const PROPERTIES = [
   'hs_lastcontacted',
 ];
 
-function adaptContact(c: { id: string; properties: Record<string, string | null> }): z.infer<
-  typeof ContactOut
-> {
+function adaptContact(c: { id: string; properties: Record<string, string | null> }): z.infer<typeof ContactOut> {
   return {
     id: c.id,
     firstName: c.properties.firstname ?? null,
@@ -76,25 +74,15 @@ export const searchContacts = registerTool({
     const baseGroups = input.query.includes('@')
       ? [{ filters: [{ propertyName: 'email', operator: 'EQ', value: input.query }] }]
       : [
-          {
-            filters: [
-              { propertyName: 'firstname', operator: 'CONTAINS_TOKEN', value: input.query },
-            ],
-          },
-          {
-            filters: [{ propertyName: 'lastname', operator: 'CONTAINS_TOKEN', value: input.query }],
-          },
+          { filters: [{ propertyName: 'firstname', operator: 'CONTAINS_TOKEN', value: input.query }] },
+          { filters: [{ propertyName: 'lastname', operator: 'CONTAINS_TOKEN', value: input.query }] },
         ];
     // filterGroups OR together; filters within a group AND. Scope each group by companyId when provided.
     const filterGroups = input.companyId
       ? baseGroups.map((g) => ({
           filters: [
             ...g.filters,
-            {
-              propertyName: 'associatedcompanyid',
-              operator: 'EQ',
-              value: input.companyId as string,
-            },
+            { propertyName: 'associatedcompanyid', operator: 'EQ', value: input.companyId as string },
           ],
         }))
       : baseGroups;

@@ -1,14 +1,29 @@
-import { SURFACE_LABEL, fetchUserNames, riskSignals } from '@/app/api/admin/_lib/audit-filters';
+import Link from 'next/link';
+import { clsx } from 'clsx';
+import {
+  Ban,
+  Flag,
+  Lock,
+  Radar,
+  ShieldAlert,
+  ShieldCheck,
+  Users,
+  Wrench,
+} from 'lucide-react';
+import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { toolLabel } from '@/lib/tool-labels';
-import { clsx } from 'clsx';
-import { Ban, Flag, Lock, Radar, ShieldAlert, ShieldCheck, Users, Wrench } from 'lucide-react';
-import Link from 'next/link';
+import { fetchUserNames, riskSignals, SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
+import {
+  DecisionTag,
+  LegendDot,
+  RiskTag,
+  SignalChip,
+  SurfaceTag,
+} from '../audit/_components/tags';
 import { absoluteTime } from '../audit/_components/format';
-import { DecisionTag, LegendDot, RiskTag, SignalChip, SurfaceTag } from '../audit/_components/tags';
 
 export const dynamic = 'force-dynamic';
 
@@ -112,9 +127,7 @@ export default async function SecurityPage() {
   for (const e of events) {
     for (const s of riskSignals(e.signals)) signalCounts[s] = (signalCounts[s] ?? 0) + 1;
   }
-  const topSignals = Object.entries(signalCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8);
+  const topSignals = Object.entries(signalCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
   const maxSignal = topSignals[0]?.[1] ?? 1;
 
   // Tool breakdown over the whole window.
@@ -126,9 +139,7 @@ export default async function SecurityPage() {
     if (e.decision === 'blocked') t.blocked += 1;
     if (SEVERITY.indexOf(e.risk_level) > SEVERITY.indexOf(t.worst)) t.worst = e.risk_level;
   }
-  const topTools = Object.entries(byTool)
-    .sort((a, b) => b[1].total - a[1].total)
-    .slice(0, 8);
+  const topTools = Object.entries(byTool).sort((a, b) => b[1].total - a[1].total).slice(0, 8);
   const maxTool = topTools[0]?.[1].total ?? 1;
 
   // Timeline: flagged vs blocked per day.
@@ -148,7 +159,10 @@ export default async function SecurityPage() {
   const timelineTotal = timeline.reduce((n, d) => n + d.flagged + d.blocked, 0);
 
   const recent = events.slice(0, 25);
-  const userNames = await fetchUserNames(sb, recent.map((e) => e.user_id ?? '').filter(Boolean));
+  const userNames = await fetchUserNames(
+    sb,
+    recent.map((e) => e.user_id ?? '').filter(Boolean),
+  );
 
   const tiles = [
     {
@@ -170,12 +184,7 @@ export default async function SecurityPage() {
       tone: riskyAudit7d > 0 ? 'text-amber' : 'text-emerald',
     },
     { label: 'Personas involucradas', value: String(users7), icon: Users, tone: 'text-ink' },
-    {
-      label: 'Señal más frecuente',
-      value: topSignals[0]?.[0] ?? '—',
-      icon: Radar,
-      tone: 'text-ink',
-    },
+    { label: 'Señal más frecuente', value: topSignals[0]?.[0] ?? '—', icon: Radar, tone: 'text-ink' },
   ];
 
   return (
@@ -198,8 +207,8 @@ export default async function SecurityPage() {
       <div className="space-y-4">
         {/* Hairlines come from the gap showing the border colour through, so the
             rules stay correct at every breakpoint the grid reflows to. */}
-        <Panel className="overflow-hidden">
-          <div className="grid grid-cols-2 gap-px bg-border lg:grid-cols-5">
+        <Panel className="overflow-hidden bg-border">
+          <div className="grid grid-cols-2 gap-px lg:grid-cols-5">
             {tiles.map((t) => (
               <div key={t.label} className="bg-surface p-4">
                 <div className="flex items-center gap-1.5">
@@ -468,7 +477,8 @@ export default async function SecurityPage() {
             .filter(([key]) => key !== 'unknown')
             .map(([, label]) => label)
             .join(' · ')}
-          . Las llamadas marcadas y bloqueadas también se ven en la{' '}
+          . Las
+          llamadas marcadas y bloqueadas también se ven en la{' '}
           <Link
             href="/admin/audit?decision=blocked"
             className="font-semibold text-primary hover:underline"

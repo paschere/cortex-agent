@@ -1,9 +1,9 @@
+import { notFound } from 'next/navigation';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { notFound } from 'next/navigation';
 import { PipelineBuilder } from '../../_components/PipelineBuilder';
-import type { ParamDef, StepDef } from '../../_lib/playbook';
 import { builderToolCatalog } from '../../_lib/tool-catalog';
+import type { ParamDef, StepDef } from '../../_lib/playbook';
 
 export const dynamic = 'force-dynamic';
 

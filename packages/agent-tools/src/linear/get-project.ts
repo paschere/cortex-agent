@@ -10,7 +10,9 @@ const Output = z.object({
   progress: z.number(),
   startDate: z.string().nullable(),
   targetDate: z.string().nullable(),
-  lead: z.object({ id: z.string(), name: z.string(), email: z.string().nullable() }).nullable(),
+  lead: z
+    .object({ id: z.string(), name: z.string(), email: z.string().nullable() })
+    .nullable(),
   milestones: z.array(
     z.object({
       id: z.string(),
@@ -82,7 +84,9 @@ export const getProject = registerTool({
       progress: p.progress,
       startDate: p.startDate ?? null,
       targetDate: p.targetDate ?? null,
-      lead: p.lead ? { id: p.lead.id, name: p.lead.name, email: p.lead.email ?? null } : null,
+      lead: p.lead
+        ? { id: p.lead.id, name: p.lead.name, email: p.lead.email ?? null }
+        : null,
       milestones: p.projectMilestones.nodes.map((m) => ({
         id: m.id,
         name: m.name,

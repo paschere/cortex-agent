@@ -30,8 +30,7 @@ function extractText(payload: MimePart | undefined): string {
 
 export const gmailReadThread = registerTool({
   id: 'gmail.read_thread',
-  description:
-    'Read a full Gmail thread by threadId — returns ordered messages with from/to/date/body.',
+  description: 'Read a full Gmail thread by threadId — returns ordered messages with from/to/date/body.',
   inputSchema: z.object({ threadId: z.string() }),
   outputSchema: z.object({
     thread: z.object({
@@ -47,9 +46,7 @@ export const gmailReadThread = registerTool({
       ),
     }),
   }),
-  requiredScopes: [
-    { provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] },
-  ],
+  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] }],
   rateLimit: { perMinute: 60 },
   handler: async (input, ctx) => {
     type GmailThread = {

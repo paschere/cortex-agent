@@ -1,5 +1,5 @@
+import { type StatusTone, CHIP_BASE, CHIP_TONE, DOT_TONE } from '@/lib/status-chip';
 import type { RunStatus, TaskStatus } from '@/lib/orchestrator/types';
-import { CHIP_BASE, CHIP_TONE, DOT_TONE, type StatusTone } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { Ban, Circle, CircleCheckBig, CircleSlash, CircleX, Loader2, Sparkles } from 'lucide-react';
 

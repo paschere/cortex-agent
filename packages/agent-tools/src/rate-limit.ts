@@ -1,5 +1,5 @@
-import { RateLimitError, type UUID } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { RateLimitError, type UUID } from '@cortex/core';
 
 export async function consumeToken(
   db: SupabaseClient,
@@ -12,17 +12,17 @@ export async function consumeToken(
       p_user_id: userId,
       p_tool_id: toolId,
       p_per_minute: perMinute,
-    });
+    })
     if (error) {
       if (error.message?.includes('does not exist')) {
         // RPC not yet deployed — use legacy path silently
-        return consumeTokenLegacy(db, userId, toolId, perMinute);
+        return consumeTokenLegacy(db, userId, toolId, perMinute)
       }
-      throw error;
+      throw error
     }
-    if (data === false) throw new RateLimitError(toolId);
+    if (data === false) throw new RateLimitError(toolId)
   } catch (err) {
-    if (err instanceof RateLimitError) throw err;
+    if (err instanceof RateLimitError) throw err
     // Non-fatal on unexpected errors
   }
 }

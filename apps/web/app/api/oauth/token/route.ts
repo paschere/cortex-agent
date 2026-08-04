@@ -1,14 +1,14 @@
+import { type NextRequest } from 'next/server';
 import {
-  MCP_SCOPE,
+  getClient,
   consumeAuthCode,
   consumeRefreshToken,
-  getClient,
   issueTokens,
-  mcpResource,
   verifyPkce,
+  mcpResource,
+  MCP_SCOPE,
 } from '@/lib/oauth';
 import { corsJson, corsPreflight } from '@/lib/oauth-cors';
-import type { NextRequest } from 'next/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,11 @@ export const dynamic = 'force-dynamic';
  * rotated on use (public clients).
  */
 
-function oauthError(error: string, description: string, status = 400): ReturnType<typeof corsJson> {
+function oauthError(
+  error: string,
+  description: string,
+  status = 400,
+): ReturnType<typeof corsJson> {
   return corsJson(
     { error, error_description: description },
     {
@@ -69,7 +73,8 @@ async function handleAuthorizationCode(
 
   if (!code) return oauthError('invalid_request', 'missing code');
   if (!clientId) return oauthError('invalid_request', 'missing client_id');
-  if (!codeVerifier) return oauthError('invalid_request', 'missing code_verifier (PKCE required)');
+  if (!codeVerifier)
+    return oauthError('invalid_request', 'missing code_verifier (PKCE required)');
 
   const client = await getClient(clientId);
   if (!client) return oauthError('invalid_client', 'unknown client_id', 401);
@@ -92,7 +97,9 @@ async function handleAuthorizationCode(
   if (stored.redirect_uri !== redirectUri) {
     return oauthError('invalid_grant', 'redirect_uri mismatch');
   }
-  if (!verifyPkce(codeVerifier, stored.code_challenge, stored.code_challenge_method)) {
+  if (
+    !verifyPkce(codeVerifier, stored.code_challenge, stored.code_challenge_method)
+  ) {
     return oauthError('invalid_grant', 'PKCE verification failed');
   }
 
@@ -112,13 +119,16 @@ async function handleAuthorizationCode(
   });
 }
 
-async function handleRefreshToken(form: URLSearchParams): Promise<ReturnType<typeof corsJson>> {
+async function handleRefreshToken(
+  form: URLSearchParams,
+): Promise<ReturnType<typeof corsJson>> {
   const refreshToken = form.get('refresh_token') ?? '';
   const clientId = form.get('client_id') ?? '';
   const clientSecret = form.get('client_secret');
   const requestedScope = form.get('scope');
 
-  if (!refreshToken) return oauthError('invalid_request', 'missing refresh_token');
+  if (!refreshToken)
+    return oauthError('invalid_request', 'missing refresh_token');
   if (!clientId) return oauthError('invalid_request', 'missing client_id');
 
   const client = await getClient(clientId);

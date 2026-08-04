@@ -119,8 +119,7 @@ async function createWorkspace(
   const tieBreak = createHash('sha256').update(baUserId).digest('hex');
 
   for (let attempt = 0; attempt < 4; attempt++) {
-    const slug =
-      attempt === 0 ? baseSlug : `${baseSlug}-${tieBreak.slice(attempt * 6, attempt * 6 + 6)}`;
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${tieBreak.slice(attempt * 6, attempt * 6 + 6)}`;
     const { rows } = await pool.query<{ id: string; slug: string | null }>(
       `insert into public.ba_organization (id, name, slug, "createdAt")
        values ($1, $2, $3, now())
@@ -178,8 +177,7 @@ export async function resolveActiveOrganization(
     if (claimed) return claimed;
   }
 
-  const resolved =
-    (await findFirstMembership(baUserId)) ?? (await createWorkspace(baUserId, name, email));
+  const resolved = (await findFirstMembership(baUserId)) ?? (await createWorkspace(baUserId, name, email));
 
   // Write the choice back so the next request reads it from the session instead
   // of re-deriving it. Best-effort: a failure here costs a lookup, not access.
@@ -203,10 +201,10 @@ export async function setActiveOrganization(
 ): Promise<ActiveOrganization | null> {
   const membership = await findMembership(baUserId, organizationId);
   if (!membership) return null;
-  await pool.query(`update public.ba_session set "activeOrganizationId" = $2 where "userId" = $1`, [
-    baUserId,
-    organizationId,
-  ]);
+  await pool.query(
+    `update public.ba_session set "activeOrganizationId" = $2 where "userId" = $1`,
+    [baUserId, organizationId],
+  );
   return membership;
 }
 

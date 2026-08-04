@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
 interface MobileSidebarContextValue {
   open: boolean;

@@ -1,5 +1,5 @@
-import type { IntegrationProvider, Logger, UUID } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { IntegrationProvider, Logger, UUID } from '@cortex/core';
 import type { z } from 'zod';
 
 export interface IntegrationsClient {
@@ -23,11 +23,7 @@ export interface ToolContext {
   integrations: IntegrationsClient;
   logger: Logger;
   signal?: AbortSignal;
-  withSpan?: <T>(
-    name: string,
-    attrs: Record<string, string | number>,
-    fn: () => Promise<T>,
-  ) => Promise<T>;
+  withSpan?: <T>(name: string, attrs: Record<string, string | number>, fn: () => Promise<T>) => Promise<T>;
 }
 
 export interface ToolDef<I, O> {

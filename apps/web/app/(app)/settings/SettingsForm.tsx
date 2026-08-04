@@ -73,9 +73,7 @@ function Toggle({
         <span
           className={clsx(
             'absolute top-1/2 h-[18px] w-[18px] -translate-y-1/2 rounded-card border transition-[left]',
-            checked
-              ? 'left-[22px] border-primary-strong bg-white'
-              : 'left-[2px] border-border bg-surface',
+            checked ? 'left-[22px] border-primary-strong bg-white' : 'left-[2px] border-border bg-surface',
           )}
         />
       </button>
@@ -211,8 +209,9 @@ export function SettingsForm({
             </li>
             <li>
               <strong className="text-ink">Se resume de nuestro lado.</strong> Los mensajes se
-              condensan en nuestros servidores para armar el resumen que recibes. El correo en sí no
-              se guarda, no entra a Brain Knowledge y no se le pasa al asistente con el que chateas.
+              condensan en nuestros servidores para armar el resumen que recibes. El correo en sí
+              no se guarda, no entra a Brain Knowledge y no se le pasa al asistente con el que
+              chateas.
             </li>
             <li>
               <strong className="text-ink">Te llega solo a ti.</strong> El resumen va a tu correo, a

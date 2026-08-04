@@ -1,7 +1,7 @@
+import { type NextRequest } from 'next/server';
+import { z } from 'zod';
 import { registerClient } from '@/lib/oauth';
 import { corsJson, corsPreflight } from '@/lib/oauth-cors';
-import type { NextRequest } from 'next/server';
-import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,7 +65,9 @@ export async function POST(req: NextRequest) {
     response_types: client.response_types,
     token_endpoint_auth_method: client.token_endpoint_auth_method,
     scope: client.scope,
-    client_id_issued_at: Math.floor(new Date(client.created_at).getTime() / 1000),
+    client_id_issued_at: Math.floor(
+      new Date(client.created_at).getTime() / 1000,
+    ),
   };
   if (client.client_secret) {
     response.client_secret = client.client_secret;

@@ -408,7 +408,8 @@ function Empty({
 
 /** ok / error / running, in the shared status shape. */
 function RunStatusChip({ status }: { status: string }) {
-  const tone: StatusTone = status === 'ok' ? 'emerald' : status === 'error' ? 'rose' : 'primary';
+  const tone: StatusTone =
+    status === 'ok' ? 'emerald' : status === 'error' ? 'rose' : 'primary';
   const label = status === 'ok' ? 'exitosa' : status === 'error' ? 'falló' : 'corriendo';
   return <span className={chipClass(tone)}>{label}</span>;
 }

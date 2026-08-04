@@ -30,22 +30,16 @@ const StepDef = z.object({
     .string()
     .min(5)
     .max(2000)
-    .describe(
-      'What to do in this step: tools to call, what to look for, what to produce. May use {{param}}.',
-    ),
+    .describe('What to do in this step: tools to call, what to look for, what to produce. May use {{param}}.'),
   tools: z
     .array(z.string())
     .max(8)
     .default([])
-    .describe(
-      'Tool ids this step uses, e.g. ["growth.find_signals", "kb.search"] — shown as chips in the UI',
-    ),
+    .describe('Tool ids this step uses, e.g. ["growth.find_signals", "kb.search"] — shown as chips in the UI'),
   checkpoint: z
     .boolean()
     .default(false)
-    .describe(
-      'true = human decision point: present findings and WAIT for the user before continuing',
-    ),
+    .describe('true = human decision point: present findings and WAIT for the user before continuing'),
 });
 
 const PipelineSummary = z.object({
@@ -92,10 +86,7 @@ function validatePlaceholders(texts: string[], params: Array<{ name: string }>):
 }
 
 function render(text: string, args: Record<string, string>): string {
-  return text.replace(
-    /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}/g,
-    (_, p: string) => args[p] ?? `{{${p}}}`,
-  );
+  return text.replace(/\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}/g, (_, p: string) => args[p] ?? `{{${p}}}`);
 }
 
 export const pipelineCreate = registerTool({
@@ -225,7 +216,7 @@ export const pipelineUpdate = registerTool({
         .eq('slug', input.slug)
         .maybeSingle();
       if (!existing) throw new ValidationError(`Pipeline not found: ${input.slug}`);
-      const steps = input.steps ?? (existing.steps as Step[]) ?? [];
+      const steps = (input.steps ?? (existing.steps as Step[])) ?? [];
       const intro = input.intro ?? ((existing.intro as string) || '');
       const params = input.params ?? ((existing.params ?? []) as Array<{ name: string }>);
       validatePlaceholders([intro, ...steps.flatMap((s) => [s.title, s.detail])], params);
@@ -307,10 +298,9 @@ export const pipelineRun = registerTool({
         const head = s.checkpoint
           ? `⛔ STEP ${i + 1} — CHECKPOINT: ${render(s.title, args)}`
           : `▪ STEP ${i + 1}: ${render(s.title, args)}`;
-        const toolsLine =
-          (s.tools ?? []).length > 0 ? `\n   Tools: ${(s.tools ?? []).join(', ')}` : '';
+        const toolsLine = (s.tools ?? []).length > 0 ? `\n   Tools: ${(s.tools ?? []).join(', ')}` : '';
         const gate = s.checkpoint
-          ? "\n   HARD STOP: present your findings and WAIT for the user's explicit decision before continuing."
+          ? '\n   HARD STOP: present your findings and WAIT for the user\'s explicit decision before continuing.'
           : '';
         return `${head}\n   ${render(s.detail, args)}${toolsLine}${gate}`;
       })

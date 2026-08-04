@@ -1,6 +1,6 @@
 import 'server-only';
-import { type CheckOutcome, type CheckPlan, buildCheckPlan } from '@cortex/agent-tools';
 import type { Sandbox } from '@vercel/sandbox';
+import { type CheckOutcome, type CheckPlan, buildCheckPlan } from '@cortex/agent-tools';
 import { REPO_ROOT, run, truncateOutput } from './sandbox';
 
 /**

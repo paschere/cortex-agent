@@ -90,7 +90,9 @@ export const cycleStats = registerTool({
 
     // Pick current cycle (active) and the most recent prior cycle by number.
     const sorted = [...cyclesData.team.cycles.nodes].sort((a, b) => b.number - a.number);
-    const current = activeId ? (sorted.find((c) => c.id === activeId) ?? sorted[0]) : sorted[0];
+    const current = activeId
+      ? sorted.find((c) => c.id === activeId) ?? sorted[0]
+      : sorted[0];
     const last = current ? sorted.find((c) => c.number < current.number) : undefined;
     const scope = [current, last].filter((c): c is NonNullable<typeof c> => Boolean(c));
 

@@ -1,30 +1,20 @@
-import { IntegrationError } from '@cortex/core';
-import { http, HttpResponse } from 'msw';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { setupServer } from 'msw/node';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { ToolContext } from '../../types';
-import { getCompany } from '../get-company';
-import { listRecentActivities } from '../list-recent-activities';
+import { http, HttpResponse } from 'msw';
+import { IntegrationError } from '@cortex/core';
 import { searchCompanies } from '../search-companies';
+import { getCompany } from '../get-company';
 import { searchDeals } from '../search-deals';
+import { listRecentActivities } from '../list-recent-activities';
+import type { ToolContext } from '../../types';
 
 // biome-ignore lint/suspicious/noExplicitAny: test stub
 const fakeCtx = (): ToolContext => ({
   userId: '00000000-0000-0000-0000-000000000001',
   agentId: '00000000-0000-0000-0000-000000000002',
   db: {} as never,
-  integrations: {
-    getAccessToken: async () => ({ token: 't', scopes: [] }),
-    hasScopes: async () => true,
-  } as any,
-  logger: {
-    info: () => {},
-    error: () => {},
-    warn: () => {},
-    debug: () => {},
-    trace: () => {},
-    fatal: () => {},
-  } as any,
+  integrations: { getAccessToken: async () => ({ token: 't', scopes: [] }), hasScopes: async () => true } as any,
+  logger: { info: () => {}, error: () => {}, warn: () => {}, debug: () => {}, trace: () => {}, fatal: () => {} } as any,
 });
 
 const server = setupServer(
@@ -33,13 +23,7 @@ const server = setupServer(
       results: [
         {
           id: '101',
-          properties: {
-            name: 'Acme',
-            domain: 'acme.com',
-            industry: 'Tech',
-            numberofemployees: '120',
-            country: 'US',
-          },
+          properties: { name: 'Acme', domain: 'acme.com', industry: 'Tech', numberofemployees: '120', country: 'US' },
         },
       ],
     }),
@@ -63,12 +47,7 @@ const server = setupServer(
       results: [
         {
           id: '500',
-          properties: {
-            dealname: 'Acme Q1',
-            amount: '50000',
-            dealstage: 'qualified',
-            closedate: '2026-06-30',
-          },
+          properties: { dealname: 'Acme Q1', amount: '50000', dealstage: 'qualified', closedate: '2026-06-30' },
         },
       ],
     }),
@@ -78,12 +57,7 @@ const server = setupServer(
       results: [
         {
           id: '500',
-          properties: {
-            dealname: 'Acme Q1',
-            amount: '50000',
-            dealstage: 'qualified',
-            closedate: '2026-06-30',
-          },
+          properties: { dealname: 'Acme Q1', amount: '50000', dealstage: 'qualified', closedate: '2026-06-30' },
           associations: { companies: { results: [{ id: '101' }] } },
         },
       ],
@@ -129,9 +103,9 @@ describe('HubSpot tools', () => {
         HttpResponse.json({ message: 'Server Error' }, { status: 500 }),
       ),
     );
-    await expect(
-      searchCompanies.handler({ query: 'Acme', limit: 5 }, fakeCtx()),
-    ).rejects.toBeInstanceOf(IntegrationError);
+    await expect(searchCompanies.handler({ query: 'Acme', limit: 5 }, fakeCtx())).rejects.toBeInstanceOf(
+      IntegrationError,
+    );
   });
 
   it('get_company returns recentDeals with correct amount', async () => {
@@ -150,21 +124,15 @@ describe('HubSpot tools', () => {
 
   it('search_deals throws IntegrationError on 401', async () => {
     server.use(
-      http.post(
-        'https://api.hubapi.com/crm/v3/objects/deals/search',
-        () => new HttpResponse(null, { status: 401 }),
+      http.post('https://api.hubapi.com/crm/v3/objects/deals/search', () =>
+        new HttpResponse(null, { status: 401 }),
       ),
     );
-    await expect(searchDeals.handler({ limit: 10 }, fakeCtx())).rejects.toBeInstanceOf(
-      IntegrationError,
-    );
+    await expect(searchDeals.handler({ limit: 10 }, fakeCtx())).rejects.toBeInstanceOf(IntegrationError);
   });
 
   it('list_recent_activities returns an array (empty from mock)', async () => {
-    const out = await listRecentActivities.handler(
-      { companyId: '101', days: 30, limit: 20 },
-      fakeCtx(),
-    );
+    const out = await listRecentActivities.handler({ companyId: '101', days: 30, limit: 20 }, fakeCtx());
     expect(Array.isArray(out.results)).toBe(true);
   });
 });

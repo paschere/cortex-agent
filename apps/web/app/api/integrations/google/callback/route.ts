@@ -1,8 +1,8 @@
+import { NextResponse, type NextRequest } from 'next/server';
+import { cookies } from 'next/headers';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { IntegrationError, encryptToken, getEnv } from '@cortex/core';
-import { cookies } from 'next/headers';
-import { type NextRequest, NextResponse } from 'next/server';
+import { encryptToken, getEnv, IntegrationError } from '@cortex/core';
 
 export async function GET(req: NextRequest) {
   const user = await requireSession();
@@ -49,7 +49,10 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
 
   const mergedScopes = Array.from(
-    new Set([...((existing?.scopes as string[] | undefined) ?? []), ...tok.scope.split(' ')]),
+    new Set([
+      ...((existing?.scopes as string[] | undefined) ?? []),
+      ...tok.scope.split(' '),
+    ]),
   );
   const refreshEnc = tok.refresh_token
     ? encryptToken(tok.refresh_token)

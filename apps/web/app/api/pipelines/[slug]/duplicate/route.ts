@@ -1,6 +1,6 @@
+import { type NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
-import { type NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
@@ -35,7 +35,10 @@ export async function POST(
   const candidates = [withSuffix(base, '-copy')];
   for (let n = 2; n <= 20; n++) candidates.push(withSuffix(base, `-copy-${n}`));
 
-  const { data: taken } = await db.from('pipelines').select('slug').in('slug', candidates);
+  const { data: taken } = await db
+    .from('pipelines')
+    .select('slug')
+    .in('slug', candidates);
   const takenSet = new Set(((taken ?? []) as { slug: string }[]).map((r) => r.slug));
   const newSlug = candidates.find((c) => !takenSet.has(c));
   if (!newSlug) {

@@ -73,9 +73,7 @@ export const getContactTimeline = registerTool({
     limit: z.number().int().min(1).max(50).default(20),
   }),
   outputSchema: Output,
-  requiredScopes: [
-    { provider: 'hubspot', scopes: ['crm.objects.contacts.read', 'sales-email-read'] },
-  ],
+  requiredScopes: [{ provider: 'hubspot', scopes: ['crm.objects.contacts.read', 'sales-email-read'] }],
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     const days = input.days ?? 90;
@@ -116,9 +114,7 @@ export const getContactTimeline = registerTool({
     });
     const results = all.slice(0, input.limit);
     const markdown = results
-      .map(
-        (r) => `- **${r.type}** (${r.createdAt ?? 'unknown date'}): ${r.subject ?? '(no subject)'}`,
-      )
+      .map((r) => `- **${r.type}** (${r.createdAt ?? 'unknown date'}): ${r.subject ?? '(no subject)'}`)
       .join('\n');
     return { results, markdown };
   },

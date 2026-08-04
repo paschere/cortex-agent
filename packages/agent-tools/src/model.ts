@@ -23,10 +23,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 type ThinkingMode = 'summarized' | 'off';
 
 function bodyRewriter(mode: ThinkingMode) {
-  return async (
-    input: Parameters<typeof fetch>[0],
-    init?: Parameters<typeof fetch>[1],
-  ): Promise<Response> => {
+  return async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {
     if (typeof init?.body !== 'string') return fetch(input, init);
 
     let body: Record<string, unknown>;

@@ -1,10 +1,10 @@
 'use client';
 
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
 import { Archive, ArchiveRestore, Copy, Loader2, MoreHorizontal, Pencil } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
 
 /** ⋯ menu on a gallery card: edit, duplicate, archive / unarchive. */
 export function PipelineCardMenu({
@@ -22,18 +22,16 @@ export function PipelineCardMenu({
     try {
       const res = await fetch(url, {
         method,
-        ...(body
-          ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-          : {}),
+        ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: unknown };
-        window.alert(typeof data.error === 'string' ? data.error : 'Esa acción falló.');
+        window.alert(typeof data.error === 'string' ? data.error : 'That action failed.');
         return null;
       }
       return (await res.json()) as { slug: string };
     } catch {
-      window.alert('Error de red. Vuelve a intentarlo.');
+      window.alert('Network error — please try again.');
       return null;
     } finally {
       setBusy(false);
@@ -49,11 +47,7 @@ export function PipelineCardMenu({
   }
 
   async function setArchived(next: boolean) {
-    if (
-      next &&
-      !window.confirm('¿Archivar este pipeline? Su historial de ejecuciones se conserva.')
-    )
-      return;
+    if (next && !window.confirm('Archive this pipeline? Its run history is kept.')) return;
     const out = next
       ? await call(`/api/pipelines/${slug}`, 'DELETE')
       : await call(`/api/pipelines/${slug}`, 'PATCH', { archived: false });
@@ -65,7 +59,7 @@ export function PipelineCardMenu({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          aria-label="Acciones del pipeline"
+          aria-label="Pipeline actions"
           disabled={busy}
           className="grid h-7 w-7 place-items-center rounded-card border border-border bg-surface text-ink-faint transition-colors hover:text-ink data-[state=open]:text-ink"
         >
@@ -83,19 +77,19 @@ export function PipelineCardMenu({
           className="z-50 min-w-[170px] overflow-hidden rounded-card border border-border bg-surface p-1 shadow-pop"
         >
           <Item onSelect={() => router.push(`/pipelines/${slug}/edit`)}>
-            <Pencil className="h-3.5 w-3.5" /> Editar
+            <Pencil className="h-3.5 w-3.5" /> Edit
           </Item>
           <Item onSelect={duplicate}>
-            <Copy className="h-3.5 w-3.5" /> Duplicar
+            <Copy className="h-3.5 w-3.5" /> Duplicate
           </Item>
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
           {archived ? (
             <Item onSelect={() => setArchived(false)}>
-              <ArchiveRestore className="h-3.5 w-3.5" /> Desarchivar
+              <ArchiveRestore className="h-3.5 w-3.5" /> Unarchive
             </Item>
           ) : (
             <Item tone="rose" onSelect={() => setArchived(true)}>
-              <Archive className="h-3.5 w-3.5" /> Archivar
+              <Archive className="h-3.5 w-3.5" /> Archive
             </Item>
           )}
         </DropdownMenu.Content>

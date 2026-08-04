@@ -1,4 +1,4 @@
-import { CORTEX_ICON_PATH, FONT_STACK, escapeHtml, palette, safeHref } from './theme';
+import { FONT_STACK, CORTEX_ICON_PATH, escapeHtml, palette, safeHref } from './theme';
 
 /**
  * The shell every automated Cortex email is poured into.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { renderDealCard } from '../format/index';
 import { registerTool } from '../index';
+import { renderDealCard } from '../format/index';
 import { hsFetch } from './client';
 
 const Output = z.object({
@@ -17,8 +17,7 @@ const Output = z.object({
 
 export const updateDeal = registerTool({
   id: 'hubspot.update_deal',
-  description:
-    'Update properties on an existing HubSpot deal. At least one field must be provided.',
+  description: 'Update properties on an existing HubSpot deal. At least one field must be provided.',
   inputSchema: z
     .object({
       id: z.string(),

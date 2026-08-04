@@ -1,7 +1,7 @@
+import { NextResponse, type NextRequest } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { syncExternalServerManifest } from '@cortex/agent-tools';
-import { type NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 

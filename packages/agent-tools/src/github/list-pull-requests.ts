@@ -79,12 +79,7 @@ export const listPullRequests = registerTool({
       if (data.length < 100) break;
       if (page === MAX_PAGES && data.length === 100) {
         ctx.logger.info(
-          {
-            owner: input.owner,
-            repo: input.repo,
-            state: input.state,
-            fetched: pullRequests.length,
-          },
+          { owner: input.owner, repo: input.repo, state: input.state, fetched: pullRequests.length },
           'github.list_pull_requests truncated at page cap',
         );
       }

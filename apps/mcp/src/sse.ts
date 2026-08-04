@@ -9,9 +9,9 @@
  * We implement the Transport interface directly using the Web Streams API.
  */
 
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
 interface SSESession {
   transport: WorkersSSETransport;
@@ -87,12 +87,9 @@ export function handleSseGet(buildServer: () => Server, messagesUrl: string): Re
       controller.enqueue(sseEvent('endpoint', `${messagesUrl}?sessionId=${sessionId}`));
 
       // Attach the transport to the MCP server (sets onmessage/onerror/onclose, calls start()).
-      sessions
-        .get(sessionId)!
-        .server.connect(transport)
-        .catch((err: Error) => {
-          transport.error(err);
-        });
+      sessions.get(sessionId)!.server.connect(transport).catch((err: Error) => {
+        transport.error(err);
+      });
     },
     cancel() {
       sessions.delete(sessionId);

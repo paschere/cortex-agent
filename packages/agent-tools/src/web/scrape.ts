@@ -1,7 +1,7 @@
 import { IntegrationError } from '@cortex/core';
 import { z } from 'zod';
-import { assertPublicHost } from '../external-mcp';
 import { registerTool } from '../index';
+import { assertPublicHost } from '../external-mcp';
 
 /**
  * String/hostname-based SSRF guard. Blocks loopback, link-local, cloud metadata,

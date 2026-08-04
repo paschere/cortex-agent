@@ -12,16 +12,11 @@ export const sheetsReadRange = registerTool({
   outputSchema: z.object({
     values: z.array(z.array(z.string())),
   }),
-  requiredScopes: [
-    { provider: 'google', scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] },
-  ],
+  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] }],
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     type R = { range: string; values?: string[][] };
-    const r = await sheetsFetch<R>(
-      ctx,
-      `/${input.spreadsheetId}/values/${encodeURIComponent(input.range)}`,
-    );
+    const r = await sheetsFetch<R>(ctx, `/${input.spreadsheetId}/values/${encodeURIComponent(input.range)}`);
     return { values: r.values ?? [] };
   },
 });

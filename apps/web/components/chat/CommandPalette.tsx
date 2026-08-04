@@ -48,7 +48,7 @@ const CONNECTIONS: Entry[] = [
   {
     href: '/integrations',
     label: 'Integraciones — a qué está conectado Cortex',
-    keywords: 'google hubspot workable slack github linear apollo payroll mcp servers',
+    keywords: 'google hubspot slack github linear payroll mcp servers',
   },
   {
     href: '/mcp-tokens',

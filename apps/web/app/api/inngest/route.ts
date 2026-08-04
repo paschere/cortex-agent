@@ -1,6 +1,6 @@
-import { functions } from '@/inngest/functions';
-import { inngest } from '@/lib/inngest';
 import { serve } from 'inngest/next';
+import { inngest } from '@/lib/inngest';
+import { functions } from '@/inngest/functions';
 
 const handlers = serve({ client: inngest, functions });
 

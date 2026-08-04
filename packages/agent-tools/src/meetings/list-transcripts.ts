@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { fetchCalendarTimeZone, fetchEventsInRange, normalizeEvent } from '../gcal/events';
 import { registerTool } from '../index';
+import { fetchCalendarTimeZone, fetchEventsInRange, normalizeEvent } from '../gcal/events';
 import {
   MEET_READONLY_SCOPE,
   fetchSpaceMeetingCode,
@@ -44,12 +44,18 @@ export const meetingsListTranscripts = registerTool({
   description:
     'Show which recent meetings left a transcript behind, so you can pick the one worth reading. For each call you get the title, when it happened, how long it ran, who took part and the opening lines of the conversation. Ideal for "what did we discuss with Acme last time" or "did we record the interview with María" — filter by a person\'s name or email to narrow it down. Covers the last 7 days by default and up to two months.',
   inputSchema: z.object({
-    days: z.number().int().min(1).max(60).default(7).describe('How far back to look, in days'),
+    days: z
+      .number()
+      .int()
+      .min(1)
+      .max(60)
+      .default(7)
+      .describe('How far back to look, in days'),
     limit: z.number().int().min(1).max(25).default(10),
     attendee: z
       .string()
       .optional()
-      .describe('Only keep meetings involving this person (name or email, partial is fine)'),
+      .describe("Only keep meetings involving this person (name or email, partial is fine)"),
     excerptChars: z.number().int().min(100).max(4000).default(500),
     calendarId: z.string().default('primary'),
   }),
@@ -91,7 +97,10 @@ export const meetingsListTranscripts = registerTool({
     });
 
     // Calendar side: titles and guest lists, indexed by Meet code.
-    const byCode = new Map<string, { title: string; eventId: string; attendeeText: string }>();
+    const byCode = new Map<
+      string,
+      { title: string; eventId: string; attendeeText: string }
+    >();
     try {
       const tz = await fetchCalendarTimeZone(ctx, calendarId);
       const events = await fetchEventsInRange(ctx, {
@@ -121,17 +130,14 @@ export const meetingsListTranscripts = registerTool({
 
     let records: Awaited<ReturnType<typeof listConferenceRecords>>;
     try {
-      records = await listConferenceRecords(ctx, {
-        startAfter: since,
-        pageSize: MAX_RECORDS_SCANNED,
-      });
+      records = await listConferenceRecords(ctx, { startAfter: since, pageSize: MAX_RECORDS_SCANNED });
     } catch (err) {
       ctx.logger.warn(
         { err: (err as Error).message },
         'meetings.list_transcripts: Meet lookup failed',
       );
       return bail(
-        'The meeting records could not be reached right now. This usually means the Google account needs to be reconnected with permission to read Meet recordings.',
+        "The meeting records could not be reached right now. This usually means the Google account needs to be reconnected with permission to read Meet recordings.",
       );
     }
 
@@ -157,9 +163,7 @@ export const meetingsListTranscripts = registerTool({
         for (const p of participants) {
           if (p.displayName) speakers.set(p.name, p.displayName);
         }
-        const names = [
-          ...new Set(participants.map((p) => p.displayName).filter(Boolean)),
-        ] as string[];
+        const names = [...new Set(participants.map((p) => p.displayName).filter(Boolean))] as string[];
 
         if (needle) {
           const haystack = [
