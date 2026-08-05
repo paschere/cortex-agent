@@ -11,13 +11,12 @@ import { useState } from 'react';
  *
  * What goes in and what comes back is evidence — it is the only place a person
  * can check that Cortex asked the right question of the right system — so both
- * are set in monospace under labels that name them, the way a form names its
- * boxes.
+ * are set in monospace under labels that name them.
  *
  * Only the failure is tinted. A conversation with a dozen successful lookups
  * used to render as a wall of green, which spends the reader's attention on
- * the things that went right; a quiet hairline card with a coloured status
- * rule keeps the eye free for the one that did not.
+ * the things that went right; a quiet card carrying one coloured edge keeps
+ * the eye free for the one that did not.
  */
 export function ToolCallCard({ invocation }: { invocation: ToolInvocation }) {
   const [open, setOpen] = useState(false);
@@ -31,12 +30,12 @@ export function ToolCallCard({ invocation }: { invocation: ToolInvocation }) {
     '__error' in (result as Record<string, unknown>);
 
   const evidence =
-    'scroll-slim max-h-56 overflow-auto rounded-card border border-border bg-surface-2 p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted';
+    'scroll-slim max-h-56 overflow-auto rounded-sm border border-border bg-surface-2 p-2.5 font-mono text-[10.5px] leading-relaxed text-ink-muted';
 
   return (
     <div
       className={clsx(
-        'rounded-card border border-l-2 text-xs',
+        'group rounded-card border border-l-2 text-xs shadow-card',
         isError
           ? 'border-rose/40 border-l-rose bg-rose-soft'
           : isRunning
@@ -48,7 +47,7 @@ export function ToolCallCard({ invocation }: { invocation: ToolInvocation }) {
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className="flex w-full items-center gap-2 rounded-card px-3 py-2 text-left transition-colors duration-150 motion-reduce:transition-none"
       >
         {isRunning ? (
           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-amber" />
@@ -65,7 +64,7 @@ export function ToolCallCard({ invocation }: { invocation: ToolInvocation }) {
         </span>
         <ChevronDown
           className={clsx(
-            'h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform',
+            'h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-hover:text-primary motion-reduce:transition-none',
             open && 'rotate-180',
           )}
         />

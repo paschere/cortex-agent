@@ -7,7 +7,7 @@ import {
 } from '@/lib/dev-tasks/contract';
 import { commentOnIssue } from '@/lib/dev-tasks/linear-comment';
 import { inngest } from '@/lib/inngest';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 
 /**
@@ -89,8 +89,23 @@ export const devTaskStatus = inngest.createFunction(
     }
     const status = ev.status;
 
+    // The executor reports by task id alone, and it may run in a sandbox that
+    // never saw a workspace. Reading the workspace off the task row is the one
+    // unforgeable way to get it: one unscoped lookup by primary key, and every
+    // handle after it is pinned to what came back.
+    const organizationId = await step.run('resolve-workspace', async () => {
+      const raw = getSupabaseServiceClient();
+      const { data } = await raw
+        .from('dev_tasks')
+        .select('organization_id')
+        .eq('id', ev.taskId)
+        .maybeSingle();
+      return (data?.organization_id as string | undefined) ?? null;
+    });
+    if (!organizationId) return { skipped: 'task not found' };
+
     const row = await step.run('load-task', async (): Promise<TaskRow | null> => {
-      const db = getSupabaseServiceClient();
+      const db = getOrgScopedClient(organizationId);
       const { data, error } = await db
         .from('dev_tasks')
         .select('id, external_id, external_identifier, status, repository_key, pr_url')
@@ -111,7 +126,7 @@ export const devTaskStatus = inngest.createFunction(
     }
 
     await step.run('persist', async () => {
-      const db = getSupabaseServiceClient();
+      const db = getOrgScopedClient(organizationId);
       const now = new Date().toISOString();
       const patch: Record<string, unknown> = { status, updated_at: now };
       if (ev.branchName) patch.branch_name = ev.branchName;
@@ -130,7 +145,7 @@ export const devTaskStatus = inngest.createFunction(
     await step.run('notify-linear', async () => {
       const body = statusComment(status, row, ev);
       if (!body) return { commented: false };
-      return { commented: await commentOnIssue(row.external_id, body) };
+      return { commented: await commentOnIssue(row.external_id, body, organizationId) };
     });
 
     logger.info(`dev-task-status: ${row.external_identifier} → ${status}`);

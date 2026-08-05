@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { CreateBody, placeholderError } from './_schema';
 
 export const runtime = 'nodejs';
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const phError = placeholderError(body.intro, body.steps, body.params);
   if (phError) return NextResponse.json({ error: phError }, { status: 422 });
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data, error } = await db
     .from('pipelines')
     .insert({

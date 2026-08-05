@@ -63,14 +63,26 @@ export function ProspectCard({
 }) {
   const meta = STATUS_META[prospect.status];
   const Icon = meta.icon;
+  const moving = busyWith !== null;
 
   return (
-    <div className="rounded-card border border-border bg-surface p-4">
+    // The one card on this board a person actually picks up: an action moves
+    // it to another column, so the card lifts and glows indigo while that move
+    // is in flight, and settles back once the new stage is confirmed.
+    <div
+      className={clsx(
+        'rounded-card border bg-surface p-4 shadow-card transition-all duration-200',
+        'motion-reduce:transition-none motion-reduce:transform-none',
+        moving
+          ? '-translate-y-0.5 border-primary/30 shadow-pop ring-2 ring-primary/20'
+          : 'border-border hover:-translate-y-px hover:shadow-pop',
+      )}
+    >
       {/* ------------------------------------------------------------ header */}
       <div className="flex items-start gap-3">
         <span
           className={clsx(
-            'grid h-9 w-9 shrink-0 place-items-center rounded-card border',
+            'grid h-9 w-9 shrink-0 place-items-center rounded-sm border',
             CHIP_TONE[meta.tone],
           )}
         >
@@ -116,7 +128,7 @@ export function ProspectCard({
 
       {/* Answers "did it disappear?" in the place the question gets asked. */}
       {filedAway && (
-        <p className="mt-3 rounded-card border border-border bg-surface-2 px-3 py-2 text-[11.5px] text-ink-muted">
+        <p className="mt-3 rounded-sm border border-border bg-surface-2 px-3 py-2 text-[11.5px] text-ink-muted">
           Quedó archivado en <b className="text-ink">{meta.label}</b>. Sigue aquí, y lo vas a
           encontrar en esa pestaña la próxima vez.
         </p>
@@ -124,7 +136,7 @@ export function ProspectCard({
 
       {/* ---------------------------------------------------------- evidence */}
       {prospect.summary && (
-        <div className="mt-3 rounded-card border border-border bg-surface-2 px-3 py-2.5">
+        <div className="mt-3 rounded-sm border border-border bg-surface-2 px-3 py-2.5">
           <div className="field-label mb-1 flex items-center gap-1.5">
             <Quote className="h-3 w-3" />
             Por qué parece un buen prospecto
@@ -137,7 +149,7 @@ export function ProspectCard({
       <Contact prospect={prospect} />
 
       {error && (
-        <p className="mt-3 rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+        <p className="mt-3 rounded-sm border border-rose/40 bg-rose-soft px-3 py-2 text-[12px] text-rose">
           {error} El prospecto volvió a su estado anterior.
         </p>
       )}
@@ -154,7 +166,9 @@ export function ProspectCard({
               disabled={disabled}
               onClick={() => onMove(action.next)}
               className={clsx(
-                'inline-flex items-center gap-1.5 rounded-card px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors disabled:opacity-60',
+                'inline-flex items-center gap-1.5 rounded-pill px-3.5 py-1.5 text-[12.5px] font-semibold transition-all duration-150',
+                'hover:-translate-y-px disabled:opacity-60 disabled:hover:translate-y-0',
+                'motion-reduce:transform-none motion-reduce:transition-none',
                 action.primary
                   ? 'bg-primary text-white hover:bg-primary-strong'
                   : 'border border-border-strong text-ink-muted hover:bg-surface-2 hover:text-ink',
@@ -194,7 +208,7 @@ function Contact({ prospect }: { prospect: Prospect }) {
   const isEmail = !!contactPath?.includes('@');
 
   return (
-    <div className="mt-3 rounded-card border border-border px-3 py-2.5">
+    <div className="mt-3 rounded-sm border border-border px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <UserRound className="h-3.5 w-3.5 text-ink-faint" />
         <span className="text-[12.5px] font-semibold text-ink">{contactName ?? 'Contacto'}</span>

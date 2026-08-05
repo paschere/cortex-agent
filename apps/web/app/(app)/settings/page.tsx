@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { isChatOutboundConfigured } from '@/lib/google-chat';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { PREFERENCE_COLUMNS, listMemories, rowToPreferences } from '@cortex/agent-tools';
 import { Brain, ChevronRight, Settings as SettingsIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function SettingsPage() {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   // Preferences, the Chat link and the memory counts are independent reads;
   // none blocks the others.

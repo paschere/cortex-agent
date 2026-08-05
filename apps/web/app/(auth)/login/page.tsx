@@ -122,9 +122,9 @@ export default function LoginPage() {
         {err && <AuthError>{err}</AuthError>}
       </AuthBody>
 
-      {/* The double rule is the one on a customs form that opens a new section.
-          Used once, here, to separate the act of signing in from what signing
-          in gets you. */}
+      {/* A soft fade rather than a hard rule — structure without turning the
+          card into a form. Used once, here, to separate the act of signing in
+          from what signing in gets you. */}
       <div className="rule-double mx-6 sm:mx-8" />
       <ul className="divide-y divide-border px-6 pb-4 sm:px-8">
         {CLAIMS.map((c) => (

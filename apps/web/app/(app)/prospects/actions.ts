@@ -2,7 +2,7 @@
 
 import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { growthUpdateSignal, runTool } from '@cortex/agent-tools';
 import type { UUID } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
@@ -20,11 +20,11 @@ const PATH = '/prospects';
 const STATUSES: SignalStatus[] = ['new', 'qualified', 'rejected', 'contacted'];
 
 /** Cortex is the agent every tool call on this page is attributed to. */
-async function cortexContext(userId: UUID, signal?: AbortSignal) {
-  const db = getSupabaseServiceClient();
+async function cortexContext(userId: UUID, organizationId: string, signal?: AbortSignal) {
+  const db = getOrgScopedClient(organizationId);
   const { data } = await db.from('agents').select('id').eq('slug', 'cortex').maybeSingle();
   if (!data?.id) return null;
-  return buildToolContext({ userId, agentId: data.id as UUID, signal });
+  return buildToolContext({ userId, agentId: data.id as UUID, organizationId, signal });
 }
 
 /** Turns any thrown tool error into a sentence a salesperson can act on. */
@@ -48,7 +48,7 @@ export async function setProspectStatus(
   const user = await requireSession();
   if (!STATUSES.includes(status)) return { ok: false, error: 'Ese no es un estado válido.' };
 
-  const ctx = await cortexContext(user.id);
+  const ctx = await cortexContext(user.id, user.organization.id);
   if (!ctx) return { ok: false, error: NO_AGENT };
 
   try {

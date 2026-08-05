@@ -2,7 +2,7 @@ import { DirectionPair } from '@/components/connect/DirectionPair';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { listTools } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
@@ -74,7 +74,7 @@ export default async function IntegrationsPage({
 }) {
   const user = await requireSession();
   const sp = await searchParams;
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   // Every OAuth row, not just this user's: "who connected it" is part of the
   // answer, and a team-sized table makes this a cheap read.
@@ -390,7 +390,7 @@ export default async function IntegrationsPage({
                 </span>
                 <span
                   className={clsx(
-                    'rounded-card border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]',
+                    'rounded-pill border px-2.5 py-0.5 text-[10.5px] font-semibold',
                     tag.cls,
                   )}
                 >
@@ -433,7 +433,7 @@ export default async function IntegrationsPage({
                 {p.connectHref && (
                   <Link
                     href={p.connectHref}
-                    className="rounded-card bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong"
+                    className="rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
                   >
                     Conectar
                   </Link>

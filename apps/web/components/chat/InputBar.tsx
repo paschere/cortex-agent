@@ -117,11 +117,13 @@ export function InputBar({
         <form
           onSubmit={handleSubmit}
           className={clsx(
-            // The box you write in is a box on a form: squared, ruled, flat.
-            'rounded-card border transition-colors',
+            // The composer is the one surface a person returns to all day, so
+            // it sits lifted off the canvas and rises a little further when it
+            // takes focus — the answer to "am I typing here?".
+            'rounded-card border bg-surface transition-all duration-150 motion-reduce:transition-none',
             focused
-              ? 'border-primary bg-surface ring-1 ring-primary/20'
-              : 'border-border bg-surface',
+              ? 'border-primary/40 shadow-pop ring-4 ring-primary/10'
+              : 'border-border shadow-card',
           )}
         >
           <textarea
@@ -142,7 +144,7 @@ export function InputBar({
             {pillDisabled ? (
               <span
                 title="Empieza un chat nuevo para cambiar de agente"
-                className="inline-flex items-center gap-1.5 rounded-card bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-ink-faint"
+                className="inline-flex items-center gap-1.5 rounded-pill bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink-faint"
               >
                 <Bot className="h-3.5 w-3.5" />
                 {activeAgent?.name ?? 'Agente'}
@@ -152,7 +154,7 @@ export function InputBar({
                 <DropdownMenu.Trigger asChild>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-card border border-border px-2.5 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                    className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
                   >
                     <Bot className="h-3.5 w-3.5 text-primary" />
                     {activeAgent?.name ?? 'Agente'}
@@ -172,7 +174,7 @@ export function InputBar({
                       <DropdownMenu.Item
                         key={a.slug}
                         onSelect={() => onAgentChange(a.slug)}
-                        className="flex cursor-pointer flex-col gap-0.5 rounded-card px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-surface-2"
+                        className="flex cursor-pointer flex-col gap-0.5 rounded-sm px-2.5 py-2 text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
                       >
                         <span className="font-semibold text-ink">{a.name}</span>
                         {a.description && (
@@ -195,7 +197,7 @@ export function InputBar({
                 type="submit"
                 disabled={disabled || !text.trim()}
                 aria-label="Enviar mensaje"
-                className="grid h-8 w-8 place-items-center rounded-card bg-primary text-white transition-colors hover:bg-primary-strong disabled:opacity-40"
+                className="grid h-8 w-8 place-items-center rounded-full bg-primary text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
               >
                 <ArrowUp size={16} strokeWidth={2.5} />
               </button>

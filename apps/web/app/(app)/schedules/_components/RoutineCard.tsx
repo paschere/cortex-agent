@@ -95,7 +95,7 @@ export function RoutineCard({
   const preview = lastRun?.error ?? (lastRun?.output ? stripMarkdown(lastRun.output) : null);
 
   return (
-    <section className="group overflow-hidden rounded-card border border-border bg-surface transition-colors hover:border-border-strong">
+    <section className="group overflow-hidden rounded-card border border-border bg-surface shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong motion-reduce:transform-none motion-reduce:transition-none">
       <div className="relative flex flex-wrap items-start gap-3 p-4">
         {/*
          * Card-wide link, same trick the pipelines gallery uses: an absolutely
@@ -167,7 +167,7 @@ export function RoutineCard({
                 : humanizeCron(job.cron, job.timezone)}
             </span>
             {next && job.status === 'active' && (
-              <span className="rounded-sm border border-primary/30 bg-primary-soft px-1.5 font-semibold text-primary">
+              <span className="rounded-pill border border-primary/30 bg-primary-soft px-1.5 font-semibold text-primary">
                 próxima {next}
               </span>
             )}
@@ -261,7 +261,7 @@ export function RoutineCard({
             type="button"
             disabled={running || job.status !== 'active'}
             onClick={onRunNow}
-            className="inline-flex items-center gap-1.5 rounded-card bg-primary px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-2.5 py-1.5 text-[11.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             title={
               job.status === 'active'
                 ? 'Ejecutar esta rutina ahora'

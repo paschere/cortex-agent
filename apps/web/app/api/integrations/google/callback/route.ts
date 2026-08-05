@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { encryptToken, getEnv, IntegrationError } from '@cortex/core';
 
 export async function GET(req: NextRequest) {
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     scope: string;
   };
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   // Merge scopes with existing if this is an incremental grant (Google returns
   // previously-granted scopes via include_granted_scopes=true).
   const { data: existing } = await db

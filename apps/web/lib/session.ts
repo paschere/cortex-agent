@@ -5,6 +5,20 @@ import { getSupabaseServiceClient } from "./supabase/service";
 import { resolveActiveOrganization } from "./organization";
 import { UnauthorizedError, type Role, type SessionUser } from "@cortex/core";
 
+/**
+ * Who is asking, and which workspace they are asking inside.
+ *
+ * ORDER MATTERS HERE, and it is the reverse of what it used to be. The
+ * workspace is resolved FIRST, and only then the `public.users` row, because
+ * since migration 0064 that row is per-workspace: one human who belongs to two
+ * companies has two directory rows, with two ids, two roles and two sets of
+ * conversations. Looking the row up by email alone — as this did — would return
+ * whichever one Postgres felt like and file the request under the wrong tenant.
+ *
+ * This function is one of the few places allowed to hold a raw service-role
+ * client: it runs before a workspace is known and is what determines it.
+ * Everything downstream gets `getOrgScopedClient(user.organization.id)`.
+ */
 export async function requireSession(): Promise<SessionUser> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new UnauthorizedError();
@@ -21,34 +35,6 @@ export async function requireSession(): Promise<SessionUser> {
     if (emailDomain !== allowed) throw new UnauthorizedError();
   }
 
-  const sb = getSupabaseServiceClient();
-  let { data: row, error } = await sb
-    .from("users")
-    .select("id,email,name,role")
-    .eq("email", session.user.email)
-    .single();
-
-  if (error || !row) {
-    // Back-fill missing public.users row (recovery path for after-hook failures).
-    const isFirstUser = await sb
-      .from("users")
-      .select("id", { count: "exact", head: true })
-      .then((r) => (r.count ?? 0) === 0);
-
-    const { data: inserted, error: insErr } = await sb
-      .from("users")
-      .insert({
-        email: session.user.email,
-        name: session.user.name ?? null,
-        role: isFirstUser ? "org_admin" : "member",
-      })
-      .select("id,email,name,role")
-      .single();
-
-    if (insErr || !inserted) throw new UnauthorizedError();
-    row = inserted;
-  }
-
   // The workspace this request acts in. Provisioned on demand, so an account
   // that predates multi-tenancy (or one created straight in the DB) still gets
   // a tenant on its next request instead of rendering a workspace-less app.
@@ -59,6 +45,51 @@ export async function requireSession(): Promise<SessionUser> {
     session.user.name ?? null,
     session.user.email,
   );
+
+  const sb = getSupabaseServiceClient();
+  const findRow = async () =>
+    (
+      await sb
+        .from("users")
+        .select("id,email,name,role")
+        .eq("organization_id", organization.id)
+        .eq("email", session.user.email)
+        .maybeSingle()
+    ).data;
+
+  let row = await findRow();
+
+  if (!row) {
+    // No directory row in this workspace yet. Two ways to get here: an account
+    // that has just been provisioned, and an existing account opening a
+    // workspace it was invited to. Both need a row, and neither is an error.
+    //
+    // The role comes from the workspace membership rather than from "is this
+    // the first user in the table". That old rule made the first person to sign
+    // up an admin of a product that had one company; with open signup it made
+    // them an admin and everybody after them a permanent member, in workspaces
+    // they own.
+    const { data: inserted } = await sb
+      .from("users")
+      .insert({
+        organization_id: organization.id,
+        email: session.user.email,
+        name: session.user.name ?? null,
+        role:
+          organization.role === "owner" || organization.role === "admin"
+            ? "org_admin"
+            : "member",
+      })
+      .select("id,email,name,role")
+      .single();
+
+    // A fresh account fires several requests at once and every one of them
+    // finds no row; the unique index on (organization_id, lower(email)) lets
+    // exactly one INSERT through and the losers read what the winner wrote,
+    // rather than failing the page with "unauthorized".
+    row = inserted ?? (await findRow());
+    if (!row) throw new UnauthorizedError();
+  }
 
   return {
     id: row.id as string,

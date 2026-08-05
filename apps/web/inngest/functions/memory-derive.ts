@@ -1,5 +1,5 @@
 import { inngest } from '@/lib/inngest';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { utilityModel } from '@cortex/agent-tools';
 import {
   type AuditSignalRow,
@@ -73,31 +73,44 @@ export const memoryDeriveDispatch = inngest.createFunction(
   { id: 'memory-derive-dispatch' },
   { cron: DERIVE_CRON },
   async ({ step }) => {
-    const userIds = await step.run('find-active-people', async () => {
-      const db = getSupabaseServiceClient();
-      const since = new Date(Date.now() - DAY_MS).toISOString();
-      // Somebody who did nothing yesterday has nothing new to learn from, and
-      // the point of scanning audit (rather than every user row) is that a
-      // workspace of dormant accounts costs nothing to skip.
-      const { data, error } = await db
-        .from('audit_events')
-        .select('user_id')
-        .gte('created_at', since)
-        .limit(5000);
-      if (error) throw new Error(`Failed to scan recent activity: ${error.message}`);
-      return [...new Set(((data ?? []) as Array<{ user_id: string }>).map((r) => r.user_id))];
-    });
+    // Unscoped, and only here: "who did anything yesterday" spans every
+    // workspace, and there is no session behind a cron. The audit row names the
+    // workspace the activity happened in, and it is carried on the event so the
+    // per-person function below reads and writes inside that one workspace only.
+    const people = await step.run(
+      'find-active-people',
+      async (): Promise<Array<{ userId: string; organizationId: string }>> => {
+        const db = getSupabaseServiceClient();
+        const since = new Date(Date.now() - DAY_MS).toISOString();
+        // Somebody who did nothing yesterday has nothing new to learn from, and
+        // the point of scanning audit (rather than every user row) is that a
+        // workspace of dormant accounts costs nothing to skip.
+        const { data, error } = await db
+          .from('audit_events')
+          .select('user_id, organization_id')
+          .gte('created_at', since)
+          .limit(5000);
+        if (error) throw new Error(`Failed to scan recent activity: ${error.message}`);
+        const seen = new Map<string, { userId: string; organizationId: string }>();
+        for (const row of (data ?? []) as Array<{ user_id: string; organization_id: string }>) {
+          if (!seen.has(row.user_id)) {
+            seen.set(row.user_id, { userId: row.user_id, organizationId: row.organization_id });
+          }
+        }
+        return [...seen.values()];
+      },
+    );
 
-    if (userIds.length > 0) {
+    if (people.length > 0) {
       await step.sendEvent(
         'derive-per-user',
-        userIds.map((userId) => ({
+        people.map(({ userId, organizationId }) => ({
           name: 'memory/derive.user' as const,
-          data: { userId },
+          data: { userId, organizationId },
         })),
       );
     }
-    return { dispatched: userIds.length };
+    return { dispatched: people.length };
   },
 );
 
@@ -110,10 +123,12 @@ export const memoryDeriveUser = inngest.createFunction(
   { event: 'memory/derive.user' },
   async ({ event, step }) => {
     const userId = event.data.userId as string;
+    const organizationId = event.data.organizationId as string | undefined;
     if (!userId) return { skipped: 'no user id' };
+    if (!organizationId) return { skipped: 'no workspace on the event' };
 
     const proposed = await step.run('propose', async () => {
-      const db = getSupabaseServiceClient();
+      const db = getOrgScopedClient(organizationId);
 
       const { data: prefs } = await db
         .from('user_preferences')
@@ -138,8 +153,8 @@ export const memoryDeriveUser = inngest.createFunction(
       }
 
       const [audit, recent] = await Promise.all([
-        loadAuditSignals(userId),
-        loadRecentMessages(userId, languageSince),
+        loadAuditSignals(organizationId, userId),
+        loadRecentMessages(organizationId, userId, languageSince),
       ]);
 
       const candidates: MemoryCandidate[] = [
@@ -181,8 +196,8 @@ export const memoryDeriveUser = inngest.createFunction(
 // Reading the person's own history
 // ---------------------------------------------------------------------------
 
-async function loadAuditSignals(userId: string): Promise<AuditSignalRow[]> {
-  const db = getSupabaseServiceClient();
+async function loadAuditSignals(organizationId: string, userId: string): Promise<AuditSignalRow[]> {
+  const db = getOrgScopedClient(organizationId);
   const since = new Date(Date.now() - BEHAVIOUR_WINDOW_DAYS * DAY_MS).toISOString();
   const { data, error } = await db
     .from('audit_events')
@@ -205,8 +220,12 @@ async function loadAuditSignals(userId: string): Promise<AuditSignalRow[]> {
  * Cortex's own output is how a model's assumptions become a person's stored
  * "facts".
  */
-async function loadRecentMessages(userId: string, since: string): Promise<RecentMessage[]> {
-  const db = getSupabaseServiceClient();
+async function loadRecentMessages(
+  organizationId: string,
+  userId: string,
+  since: string,
+): Promise<RecentMessage[]> {
+  const db = getOrgScopedClient(organizationId);
   const { data: convs, error: convErr } = await db
     .from('conversations')
     .select('id')

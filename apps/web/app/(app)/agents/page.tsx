@@ -1,4 +1,5 @@
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { requireSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import Link from 'next/link';
 import { Bot, Cpu, Wrench, Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
@@ -14,7 +15,8 @@ interface AgentRow {
 }
 
 export default async function AgentsPage() {
-  const sb = getSupabaseServiceClient();
+  const user = await requireSession();
+  const sb = getOrgScopedClient(user.organization.id);
   const { data } = await sb
     .from('agents')
     .select('id, slug, name, default_model, allowed_tool_ids, teams(name)')
@@ -46,13 +48,13 @@ export default async function AgentsPage() {
             const isCortex = a.slug === 'cortex';
             return (
               <Link key={a.id} href={`/agents/${a.slug}`} className="group block">
-                <Panel className="flex h-full flex-col gap-3 p-4 transition-colors group-hover:border-border-strong">
+                <Panel className="flex h-full flex-col gap-3 p-4 transition-all duration-150 group-hover:-translate-y-px group-hover:border-border-strong motion-reduce:transform-none motion-reduce:transition-none">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-[14px] font-bold text-ink">{a.name}</span>
                         {isCortex && (
-                          <span className="shrink-0 rounded-card border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-primary-ink">
+                          <span className="shrink-0 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 text-[10.5px] font-semibold text-primary-ink">
                             Super-agente
                           </span>
                         )}

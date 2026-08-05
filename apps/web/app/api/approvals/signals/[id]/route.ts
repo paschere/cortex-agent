@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -31,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   // Attributed like every other triage decision — /prospects shows "Qualified by
   // Ana", and a signal moved from this queue must name a person there too.
   const now = new Date().toISOString();

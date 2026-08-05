@@ -38,7 +38,7 @@ export function StopButton({
     return (
       <span
         className={clsx(
-          'inline-flex items-center rounded-card border border-rose/40 bg-rose-soft font-semibold text-rose',
+          'inline-flex items-center rounded-pill border border-rose/40 bg-rose-soft font-semibold text-rose',
           shape,
         )}
         title="Alguien le pidió a Cortex que se detenga. Para después del paso en el que va."
@@ -79,7 +79,7 @@ export function StopButton({
         onClick={stop}
         disabled={busy}
         className={clsx(
-          'inline-flex items-center rounded-card border border-border-strong bg-surface font-semibold text-rose transition-colors hover:bg-rose-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-rose disabled:opacity-60',
+          'inline-flex items-center rounded-pill border border-border-strong bg-surface font-semibold text-rose transition-colors hover:bg-rose-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-rose disabled:opacity-60',
           shape,
         )}
       >
@@ -94,7 +94,7 @@ export function StopButton({
         )}
       </button>
       {error && (
-        <p className="rounded-card border border-rose/40 bg-rose-soft px-2 py-1 text-[11px] text-rose">
+        <p className="rounded-sm border border-rose/40 bg-rose-soft px-2 py-1 text-[11px] text-rose">
           {error} La ejecución sigue corriendo; vuelve a intentarlo.
         </p>
       )}

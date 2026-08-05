@@ -41,7 +41,7 @@ export function TaskCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className={status.chip}>{status.label}</span>
             {task.issueKey && (
-              <span className="rounded-sm border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-ink-muted">
+              <span className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 font-mono text-[10.5px] font-semibold text-ink-muted">
                 {task.issueKey}
               </span>
             )}
@@ -92,7 +92,7 @@ export function TaskCard({
               href={task.prUrl}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <GitPullRequest className="h-3.5 w-3.5" />
               {task.prNumber ? `Revisar #${task.prNumber}` : 'Revisar el cambio'}

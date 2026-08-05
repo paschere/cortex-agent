@@ -4,6 +4,7 @@ import { type RepoRow, type RepoSelectionInput, pickRepository } from './reposit
 function repo(key: string, over: Partial<RepoRow> = {}): RepoRow {
   return {
     id: `id-${key}`,
+    organization_id: 'org-a',
     key,
     clone_url: `https://github.com/acme/${key}.git`,
     default_branch: 'main',
@@ -135,5 +136,44 @@ describe('pickRepository', () => {
     ];
     const result = pickRepository(rows, { ...NOTHING, teamKey: 'ENG' });
     expect(result.ok && result.repository.key).toBe('acme-matcher');
+  });
+
+  // -------------------------------------------------------------------------
+  // Two companies, one allowlist
+  // -------------------------------------------------------------------------
+  // A Linear delivery arrives with no session, so the allowlist is the one read
+  // in the product that legitimately spans every workspace — the repository is
+  // what SAYS whose issue this is. Which makes a duplicate key across
+  // workspaces the sharpest failure available: picking either one sends an
+  // autonomous agent into another company's codebase with another company's
+  // token.
+
+  it('REJECTS a key that two companies both registered', () => {
+    const rows = [
+      repo('web', { organization_id: 'org-acme' }),
+      repo('web', { organization_id: 'org-globex' }),
+    ];
+    const result = pickRepository(rows, { ...NOTHING, directiveKey: 'web' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/more than one workspace/);
+  });
+
+  it('REJECTS an ambiguous project mapping across companies', () => {
+    const rows = [
+      repo('web', { organization_id: 'org-acme', linear_project_ids: ['proj-1'] }),
+      repo('site', { organization_id: 'org-globex', linear_project_ids: ['proj-1'] }),
+    ];
+    const result = pickRepository(rows, { ...NOTHING, projectId: 'proj-1' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/more than one repository/);
+  });
+
+  it('carries the owning workspace on the resolution, since everything downstream runs in it', () => {
+    const rows = [
+      repo('web', { organization_id: 'org-acme' }),
+      repo('api', { organization_id: 'org-globex' }),
+    ];
+    const result = pickRepository(rows, { ...NOTHING, directiveKey: 'api' });
+    expect(result.ok && result.repository.organizationId).toBe('org-globex');
   });
 });

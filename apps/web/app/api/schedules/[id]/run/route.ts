@@ -1,6 +1,6 @@
 import { inngest } from '@/lib/inngest';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -20,7 +20,7 @@ export async function POST(
   const user = await requireSession();
   const { id } = await params;
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data: job } = await db
     .from('scheduled_jobs')
     .select('id, user_id, is_global, status')

@@ -4,7 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 
 export async function issueToken(formData: FormData) {
   const user = await requireSession();
@@ -20,7 +20,7 @@ export async function issueToken(formData: FormData) {
   const tokenHash = createHash('sha256').update(raw).digest('hex');
   const prefix = raw.slice(0, 12); // "zda_" + 8 random chars
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   const { error } = await sb.from('mcp_tokens').insert({
     user_id: user.id,
     agent_id: agentId,
@@ -45,7 +45,7 @@ export async function revokeToken(formData: FormData) {
     throw new Error('Falta el identificador del token.');
   }
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   const { error } = await sb
     .from('mcp_tokens')
     .update({ revoked_at: new Date().toISOString() })

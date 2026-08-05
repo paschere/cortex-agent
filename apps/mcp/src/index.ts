@@ -37,6 +37,7 @@ app.get('/mcp/tools', async (c) => {
   const mcp = c.get('mcp');
   const { builtins, externals } = await listToolsForAuth({
     env: c.env,
+    organizationId: mcp.organizationId,
     userId: mcp.userId,
     agentId: mcp.agentId,
   });
@@ -55,7 +56,12 @@ app.get('/mcp/tools', async (c) => {
 // SSE transport endpoints for Claude Desktop MCP connector
 app.get('/sse', (c) => {
   const mcp = c.get('mcp');
-  const ctx = { env: c.env, userId: mcp.userId, agentId: mcp.agentId };
+  const ctx = {
+    env: c.env,
+    organizationId: mcp.organizationId,
+    userId: mcp.userId,
+    agentId: mcp.agentId,
+  };
   const origin = new URL(c.req.url).origin;
   return handleSseGet(() => buildMcpServer(ctx), `${origin}/sse/messages`);
 });

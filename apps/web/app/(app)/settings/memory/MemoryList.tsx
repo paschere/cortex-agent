@@ -61,7 +61,7 @@ function MemoryCard({
   return (
     <div
       className={clsx(
-        'flex flex-col gap-3 border-b border-border px-5 py-4 last:border-b-0 sm:flex-row sm:items-start sm:justify-between',
+        'flex flex-col gap-3 border-b border-border px-5 py-4 transition-colors duration-150 last:border-b-0 hover:bg-surface-2 sm:flex-row sm:items-start sm:justify-between',
         busy && 'opacity-50',
       )}
     >
@@ -142,7 +142,7 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
   return (
     <div className="flex flex-col gap-5">
       {error && (
-        <div className="rounded-card border border-border bg-rose-soft px-4 py-3 text-[13px] text-rose">
+        <div className="rounded-card border border-border bg-rose-soft px-4 py-3 text-[13px] text-rose shadow-card">
           {error}
         </div>
       )}

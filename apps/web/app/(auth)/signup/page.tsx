@@ -81,10 +81,12 @@ export default function SignupPage() {
             Revisa tu correo
           </AuthTitle>
           {/* A link, not a Button, because it navigates — nesting a button
-              inside an anchor is invalid and breaks keyboard activation. */}
+              inside an anchor is invalid and breaks keyboard activation. Styled
+              to match the outline Button so it still reads as the one action
+              on the screen. */}
           <Link
             href="/login"
-            className="inline-flex w-full items-center justify-center rounded-card border border-border-strong bg-surface px-3.5 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
+            className="inline-flex w-full items-center justify-center rounded-pill border border-border bg-surface px-3.5 py-2.5 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
           >
             Volver a iniciar sesión
           </Link>

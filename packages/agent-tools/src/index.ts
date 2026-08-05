@@ -9,6 +9,9 @@
 // re-exports evaluated above the inlined `const REGISTRY`.
 export * from './registry';
 export * from './types';
+// The workspace boundary. Exported early and from a leaf module (it imports
+// nothing from this package) so anything below can reach it without a cycle.
+export * from './tenancy';
 export * from './model';
 export { writeAuditEvent } from './audit';
 export { consumeToken } from './rate-limit';

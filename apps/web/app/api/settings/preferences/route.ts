@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { PREFERENCE_COLUMNS, rowToPreferences } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 import { PreferencesBody, type PreferencesView } from './schema';
@@ -37,7 +37,7 @@ function toView(
 
 export async function GET() {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   const { data, error } = await db
     .from('user_preferences')
@@ -85,7 +85,7 @@ async function upsert(req: NextRequest) {
   if (p.deliverChatDm !== undefined) patch.deliver_chat_dm = p.deliverChatDm;
   if (p.digestFocus !== undefined) patch.digest_focus = p.digestFocus || null;
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data, error } = await db
     .from('user_preferences')
     .upsert(patch, { onConflict: 'user_id' })

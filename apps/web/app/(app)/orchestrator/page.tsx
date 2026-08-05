@@ -3,7 +3,7 @@ import { Panel } from '@/components/ui/panel';
 import { DEFAULT_CONCURRENCY } from '@/lib/orchestrator/executor';
 import { listRuns } from '@/lib/orchestrator/repository';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { Network } from 'lucide-react';
 import Link from 'next/link';
 import { LaunchForm } from './_components/LaunchForm';
@@ -25,7 +25,7 @@ function when(iso: string): string {
 
 export default async function OrchestratorPage() {
   const user = await requireSession();
-  const runs = await listRuns(getSupabaseServiceClient(), user.organization.id);
+  const runs = await listRuns(getOrgScopedClient(user.organization.id), user.organization.id);
 
   const now = Date.now();
   const live = runs.filter((r) => r.status === 'planning' || r.status === 'running').length;
@@ -59,20 +59,22 @@ export default async function OrchestratorPage() {
       </div>
 
       {runs.length > 0 && (
-        <Panel className="mb-5 grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
-          {stats.map((s) => (
-            <div key={s.label} className="bg-surface px-4 py-3">
-              <div className="field-label flex items-center gap-1.5">
-                {s.live && (
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
-                )}
-                {s.label}
+        <Panel className="mb-5 overflow-hidden">
+          <div className="grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
+            {stats.map((s) => (
+              <div key={s.label} className="bg-surface px-4 py-3">
+                <div className="field-label flex items-center gap-1.5">
+                  {s.live && (
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
+                  )}
+                  {s.label}
+                </div>
+                <div className="stat-num mt-1 truncate text-[20px] leading-none text-ink">
+                  {s.value}
+                </div>
               </div>
-              <div className="stat-num mt-1 truncate text-[20px] leading-none text-ink">
-                {s.value}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </Panel>
       )}
 
@@ -88,12 +90,13 @@ export default async function OrchestratorPage() {
         </Panel>
       ) : (
         <Panel className="overflow-hidden">
-          <div className="flex items-center justify-between gap-3 border-b border-border-strong px-4 py-3">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="field-label">Historial</div>
             <div className="tabular text-[11px] text-ink-faint">
               {runs.length} {runs.length === 1 ? 'ejecución' : 'ejecuciones'}
             </div>
           </div>
+          <div className="rule-double" />
           <ul>
             {runs.map((run) => {
               const done = run.taskStatuses.filter((s) => s === 'completed').length;
@@ -102,7 +105,7 @@ export default async function OrchestratorPage() {
                 <li key={run.id} className="border-b border-border last:border-b-0">
                   <Link
                     href={`/orchestrator/${run.id}`}
-                    className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2 sm:flex-row sm:items-center sm:gap-4"
+                    className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 sm:flex-row sm:items-center sm:gap-4"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="line-clamp-2 text-[13.5px] font-semibold leading-snug text-ink">

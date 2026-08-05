@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { computeNextRun } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -54,7 +54,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
   }
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data: job } = await db
     .from('scheduled_jobs')
     .select('id, user_id, is_global, status, schedule_kind, cron, timezone, run_at')

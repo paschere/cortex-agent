@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   AUDIT_SELECT,
   AUDIT_SELECT_LEGACY,
@@ -68,7 +68,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   if (!UUID_RE.test(id)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(session.organization.id);
   const event = await loadEvent(sb, id);
   if (!event) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 

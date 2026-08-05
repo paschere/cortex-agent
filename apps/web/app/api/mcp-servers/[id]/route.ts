@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { encryptToken } from '@cortex/core';
 import { isPrivateUrl } from '@cortex/agent-tools';
 
@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   const b = parsed.data;
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   // Verify ownership.
   const { data: existing, error: ownErr } = await db
@@ -88,7 +88,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireSession();
   const { id } = await params;
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   // Verify ownership.
   const { data: existing, error: ownErr } = await db

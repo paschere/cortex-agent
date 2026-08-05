@@ -1,5 +1,5 @@
 import { inngest } from '@/lib/inngest';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   MEET_READONLY_SCOPE,
   type MeetingImportContext,
@@ -57,6 +57,11 @@ const LOOKBACK_HOURS = 48;
  */
 const MAX_IMPORTS_PER_USER = 12;
 
+interface Connected {
+  userId: string;
+  organizationId: string;
+}
+
 interface UserSweepResult {
   userId: string;
   considered: number;
@@ -72,22 +77,35 @@ export const meetingImportSweep = inngest.createFunction(
     // Only accounts that actually granted the Meet scope. Asking Google on
     // behalf of someone who never granted it earns a 403 per user per run and
     // teaches the log to cry wolf.
-    const userIds = await step.run('load-connected-users', async () => {
+    // Unscoped on purpose: "who in the whole install connected Google with the
+    // Meet scope" is not a question about one workspace, and there is no session
+    // behind a cron. Each row names the workspace that granted the scope, and
+    // every handle in the per-user sweep below is built from THAT — so a
+    // transcript can only ever land in the space of the workspace whose Google
+    // account read it.
+    const connected = await step.run('load-connected-users', async (): Promise<Connected[]> => {
       const db = getSupabaseServiceClient();
       const { data, error } = await db
         .from('integrations')
-        .select('user_id, scopes')
+        .select('user_id, organization_id, scopes')
         .eq('provider', 'google')
         .contains('scopes', [MEET_READONLY_SCOPE]);
       if (error) throw new Error(`Failed to load Google integrations: ${error.message}`);
-      return [...new Set((data ?? []).map((row) => row.user_id as string))];
+      const seen = new Map<string, Connected>();
+      for (const row of data ?? []) {
+        const userId = row.user_id as string;
+        if (!seen.has(userId)) {
+          seen.set(userId, { userId, organizationId: row.organization_id as string });
+        }
+      }
+      return [...seen.values()];
     });
 
     const results: UserSweepResult[] = [];
 
-    for (const userId of userIds) {
+    for (const { userId, organizationId } of connected) {
       const result = await step
-        .run(`sweep-${userId}`, async () => sweepUser(userId))
+        .run(`sweep-${userId}`, async () => sweepUser(userId, organizationId))
         .catch((err: unknown) => {
           // Swallowed on purpose: one user's expired token must not abort the
           // batch, and Inngest has already recorded the step's own failure.
@@ -109,10 +127,10 @@ export const meetingImportSweep = inngest.createFunction(
   },
 );
 
-async function sweepUser(userId: string): Promise<UserSweepResult> {
-  const db = getSupabaseServiceClient();
+async function sweepUser(userId: string, organizationId: string): Promise<UserSweepResult> {
+  const db = getOrgScopedClient(organizationId);
   const integrations = createIntegrationsClient(db, userId, logger);
-  const ctx: MeetingImportContext = { userId, db, integrations, logger };
+  const ctx: MeetingImportContext = { organizationId, userId, db, integrations, logger };
 
   const startAfter = new Date(Date.now() - LOOKBACK_HOURS * 3_600_000);
   const records = await listConferenceRecords(ctx as ToolContext, {

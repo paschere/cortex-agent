@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import Link from 'next/link';
 import { Workflow, Play, Hash, Clock, UserCheck, Plus, Archive, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
@@ -34,8 +34,8 @@ interface PipelineRow {
 export const dynamic = 'force-dynamic';
 
 export default async function PipelinesPage() {
-  await requireSession();
-  const sb = getSupabaseServiceClient();
+  const user = await requireSession();
+  const sb = getOrgScopedClient(user.organization.id);
   const { data } = await sb
     .from('pipelines')
     .select('id, slug, name, description, emoji, params, steps, times_run, last_run_at, archived')
@@ -54,7 +54,7 @@ export default async function PipelinesPage() {
         actions={
           <Link
             href="/pipelines/new"
-            className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
           >
             <Plus className="h-4 w-4" /> New pipeline
           </Link>
@@ -74,13 +74,13 @@ export default async function PipelinesPage() {
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
             <Link
               href="/pipelines/new"
-              className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
+              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
             >
               <Plus className="h-3.5 w-3.5" /> New pipeline
             </Link>
             <Link
               href="/chat"
-              className="rounded-card border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2"
+              className="rounded-pill border border-border-strong bg-surface px-4 py-2 text-[12.5px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
             >
               Ask Cortex in chat
             </Link>
@@ -118,7 +118,7 @@ function PipelineCard({ p }: { p: PipelineRow }) {
     <div className="relative">
       <Link href={`/pipelines/${p.slug}`} className="group block h-full">
         <Panel
-          className={`flex h-full flex-col gap-3 p-4 transition-colors group-hover:border-border-strong ${
+          className={`flex h-full flex-col gap-3 p-4 transition-all duration-150 group-hover:-translate-y-px group-hover:border-border-strong motion-reduce:transform-none motion-reduce:transition-none ${
             p.archived ? 'opacity-70' : ''
           }`}
         >
@@ -150,7 +150,7 @@ function PipelineCard({ p }: { p: PipelineRow }) {
                       <UserCheck className="h-2.5 w-2.5 text-amber" />
                     </span>
                   ) : (
-                    <span className="h-2 w-2 rounded-sm bg-primary" />
+                    <span className="h-2 w-2 rounded-full bg-primary" />
                   )}
                 </span>
               ))}
@@ -163,7 +163,7 @@ function PipelineCard({ p }: { p: PipelineRow }) {
                 <span
                   key={param.name}
                   title={param.description}
-                  className="inline-flex items-center gap-1 rounded-sm border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10.5px] text-ink-muted"
+                  className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10.5px] text-ink-muted"
                 >
                   <Hash className="h-3 w-3" />
                   {param.name}

@@ -2,7 +2,7 @@ import { emit } from '@/lib/orchestrator/events';
 import { loadRun } from '@/lib/orchestrator/repository';
 import { isTerminal } from '@/lib/orchestrator/types';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -22,7 +22,7 @@ export async function POST(
 ): Promise<NextResponse> {
   const user = await requireSession();
   const { id } = await params;
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   const run = await loadRun(db, id, user.organization.id);
   if (!run) return NextResponse.json({ error: 'Run not found' }, { status: 404 });

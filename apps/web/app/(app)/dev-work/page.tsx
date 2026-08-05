@@ -11,7 +11,7 @@ import {
   toDevTask,
 } from '@/lib/dev-work';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { Hammer, Hourglass, Loader, ShieldCheck } from 'lucide-react';
@@ -36,18 +36,23 @@ function SectionLabel({
   count: number;
   tone: StatusTone;
 }) {
+  // A section break reads as whitespace plus a soft fade now, not a ruled line
+  // underneath the label — the ledger look is what this direction moved away from.
   return (
-    <div className="field-label mb-2.5 flex items-center gap-2 border-b border-border-strong pb-1.5">
-      {icon}
-      {children}
-      <span className={chipClass(tone)}>{count}</span>
+    <div className="mb-3">
+      <div className="field-label flex items-center gap-2 pb-2">
+        {icon}
+        {children}
+        <span className={chipClass(tone)}>{count}</span>
+      </div>
+      <div className="rule-double" />
     </div>
   );
 }
 
 export default async function DevWorkPage() {
-  await requireSession();
-  const db = getSupabaseServiceClient();
+  const user = await requireSession();
+  const db = getOrgScopedClient(user.organization.id);
 
   const [taskRes, repoRes] = await Promise.all([
     db
@@ -149,7 +154,7 @@ export default async function DevWorkPage() {
           <>
             <Link
               href="/dev-work/repositories"
-              className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <ShieldCheck className="h-3.5 w-3.5" /> Repositorios
             </Link>

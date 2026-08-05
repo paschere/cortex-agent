@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { encryptToken, getEnv, IntegrationError } from '@cortex/core';
 
 export async function GET(req: NextRequest) {
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     scope: string;
   };
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   await db.from('integrations').upsert(
     {
       user_id: user.id,

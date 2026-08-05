@@ -43,6 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const outcome = await decideApproval({
+    organizationId: user.organization.id,
     approvalId: idParsed.data,
     userId: user.id,
     decision: parsed.data.action === 'approve' ? 'approved' : 'declined',

@@ -1,7 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { type AnyTool, chatModel, filterTools, runTool } from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
@@ -74,7 +74,7 @@ async function isCancelled(db: SupabaseClient, runId: string): Promise<boolean> 
  * callback with nobody left to catch anything.
  */
 export async function runOrchestration(opts: RunOptions): Promise<void> {
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(opts.organizationId);
   const { runId, objective } = opts;
   const concurrency = Math.min(Math.max(opts.concurrency ?? DEFAULT_CONCURRENCY, 1), 8);
   let tokens = 0;
@@ -181,6 +181,7 @@ export async function runOrchestration(opts: RunOptions): Promise<void> {
           objective,
           agentId: agent.id,
           model: agent.defaultModel,
+          organizationId: opts.organizationId,
           userId: opts.userId,
           catalogue,
           dependencyResults: task.dependsOn
@@ -310,6 +311,7 @@ async function executeTask(args: {
   objective: string;
   agentId: string;
   model: string | null;
+  organizationId: string;
   userId: string;
   catalogue: AnyTool[];
   dependencyResults: Array<{ seq: number; title: string; text: string }>;
@@ -336,7 +338,11 @@ async function executeTask(args: {
   });
 
   const ctx = {
-    ...buildToolContext({ userId: args.userId, agentId: args.agentId }),
+    ...buildToolContext({
+      organizationId: args.organizationId,
+      userId: args.userId,
+      agentId: args.agentId,
+    }),
     // No human is watching a sub-agent, which is exactly what 'schedule' means
     // to the security layer: nothing can be confirmed interactively.
     surface: 'schedule' as const,

@@ -34,6 +34,8 @@ export type ApprovalChannel = 'web' | 'google_chat' | 'mcp';
 /** The staged action, as returned by a successful claim. */
 export interface ClaimedApproval {
   id: string;
+  /** The workspace the staged call belongs to; it is what running it acts in. */
+  organizationId: string;
   userId: string;
   agentId: string;
   toolId: string;
@@ -151,11 +153,12 @@ export function supabaseApprovalStore(db: SupabaseClient): ApprovalStore {
         .eq('user_id', input.userId)
         .is('decision', null)
         .gt('expires_at', nowIso)
-        .select('id, user_id, agent_id, tool_id, input')
+        .select('id, organization_id, user_id, agent_id, tool_id, input')
         .maybeSingle();
       if (error || !data) return null;
       return {
         id: data.id as string,
+        organizationId: data.organization_id as string,
         userId: data.user_id as string,
         agentId: data.agent_id as string,
         toolId: data.tool_id as string,

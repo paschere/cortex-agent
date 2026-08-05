@@ -167,7 +167,7 @@ export function ProspectBoard({
             type="button"
             onClick={() => refilter(() => setStatus(ANY))}
             className={clsx(
-              'tabular rounded-card px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
+              'tabular rounded-pill px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
               status === ANY
                 ? 'bg-primary-soft text-primary'
                 : 'text-ink-faint hover:bg-surface-2 hover:text-ink-muted',
@@ -191,7 +191,8 @@ export function ProspectBoard({
                 onClick={() => refilter(() => setStatus(stage))}
                 aria-pressed={active}
                 className={clsx(
-                  'rounded-card bg-surface p-3 text-left transition-colors',
+                  'rounded-card bg-surface p-3 text-left transition-all duration-150',
+                  'hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none',
                   active
                     ? `border border-transparent ring-2 ${meta.ring}`
                     : 'border border-border hover:border-border-strong',
@@ -209,9 +210,9 @@ export function ProspectBoard({
                   </span>
                 </div>
                 <div className="stat-num mt-1.5 text-[26px] leading-none text-ink">{count}</div>
-                <div className="mt-2 h-1.5 w-full overflow-hidden border border-border bg-canvas">
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
                   <div
-                    className={clsx('h-full transition-[width] duration-500', meta.bar)}
+                    className={clsx('h-full rounded-full transition-[width] duration-500', meta.bar)}
                     style={{ width: `${Math.max(pct, count > 0 ? 5 : 0)}%` }}
                   />
                 </div>
@@ -237,7 +238,7 @@ export function ProspectBoard({
             onChange={(e) => refilter(() => setQuery(e.target.value))}
             placeholder="Buscar por empresa"
             aria-label="Buscar prospectos por empresa"
-            className="w-full rounded-card border border-border bg-surface py-1.5 pl-8 pr-3 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-border-strong focus:outline-none"
+            className="w-full rounded-card border border-border bg-surface py-1.5 pl-8 pr-3 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
           />
         </div>
 
@@ -264,7 +265,7 @@ export function ProspectBoard({
                 setQuery('');
               })
             }
-            className="rounded-card px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
+            className="rounded-pill px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
           >
             Limpiar
           </button>
@@ -326,7 +327,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-card border border-border bg-surface px-2.5 py-1.5 text-[12.5px] font-medium text-ink focus:border-border-strong focus:outline-none"
+        className="rounded-card border border-border bg-surface px-2.5 py-1.5 text-[12.5px] font-medium text-ink focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
       >
         <option value={ANY}>Cualquiera</option>
         {options.map((o) => (
@@ -352,13 +353,13 @@ function NothingFoundYet() {
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <Link
           href="/chat"
-          className="rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
+          className="rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
         >
           Pedirle a Cortex que barra ahora
         </Link>
         <Link
           href="/schedules"
-          className="rounded-card border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2"
+          className="rounded-pill border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
         >
           Programar el barrido semanal
         </Link>
@@ -401,7 +402,7 @@ function NothingMatches({
       <button
         type="button"
         onClick={onClear}
-        className="mt-4 rounded-card border border-border-strong px-4 py-1.5 text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2"
+        className="mt-4 rounded-pill border border-border-strong px-4 py-1.5 text-[12.5px] font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
       >
         Ver todos los prospectos
       </button>

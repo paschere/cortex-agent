@@ -1,7 +1,7 @@
 import { DEFAULT_CONCURRENCY, runOrchestration } from '@/lib/orchestrator/executor';
 import { listRuns } from '@/lib/orchestrator/repository';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse, after } from 'next/server';
 import { z } from 'zod';
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data, error } = await db
     .from('orchestration_runs')
     .insert({
@@ -84,6 +84,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 /** Run history for the active workspace. */
 export async function GET(): Promise<NextResponse> {
   const user = await requireSession();
-  const runs = await listRuns(getSupabaseServiceClient(), user.organization.id);
+  const runs = await listRuns(getOrgScopedClient(user.organization.id), user.organization.id);
   return NextResponse.json({ runs });
 }

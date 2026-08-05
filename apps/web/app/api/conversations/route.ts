@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   // MCP sessions (Claude tool-call logs) are excluded from the sidebar: they
   // are records, not chats to resume. They remain visible in /conversations
   // via ?surface=mcp and in the audit log.

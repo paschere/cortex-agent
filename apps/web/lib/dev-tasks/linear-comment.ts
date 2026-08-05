@@ -1,5 +1,5 @@
 import { buildToolContext } from '@/lib/agent';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { getTool, runTool } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
@@ -27,15 +27,32 @@ import { logger } from '@cortex/core';
  */
 
 interface Actor {
+  organizationId: string;
   userId: string;
   agentId: string;
 }
 
-let cachedActor: Actor | null = null;
+const cachedActors = new Map<string, Actor>();
 
-async function resolveActor(): Promise<Actor | null> {
-  if (cachedActor) return cachedActor;
-  const db = getSupabaseServiceClient();
+/**
+ * Whose Cortex account posts the comment, and in which workspace.
+ *
+ * `organizationId` is null only on the rejection path, where the issue never
+ * resolved to a repository and therefore never resolved to a workspace. Rather
+ * than pick one — the whole point of the rejection is that we refuse to guess
+ * whose codebase this is — it is accepted only when the install has exactly one
+ * workspace with Linear connected. Two candidates and the comment is skipped:
+ * the human still sees the issue unassigned, which is a worse experience than a
+ * comment and a far better one than a comment posted by another company's
+ * Linear token.
+ */
+async function resolveActor(organizationId: string | null): Promise<Actor | null> {
+  const resolved = organizationId ?? (await soleLinearWorkspace());
+  if (!resolved) return null;
+
+  const hit = cachedActors.get(resolved);
+  if (hit) return hit;
+  const db = getOrgScopedClient(resolved);
 
   const { data: agent } = await db.from('agents').select('id').eq('slug', 'cortex').maybeSingle();
   const agentId = agent?.id as string | undefined;
@@ -55,8 +72,9 @@ async function resolveActor(): Promise<Actor | null> {
       )
       .maybeSingle();
     if (user?.id) {
-      cachedActor = { userId: user.id as string, agentId };
-      return cachedActor;
+      const actor = { organizationId: resolved, userId: user.id as string, agentId };
+      cachedActors.set(resolved, actor);
+      return actor;
     }
     logger.warn(`dev-tasks: CORTEX_LINEAR_ACTOR_EMAIL "${configured}" matches no Cortex user`);
   }
@@ -72,8 +90,32 @@ async function resolveActor(): Promise<Actor | null> {
     logger.error('dev-tasks: nobody has connected Linear — cannot post to Linear');
     return null;
   }
-  cachedActor = { userId: integration.user_id as string, agentId };
-  return cachedActor;
+  const actor = { organizationId: resolved, userId: integration.user_id as string, agentId };
+  cachedActors.set(resolved, actor);
+  return actor;
+}
+
+/**
+ * The one workspace that has Linear connected, or null when zero or several do.
+ * Unscoped by necessity: the question is precisely "is there exactly one
+ * candidate", which no single-workspace query could answer.
+ */
+async function soleLinearWorkspace(): Promise<string | null> {
+  const { data } = await getSupabaseServiceClient()
+    .from('integrations')
+    .select('organization_id')
+    .eq('provider', 'linear')
+    .limit(50);
+  const workspaces = new Set(
+    ((data ?? []) as Array<{ organization_id: string }>).map((r) => r.organization_id),
+  );
+  if (workspaces.size !== 1) {
+    logger.warn(
+      `dev-tasks: ${workspaces.size} workspaces have Linear connected — refusing to guess whose issue this is`,
+    );
+    return null;
+  }
+  return [...workspaces][0] ?? null;
 }
 
 /**
@@ -84,9 +126,13 @@ async function resolveActor(): Promise<Actor | null> {
  * never containing a token or anything the requester did not already see on
  * their own issue.
  */
-export async function commentOnIssue(issueId: string, body: string): Promise<boolean> {
+export async function commentOnIssue(
+  issueId: string,
+  body: string,
+  organizationId: string | null = null,
+): Promise<boolean> {
   try {
-    const actor = await resolveActor();
+    const actor = await resolveActor(organizationId);
     if (!actor) return false;
     const tool = getTool('linear.create_comment');
     if (!tool) {
@@ -94,6 +140,7 @@ export async function commentOnIssue(issueId: string, body: string): Promise<boo
       return false;
     }
     const ctx = buildToolContext({
+      organizationId: actor.organizationId,
       userId: actor.userId,
       agentId: actor.agentId,
     });
@@ -110,5 +157,5 @@ export async function commentOnIssue(issueId: string, body: string): Promise<boo
 
 /** Exposed for tests and for the rare case where the actor changes at runtime. */
 export function resetLinearActorCache(): void {
-  cachedActor = null;
+  cachedActors.clear();
 }

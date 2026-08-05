@@ -1,6 +1,6 @@
 import 'server-only';
 import { createSign } from 'node:crypto';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 
 /**
@@ -407,6 +407,7 @@ async function isPrivateBotDm(space: string): Promise<boolean> {
  * `{ sent: false, reason: 'not linked' }`, never a throw.
  */
 export async function sendChatDm(opts: {
+  organizationId: string;
   userId: string;
   text: string;
   threadKey?: string;
@@ -415,7 +416,7 @@ export async function sendChatDm(opts: {
 }): Promise<ChatSendResult> {
   if (!opts.userId) return { sent: false, reason: 'not linked' };
   try {
-    const db = getSupabaseServiceClient();
+    const db = getOrgScopedClient(opts.organizationId);
     const { data } = await db
       .from('google_chat_links')
       .select('dm_space')
@@ -465,10 +466,13 @@ export function isChatOutboundConfigured(): boolean {
 }
 
 /** Does this Cortex user have a DM space with the Chat app? */
-export async function getChatDmSpace(userId: string): Promise<string | null> {
+export async function getChatDmSpace(
+  organizationId: string,
+  userId: string,
+): Promise<string | null> {
   if (!userId) return null;
   try {
-    const db = getSupabaseServiceClient();
+    const db = getOrgScopedClient(organizationId);
     const { data } = await db
       .from('google_chat_links')
       .select('dm_space')

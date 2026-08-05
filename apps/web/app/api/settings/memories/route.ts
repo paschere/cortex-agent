@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { forgetMemory, listMemories, setMemoryStatus } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 import { MemoryActionBody, type MemoryView, toMemoryView } from './schema';
@@ -17,15 +17,15 @@ export const runtime = 'nodejs';
  * nothing and reports "not found" rather than acting on their row.
  */
 
-async function view(userId: string): Promise<MemoryView[]> {
-  const db = getSupabaseServiceClient();
+async function view(userId: string, organizationId: string): Promise<MemoryView[]> {
+  const db = getOrgScopedClient(organizationId);
   return (await listMemories(db, userId)).map(toMemoryView);
 }
 
 export async function GET() {
   const user = await requireSession();
   try {
-    return NextResponse.json({ memories: await view(user.id) });
+    return NextResponse.json({ memories: await view(user.id, user.organization.id) });
   } catch {
     return NextResponse.json({ error: 'Could not load what Cortex remembers.' }, { status: 500 });
   }
@@ -47,7 +47,7 @@ export async function PATCH(req: NextRequest) {
   }
   const { id, action } = parsed.data;
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const status =
     action === 'accept'
       ? 'active'
@@ -62,7 +62,7 @@ export async function PATCH(req: NextRequest) {
     // Indistinguishable from a stale id on purpose — a distinguishable
     // "forbidden" would confirm that somebody else's memory exists.
     if (!hit) return NextResponse.json({ error: 'That memory is gone.' }, { status: 404 });
-    return NextResponse.json({ memories: await view(user.id) });
+    return NextResponse.json({ memories: await view(user.id, user.organization.id) });
   } catch {
     return NextResponse.json({ error: 'Could not update that memory.' }, { status: 500 });
   }
@@ -73,11 +73,11 @@ export async function DELETE(req: NextRequest) {
   const id = new URL(req.url).searchParams.get('id') ?? '';
   if (!id) return NextResponse.json({ error: 'Which memory?' }, { status: 400 });
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   try {
     const gone = await forgetMemory(db, user.id, id);
     if (!gone) return NextResponse.json({ error: 'That memory is gone.' }, { status: 404 });
-    return NextResponse.json({ memories: await view(user.id) });
+    return NextResponse.json({ memories: await view(user.id, user.organization.id) });
   } catch {
     return NextResponse.json({ error: 'Could not delete that memory.' }, { status: 500 });
   }

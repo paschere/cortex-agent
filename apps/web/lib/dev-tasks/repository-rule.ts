@@ -40,6 +40,7 @@ export type RepoResolution =
 /** One row of the allowlist, as stored. */
 export interface RepoRow {
   id: string;
+  organization_id: string;
   key: string;
   clone_url: string;
   default_branch: string;
@@ -61,6 +62,7 @@ export interface RepoSelectionInput {
 function toRepository(row: RepoRow): DevTaskRepository {
   return {
     id: row.id,
+    organizationId: row.organization_id,
     key: row.key,
     provider: 'github',
     cloneUrl: row.clone_url,
@@ -76,7 +78,22 @@ export function pickRepository(rows: RepoRow[], input: RepoSelectionInput): Repo
   const explicit = input.directiveKey ?? input.labelKey;
   if (explicit) {
     const key = explicit.trim().toLowerCase();
-    const hit = active.find((r) => r.key.toLowerCase() === key);
+    const hits = active.filter((r) => r.key.toLowerCase() === key);
+    // The allowlist spans every workspace, because a Linear delivery arrives
+    // with no session and the repo IS what names the workspace. Two companies
+    // both registering a repo called `web` is therefore not a configuration
+    // mistake — it is the ordinary case — and picking either one would send an
+    // autonomous agent into the wrong company's codebase. Ambiguity is
+    // rejected, exactly as absence is.
+    if (hits.length > 1) {
+      return {
+        ok: false,
+        reason: `"${key}" is registered in more than one workspace, so I cannot tell whose it is`,
+        askedFor: key,
+        available,
+      };
+    }
+    const hit = hits[0];
     if (hit) {
       return {
         ok: true,
@@ -97,7 +114,16 @@ export function pickRepository(rows: RepoRow[], input: RepoSelectionInput): Repo
 
   const projectId = input.projectId;
   if (projectId) {
-    const hit = active.find((r) => (r.linear_project_ids ?? []).includes(projectId));
+    const matches = active.filter((r) => (r.linear_project_ids ?? []).includes(projectId));
+    if (matches.length > 1) {
+      return {
+        ok: false,
+        reason: `Linear project ${projectId} is mapped to more than one repository (${matches.map((m) => m.key).join(', ')})`,
+        askedFor: null,
+        available,
+      };
+    }
+    const hit = matches[0];
     if (hit) return { ok: true, repository: toRepository(hit), via: 'project' };
   }
 

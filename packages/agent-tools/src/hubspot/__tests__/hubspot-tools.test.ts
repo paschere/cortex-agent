@@ -10,6 +10,7 @@ import type { ToolContext } from '../../types';
 
 // biome-ignore lint/suspicious/noExplicitAny: test stub
 const fakeCtx = (): ToolContext => ({
+  organizationId: 'org-test',
   userId: '00000000-0000-0000-0000-000000000001',
   agentId: '00000000-0000-0000-0000-000000000002',
   db: {} as never,

@@ -72,6 +72,7 @@ function fakeStore(overrides: Partial<Row> = {}) {
       // --------------------------------------
       return {
         id: row.id,
+        organizationId: 'org-a',
         userId: row.user_id,
         agentId: row.agent_id,
         toolId: row.tool_id,

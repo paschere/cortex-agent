@@ -2,7 +2,7 @@ import { buildToolContext } from '@/lib/agent';
 import { sendApprovalRequestEmail } from '@/lib/approval-email';
 import { confirmationReason } from '@/lib/confirmation-notes';
 import { toChatText } from '@/lib/google-chat';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { chatModel } from '@cortex/agent-tools';
@@ -92,6 +92,7 @@ const FINANCIAL_FAMILIES = new Set(['payroll']);
 const PII_FAMILIES = new Set(['presentations', 'people', 'gmail']);
 
 export interface ChatTurnRequest {
+  organizationId: string;
   userId: string;
   /** Display name of the sender, for the greeting and conversation title. */
   senderName?: string;
@@ -177,12 +178,13 @@ function shouldRunRag(message: string): boolean {
  * are what actually identify the surface until the enum gains a 'chat' member.
  */
 async function getOrCreateConversation(opts: {
+  organizationId: string;
   userId: string;
   agentId: string;
   externalKey: string;
   title: string;
 }): Promise<string | null> {
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(opts.organizationId);
   try {
     const { data: existing } = await db
       .from('conversations')
@@ -213,6 +215,7 @@ async function getOrCreateConversation(opts: {
 
 /** Stage an approval so it shows up on /approvals. Returns the row id. */
 async function stageConfirmation(opts: {
+  organizationId: string;
   userId: string;
   agentId: string;
   toolId: string;
@@ -220,7 +223,7 @@ async function stageConfirmation(opts: {
   expiresAt: Date;
 }): Promise<string | null> {
   try {
-    const db = getSupabaseServiceClient();
+    const db = getOrgScopedClient(opts.organizationId);
     const { data, error } = await db
       .from('mcp_pending_actions')
       .insert({
@@ -295,7 +298,7 @@ const APPROVAL_IN_SPACE_NOTE =
 // ---------------------------------------------------------------------------
 
 export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDelivery> {
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(req.organizationId);
   const agent = await loadAgent(db, 'cortex');
 
   const title =
@@ -304,6 +307,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
       : `Chat · ${req.spaceDisplayName ?? req.space}`;
 
   const conversationId = await getOrCreateConversation({
+    organizationId: req.organizationId,
     userId: req.userId,
     agentId: agent.id,
     externalKey: req.conversationKey,
@@ -318,6 +322,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
   }
 
   const ctx = buildToolContext({
+    organizationId: req.organizationId,
     userId: req.userId,
     agentId: agent.id,
     ...(conversationId ? { conversationId } : {}),
@@ -326,7 +331,10 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
   // --- retrieval (same conditional RAG prepend as the web chat) -------------
   let ragBlock = '';
   try {
-    const { count } = await db.from('kb_chunks').select('id', { count: 'exact', head: true });
+    // kb_documents, not kb_chunks: chunks inherit their workspace from their
+    // document (migration 0064 § 12), so counting them install-wide would tell
+    // a workspace with an empty brain that it has one.
+    const { count } = await db.from('kb_documents').select('id', { count: 'exact', head: true });
     if ((count ?? 0) > 0 && shouldRunRag(req.userText)) {
       const ragOut = (await runTool(kbSearch, { query: req.userText, limit: 3 }, ctx).catch(() => ({
         hits: [],
@@ -410,6 +418,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
               // + DM via approval-email), and tell the model to stop here.
               const expiresAt = new Date(Date.now() + PENDING_ACTION_TTL_MS);
               const id = await stageConfirmation({
+                organizationId: req.organizationId,
                 userId: req.userId,
                 agentId: agent.id,
                 toolId: err.toolId,
@@ -420,6 +429,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
               // Carries the id, so the DM arrives as a card with Approve /
               // Decline buttons instead of a link out of Chat.
               void sendApprovalRequestEmail({
+                organizationId: req.organizationId,
                 userId: req.userId,
                 toolId: err.toolId,
                 input: err.input,
@@ -481,6 +491,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
   // every surface or none. `audience: 'group'` adds the do-not-repeat rule to
   // the prompt; the enforcement is below, on the finished text.
   const { system, memories } = await buildSystemPrompt({
+    organizationId: req.organizationId,
     userId: req.userId,
     basePrompt: agent.systemPrompt,
     audience: req.audience === 'space' ? 'group' : 'private',

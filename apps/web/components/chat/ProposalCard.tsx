@@ -11,8 +11,8 @@ import { useMemo, useState } from 'react';
  * Markdown string; this component renders the structured fields and uses the
  * Markdown for the "Copy as Markdown" action.
  *
- * It is a rate sheet, so it is built like one: a ruled table, every figure in
- * the monospaced face so a column of them can be read down, and a double rule
+ * It is a rate sheet, so it is built like one: an aligned table, every figure
+ * in the monospaced face so a column of them can be read down, and a soft rule
  * before the total the way a ledger closes a section.
  *
  * The shape is intentionally permissive: it renders whatever the tool provides
@@ -112,9 +112,9 @@ function daysSince(dateIso: string): number | null {
  * lapsing, lapsed. Colour here is meaning, not decoration.
  */
 function activityTone(days: number): string {
-  if (days < 14) return 'border-emerald/40 bg-emerald-soft text-emerald';
-  if (days <= 30) return 'border-amber/40 bg-amber-soft text-amber';
-  return 'border-rose/40 bg-rose-soft text-rose';
+  if (days < 14) return 'border-emerald/20 bg-emerald-soft text-emerald';
+  if (days <= 30) return 'border-amber/20 bg-amber-soft text-amber';
+  return 'border-rose/20 bg-rose-soft text-rose';
 }
 
 /** Build a Markdown fallback if the tool did not supply one. */
@@ -181,8 +181,8 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
   /**
    * "Why us" either comes as free text from the tool, or is derived from
    * Brain Knowledge hits. Only the second kind has somewhere it came from, and
-   * only that kind gets a stamp — a claim with an empty stamp beside it would
-   * borrow authority it has not earned.
+   * only that kind gets a provenance chip — a claim with an empty chip beside
+   * it would borrow authority it has not earned.
    */
   const whyItems = useMemo<Array<{ text: string; source?: string; detail?: string }>>(() => {
     if (result.whyUs?.length) return result.whyUs.map((text) => ({ text }));
@@ -248,11 +248,11 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
   ];
 
   return (
-    <div className="not-prose w-full max-w-2xl overflow-hidden rounded-card border border-border bg-surface text-ink">
+    <div className="not-prose w-full max-w-2xl overflow-hidden rounded-card border border-border bg-surface text-ink shadow-card">
       {/* Head */}
       <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
         <div className="flex items-start gap-2.5">
-          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-card bg-surface-2 text-ink-faint">
+          <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-surface-2 text-ink-faint">
             <Building2 className="h-4 w-4" />
           </span>
           <div className="min-w-0">
@@ -261,7 +261,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
             </h3>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-faint">
               {result.company.industry && (
-                <span className="rounded-card bg-surface-2 px-1.5 py-0.5 font-medium text-ink-muted">
+                <span className="rounded-pill bg-surface-2 px-2 py-0.5 font-medium text-ink-muted">
                   {result.company.industry}
                 </span>
               )}
@@ -272,7 +272,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
         <button
           type="button"
           onClick={onCopy}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-card border border-border-strong px-2.5 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transform-none motion-reduce:transition-none"
           aria-label="Copiar la propuesta como Markdown"
         >
           {copied ? (
@@ -299,7 +299,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
           {daysLast != null && (
             <span
               className={clsx(
-                'ml-auto inline-flex items-center gap-1 rounded-card border px-1.5 py-0.5 text-[11px] font-medium',
+                'ml-auto inline-flex items-center gap-1 rounded-pill border px-2.5 py-0.5 text-[11px] font-medium',
                 activityTone(daysLast),
               )}
             >
@@ -315,7 +315,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
         <div className="scroll-slim overflow-x-auto">
           <table className="w-full border-collapse text-xs">
             <thead>
-              <tr className="border-b border-border-strong text-left">
+              <tr className="border-b border-border text-left">
                 {columns.map((col) => {
                   const active = sort?.key === col.key;
                   return (
@@ -327,8 +327,8 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
                         type="button"
                         onClick={() => toggleSort(col.key)}
                         className={clsx(
-                          'field-label inline-flex items-center gap-1 transition-colors hover:text-ink-muted',
-                          active && '!text-ink-muted',
+                          'field-label inline-flex items-center gap-1 rounded-pill transition-colors duration-150 hover:text-primary motion-reduce:transition-none',
+                          active && '!text-primary',
                           col.align === 'right' && 'flex-row-reverse',
                         )}
                         aria-label={`Ordenar por ${col.label}`}
@@ -367,7 +367,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
                         {(r.techStack ?? []).map((t) => (
                           <span
                             key={t}
-                            className="rounded-card bg-surface-2 px-1.5 py-0.5 text-[10px] text-ink-muted"
+                            className="rounded-pill bg-surface-2 px-2 py-0.5 text-[10px] text-ink-muted"
                           >
                             {t}
                           </span>
@@ -381,7 +381,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
           </table>
         </div>
 
-        {/* The double rule closes the section, the way a ledger totals a page. */}
+        {/* The soft rule closes the section, the way a ledger totals a page. */}
         {totals && (
           <div className="rule-double mt-1 flex items-center justify-between pt-2 text-xs font-semibold">
             <span>Total mensual</span>
@@ -397,12 +397,12 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
             type="button"
             onClick={() => setWhyOpen((o) => !o)}
             aria-expanded={whyOpen}
-            className="flex w-full items-center gap-2 py-1 text-left text-xs font-semibold text-ink"
+            className="group flex w-full items-center gap-2 rounded-pill py-1 text-left text-xs font-semibold text-ink transition-colors duration-150 hover:text-primary motion-reduce:transition-none"
           >
             <span className="flex-1">Por qué nosotros</span>
             <ChevronDown
               className={clsx(
-                'h-3.5 w-3.5 text-ink-faint transition-transform',
+                'h-3.5 w-3.5 text-ink-faint transition-transform duration-150 group-hover:text-primary motion-reduce:transition-none',
                 whyOpen && 'rotate-180',
               )}
             />

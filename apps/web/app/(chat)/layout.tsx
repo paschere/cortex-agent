@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 
 export default async function ChatLayout({ children }: { children: ReactNode }) {
   const user = await requireSession();
-  const pendingApprovals = await countPendingApprovals(user.id);
+  const pendingApprovals = await countPendingApprovals(user.organization.id, user.id);
   return (
     <MobileSidebarProvider>
       <div className="flex flex-row h-screen overflow-hidden">

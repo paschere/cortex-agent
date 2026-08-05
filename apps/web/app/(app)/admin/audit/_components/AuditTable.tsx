@@ -71,7 +71,7 @@ export function AuditTable({
                     }
                   }}
                   className={clsx(
-                    'cursor-pointer border-t border-border align-top hover:bg-surface-2/60',
+                    'cursor-pointer border-t border-border align-top transition-colors hover:bg-surface-2/60',
                     risky && 'bg-rose-soft/40',
                   )}
                 >

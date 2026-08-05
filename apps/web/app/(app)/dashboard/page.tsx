@@ -5,7 +5,7 @@ import { getMcpUrl } from '@/lib/mcp-url';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -45,7 +45,7 @@ function relName(rel: { name: string } | { name: string }[] | null): string | un
 
 export default async function DashboardPage() {
   const user = await requireSession();
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -136,7 +136,7 @@ export default async function DashboardPage() {
       {needsYou > 0 && (
         <Link
           href="/approvals"
-          className="group mb-4 flex items-center gap-3 rounded-card border border-amber/50 bg-amber-soft px-4 py-3 transition-colors hover:border-amber"
+          className="group mb-4 flex items-center gap-3 rounded-card border border-amber/50 bg-amber-soft px-4 py-3 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-amber motion-reduce:transform-none motion-reduce:transition-none"
         >
           <BadgeCheck className="h-4 w-4 shrink-0 text-amber" />
           <div className="min-w-0 flex-1 text-[13px]">
@@ -238,7 +238,7 @@ export default async function DashboardPage() {
                     href={`/chat/${c.id}`}
                     className="flex items-center gap-3 rounded-card px-1.5 py-2.5 transition-colors hover:bg-surface-2"
                   >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-ink-muted">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-surface-2 text-ink-muted">
                       <MessagesSquare className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
@@ -305,7 +305,7 @@ export default async function DashboardPage() {
           </div>
           <Link
             href="/mcp-tokens"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-card bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
           >
             Configurar un cliente
             <ArrowRight className="h-3.5 w-3.5" />
@@ -398,7 +398,7 @@ function Empty({
       <p className="mx-auto mt-1 max-w-xs text-[12px] leading-relaxed text-ink-muted">{body}</p>
       <Link
         href={action.href}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-3 py-1.5 text-[12px] font-semibold text-ink transition-colors hover:bg-surface-2"
+        className="mt-3 inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
       >
         {action.label} <ArrowRight className="h-3.5 w-3.5" />
       </Link>
@@ -426,7 +426,7 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 py-3 transition-colors hover:border-border-strong hover:bg-surface-2"
+      className="group flex items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 py-3 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
     >
       <span className="shrink-0 text-primary">{icon}</span>
       <span className="truncate text-[13px] font-semibold text-ink">{label}</span>

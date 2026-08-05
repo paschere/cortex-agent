@@ -1,7 +1,7 @@
 'use client';
 
 import type { Message, ToolInvocation } from 'ai';
-import { Check, Copy, RotateCw, Stamp } from 'lucide-react';
+import { Brain, Check, Copy, RotateCw } from 'lucide-react';
 import { useState } from 'react';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
@@ -71,7 +71,7 @@ function CopyButton({ text }: { text: string }) {
         setDone(true);
         setTimeout(() => setDone(false), 1400);
       }}
-      className="rounded-card p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
+      className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
       aria-label="Copiar mensaje"
     >
       {done ? <Check className="h-3.5 w-3.5 text-emerald" /> : <Copy className="h-3.5 w-3.5" />}
@@ -99,11 +99,11 @@ export function MessageBubble({
     : null;
 
   if (isUser) {
-    // What the person said is squared off and flat against the page: it is an
-    // entry on the record, not a speech bubble floating over it.
+    // What the person said gets the one saturated fill in the transcript, and
+    // a corner softened on the side it was sent from.
     return (
       <div className="flex justify-end">
-        <div className="max-w-[82%] whitespace-pre-wrap rounded-card bg-primary px-3.5 py-2.5 text-sm text-white">
+        <div className="max-w-[82%] whitespace-pre-wrap rounded-card rounded-br-sm bg-primary px-4 py-2.5 text-sm text-white shadow-card">
           {content}
         </div>
       </div>
@@ -112,8 +112,8 @@ export function MessageBubble({
 
   return (
     <div className="group flex items-start gap-3">
-      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-card border border-primary/30 bg-primary-soft text-primary">
-        <Stamp className="h-3.5 w-3.5" />
+      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary ring-1 ring-inset ring-primary/15">
+        <Brain className="h-3.5 w-3.5" />
       </span>
 
       <div className="min-w-0 flex-1">
@@ -159,7 +159,7 @@ export function MessageBubble({
               <button
                 type="button"
                 onClick={onRegenerate}
-                className="rounded-card p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
+                className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
                 aria-label="Volver a generar la respuesta"
               >
                 <RotateCw className="h-3.5 w-3.5" />

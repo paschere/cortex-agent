@@ -53,7 +53,7 @@ export function RunStatusPill({ status, className }: { status: RunStatus; classN
   );
 }
 
-/** The task's state as a squared mark, sized to sit beside its sequence number. */
+/** The task's state as a small soft-cornered badge, sized to sit beside its sequence number. */
 export function TaskStatusIcon({ status }: { status: TaskStatus }) {
   const { tone, icon: Icon } = TASK_TONE[status];
   return (

@@ -2,7 +2,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { CONFIRMATION_NOTES, confirmationReason } from '@/lib/confirmation-notes';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns } from '@/lib/tool-access';
 import {
   type BlastRadius,
@@ -56,7 +56,7 @@ export default async function ToolsPage({
   const isAdmin = session.role === 'org_admin';
   const { team: requestedTeamId = '' } = await searchParams;
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(session.organization.id);
 
   const [{ data: agentData }, { data: permissionData }, { data: integrationData }, myDenied] =
     await Promise.all([

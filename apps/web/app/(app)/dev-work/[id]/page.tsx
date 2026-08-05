@@ -13,7 +13,7 @@ import {
   toDevTask,
 } from '@/lib/dev-work';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   ArrowLeft,
   CircleCheckBig,
@@ -62,9 +62,9 @@ export default async function DevWorkDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireSession();
+  const user = await requireSession();
   const { id } = await params;
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   const { data: row } = await db
     .from('dev_tasks')
@@ -163,7 +163,7 @@ export default async function DevWorkDetailPage({
               href={task.prUrl}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-card bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <GitPullRequest className="h-3.5 w-3.5" />
               {task.prNumber ? `Revisar #${task.prNumber}` : 'Revisar el cambio'}
@@ -194,7 +194,7 @@ export default async function DevWorkDetailPage({
           <Panel className="p-5">
             <div className={`mb-3 ${SECTION}`}>Lo que se pidió</div>
             {task.request ? (
-              <RunMarkdown className="rounded-card border border-border bg-surface-2 px-3.5 py-3">
+              <RunMarkdown className="rounded-sm border border-border bg-surface-2 px-3.5 py-3">
                 {task.request}
               </RunMarkdown>
             ) : (
@@ -218,7 +218,7 @@ export default async function DevWorkDetailPage({
           {task.status === 'failed' && (
             <Panel className="p-5">
               <div className={`mb-3 ${SECTION}`}>Qué salió mal</div>
-              <p className="rounded-card border border-rose/30 bg-rose-soft px-3.5 py-3 text-[13.5px] leading-relaxed text-ink">
+              <p className="rounded-sm border border-rose/30 bg-rose-soft px-3.5 py-3 text-[13.5px] leading-relaxed text-ink">
                 {task.failureReason ??
                   'Cortex se detuvo antes de terminar y no dijo por qué. No se integró nada.'}
               </p>
@@ -229,7 +229,7 @@ export default async function DevWorkDetailPage({
                   <summary className="cursor-pointer list-none text-[12px] font-semibold text-ink-muted transition-colors hover:text-ink">
                     Ver el detalle técnico
                   </summary>
-                  <pre className="scroll-slim mt-2 overflow-x-auto rounded-card border border-border bg-surface-2 px-3.5 py-3 font-mono text-[11px] leading-[1.6] text-ink-muted">
+                  <pre className="scroll-slim mt-2 overflow-x-auto rounded-sm border border-border bg-surface-2 px-3.5 py-3 font-mono text-[11px] leading-[1.6] text-ink-muted">
                     {task.errorDetail}
                   </pre>
                 </details>

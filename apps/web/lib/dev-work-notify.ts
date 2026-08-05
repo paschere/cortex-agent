@@ -10,7 +10,7 @@ import {
 import { sendEmail } from '@/lib/email';
 import { renderDevTaskEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 
 /**
@@ -192,11 +192,18 @@ function summariseChecks(task: DevTask): string | null {
  * to call again — the claim makes repeats no-ops.
  */
 export async function notifyDevTaskOutcome(opts: {
+  /**
+   * The workspace the task belongs to. Callers that only hold a task id read it
+   * off the row first — see dev-task-status.ts; there is no fallback here,
+   * because "notify somebody" with the wrong workspace means telling the wrong
+   * company's admins what Cortex did in a repository.
+   */
+  organizationId: string;
   taskId: string;
   notice: DevTaskNotice;
 }): Promise<void> {
   try {
-    const db = getSupabaseServiceClient();
+    const db = getOrgScopedClient(opts.organizationId);
     const { data: row, error } = await db
       .from('dev_tasks')
       .select(DEV_TASK_COLUMNS)
@@ -277,6 +284,7 @@ export async function notifyDevTaskOutcome(opts: {
       // for anyone who has not linked Google Chat.
       if (person.userId) {
         const chat = await sendChatDm({
+          organizationId: opts.organizationId,
           userId: person.userId,
           text: chatMessage({
             task,

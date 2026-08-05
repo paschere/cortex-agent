@@ -6,7 +6,8 @@ import { Panel } from '@/components/ui/panel';
 import { Field } from '@/components/ui/provenance';
 import { getMcpUrl } from '@/lib/mcp-url';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { chipClass, type StatusTone } from '@/lib/status-chip';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { clsx } from 'clsx';
 import { Cable, KeyRound, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { issueToken, revokeToken } from './actions';
@@ -14,7 +15,7 @@ import { issueToken, revokeToken } from './actions';
 export const dynamic = 'force-dynamic';
 
 const FIELD =
-  'w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary';
+  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary';
 
 interface AgentRow {
   id: string;
@@ -53,24 +54,15 @@ function stateOf(t: TokenRow): TokenState {
   return 'active';
 }
 
-const STATE: Record<TokenState, { label: string; className: string }> = {
-  active: { label: 'Vigente', className: 'border-emerald/40 bg-emerald-soft text-emerald' },
-  expired: { label: 'Vencido', className: 'border-amber/40 bg-amber-soft text-amber' },
-  revoked: { label: 'Revocado', className: 'border-rose/40 bg-rose-soft text-rose' },
+const STATE: Record<TokenState, { label: string; tone: StatusTone }> = {
+  active: { label: 'Vigente', tone: 'emerald' },
+  expired: { label: 'Vencido', tone: 'amber' },
+  revoked: { label: 'Revocado', tone: 'rose' },
 };
 
 function StateTag({ state }: { state: TokenState }) {
   const s = STATE[state];
-  return (
-    <span
-      className={clsx(
-        'shrink-0 rounded-card border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]',
-        s.className,
-      )}
-    >
-      {s.label}
-    </span>
-  );
+  return <span className={clsx('shrink-0', chipClass(s.tone))}>{s.label}</span>;
 }
 
 export default async function ConnectClientPage({
@@ -83,7 +75,7 @@ export default async function ConnectClientPage({
   const justIssued = sp.just_issued ?? null;
   const mcpUrl = await getMcpUrl();
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
 
   const [{ data: tokenRows }, { data: agentRows }] = await Promise.all([
     sb

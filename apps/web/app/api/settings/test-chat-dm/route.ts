@@ -29,7 +29,7 @@ export async function POST() {
     );
   }
 
-  const space = await getChatDmSpace(user.id);
+  const space = await getChatDmSpace(user.organization.id, user.id);
   if (!space) {
     return NextResponse.json(
       {

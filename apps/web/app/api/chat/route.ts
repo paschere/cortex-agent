@@ -1,6 +1,6 @@
 import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 
   const { agentSlug, messages } = parsed.data;
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   // Load agent from DB (gets UUID + system prompt stored in DB)
   let agent: Awaited<ReturnType<typeof loadAgent>>;
@@ -149,6 +149,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ctx = buildToolContext({
+    organizationId: user.organization.id,
     userId: user.id,
     agentId: agent.id,
     conversationId,
@@ -159,35 +160,53 @@ export async function POST(req: NextRequest) {
   // round-trip per message on fresh workspaces.
   const ragQuery = lastUserMessage?.content ?? '';
   let ragBlock = '';
+  // "Does this workspace know anything yet?" — counted on kb_documents rather
+  // than kb_chunks. Two reasons, and the second is the real one: chunks have no
+  // organization_id (they inherit it from their document, see migration 0064
+  // § 12), so a count across every chunk in the install used to make a brand-new
+  // company run retrieval because SOMEBODY ELSE had uploaded a file.
   const { count: chunkCount } = await db
-    .from('kb_chunks')
+    .from('kb_documents')
     .select('id', { count: 'exact', head: true });
   if ((chunkCount ?? 0) > 0 && shouldRunRag(ragQuery)) {
+    // The relevance cut used to live here, as `score >= 0.65` on the blended
+    // rank — a number that could not be interpreted and that, measured against
+    // a real corpus, never got there at all: semantic matching alone tops out
+    // around 0.49, so this block was discarding every correct result it was
+    // ever handed. kb.search now applies the cut on cosine similarity, where a
+    // threshold means something, and reports what it concluded in `coverage`.
+    // See packages/agent-tools/src/kb/relevance.ts for the measurement.
     const ragOut = ragQuery
-      ? await runTool(kbSearch, { query: ragQuery, limit: 3 }, ctx).catch(() => ({ hits: [] }))
-      : { hits: [] };
-    const relevant = (
-      ragOut.hits as Array<{
-        score?: number;
-        documentTitle: string;
-        chunkIndex: number;
-        content: string;
-        // Set only on chunks from a recording — `mm:ss` into it.
-        spokenAt?: string;
-      }>
-    ).filter((h) => (h.score ?? 1) >= 0.65);
-    if (relevant.length > 0) {
+      ? await runTool(kbSearch, { query: ragQuery, limit: 3 }, ctx).catch(() => null)
+      : null;
+
+    if (ragOut && ragOut.coverage === 'nothing') {
+      // The empty case is now stated instead of skipped. An absent <context>
+      // block is indistinguishable from "RAG did not run", so the model used to
+      // answer from nothing with no idea it was doing so; being told, in words,
+      // that the brain holds nothing on the subject is what lets it say so.
+      ragBlock = `<context>\n${ragOut.summary}\n</context>`;
+    } else if (ragOut && ragOut.hits.length > 0) {
       ragBlock =
         '<context>\n' +
-        relevant
+        `${ragOut.summary}\n\n` +
+        ragOut.hits
           .map(
             (h, i) =>
               // A chunk of a recording is located by its offset, not by a chunk
               // number, and its text already opens with the speaker — so this
-              // reads "[12:34] Ana: …" and can be quoted straight back.
-              `[^${i + 1}] (${(h.score ?? 0).toFixed(2)}) ${h.documentTitle} ${h.spokenAt ? `at ${h.spokenAt}` : `chunk ${h.chunkIndex}`}:\n${h.spokenAt ? `[${h.spokenAt}] ` : ''}${h.content}`,
+              // reads "[12:34] Ana: …" and can be quoted straight back. The age
+              // and the "coincidencia débil" marker travel with the citation
+              // because they change what it is worth: a rate from a year ago is
+              // a different claim from the same rate quoted last week.
+              `[^${i + 1}] ${h.documentTitle} ${h.spokenAt ? `at ${h.spokenAt}` : `chunk ${h.chunkIndex}`}` +
+              `${h.age ? ` · ${h.age}` : ''}${h.relevance === 'weak' ? ' · coincidencia débil' : ''}:\n` +
+              `${h.spokenAt ? `[${h.spokenAt}] ` : ''}${h.content}`,
           )
           .join('\n\n') +
+        (ragOut.conflicts && ragOut.conflicts.length > 0
+          ? `\n\n${ragOut.conflicts.map((c) => `⚠ CONFLICTO: ${c.note}`).join('\n')}`
+          : '') +
         '\n</context>';
     }
   }
@@ -361,6 +380,7 @@ export async function POST(req: NextRequest) {
   // Shared with Google Chat and MCP so a person's standing instructions cannot
   // apply on one surface and silently not on another. See lib/system-prompt.ts.
   const { system } = await buildSystemPrompt({
+    organizationId: user.organization.id,
     userId: user.id,
     basePrompt: agent.systemPrompt,
     sections: [ragBlock],

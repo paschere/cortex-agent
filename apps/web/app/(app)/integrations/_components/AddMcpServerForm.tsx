@@ -7,7 +7,7 @@ import { useState } from 'react';
 type AuthType = 'none' | 'bearer' | 'api_key';
 
 const FIELD =
-  'mt-1 w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary disabled:opacity-50';
+  'mt-1 w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary disabled:opacity-50';
 
 export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
   const router = useRouter();

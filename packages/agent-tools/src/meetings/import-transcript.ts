@@ -119,7 +119,7 @@ export interface ImportMeetingOptions {
  */
 export type MeetingImportContext = Pick<
   ToolContext,
-  'userId' | 'db' | 'integrations' | 'logger'
+  'organizationId' | 'userId' | 'db' | 'integrations' | 'logger'
 > & { signal?: AbortSignal };
 
 // ---------------------------------------------------------------------------

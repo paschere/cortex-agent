@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Download, ScrollText, ShieldAlert } from 'lucide-react';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { requireSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import {
@@ -42,7 +43,7 @@ function EmptyState({ filters }: { filters: AuditFilters }) {
       {!unfiltered && (
         <Link
           href="/admin/audit?range=all"
-          className="mt-4 inline-block rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
+          className="mt-4 inline-block rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
         >
           Quitar todos los filtros
         </Link>
@@ -56,8 +57,10 @@ export default async function AuditPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  // Session first: the client is scoped to the workspace it resolves.
+  const user = await requireSession();
   const filters = parseAuditFilters(await searchParams);
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
 
   const { rows, total, legacySchema } = await fetchAuditEvents(sb, filters, {
     limit: PAGE_SIZE,
@@ -97,7 +100,7 @@ export default async function AuditPage({
         actions={
           <a
             href={exportHref}
-            className="inline-flex items-center gap-2 rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
+            className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
           >
             <Download className="h-4 w-4" />
             Exportar CSV
@@ -113,7 +116,7 @@ export default async function AuditPage({
       />
 
       {legacySchema && (
-        <div className="mb-4 flex items-start gap-2.5 rounded-card border border-border bg-amber-soft p-3 text-[12.5px] text-amber">
+        <div className="mb-4 flex items-start gap-2.5 rounded-card border border-border bg-amber-soft p-3 text-[12.5px] text-amber shadow-card">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             Esta base de datos todavía no corrió la migración de seguridad, así que no se registran

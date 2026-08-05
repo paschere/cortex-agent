@@ -216,7 +216,7 @@ export function EditRoutineDialog({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={120}
-                className="w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
+                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                 placeholder="Reporte de clientes del viernes"
               />
             </Field>
@@ -232,7 +232,7 @@ export function EditRoutineDialog({
                       else setDraft(parseCron(rawCron) ?? draft);
                       setAdvanced(!advanced);
                     }}
-                    className="rounded-card px-2 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="rounded-pill px-2 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     {advanced ? 'Usar el selector' : 'Avanzado'}
                   </button>
@@ -244,7 +244,7 @@ export function EditRoutineDialog({
                     onChange={(e) => setRawCron(e.target.value)}
                     spellCheck={false}
                     placeholder="0 9 * * 1-5"
-                    className="w-full rounded-card border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
+                    className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                   />
                 ) : (
                   <div className="space-y-2">
@@ -255,10 +255,10 @@ export function EditRoutineDialog({
                           type="button"
                           onClick={() => setDraft({ ...draft, frequency: f })}
                           className={clsx(
-                            'rounded-sm px-2 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                            'rounded-pill px-2 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                             draft.frequency === f
-                              ? 'border border-border-strong bg-surface text-ink'
-                              : 'border border-transparent text-ink-muted hover:text-ink',
+                              ? 'bg-primary-soft text-primary-ink'
+                              : 'text-ink-muted hover:text-ink',
                           )}
                         >
                           {FREQUENCY_LABEL[f]}
@@ -272,7 +272,7 @@ export function EditRoutineDialog({
                           type="time"
                           value={draft.time}
                           onChange={(e) => setDraft({ ...draft, time: e.target.value })}
-                          className="tabular rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
+                          className="tabular rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                         />
                       </label>
                       {draft.frequency === 'weekly' && (
@@ -281,7 +281,7 @@ export function EditRoutineDialog({
                           <select
                             value={draft.weekday}
                             onChange={(e) => setDraft({ ...draft, weekday: e.target.value })}
-                            className="rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
+                            className="rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                           >
                             {DOW.map((d, i) => (
                               <option key={d} value={String(i)}>
@@ -297,7 +297,7 @@ export function EditRoutineDialog({
                           <select
                             value={draft.monthDay}
                             onChange={(e) => setDraft({ ...draft, monthDay: e.target.value })}
-                            className="tabular rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
+                            className="tabular rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                           >
                             {Array.from({ length: 28 }, (_, i) => String(i + 1)).map((d) => (
                               <option key={d} value={d}>
@@ -328,7 +328,7 @@ export function EditRoutineDialog({
                 id="routine-timezone"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
+                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
               >
                 {tzOptions.map((tz) => (
                   <option key={tz} value={tz}>
@@ -350,13 +350,13 @@ export function EditRoutineDialog({
                 </span>
                 <span
                   className={clsx(
-                    'relative h-5 w-9 shrink-0 rounded-sm border transition-colors',
+                    'relative h-5 w-9 shrink-0 rounded-pill border transition-colors',
                     notifyEmail ? 'border-primary bg-primary' : 'border-border bg-surface-2',
                   )}
                 >
                   <span
                     className={clsx(
-                      'absolute top-0.5 h-3.5 w-3.5 rounded-sm bg-surface transition-all',
+                      'absolute top-0.5 h-3.5 w-3.5 rounded-full bg-surface transition-all',
                       notifyEmail ? 'left-[1.125rem]' : 'left-0.5',
                     )}
                   />
@@ -372,13 +372,13 @@ export function EditRoutineDialog({
                     {recipients.map((r) => (
                       <span
                         key={r}
-                        className="inline-flex items-center gap-1 rounded-sm border border-primary/30 bg-primary-soft py-0.5 pl-2 pr-1 font-mono text-[11px] font-semibold text-primary"
+                        className="inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft py-0.5 pl-2 pr-1 font-mono text-[11px] font-semibold text-primary"
                       >
                         {r}
                         <button
                           type="button"
                           onClick={() => setRecipients(recipients.filter((x) => x !== r))}
-                          className="grid h-4 w-4 place-items-center rounded-sm transition-colors hover:bg-primary hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          className="grid h-4 w-4 place-items-center rounded-full transition-colors hover:bg-primary hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           aria-label={`Quitar ${r}`}
                         >
                           <X className="h-3 w-3" />
@@ -400,12 +400,12 @@ export function EditRoutineDialog({
                     onBlur={() => recipientDraft.trim() && addRecipient()}
                     type="email"
                     placeholder="companero@empresa.com"
-                    className="min-w-0 flex-1 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors focus:border-border-strong"
+                    className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                   />
                   <button
                     type="button"
                     onClick={() => addRecipient()}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-card border border-border-strong bg-surface px-2.5 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-border-strong bg-surface px-2.5 text-[12px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
                   >
                     <Plus className="h-3.5 w-3.5" /> Agregar
                   </button>
@@ -421,14 +421,14 @@ export function EditRoutineDialog({
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-            <Dialog.Close className="rounded-card px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <Dialog.Close className="rounded-pill px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               Cancelar
             </Dialog.Close>
             <button
               type="button"
               onClick={save}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 rounded-card bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {saving ? 'Guardando…' : 'Guardar cambios'}

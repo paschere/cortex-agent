@@ -1,7 +1,7 @@
 import { toMemoryView } from '@/app/api/settings/memories/schema';
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { listMemories } from '@cortex/agent-tools';
 import { Brain } from 'lucide-react';
 import { MemoryList } from './MemoryList';
@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function MemoryPage() {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const memories = (await listMemories(db, user.id)).map(toMemoryView);
 
   return (

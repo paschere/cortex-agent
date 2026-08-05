@@ -41,7 +41,7 @@ export function TranscriptMessage({
       <div className="mb-2 flex items-center gap-2">
         <span
           className={clsx(
-            'grid h-7 w-7 shrink-0 place-items-center rounded-card text-white',
+            'grid h-7 w-7 shrink-0 place-items-center rounded-full text-white',
             isUser ? 'bg-ink' : 'bg-primary',
           )}
         >

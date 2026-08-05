@@ -21,6 +21,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { Panel } from '@/components/ui/panel';
+import { CHIP_INTERACTIVE } from '@/lib/status-chip';
 import {
   type BuilderTool,
   type ParamDef,
@@ -73,7 +74,7 @@ export interface PipelineBuilderProps {
 
 const SECTION = 'field-label';
 const FIELD =
-  'w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-border-strong';
+  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10';
 
 /** Small pill switch, matching the tools catalog toggle. */
 function Switch({
@@ -95,13 +96,13 @@ function Switch({
       aria-label={label}
       onClick={onClick}
       className={clsx(
-        'relative h-[18px] w-8 shrink-0 rounded-sm transition-colors',
+        'relative h-[18px] w-8 shrink-0 rounded-pill transition-colors',
         on ? (tone === 'amber' ? 'bg-amber' : 'bg-primary') : 'bg-border',
       )}
     >
       <span
         className={clsx(
-          'absolute top-[2px] h-[14px] w-[14px] rounded-sm bg-surface transition-all',
+          'absolute top-[2px] h-[14px] w-[14px] rounded-full bg-surface transition-all',
           on ? 'left-[16px]' : 'left-[2px]',
         )}
       />
@@ -342,7 +343,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
         <div className="flex items-center gap-2">
           <Link
             href={mode === 'edit' ? `/pipelines/${slug}` : '/pipelines'}
-            className="rounded-card border border-border-strong px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+            className="rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink motion-reduce:transform-none motion-reduce:transition-none"
           >
             Cancel
           </Link>
@@ -350,7 +351,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             type="button"
             onClick={save}
             disabled={errors.length > 0 || saving}
-            className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             {mode === 'create' ? 'Create pipeline' : 'Save changes'}
@@ -461,24 +462,26 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
               {steps.map((s, i) => {
                 const isLast = i === steps.length - 1;
                 return (
-                  <li key={s.key} className="relative flex gap-4 pb-5">
+                  <li key={s.key} className="group relative flex gap-4 pb-5">
                     {!isLast && (
                       <span className="absolute left-[17px] top-9 h-[calc(100%-2rem)] w-[2px] rounded bg-border" />
                     )}
                     {s.checkpoint ? (
-                      <span className="z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card border border-amber bg-amber-soft">
+                      <span className="z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card border border-amber bg-amber-soft transition-transform duration-150 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none">
                         <UserCheck className="h-4 w-4 text-amber" />
                       </span>
                     ) : (
-                      <span className="stat-num z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card bg-primary text-[13px] text-white">
+                      <span className="stat-num z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card bg-primary text-[13px] text-white transition-transform duration-150 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none">
                         {String(i + 1).padStart(2, '0')}
                       </span>
                     )}
 
                     <div
                       className={clsx(
-                        'min-w-0 flex-1 rounded-card border p-3.5',
-                        s.checkpoint ? 'border-amber/40 bg-amber-soft/40' : 'border-border bg-surface-2',
+                        'min-w-0 flex-1 rounded-card border p-3.5 transition-colors',
+                        s.checkpoint
+                          ? 'border-amber/40 bg-amber-soft/40'
+                          : 'border-border bg-surface-2 group-hover:border-border-strong',
                       )}
                     >
                       <div className="mb-2 flex items-center justify-between gap-2">
@@ -562,7 +565,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
               type="button"
               onClick={addStep}
               disabled={steps.length >= MAX_STEPS}
-              className="ml-[52px] inline-flex items-center gap-1.5 rounded-card border border-dashed border-border-strong px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              className="ml-[52px] inline-flex items-center gap-1.5 rounded-pill border border-dashed border-border-strong px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             >
               <Plus className="h-3.5 w-3.5" /> Add step
             </button>
@@ -642,7 +645,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
               type="button"
               onClick={() => addParam()}
               disabled={params.length >= MAX_PARAMS}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-card border border-dashed border-border-strong px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-pill border border-dashed border-border-strong px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             >
               <Plus className="h-3.5 w-3.5" /> Add parameter
             </button>
@@ -690,7 +693,10 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                     key={u}
                     type="button"
                     onClick={() => addParam(u)}
-                    className="inline-flex items-center gap-1 rounded-sm border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
+                    className={clsx(
+                      'inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-primary hover:bg-primary hover:text-white',
+                      CHIP_INTERACTIVE,
+                    )}
                   >
                     <Plus className="h-3 w-3" /> declare {u}
                   </button>
@@ -700,7 +706,9 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
           </Panel>
 
           <Panel className="overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-border-strong px-4 py-2.5">
+            {/* A fixed title bar over the scrollable preview below — a plain
+                hairline is genuine edge definition here, not a section rule. */}
+            <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
               <Terminal className="h-3.5 w-3.5 text-primary" />
               <span className={SECTION}>What the agent will actually see</span>
             </div>
@@ -740,7 +748,8 @@ function IconBtn({
       aria-label={label}
       title={label}
       className={clsx(
-        'rounded-card p-1.5 text-ink-faint transition-colors disabled:cursor-not-allowed disabled:opacity-30',
+        'rounded-card p-1.5 text-ink-faint disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:translate-y-0',
+        CHIP_INTERACTIVE,
         tone === 'rose' ? 'hover:bg-rose-soft hover:text-rose' : 'hover:bg-surface hover:text-ink',
       )}
     >

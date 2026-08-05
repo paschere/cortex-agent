@@ -1,6 +1,6 @@
 import { type DriveContext, crawlSubtree, normalizeGdriveMime } from '@/app/api/kb/drive/_lib';
 import { inngest } from '@/lib/inngest';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { type ToolContext, createIntegrationsClient, driveGet } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
@@ -40,6 +40,13 @@ function revisionOf(file: DriveChangeFile): string {
 // Incremental Google Drive sync. Runs every 10 minutes and drains the Drive
 // Changes API for every collection that has an owner. Each collection is synced
 // in its own step.run so one collection's failure can't abort the batch.
+//
+// TENANCY. The scan that finds work is install-wide and therefore unscoped —
+// "every synced folder in the product" is not a question about one workspace.
+// Everything after it is scoped: each sync state row names the workspace that
+// owns the space, and the per-collection step builds its client from that, so a
+// Drive change can only ever create, update or delete documents inside the
+// workspace whose folder was being watched.
 export const driveSync = inngest.createFunction(
   { id: 'drive-sync-all' },
   { cron: '*/10 * * * *' },
@@ -48,7 +55,7 @@ export const driveSync = inngest.createFunction(
       const db = getSupabaseServiceClient();
       const { data, error } = await db
         .from('gdrive_sync_state')
-        .select('collection_id, page_token, owner_user_id, tracked_folder_ids')
+        .select('collection_id, organization_id, page_token, owner_user_id, tracked_folder_ids')
         .not('owner_user_id', 'is', null);
       if (error) throw new Error(`Failed to load gdrive_sync_state: ${error.message}`);
       return data ?? [];
@@ -58,12 +65,13 @@ export const driveSync = inngest.createFunction(
 
     for (const state of states) {
       const collectionId = state.collection_id as string;
+      const organizationId = state.organization_id as string;
       const ownerUserId = state.owner_user_id as string;
 
       // Per-collection isolation: never let one collection abort the batch.
       const result = await step
         .run(`sync-${collectionId}`, async () => {
-          const db = getSupabaseServiceClient();
+          const db = getOrgScopedClient(organizationId);
           const integrations = createIntegrationsClient(db, ownerUserId, logger);
           const ctx: DriveContext = { integrations, signal: undefined };
 

@@ -41,13 +41,14 @@ export function CitationFootnote({ citations }: CitationFootnoteProps) {
   if (!citations || citations.length === 0) return null;
 
   return (
-    <div className="mt-3 border-t border-border pt-2.5">
-      <div className="field-label">Fuentes</div>
+    <div className="mt-3">
+      <div className="rule-double" />
+      <div className="field-label mt-2.5">Fuentes</div>
       <ol className="mt-1.5 space-y-2">
         {citations.map((c) => {
-          // A stamp with nothing to attest is decoration, and one empty stamp
-          // devalues every real one. Without a space or a read time there is
-          // no provenance to show, so the citation is left plain.
+          // A provenance chip with nothing to attest is decoration, and one
+          // empty chip devalues every real one. Without a space or a read time
+          // there is nothing to show, so the citation is left plain.
           const hasProvenance = Boolean(c.space || c.readAt);
           const detail =
             c.spaceKind === 'personal'

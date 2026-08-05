@@ -1,6 +1,6 @@
 import 'server-only';
 import { buildToolContext } from '@/lib/agent';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { getTool, runTool } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
@@ -41,6 +41,7 @@ import {
 const DECISION_AUDIT_TOOL_ID = '__approval_decision';
 
 export interface DecideInput {
+  organizationId: string;
   approvalId: string;
   userId: string;
   decision: ApprovalDecision;
@@ -49,7 +50,7 @@ export interface DecideInput {
 }
 
 export async function decideApproval(input: DecideInput): Promise<ClaimOutcome> {
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(input.organizationId);
   const now = input.now ?? new Date();
 
   const outcome = await claimApproval(supabaseApprovalStore(db), {
@@ -122,7 +123,7 @@ export async function runApprovedAction(action: ClaimedApproval): Promise<Execut
     };
   }
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(action.organizationId);
   const denied = await deniedToolPatterns(db, action.userId);
   if (isToolDenied(action.toolId, denied)) {
     return {
@@ -133,7 +134,11 @@ export async function runApprovedAction(action: ClaimedApproval): Promise<Execut
   }
 
   try {
-    const ctx = buildToolContext({ userId: action.userId, agentId: action.agentId });
+    const ctx = buildToolContext({
+      organizationId: action.organizationId,
+      userId: action.userId,
+      agentId: action.agentId,
+    });
     const result = await runTool(tool, action.input, ctx, { confirmed: true });
     return { ok: true, result };
   } catch (err) {
@@ -147,9 +152,9 @@ export async function runApprovedAction(action: ClaimedApproval): Promise<Execut
  * The timezone the person reads clocks in. Without it "approved at 14:32" is
  * a UTC timestamp wearing a local time's clothes.
  */
-export async function approvalTimeZone(userId: string): Promise<string> {
+export async function approvalTimeZone(organizationId: string, userId: string): Promise<string> {
   try {
-    const { data } = await getSupabaseServiceClient()
+    const { data } = await getOrgScopedClient(organizationId)
       .from('user_preferences')
       .select('timezone')
       .eq('user_id', userId)

@@ -1,7 +1,7 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { clsx } from 'clsx';
 import { AlarmClock } from 'lucide-react';
 import { RefreshButton } from './_components/RefreshButton';
@@ -15,7 +15,7 @@ const WINDOW_DAYS = 7;
 
 export default async function SchedulesPage() {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   const { data: rows } = await db
     .from('scheduled_jobs')

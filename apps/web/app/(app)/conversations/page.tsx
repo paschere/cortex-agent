@@ -8,7 +8,7 @@ import {
 } from '@/lib/conversation-surface';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { MessagesSquare } from 'lucide-react';
 import Link from 'next/link';
 import { ConversationFilters } from './_components/ConversationFilters';
@@ -45,7 +45,7 @@ export default async function ConversationsPage({
   const surface = parseSurfaceFilter(sp.surface);
   const q = (sp.q ?? '').trim();
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   let query = sb
     .from('conversations')
     .select('id, title, agent_id, surface, external_key, created_at, updated_at, agents(name)')
@@ -113,7 +113,7 @@ export default async function ConversationsPage({
                 </p>
                 <Link
                   href="/conversations"
-                  className="mt-4 inline-flex rounded-card border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2"
+                  className="mt-4 inline-flex rounded-pill border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
                 >
                   Limpiar la búsqueda
                 </Link>
@@ -127,7 +127,7 @@ export default async function ConversationsPage({
                 </p>
                 <Link
                   href="/chat"
-                  className="mt-4 inline-flex rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
+                  className="mt-4 inline-flex rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
                 >
                   Abrir el chat
                 </Link>
@@ -141,13 +141,13 @@ export default async function ConversationsPage({
               return (
                 <li
                   key={c.id}
-                  className="group flex items-center gap-2 pr-2 transition-colors hover:bg-surface-2"
+                  className="group flex items-center gap-2 pr-2 transition-colors hover:bg-primary-soft/50"
                 >
                   <Link
                     href={`/conversations/${c.id}`}
                     className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3.5"
                   >
-                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-ink-muted">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-surface-2 text-ink-muted">
                       <MessagesSquare className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">

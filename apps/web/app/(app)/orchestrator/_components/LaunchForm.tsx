@@ -53,7 +53,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
   }
 
   return (
-    <div className="rounded-card border border-border bg-surface p-4 md:p-5">
+    <div className="rounded-card border border-border bg-surface p-4 shadow-card md:p-5">
       <div className="field-label mb-2">Objetivo</div>
 
       <textarea
@@ -71,7 +71,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
         maxLength={4000}
         disabled={busy}
         placeholder="Describe el resultado que quieres. Cortex lo reparte entre subagentes, corre en paralelo los que no dependen de nadie y te escribe un solo informe."
-        className="scroll-slim w-full resize-y rounded-card border border-border bg-canvas px-3.5 py-3 text-[14px] leading-relaxed text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-border-strong disabled:opacity-60"
+        className="scroll-slim w-full resize-y rounded-card border border-border bg-canvas px-3.5 py-3 text-[14px] leading-relaxed text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
       />
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -84,7 +84,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
               disabled={busy}
               title={example}
               onClick={() => setObjective(example)}
-              className="tabular rounded-card border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-50"
+              className="tabular rounded-pill border border-border bg-surface-2 px-2.5 py-0.5 text-[11px] font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:text-ink disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none"
             >
               Ejemplo {i + 1}
             </button>
@@ -100,9 +100,10 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
             onClick={() => void launch()}
             disabled={busy || tooShort}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-card px-4 py-2 text-[13px] font-semibold transition-colors',
-              'bg-primary text-white hover:bg-primary-strong',
-              'disabled:cursor-not-allowed disabled:opacity-45',
+              'inline-flex items-center gap-1.5 rounded-pill px-4 py-2 text-[13px] font-semibold shadow-pop transition-all duration-150',
+              'bg-primary text-white hover:-translate-y-px hover:bg-primary-strong',
+              'disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
+              'motion-reduce:transform-none motion-reduce:transition-none',
             )}
           >
             {busy ? (

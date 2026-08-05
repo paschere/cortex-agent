@@ -194,7 +194,7 @@ export function ScheduleList({
 
   if (jobs.length === 0) {
     return (
-      <section className="rounded-card border border-border bg-surface p-10 text-center text-[13px] text-ink-muted">
+      <section className="rounded-card border border-border bg-surface p-10 text-center text-[13px] text-ink-muted shadow-card">
         <AlarmClock className="mx-auto mb-3 h-7 w-7 text-primary" />
         <p className="mb-1 text-[15px] font-bold text-ink">Todavía no hay rutinas</p>
         <p className="mx-auto max-w-md leading-relaxed">
@@ -207,7 +207,7 @@ export function ScheduleList({
         </p>
         <Link
           href="/chat"
-          className="mt-4 inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
         >
           Programar una rutina en el chat
         </Link>
@@ -218,7 +218,7 @@ export function ScheduleList({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1 rounded-card border border-border bg-surface-2 p-1">
+        <div className="flex flex-wrap gap-1 rounded-pill border border-border bg-surface-2 p-1">
           {FILTERS.map((f) => (
             <button
               key={f.id}
@@ -226,17 +226,17 @@ export function ScheduleList({
               onClick={() => setFilter(f.id)}
               aria-pressed={filter === f.id}
               className={clsx(
-                'inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                 filter === f.id
-                  ? 'border border-border-strong bg-surface text-ink'
-                  : 'border border-transparent text-ink-muted hover:text-ink',
+                  ? 'bg-primary-soft text-primary-ink'
+                  : 'text-ink-muted hover:text-ink',
               )}
             >
               {f.label}
               <span
                 className={clsx(
-                  'tabular rounded-sm px-1 text-[10.5px] font-bold',
-                  filter === f.id ? 'bg-primary-soft text-primary' : 'text-ink-faint',
+                  'tabular rounded-pill px-1 text-[10.5px] font-bold',
+                  filter === f.id ? 'text-primary-ink' : 'text-ink-faint',
                 )}
               >
                 {counts[f.id]}
@@ -252,14 +252,14 @@ export function ScheduleList({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por nombre o instrucción…"
             aria-label="Buscar rutinas"
-            className="w-full rounded-card border border-border bg-surface py-1.5 pl-8 pr-7 text-[12.5px] text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-border-strong"
+            className="w-full rounded-pill border border-border bg-surface py-1.5 pl-8 pr-7 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
               aria-label="Limpiar la búsqueda"
-              className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-sm text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="absolute right-1.5 top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-full text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <X className="h-3 w-3" />
             </button>
@@ -268,13 +268,13 @@ export function ScheduleList({
       </div>
 
       {error && (
-        <div className="rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+        <div className="rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose shadow-card">
           {error} No se cambió nada; vuelve a intentarlo.
         </div>
       )}
 
       {visible.length === 0 ? (
-        <section className="rounded-card border border-border bg-surface p-8 text-center text-[13px] text-ink-muted">
+        <section className="rounded-card border border-border bg-surface p-8 text-center text-[13px] text-ink-muted shadow-card">
           <SearchX className="mx-auto mb-2.5 h-7 w-7 text-ink-faint" />
           <p className="mb-1 text-[14px] font-bold text-ink">Ninguna rutina coincide</p>
           <p className="mb-3">
@@ -286,7 +286,7 @@ export function ScheduleList({
               setFilter('all');
               setQuery('');
             }}
-            className="rounded-card bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
           >
             Ver todas las rutinas
           </button>
@@ -346,11 +346,12 @@ function Group({
 }) {
   return (
     <section>
-      <h2 className="field-label mb-2 flex items-center gap-1.5 border-b border-border-strong pb-1.5">
+      <h2 className="field-label mb-2 flex items-center gap-1.5">
         {icon}
         {label}
         <span className="tabular text-ink-muted">{count}</span>
       </h2>
+      <div className="rule-double mb-3" />
       <div className="space-y-3">{children}</div>
     </section>
   );

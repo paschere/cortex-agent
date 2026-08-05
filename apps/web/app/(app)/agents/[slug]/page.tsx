@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Eyebrow, Panel } from '@/components/ui/panel';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   ArrowLeft,
   Bell,
@@ -184,7 +184,7 @@ async function updateAgent(slug: string, formData: FormData) {
   const systemPrompt = formData.get('system_prompt') as string;
   const allowedToolIds = formData.getAll('allowed_tool_ids') as string[];
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   await sb
     .from('agents')
     .update({
@@ -214,7 +214,7 @@ export default async function AgentDetailPage({
 }) {
   const [user, { slug }] = await Promise.all([requireSession(), params]);
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   const { data } = await sb
     .from('agents')
     .select('id, slug, name, default_model, system_prompt, allowed_tool_ids, teams(name)')
@@ -247,7 +247,7 @@ export default async function AgentDetailPage({
         actions={
           <Link
             href="/chat"
-            className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-primary-strong"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
           >
             <MessageSquare className="h-4 w-4" /> Abrir el chat
           </Link>
@@ -307,7 +307,7 @@ export default async function AgentDetailPage({
                   disabled={!isAdmin}
                   className="peer sr-only"
                 />
-                <span className="inline-flex items-center gap-2 rounded-card border border-border bg-surface px-4 py-2 font-mono text-[13px] text-ink-muted transition-colors peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:font-semibold peer-checked:text-primary-ink">
+                <span className="inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-4 py-2 font-mono text-[13px] text-ink-muted transition-all duration-150 peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:font-semibold peer-checked:text-primary-ink">
                   <Cpu className="h-3.5 w-3.5" />
                   {m}
                 </span>
@@ -320,7 +320,7 @@ export default async function AgentDetailPage({
         <Panel className="p-5">
           <div className="flex items-center justify-between">
             <Eyebrow>Capacidades</Eyebrow>
-            <span className="tabular rounded-card border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary-ink">
+            <span className="tabular rounded-pill border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary-ink">
               {agent.allowed_tool_ids.length} / {TOTAL_TOOLS} habilitadas
             </span>
           </div>
@@ -354,13 +354,13 @@ export default async function AgentDetailPage({
                           disabled={!isAdmin}
                           className="peer sr-only"
                         />
-                        <span className="flex items-center justify-between gap-2 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink-muted transition-colors hover:border-border-strong peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:text-ink peer-disabled:opacity-60">
+                        <span className="flex items-center justify-between gap-2 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink-muted transition-all duration-150 hover:border-border-strong peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:text-ink peer-disabled:opacity-60">
                           <span className="flex items-center gap-2">
-                            <span className="h-3.5 w-3.5 shrink-0 rounded-card border border-border-strong bg-surface peer-checked:border-primary peer-checked:bg-primary" />
+                            <span className="h-3.5 w-3.5 shrink-0 rounded-sm border border-border-strong bg-surface peer-checked:border-primary peer-checked:bg-primary" />
                             <span className="font-medium">{shortName(t.id)}</span>
                           </span>
                           {t.write && (
-                            <span className="rounded-card border border-amber/40 bg-amber-soft px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-amber">
+                            <span className="rounded-pill border border-amber/40 bg-amber-soft px-1.5 py-0.5 text-[9.5px] font-semibold text-amber">
                               Escribe
                             </span>
                           )}

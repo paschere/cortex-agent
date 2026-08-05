@@ -4,7 +4,7 @@ import { sendApprovalRequestEmail } from '@/lib/approval-email';
 import { decideApproval } from '@/lib/approvals/decide';
 import { mintConfirmationToken, verifyConfirmationToken } from '@/lib/mcp-confirm';
 import { issuer, sha256 } from '@/lib/oauth';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import {
@@ -155,9 +155,16 @@ function isNotification(msg: unknown): boolean {
 // ---------------------------------------------------------------------------
 interface AuthResult {
   userId: string;
+  organizationId: string;
   scope: string | null;
 }
 
+/**
+ * Token lookup runs before a workspace is known — it is what determines it —
+ * so it has to hold the raw, unscoped client. Once the token resolves to a
+ * user, the workspace is read off that directory row with a second raw query
+ * and everything downstream of `authenticate` uses a client scoped to it.
+ */
 async function authenticate(req: NextRequest): Promise<AuthResult | null> {
   const header = req.headers.get('authorization') ?? '';
   const match = /^Bearer\s+(.+)$/i.exec(header.trim());
@@ -165,8 +172,8 @@ async function authenticate(req: NextRequest): Promise<AuthResult | null> {
   const token = (match[1] ?? '').trim();
   if (!token) return null;
 
-  const db = getSupabaseServiceClient();
-  const { data, error } = await db
+  const raw = getSupabaseServiceClient();
+  const { data, error } = await raw
     .from('oauth_access_tokens')
     .select('user_id, scope, expires_at')
     .eq('token_hash', sha256(token))
@@ -177,7 +184,19 @@ async function authenticate(req: NextRequest): Promise<AuthResult | null> {
   if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) return null;
   if (!data.user_id) return null;
 
-  return { userId: data.user_id as string, scope: (data.scope as string | null) ?? null };
+  const { data: userRow } = await raw
+    .from('users')
+    .select('organization_id')
+    .eq('id', data.user_id)
+    .maybeSingle();
+  const organizationId = userRow?.organization_id as string | undefined;
+  if (!organizationId) return null;
+
+  return {
+    userId: data.user_id as string,
+    organizationId,
+    scope: (data.scope as string | null) ?? null,
+  };
 }
 
 /** The RFC 9728 Protected Resource Metadata document URL we point Claude at. */
@@ -216,15 +235,18 @@ interface CatalogEntry {
 }
 
 // Module-level cache: agents change via migrations, not at runtime, so 60s
-// staleness is fine and saves a DB round-trip per JSON-RPC message.
+// staleness is fine and saves a DB round-trip per JSON-RPC message. Keyed by
+// workspace — `agents` is tenant data, so a single unkeyed cache would leak
+// one workspace's agent catalog into another's.
 const AGENTS_CACHE_TTL_MS = 60_000;
-let agentsCache: { at: number; agents: AgentRow[] } | null = null;
+const agentsCacheByOrg = new Map<string, { at: number; agents: AgentRow[] }>();
 
-async function loadAllAgents(): Promise<AgentRow[]> {
-  if (agentsCache && Date.now() - agentsCache.at < AGENTS_CACHE_TTL_MS) {
-    return agentsCache.agents;
+async function loadAllAgents(organizationId: string): Promise<AgentRow[]> {
+  const cached = agentsCacheByOrg.get(organizationId);
+  if (cached && Date.now() - cached.at < AGENTS_CACHE_TTL_MS) {
+    return cached.agents;
   }
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(organizationId);
   const { data, error } = await db
     .from('agents')
     .select('id, slug, name, system_prompt, allowed_tool_ids')
@@ -234,7 +256,7 @@ async function loadAllAgents(): Promise<AgentRow[]> {
     throw new Error(`Failed to load agents: ${error?.message ?? 'no rows'}`);
   }
   const agents = data as unknown as AgentRow[];
-  agentsCache = { at: Date.now(), agents };
+  agentsCacheByOrg.set(organizationId, { at: Date.now(), agents });
   return agents;
 }
 
@@ -248,9 +270,12 @@ function toMcpName(id: string): string {
  * top of the agents' allowed tools, so a blocked tool is neither advertised in
  * tools/list nor resolvable in tools/call (it falls through to "Unknown tool").
  */
-async function buildCatalog(userId?: string): Promise<Map<string, CatalogEntry>> {
-  const agents = await loadAllAgents();
-  const denied = userId ? await deniedToolPatterns(getSupabaseServiceClient(), userId) : [];
+async function buildCatalog(
+  organizationId: string,
+  userId?: string,
+): Promise<Map<string, CatalogEntry>> {
+  const agents = await loadAllAgents(organizationId);
+  const denied = userId ? await deniedToolPatterns(getOrgScopedClient(organizationId), userId) : [];
   // Cortex first: shared tools attribute to the super-agent (audit trail and
   // MCP conversations read as Cortex's work, matching the product story).
   const ordered = [...agents].sort((a, b) =>
@@ -383,7 +408,7 @@ async function getOrCreateMcpConversation(
   sessionId: string,
   agentId: string,
 ): Promise<string | null> {
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(auth.organizationId);
   const externalKey = `mcp:${sessionId}`;
 
   const { data: existing } = await db
@@ -411,6 +436,7 @@ async function getOrCreateMcpConversation(
 
 /** Best-effort: never let persistence failures break a tool call. */
 async function persistToolMessage(opts: {
+  organizationId: string;
   conversationId: string;
   toolId: string;
   args: unknown;
@@ -427,7 +453,7 @@ async function persistToolMessage(opts: {
       result = { __error: true, message: result };
     }
 
-    const db = getSupabaseServiceClient();
+    const db = getOrgScopedClient(opts.organizationId);
     const toolCallId = randomUUID();
     await db.from('messages').insert({
       conversation_id: opts.conversationId,
@@ -464,9 +490,9 @@ async function resolveMcpConversation(
 // ---------------------------------------------------------------------------
 
 async function handleOverview(auth: AuthResult): Promise<unknown> {
-  const db = getSupabaseServiceClient();
-  const agents = await loadAllAgents();
-  const catalog = await buildCatalog(auth.userId);
+  const db = getOrgScopedClient(auth.organizationId);
+  const agents = await loadAllAgents(auth.organizationId);
+  const catalog = await buildCatalog(auth.organizationId, auth.userId);
 
   const [integrationsRes, spaces] = await Promise.all([
     db.from('integrations').select('provider, scopes').eq('user_id', auth.userId),
@@ -509,6 +535,7 @@ async function handleConfirmAction(
     // atomic conditional update, so an id already answered in Chat cannot be
     // spent again here, and a retry cannot execute the action twice.
     const claim = await decideApproval({
+      organizationId: auth.organizationId,
       approvalId: confirmationId,
       userId: auth.userId,
       decision: 'approved',
@@ -562,7 +589,7 @@ async function handleConfirmAction(
   }
   // A team may have blocked the tool after the action was staged — a denied
   // tool must never execute, even with a valid confirmation id.
-  const denied = await deniedToolPatterns(getSupabaseServiceClient(), auth.userId);
+  const denied = await deniedToolPatterns(getOrgScopedClient(auth.organizationId), auth.userId);
   if (isToolDenied(payload.toolId, denied)) {
     return {
       content: [{ type: 'text', text: `Unknown tool: ${toMcpName(payload.toolId)}` }],
@@ -571,10 +598,16 @@ async function handleConfirmAction(
   }
 
   const conversationId = await resolveMcpConversation(auth, sessionId, payload.agentId);
-  const ctx = buildToolContext({ userId: auth.userId, agentId: payload.agentId, conversationId });
+  const ctx = buildToolContext({
+    organizationId: auth.organizationId,
+    userId: auth.userId,
+    agentId: payload.agentId,
+    conversationId,
+  });
   const result = await runTool(tool, payload.input, ctx, { confirmed: true });
   if (conversationId) {
     await persistToolMessage({
+      organizationId: auth.organizationId,
       conversationId,
       toolId: payload.toolId,
       args: payload.input,
@@ -605,7 +638,7 @@ async function confirmationRequiredResult(
   // Persist the validated input server-side; the model only round-trips a
   // short single-use id. (The old HMAC token embedded the whole payload and
   // got truncated by the model on large inputs.)
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(auth.organizationId);
   const expiresAt = new Date(Date.now() + PENDING_ACTION_TTL_MS);
   const { data: pending, error } = await db
     .from('mcp_pending_actions')
@@ -635,6 +668,7 @@ async function confirmationRequiredResult(
   // Google Chat. Fire-and-forget: the tool response must not wait on (or fail
   // because of) either delivery.
   void sendApprovalRequestEmail({
+    organizationId: auth.organizationId,
     userId: auth.userId,
     toolId: err.toolId,
     input: err.input,
@@ -722,8 +756,10 @@ const PROMPTS: PromptDef[] = [
 // Resources
 // ---------------------------------------------------------------------------
 
-async function listResources(): Promise<Array<{ uri: string; name: string; mimeType: string }>> {
-  const agents = await loadAllAgents();
+async function listResources(
+  organizationId: string,
+): Promise<Array<{ uri: string; name: string; mimeType: string }>> {
+  const agents = await loadAllAgents(organizationId);
   return [
     ...agents.map((a) => ({
       uri: `cortex://agents/${a.slug}/system-prompt`,
@@ -753,12 +789,12 @@ async function readResource(
   uri: string,
   auth: AuthResult,
 ): Promise<JsonRpcResponse['result'] | null> {
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(auth.organizationId);
 
   const agentMatch = /^cortex:\/\/agents\/([a-z0-9-]+)\/system-prompt$/.exec(uri);
   if (agentMatch || uri === 'cortex://agent/system-prompt') {
     const slug = agentMatch ? agentMatch[1]! : 'sales';
-    const agents = await loadAllAgents();
+    const agents = await loadAllAgents(auth.organizationId);
     const agent = agents.find((a) => a.slug === slug);
     if (!agent) return null;
     return { contents: [{ uri, mimeType: 'text/markdown', text: agent.system_prompt }] };
@@ -808,7 +844,7 @@ async function dispatch(
       // never fail because of this.
       let playbook = '';
       try {
-        const agents = await loadAllAgents();
+        const agents = await loadAllAgents(auth.organizationId);
         const cortex = agents.find((a) => a.slug === 'cortex');
         if (cortex?.system_prompt) {
           playbook = `\n\nCORTEX'S TEAM PLAYBOOK (live from Cortex — follow it):\n${cortex.system_prompt}`;
@@ -827,6 +863,7 @@ async function dispatch(
       try {
         instructions = (
           await buildSystemPrompt({
+            organizationId: auth.organizationId,
             userId: auth.userId,
             basePrompt: instructions,
           })
@@ -860,7 +897,7 @@ async function dispatch(
       return rpcOk(id, {});
 
     case 'tools/list': {
-      const catalog = await buildCatalog(auth.userId);
+      const catalog = await buildCatalog(auth.organizationId, auth.userId);
       return rpcOk(id, { tools: buildToolDefs(catalog) });
     }
 
@@ -880,7 +917,7 @@ async function dispatch(
           return rpcOk(id, await handleConfirmAction(args, auth, sessionId));
         }
 
-        const catalog = await buildCatalog(auth.userId);
+        const catalog = await buildCatalog(auth.organizationId, auth.userId);
         const entry = catalog.get(mcpName);
         if (!entry) {
           return rpcOk(id, {
@@ -891,6 +928,7 @@ async function dispatch(
 
         const conversationId = await resolveMcpConversation(auth, sessionId, entry.agentId);
         const ctx = buildToolContext({
+          organizationId: auth.organizationId,
           userId: auth.userId,
           agentId: entry.agentId,
           conversationId,
@@ -899,6 +937,7 @@ async function dispatch(
           const result = await runTool(entry.tool, args, ctx);
           if (conversationId) {
             await persistToolMessage({
+              organizationId: auth.organizationId,
               conversationId,
               toolId: entry.tool.id,
               args,
@@ -957,7 +996,7 @@ async function dispatch(
     }
 
     case 'resources/list':
-      return rpcOk(id, { resources: await listResources() });
+      return rpcOk(id, { resources: await listResources(auth.organizationId) });
 
     case 'resources/read': {
       const p = (params ?? {}) as { uri?: string };

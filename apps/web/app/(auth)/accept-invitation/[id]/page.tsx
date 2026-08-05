@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/provenance';
 import { authClient } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
@@ -54,12 +55,11 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
 
         {/* The invitation id is the one checkable fact on this screen — it is
             what an admin needs if the invite has to be traced. */}
-        <div className="mb-5">
-          <div className="field-label">Invitación</div>
-          <div className="tabular mt-1 truncate text-[13px] text-ink" title={id}>
+        <Field label="Invitación" className="mb-5">
+          <span className="block truncate" title={id}>
             {id}
-          </div>
-        </div>
+          </span>
+        </Field>
 
         <div className="flex gap-3">
           <Button

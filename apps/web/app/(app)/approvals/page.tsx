@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import Link from 'next/link';
 import { Inbox, ShieldAlert, Radar, AlarmClockOff, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
@@ -64,18 +64,23 @@ function SectionLabel({
   count: number;
   tone: StatusTone;
 }) {
+  // A section break reads as whitespace plus a soft fade now, not a ruled line
+  // underneath the label — the ledger look is what this direction moved away from.
   return (
-    <div className="field-label mb-2.5 flex items-center gap-2 border-b border-border-strong pb-1.5">
-      {icon}
-      {children}
-      <span className={chipClass(tone)}>{count}</span>
+    <div className="mb-3">
+      <div className="field-label flex items-center gap-2 pb-2">
+        {icon}
+        {children}
+        <span className={chipClass(tone)}>{count}</span>
+      </div>
+      <div className="rule-double" />
     </div>
   );
 }
 
 export default async function ApprovalsPage() {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   const nowIso = new Date().toISOString();
   const decidedSince = new Date(Date.now() - RECENTLY_DECIDED_MS).toISOString();
@@ -210,13 +215,13 @@ export default async function ApprovalsPage() {
                         </div>
                       </div>
                       {excerpt && (
-                        <p className="rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 font-mono text-[11px] leading-snug text-rose">
+                        <p className="rounded-sm border border-rose/30 bg-rose-soft px-2.5 py-1.5 font-mono text-[11px] leading-snug text-rose">
                           {excerpt}
                         </p>
                       )}
                       <Link
                         href="/schedules"
-                        className="mt-auto inline-flex items-center gap-1 text-[12px] font-semibold text-primary hover:text-primary-strong"
+                        className="mt-auto inline-flex items-center gap-1 text-[12px] font-semibold text-primary transition-colors hover:text-primary-strong"
                       >
                         Revisar en Rutinas <ArrowRight className="h-3.5 w-3.5" />
                       </Link>

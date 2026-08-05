@@ -14,7 +14,7 @@ import {
   toChatText,
   updateChatMessage,
 } from '@/lib/google-chat';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { toolDisplayName } from '@/lib/tool-labels';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse, after } from 'next/server';
@@ -81,6 +81,7 @@ const ACK_TEXT = 'On it ⚡';
 
 interface LinkedUser {
   userId: string;
+  organizationId: string;
   email: string;
   name: string | null;
 }
@@ -173,15 +174,28 @@ async function resolveUser(chatUser: ChatUser | undefined): Promise<LinkedUser |
   const email = chatUser?.email?.trim();
   if (!email) return null;
   try {
+    // Raw: this lookup is what resolves the caller (and their workspace) — it
+    // runs before either is known, matching the sender's address against every
+    // workspace's directory rather than a single one already picked.
     const db = getSupabaseServiceClient();
+    // Oldest first, one row. Since migration 0064 a directory row belongs to one
+    // workspace, so somebody who joined two of them has two rows with the same
+    // address — and a `maybeSingle()` here would fail outright for exactly those
+    // people. Chat reaches the workspace they joined first; that is a product
+    // limitation of a surface with no workspace switcher, not an ambiguity to
+    // resolve at random.
     const { data } = await db
       .from('users')
-      .select('id, email, name')
+      .select('id, email, name, organization_id')
       .ilike('email', escapeLike(email))
+      .order('created_at', { ascending: true })
+      .limit(1)
       .maybeSingle();
-    if (!data?.id) return null;
+    const organizationId = data?.organization_id as string | undefined;
+    if (!data?.id || !organizationId) return null;
     return {
       userId: data.id as string,
+      organizationId,
       email: (data.email as string | null) ?? email,
       name: (data.name as string | null) ?? null,
     };
@@ -204,7 +218,7 @@ async function upsertLink(opts: {
   const chatUserName = opts.chatUser.name;
   if (!chatUserName) return;
   try {
-    const db = getSupabaseServiceClient();
+    const db = getOrgScopedClient(opts.user.organizationId);
     const row: Record<string, unknown> = {
       chat_user_name: chatUserName,
       user_id: opts.user.userId,
@@ -227,7 +241,26 @@ async function upsertLink(opts: {
 async function clearDmSpace(chatUserName: string | undefined, space: string | undefined) {
   if (!chatUserName || !space) return;
   try {
-    const db = getSupabaseServiceClient();
+    // Raw, for the same reason as resolveUser: the link row is what names the
+    // workspace here, and it has to be read unscoped to find it.
+    const raw = getSupabaseServiceClient();
+    const { data: link } = await raw
+      .from('google_chat_links')
+      .select('user_id')
+      .eq('chat_user_name', chatUserName)
+      .eq('dm_space', space)
+      .maybeSingle();
+    const userId = link?.user_id as string | undefined;
+    if (!userId) return;
+    const { data: userRow } = await raw
+      .from('users')
+      .select('organization_id')
+      .eq('id', userId)
+      .maybeSingle();
+    const organizationId = userRow?.organization_id as string | undefined;
+    if (!organizationId) return;
+
+    const db = getOrgScopedClient(organizationId);
     await db
       .from('google_chat_links')
       .update({ dm_space: null })
@@ -299,7 +332,11 @@ async function deliver(opts: {
 
   if (!opts.privateText) return;
 
-  const dm = await sendChatDm({ userId: opts.user.userId, text: opts.privateText });
+  const dm = await sendChatDm({
+    organizationId: opts.user.organizationId,
+    userId: opts.user.userId,
+    text: opts.privateText,
+  });
   if (dm.sent) return;
 
   // No DM space yet (they have never messaged the app 1:1). The Chat-flattened
@@ -355,6 +392,7 @@ async function handleMessage(event: ChatEvent, asAddOn: boolean): Promise<NextRe
     const placeholder = ack.sent ? ack.messageName : undefined;
     try {
       const delivery = await runChatTurn({
+        organizationId: user.organizationId,
         userId: user.userId,
         ...(sender.displayName ? { senderName: sender.displayName } : {}),
         space: spaceName,
@@ -480,6 +518,7 @@ async function handleCardClicked(event: ChatEvent, asAddOn: boolean): Promise<Ne
   const spaceName = event.space?.name;
 
   const outcome = await decideApproval({
+    organizationId: user.organizationId,
     approvalId,
     userId: user.userId,
     decision,
@@ -491,7 +530,7 @@ async function handleCardClicked(event: ChatEvent, asAddOn: boolean): Promise<Ne
   if (outcome.status === 'not_yours') return jsonText(NOT_YOURS_REPLY, asAddOn);
   if (outcome.status === 'unknown') return jsonText(GONE_REPLY, asAddOn);
 
-  const zone = await approvalTimeZone(user.userId);
+  const zone = await approvalTimeZone(user.organizationId, user.userId);
   const now = new Date();
 
   if (outcome.status === 'expired') {
@@ -637,6 +676,10 @@ async function handleAddedToSpace(event: ChatEvent, asAddOn: boolean): Promise<N
  * wrong — as opposed to arriving and failing verification.
  */
 async function recentRejections(): Promise<NextResponse> {
+  // Unscoped by design: these are requests that failed verification, so no
+  // caller — and therefore no workspace — was ever established for them. This
+  // is install-wide operator diagnostics behind CHAT_DIAGNOSTICS_KEY, not a
+  // tenant-facing surface.
   const { data, error } = await getSupabaseServiceClient()
     .from('security_events')
     .select('created_at, reason, signals')
@@ -663,6 +706,9 @@ async function recordRejection(
   detail: ChatAuthFailureDetail | undefined,
 ): Promise<void> {
   try {
+    // Unscoped by design: this fires when authentication just FAILED, so there
+    // is no caller and no workspace to attribute the row to — the same reason
+    // recentRejections above reads it back unscoped.
     await getSupabaseServiceClient()
       .from('security_events')
       .insert({

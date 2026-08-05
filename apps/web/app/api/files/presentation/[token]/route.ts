@@ -67,6 +67,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     return problem('This download link is not valid.', 404);
   }
 
+  // Unscoped by design: this is a public download link, found by an unguessable
+  // token rather than a session, so there is no workspace to scope to — the
+  // token itself is what proves the caller may see this one row.
   const sb = getSupabaseServiceClient();
 
   const { data, error } = await sb

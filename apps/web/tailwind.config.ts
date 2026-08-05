@@ -36,6 +36,11 @@ const config: Config = {
       },
       borderRadius: {
         card: 'var(--radius)',
+        // Tailwind's stock `sm` is 2px, which is a hairline chamfer — a leftover
+        // from the squared direction wherever it appears. The design system
+        // says small radius is 10px, so `rounded-sm` is bound to the token that
+        // actually carries that value.
+        sm: 'var(--radius-sm)',
         pill: '999px',
       },
       boxShadow: {

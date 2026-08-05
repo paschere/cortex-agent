@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { PipelineBuilder } from '../../_components/PipelineBuilder';
 import { builderToolCatalog } from '../../_lib/tool-catalog';
 import type { ParamDef, StepDef } from '../../_lib/playbook';
@@ -12,10 +12,10 @@ export default async function EditPipelinePage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  await requireSession();
+  const user = await requireSession();
   const { slug } = await params;
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   const { data: p } = await sb
     .from('pipelines')
     .select('slug, name, description, emoji, intro, steps, params, times_run')

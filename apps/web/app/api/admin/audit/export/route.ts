@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   type AuditEventRow,
   fetchAuditEvents,
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
   }
 
   const filters = parseAuditFilters(Object.fromEntries(req.nextUrl.searchParams.entries()));
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(session.organization.id);
   const users = await userDirectory(sb);
 
   const encoder = new TextEncoder();

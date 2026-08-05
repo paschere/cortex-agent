@@ -47,7 +47,7 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
   const excerpt = summary && summary.length > 220 ? `${summary.slice(0, 220)}…` : summary;
 
   return (
-    <div className="flex h-full flex-col gap-2.5 rounded-card border border-border bg-surface p-4">
+    <div className="flex h-full flex-col gap-2.5 rounded-card border border-border bg-surface p-4 shadow-card">
       <div className="flex items-start gap-3">
         <Radar className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
@@ -70,7 +70,7 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
       </a>
 
       {status === 'error' && (
-        <p className="rounded-card border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-xs text-rose">
+        <p className="rounded-sm border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-xs text-rose">
           {errorMessage} El prospecto sigue igual. Vuelve a intentarlo.
         </p>
       )}
@@ -80,7 +80,7 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
           type="button"
           onClick={() => act('qualified')}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-card bg-emerald px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:brightness-95 disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-pill bg-emerald px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
         >
           {status === 'qualifying' ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -93,7 +93,7 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
           type="button"
           onClick={() => act('rejected')}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-card px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-60"
         >
           {status === 'rejecting' ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />

@@ -3,6 +3,7 @@ import {
   type ToolContext,
   callExternalTool,
   createIntegrationsClient,
+  createOrgScopedClient,
   fetchEnabledExternalTools,
   getTool,
   runTool,
@@ -16,6 +17,8 @@ import type { Env } from './index';
 
 export interface BridgeContext {
   env: Env;
+  /** The workspace the bearer token belongs to. Set by bearerAuth. */
+  organizationId: string;
   userId: string;
   agentId: string | null;
 }
@@ -23,7 +26,7 @@ export interface BridgeContext {
 export async function listToolsForAuth(ctx: BridgeContext) {
   // Set env vars on process.env so getEnv()/integrations refresh works
   hydrateProcessEnv(ctx.env);
-  const sb = makeServiceClient(ctx.env);
+  const sb = makeServiceClient(ctx.env, ctx.organizationId);
   const slug = await resolveAgentSlug(sb, ctx.agentId);
   const agent = await loadAgent(sb, slug);
   const builtins = getAgentTools(agent);
@@ -51,7 +54,7 @@ export async function callTool(
   | { ok: false; error: string }
 > {
   hydrateProcessEnv(ctx.env);
-  const sb = makeServiceClient(ctx.env);
+  const sb = makeServiceClient(ctx.env, ctx.organizationId);
   const integrations = createIntegrationsClient(sb, ctx.userId, logger);
   const slug = await resolveAgentSlug(sb, ctx.agentId);
   const agent = await loadAgent(sb, slug);
@@ -67,7 +70,9 @@ export async function callTool(
     if (!tool) return { ok: false, error: `Tool ${builtinId} not registered` };
 
     const toolCtx: ToolContext = {
+      organizationId: ctx.organizationId,
       userId: ctx.userId,
+      surface: 'mcp',
       agentId: agent.id,
       db: sb,
       integrations,
@@ -122,11 +127,19 @@ export async function callTool(
   return { ok: false, error: `Unknown tool: ${toolName}` };
 }
 
-// Cast to the unparameterised SupabaseClient expected by @cortex/agent-tools / @cortex/agents.
-function makeServiceClient(env: Env): SupabaseClient {
-  return createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+/**
+ * The workspace-scoped handle every MCP call runs against. Cast to the
+ * unparameterised SupabaseClient expected by @cortex/agent-tools / @cortex/agents.
+ *
+ * MCP is the surface with no session and no browser — a long-lived bearer token
+ * is the whole context — so pinning the workspace here, once, is what keeps a
+ * token issued at one company from reading another's rows.
+ */
+function makeServiceClient(env: Env, organizationId: string): SupabaseClient {
+  const raw = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   }) as unknown as SupabaseClient;
+  return createOrgScopedClient(raw, organizationId);
 }
 
 async function resolveAgentSlug(sb: SupabaseClient, agentId: string | null): Promise<string> {

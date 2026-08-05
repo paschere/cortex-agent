@@ -118,7 +118,7 @@ export function PendingActionCard({
     return (
       <div
         className={clsx(
-          'flex flex-wrap items-center gap-2 rounded-card border px-4 py-3 text-[13px]',
+          'flex flex-wrap items-center gap-2 rounded-card border px-4 py-3 text-[13px] shadow-card',
           decision === 'approved'
             ? 'border-emerald/40 bg-emerald-soft text-emerald'
             : 'border-border bg-surface-2 text-ink-muted',
@@ -136,13 +136,13 @@ export function PendingActionCard({
   // ---- Resolved states (compact pills) ----
   if (status === 'done') {
     return (
-      <div className="rounded-card border border-emerald/40 bg-emerald-soft px-4 py-3">
+      <div className="rounded-card border border-emerald/40 bg-emerald-soft px-4 py-3 shadow-card">
         <div className="flex items-center gap-2 text-[13px] font-semibold text-emerald">
           <Check className="h-4 w-4 shrink-0" />
           Aprobada y ejecutada — {title}
         </div>
         {result && (
-          <pre className="scroll-slim mt-2 max-h-32 overflow-auto rounded-card border border-emerald/30 bg-surface p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted">
+          <pre className="scroll-slim mt-2 max-h-32 overflow-auto rounded-sm border border-emerald/30 bg-surface p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted">
             {result}
           </pre>
         )}
@@ -151,7 +151,7 @@ export function PendingActionCard({
   }
   if (status === 'declined') {
     return (
-      <div className="flex items-center gap-2 rounded-card border border-border bg-surface-2 px-4 py-3 text-[13px] text-ink-muted">
+      <div className="flex items-center gap-2 rounded-card border border-border bg-surface-2 px-4 py-3 text-[13px] text-ink-muted shadow-card">
         <X className="h-4 w-4" />
         Rechazada — {title} no se ejecutó
       </div>
@@ -161,14 +161,17 @@ export function PendingActionCard({
   const busy = status === 'running' || status === 'declining';
 
   // ---- Pending / running / error card ----
+  // The one screen in this queue that asks for a decision, not just shows a
+  // result — it lifts off the canvas like every other surface here, plus the
+  // amber wash on its header so the ask reads before the copy does.
   return (
-    <div className="overflow-hidden rounded-card border border-amber/40 bg-surface">
+    <div className="overflow-hidden rounded-card border border-amber/40 bg-surface shadow-card">
       <div className="flex items-start gap-3 border-b border-amber/30 bg-amber-soft px-4 py-3">
         <ShieldAlert className="mt-0.5 h-[18px] w-[18px] shrink-0 text-amber" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="field-label text-amber">Necesita tu confirmación</span>
-            <span className="tabular inline-flex items-center gap-1 rounded-sm border border-border bg-surface px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-muted">
+            <span className="tabular inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">
               <Clock className="h-3 w-3" />
               {timeLeft(expiresAt)}
             </span>
@@ -189,13 +192,13 @@ export function PendingActionCard({
           {showDetails ? 'Ocultar los datos' : 'Ver los datos exactos'}
         </button>
         {showDetails && (
-          <pre className="scroll-slim mt-2 max-h-48 overflow-auto rounded-card border border-border bg-surface-2 p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted">
+          <pre className="scroll-slim mt-2 max-h-48 overflow-auto rounded-sm border border-border bg-surface-2 p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted">
             {JSON.stringify(input, null, 2)}
           </pre>
         )}
 
         {status === 'error' && (
-          <p className="mt-2 rounded-card border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-xs text-rose">
+          <p className="mt-2 rounded-sm border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-xs text-rose">
             {errorMessage} No se ejecutó nada. Vuelve a intentarlo o rechaza la acción.
           </p>
         )}
@@ -205,7 +208,7 @@ export function PendingActionCard({
             type="button"
             onClick={() => act('approve')}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-card bg-amber px-4 py-1.5 text-[13px] font-semibold text-white transition-colors hover:brightness-95 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-amber px-4 py-1.5 text-[13px] font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
           >
             {status === 'running' ? (
               <>
@@ -223,7 +226,7 @@ export function PendingActionCard({
             type="button"
             onClick={() => act('decline')}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-card px-3 py-1.5 text-[13px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[13px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-60"
           >
             {status === 'declining' ? (
               <>

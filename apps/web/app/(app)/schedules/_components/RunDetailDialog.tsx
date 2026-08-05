@@ -133,7 +133,7 @@ export function RunDetailDialog({
             {conversationId ? (
               <Link
                 href={`/chat/${conversationId}`}
-                className="inline-flex items-center gap-1.5 rounded-card px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <MessageSquare className="h-3.5 w-3.5" /> Abrir la conversación
               </Link>
@@ -146,7 +146,7 @@ export function RunDetailDialog({
               type="button"
               onClick={copyOutput}
               disabled={!body && !run.error}
-              className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             >
               {copied ? (
                 <>

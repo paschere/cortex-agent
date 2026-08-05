@@ -71,7 +71,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       key={e.href}
       value={`${e.label} ${e.keywords}`}
       onSelect={() => go(e.href)}
-      className="cursor-pointer rounded-card px-3 py-2 text-[13px] text-ink-muted aria-selected:bg-surface-2 aria-selected:text-ink hover:bg-surface-2 hover:text-ink"
+      className="cursor-pointer rounded-sm px-3 py-2 text-[13px] text-ink-muted transition-colors duration-150 aria-selected:bg-primary-soft aria-selected:text-primary-ink hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
     >
       {e.label}
     </Command.Item>
@@ -95,11 +95,11 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       <div className="w-full max-w-lg px-4">
         {/* A dialog genuinely floats above the page — one of the few places
             elevation is earned. */}
-        <Command className="overflow-hidden rounded-card border border-border-strong bg-surface shadow-pop">
+        <Command className="overflow-hidden rounded-card border border-border bg-surface shadow-pop">
           <Command.Input
             aria-label="Buscar un comando"
             placeholder="Escribe un comando o busca…"
-            className="w-full border-b border-border bg-transparent px-4 py-3 text-[13px] text-ink outline-none placeholder:text-ink-faint"
+            className="w-full border-b border-border bg-transparent px-4 py-3 text-[13px] text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint focus:bg-primary-soft/40 motion-reduce:transition-none"
           />
           <Command.List className="max-h-72 overflow-y-auto p-2">
             <Command.Empty className="py-4 text-center text-[13px] text-ink-faint">
@@ -107,13 +107,13 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             </Command.Empty>
             <Command.Group
               heading="Navegación"
-              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.14em] [&_[cmdk-group-heading]]:text-ink-faint"
+              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-ink-faint"
             >
               {NAVIGATION.map(item)}
             </Command.Group>
             <Command.Group
               heading="Conexiones"
-              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.14em] [&_[cmdk-group-heading]]:text-ink-faint"
+              className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-ink-faint"
             >
               {CONNECTIONS.map(item)}
             </Command.Group>

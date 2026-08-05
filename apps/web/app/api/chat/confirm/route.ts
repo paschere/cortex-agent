@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireSession } from '@/lib/session';
 import { buildToolContext } from '@/lib/agent';
 import { getTool, runTool } from '@cortex/agent-tools';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 
 const Body = z.object({
   conversationId: z.string().uuid(),
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data: conv, error: convErr } = await db
     .from('conversations')
     .select('agent_id')
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ctx = buildToolContext({
+    organizationId: user.organization.id,
     userId: user.id,
     agentId: conv.agent_id as string,
     conversationId: parsed.data.conversationId,

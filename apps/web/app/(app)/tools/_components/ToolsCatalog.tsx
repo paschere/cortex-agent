@@ -150,8 +150,9 @@ type RiskFilter = 'all' | RiskLevel;
 type ConnectionFilter = 'all' | 'needs-connection' | 'no-integration';
 
 /**
- * Small on/off switch used for both family and tool rows. Squared: this is the
- * box an administrator ticks on the permissions sheet, not a consumer slider.
+ * Small on/off switch used for both family and tool rows. A soft pill track
+ * with a round thumb — the same shape a person would expect on any modern
+ * settings screen, even though what it controls is a permissions sheet.
  */
 function Toggle({
   on,
@@ -174,13 +175,13 @@ function Toggle({
       disabled={disabled}
       onClick={onClick}
       className={clsx(
-        'relative h-5 w-9 shrink-0 rounded-card border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        'relative h-5 w-9 shrink-0 rounded-pill border transition-colors disabled:cursor-not-allowed disabled:opacity-50',
         on ? 'border-emerald bg-emerald' : 'border-border bg-surface-2',
       )}
     >
       <span
         className={clsx(
-          'absolute left-0.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-card border transition-transform',
+          'absolute left-0.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border transition-transform',
           on ? 'translate-x-4 border-emerald bg-surface' : 'border-border bg-surface',
         )}
       />
@@ -203,7 +204,7 @@ function FilterChip({
       onClick={onClick}
       aria-pressed={active}
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-card border px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
+        'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11.5px] font-semibold transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none',
         active
           ? 'border-primary bg-primary text-white'
           : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
@@ -214,7 +215,7 @@ function FilterChip({
   );
 }
 
-/** A ruled tag on the row: squared, bordered, and never a shadow. */
+/** A soft pill tag on the row: short label, bordered, and never a shadow. */
 function Badge({
   className,
   icon: Icon,
@@ -230,7 +231,7 @@ function Badge({
     <span
       title={title}
       className={clsx(
-        'inline-flex items-center gap-1 rounded-card border px-2 py-0.5 text-[10.5px] font-semibold',
+        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10.5px] font-semibold',
         className,
       )}
     >
@@ -380,7 +381,7 @@ export function ToolsCatalog({
                 value={selectedTeamId}
                 onChange={(e) => selectTeam(e.target.value)}
                 aria-label="Equipo cuyos permisos vas a editar"
-                className="w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary sm:w-auto sm:min-w-[240px]"
+                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary sm:w-auto sm:min-w-[240px]"
               >
                 <option value="">Solo mirar — sin equipo seleccionado</option>
                 {teams.map((t) => (
@@ -390,7 +391,7 @@ export function ToolsCatalog({
                 ))}
               </select>
               {selectedTeam && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-card border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-ink-muted">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-ink-muted">
                   <Users2 className="h-3 w-3" />
                   <span className="tabular">{selectedTeam.memberCount}</span>{' '}
                   {selectedTeam.memberCount === 1 ? 'persona' : 'personas'}
@@ -434,7 +435,7 @@ export function ToolsCatalog({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Busca por nombre, por lo que hace o por el sistema que toca…"
-              className="h-9 w-full rounded-card border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary focus:bg-surface"
+              className="h-9 w-full rounded-sm border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary focus:bg-surface"
             />
           </label>
           <Button
@@ -533,7 +534,7 @@ export function ToolsCatalog({
                     type="button"
                     onClick={() => toggleFamily(family)}
                     aria-expanded={open}
-                    className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                    className="flex min-w-0 flex-1 items-start gap-3 rounded-sm text-left transition-colors hover:bg-surface-2"
                   >
                     <span
                       className={clsx(
@@ -585,7 +586,7 @@ export function ToolsCatalog({
                       />
                       <span
                         className={clsx(
-                          'text-[9.5px] font-semibold uppercase tracking-[0.08em]',
+                          'text-[10.5px] font-semibold',
                           familyBlocked ? 'text-rose' : 'text-ink-faint',
                         )}
                       >
@@ -740,12 +741,12 @@ export function ToolsCatalog({
                                 onClick={() => setPermission(t.id, toolBlocked)}
                               />
                               {familyBlocked ? (
-                                <span className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-rose">
+                                <span className="text-[10.5px] font-semibold text-rose">
                                   Por familia
                                 </span>
                               ) : (
                                 toolBlocked && (
-                                  <span className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-rose">
+                                  <span className="text-[10.5px] font-semibold text-rose">
                                     Bloqueada
                                   </span>
                                 )

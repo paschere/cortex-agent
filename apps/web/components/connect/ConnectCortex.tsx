@@ -89,10 +89,10 @@ export function CopyButton({
       onClick={onCopy}
       aria-label={copied ? 'Copied' : label}
       className={clsx(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-[11.5px] font-semibold transition-colors duration-150 motion-reduce:transition-none',
         copied
-          ? 'border-emerald/40 bg-emerald-soft text-emerald'
-          : 'border-border bg-surface text-ink-muted hover:border-primary/30 hover:text-primary',
+          ? 'border-emerald/20 bg-emerald-soft text-emerald'
+          : 'border-border bg-surface text-ink-muted hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink',
         className,
       )}
     >
@@ -105,7 +105,7 @@ export function CopyButton({
 /** Mono line + its own copy button. */
 function CodeLine({ text }: { text: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-[10px] border border-border bg-surface-2 px-3 py-2">
+    <div className="flex items-center gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2">
       <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[11.5px] leading-relaxed text-ink">
         {text}
       </code>
@@ -176,9 +176,7 @@ export function ConnectCortex({ url }: { url: string }) {
   return (
     <div className="mt-4">
       {/* Connector URL */}
-      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
-        Connector URL
-      </div>
+      <div className="field-label">Connector URL</div>
       <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5">
         <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[13px] font-semibold text-ink">
           {url}
@@ -195,8 +193,10 @@ export function ConnectCortex({ url }: { url: string }) {
             onClick={() => setActive(t.id)}
             aria-pressed={t.id === active}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold transition-all',
-              t.id === active ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink',
+              'inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold transition-all duration-150 motion-reduce:transition-none',
+              t.id === active
+                ? 'bg-surface text-primary-ink shadow-card'
+                : 'text-ink-muted hover:bg-surface/60 hover:text-ink',
             )}
           >
             {t.icon}
@@ -228,9 +228,10 @@ export function ConnectCortex({ url }: { url: string }) {
         )}
 
         {current.note && (
-          <p className="mt-3 border-t border-border pt-2.5 text-[11.5px] leading-relaxed text-ink-faint">
-            {current.note}
-          </p>
+          <>
+            <div className="rule-double mt-3" />
+            <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink-faint">{current.note}</p>
+          </>
         )}
       </div>
     </div>

@@ -1,5 +1,5 @@
 import 'server-only';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   type MemoryAudience,
   type MemoryContextEntry,
@@ -48,6 +48,8 @@ export interface SystemPromptResult {
 }
 
 export interface SystemPromptOptions {
+  /** The workspace the turn is happening in. Scopes the memory lookup. */
+  organizationId: string;
   userId: string;
   /** The agent's own prompt, live from the `agents` row. */
   basePrompt: string;
@@ -62,7 +64,7 @@ export interface SystemPromptOptions {
 }
 
 export async function buildSystemPrompt(opts: SystemPromptOptions): Promise<SystemPromptResult> {
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(opts.organizationId);
 
   // A memory lookup that fails is a turn with less context, never a turn that
   // dies — loadMemoryContext already swallows its own errors and returns [].

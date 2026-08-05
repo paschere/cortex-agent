@@ -26,7 +26,7 @@ export function DeleteConversationButton({ id }: { id: string }) {
       disabled={busy}
       aria-label="Eliminar la conversación"
       title="Eliminar la conversación"
-      className="rounded-card p-2 text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
+      className="rounded-full p-2 text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
     >
       {busy ? (
         <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />

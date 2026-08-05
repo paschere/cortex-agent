@@ -4,39 +4,38 @@ import type { ReactNode } from 'react';
 /**
  * Shared tag vocabulary for the audit + security surfaces.
  *
- * These are stamps on a record, not chips in an app: squared, ruled, mono, and
- * coloured only where the colour carries meaning. Low risk and an ordinary
- * `allowed` decision stay grey on purpose — if every row is coloured, the one
- * that was blocked stops standing out.
+ * Soft capsules that carry colour only where the colour means something. Low
+ * risk and an ordinary `allowed` decision stay grey on purpose — if every row
+ * is coloured, the one that was blocked stops standing out.
  *
  * Pure presentation — safe to import from both server and client components.
  */
 
 export const STATUS_TAG: Record<string, string> = {
-  ok: 'border-emerald/40 bg-emerald-soft text-emerald',
-  error: 'border-rose/40 bg-rose-soft text-rose',
-  confirmation_required: 'border-amber/40 bg-amber-soft text-amber',
-  rate_limited: 'border-amber/40 bg-amber-soft text-amber',
+  ok: 'border-emerald/20 bg-emerald-soft text-emerald',
+  error: 'border-rose/20 bg-rose-soft text-rose',
+  confirmation_required: 'border-amber/20 bg-amber-soft text-amber',
+  rate_limited: 'border-amber/20 bg-amber-soft text-amber',
 };
 
 export const RISK_TAG: Record<string, string> = {
   low: 'border-border bg-surface-2 text-ink-faint',
-  medium: 'border-sky/40 bg-sky-soft text-sky',
-  high: 'border-amber/40 bg-amber-soft text-amber',
-  critical: 'border-rose/40 bg-rose-soft text-rose',
+  medium: 'border-sky/20 bg-sky-soft text-sky',
+  high: 'border-amber/20 bg-amber-soft text-amber',
+  critical: 'border-rose/20 bg-rose-soft text-rose',
 };
 
 export const DECISION_TAG: Record<string, string> = {
   allowed: 'border-border bg-surface-2 text-ink-faint',
-  confirmed: 'border-emerald/40 bg-emerald-soft text-emerald',
-  flagged: 'border-amber/40 bg-amber-soft text-amber',
-  blocked: 'border-rose/40 bg-rose-soft text-rose',
+  confirmed: 'border-emerald/20 bg-emerald-soft text-emerald',
+  flagged: 'border-amber/20 bg-amber-soft text-amber',
+  blocked: 'border-rose/20 bg-rose-soft text-rose',
 };
 
 export const SURFACE_TAG: Record<string, string> = {
   web: 'border-border bg-surface-2 text-ink-muted',
-  mcp: 'border-primary/30 bg-primary-soft text-primary',
-  schedule: 'border-sky/40 bg-sky-soft text-sky',
+  mcp: 'border-primary/15 bg-primary-soft text-primary',
+  schedule: 'border-sky/20 bg-sky-soft text-sky',
 };
 
 export const SURFACE_SHORT: Record<string, string> = {
@@ -99,7 +98,7 @@ export function Tag({
     <span
       title={title}
       className={clsx(
-        'inline-block whitespace-nowrap rounded-card border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]',
+        'inline-block whitespace-nowrap rounded-pill border px-2.5 py-[3px] text-[10.5px] font-semibold',
         tone,
         className,
       )}
@@ -136,7 +135,7 @@ export function DecisionTag({ decision }: { decision: string | null }) {
 /** Small grey chip used for risk signals. */
 export function SignalChip({ children }: { children: ReactNode }) {
   return (
-    <span className="tabular inline-block rounded-card border border-border bg-surface-2 px-2 py-0.5 text-[10.5px] text-ink-muted">
+    <span className="tabular inline-block rounded-pill border border-border bg-surface-2 px-2.5 py-[3px] text-[10.5px] text-ink-muted">
       {children}
     </span>
   );

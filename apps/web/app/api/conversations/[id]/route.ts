@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 
 export const runtime = 'nodejs';
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   // Ownership check — only delete the caller's own conversation.
   const { data: conv } = await db

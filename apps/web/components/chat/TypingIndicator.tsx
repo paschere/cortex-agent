@@ -1,6 +1,6 @@
 'use client';
 
-import { Stamp } from 'lucide-react';
+import { Brain } from 'lucide-react';
 
 /**
  * Shown while the assistant is working.
@@ -19,10 +19,10 @@ export function TypingIndicator({ label }: { label?: string }) {
     // <output> carries role="status" natively, so a screen reader is told what
     // the assistant is doing without a redundant ARIA role.
     <output className="flex items-start gap-3" aria-live="polite">
-      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-card border border-primary/30 bg-primary-soft text-primary">
-        <Stamp className="h-3.5 w-3.5" />
+      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary ring-1 ring-inset ring-primary/15">
+        <Brain className="h-3.5 w-3.5" />
       </span>
-      <div className="flex items-center gap-2.5 rounded-card border border-border bg-surface px-3 py-2">
+      <div className="flex items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 py-2 shadow-card">
         <span className="flex items-center gap-1" aria-hidden>
           {[0, 1, 2].map((i) => (
             <span

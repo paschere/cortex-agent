@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { clsx } from 'clsx';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { revalidatePath } from 'next/cache';
 import { ChevronRight, Flag, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -42,13 +42,14 @@ async function setUserRole(formData: FormData) {
   if (user.role !== 'org_admin') throw new Error('forbidden');
   const userId = formData.get('userId') as string;
   const role = formData.get('role') as Role;
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   await sb.from('users').update({ role }).eq('id', userId);
   revalidatePath('/admin/users');
 }
 
 export default async function UsersPage() {
-  const sb = getSupabaseServiceClient();
+  const user = await requireSession();
+  const sb = getOrgScopedClient(user.organization.id);
 
   // Two reads for the whole roster — never one per user. See _lib/user-activity.
   const [{ data }, activity] = await Promise.all([
@@ -111,13 +112,13 @@ export default async function UsersPage() {
                               </span>
                             )}
                           </span>
-                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transition-none motion-reduce:group-hover:translate-x-0" />
                         </Link>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
                           className={clsx(
-                            'rounded-card border px-2 py-0.5 text-[11px] font-semibold',
+                            'rounded-pill border px-2 py-0.5 text-[11px] font-semibold',
                             ROLE_TAG[u.role],
                           )}
                         >
@@ -147,7 +148,7 @@ export default async function UsersPage() {
                         {a.flagged30d > 0 ? (
                           <Link
                             href={`/admin/users/${u.id}#security`}
-                            className="inline-flex items-center gap-1 rounded-card border border-rose/40 bg-rose-soft px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-rose transition-opacity hover:opacity-80"
+                            className="inline-flex items-center gap-1 rounded-pill border border-rose/40 bg-rose-soft px-2 py-0.5 font-mono text-[10px] font-semibold text-rose transition-all duration-150 hover:-translate-y-px hover:opacity-90 motion-reduce:transform-none motion-reduce:transition-none"
                             title={`${a.flagged30d} evento${a.flagged30d === 1 ? '' : 's'} de seguridad en los últimos ${WINDOW_DAYS} días`}
                           >
                             <Flag className="h-3 w-3" />
@@ -167,7 +168,7 @@ export default async function UsersPage() {
                             name="role"
                             defaultValue={u.role}
                             aria-label={`Rol de ${u.name || u.email}`}
-                            className="rounded-card border border-border bg-surface px-2 py-1 text-xs text-ink focus:border-primary"
+                            className="rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                           >
                             <option value="member">{ROLE_LABEL.member}</option>
                             <option value="team_admin">{ROLE_LABEL.team_admin}</option>

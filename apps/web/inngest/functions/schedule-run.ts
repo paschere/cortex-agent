@@ -3,7 +3,7 @@ import { sendEmail } from '@/lib/email';
 import { renderRoutineResultEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { chatModel } from '@cortex/agent-tools';
 import { filterTools, getTool, runTool } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
@@ -13,6 +13,7 @@ const MAX_OUTPUT_CHARS = 8000;
 
 interface JobRow {
   id: string;
+  organization_id: string;
   user_id: string;
   agent_id: string;
   name: string;
@@ -74,7 +75,10 @@ function buildChatBody(job: JobRow, result: ExecResult): string {
  * space with the Chat app is simply skipped.
  */
 async function chatDmUserIds(job: JobRow): Promise<string[]> {
-  const db = getSupabaseServiceClient();
+  // Scoped to the job's workspace, so an explicit recipient list can only ever
+  // match colleagues: an address belonging to somebody at another company
+  // resolves to no directory row and is silently skipped.
+  const db = getOrgScopedClient(job.organization_id);
   let candidates: string[];
 
   if (job.recipients.length > 0) {
@@ -103,7 +107,12 @@ async function chatDmUserIds(job: JobRow): Promise<string[]> {
 async function executeToolJob(job: JobRow): Promise<ExecResult> {
   const toolDef = getTool(job.tool_id ?? '');
   if (!toolDef) return { ok: false, output: '', error: `Unknown tool: ${job.tool_id}` };
-  const ctx = buildToolContext({ userId: job.user_id, agentId: job.agent_id });
+  const ctx = buildToolContext({
+    organizationId: job.organization_id,
+    userId: job.user_id,
+    agentId: job.agent_id,
+    surface: 'schedule',
+  });
   try {
     const result = await runTool(toolDef, job.tool_input ?? {}, ctx, {
       confirmed: job.allow_unattended_writes,
@@ -124,7 +133,7 @@ async function executeToolJob(job: JobRow): Promise<ExecResult> {
  * opted into unattended writes.
  */
 async function executeAgentJob(job: JobRow): Promise<ExecResult> {
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(job.organization_id);
   const { data: agent, error } = await db
     .from('agents')
     .select('id, system_prompt, default_model, allowed_tool_ids')
@@ -132,7 +141,12 @@ async function executeAgentJob(job: JobRow): Promise<ExecResult> {
     .single();
   if (error || !agent) return { ok: false, output: '', error: `Agent ${job.agent_id} not found` };
 
-  const ctx = buildToolContext({ userId: job.user_id, agentId: job.agent_id });
+  const ctx = buildToolContext({
+    organizationId: job.organization_id,
+    userId: job.user_id,
+    agentId: job.agent_id,
+    surface: 'schedule',
+  });
   const allowed = filterTools(agent.allowed_tool_ids as string[]);
 
   const aiTools: Record<string, CoreTool> = Object.fromEntries(
@@ -204,13 +218,19 @@ export const scheduleRun = inngest.createFunction(
   async ({ event, step }) => {
     const jobId = event.data.jobId as string;
     const scheduledFor = event.data.scheduledFor as string;
+    // Put on the event by schedule-dispatch, straight off the job row. Every
+    // database handle in this function is built from it, so a run can only ever
+    // read and write inside the workspace that owns the routine — including the
+    // load below, which finds nothing at all if the two ever disagree.
+    const organizationId = event.data.organizationId as string | undefined;
+    if (!organizationId) return { skipped: 'no workspace on the event' };
 
     const job = await step.run('load-job', async (): Promise<JobRow | null> => {
-      const db = getSupabaseServiceClient();
+      const db = getOrgScopedClient(organizationId);
       const { data, error } = await db
         .from('scheduled_jobs')
         .select(
-          'id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id, recipients, is_global, timezone, next_run_at',
+          'id, organization_id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id, recipients, is_global, timezone, next_run_at',
         )
         .eq('id', jobId)
         .maybeSingle();
@@ -236,7 +256,7 @@ export const scheduleRun = inngest.createFunction(
     if (job.status !== 'active') return { skipped: `job is ${job.status}` };
 
     const runId = await step.run('create-run', async () => {
-      const db = getSupabaseServiceClient();
+      const db = getOrgScopedClient(organizationId);
       const { data, error } = await db
         .from('scheduled_job_runs')
         .insert({
@@ -260,7 +280,7 @@ export const scheduleRun = inngest.createFunction(
 
     if (job.notify_conversation) {
       await step.run('deliver-conversation', async () => {
-        const db = getSupabaseServiceClient();
+        const db = getOrgScopedClient(organizationId);
         let conversationId = job.conversation_id;
         if (!conversationId) {
           const { data: conv, error } = await db
@@ -337,7 +357,14 @@ export const scheduleRun = inngest.createFunction(
         if (userIds.length === 0) return { sent: 0 };
         const text = buildChatBody(job, result);
         const outcomes = await Promise.all(
-          userIds.map((userId) => sendChatDm({ userId, text, threadKey: `job-${job.id}` })),
+          userIds.map((userId) =>
+            sendChatDm({
+              organizationId: job.organization_id,
+              userId,
+              text,
+              threadKey: `job-${job.id}`,
+            }),
+          ),
         );
         const sent = outcomes.filter((o) => o.sent).length;
         if (sent < userIds.length) {
@@ -358,7 +385,7 @@ export const scheduleRun = inngest.createFunction(
     });
 
     await step.run('finalize', async () => {
-      const db = getSupabaseServiceClient();
+      const db = getOrgScopedClient(organizationId);
       const { error: runErr } = await db
         .from('scheduled_job_runs')
         .update({

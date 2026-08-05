@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Archive, Hash, Play, UserCheck, Wrench, CheckCircle2, XCircle, CircleDashed } from 'lucide-react';
@@ -26,9 +26,9 @@ export default async function PipelineDetailPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  await requireSession();
+  const user = await requireSession();
   const { slug } = await params;
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
 
   const { data: p } = await sb
     .from('pipelines')
@@ -142,7 +142,7 @@ export default async function PipelineDetailPage({
                           {(s.tools ?? []).map((t) => (
                             <span
                               key={t}
-                              className="inline-flex items-center gap-1 rounded-sm border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-primary"
+                              className="inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-primary"
                             >
                               <Wrench className="h-3 w-3" />
                               {t}
@@ -169,7 +169,7 @@ export default async function PipelineDetailPage({
               <ul className="space-y-2">
                 {pipelineParams.map((param) => (
                   <li key={param.name} className="text-[12.5px]">
-                    <span className="inline-flex items-center gap-1 rounded-sm border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-ink">
+                    <span className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-ink">
                       <Hash className="h-3 w-3 text-primary" />
                       {param.name}
                       {param.required !== false && <span className="text-rose">*</span>}

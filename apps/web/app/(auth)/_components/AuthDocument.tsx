@@ -5,30 +5,30 @@ import { type InputHTMLAttributes, type ReactNode, useId } from 'react';
 
 /**
  * The access screens are the first thing anyone sees, so they set the promise
- * the rest of the product has to keep: this is a system of record, not a
- * consumer app.
+ * the rest of the product has to keep: a well-made instrument, not the
+ * paperwork it replaces.
  *
- * Every screen in the flow is the same document — one masthead printed on
- * security paper, fields that look like the boxes on a form, and definition
- * from rules rather than shadows. Sharing these pieces is what stops the six
- * screens drifting into six different products.
+ * Every screen in the flow shares the same card: a soft indigo band up top, a
+ * curved white body, and depth that comes from a lifted shadow rather than a
+ * ruled line. Sharing these pieces is what stops the six screens drifting
+ * into six different products.
  */
 
-/** The sheet itself: white, ruled, flat. */
+/** The card itself: white, curved, lifted off the canvas. */
 export function AuthDocument({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-card border border-border-strong bg-surface">
+    <div className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
       {children}
     </div>
   );
 }
 
 /**
- * The printed head of the document.
+ * The band at the top of the card.
  *
- * The wordmark is set in wide caps directly on the guilloche rather than in a
- * chip: on security paper a name that sits in its own box reads as a sticker,
- * and this one has to read as printed.
+ * The wordmark sits directly on the mesh rather than in its own chip — boxing
+ * it up would read as a sticker dropped on top of the gradient instead of a
+ * mark that belongs to it.
  */
 export function AuthMasthead({
   note = 'Cerebro operativo · logística postal y aduanera',
@@ -45,8 +45,7 @@ export function AuthMasthead({
           Cortex
         </span>
       </div>
-      <div className="mt-5 h-px bg-white/25" />
-      <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-white/75">{note}</p>
+      <p className="mt-4 text-[13px] leading-snug text-white/75">{note}</p>
     </div>
   );
 }
@@ -85,8 +84,9 @@ export function AuthField({
       <input
         id={id}
         className={clsx(
-          'mt-1 w-full rounded-card border border-border bg-surface-2 px-3 py-2.5 text-[13px] text-ink',
+          'mt-1 w-full rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-[13px] text-ink',
           'transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-surface',
+          'focus:outline-none focus:ring-4 focus:ring-primary/10',
           // Credentials and one-time codes are read character by character.
           // Mono is what stops an l passing for a 1 at the worst moment.
           mono && 'font-mono',
@@ -102,20 +102,18 @@ export function AuthDivider({ label = 'o' }: { label?: string }) {
   return (
     <div className="my-4 flex items-center gap-3">
       <span className="h-px flex-1 bg-border" />
-      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-        {label}
-      </span>
+      <span className="text-[11px] font-medium text-ink-faint">{label}</span>
       <span className="h-px flex-1 bg-border" />
     </div>
   );
 }
 
-/** A refusal stamped on the form: red, ruled, and never dismissible. */
+/** An error banner inside the card: soft rose, never dismissed on its own. */
 export function AuthError({ children }: { children: ReactNode }) {
   return (
     <p
       role="alert"
-      className="mt-4 rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] leading-snug text-rose"
+      className="mt-4 rounded-sm border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] leading-snug text-rose"
     >
       {children}
     </p>

@@ -23,7 +23,7 @@ import {
   stopSandbox,
 } from '@/lib/dev-tasks/sandbox';
 import { inngest } from '@/lib/inngest';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   type CheckOutcome,
   type CheckPlan,
@@ -125,6 +125,11 @@ export const devTaskRun = inngest.createFunction(
     const queued = event.data as unknown as DevTaskQueuedEvent;
     const taskId = queued?.taskId;
     if (!taskId) return { skipped: 'event carried no taskId' };
+    // Put on the event by the intake, off the repository row it resolved. Every
+    // database handle in this function is pinned to it, so a task id from
+    // another workspace simply finds nothing to claim.
+    const organizationId = queued.repository?.organizationId;
+    if (!organizationId) return { skipped: 'event carried no workspace' };
 
     const budget = budgetFromEnv(process.env);
     // Captured inside a step so replays see the same instant; a bare Date.now()
@@ -132,7 +137,7 @@ export const devTaskRun = inngest.createFunction(
     const startedAtMs = await step.run('started-at', async () => Date.now());
 
     const claim = await step.run('claim', async () => {
-      const db = getSupabaseServiceClient() as unknown as ClaimDbClient;
+      const db = getOrgScopedClient(organizationId) as unknown as ClaimDbClient;
       return claimDevTask(db, taskId);
     });
 
@@ -156,7 +161,9 @@ export const devTaskRun = inngest.createFunction(
     // The allowlist is re-read from the database rather than trusted from the
     // event: the event is a message that could be stale or replayed, while
     // dev_repositories is the authority on what Cortex may touch right now.
-    const repository = await step.run('verify-allowlist', async () => verifyRepository(task));
+    const repository = await step.run('verify-allowlist', async () =>
+      verifyRepository(organizationId, task),
+    );
     if ('error' in repository) {
       await report(step, 'rejected', {
         taskId,
@@ -525,8 +532,11 @@ async function report(step: StepApi, id: string, data: DevTaskStatusEvent): Prom
  * minted and a VM is started, and it is the last chance to notice that the repo
  * was deactivated in between.
  */
-async function verifyRepository(task: DevTask): Promise<DevRepository | { error: string }> {
-  const db = getSupabaseServiceClient();
+async function verifyRepository(
+  organizationId: string,
+  task: DevTask,
+): Promise<DevRepository | { error: string }> {
+  const db = getOrgScopedClient(organizationId);
   const { data, error } = await db
     .from('dev_repositories')
     .select('id, key, name, clone_url, default_branch, allow_pull_requests, is_active')

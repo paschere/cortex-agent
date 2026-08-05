@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { getTool, listTools } from '@cortex/agent-tools';
 
 export const runtime = 'nodejs';
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(session.organization.id);
   const { error } = await db.from('team_tool_permissions').upsert(
     {
       team_id: teamId,

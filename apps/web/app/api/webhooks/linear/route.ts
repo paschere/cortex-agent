@@ -91,6 +91,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const data = body.data ?? {};
   const issueId = data.id as string;
 
+  // Unscoped by design: `dev_task_events` (migration 0064 § 12) is written here
+  // with organization_id left null on purpose. A Linear delivery carries no
+  // session and no workspace — the issue's repository is what determines whose
+  // work this is, and that match (and the resulting scoped dev_tasks row) only
+  // happens downstream in inngest/functions/dev-task-intake.ts, which rejects
+  // and asks rather than guessing when no repository matches.
   const ledger = supabaseDeliveryLedger(getSupabaseServiceClient());
   let deliveryId: string;
   try {

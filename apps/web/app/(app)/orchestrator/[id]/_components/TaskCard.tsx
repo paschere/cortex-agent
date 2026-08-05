@@ -120,7 +120,7 @@ export function TaskCard({
   return (
     <div
       className={clsx(
-        'flex flex-col rounded-card border bg-surface transition-colors',
+        'flex flex-col rounded-card border bg-surface shadow-card transition-colors',
         tone.ring,
         running && 'border-l-2 border-l-primary',
       )}
@@ -136,9 +136,7 @@ export function TaskCard({
           </div>
           <div className="tabular mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-ink-faint">
             {task.agentLabel && (
-              <span className="font-semibold uppercase tracking-[0.08em] text-ink-muted">
-                {task.agentLabel}
-              </span>
+              <span className="font-semibold text-ink-muted">{task.agentLabel}</span>
             )}
             {task.dependsOn.length > 0 && (
               <span>
@@ -179,7 +177,7 @@ export function TaskCard({
           {task.allowedTools.slice(0, 6).map((id) => (
             <span
               key={id}
-              className="rounded-sm border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-ink-muted"
+              className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 font-mono text-[10px] text-ink-muted"
             >
               {id}
             </span>

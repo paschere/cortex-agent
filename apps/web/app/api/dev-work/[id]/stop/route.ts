@@ -1,6 +1,6 @@
 import { isMissingTable } from '@/lib/dev-work';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 import { NextResponse } from 'next/server';
 
@@ -33,7 +33,7 @@ export async function POST(
   const user = await requireSession();
   const { id } = await params;
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data: task, error: readError } = await db
     .from('dev_tasks')
     .select('id, title, status, cancel_requested_at')

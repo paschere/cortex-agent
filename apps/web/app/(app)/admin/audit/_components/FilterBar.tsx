@@ -32,10 +32,10 @@ function ChipGroup({ label, chips }: { label: string; chips: Chip[] }) {
           key={c.key}
           href={c.href}
           className={clsx(
-            'rounded-card border px-2.5 py-1 text-[11.5px] font-semibold transition-colors',
+            'rounded-pill border px-2.5 py-1 text-[11.5px] font-semibold transition-all duration-150',
             c.mono && 'font-mono',
             c.active
-              ? 'border-primary bg-primary text-white'
+              ? 'border-primary/30 bg-primary-soft text-primary-ink'
               : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
           )}
         >
@@ -111,7 +111,7 @@ export function FilterBar({
   ];
 
   return (
-    <div className="mb-4 space-y-2 rounded-card border border-border bg-surface p-3">
+    <div className="mb-4 space-y-2 rounded-card border border-border bg-surface p-3 shadow-card">
       <ChipGroup label="Rango" chips={rangeChips} />
       <ChipGroup label="Estado" chips={statusChips} />
       <ChipGroup label="Origen" chips={surfaceChips} />
@@ -121,13 +121,13 @@ export function FilterBar({
       {filters.user && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="field-label w-[62px] shrink-0">Persona</span>
-          <span className="tabular rounded-card border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11.5px] font-semibold text-primary-ink">
+          <span className="tabular rounded-pill border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11.5px] font-semibold text-primary-ink">
             {userLabel ?? `${filters.user.slice(0, 8)}…`}
           </span>
           <Link
             href={auditHref(filters, { user: '' })}
             aria-label="Quitar el filtro de persona"
-            className="rounded-card p-1 text-ink-faint hover:bg-surface-2 hover:text-ink"
+            className="rounded-full p-1 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
           >
             <X className="h-3.5 w-3.5" />
           </Link>

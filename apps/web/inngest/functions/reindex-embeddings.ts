@@ -22,6 +22,18 @@ import { logger } from '@cortex/core';
  * owner of "turn a source into chunks" and this one owns "turn chunks into
  * vectors", with no overlap to keep in sync.
  *
+ * WHY IT RUNS UNSCOPED, AND WHY THAT IS SAFE. This is the one job that
+ * deliberately works across every workspace at once, on the raw service-role
+ * client. "Which chunks have no vector" is a property of the install, not of a
+ * tenant, and there is no session behind a cron to scope it to. It is also the
+ * only job that reads `kb_chunks` without naming a document — which the scoped
+ * client would refuse, correctly, since kb_chunks inherits its workspace from
+ * kb_documents (migration 0064 § 12).
+ *
+ * Nothing here can cross a boundary: every row is read by id, written back by
+ * the same id, and the only column that changes is `embedding`. No content
+ * moves, nothing is returned to a caller, and no row changes owner.
+ *
  * WHY A CRON AS WELL AS AN EVENT. After a dimension migration the KB is dark
  * until something drains the backlog, and "someone remembers to trigger the
  * job" is not a recovery plan — nor is it one for the day a Voyage key is

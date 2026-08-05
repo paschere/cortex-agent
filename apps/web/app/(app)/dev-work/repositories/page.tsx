@@ -3,7 +3,7 @@ import { Eyebrow, Panel } from '@/components/ui/panel';
 import { DEV_REPO_COLUMNS, isMissingTable, toDevRepository } from '@/lib/dev-work';
 import { chipClass } from '@/lib/status-chip';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   ArrowLeft,
   FolderGit2,
@@ -45,7 +45,7 @@ async function addRepository(formData: FormData) {
   const description = (formData.get('description') as string | null)?.trim() || null;
   const defaultBranch = (formData.get('defaultBranch') as string | null)?.trim() || 'main';
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   await sb.from('dev_repositories').insert({
     name: fullName.split('/')[1],
     full_name: fullName,
@@ -66,7 +66,7 @@ async function setEnabled(formData: FormData) {
   const enabled = formData.get('enabled') === 'true';
   if (!id) return;
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   await sb.from('dev_repositories').update({ enabled }).eq('id', id);
   revalidatePath('/dev-work/repositories');
 }
@@ -79,7 +79,7 @@ async function removeRepository(formData: FormData) {
   const id = (formData.get('id') as string | null)?.trim();
   if (!id) return;
 
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   await sb.from('dev_repositories').delete().eq('id', id);
   revalidatePath('/dev-work/repositories');
 }
@@ -87,7 +87,7 @@ async function removeRepository(formData: FormData) {
 export default async function DevRepositoriesPage() {
   const user = await requireSession();
   const isAdmin = user.role === 'org_admin';
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
 
   const [repoRes, taskRes] = await Promise.all([
     sb.from('dev_repositories').select(DEV_REPO_COLUMNS).order('name'),
@@ -172,23 +172,23 @@ export default async function DevRepositoriesPage() {
                   placeholder="dueño/repositorio"
                   title="dueño/repositorio, tal como aparece en GitHub"
                   aria-label="Nombre completo del repositorio"
-                  className="min-w-[220px] flex-1 rounded-card border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-border-strong focus:outline-none"
+                  className="min-w-[220px] flex-1 rounded-card border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                 />
                 <input
                   name="defaultBranch"
                   placeholder="main"
                   aria-label="Rama base"
-                  className="w-28 rounded-card border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-border-strong focus:outline-none"
+                  className="w-28 rounded-card border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                 />
                 <input
                   name="description"
                   placeholder="¿Qué es? (opcional)"
                   aria-label="Descripción del repositorio"
-                  className="min-w-[200px] flex-1 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-border-strong focus:outline-none"
+                  className="min-w-[200px] flex-1 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                 />
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-primary-strong"
+                  className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
                 >
                   <Plus className="h-3.5 w-3.5" /> Permitir
                 </button>
@@ -214,7 +214,7 @@ export default async function DevRepositoriesPage() {
                   <Panel key={repo.id} className="p-4">
                     <div className="flex flex-wrap items-start gap-3">
                       <span
-                        className={`grid h-9 w-9 shrink-0 place-items-center rounded-card border ${
+                        className={`grid h-9 w-9 shrink-0 place-items-center rounded-sm border ${
                           repo.enabled
                             ? 'border-emerald/40 bg-emerald-soft text-emerald'
                             : 'border-border bg-surface-2 text-ink-faint'
@@ -259,7 +259,7 @@ export default async function DevRepositoriesPage() {
                             />
                             <button
                               type="submit"
-                              className={`inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                              className={`inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                                 repo.enabled
                                   ? 'text-amber hover:bg-amber-soft'
                                   : 'text-emerald hover:bg-emerald-soft'
@@ -279,7 +279,7 @@ export default async function DevRepositoriesPage() {
                             <button
                               type="submit"
                               title="Olvidar este repositorio por completo. Casi siempre lo que quieres es apagarlo."
-                              className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-rose transition-colors hover:bg-rose-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-rose"
+                              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-rose transition-colors hover:bg-rose-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-rose"
                             >
                               <Trash2 className="h-3.5 w-3.5" /> Quitar
                             </button>

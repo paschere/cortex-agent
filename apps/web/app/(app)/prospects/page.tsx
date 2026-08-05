@@ -1,6 +1,6 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { Radar } from 'lucide-react';
 import { ProspectBoard } from './_components/ProspectBoard';
 import type { ContactConfidence, Prospect, SignalStatus } from './_components/types';
@@ -42,8 +42,8 @@ const STATUSES = new Set<string>(['new', 'qualified', 'rejected', 'contacted']);
 const CONFIDENCES = new Set<string>(['found', 'inferred', 'unknown']);
 
 export default async function ProspectsPage() {
-  await requireSession();
-  const db = getSupabaseServiceClient();
+  const user = await requireSession();
+  const db = getOrgScopedClient(user.organization.id);
 
   const { data } = await db
     .from('growth_signals')

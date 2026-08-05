@@ -19,6 +19,7 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     fatal: vi.fn(),
   };
   return {
+    organizationId: 'org-test',
     userId: '00000000-0000-0000-0000-000000000001',
     agentId: '00000000-0000-0000-0000-000000000002',
     db: db as unknown as ToolContext['db'],

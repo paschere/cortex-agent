@@ -25,8 +25,8 @@ function authBadge(t: McpServer['auth_type']): string {
   return t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer' : 'Sin auth';
 }
 
-/** A ruled tag on the row: squared, bordered, never a shadow. */
-const TAG = 'rounded-card border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]';
+/** A soft pill tag on the row: short label, no shadow of its own. */
+const TAG = 'rounded-pill border px-2.5 py-0.5 text-[11px] font-semibold';
 
 export function McpServerList({ servers }: { servers: McpServer[] }) {
   if (servers.length === 0) {

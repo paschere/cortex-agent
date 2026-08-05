@@ -4,7 +4,7 @@ import { Panel } from '@/components/ui/panel';
 import { conversationSurface } from '@/lib/conversation-surface';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { ArrowLeft, MessagesSquare, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -36,7 +36,7 @@ export default async function ConversationDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireSession();
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   const { id } = await params;
 
   const { data: convData } = await sb

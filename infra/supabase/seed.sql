@@ -1,29 +1,21 @@
--- Idempotent seed: ensure Sales team + Sales agent exist
-do $$
-declare
-  v_team uuid;
-begin
-  insert into public.teams(name)
-  values ('Sales')
-  on conflict (name) do nothing;
-
-  select id into v_team from public.teams where name = 'Sales';
-
-  insert into public.agents(slug, name, team_id, system_prompt, default_model, allowed_tool_ids)
-  values (
-    'sales',
-    'Sales',
-    v_team,
-    'You are the Sales co-pilot for this workspace. Always cite KB sources when stating facts. Never send emails directly — create drafts only. For full proposals prefer the sales.draft_proposal tool; for narrow questions use primitives. Respond in the user''s language.',
-    'gemini-3.1-flash-lite',
-    array[
-      'hubspot.search_companies','hubspot.get_company','hubspot.search_deals','hubspot.get_deal','hubspot.list_recent_activities',
-      'gmail.search','gmail.read_thread','gmail.draft',
-      'gcal.list_events','gcal.create_event',
-      'gsheets.read_range',
-      'kb.search','kb.list_spaces',
-      'sales.draft_proposal'
-    ]
-  )
-  on conflict (slug) do nothing;
-end $$;
+-- Local development seed.
+--
+-- This file used to insert a "Sales" team and a "Sales" agent. Both statements
+-- are wrong twice over now and have been removed rather than repaired:
+--
+--   1. Migration 0037 archived every agent that is not `cortex`, and 0063
+--      finished the job. Re-inserting a Sales agent after the migrations ran
+--      undid, on every `supabase db reset`, a decision the product had already
+--      made — local dev was the only place that agent still existed.
+--
+--   2. Migration 0064 made teams and agents belong to a workspace. There is no
+--      workspace to seed them into at reset time: workspaces are created when
+--      somebody signs up, and each one gets its own copy of the agent catalogue
+--      automatically (see `provision_organization_agents`, wired to a trigger on
+--      ba_organization). Seeding a workspace-less row is not possible, and
+--      seeding one into the template workspace would push a Sales agent into
+--      every company that ever registers.
+--
+-- So a fresh local database is intentionally empty of tenant data. Sign in once
+-- and the first authenticated request provisions the workspace, the directory
+-- row and the agents.

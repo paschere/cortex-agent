@@ -2,7 +2,7 @@
 
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
-import { Menu, Stamp } from 'lucide-react';
+import { Brain, Menu } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
@@ -99,13 +99,13 @@ export function ChatRoot({
           type="button"
           onClick={() => setSidebarOpen(true)}
           aria-label="Abrir menú"
-          className="rounded-card p-1.5 text-ink-muted hover:bg-surface-2 md:hidden"
+          className="rounded-full p-1.5 text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink motion-reduce:transition-none md:hidden"
         >
           <Menu className="h-5 w-5" />
         </button>
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-card border border-primary/30 bg-primary-soft text-primary">
-            <Stamp className="h-3.5 w-3.5" />
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary ring-1 ring-inset ring-primary/15">
+            <Brain className="h-3.5 w-3.5" />
           </span>
           <div className="min-w-0 leading-tight">
             <div className="truncate text-[13px] font-semibold text-ink">
@@ -113,7 +113,7 @@ export function ChatRoot({
             </div>
             {/* The conversation id is what a person quotes when they need this
                 exchange looked up later, so it is set as evidence, not prose. */}
-            <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+            <div className="font-mono text-[10.5px] text-ink-faint">
               {conversationId ? (
                 <span title={conversationId}>#{conversationId.slice(0, 8)}</span>
               ) : (

@@ -146,7 +146,7 @@ function ApprovalBadge({ count, active }: { count: number; active: boolean }) {
       <span
         aria-hidden="true"
         className={clsx(
-          'ml-auto shrink-0 rounded-sm px-1.5 py-0.5 text-[10.5px] font-bold tabular-nums',
+          'ml-auto shrink-0 rounded-pill px-2 py-0.5 text-[10.5px] font-bold tabular-nums',
           active ? 'bg-white/20 text-white' : 'bg-amber-soft text-amber',
         )}
       >
@@ -158,10 +158,14 @@ function ApprovalBadge({ count, active }: { count: number; active: boolean }) {
 }
 
 /**
- * One destination. The active row is the only saturated block of stamp blue
- * anywhere in the chrome — that single exception is what makes "where am I"
- * answerable from the corner of the eye. It is filled rather than raised: on a
- * ruled page a drop shadow reads as a sticker laid on the form.
+ * One destination, drawn as a capsule. The active row is the only saturated
+ * block of indigo anywhere in the chrome — that single exception is what makes
+ * "where am I" answerable from the corner of the eye. It is both filled and
+ * lifted, so it reads as the one thing standing proud of the recessed rail.
+ *
+ * Rows change colour on hover but never move: a list of twelve capsules all
+ * flinching under the cursor is noise, and the lift is reserved for the things
+ * a person actually presses.
  */
 function NavLink({
   item,
@@ -190,13 +194,13 @@ function NavLink({
       aria-current={active ? 'page' : undefined}
       title={collapsed ? item.label : undefined}
       className={clsx(
-        'group relative flex items-center rounded-card transition-colors',
+        'group relative flex items-center rounded-pill transition-colors duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         'motion-reduce:transition-none',
-        collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5',
+        collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3',
         !collapsed && (primary ? 'py-[9px]' : 'py-[7px]'),
         active
-          ? 'bg-primary font-semibold text-white'
+          ? 'bg-primary font-semibold text-white shadow-card'
           : clsx(
               'hover:bg-surface hover:text-ink',
               primary ? 'font-medium text-ink' : 'font-medium text-ink-muted',
@@ -215,7 +219,7 @@ function NavLink({
           <span
             aria-hidden="true"
             className={clsx(
-              'absolute -right-1.5 -top-1.5 min-w-[15px] rounded-sm px-1 text-center text-[9.5px] font-bold leading-[15px] tabular-nums',
+              'absolute -right-1.5 -top-1.5 min-w-[15px] rounded-full px-1 text-center text-[9.5px] font-bold leading-[15px] tabular-nums',
               active ? 'bg-white text-primary' : 'bg-amber text-white',
             )}
           >
@@ -230,7 +234,7 @@ function NavLink({
   );
 }
 
-/** Open threads, hung off Chat on a hairline — they are chats, so they nest. */
+/** Open threads, hung off Chat on a hairline stem — they are chats, so they nest. */
 function ThreadList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -273,7 +277,7 @@ function ThreadList({ onNavigate }: { onNavigate?: () => void }) {
               aria-current={active ? 'page' : undefined}
               title={c.title ?? 'Untitled'}
               className={clsx(
-                'block truncate rounded-card py-1.5 pl-2 pr-7 text-[12.5px] transition-colors',
+                'block truncate rounded-pill py-1.5 pl-2.5 pr-7 text-[12.5px] transition-colors duration-150',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
                 'motion-reduce:transition-none',
                 active
@@ -287,7 +291,7 @@ function ThreadList({ onNavigate }: { onNavigate?: () => void }) {
               type="button"
               onClick={(e) => handleDelete(e, c.id)}
               aria-label={`Delete conversation ${c.title?.trim() || 'Untitled'}`}
-              className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded-sm p-1 text-ink-faint opacity-0 transition-opacity hover:bg-rose-soft hover:text-rose focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 group-hover/conv:opacity-100 motion-reduce:transition-none"
+              className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-ink-faint opacity-0 transition-[opacity,color,background-color] duration-150 hover:bg-rose-soft hover:text-rose focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 group-hover/conv:opacity-100 motion-reduce:transition-none"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -321,7 +325,7 @@ function GroupBlock({
         onClick={onToggle}
         aria-expanded={open}
         aria-controls={panelId}
-        className="flex w-full items-center gap-1.5 rounded-card px-2.5 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.13em] text-ink-faint transition-colors hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="flex w-full items-center gap-1.5 rounded-pill px-3 py-1.5 text-[11px] font-semibold tracking-[0.02em] text-ink-faint transition-colors duration-150 hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         <ChevronRight
           aria-hidden="true"
@@ -360,10 +364,9 @@ function Brand({ collapsed }: { collapsed: boolean }) {
       {!collapsed && (
         <div className="leading-tight">
           {/*
-            The wordmark reads as printed on the document rather than set on a
-            screen: weight and a touch of tracking, no gradient. The maker's line
-            below uses the field-label treatment — it is the imprint at the foot
-            of a form, which is exactly what it is.
+            The wordmark stays plain — weight and a touch of tracking, no
+            gradient. The maker's line below takes the field-label treatment: it
+            names the thing above it and should recede while doing so.
           */}
           <div className="text-[15px] font-bold tracking-[0.01em] text-ink">Cortex</div>
           <div className="field-label">by Vertix</div>
@@ -414,7 +417,7 @@ function SidebarNav({
 
       {collapsed ? (
         // A 72px rail cannot hold a disclosure, so the groups flatten into one
-        // icon list with the boundaries kept as rules.
+        // icon list, separated by a hairline where a label would have gone.
         <>
           {groups.map((group) => (
             <div key={group.id} className="flex flex-col gap-px">
@@ -521,7 +524,7 @@ export function Sidebar({
   return (
     <>
       {/* Desktop: collapsible rail, hidden on mobile. Recessed against the
-          canvas so the one plum active row is the only thing that lifts. */}
+          canvas so the one indigo active row is the only thing that lifts. */}
       <aside
         className={clsx(
           'hidden shrink-0 flex-col border-r border-border bg-surface-2 md:flex',
@@ -541,7 +544,7 @@ export function Sidebar({
               type="button"
               onClick={toggleCollapsed}
               aria-label="Collapse sidebar"
-              className="rounded-card p-1.5 text-ink-faint transition-colors hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+              className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
             >
               <PanelLeftClose className="h-4 w-4" />
             </button>
@@ -552,7 +555,7 @@ export function Sidebar({
             type="button"
             onClick={toggleCollapsed}
             aria-label="Expand sidebar"
-            className="mx-auto mb-2 rounded-card p-1.5 text-ink-faint transition-colors hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="mx-auto mb-2 rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             <PanelLeftOpen className="h-4 w-4" />
           </button>
@@ -572,7 +575,7 @@ export function Sidebar({
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm md:hidden" />
-          <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-border bg-surface-2 shadow-xl outline-none md:hidden">
+          <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-border bg-surface-2 shadow-pop outline-none md:hidden">
             <div className="flex shrink-0 items-center justify-between px-3 py-4">
               <Dialog.Title asChild>
                 <div>
@@ -581,7 +584,7 @@ export function Sidebar({
               </Dialog.Title>
               <Dialog.Close
                 aria-label="Close menu"
-                className="rounded-card p-1.5 text-ink-faint transition-colors hover:bg-surface hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+                className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
               >
                 <X className="h-4 w-4" />
               </Dialog.Close>

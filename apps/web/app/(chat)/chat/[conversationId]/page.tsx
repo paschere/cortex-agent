@@ -1,6 +1,6 @@
 import { ChatRoot } from '@/components/chat/ChatRoot';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { toToolInvocations } from '@/lib/tool-invocations';
 import { listAgents } from '@cortex/agents';
 import type { Message } from 'ai';
@@ -12,7 +12,7 @@ export default async function ResumeChatPage({
 }) {
   const { conversationId } = await params;
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   const agents = listAgents().map((a) => ({
     slug: a.id,

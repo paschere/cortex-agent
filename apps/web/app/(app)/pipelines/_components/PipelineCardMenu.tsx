@@ -117,7 +117,7 @@ function Item({
         'flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12.5px] font-semibold outline-none transition-colors',
         tone === 'rose'
           ? 'text-rose data-[highlighted]:bg-rose-soft'
-          : 'text-ink-muted data-[highlighted]:bg-surface-2 data-[highlighted]:text-ink',
+          : 'text-ink-muted data-[highlighted]:bg-primary-soft data-[highlighted]:text-primary-ink',
       )}
     >
       {children}

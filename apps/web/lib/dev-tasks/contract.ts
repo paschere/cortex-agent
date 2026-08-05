@@ -87,6 +87,12 @@ export interface DevTaskRequester {
 /** A repo from the allowlist. */
 export interface DevTaskRepository {
   id: string;
+  /**
+   * The workspace that registered this repository. It is the workspace the
+   * whole delivery is processed in: a Linear webhook arrives with no session,
+   * so the repo it resolves to is the only thing that says whose work this is.
+   */
+  organizationId: string;
   key: string;
   provider: 'github';
   cloneUrl: string;

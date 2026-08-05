@@ -16,7 +16,7 @@ const TONE_CHIP: Record<Tone, string> = {
   neutral: 'bg-surface-2 text-ink-faint',
 };
 
-/** Border to match each tone, so a chip reads as ruled rather than filled. */
+/** Border tuned to each tone so the chip's edge stays legible against its own soft fill. */
 const TONE_BORDER: Record<Tone, string> = {
   primary: 'border-primary/30',
   emerald: 'border-emerald/30',
@@ -49,9 +49,9 @@ export function StatTile({
   tone?: Tone;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-card border border-border bg-surface p-3.5">
+    <div className="flex items-center gap-3 rounded-card border border-border bg-surface p-3.5 shadow-card">
       <span
-        className={clsx('grid h-9 w-9 shrink-0 place-items-center rounded-card', TONE_CHIP[tone])}
+        className={clsx('grid h-9 w-9 shrink-0 place-items-center rounded-sm', TONE_CHIP[tone])}
       >
         {icon}
       </span>
@@ -81,7 +81,7 @@ export function Chip({
     <span
       title={title}
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-card border px-2.5 py-1 text-[11.5px] font-semibold',
+        'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11.5px] font-semibold',
         TONE_CHIP[tone],
         TONE_BORDER[tone],
       )}
@@ -152,9 +152,9 @@ export function StackedBar({
   return (
     <div>
       {total === 0 ? (
-        <div className="h-3 w-full rounded-card border border-border bg-surface-2" />
+        <div className="h-3 w-full rounded-full border border-border bg-surface-2" />
       ) : (
-        <div className="flex h-3 w-full overflow-hidden rounded-card border border-border bg-surface-2">
+        <div className="flex h-3 w-full overflow-hidden rounded-full border border-border bg-surface-2">
           {visible.map((s) => (
             <div
               key={s.key}
@@ -186,7 +186,7 @@ export function StackedBar({
 /** Horizontal count bar used by the "top tools" list. */
 export function CountBar({ value, max, tone }: { value: number; max: number; tone: string }) {
   return (
-    <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
+    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
       <div
         className={clsx('h-full', tone)}
         style={{ width: `${Math.max(3, Math.round((value / Math.max(1, max)) * 100))}%` }}

@@ -74,7 +74,7 @@ export function ToolPicker({
               key={id}
               title={t?.description ?? 'Unknown tool — not in the live registry'}
               className={clsx(
-                'inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-[10.5px] font-semibold',
+                'inline-flex items-center gap-1 rounded-pill border px-1.5 py-0.5 font-mono text-[10.5px] font-semibold',
                 write
                   ? 'border-amber/40 bg-amber-soft text-amber'
                   : 'border-primary/30 bg-primary-soft text-primary',
@@ -99,7 +99,7 @@ export function ToolPicker({
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-sm border border-dashed border-border-strong px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-muted transition-colors hover:border-primary hover:text-primary"
+            className="inline-flex items-center gap-1 rounded-pill border border-dashed border-border-strong px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary hover:text-primary motion-reduce:transform-none motion-reduce:transition-none"
           >
             <Plus className="h-3 w-3" />
             Tool
@@ -107,7 +107,7 @@ export function ToolPicker({
 
           {open && (
             <div className="absolute left-0 top-7 z-30 w-[340px] overflow-hidden rounded-card border border-border bg-surface shadow-pop">
-              <div className="relative flex items-center border-b border-border">
+              <div className="relative flex items-center border-b border-border transition-colors duration-150 focus-within:bg-primary-soft/40 motion-reduce:transition-none">
                 <Search className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-ink-faint" />
                 <input
                   ref={searchRef}

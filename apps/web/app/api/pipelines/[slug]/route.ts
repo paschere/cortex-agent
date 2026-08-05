@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { UpdateBody, placeholderError } from '../_schema';
 
 export const runtime = 'nodejs';
@@ -13,7 +13,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
-  await requireSession();
+  const user = await requireSession();
   const { slug } = await params;
 
   const parsed = UpdateBody.safeParse(await req.json().catch(() => null));
@@ -25,7 +25,7 @@ export async function PATCH(
   }
   const body = parsed.data;
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data: existing } = await db
     .from('pipelines')
     .select('id')
@@ -68,10 +68,10 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ): Promise<NextResponse> {
-  await requireSession();
+  const user = await requireSession();
   const { slug } = await params;
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data, error } = await db
     .from('pipelines')
     .update({ archived: true, updated_at: new Date().toISOString() })

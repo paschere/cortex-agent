@@ -9,7 +9,7 @@ import { confirmationReason } from '@/lib/confirmation-notes';
 import { sendEmail } from '@/lib/email';
 import { renderApprovalRequestEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { humanizeToolId } from '@/lib/tool-labels';
 import { logger } from '@cortex/core';
 
@@ -47,6 +47,7 @@ const MAX_PAYLOAD_CHARS = 1500;
 const APPROVAL_TTL_MS = 15 * 60_000;
 
 export async function sendApprovalRequestEmail(opts: {
+  organizationId: string;
   userId: string;
   toolId: string;
   input: unknown;
@@ -58,7 +59,7 @@ export async function sendApprovalRequestEmail(opts: {
   expiresAt?: Date;
 }): Promise<void> {
   try {
-    const db = getSupabaseServiceClient();
+    const db = getOrgScopedClient(opts.organizationId);
     const { data: user } = await db
       .from('users')
       .select('email, name')
@@ -118,10 +119,11 @@ export async function sendApprovalRequestEmail(opts: {
         input: opts.input,
         expiresAt: opts.expiresAt ?? new Date(Date.now() + APPROVAL_TTL_MS),
         origin: opts.surface ?? 'web',
-        timeZone: await approvalTimeZone(opts.userId),
+        timeZone: await approvalTimeZone(opts.organizationId, opts.userId),
         ...(base ? { appBaseUrl: base } : {}),
       });
       const carded = await sendChatDm({
+        organizationId: opts.organizationId,
         userId: opts.userId,
         text: approvalNotificationText(opts.toolId),
         cards: [card],
@@ -158,7 +160,11 @@ export async function sendApprovalRequestEmail(opts: {
         'Nothing has happened yet — it only runs if you approve. The request expires in 15 minutes.',
       ].join('\n'),
     );
-    const chat = await sendChatDm({ userId: opts.userId, text: chatText });
+    const chat = await sendChatDm({
+      organizationId: opts.organizationId,
+      userId: opts.userId,
+      text: chatText,
+    });
     if (!chat.sent && chat.reason !== 'not linked') {
       logger.warn('approval Chat DM not sent', {
         reason: chat.reason,

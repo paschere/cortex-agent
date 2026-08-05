@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { revalidatePath } from 'next/cache';
 import { ShieldBan, UserMinus, UserPlus, Users2, UsersRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
-import { Eyebrow, Panel } from '@/components/ui/panel';
+import { Panel } from '@/components/ui/panel';
 
 const FIELD =
-  'rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary disabled:opacity-50';
+  'rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-50';
 
 const ROLE_LABEL: Record<string, string> = {
   org_admin: 'Admin de la organización',
@@ -39,7 +39,7 @@ async function createTeam(formData: FormData) {
   if (user.role !== 'org_admin') throw new Error('forbidden');
   const name = (formData.get('name') as string | null)?.trim();
   if (!name) return;
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   await sb.from('teams').insert({ name });
   revalidatePath('/admin/teams');
 }
@@ -51,7 +51,7 @@ async function addTeamMember(formData: FormData) {
   const teamId = (formData.get('teamId') as string | null)?.trim();
   const userId = (formData.get('userId') as string | null)?.trim();
   if (!teamId || !userId) return;
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   await sb.from('team_members').upsert({ team_id: teamId, user_id: userId }, {
     onConflict: 'team_id,user_id',
   });
@@ -65,13 +65,14 @@ async function removeTeamMember(formData: FormData) {
   const teamId = (formData.get('teamId') as string | null)?.trim();
   const userId = (formData.get('userId') as string | null)?.trim();
   if (!teamId || !userId) return;
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(user.organization.id);
   await sb.from('team_members').delete().eq('team_id', teamId).eq('user_id', userId);
   revalidatePath('/admin/teams');
 }
 
 export default async function TeamsPage() {
-  const sb = getSupabaseServiceClient();
+  const user = await requireSession();
+  const sb = getOrgScopedClient(user.organization.id);
 
   const [{ data: teamsData }, { data: membersData }, { data: usersData }, { data: permsData }] =
     await Promise.all([
@@ -110,7 +111,7 @@ export default async function TeamsPage() {
 
       <div className="space-y-4">
         <Panel className="p-5">
-          <Eyebrow>Crear un equipo</Eyebrow>
+          <div className="field-label">Crear un equipo</div>
           <form action={createTeam} className="mt-3 flex flex-wrap items-center gap-2">
             <label htmlFor="team-name" className="sr-only">
               Nombre del equipo
@@ -146,9 +147,9 @@ export default async function TeamsPage() {
 
             return (
               <Panel key={team.id} className="overflow-hidden">
-                <div className="flex flex-wrap items-center gap-2 border-b border-border-strong bg-surface-2 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2 bg-surface-2 px-4 py-3">
                   <span className="text-[13.5px] font-semibold text-ink">{team.name}</span>
-                  <span className="inline-flex items-center gap-1 rounded-card border border-border bg-surface px-2.5 py-0.5 text-[10.5px] font-semibold text-ink-muted">
+                  <span className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2.5 py-0.5 text-[10.5px] font-semibold text-ink-muted">
                     <Users2 className="h-3 w-3" />
                     <span className="tabular">{teamMembers.length}</span>{' '}
                     {teamMembers.length === 1 ? 'persona' : 'personas'}
@@ -157,8 +158,8 @@ export default async function TeamsPage() {
                     href={`/tools?team=${team.id}`}
                     className={
                       restrictions > 0
-                        ? 'inline-flex items-center gap-1 rounded-card border border-rose/40 bg-rose-soft px-2.5 py-0.5 text-[10.5px] font-semibold text-rose transition-opacity hover:opacity-80'
-                        : 'inline-flex items-center gap-1 rounded-card border border-border bg-surface px-2.5 py-0.5 text-[10.5px] font-semibold text-ink-faint transition-colors hover:text-ink'
+                        ? 'inline-flex items-center gap-1 rounded-pill border border-rose/40 bg-rose-soft px-2.5 py-0.5 text-[10.5px] font-semibold text-rose transition-all duration-150 hover:-translate-y-px hover:opacity-90 motion-reduce:transform-none motion-reduce:transition-none'
+                        : 'inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2.5 py-0.5 text-[10.5px] font-semibold text-ink-faint transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transform-none motion-reduce:transition-none'
                     }
                   >
                     <ShieldBan className="h-3 w-3" />
@@ -176,7 +177,10 @@ export default async function TeamsPage() {
                   ) : (
                     <ul className="mt-2 divide-y divide-border">
                       {teamMembers.map((u) => (
-                        <li key={u.id} className="flex items-center gap-3 py-2">
+                        <li
+                          key={u.id}
+                          className="-mx-2 flex items-center gap-3 rounded-sm px-2 py-2 transition-colors duration-150 hover:bg-surface-2"
+                        >
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-[13px] font-semibold text-ink">
                               {u.name || u.email}
@@ -187,7 +191,7 @@ export default async function TeamsPage() {
                               </div>
                             )}
                           </div>
-                          <span className="shrink-0 rounded-card border border-border bg-surface-2 px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">
+                          <span className="shrink-0 rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">
                             {ROLE_LABEL[u.role] ?? u.role}
                           </span>
                           <form action={removeTeamMember} className="shrink-0">

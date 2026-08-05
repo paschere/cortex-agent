@@ -56,7 +56,7 @@ function SequenceRow({
   return (
     <li
       className={clsx(
-        'flex items-center gap-2 rounded-card px-2 py-1.5 text-[11.5px]',
+        'flex items-center gap-2 rounded-sm px-2 py-1.5 text-[11.5px] transition-colors',
         current ? 'bg-primary-soft' : 'hover:bg-surface-2',
       )}
     >
@@ -150,7 +150,7 @@ export function AuditDetailDrawer({
             </div>
             <Dialog.Close
               aria-label="Cerrar el detalle"
-              className="rounded-card p-1.5 text-ink-faint hover:bg-surface-2 hover:text-ink-muted"
+              className="rounded-full p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink-muted"
             >
               <X className="h-4 w-4" />
             </Dialog.Close>
@@ -174,7 +174,7 @@ export function AuditDetailDrawer({
             {(event.risk_reason || risky) && (
               <div
                 className={clsx(
-                  'flex gap-2.5 rounded-card p-3 text-[12.5px]',
+                  'flex gap-2.5 rounded-sm p-3 text-[12.5px]',
                   event.risk_level === 'critical'
                     ? 'bg-rose-soft text-rose'
                     : 'bg-amber-soft text-amber',

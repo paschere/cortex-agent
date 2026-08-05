@@ -1,4 +1,6 @@
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { requireSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
+import { clsx } from 'clsx';
 import Link from 'next/link';
 import { BarChart3, Zap, AlertTriangle, Users, Timer, CheckCircle2, Cpu } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
@@ -45,9 +47,9 @@ function StackedBar({
   return (
     <div>
       {total === 0 ? (
-        <div className="h-3 w-full rounded-card border border-border bg-surface-2" />
+        <div className="h-3 w-full rounded-full border border-border bg-surface-2" />
       ) : (
-        <div className="flex h-3 w-full overflow-hidden rounded-card border border-border bg-surface-2">
+        <div className="flex h-3 w-full overflow-hidden rounded-full border border-border bg-surface-2">
           {visible.map((s) => (
             <div
               key={s.key}
@@ -86,7 +88,9 @@ export default async function UsagePage({
     ? Number(daysParam)
     : 7;
 
-  const sb = getSupabaseServiceClient();
+  // Session first: the client is scoped to the workspace it resolves.
+  const user = await requireSession();
+  const sb = getOrgScopedClient(user.organization.id);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   const run = (select: string) =>
@@ -250,11 +254,12 @@ export default async function UsagePage({
           <Link
             key={r}
             href={`/admin/usage?days=${r}`}
-            className={
+            className={clsx(
+              'rounded-pill border px-3 py-1 font-mono font-semibold transition-all duration-150',
               days === r
-                ? 'rounded-card border border-primary bg-primary px-3 py-1 font-mono font-semibold text-white'
-                : 'rounded-card border border-border bg-surface px-3 py-1 font-mono font-semibold text-ink-muted hover:border-border-strong hover:text-ink'
-            }
+                ? 'border-primary bg-primary text-white hover:bg-primary-strong'
+                : 'border-border bg-surface text-ink-muted hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transform-none motion-reduce:transition-none',
+            )}
           >
             {r}d
           </Link>
@@ -298,8 +303,14 @@ export default async function UsagePage({
                   title={`${d.day}: ${total} llamadas (${d.error} con error)`}
                 >
                   <div className="flex h-28 flex-col justify-end overflow-hidden">
-                    <div className="w-full bg-rose" style={{ height: `${errH}%` }} />
-                    <div className="w-full bg-primary" style={{ height: `${Math.max(total > 0 ? 2 : 0, h - errH)}%` }} />
+                    <div
+                      className={clsx('w-full bg-rose', errH > 0 && 'rounded-t-full')}
+                      style={{ height: `${errH}%` }}
+                    />
+                    <div
+                      className={clsx('w-full bg-primary', errH === 0 && 'rounded-t-full')}
+                      style={{ height: `${Math.max(total > 0 ? 2 : 0, h - errH)}%` }}
+                    />
                   </div>
                 </div>
               );
@@ -353,7 +364,7 @@ export default async function UsagePage({
               { label: 'De salida', value: formatTokens(tokensOut) },
               { label: 'Promedio por día', value: formatTokens(tokensPerDay) },
             ].map((s) => (
-              <div key={s.label} className="rounded-card border border-border bg-surface-2 p-3">
+              <div key={s.label} className="rounded-sm border border-border bg-surface-2 p-3">
                 <div className="stat-num text-[20px] leading-tight text-ink">{s.value}</div>
                 <div className="field-label mt-1">{s.label}</div>
               </div>
@@ -361,7 +372,7 @@ export default async function UsagePage({
           </div>
 
           {totalTokens === 0 ? (
-            <div className="flex h-20 items-center justify-center rounded-card border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
+            <div className="flex h-20 items-center justify-center rounded-sm border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
               Ningún turno de chat registró consumo de tokens en esta ventana.
             </div>
           ) : (
@@ -378,9 +389,12 @@ export default async function UsagePage({
                       title={`${d.day}: ${d.in.toLocaleString('es-CO')} de entrada / ${d.out.toLocaleString('es-CO')} de salida`}
                     >
                       <div className="flex h-20 flex-col justify-end overflow-hidden">
-                        <div className="w-full bg-primary" style={{ height: `${outH}%` }} />
                         <div
-                          className="w-full bg-sky"
+                          className={clsx('w-full bg-primary', outH > 0 && 'rounded-t-full')}
+                          style={{ height: `${outH}%` }}
+                        />
+                        <div
+                          className={clsx('w-full bg-sky', outH === 0 && 'rounded-t-full')}
                           style={{ height: `${Math.max(total > 0 ? 2 : 0, h - outH)}%` }}
                         />
                       </div>
@@ -422,9 +436,9 @@ export default async function UsagePage({
                           )}
                         </span>
                       </div>
-                      <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
+                      <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
                         <div
-                          className={t.errors > 0 ? 'h-full bg-amber' : 'h-full bg-primary'}
+                          className={t.errors > 0 ? 'h-full rounded-full bg-amber' : 'h-full rounded-full bg-primary'}
                           style={{ width: `${Math.max(3, Math.round((t.count / maxToolCount) * 100))}%` }}
                         />
                       </div>
@@ -452,9 +466,9 @@ export default async function UsagePage({
                         {count} {count === 1 ? 'llamada' : 'llamadas'}
                       </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
                       <div
-                        className="h-full bg-primary"
+                        className="h-full rounded-full bg-primary"
                         style={{ width: `${Math.max(3, Math.round((count / maxUserCount) * 100))}%` }}
                       />
                     </div>

@@ -184,6 +184,7 @@ function makeCtx(seed: Partial<Record<string, Row[]>> = {}): MeetingImportContex
   };
 
   return {
+    organizationId: 'org-test',
     userId: USER_ID,
     db: db as unknown as MeetingImportContext['db'],
     integrations: {

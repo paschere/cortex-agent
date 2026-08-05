@@ -43,7 +43,7 @@ function CardBody({ card, active }: { card: Card; active: boolean }) {
       <div className="flex items-center gap-2">
         <span
           className={clsx(
-            'grid h-7 w-7 shrink-0 place-items-center rounded-[9px]',
+            'grid h-7 w-7 shrink-0 place-items-center rounded-sm',
             active ? 'bg-primary text-white' : 'bg-surface-2 text-ink-faint',
           )}
         >
@@ -53,7 +53,7 @@ function CardBody({ card, active }: { card: Card; active: boolean }) {
           {card.title}
         </span>
         {active ? (
-          <span className="ml-auto rounded-pill bg-primary-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+          <span className="ml-auto rounded-pill bg-primary-soft px-2.5 py-0.5 text-[11px] font-semibold text-primary-ink">
             You are here
           </span>
         ) : (
@@ -85,7 +85,7 @@ export function DirectionPair({ active }: { active: Direction }) {
           <Link
             key={dir}
             href={card.href}
-            className="rounded-card border border-border bg-surface p-3.5 shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-pop"
+            className="rounded-card border border-border bg-surface p-3.5 shadow-card transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-pop motion-reduce:transform-none motion-reduce:transition-none"
           >
             <CardBody card={card} active={false} />
           </Link>

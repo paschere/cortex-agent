@@ -53,10 +53,10 @@ export function FileDropZone(_props: { conversationId: string }) {
     <div
       {...getRootProps({
         className: clsx(
-          'cursor-pointer rounded-card border border-dashed p-2 text-xs transition-colors',
+          'cursor-pointer rounded-card border border-dashed px-3 py-2.5 text-xs transition-colors duration-150 motion-reduce:transition-none',
           isDragActive
-            ? 'border-primary bg-primary-soft text-primary'
-            : 'border-border-strong text-ink-faint hover:bg-surface-2',
+            ? 'border-primary bg-primary-soft text-primary-ink'
+            : 'border-border-strong text-ink-faint hover:border-primary/40 hover:bg-primary-soft hover:text-primary-ink',
         ),
       })}
     >

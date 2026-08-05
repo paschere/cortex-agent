@@ -1,6 +1,6 @@
 'use client';
 
-import { AlarmClock, AudioLines, FileSearch, Network, Stamp, Truck, Users } from 'lucide-react';
+import { AlarmClock, AudioLines, Brain, FileSearch, Network, Truck, Users } from 'lucide-react';
 
 interface Suggestion {
   icon: typeof Truck;
@@ -51,8 +51,8 @@ export function EmptyState({
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-4 py-10 text-center sm:px-6">
       <div className="animate-rise mb-7 flex flex-col items-center">
-        <span className="grid h-11 w-11 place-items-center rounded-card border border-primary/30 bg-primary-soft text-primary">
-          <Stamp className="h-5 w-5" />
+        <span className="grid h-11 w-11 place-items-center rounded-card bg-primary-soft text-primary shadow-card ring-1 ring-inset ring-primary/10">
+          <Brain className="h-5 w-5" />
         </span>
         <h2 className="mt-4 text-lg font-bold tracking-tight text-ink">{copy.title}</h2>
         <p className="mt-1.5 max-w-md text-[13px] leading-snug text-ink-muted">{copy.subtitle}</p>
@@ -65,7 +65,7 @@ export function EmptyState({
             type="button"
             // CSS animation, not framer-motion: globals.css already neutralises
             // it under prefers-reduced-motion.
-            className="animate-rise group flex items-start gap-2.5 rounded-card border border-border bg-surface p-3 text-left text-[13px] leading-snug text-ink-muted transition-colors hover:border-primary/40 hover:text-ink"
+            className="animate-rise group flex items-start gap-2.5 rounded-card border border-border bg-surface p-3.5 text-left text-[13px] leading-snug text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-ink hover:shadow-pop motion-reduce:transform-none motion-reduce:transition-none"
             style={{ animationDelay: `${60 + i * 40}ms` }}
             onClick={() => onSuggestion(s.text)}
           >

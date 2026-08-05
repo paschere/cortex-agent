@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { inngest } from '@/lib/inngest';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   type ToolContext,
   createIntegrationsClient,
@@ -31,7 +31,26 @@ export const ingestDocument = inngest.createFunction(
   { event: 'kb/document.ingest' },
   async ({ event, step }) => {
     const { documentId } = event.data as { documentId: string };
-    const sb = getSupabaseServiceClient();
+
+    // THE WORKSPACE COMES FROM THE DOCUMENT, NOT FROM THE EVENT. Ingestion is
+    // triggered from four places (upload, Drive import, Drive sync, the
+    // create-document tool) and will be triggered from a fifth eventually. If
+    // the sender had to put the workspace on the event, one of them would
+    // eventually not, and the job would have to either guess or fail. Reading it
+    // off the row is unforgeable and cannot be forgotten: one unscoped lookup of
+    // a single row by primary key, and every handle after it is pinned.
+    const organizationId = await step.run('resolve-workspace', async () => {
+      const raw = getSupabaseServiceClient();
+      const { data } = await raw
+        .from('kb_documents')
+        .select('organization_id')
+        .eq('id', documentId)
+        .maybeSingle();
+      return (data?.organization_id as string | undefined) ?? null;
+    });
+    if (!organizationId) return { ok: false as const, error: `Document ${documentId} not found` };
+
+    const sb = getOrgScopedClient(organizationId);
 
     // Fetch the document row
     const doc = await step.run('load-doc', async () => {

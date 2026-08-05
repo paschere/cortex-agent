@@ -10,7 +10,8 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { requireSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
@@ -91,7 +92,8 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 }
 
 export default async function SecurityPage() {
-  const sb = getSupabaseServiceClient();
+  const user = await requireSession();
+  const sb = getOrgScopedClient(user.organization.id);
   const now = Date.now();
   const since30 = new Date(now - WINDOW_DAYS * DAY).toISOString();
   const since7 = new Date(now - 7 * DAY).toISOString();
@@ -196,7 +198,7 @@ export default async function SecurityPage() {
         actions={
           <Link
             href="/admin/audit?risk=high"
-            className="inline-flex items-center gap-2 rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2"
+            className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
           >
             <ShieldAlert className="h-4 w-4" />
             Ver los eventos riesgosos
@@ -238,7 +240,7 @@ export default async function SecurityPage() {
             </div>
           </div>
           {timelineTotal === 0 ? (
-            <div className="flex h-28 items-center justify-center rounded-card border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
+            <div className="flex h-28 items-center justify-center rounded-sm border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
               No se marcó ni se bloqueó nada en esta ventana.
             </div>
           ) : (
@@ -253,7 +255,9 @@ export default async function SecurityPage() {
                     className="flex-1"
                     title={`${d.day}: ${d.flagged} marcadas, ${d.blocked} bloqueadas`}
                   >
-                    <div className="flex h-28 flex-col justify-end overflow-hidden">
+                    {/* The stack reads as one meter, so it takes one rounded cap
+                        rather than each segment fighting for its own corner. */}
+                    <div className="flex h-28 flex-col justify-end overflow-hidden rounded-t-pill">
                       <div className="w-full bg-rose" style={{ height: `${blockedH}%` }} />
                       <div
                         className="w-full bg-amber"
@@ -296,9 +300,12 @@ export default async function SecurityPage() {
                         )}
                       </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
+                    <div className="h-1.5 overflow-hidden rounded-pill bg-surface-2">
                       <div
-                        className={t.blocked > 0 ? 'h-full bg-rose' : 'h-full bg-amber'}
+                        className={clsx(
+                          'h-full rounded-pill',
+                          t.blocked > 0 ? 'bg-rose' : 'bg-amber',
+                        )}
                         style={{ width: `${Math.max(3, Math.round((t.total / maxTool) * 100))}%` }}
                       />
                     </div>
@@ -321,9 +328,9 @@ export default async function SecurityPage() {
                       <span className="tabular truncate text-ink">{signal}</span>
                       <span className="tabular shrink-0 text-ink-faint">{count}×</span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-card bg-surface-2">
+                    <div className="h-1.5 overflow-hidden rounded-pill bg-surface-2">
                       <div
-                        className="h-full bg-sky"
+                        className="h-full rounded-pill bg-sky"
                         style={{ width: `${Math.max(3, Math.round((count / maxSignal) * 100))}%` }}
                       />
                     </div>
@@ -434,7 +441,7 @@ export default async function SecurityPage() {
         <Panel className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="field-label">Políticas activas</div>
-            <span className="inline-flex items-center gap-1.5 rounded-card border border-border bg-surface-2 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            <span className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-ink-faint">
               <Lock className="h-3 w-3" />
               Solo lectura
             </span>
@@ -446,12 +453,12 @@ export default async function SecurityPage() {
               {policies.map((p) => {
                 const copy = POLICY_COPY[p.key];
                 return (
-                  <li key={p.key} className="rounded-card border border-border bg-surface-2 p-3">
+                  <li key={p.key} className="rounded-sm border border-border bg-surface-2 p-3">
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[12.5px] font-bold text-ink">
                         {copy?.title ?? p.key.replaceAll('_', ' ')}
                       </span>
-                      <span className="tabular shrink-0 rounded-card border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink">
+                      <span className="tabular shrink-0 rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink">
                         {policyDisplay(p.value)}
                       </span>
                     </div>

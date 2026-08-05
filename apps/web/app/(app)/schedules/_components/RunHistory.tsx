@@ -152,7 +152,7 @@ function CopyRaw({ text }: { text: string }) {
           setCopied(false);
         }
       }}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
     >
       {copied ? (
         <>

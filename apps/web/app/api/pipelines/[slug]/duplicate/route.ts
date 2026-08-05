@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +22,7 @@ export async function POST(
   const user = await requireSession();
   const { slug } = await params;
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { data: source } = await db
     .from('pipelines')
     .select('name, description, emoji, intro, steps, params, instruction')

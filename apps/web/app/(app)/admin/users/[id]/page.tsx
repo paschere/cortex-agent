@@ -28,10 +28,12 @@ import {
   Zap,
 } from 'lucide-react';
 import { listTools } from '@cortex/agent-tools';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { requireSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { CHIP_INTERACTIVE } from '@/lib/status-chip';
 import { toolLabel } from '@/lib/tool-labels';
 import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
 import {
@@ -64,9 +66,9 @@ export const dynamic = 'force-dynamic';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Header links: ruled and square, like every other control on the page. */
+/** Header links styled like the outline button variant: pill, bordered, lifted off the canvas with a soft shadow. */
 const HEADER_ACTION =
-  'inline-flex items-center gap-2 rounded-card border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2';
+  'inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:border-border-strong hover:bg-surface-2';
 const SURFACE_KEYS = ['web', 'mcp', 'schedule', 'unknown'] as const;
 
 type Role = 'member' | 'team_admin' | 'org_admin';
@@ -155,10 +157,13 @@ function matchPattern(pattern: string, toolId: string): boolean {
 
 function PanelHeadRow({ label, right }: { label: ReactNode; right?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-      <SectionLabel>{label}</SectionLabel>
-      {right && <span className="text-[11px] text-ink-faint">{right}</span>}
-    </div>
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+        <SectionLabel>{label}</SectionLabel>
+        {right && <span className="text-[11px] text-ink-faint">{right}</span>}
+      </div>
+      <div className="rule-double" />
+    </>
   );
 }
 
@@ -166,7 +171,9 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const sb = getSupabaseServiceClient();
+  // Session first: the client is scoped to the workspace it resolves.
+  const viewer = await requireSession();
+  const sb = getOrgScopedClient(viewer.organization.id);
   const { data: userData } = await sb
     .from('users')
     .select('id, email, name, role, created_at')
@@ -338,7 +345,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                 </h2>
                 <span
                   className={clsx(
-                    'rounded-card border px-2 py-0.5 text-[11px] font-semibold',
+                    'rounded-pill border px-2 py-0.5 text-[11px] font-semibold',
                     ROLE_TAG[user.role] ?? 'border-border bg-surface-2 text-ink-muted',
                   )}
                 >
@@ -380,7 +387,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                   <EmptyNote>No está en ningún equipo, así que nada le resta acceso.</EmptyNote>
                 ) : (
                   teams.map((t) => (
-                    <Link key={t.id} href={`/tools?team=${t.id}`}>
+                    <Link
+                      key={t.id}
+                      href={`/tools?team=${t.id}`}
+                      className={clsx('inline-flex', CHIP_INTERACTIVE)}
+                    >
                       <Chip tone="sky">
                         <Users2 className="h-3 w-3" />
                         {t.name}
@@ -645,7 +656,10 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                   </thead>
                   <tbody>
                     {security.events.slice(0, 25).map((e) => (
-                      <tr key={e.id} className="border-t border-border align-top">
+                      <tr
+                        key={e.id}
+                        className="border-t border-border align-top transition-colors duration-150 hover:bg-surface-2"
+                      >
                         <td
                           className="tabular whitespace-nowrap px-4 py-2 text-ink-faint"
                           title={absoluteTime(e.created_at)}
@@ -748,7 +762,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                     <li key={p.id}>
                       <Link
                         href={`/pipelines/${p.slug}`}
-                        className="group flex items-center justify-between gap-2 rounded-card px-2 py-1.5 hover:bg-surface-2"
+                        className="group flex items-center justify-between gap-2 rounded-card px-2 py-1.5 transition-colors duration-150 hover:bg-surface-2"
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-[12.5px] font-semibold text-ink group-hover:text-primary">
@@ -782,7 +796,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                     <li key={j.id}>
                       <Link
                         href="/schedules"
-                        className="group flex items-center justify-between gap-2 rounded-card px-2 py-1.5 hover:bg-surface-2"
+                        className="group flex items-center justify-between gap-2 rounded-card px-2 py-1.5 transition-colors duration-150 hover:bg-surface-2"
                       >
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5">
@@ -800,7 +814,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         </span>
                         <span
                           className={clsx(
-                            'shrink-0 rounded-card border px-2 py-0.5 text-[10.5px] font-semibold',
+                            'shrink-0 rounded-pill border px-2 py-0.5 text-[10.5px] font-semibold',
                             JOB_STATUS_TONE[j.status] ?? 'border-border bg-surface-2 text-ink-faint',
                           )}
                         >
@@ -825,7 +839,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                     <li key={c.id}>
                       <Link
                         href={`/conversations/${c.id}`}
-                        className="group flex items-center justify-between gap-2 rounded-card px-2 py-1.5 hover:bg-surface-2"
+                        className="group flex items-center justify-between gap-2 rounded-card px-2 py-1.5 transition-colors duration-150 hover:bg-surface-2"
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-[12.5px] font-semibold text-ink group-hover:text-primary">
@@ -879,7 +893,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                 {denials.map((d) => {
                   const team = teams.find((t) => d.teams.includes(t.name));
                   return (
-                    <Link key={d.pattern} href={`/tools?team=${team?.id ?? ''}`}>
+                    <Link
+                      key={d.pattern}
+                      href={`/tools?team=${team?.id ?? ''}`}
+                      className={clsx('inline-flex', CHIP_INTERACTIVE)}
+                    >
                       <Chip tone="rose" title={`Bloqueado por ${d.teams.join(', ')}`}>
                         <ShieldBan className="h-3 w-3" />
                         <span className="tabular">{d.pattern}</span>
@@ -1003,7 +1021,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                       <tr
                         key={e.id}
                         className={clsx(
-                          'border-t border-border align-top',
+                          'border-t border-border align-top transition-colors duration-150 hover:bg-surface-2',
                           risky && 'bg-rose-soft/40',
                         )}
                       >

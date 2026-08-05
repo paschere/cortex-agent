@@ -48,7 +48,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
                 value={values[p.name] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [p.name]: e.target.value }))}
                 placeholder={p.description || `Value for ${p.name}`}
-                className="w-full rounded-card border border-border bg-surface px-2.5 py-1.5 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-border-strong"
+                className="w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
               />
             </label>
           ))}
@@ -66,8 +66,10 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
         type="button"
         onClick={copy}
         className={clsx(
-          'mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-card px-3 py-2 text-[12.5px] font-semibold transition-colors',
-          copied ? 'bg-emerald-soft text-emerald' : 'bg-primary text-white hover:bg-primary-strong',
+          'mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-pill px-3 py-2 text-[12.5px] font-semibold transition-all duration-150 motion-reduce:transform-none motion-reduce:transition-none',
+          copied
+            ? 'bg-emerald-soft text-emerald'
+            : 'bg-primary text-white shadow-pop hover:-translate-y-px hover:bg-primary-strong',
         )}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}

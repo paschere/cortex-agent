@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { flattenMarkdownForChat, parseChatWebhookUrl } from '@cortex/agent-tools';
 import { ValidationError } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   let candidate = parsed.data.webhookUrl?.trim() ?? '';
   if (!candidate) {
-    const db = getSupabaseServiceClient();
+    const db = getOrgScopedClient(user.organization.id);
     const { data } = await db
       .from('user_preferences')
       .select('chat_webhook_url')

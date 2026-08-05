@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import type { Env } from './index';
 
 interface McpAuthContext {
+  /** The workspace the token was issued in; every query it makes is pinned to it. */
+  organizationId: string;
   userId: string;
   agentId: string | null;
   tokenId: string;
@@ -37,7 +39,7 @@ export function bearerAuth(): MiddlewareHandler<{ Bindings: Env }> {
 
     const { data, error } = await sb
       .from('mcp_tokens')
-      .select('id, user_id, agent_id, revoked_at, expires_at')
+      .select('id, organization_id, user_id, agent_id, revoked_at, expires_at')
       .eq('token_hash', tokenHash)
       .maybeSingle();
 
@@ -50,7 +52,11 @@ export function bearerAuth(): MiddlewareHandler<{ Bindings: Env }> {
     // Fire-and-forget update of last_used_at
     void sb.from('mcp_tokens').update({ last_used_at: new Date().toISOString() }).eq('id', data.id as string);
 
+    // The token names its workspace, and everything downstream is scoped to it
+    // (see bridge.ts). The lookup itself has to be unscoped: it is what
+    // determines the workspace, so it cannot already be inside one.
     c.set('mcp', {
+      organizationId: data.organization_id as string,
       userId: data.user_id as string,
       agentId: (data.agent_id as string | null) ?? null,
       tokenId: data.id as string,

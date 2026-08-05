@@ -77,7 +77,7 @@ export default function TwoFactorPage() {
               placeholder={useBackup ? 'xxxx-xxxx' : '000000'}
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              className="tabular mt-1 w-full rounded-card border border-border bg-surface-2 px-3 py-3 text-center text-[19px] tracking-[0.3em] text-ink transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-surface"
+              className="tabular mt-1 w-full rounded-sm border border-border bg-surface-2 px-3 py-3 text-center text-[19px] tracking-[0.3em] text-ink transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-surface focus:outline-none focus:ring-4 focus:ring-primary/10"
             />
           </div>
 

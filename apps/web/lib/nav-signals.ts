@@ -1,5 +1,5 @@
 import 'server-only';
-import { getSupabaseServiceClient } from './supabase/service';
+import { getOrgScopedClient } from './supabase/service';
 
 /**
  * Confirmations sitting in this person's approvals queue right now.
@@ -11,9 +11,12 @@ import { getSupabaseServiceClient } from './supabase/service';
  * a new endpoint. A failure is swallowed: a missing badge must never take the
  * navigation down with it.
  */
-export async function countPendingApprovals(userId: string): Promise<number> {
+export async function countPendingApprovals(
+  organizationId: string,
+  userId: string,
+): Promise<number> {
   try {
-    const { count } = await getSupabaseServiceClient()
+    const { count } = await getOrgScopedClient(organizationId)
       .from('mcp_pending_actions')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)

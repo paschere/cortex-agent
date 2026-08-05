@@ -12,7 +12,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // /agents, which then failed on env vars that only exist at runtime. The
   // middleware is what turns a signed-out visit into a redirect.
   const user = await requireSession();
-  const pendingApprovals = await countPendingApprovals(user.id);
+  const pendingApprovals = await countPendingApprovals(user.organization.id, user.id);
   return (
     <MobileSidebarProvider>
       <div className="flex h-screen overflow-hidden bg-canvas">

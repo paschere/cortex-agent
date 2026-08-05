@@ -26,15 +26,17 @@ type Status =
   | { kind: 'error'; message: string };
 
 /**
- * The document's own field styling: a ruled box, square corners, and the global
- * focus outline left intact rather than swapped for a ring.
+ * This form's shared field styling — nested inside a Panel, so it takes the
+ * smaller radius, and the same ring-based focus <Input> uses elsewhere in the
+ * product rather than the browser's default outline.
  */
 const FIELD =
-  'w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary disabled:cursor-not-allowed disabled:opacity-60';
+  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60';
 
 /**
  * A labelled switch — the same control the master opt-in and the channels use.
- * Squared rather than pill-shaped: this is the box you tick on a form.
+ * Pill-shaped track and knob, indigo when on, with the knob sliding smoothly
+ * between the two.
  */
 function Toggle({
   checked,
@@ -65,15 +67,17 @@ function Toggle({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={clsx(
-          'relative mt-0.5 h-6 w-11 shrink-0 rounded-card border transition-colors',
+          'relative mt-0.5 h-6 w-11 shrink-0 rounded-pill border transition-colors duration-150',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface',
           checked ? 'border-primary bg-primary' : 'border-border bg-surface-2',
           disabled && 'cursor-not-allowed opacity-50',
         )}
       >
         <span
           className={clsx(
-            'absolute top-1/2 h-[18px] w-[18px] -translate-y-1/2 rounded-card border transition-[left]',
-            checked ? 'left-[22px] border-primary-strong bg-white' : 'left-[2px] border-border bg-surface',
+            'absolute left-[2px] top-[3px] h-[18px] w-[18px] rounded-pill bg-white shadow-card',
+            'transition-transform duration-200 ease-out motion-reduce:transition-none motion-reduce:transform-none',
+            checked && 'translate-x-[20px]',
           )}
         />
       </button>
@@ -196,7 +200,7 @@ export function SettingsForm({
           description="Una vez al día Cortex lee tu correo reciente y te manda un resumen corto: qué está esperando tu respuesta, qué estás esperando tú de otros y qué vale la pena saber."
         />
 
-        <div className="mt-4 rounded-card border border-border bg-surface-2 p-4">
+        <div className="mt-4 rounded-sm border border-border bg-surface-2 p-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
             <Eyebrow>Qué lee Cortex y qué no</Eyebrow>
@@ -277,7 +281,7 @@ export function SettingsForm({
         <Eyebrow>A dónde llega</Eyebrow>
 
         <div className="mt-3 space-y-4">
-          <div className="rounded-card border border-border p-4">
+          <div className="rounded-sm border border-border p-4">
             <Toggle
               checked={prefs.deliverEmail}
               disabled={!on}
@@ -295,7 +299,7 @@ export function SettingsForm({
             </div>
           </div>
 
-          <div className="rounded-card border border-border p-4">
+          <div className="rounded-sm border border-border p-4">
             <Toggle
               checked={prefs.deliverChat}
               disabled={!on}
@@ -373,7 +377,7 @@ export function SettingsForm({
           </div>
 
           {/* ---- Google Chat, privately ------------------------------------ */}
-          <div className="rounded-card border border-border p-4">
+          <div className="rounded-sm border border-border p-4">
             <Toggle
               checked={prefs.deliverChatDm}
               disabled={!on || !chatDm.configured}
@@ -389,7 +393,7 @@ export function SettingsForm({
               {/* The link status is the whole point of this block: without it,
                   the toggle is a checkbox that can silently do nothing. */}
               {!chatDm.configured ? (
-                <div className="flex items-start gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+                <div className="flex items-start gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     La app de Cortex para Chat todavía no está configurada en este entorno, así que
@@ -397,7 +401,7 @@ export function SettingsForm({
                   </span>
                 </div>
               ) : dmReady ? (
-                <div className="flex items-start gap-2 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-emerald">
+                <div className="flex items-start gap-2 rounded-sm border border-emerald/30 bg-emerald-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-emerald">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     Conectado como{' '}
@@ -408,7 +412,7 @@ export function SettingsForm({
                   </span>
                 </div>
               ) : (
-                <div className="rounded-card border border-amber/30 bg-amber-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+                <div className="rounded-sm border border-amber/30 bg-amber-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
                   <div className="flex items-start gap-2 font-medium text-amber">
                     <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>Todavía no está conectado, así que aquí no llega nada.</span>

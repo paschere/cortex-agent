@@ -9,7 +9,7 @@ import {
 import { commentOnIssue } from '@/lib/dev-tasks/linear-comment';
 import { resolveRepository } from '@/lib/dev-tasks/repository';
 import { inngest } from '@/lib/inngest';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 
 /**
@@ -86,7 +86,9 @@ export const devTaskIntake = inngest.createFunction(
       }
 
       const repo = resolution.repository;
-      const db = getSupabaseServiceClient();
+      // The repository the issue named is what says whose delivery this is;
+      // everything the intake writes lands in that workspace.
+      const db = getOrgScopedClient(repo.organizationId);
       const { data, error } = await db
         .from('dev_tasks')
         .insert({
@@ -124,7 +126,11 @@ export const devTaskIntake = inngest.createFunction(
         throw new Error(`Could not create the dev task: ${error.message}`);
       }
 
-      await commentOnIssue(intake.issue.id, acknowledgementComment(repo, intake.via));
+      await commentOnIssue(
+        intake.issue.id,
+        acknowledgementComment(repo, intake.via),
+        repo.organizationId,
+      );
       return {
         kind: 'accepted',
         taskId: data.id as string,
@@ -147,12 +153,23 @@ export const devTaskIntake = inngest.createFunction(
     }
 
     await step.run('settle-delivery', async () => {
-      const ledger = supabaseDeliveryLedger(getSupabaseServiceClient());
+      // The delivery ledger row was written by the webhook before any workspace
+      // was known (migration 0064 § 10), so it is settled on the raw client and
+      // stamped with the workspace only once the intake resolved one. A
+      // rejected delivery keeps a null workspace and is visible to no tenant.
+      const raw = getSupabaseServiceClient();
+      const ledger = supabaseDeliveryLedger(raw);
       await ledger.settle(intake.deliveryId, {
         outcome: outcome.kind === 'accepted' ? 'accepted' : outcome.kind,
         taskId: outcome.kind === 'accepted' ? outcome.taskId : null,
         reason: outcome.kind === 'accepted' ? null : outcome.reason,
       });
+      if (outcome.kind === 'accepted') {
+        await raw
+          .from('dev_task_events')
+          .update({ organization_id: outcome.repository.organizationId })
+          .eq('id', intake.deliveryId);
+      }
     });
 
     logger.info(

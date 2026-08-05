@@ -12,6 +12,17 @@ import { logger } from '@cortex/core';
  * `eq(next_run_at, <the due value we read>)`. If a concurrent dispatcher
  * already advanced it, zero rows match and we skip — each due occurrence is
  * dispatched at most once.
+ *
+ * WHY THIS ONE HOLDS A RAW, UNSCOPED CLIENT. "Every routine due in the next
+ * minute" is a question about the whole install; there is no workspace to scope
+ * it to, and there is no session behind a cron. The isolation happens one step
+ * later and is the reason `organization_id` is read here: each event carries the
+ * workspace of the job it names, and schedule-run loads that job through a
+ * client pinned to it. A job id from workspace A arriving with workspace B
+ * therefore finds nothing, instead of running B's routine on A's data.
+ *
+ * The dispatcher itself writes only to `scheduled_jobs.next_run_at`, always
+ * `.eq('id', …)`, so an unscoped handle here cannot move a row between tenants.
  */
 export const scheduleDispatch = inngest.createFunction(
   { id: 'schedule-dispatch' },
@@ -22,16 +33,17 @@ export const scheduleDispatch = inngest.createFunction(
       const nowIso = new Date().toISOString();
       const { data, error } = await db
         .from('scheduled_jobs')
-        .select('id, schedule_kind, cron, timezone, next_run_at')
+        .select('id, organization_id, schedule_kind, cron, timezone, next_run_at')
         .eq('status', 'active')
         .lte('next_run_at', nowIso)
         .not('next_run_at', 'is', null)
         .limit(100);
       if (error) throw new Error(`Failed to scan due jobs: ${error.message}`);
 
-      const claimed: { jobId: string; scheduledFor: string }[] = [];
+      const claimed: { jobId: string; organizationId: string; scheduledFor: string }[] = [];
       for (const job of data ?? []) {
         const jobId = job.id as string;
+        const organizationId = job.organization_id as string;
         const dueAt = job.next_run_at as string;
         let next: string | null = null;
         if (job.schedule_kind === 'cron') {
@@ -66,7 +78,7 @@ export const scheduleDispatch = inngest.createFunction(
           });
           continue;
         }
-        if (won && won.length > 0) claimed.push({ jobId, scheduledFor: dueAt });
+        if (won && won.length > 0) claimed.push({ jobId, organizationId, scheduledFor: dueAt });
       }
       return claimed;
     });

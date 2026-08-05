@@ -1,5 +1,5 @@
+import { createOrgScopedClient, listVisibleSpaces } from '@cortex/agent-tools';
 import { createClient } from '@supabase/supabase-js';
-import { listVisibleSpaces } from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
 import type { BridgeContext } from './bridge';
 
@@ -17,9 +17,11 @@ export const RESOURCES = [
 ];
 
 export async function readResource(ctx: BridgeContext, uri: string) {
-  const sb = createClient(ctx.env.NEXT_PUBLIC_SUPABASE_URL, ctx.env.SUPABASE_SERVICE_ROLE_KEY, {
+  const raw = createClient(ctx.env.NEXT_PUBLIC_SUPABASE_URL, ctx.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  // Pinned to the workspace the bearer token belongs to, same as bridge.ts.
+  const sb = createOrgScopedClient(raw, ctx.organizationId);
 
   if (uri === 'cortex://agent/system-prompt') {
     const agent = await loadAgent(sb, 'sales');

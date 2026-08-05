@@ -2,7 +2,7 @@ import { Panel } from '@/components/ui/panel';
 import { Provenance } from '@/components/ui/provenance';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   AlarmClock,
   ArrowLeft,
@@ -68,7 +68,7 @@ export default async function RoutineDetailPage({
 }) {
   const user = await requireSession();
   const { id } = await params;
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   const { data: row } = await db
     .from('scheduled_jobs')
@@ -232,7 +232,7 @@ export default async function RoutineDetailPage({
               )
             ) : (
               <div className="space-y-2">
-                <span className="inline-flex items-center gap-1.5 rounded-sm border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[11.5px] font-semibold text-primary">
+                <span className="inline-flex items-center gap-1.5 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[11.5px] font-semibold text-primary">
                   <Wrench className="h-3 w-3" />
                   {job.toolId ?? 'herramienta desconocida'}
                 </span>
@@ -271,7 +271,7 @@ export default async function RoutineDetailPage({
                     {job.recipients.map((r) => (
                       <span
                         key={r}
-                        className="inline-flex items-center gap-1 rounded-sm border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[11px] font-semibold text-primary"
+                        className="inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[11px] font-semibold text-primary"
                       >
                         <Mail className="h-3 w-3" />
                         {r}
@@ -367,7 +367,7 @@ export default async function RoutineDetailPage({
               </p>
               <Link
                 href={`/chat/${job.conversationId}`}
-                className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-primary shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
               >
                 <MessageSquare className="h-3.5 w-3.5" /> Abrir la conversación
               </Link>

@@ -26,6 +26,7 @@ function makeCtx(row: Record<string, unknown> | null): ToolContext {
     }),
   };
   return {
+    organizationId: 'org-test',
     userId: USER,
     agentId: '00000000-0000-0000-0000-000000000002',
     db: { from: vi.fn().mockReturnValue(chain) } as unknown as ToolContext['db'],

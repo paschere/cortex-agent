@@ -27,6 +27,7 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   };
 
   return {
+    organizationId: 'org-test',
     userId: '00000000-0000-0000-0000-000000000001',
     agentId: '00000000-0000-0000-0000-000000000002',
     conversationId: '00000000-0000-0000-0000-000000000003',

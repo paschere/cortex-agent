@@ -70,7 +70,7 @@ function CancelButton({ runId, onCancelled }: { runId: string; onCancelled: () =
       type="button"
       onClick={() => void cancel()}
       disabled={busy}
-      className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-rose transition-colors hover:bg-rose-soft disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-rose shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-rose-soft disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
     >
       {busy ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -221,8 +221,9 @@ export function Console({
         <ConnectionDot connection={connection} active={active} />
       </div>
 
-      {/* The run's masthead: objective, then its figures in a ruled meter strip. */}
-      <div className="rule-double mb-5 pt-4">
+      {/* The run's masthead: objective, then its figures in a soft meter strip. */}
+      <div className="rule-double" />
+      <div className="mb-5 pt-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1 basis-[20rem]">
             <div className="field-label">Objetivo</div>
@@ -237,7 +238,7 @@ export function Console({
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="inline-flex items-center gap-1.5 rounded-card border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink motion-reduce:transform-none motion-reduce:transition-none"
               >
                 <RefreshCw className="h-3.5 w-3.5" /> Actualizar
               </button>
@@ -245,15 +246,17 @@ export function Console({
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
-          <Meter label="Subagentes" value={String(tasks.length)} />
-          <Meter label="Transcurrido" value={formatDuration(duration)} />
-          <Meter label="Herramientas" value={toolCallCount.toLocaleString()} />
-          <Meter
-            label="Tokens"
-            value={run.totalTokens > 0 ? run.totalTokens.toLocaleString() : '—'}
-          />
-        </div>
+        <Panel className="mt-3 overflow-hidden">
+          <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+            <Meter label="Subagentes" value={String(tasks.length)} />
+            <Meter label="Transcurrido" value={formatDuration(duration)} />
+            <Meter label="Herramientas" value={toolCallCount.toLocaleString()} />
+            <Meter
+              label="Tokens"
+              value={run.totalTokens > 0 ? run.totalTokens.toLocaleString() : '—'}
+            />
+          </div>
+        </Panel>
       </div>
 
       {tasks.length > 0 && (
@@ -264,9 +267,9 @@ export function Console({
             </span>
             <span className="tabular text-[11px] text-ink-muted">{progress}%</span>
           </div>
-          <div className="h-1.5 w-full overflow-hidden border border-border bg-surface-2">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
             <div
-              className="h-full bg-primary transition-[width] duration-500"
+              className="h-full rounded-full bg-primary transition-[width] duration-500"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -315,18 +318,19 @@ export function Console({
         const runningHere = waveTasks.filter((t) => t.status === 'running').length;
         return (
           <section key={wave} className="mb-5">
-            <div className="mb-2 flex items-center gap-2 border-b border-border-strong pb-1.5">
+            <div className="mb-2 flex items-center gap-2">
               <div className="field-label text-ink-muted">Ola {wave}</div>
-              <div className="tabular text-[10px] uppercase tracking-[0.08em] text-ink-faint">
+              <div className="tabular text-[11px] text-ink-faint">
                 {parallel ? `${waveTasks.length} en paralelo` : 'un solo agente'}
               </div>
               {runningHere > 0 && (
-                <span className="tabular ml-auto inline-flex items-center gap-1 text-[10px] uppercase tracking-[0.08em] text-primary">
+                <span className="tabular ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
                   <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
                   {runningHere} trabajando
                 </span>
               )}
             </div>
+            <div className="rule-double mb-3" />
             <div className={clsx('grid gap-3', parallel && 'lg:grid-cols-2')}>
               {waveTasks.map((task) => (
                 <TaskCard key={task.id} task={task} calls={toolCalls[task.id] ?? []} now={now} />
@@ -337,7 +341,7 @@ export function Console({
       })}
 
       <Panel className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-strong px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <div className="field-label">Informe final</div>
           {/* Real provenance: the report is Cortex's own assertion, and this
               says which run produced it and when that run stopped. */}
@@ -350,6 +354,7 @@ export function Console({
             />
           )}
         </div>
+        <div className="rule-double" />
         <div className="px-4 py-4">
           {run.summary ? (
             <RunMarkdown>{run.summary}</RunMarkdown>
