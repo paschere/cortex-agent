@@ -1,7 +1,9 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { COMMITMENT_KINDS, DEFAULT_NOTICE_DAYS, KIND_LABEL } from '@cortex/agent-tools';
+// Not from `@cortex/agent-tools`: the barrel reaches `node:dns/promises` and
+// fails the browser bundle. See the header of commitments-shape.ts.
+import { COMMITMENT_KINDS, DEFAULT_NOTICE_DAYS, KIND_LABEL } from '@/lib/commitments-shape';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Loader2, Plus } from 'lucide-react';
 import { useState, useTransition } from 'react';
