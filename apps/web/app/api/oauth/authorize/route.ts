@@ -46,7 +46,10 @@ function readParams(sp: URLSearchParams): AuthParams {
 }
 
 function badRequest(message: string): NextResponse {
-  return new NextResponse(`Invalid authorization request: ${message}`, {
+  // Plain text a person may land on: the detail stays in protocol terms, the
+  // frame tells them what to do about it.
+  const body = `La solicitud de autorización no es válida: ${message}. Vuelve a iniciar la conexión desde tu cliente; si sigue igual, avísale al equipo de Cortex.`;
+  return new NextResponse(body, {
     status: 400,
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
@@ -132,36 +135,51 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
     .join('\n');
 
   return `<!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Connect ${esc(clientName)} · Cortex</title>
+<title>Conectar ${esc(clientName)} · Cortex</title>
 <link rel="icon" href="/icon.png" />
 <style>
+  /*
+   * Hand-written twin of the product's tokens: this route returns loose HTML,
+   * so Tailwind never reaches it. Values mirror apps/web/app/globals.css —
+   * keep them in step if the palette moves.
+   */
   :root {
-    --plum: #9658A3;
-    --accent: #7E4390;
-    --ink: #241A2E;
-    --ink-soft: #5C4E68;
-    --line: #E6DDEE;
-    --chip: #F3EBF8;
+    --primary: 88 80 236;
+    --primary-strong: 71 62 214;
+    --primary-soft: 240 239 254;
+    --primary-ink: 62 53 199;
+    --ink: 24 26 39;
+    --ink-muted: 99 104 128;
+    --ink-faint: 142 147 170;
+    --canvas: 249 250 253;
+    --surface: 255 255 255;
+    --border: 231 233 241;
+    --border-strong: 213 216 229;
+    --radius: 14px;
+    --radius-sm: 10px;
+    --shadow-card: 0 1px 2px rgb(24 26 39 / 0.04), 0 4px 12px -4px rgb(24 26 39 / 0.06);
+    --shadow-pop: 0 4px 12px -2px rgb(24 26 39 / 0.08), 0 16px 32px -12px rgb(62 53 199 / 0.22);
   }
   * { box-sizing: border-box; }
   body {
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-    background: linear-gradient(180deg, #FAF8FC 0%, #F3EBF8 100%);
-    color: var(--ink);
+    background: rgb(var(--canvas));
+    color: rgb(var(--ink));
     display: flex; min-height: 100vh; align-items: center; justify-content: center;
     margin: 0; padding: 24px;
+    -webkit-font-smoothing: antialiased;
   }
   .card {
     max-width: 26rem; width: 100%;
-    background: #ffffff;
-    border: 1px solid var(--line);
-    border-radius: 20px;
+    background: rgb(var(--surface));
+    border: 1px solid rgb(var(--border));
+    border-radius: var(--radius);
     padding: 2.25rem 2rem 2rem;
-    box-shadow: 0 20px 60px -30px rgba(60, 20, 80, .28);
+    box-shadow: var(--shadow-pop);
     text-align: center;
   }
   .logos {
@@ -169,43 +187,58 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
     margin-bottom: 1.5rem;
   }
   .logos .cortex {
-    width: 64px; height: 64px; border-radius: 18px;
-    box-shadow: 0 8px 22px -8px rgba(120, 60, 160, .45);
+    width: 64px; height: 64px; border-radius: var(--radius);
+    box-shadow: var(--shadow-pop);
   }
   .logos .link {
-    color: var(--plum); font-size: 22px; letter-spacing: 2px; user-select: none;
+    color: rgb(var(--primary)); font-size: 22px; letter-spacing: 2px; user-select: none;
   }
   .logos .client {
-    width: 64px; height: 64px; border-radius: 18px;
+    width: 64px; height: 64px; border-radius: var(--radius);
     display: grid; place-items: center;
-    background: var(--chip); border: 1px solid var(--line);
-    font-weight: 800; font-size: 24px; color: var(--accent);
+    background: rgb(var(--primary-soft)); border: 1px solid rgb(var(--primary) / 0.14);
+    font-weight: 800; font-size: 24px; color: rgb(var(--primary-ink));
   }
   h1 { font-size: 1.2rem; margin: 0 0 .35rem; letter-spacing: -.01em; }
-  .sub { color: var(--ink-soft); font-size: .88rem; line-height: 1.5; margin: 0; }
-  .sub strong { color: var(--ink); }
+  .sub { color: rgb(var(--ink-muted)); font-size: .88rem; line-height: 1.5; margin: 0; }
+  .sub strong { color: rgb(var(--ink)); }
   .grants {
     text-align: left; margin: 1.4rem 0; padding: .9rem 1rem;
-    background: var(--chip); border-radius: 14px;
-    font-size: .84rem; color: var(--ink-soft); line-height: 1.65;
+    background: rgb(var(--canvas)); border: 1px solid rgb(var(--border));
+    border-radius: var(--radius);
+    font-size: .84rem; color: rgb(var(--ink-muted)); line-height: 1.65;
   }
-  .grants li { margin-left: 1.1rem; }
-  .grants b { color: var(--ink); }
+  .grants ul { margin: .5rem 0 0; padding-left: 1.1rem; }
+  .grants b { color: rgb(var(--ink)); }
   .actions { display: flex; gap: .75rem; margin-top: 1.4rem; }
   button {
-    flex: 1; padding: .72rem; border-radius: 12px;
-    font-weight: 700; font-size: .95rem; cursor: pointer;
-    border: 1px solid var(--line); transition: filter .15s ease;
+    flex: 1; padding: .72rem; border-radius: 999px;
+    font: inherit; font-weight: 700; font-size: .95rem; cursor: pointer;
+    border: 1px solid rgb(var(--border-strong));
+    transition: transform .15s ease, background-color .15s ease, box-shadow .15s ease;
   }
-  button:hover { filter: brightness(.96); }
-  .approve { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .deny { background: #fff; color: var(--ink-soft); }
+  button:hover { transform: translateY(-1px); }
+  button:focus-visible { outline: 2px solid rgb(var(--primary)); outline-offset: 2px; }
+  .approve {
+    background: rgb(var(--primary)); color: #fff;
+    border-color: rgb(var(--primary)); box-shadow: var(--shadow-pop);
+  }
+  .approve:hover { background: rgb(var(--primary-strong)); }
+  .deny {
+    background: rgb(var(--surface)); color: rgb(var(--ink-muted));
+    box-shadow: var(--shadow-card);
+  }
+  .deny:hover { background: rgb(var(--canvas)); color: rgb(var(--ink)); }
   .foot {
-    margin-top: 1.5rem; padding-top: 1.1rem; border-top: 1px solid var(--line);
+    margin-top: 1.5rem; padding-top: 1.1rem; border-top: 1px solid rgb(var(--border));
     display: flex; align-items: center; justify-content: center; gap: 8px;
-    font-size: .72rem; color: var(--ink-soft);
+    font-size: .72rem; color: rgb(var(--ink-faint));
   }
   .foot img { height: 16px; width: auto; display: block; }
+  @media (prefers-reduced-motion: reduce) {
+    button { transition: none; }
+    button:hover { transform: none; }
+  }
 </style>
 </head>
 <body>
@@ -215,24 +248,26 @@ function consentHtml(p: AuthParams, clientName: string, userEmail: string): stri
       <span class="link">⇄</span>
       <span class="client" aria-hidden="true">${esc((clientName[0] ?? 'C').toUpperCase())}</span>
     </div>
-    <h1>Connect ${esc(clientName)} to Cortex</h1>
-    <p class="sub">Signed in as <strong>${esc(userEmail)}</strong></p>
+    <h1>Conectar ${esc(clientName)} con Cortex</h1>
+    <p class="sub">Entraste como <strong>${esc(userEmail)}</strong></p>
     <div class="grants">
-      Approving lets <b>${esc(clientName)}</b> use Cortex on your behalf:
-      <li>Your access, your permissions — nothing more</li>
-      <li>Writes always ask you before executing</li>
-      <li>Every action is logged in Cortex</li>
+      Si apruebas, <b>${esc(clientName)}</b> va a poder usar Cortex en tu nombre:
+      <ul>
+        <li>Con tu acceso y tus permisos, nada más</li>
+        <li>Todo lo que escriba te lo pregunta antes</li>
+        <li>Cada acción queda registrada en Cortex</li>
+      </ul>
     </div>
     <form method="POST" action="/api/oauth/authorize">
       ${hidden}
       <div class="actions">
-        <button class="deny" type="submit" name="decision" value="deny">Deny</button>
-        <button class="approve" type="submit" name="decision" value="approve">Approve</button>
+        <button class="deny" type="submit" name="decision" value="deny">Rechazar</button>
+        <button class="approve" type="submit" name="decision" value="approve">Aprobar</button>
       </div>
     </form>
     <div class="foot">
       <img src="/icon.png" alt="Cortex" />
-      <span>· Cortex — your workspace super-agent</span>
+      <span>· Cortex — el cerebro de tu operación</span>
     </div>
   </div>
 </body>

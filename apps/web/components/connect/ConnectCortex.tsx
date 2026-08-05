@@ -64,7 +64,7 @@ function Step({ text }: { text: string }) {
  */
 export function CopyButton({
   text,
-  label = 'Copy',
+  label = 'Copiar',
   className,
 }: {
   text: string;
@@ -87,7 +87,7 @@ export function CopyButton({
     <button
       type="button"
       onClick={onCopy}
-      aria-label={copied ? 'Copied' : label}
+      aria-label={copied ? 'Copiado' : label}
       className={clsx(
         'inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-[11.5px] font-semibold transition-colors duration-150 motion-reduce:transition-none',
         copied
@@ -97,7 +97,7 @@ export function CopyButton({
       )}
     >
       {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      {copied ? 'Copied' : label}
+      {copied ? 'Copiado' : label}
     </button>
   );
 }
@@ -123,51 +123,51 @@ export function ConnectCortex({ url }: { url: string }) {
       id: 'claude',
       label: 'Claude',
       icon: <Bot className="h-3.5 w-3.5" />,
-      caption: 'Claude on web, desktop and mobile',
+      caption: 'Claude en la web, en el escritorio y en el celular',
       steps: [
-        'Open **Settings → Connectors**.',
-        'Choose **Add custom connector**.',
-        'Paste the connector URL above.',
-        'Sign in with your **work** Google account and hit **Approve**.',
+        'Abre **Configuración → Conectores**.',
+        'Elige **Agregar conector personalizado**.',
+        'Pega la URL del conector que está arriba.',
+        'Inicia sesión con tu cuenta de Google **del trabajo** y dale **Aprobar**.',
       ],
-      note: 'Inside a chat, enable the connector from the tools menu so Cortex can use it.',
+      note: 'Ya dentro de un chat, activa el conector en el menú de herramientas para que Cortex pueda usarlo.',
     },
     chatgpt: {
       id: 'chatgpt',
       label: 'ChatGPT',
       icon: <MessagesSquare className="h-3.5 w-3.5" />,
-      caption: 'ChatGPT with connector support enabled',
+      caption: 'ChatGPT con los conectores habilitados',
       steps: [
-        'Open **Settings → Connectors** — or a custom connector / developer mode, depending on your plan.',
-        'Add an MCP server pointing at the same URL above.',
-        'Authorize with your Google account when prompted.',
+        'Abre **Configuración → Conectores**; según tu plan puede aparecer como conector personalizado o como modo desarrollador.',
+        'Agrega un servidor MCP apuntando a la misma URL de arriba.',
+        'Autoriza con tu cuenta de Google cuando te lo pida.',
       ],
-      note: 'Availability depends on your ChatGPT plan, and the feature may still be labeled beta.',
+      note: 'Depende del plan de ChatGPT que tengas, y puede que todavía aparezca marcado como beta.',
     },
     'claude-code': {
       id: 'claude-code',
       label: 'Claude Code',
       icon: <Terminal className="h-3.5 w-3.5" />,
-      caption: 'The CLI, in any terminal',
+      caption: 'La CLI, en cualquier terminal',
       steps: [
-        'Run the command below once — it registers Cortex for your user.',
-        'Authorize in the browser window it opens.',
+        'Corre el comando de abajo una sola vez: deja Cortex registrado en tu usuario.',
+        'Autoriza en la ventana del navegador que se abre.',
       ],
       snippet: `claude mcp add --transport http cortex ${url}`,
-      note: 'Working inside the cortex-agent repo? It is picked up automatically from .mcp.json — no setup needed.',
+      note: '¿Estás trabajando dentro del repo cortex-agent? Ahí se toma solo del .mcp.json: no hay nada que configurar.',
     },
     other: {
       id: 'other',
-      label: 'Other clients',
+      label: 'Otros clientes',
       icon: <Plug className="h-3.5 w-3.5" />,
-      caption: 'Cursor, Windsurf, or your own client',
+      caption: 'Cursor, Windsurf o tu propio cliente',
       steps: [
-        'Any client that supports **remote MCP servers with OAuth 2.1** works.',
-        'Register the same URL as a remote MCP server.',
-        'Complete the Google sign-in the client opens for you.',
+        'Sirve cualquier cliente que soporte **servidores MCP remotos con OAuth 2.1**.',
+        'Registra la misma URL como servidor MCP remoto.',
+        'Completa el inicio de sesión con Google que te abre el cliente.',
       ],
       snippet: url,
-      note: 'Discovery is automatic — the client reads the authorization metadata and the tool list from the URL itself.',
+      note: 'El descubrimiento es automático: el cliente lee los datos de autorización y la lista de herramientas desde la misma URL.',
     },
   };
 
@@ -176,12 +176,12 @@ export function ConnectCortex({ url }: { url: string }) {
   return (
     <div className="mt-4">
       {/* Connector URL */}
-      <div className="field-label">Connector URL</div>
+      <div className="field-label">URL del conector</div>
       <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5">
         <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[13px] font-semibold text-ink">
           {url}
         </code>
-        <CopyButton text={url} label="Copy URL" />
+        <CopyButton text={url} label="Copiar la URL" />
       </div>
 
       {/* Target picker */}

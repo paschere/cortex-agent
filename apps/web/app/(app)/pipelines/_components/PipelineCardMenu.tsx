@@ -26,12 +26,12 @@ export function PipelineCardMenu({
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: unknown };
-        window.alert(typeof data.error === 'string' ? data.error : 'That action failed.');
+        window.alert(typeof data.error === 'string' ? data.error : 'No se pudo hacer ese cambio.');
         return null;
       }
       return (await res.json()) as { slug: string };
     } catch {
-      window.alert('Network error — please try again.');
+      window.alert('No hubo conexión. Vuelve a intentarlo.');
       return null;
     } finally {
       setBusy(false);
@@ -47,7 +47,8 @@ export function PipelineCardMenu({
   }
 
   async function setArchived(next: boolean) {
-    if (next && !window.confirm('Archive this pipeline? Its run history is kept.')) return;
+    if (next && !window.confirm('¿Archivar este flujo? Se guarda el historial de ejecuciones.'))
+      return;
     const out = next
       ? await call(`/api/pipelines/${slug}`, 'DELETE')
       : await call(`/api/pipelines/${slug}`, 'PATCH', { archived: false });
@@ -59,7 +60,7 @@ export function PipelineCardMenu({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          aria-label="Pipeline actions"
+          aria-label="Acciones del flujo"
           disabled={busy}
           className="grid h-7 w-7 place-items-center rounded-card border border-border bg-surface text-ink-faint transition-colors hover:text-ink data-[state=open]:text-ink"
         >
@@ -77,19 +78,19 @@ export function PipelineCardMenu({
           className="z-50 min-w-[170px] overflow-hidden rounded-card border border-border bg-surface p-1 shadow-pop"
         >
           <Item onSelect={() => router.push(`/pipelines/${slug}/edit`)}>
-            <Pencil className="h-3.5 w-3.5" /> Edit
+            <Pencil className="h-3.5 w-3.5" /> Editar
           </Item>
           <Item onSelect={duplicate}>
-            <Copy className="h-3.5 w-3.5" /> Duplicate
+            <Copy className="h-3.5 w-3.5" /> Duplicar
           </Item>
           <DropdownMenu.Separator className="my-1 h-px bg-border" />
           {archived ? (
             <Item onSelect={() => setArchived(false)}>
-              <ArchiveRestore className="h-3.5 w-3.5" /> Unarchive
+              <ArchiveRestore className="h-3.5 w-3.5" /> Desarchivar
             </Item>
           ) : (
             <Item tone="rose" onSelect={() => setArchived(true)}>
-              <Archive className="h-3.5 w-3.5" /> Archive
+              <Archive className="h-3.5 w-3.5" /> Archivar
             </Item>
           )}
         </DropdownMenu.Content>

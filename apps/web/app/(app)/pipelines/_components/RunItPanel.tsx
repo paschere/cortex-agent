@@ -29,10 +29,10 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
 
   return (
     <Panel className="p-4">
-      <div className="field-label mb-2">Run it</div>
+      <div className="field-label mb-2">Ejecutarlo</div>
       <p className="mb-3 text-[12px] text-ink-muted">
-        Fill in the arguments, then say this to Cortex — in the web chat, in Claude, or from a
-        scheduled routine.
+        Llena los datos y dile esta frase a Cortex: en el chat de la web, desde Claude o desde una
+        rutina programada.
       </p>
 
       {params.length > 0 && (
@@ -47,7 +47,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
               <input
                 value={values[p.name] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [p.name]: e.target.value }))}
-                placeholder={p.description || `Value for ${p.name}`}
+                placeholder={p.description || `Valor de ${p.name}`}
                 className="w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
               />
             </label>
@@ -73,7 +73,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
         )}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        {copied ? 'Copied' : 'Copy the prompt'}
+        {copied ? 'Copiada' : 'Copiar la frase'}
       </button>
     </Panel>
   );

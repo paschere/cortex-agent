@@ -48,15 +48,15 @@ export default async function PipelinesPage() {
   return (
     <>
       <PageHeader
-        title="Pipelines"
-        subtitle="Reusable playbooks — build one here or in chat, run it anywhere: web, Claude, or on a schedule"
+        title="Flujos"
+        subtitle="Instructivos que escribes una vez y ejecutas donde quieras: aquí, desde Claude o en una rutina programada. Los armas en esta pantalla o hablando en el chat."
         icon={<Workflow className="h-5 w-5" />}
         actions={
           <Link
             href="/pipelines/new"
             className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
           >
-            <Plus className="h-4 w-4" /> New pipeline
+            <Plus className="h-4 w-4" /> Nuevo flujo
           </Link>
         }
       />
@@ -64,25 +64,27 @@ export default async function PipelinesPage() {
       {pipelines.length === 0 ? (
         <Panel className="p-10 text-center text-[13px] text-ink-muted">
           <Workflow className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <p className="mb-1 text-[15px] font-bold text-ink">No pipelines yet</p>
+          <p className="mb-1 text-[15px] font-bold text-ink">Todavía no hay flujos</p>
           <p className="mx-auto max-w-md leading-relaxed">
-            A pipeline is a playbook you write once and run anywhere — here, in Claude, or on a
-            schedule. Build one step by step, or ask Cortex in chat: <em>&ldquo;Create a pipeline
-            that every Friday prepares each client&apos;s active-candidates report and drafts the
-            emails for my approval.&rdquo;</em>
+            Un flujo es un instructivo que escribes una vez y ejecutas donde quieras: aquí, desde
+            Claude o en una rutina. Ármalo paso a paso, o pídeselo a Cortex en el chat:{' '}
+            <em>
+              &ldquo;Crea un flujo que todos los viernes prepare el reporte de candidatos activos de
+              cada cliente y me deje los correos listos para aprobar.&rdquo;
+            </em>
           </p>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
             <Link
               href="/pipelines/new"
               className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
             >
-              <Plus className="h-3.5 w-3.5" /> New pipeline
+              <Plus className="h-3.5 w-3.5" /> Nuevo flujo
             </Link>
             <Link
               href="/chat"
               className="rounded-pill border border-border-strong bg-surface px-4 py-2 text-[12.5px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
             >
-              Ask Cortex in chat
+              Pedírselo a Cortex en el chat
             </Link>
           </div>
         </Panel>
@@ -99,7 +101,7 @@ export default async function PipelinesPage() {
           <summary className="field-label flex cursor-pointer list-none items-center gap-2 transition-colors hover:text-ink">
             <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
             <Archive className="h-3.5 w-3.5" />
-            Archived ({archived.length})
+            Archivados ({archived.length})
           </summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {archived.map((p) => (
@@ -176,17 +178,17 @@ function PipelineCard({ p }: { p: PipelineRow }) {
           <div className="tabular mt-auto flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-ink-faint">
             <span className="inline-flex items-center gap-1">
               <Play className="h-3.5 w-3.5" />
-              {p.times_run} run{p.times_run === 1 ? '' : 's'}
+              {p.times_run} {p.times_run === 1 ? 'ejecución' : 'ejecuciones'}
             </span>
             <span className="inline-flex items-center gap-1">
               {p.archived ? (
                 <>
-                  <Archive className="h-3.5 w-3.5" /> archived
+                  <Archive className="h-3.5 w-3.5" /> archivado
                 </>
               ) : (
                 <>
                   <Clock className="h-3.5 w-3.5" />
-                  {p.last_run_at ? `last ${relativeTime(p.last_run_at)}` : 'never run'}
+                  {p.last_run_at ? `última ${relativeTime(p.last_run_at)}` : 'sin ejecutar'}
                 </>
               )}
             </span>

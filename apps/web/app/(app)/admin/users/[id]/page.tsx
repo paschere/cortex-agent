@@ -271,7 +271,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       team_id: string;
       tool_pattern: string;
     }>) {
-      const teamName = teams.find((t) => t.id === row.team_id)?.name ?? 'a team';
+      const teamName = teams.find((t) => t.id === row.team_id)?.name ?? 'un equipo';
       const set = byPattern.get(row.tool_pattern) ?? new Set<string>();
       set.add(teamName);
       byPattern.set(row.tool_pattern, set);

@@ -16,7 +16,7 @@ export function PipelineHeaderActions({ slug, archived }: { slug: string; archiv
       const res = await fetch(`/api/pipelines/${slug}/duplicate`, { method: 'POST' });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: unknown };
-        window.alert(typeof data.error === 'string' ? data.error : 'Could not duplicate.');
+        window.alert(typeof data.error === 'string' ? data.error : 'No se pudo duplicar el flujo.');
         setBusy(null);
         return;
       }
@@ -24,13 +24,17 @@ export function PipelineHeaderActions({ slug, archived }: { slug: string; archiv
       router.push(`/pipelines/${newSlug}/edit`);
       router.refresh();
     } catch {
-      window.alert('Network error — please try again.');
+      window.alert('No hubo conexión. Vuelve a intentarlo.');
       setBusy(null);
     }
   }
 
   async function toggleArchive() {
-    if (!archived && !window.confirm('Archive this pipeline? Its run history is kept.')) return;
+    if (
+      !archived &&
+      !window.confirm('¿Archivar este flujo? Se guarda el historial de ejecuciones.')
+    )
+      return;
     setBusy('archive');
     try {
       const res = archived
@@ -41,11 +45,11 @@ export function PipelineHeaderActions({ slug, archived }: { slug: string; archiv
           })
         : await fetch(`/api/pipelines/${slug}`, { method: 'DELETE' });
       if (!res.ok) {
-        window.alert('That action failed.');
+        window.alert('No se pudo hacer ese cambio. Vuelve a intentarlo.');
       }
       router.refresh();
     } catch {
-      window.alert('Network error — please try again.');
+      window.alert('No hubo conexión. Vuelve a intentarlo.');
     } finally {
       setBusy(null);
     }
@@ -57,7 +61,7 @@ export function PipelineHeaderActions({ slug, archived }: { slug: string; archiv
         href={`/pipelines/${slug}/edit`}
         className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
       >
-        <Pencil className="h-3.5 w-3.5" /> Edit
+        <Pencil className="h-3.5 w-3.5" /> Editar
       </Link>
       <button
         type="button"
@@ -70,14 +74,14 @@ export function PipelineHeaderActions({ slug, archived }: { slug: string; archiv
         ) : (
           <Copy className="h-3.5 w-3.5" />
         )}
-        Duplicate
+        Duplicar
       </button>
       <button
         type="button"
         onClick={toggleArchive}
         disabled={busy !== null}
-        aria-label={archived ? 'Unarchive pipeline' : 'Archive pipeline'}
-        title={archived ? 'Unarchive pipeline' : 'Archive pipeline'}
+        aria-label={archived ? 'Desarchivar el flujo' : 'Archivar el flujo'}
+        title={archived ? 'Desarchivar el flujo' : 'Archivar el flujo'}
         className="grid h-9 w-9 place-items-center rounded-card border border-border-strong bg-surface text-ink-faint shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
       >
         {busy === 'archive' ? (

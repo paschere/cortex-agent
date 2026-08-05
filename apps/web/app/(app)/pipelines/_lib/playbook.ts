@@ -141,15 +141,15 @@ const FAMILY_LABELS: Record<string, string> = {
   github: 'GitHub',
   linear: 'Linear',
   slack: 'Slack',
-  payroll: 'Payroll',
+  payroll: 'Nómina',
   web: 'Web',
-  format: 'Formatting',
-  people: 'People',
-  presentations: 'Presentations',
-  growth: 'Growth Signals',
-  pipeline: 'Pipelines',
-  schedule: 'Schedules',
-  sales: 'Sales',
+  format: 'Formato',
+  people: 'Personas',
+  presentations: 'Presentaciones',
+  growth: 'Señales de crecimiento',
+  pipeline: 'Flujos',
+  schedule: 'Rutinas',
+  sales: 'Ventas',
   cortex: 'Cortex',
 };
 
@@ -170,5 +170,5 @@ export function runSentence(
   const parts = params
     .filter((p) => p.required !== false || (values[p.name] ?? '').trim().length > 0)
     .map((p) => `${p.name}: ${(values[p.name] ?? '').trim() || '…'}`);
-  return `Run the "${slug}" pipeline${parts.length > 0 ? ` with ${parts.join(', ')}` : ''}`;
+  return `Ejecuta el flujo "${slug}"${parts.length > 0 ? ` con ${parts.join(', ')}` : ''}`;
 }

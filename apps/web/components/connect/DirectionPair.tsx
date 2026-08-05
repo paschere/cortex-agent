@@ -21,16 +21,16 @@ const CARDS: Record<Direction, Card> = {
   outbound: {
     href: '/integrations',
     icon: ArrowUpRight,
-    title: 'Cortex → your systems',
-    body: 'What Cortex is connected to: Google Workspace, HubSpot, payroll, Slack — plus any extra MCP server you plug in.',
-    cta: 'Integrations',
+    title: 'Cortex → tus sistemas',
+    body: 'A qué está conectado Cortex: Google Workspace, HubSpot, nómina, Slack y cualquier servidor MCP que le conectes.',
+    cta: 'Integraciones',
   },
   inbound: {
     href: '/mcp-tokens',
     icon: ArrowDownLeft,
-    title: 'Your AI client → Cortex',
-    body: 'The reverse: reach Cortex from Claude, Claude Code, ChatGPT or any MCP client, running with your own permissions.',
-    cta: 'Connect Claude',
+    title: 'Tu cliente de IA → Cortex',
+    body: 'Al revés: llegar a Cortex desde Claude, Claude Code, ChatGPT o cualquier cliente MCP, con tus propios permisos.',
+    cta: 'Conectar Claude',
   },
 };
 
@@ -54,7 +54,7 @@ function CardBody({ card, active }: { card: Card; active: boolean }) {
         </span>
         {active ? (
           <span className="ml-auto rounded-pill bg-primary-soft px-2.5 py-0.5 text-[11px] font-semibold text-primary-ink">
-            You are here
+            Estás aquí
           </span>
         ) : (
           <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-primary">
