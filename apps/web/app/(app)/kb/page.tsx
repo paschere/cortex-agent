@@ -5,6 +5,7 @@ import { BookOpen } from 'lucide-react';
 import { KnowledgeBase } from './_components/KnowledgeBase';
 import type { SpaceSummary } from './_components/types';
 import { readBrain } from './_lib/brain';
+import { readFragmentHealth, readShape, readStale } from './_lib/inspect';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,11 +13,21 @@ export default async function KnowledgeBasePage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  // Everything on this page — the cycle, the figures, the space cards — comes
-  // out of one reading, so nothing on screen can disagree with anything else.
+  // Everything on this page — the map, the figures, the analysis — comes out of
+  // one reading, so nothing on screen can disagree with anything else.
   const { spaces, facts, stats } = await readBrain(db, user.id, { perSpaceChunks: true });
 
-  // "Who owns it" is a name on a card, so resolve the ids here — the client
+  // The three analyses run together rather than one after another: none of them
+  // needs another's answer, and in series they would add their latencies to a
+  // page somebody is waiting on. Each returns null or an empty list on failure,
+  // so one slow or missing reading costs its own panel and nothing else.
+  const [health, shape, stale] = await Promise.all([
+    readFragmentHealth(db, user.id),
+    readShape(db, user.id),
+    readStale(db, user.id),
+  ]);
+
+  // "Who owns it" is a name on a row, so resolve the ids here — the client
   // never sees a user id it would have to look up.
   const ownerIds = [
     ...new Set(spaces.flatMap((s) => [s.ownerId, s.createdBy].filter(Boolean) as string[])),
@@ -60,12 +71,15 @@ export default async function KnowledgeBasePage() {
     <>
       <PageHeader
         title="Brain Knowledge"
-        subtitle="La memoria de la empresa. Lo que entra aquí es lo que Cortex puede recordar."
+        subtitle="Lo que Cortex memorizó, fragmento por fragmento — y la prueba de que lo encuentra."
         icon={<BookOpen className="h-5 w-5" />}
       />
       <KnowledgeBase
         spaces={summaries}
         stats={stats}
+        health={health}
+        shape={shape}
+        stale={stale}
         isAdmin={isAdmin}
         viewerName={user.name ?? user.email}
       />

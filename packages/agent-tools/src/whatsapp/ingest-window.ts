@@ -3,6 +3,7 @@ import type { Logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { approxTokens } from '../kb/chunker';
 import { embedDocuments } from '../kb/embedder';
+import { recordEmbeddingUsage } from '../kb/embedding-usage';
 import { assertCanWriteToSpace } from '../kb/spaces';
 import type { SpeechTurn } from '../kb/transcribe';
 import { chunkTranscript } from '../kb/transcript-chunker';
@@ -453,7 +454,10 @@ export async function ingestWindow(
 
     // Indexed as documents, never as queries (see kb/embedder.ts on asymmetry).
     const embedded = await embedDocuments(chunks.map((c) => c.content));
-    if (!embedded.ok && embedded.configured) throw new Error(embedded.reason);
+    // Only a transient failure is worth raising: a missing or rejected key and
+    // an exhausted quota all fail identically on the next pass, and the flush
+    // runs on a timer, so raising them would re-ask a settled question forever.
+    if (!embedded.ok && embedded.retryable) throw new Error(embedded.reason);
 
     const { error: chunkErr } = await db.from('kb_chunks').insert(
       chunks.map((c, i) => ({
@@ -465,10 +469,21 @@ export async function ingestWindow(
         // still keeps the conversation, findable by keyword, rather than losing
         // it to a missing environment variable.
         embedding: embedded.ok ? embedded.data[i] : null,
+        // The model travels with the vector or neither is written (0074).
+        embedding_model: embedded.ok ? embedded.usage.modelId : null,
         metadata: c.metadata,
       })),
     );
     if (chunkErr) throw new Error(chunkErr.message);
+
+    if (embedded.ok) {
+      await recordEmbeddingUsage(db, {
+        organizationId: ctx.organizationId,
+        documentId,
+        source: 'whatsapp',
+        usage: embedded.usage,
+      });
+    }
 
     await db
       .from('kb_documents')

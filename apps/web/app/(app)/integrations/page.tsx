@@ -3,13 +3,19 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { listTools } from '@cortex/agent-tools';
+import {
+  PRICES_CHECKED_ON,
+  embeddingConfig,
+  listTools,
+  readEmbeddingSpend,
+} from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
   Boxes,
   Brain,
   Building2,
   CircleCheck,
+  Gauge,
   GitBranch,
   Globe,
   ListTodo,
@@ -137,7 +143,14 @@ export default async function IntegrationsPage({
   // Losing the second is a degradation (keyword search still works), losing the
   // first is an outage — so only the first switches the card off.
   const brainOn = !!process.env.ANTHROPIC_API_KEY;
-  const semanticSearchOn = !!process.env.VOYAGE_API_KEY;
+  // Which embedding provider this deployment is actually pointed at, and what it
+  // has cost lately. Both live here rather than on the Brain Knowledge screen
+  // because this is the page about credentials somebody in ops owns, and the
+  // thing that went wrong was a credential nobody was watching.
+  const embedding = embeddingConfig();
+  const embeddingOk = !('error' in embedding);
+  const semanticSearchOn = embeddingOk && embedding.keyConfigured;
+  const spend = await readEmbeddingSpend(db, { days: 30 });
   const webOn = !!process.env.TAVILY_API_KEY;
   const slackOn = !!process.env.SLACK_BOT_TOKEN;
 
@@ -370,6 +383,156 @@ export default async function IntegrationsPage({
             </div>
           ))}
         </div>
+      </Panel>
+
+      {/* THE PANEL THAT WOULD HAVE CAUGHT IT ON DAY ONE.
+          A single document once burned an entire embedding account, and nobody
+          found out until Brain Knowledge stopped indexing. Nothing here is a
+          billing system — it is the four facts that would have made somebody
+          ask a question: which model is running, whether that model has any
+          free allowance at all, how much has been embedded this month, and
+          which document accounted for most of it. */}
+      <Panel className="mb-5 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">
+              <Gauge className="h-5 w-5" />
+            </span>
+            <div>
+              <div className="text-[13.5px] font-bold text-ink">Embeddings de Brain Knowledge</div>
+              <p className="mt-0.5 text-[12px] leading-snug text-ink-muted">
+                {embeddingOk ? (
+                  <>
+                    <span className="font-semibold text-ink">{embedding.provider.label}</span> ·{' '}
+                    <span className="font-mono text-[11.5px]">{embedding.model}</span> · 1024
+                    dimensiones
+                  </>
+                ) : (
+                  'La configuración de embeddings no es válida, así que no se está indexando nada.'
+                )}
+              </p>
+            </div>
+          </div>
+          <span
+            className={clsx(
+              'rounded-pill border px-2.5 py-0.5 text-[10.5px] font-semibold',
+              semanticSearchOn
+                ? 'border-emerald/40 bg-emerald-soft text-emerald'
+                : 'border-amber/40 bg-amber-soft text-amber',
+            )}
+          >
+            {semanticSearchOn ? 'Indexando por significado' : 'Solo por palabras'}
+          </span>
+        </div>
+
+        {!embeddingOk && (
+          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11px] leading-snug text-rose">
+            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+            <span>{embedding.error}</span>
+          </p>
+        )}
+
+        {/* The lesson of the incident, stated as a rule the screen enforces: a
+            model without a free allowance is a decision, not a default, and it
+            should be visible before the credits run out rather than after. */}
+        {embeddingOk && embedding.facts && embedding.facts.freeTierTokens === 0 && (
+          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
+            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+            <span>
+              <span className="font-semibold">Este modelo no tiene tokens gratis: </span>
+              se paga desde el primero. {embedding.facts.note} Si no fue una decisión deliberada,
+              vuelve a <span className="font-mono">voyage-4-lite</span>, que trae 200 millones
+              gratis y las mismas 1024 dimensiones.
+            </span>
+          </p>
+        )}
+        {embeddingOk && !embedding.facts && (
+          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
+            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+            <span>
+              No conocemos <span className="font-mono">{embedding.model}</span>, así que no podemos
+              decir qué cuesta ni si tiene nivel gratuito. Verifícalo con {embedding.provider.label}{' '}
+              antes de indexar un corpus grande.
+            </span>
+          </p>
+        )}
+        {embeddingOk && !embedding.keyConfigured && (
+          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
+            <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
+            <span>
+              Falta <span className="font-mono">{embedding.apiKeyEnv}</span>. Nada se pierde: los
+              documentos se guardan, se buscan por palabras y quedan en cola sin vector. En cuanto
+              exista la llave, el trabajo de reindexado los completa solo.
+            </span>
+          </p>
+        )}
+
+        <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-4">
+          <div className="bg-surface p-3">
+            <span className="field-label">Tokens embebidos · 30 días</span>
+            <div className="stat-num mt-1 text-[22px] leading-none text-ink">
+              {spend.tokens.toLocaleString('es-CO')}
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-ink-faint">
+              {spend.anyEstimated ? 'incluye estimados nuestros' : 'según el proveedor'}
+            </div>
+          </div>
+          <div className="bg-surface p-3">
+            <span className="field-label">Costo aproximado</span>
+            <div className="stat-num mt-1 text-[22px] leading-none text-ink">
+              {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
+                ? `US$${((spend.tokens / 1_000_000) * embedding.facts.pricePerMillionTokensUsd).toFixed(4)}`
+                : '—'}
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-ink-faint">
+              {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
+                ? `US$${embedding.facts.pricePerMillionTokensUsd}/millón · precio verificado el ${PRICES_CHECKED_ON}`
+                : 'el proveedor no publica precio por token'}
+            </div>
+          </div>
+          <div className="bg-surface p-3">
+            <span className="field-label">Fragmentos</span>
+            <div className="stat-num mt-1 text-[22px] leading-none text-ink">
+              {spend.texts.toLocaleString('es-CO')}
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-ink-faint">
+              en {spend.requests.toLocaleString('es-CO')}{' '}
+              {spend.requests === 1 ? 'llamada' : 'llamadas'}
+            </div>
+          </div>
+          <div className="bg-surface p-3">
+            <span className="field-label">Modelos usados</span>
+            <div className="stat-num mt-1 text-[22px] leading-none text-ink">
+              {spend.models.length || '—'}
+            </div>
+            <div className="mt-1 line-clamp-2 text-[11px] leading-snug text-ink-faint">
+              {spend.models.length > 1
+                ? 'hubo un cambio de modelo; se está reindexando'
+                : (spend.models[0] ?? 'nada embebido en el periodo')}
+            </div>
+          </div>
+        </div>
+
+        {spend.topDocuments.length > 0 && (
+          <div className="mt-3">
+            <span className="field-label">Lo que más se embebió</span>
+            <ul className="mt-1.5 space-y-1">
+              {spend.topDocuments.map((d) => (
+                <li
+                  key={d.documentId ?? 'sin-documento'}
+                  className="flex items-baseline justify-between gap-3 text-[11.5px]"
+                >
+                  <span className="truncate text-ink-muted">
+                    {d.title ?? (d.documentId ? 'Documento eliminado' : 'Sin documento')}
+                  </span>
+                  <span className="shrink-0 font-mono text-[11px] text-ink-faint">
+                    {d.tokens.toLocaleString('es-CO')} tokens · {d.texts} fragmentos
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Panel>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

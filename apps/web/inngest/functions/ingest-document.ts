@@ -9,7 +9,8 @@ import {
   driveGetText,
 } from '@cortex/agent-tools';
 import { chunkText } from '@cortex/agent-tools/src/kb/chunker';
-import { embedDocuments } from '@cortex/agent-tools/src/kb/embedder';
+import { embedInBatches, embeddingModelId } from '@cortex/agent-tools/src/kb/embedder';
+import { recordEmbeddingUsage } from '@cortex/agent-tools/src/kb/embedding-usage';
 import { parseDocument } from '@cortex/agent-tools/src/kb/parsers';
 import { transcribeAudio } from '@cortex/agent-tools/src/kb/transcribe';
 import { chunkTranscript } from '@cortex/agent-tools/src/kb/transcript-chunker';
@@ -18,6 +19,21 @@ import { logger } from '@cortex/core';
 /** Long enough for Deepgram to pull a 200MB recording, short enough to expire. */
 const AUDIO_SIGNED_URL_TTL_SECONDS = 60 * 60;
 
+/**
+ * How many chunks one embedding step takes on. Comfortably above any provider's
+ * per-request ceiling on purpose: the step re-plans the work into real provider
+ * requests internally and PERSISTS EACH ONE as it lands, so a bigger slice means
+ * fewer Inngest steps without making any single failure more expensive.
+ */
+const CHUNKS_PER_EMBED_STEP = 128;
+
+/**
+ * A ceiling on steps per invocation, not on work. Whatever is left is picked up
+ * by kb-reindex-embeddings on its next pass — the same drain that already exists
+ * for chunks stored without a key.
+ */
+const MAX_EMBED_STEPS = 40;
+
 /** What goes into kb_chunks, whichever branch produced it. */
 interface PendingChunk {
   content: string;
@@ -25,6 +41,15 @@ interface PendingChunk {
   tokens: number;
   metadata: Record<string, unknown>;
 }
+
+/**
+ * What a source-resolution step hands back. Small on purpose: the TEXT goes to
+ * the database inside the step, not through Inngest's memoised step output.
+ */
+type PrepareOutcome =
+  | { ok: true; chunks: number }
+  /** Unrecoverable for this document — the row is already marked failed. */
+  | { ok: false; terminal: true; reason: string };
 
 export const ingestDocument = inngest.createFunction(
   { id: 'ingest-document', retries: 3 },
@@ -78,59 +103,70 @@ export const ingestDocument = inngest.createFunction(
       return { ok: false as const, error: message };
     };
 
+    // Same contract as before the rewrite: whatever else happens, the row stops
+    // claiming to be mid-ingestion and carries a sentence someone can read. The
+    // throw is preserved so Inngest still counts the attempt.
     try {
-      // Resolve the document content into a buffer + parse it.
-      let text = '';
-      let pages: number | undefined;
-      // Filled by the audio branch only. A conversation is not chunked from a
-      // wall of text — its chunks are groups of speech turns, each carrying the
-      // speaker and the offsets that make a citation checkable — so that branch
-      // produces finished chunks rather than a string for `chunkText`.
-      let transcriptChunks: PendingChunk[] | null = null;
+    // -----------------------------------------------------------------------
+    // 1. Source -> chunk ROWS, inside a step, with only a count coming back out
+    // -----------------------------------------------------------------------
+    // WHY THE EXTRACTION AND THE INSERT ARE ONE STEP. Inngest memoises what
+    // happens INSIDE a step and re-executes everything outside it on every
+    // retry. Extraction — a Drive export, a storage download, a PDF parse — used
+    // to sit outside any step, so a failure anywhere later in this function
+    // downloaded and parsed the whole document again. Pairing it with the insert
+    // makes "the text exists in kb_chunks" the memoised fact, and the step's
+    // output stays a single number instead of megabytes of prose.
+    //
+    // WHY THE TRANSCRIPTION KEEPS ITS OWN STEP. It is the single most expensive
+    // call in the function and it already had one. Folding it into the chunking
+    // step would mean a failed insert re-transcribing an hour of audio.
+    let prepared: PrepareOutcome;
 
-      if (doc.media_kind === 'audio') {
-        const audioPath = (doc.media_path ?? doc.source_ref) as string | null;
-        if (!audioPath) {
-          return await failAndStop(`Recording ${documentId} has no stored audio path`);
-        }
+    if (doc.media_kind === 'audio') {
+      const audioPath = (doc.media_path ?? doc.source_ref) as string | null;
+      if (!audioPath) {
+        return await failAndStop(`Recording ${documentId} has no stored audio path`);
+      }
 
+      // Signing and transcribing live in one step so the URL cannot expire
+      // between them, and so an Inngest retry of a LATER step never re-pays for
+      // a transcription that already succeeded.
+      const outcome = await step.run('transcribe-audio', async () => {
         await sb
           .from('kb_documents')
           .update({ transcript_status: 'transcribing', transcript_error: null })
           .eq('id', documentId);
 
-        // Signing and transcribing live in one step so the URL cannot expire
-        // between them, and so an Inngest retry of a LATER step never re-pays
-        // for a transcription that already succeeded — minutes of work and the
-        // most expensive call in this function.
-        const outcome = await step.run('transcribe-audio', async () => {
-          const { data: signed, error: signError } = await sb.storage
-            .from('kb-uploads')
-            .createSignedUrl(audioPath, AUDIO_SIGNED_URL_TTL_SECONDS);
-          if (signError || !signed?.signedUrl) {
-            throw new Error(
-              `Could not sign the recording for transcription: ${signError?.message}`,
-            );
-          }
-          // Deepgram fetches the audio itself. Downloading it here only to
-          // upload the same bytes back would double the transfer and hold the
-          // whole file in this function's heap for the length of the call.
-          return await transcribeAudio({ url: signed.signedUrl }, { logger });
-        });
-
-        if (!outcome.ok) {
-          await sb
-            .from('kb_documents')
-            .update({ transcript_status: 'failed', transcript_error: outcome.reason })
-            .eq('id', documentId);
-          // A missing key or an undecodable file will fail identically on every
-          // retry; a rate limit or an outage will not. Only the first kind stops.
-          if (!outcome.retryable) return await failAndStop(outcome.reason);
-          throw new Error(outcome.reason);
+        const { data: signed, error: signError } = await sb.storage
+          .from('kb-uploads')
+          .createSignedUrl(audioPath, AUDIO_SIGNED_URL_TTL_SECONDS);
+        if (signError || !signed?.signedUrl) {
+          throw new Error(`Could not sign the recording for transcription: ${signError?.message}`);
         }
+        // Deepgram fetches the audio itself. Downloading it here only to upload
+        // the same bytes back would double the transfer and hold the whole file
+        // in this function's heap for the length of the call.
+        return await transcribeAudio({ url: signed.signedUrl }, { logger });
+      });
 
-        const transcript = outcome.data;
-        transcriptChunks = chunkTranscript(transcript.turns).map((c) => ({
+      if (!outcome.ok) {
+        await sb
+          .from('kb_documents')
+          .update({ transcript_status: 'failed', transcript_error: outcome.reason })
+          .eq('id', documentId);
+        // A missing key or an undecodable file will fail identically on every
+        // retry; a rate limit or an outage will not. Only the first kind stops.
+        if (!outcome.retryable) return await failAndStop(outcome.reason);
+        throw new Error(outcome.reason);
+      }
+
+      const transcript = outcome.data;
+      prepared = await step.run('store-transcript-chunks', async (): Promise<PrepareOutcome> => {
+        // A conversation is not chunked from a wall of text — its chunks are
+        // groups of speech turns, each carrying the speaker and the offsets that
+        // make a citation checkable.
+        const chunks: PendingChunk[] = chunkTranscript(transcript.turns).map((c) => ({
           content: c.content,
           chunkIndex: c.chunkIndex,
           tokens: c.tokens,
@@ -139,6 +175,9 @@ export const ingestDocument = inngest.createFunction(
             ...(transcript.language ? { language: transcript.language } : {}),
           },
         }));
+        if (chunks.length === 0) throw new Error('No chunks produced');
+
+        await storeChunks(sb, documentId, chunks);
 
         await sb
           .from('kb_documents')
@@ -152,148 +191,283 @@ export const ingestDocument = inngest.createFunction(
             ...(doc.recorded_at ? {} : { recorded_at: doc.created_at }),
           })
           .eq('id', documentId);
-      } else if (doc.source === 'upload') {
-        const storagePath = doc.source_ref as string | null;
-        if (!storagePath) throw new Error(`Document ${documentId} has no source_ref`);
-        const { data: file } = await sb.storage.from('kb-uploads').download(storagePath);
-        if (!file) throw new Error('File not found in storage');
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const parsed = await parseDocument(buffer, doc.mime as string);
-        text = parsed.text;
-        pages = parsed.pages;
-      } else if (doc.source === 'gdrive') {
-        const fileId = doc.source_ref as string | null;
-        if (!fileId) return await failAndStop(`Document ${documentId} has no source_ref`);
 
-        // The owner of the tracked folder set provides the Google credentials.
-        const { data: syncState } = await sb
-          .from('gdrive_sync_state')
-          .select('owner_user_id')
-          .eq('collection_id', doc.collection_id as string)
-          .maybeSingle();
-        const ownerUserId = syncState?.owner_user_id as string | null | undefined;
-        if (!ownerUserId) {
-          return await failAndStop(
-            `No Google Drive owner configured for collection ${doc.collection_id}`,
-          );
-        }
+        return { ok: true, chunks: chunks.length };
+      });
+    } else {
+      prepared = await step.run('extract-and-store-chunks', async (): Promise<PrepareOutcome> => {
+        let text = '';
+        let pages: number | undefined;
 
-        const ctx: Pick<ToolContext, 'integrations' | 'signal'> = {
-          integrations: createIntegrationsClient(sb, ownerUserId, logger),
-          signal: undefined,
-        };
-        const encId = encodeURIComponent(fileId);
-
-        // Inspect the live mime to decide export vs. raw download.
-        const meta = await driveGet<{ mimeType?: string }>(ctx as ToolContext, `/files/${encId}`, {
-          fields: 'mimeType',
-        });
-        const liveMime = meta.mimeType ?? '';
-        const isNative = liveMime.startsWith('application/vnd.google-apps');
-
-        let bytes: Buffer;
-        if (isNative) {
-          const exportMime =
-            liveMime === 'application/vnd.google-apps.spreadsheet' ? 'text/csv' : 'text/plain';
-          try {
-            const exported = await driveGetText(ctx as ToolContext, `/files/${encId}/export`, {
-              mimeType: exportMime,
-            });
-            bytes = Buffer.from(exported, 'utf8');
-          } catch (exportErr) {
-            // Google caps exports at 10MB (403 exportSizeLimitExceeded). The Drive
-            // helpers only target the API base URL and cannot follow the absolute
-            // exportLinks URLs, so this is a terminal failure for the worker.
-            const msg = (exportErr as Error).message ?? '';
-            if (msg.includes('exportSizeLimitExceeded')) {
-              return await failAndStop(
-                `Google Drive export exceeds the 10MB size limit for file ${fileId}`,
-              );
-            }
-            throw exportErr;
-          }
-        } else {
-          bytes = await driveGetBytes(ctx as ToolContext, `/files/${encId}`, { alt: 'media' });
-        }
-
-        // Persist the content hash before parsing (the stored mime is the
-        // post-export mime, not the live Drive mime).
-        const sha256 = createHash('sha256').update(bytes).digest('hex');
-        await sb.from('kb_documents').update({ sha256 }).eq('id', documentId);
-
-        try {
-          const parsed = await parseDocument(bytes, doc.mime as string);
+        if (doc.source === 'upload') {
+          const storagePath = doc.source_ref as string | null;
+          if (!storagePath) throw new Error(`Document ${documentId} has no source_ref`);
+          const { data: file } = await sb.storage.from('kb-uploads').download(storagePath);
+          if (!file) throw new Error('File not found in storage');
+          const buffer = Buffer.from(await file.arrayBuffer());
+          const parsed = await parseDocument(buffer, doc.mime as string);
           text = parsed.text;
           pages = parsed.pages;
-        } catch (parseErr) {
-          return await failAndStop(
-            `Failed to parse Google Drive file ${fileId}: ${(parseErr as Error).message}`,
+        } else if (doc.source === 'gdrive') {
+          const fileId = doc.source_ref as string | null;
+          if (!fileId) return terminal(`Document ${documentId} has no source_ref`);
+
+          // The owner of the tracked folder set provides the Google credentials.
+          const { data: syncState } = await sb
+            .from('gdrive_sync_state')
+            .select('owner_user_id')
+            .eq('collection_id', doc.collection_id as string)
+            .maybeSingle();
+          const ownerUserId = syncState?.owner_user_id as string | null | undefined;
+          if (!ownerUserId) {
+            return terminal(
+              `No Google Drive owner configured for collection ${doc.collection_id}`,
+            );
+          }
+
+          const ctx: Pick<ToolContext, 'integrations' | 'signal'> = {
+            integrations: createIntegrationsClient(sb, ownerUserId, logger),
+            signal: undefined,
+          };
+          const encId = encodeURIComponent(fileId);
+
+          // Inspect the live mime to decide export vs. raw download.
+          const meta = await driveGet<{ mimeType?: string }>(
+            ctx as ToolContext,
+            `/files/${encId}`,
+            { fields: 'mimeType' },
           );
+          const liveMime = meta.mimeType ?? '';
+          const isNative = liveMime.startsWith('application/vnd.google-apps');
+
+          let bytes: Buffer;
+          if (isNative) {
+            const exportMime =
+              liveMime === 'application/vnd.google-apps.spreadsheet' ? 'text/csv' : 'text/plain';
+            try {
+              const exported = await driveGetText(ctx as ToolContext, `/files/${encId}/export`, {
+                mimeType: exportMime,
+              });
+              bytes = Buffer.from(exported, 'utf8');
+            } catch (exportErr) {
+              // Google caps exports at 10MB (403 exportSizeLimitExceeded). The
+              // Drive helpers only target the API base URL and cannot follow the
+              // absolute exportLinks URLs, so this is terminal for the worker.
+              const msg = (exportErr as Error).message ?? '';
+              if (msg.includes('exportSizeLimitExceeded')) {
+                return terminal(
+                  `Google Drive export exceeds the 10MB size limit for file ${fileId}`,
+                );
+              }
+              throw exportErr;
+            }
+          } else {
+            bytes = await driveGetBytes(ctx as ToolContext, `/files/${encId}`, { alt: 'media' });
+          }
+
+          // Persist the content hash before parsing (the stored mime is the
+          // post-export mime, not the live Drive mime).
+          const sha256 = createHash('sha256').update(bytes).digest('hex');
+          await sb.from('kb_documents').update({ sha256 }).eq('id', documentId);
+
+          try {
+            const parsed = await parseDocument(bytes, doc.mime as string);
+            text = parsed.text;
+            pages = parsed.pages;
+          } catch (parseErr) {
+            return terminal(
+              `Failed to parse Google Drive file ${fileId}: ${(parseErr as Error).message}`,
+            );
+          }
+        } else {
+          throw new Error(`Source ${doc.source} not yet supported`);
         }
-      } else {
-        throw new Error(`Source ${doc.source} not yet supported`);
-      }
 
-      // Clear any existing chunks before re-inserting (gdrive re-sync + retries).
-      await step.run('clear-chunks', async () => {
-        await sb.from('kb_chunks').delete().eq('document_id', documentId);
-      });
-
-      const chunks: PendingChunk[] =
-        transcriptChunks ??
-        chunkText(text).map((c) => ({
+        const chunks: PendingChunk[] = chunkText(text).map((c) => ({
           content: c.content,
           chunkIndex: c.chunkIndex,
           tokens: c.tokens,
           metadata: pages != null ? { pages } : {},
         }));
-      if (chunks.length === 0) throw new Error('No chunks produced');
+        if (chunks.length === 0) throw new Error('No chunks produced');
 
-      // Embed all chunks (batched internally, as documents — never as queries)
-      const embedded = await embedDocuments(chunks.map((c) => c.content));
+        await storeChunks(sb, documentId, chunks);
+        return { ok: true, chunks: chunks.length };
+      });
+    }
 
-      // A missing Voyage key is not a reason to lose the document. The text is
-      // the expensive part (download, export, parse); the vectors are cheap to
-      // add later. Storing the chunks with a null embedding keeps the document
-      // findable by keyword and hands it to kb-reindex-embeddings, which fills
-      // the vectors in and flips the row to `ready` once the key exists. Any
-      // other failure is transient and worth an Inngest retry.
-      if (!embedded.ok && embedded.configured) throw new Error(embedded.reason);
+    if (!prepared.ok) return await failAndStop(prepared.reason);
+    const chunkCount = prepared.chunks;
 
-      await sb.from('kb_chunks').insert(
-        chunks.map((c, i) => ({
-          document_id: documentId,
-          chunk_index: c.chunkIndex,
-          content: c.content,
-          tokens: c.tokens,
-          embedding: embedded.ok ? embedded.data[i] : null,
-          metadata: c.metadata,
-        })),
-      );
+    // -----------------------------------------------------------------------
+    // 2. Embed — one memoised step per slice, persisted as it goes
+    // -----------------------------------------------------------------------
+    // THE BUG THIS REPLACES. `embedDocuments(...)` used to be called here,
+    // OUTSIDE any step, in a function declared `retries: 3`. Inngest re-executes
+    // everything outside a step on every attempt, so one failure re-embedded the
+    // entire document from scratch, up to four times — and because the embedder
+    // batches internally, a failure in batch 15 of 20 also threw away the
+    // fourteen batches already paid for and bought them again on the next
+    // attempt. A long transcript is thousands of chunks. That is how one
+    // document exhausted an account.
+    //
+    // WHAT MAKES IT RESUMABLE RATHER THAN REPEATABLE. Each step below re-reads
+    // "chunks of this document that still have no vector from the CURRENT
+    // model", embeds them one provider request at a time, and writes each
+    // request's vectors before the next is sent. Two independent things now
+    // protect the spend: Inngest never re-runs a completed step, and even a step
+    // that dies mid-way finds only its unfinished remainder when it is retried.
+    // A retry can cost at most one provider request that was already in flight.
+    const modelId = embeddingModelId();
+    let embedded = 0;
+    let halted: string | null = null;
 
-      if (!embedded.ok) {
+    const steps = Math.min(MAX_EMBED_STEPS, Math.ceil(chunkCount / CHUNKS_PER_EMBED_STEP));
+    for (let i = 0; i < steps; i++) {
+      const result = await step.run(`embed-batch-${i}`, async () => {
+        const { data, error } = await sb
+          .from('kb_chunks')
+          .select('id, content')
+          .eq('document_id', documentId)
+          .is('embedding', null)
+          .order('chunk_index', { ascending: true })
+          .limit(CHUNKS_PER_EMBED_STEP);
+        if (error) throw new Error(`Could not read chunks to embed: ${error.message}`);
+
+        const rows = (data ?? []) as Array<{ id: string; content: string }>;
+        if (rows.length === 0) return { done: 0, halted: null as string | null };
+
+        let written = 0;
+        const run = await embedInBatches(
+          rows.map((r) => r.content),
+          async ({ start, vectors, usage }) => {
+            // Written BEFORE the next request goes out. This await is the whole
+            // guarantee: money already spent is in the database before any more
+            // is spent.
+            for (let k = 0; k < vectors.length; k++) {
+              const row = rows[start + k];
+              if (!row) continue;
+              const { error: writeError } = await sb
+                .from('kb_chunks')
+                .update({ embedding: vectors[k], embedding_model: modelId })
+                .eq('document_id', documentId)
+                .eq('id', row.id);
+              if (writeError) throw new Error(`Could not store embeddings: ${writeError.message}`);
+            }
+            written += vectors.length;
+            await recordEmbeddingUsage(sb, {
+              organizationId,
+              documentId,
+              source: 'ingest',
+              usage,
+            });
+          },
+        );
+
+        if (run.failure) {
+          // The distinction that stops this from being expensive twice. A
+          // missing key, a rejected key or an exhausted quota fails identically
+          // on every attempt; throwing would spend the function's retry budget
+          // reconfirming it, and against a spent quota it would spend money
+          // doing so. Those halt, the chunks stay stored and unvectorised, and
+          // kb-reindex-embeddings finishes the job once ops acts. Only genuinely
+          // transient failures are worth an Inngest retry.
+          if (!run.failure.retryable) return { done: written, halted: run.failure.reason };
+          if (written > 0) {
+            logger.warn('ingest: embedding interrupted, partial batch persisted', {
+              documentId,
+              written,
+              reason: run.failure.reason,
+            });
+          }
+          throw new Error(run.failure.reason);
+        }
+        return { done: written, halted: null as string | null };
+      });
+
+      embedded += result.done;
+      if (result.halted) {
+        halted = result.halted;
+        break;
+      }
+      if (result.done === 0) break;
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. Settle the document
+    // -----------------------------------------------------------------------
+    return await step.run('finalize', async () => {
+      const { count } = await sb
+        .from('kb_chunks')
+        .select('id', { count: 'exact', head: true })
+        .eq('document_id', documentId)
+        .is('embedding', null);
+      const outstanding = count ?? 0;
+
+      if (outstanding > 0) {
+        // A missing key is not a reason to lose the document. The text is the
+        // expensive part (download, export, parse); the vectors are cheap to add
+        // later. Chunks with a null embedding keep the document findable by
+        // keyword and hand it to kb-reindex-embeddings, which fills the vectors
+        // in and flips the row to `ready` once the key or the quota exists.
+        const reason =
+          halted ??
+          `Quedan ${outstanding} fragmentos sin vector; kb-reindex-embeddings los completa.`;
         await sb
           .from('kb_documents')
-          .update({ status: 'pending', error_message: embedded.reason })
+          .update({ status: 'pending', error_message: reason })
           .eq('id', documentId);
-        return { ok: true, chunks: chunks.length, awaitingEmbeddings: true };
+        return { ok: true, chunks: chunkCount, embedded, awaitingEmbeddings: true, halted };
       }
 
       await sb
         .from('kb_documents')
         .update({ status: 'ready', error_message: null })
         .eq('id', documentId);
-
-      return { ok: true, chunks: chunks.length };
+      return { ok: true, chunks: chunkCount, embedded };
+    });
     } catch (err) {
       await sb
         .from('kb_documents')
-        .update({
-          status: 'failed',
-          error_message: (err as Error).message,
-        })
+        .update({ status: 'failed', error_message: (err as Error).message })
         .eq('id', documentId);
       throw err;
     }
   },
 );
+
+/** Narrowing helper so the branches above read as prose. */
+function terminal(reason: string): PrepareOutcome {
+  return { ok: false, terminal: true, reason };
+}
+
+/**
+ * Replace this document's chunks with `chunks`, unvectorised.
+ *
+ * Delete-then-insert rather than diff: chunk boundaries move when a source is
+ * re-read, so index N is not the same passage it was last time. Both statements
+ * live inside the caller's step, so a retry re-does both and lands on the same
+ * rows.
+ */
+async function storeChunks(
+  sb: ReturnType<typeof getOrgScopedClient>,
+  documentId: string,
+  chunks: PendingChunk[],
+): Promise<void> {
+  await sb.from('kb_chunks').delete().eq('document_id', documentId);
+  const { error } = await sb.from('kb_chunks').insert(
+    chunks.map((c) => ({
+      document_id: documentId,
+      chunk_index: c.chunkIndex,
+      content: c.content,
+      tokens: c.tokens,
+      // Vectors arrive in their own steps. Null here is the durable marker of
+      // "stored, not yet embedded" that both the reindexer and search already
+      // understand (migrations 0057, 0074).
+      embedding: null,
+      embedding_model: null,
+      metadata: c.metadata,
+    })),
+  );
+  if (error) throw new Error(`Could not store chunks: ${error.message}`);
+}

@@ -5,6 +5,7 @@ import { fetchEventsInRange, parseMeetCode } from '../gcal/events';
 import { registerTool } from '../index';
 import { approxTokens } from '../kb/chunker';
 import { embedDocuments } from '../kb/embedder';
+import { recordEmbeddingUsage } from '../kb/embedding-usage';
 import { assertCanWriteToSpace, ensurePersonalSpace, resolveSpaceByName } from '../kb/spaces';
 import type { SpeechTurn } from '../kb/transcribe';
 import { chunkTranscript } from '../kb/transcript-chunker';
@@ -745,7 +746,11 @@ export async function importMeetingTranscript(
 
     // Indexed as documents, never as queries (see kb/embedder.ts on asymmetry).
     const embedded = await embedDocuments(chunks.map((c) => c.content));
-    if (!embedded.ok && embedded.configured) throw new Error(embedded.reason);
+    // Only a transient failure is worth raising. A missing or rejected key and
+    // an exhausted quota all fail the same way next time; this runs inside the
+    // meeting sweep, whose per-user step Inngest WILL retry, and retrying
+    // against a spent quota spends money to learn nothing.
+    if (!embedded.ok && embedded.retryable) throw new Error(embedded.reason);
 
     const { error: chunkErr } = await db.from('kb_chunks').insert(
       chunks.map((c, i) => ({
@@ -757,10 +762,21 @@ export async function importMeetingTranscript(
         // still keeps the conversation, findable by keyword, rather than losing
         // a meeting because of a missing environment variable.
         embedding: embedded.ok ? embedded.data[i] : null,
+        // The model travels with the vector or neither is written (0074).
+        embedding_model: embedded.ok ? embedded.usage.modelId : null,
         metadata: c.metadata,
       })),
     );
     if (chunkErr) throw new Error(chunkErr.message);
+
+    if (embedded.ok) {
+      await recordEmbeddingUsage(db, {
+        organizationId: ctx.organizationId,
+        documentId,
+        source: 'meeting',
+        usage: embedded.usage,
+      });
+    }
 
     await db
       .from('kb_documents')

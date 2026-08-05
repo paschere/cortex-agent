@@ -80,6 +80,10 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   kb_collections: tenant(),
   kb_documents: tenant(),
   kb_chunks: derived('kb_documents', 'document_id'),
+  // Tenant rather than derived even though most rows name a document: the whole
+  // point of the table is "what did THIS workspace spend", which has to be
+  // answerable without naming a document, and some rows have none.
+  kb_embedding_usage: tenant(),
   gdrive_sync_state: tenant(),
   meeting_imports: tenant(),
   meeting_briefings: tenant(),
@@ -219,6 +223,12 @@ export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   kb_search_scoped: 'person',
   kb_brain_graph: 'person',
   kb_conflict_candidates: 'person',
+  // Migration 0073. Both derive the visible spaces from p_user_id, exactly like
+  // the search does — `kb_note_retrieval` is the only write in this surface
+  // that takes raw chunk ids from a caller, and it re-derives every one of them
+  // from that visible set rather than trusting the list it was handed.
+  kb_fragment_health: 'person',
+  kb_note_retrieval: 'person',
   user_memory_context: 'person',
   user_memory_list: 'person',
   user_memory_remember: 'person',

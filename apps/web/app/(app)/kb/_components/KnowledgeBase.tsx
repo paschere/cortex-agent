@@ -1,95 +1,293 @@
 'use client';
 
-import { Panel, PanelHead } from '@/components/ui/panel';
+import { Panel } from '@/components/ui/panel';
+import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { AlertTriangle, Building2, Loader2, Lock, Plus, Search, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { countBySource, focusStats } from '../_lib/view';
-import { searchKnowledge } from '../actions';
-import { BrainPanel, GrowthPanel } from './BrainPlate';
+import { Building2, ChevronRight, Loader2, Lock, Plus } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { focusStats } from '../_lib/view';
 import { DigestionPanel, KnowsPanel, useDigest } from './Digestion';
+import { GrowthPanel } from './GrowthPanel';
+import { type IndexItem, IndexList } from './Index';
 import { IntakeChooser } from './Intake';
-import { RelationsPanel, SOURCE_LABEL } from './RelationsGraph';
-import { SpaceDetail } from './SpaceDetail';
+import { SOURCE_LABEL } from './RelationsGraph';
 import { SpaceDialog } from './SpaceDialog';
-import { ago, hours, num, plural } from './format';
-import type { BrainStats, IntakeKey, SearchResult, SpaceSummary } from './types';
+import { SpaceTools } from './SpaceTools';
+import { Analysis } from './analysis/Analysis';
+import { MemoryBench } from './bench/MemoryBench';
+import { BrainField, type FieldFlare } from './field/BrainField';
+import { type FieldSeed, LOBE_NAME } from './field/field-math';
+import { num, plural } from './format';
+import { FragmentReader } from './reader/FragmentReader';
+import type {
+  BrainStats,
+  FragmentHealth,
+  IntakeKey,
+  KnowledgeShape,
+  ProbeResult,
+  SpaceSummary,
+  StaleDocument,
+} from './types';
 
 /**
- * Brain Knowledge, read top to bottom as the thing it is: something that eats,
- * digests, and then remembers.
+ * Brain Knowledge.
  *
- *   1. the belt — what went in, what is being worked on, what came out;
- *   2. what it knows, in counted figures;
- *   3. the four mouths;
- *   4. proof that the memory works — the same search Cortex runs;
- *   5. where the memory is kept.
+ * THE SHAPE OF THE SCREEN, AND WHY. The old page was a stack of panels with a
+ * drawing of a brain at the top: the drawing was an illustration and the lists
+ * underneath were the product. This inverts that. The cortex is now the map you
+ * navigate — spaces are hills, you walk into one and its documents become the
+ * hills, you walk into a document and the map flattens into that document's own
+ * ribbon of fragments. Three depths, one object, and it is drawn from the
+ * corpus rather than from constants: elevation is fragments, position is what
+ * the material is made of.
  *
- * The old page opened with a search box over a grid of folders, which described
- * a file manager. This describes an organism with a digestive tract, because
- * that is what the product actually is.
+ * AND IT IS NEVER THE ONLY DOOR. Beside the map, at every depth, is the same
+ * set of things as a list you can filter by typing and walk with the arrow
+ * keys. Not a fallback — a peer, wired to the same state, so pointing at a row
+ * lights the hill and the other way round. A screen whose navigation lives
+ * inside a picture is unusable to anybody on a keyboard and slower than a
+ * filing cabinet for anybody who already knows the name of what they want.
+ *
+ * THE FIRST THING ON SCREEN IS THE BENCH. Not the map. The most useful thing
+ * here is being able to type a real question and see exactly which fragments
+ * Cortex would retrieve, in what order, with what score, without spending an
+ * answer — so it sits open by default in the right-hand column, beside the map,
+ * and running it lights the map where the answer lives. That is the whole
+ * product in one view: ask it something, watch which part of the memory
+ * responds, go and read the actual fragment.
  */
+
+type Tab = 'ask' | 'index';
+
 export function KnowledgeBase({
   spaces,
   stats: serverStats,
+  health,
+  shape,
+  stale,
   isAdmin,
   viewerName,
 }: {
   spaces: SpaceSummary[];
   stats: BrainStats;
+  health: FragmentHealth | null;
+  shape: KnowledgeShape | null;
+  stale: StaleDocument[];
   isAdmin: boolean;
   viewerName: string;
 }) {
   const stats = useDigest(serverStats);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [intake, setIntake] = useState<IntakeKey>('upload');
-  // Which lobe of the plate is pressed. Null is "todo".
-  const [openRegion, setOpenRegion] = useState<IntakeKey | null>(null);
+
+  // Where we are. Three depths, expressed as two ids rather than a tagged
+  // union, because every transition between them is "set one, clear the other"
+  // and a union would need a reducer to say the same thing.
+  const [spaceId, setSpaceId] = useState<string | null>(null);
+  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+
+  const [tab, setTab] = useState<Tab>('ask');
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [probe, setProbe] = useState<ProbeResult | null>(null);
+  const [source, setSource] = useState<IntakeKey | null>(null);
   const [creating, setCreating] = useState<'personal' | 'global' | null>(null);
-  // A document opened from the ring: which space to walk into, and what to
-  // point at once we are there.
-  const [focusDoc, setFocusDoc] = useState<string | null>(null);
+  const [intake, setIntake] = useState<IntakeKey>('upload');
 
-  const search = useKnowledgeSearch();
-  const found = search.found;
+  const space = spaces.find((s) => s.id === spaceId) ?? null;
+  const depth: 'cortex' | 'space' | 'document' = documentId
+    ? 'document'
+    : spaceId
+      ? 'space'
+      : 'cortex';
 
-  // Everything under the plate reads the focused view; the plate itself keeps
-  // the whole reading, because it is the control and has to draw all four.
-  const view = useMemo(() => focusStats(stats, openRegion), [stats, openRegion]);
-  const focusLabel = openRegion ? { label: SOURCE_LABEL[openRegion] } : null;
+  /* ------------------------------------------------------------- the level */
 
-  const company = useMemo(() => spaces.filter((s) => s.kind === 'global'), [spaces]);
-  const mine = useMemo(() => spaces.filter((s) => s.kind === 'personal'), [spaces]);
+  // One level down the map stops being spaces and becomes the documents inside
+  // one. Both readings come from things the page already has: the space cards
+  // carry their own fragment counts and intake mix, and the relations graph
+  // carries per-document fragment counts and the ties between them.
+  const graph = useQuery({
+    queryKey: ['kb-graph', spaceId ?? 'all', 'all'],
+    queryFn: async () => {
+      const r = await fetch(`/api/kb/graph?spaceId=${spaceId}`);
+      if (!r.ok) throw new Error('No se pudieron leer las relaciones.');
+      return (await r.json()) as {
+        nodes: Array<{ id: string; title: string; source: IntakeKey; chunks: number }>;
+        semantic: Array<{ a: string; b: string; score: number }>;
+        considered: number;
+        total: number;
+      };
+    },
+    enabled: depth === 'space',
+  });
 
-  const openDocument = useCallback((spaceId: string, documentId: string) => {
-    setFocusDoc(documentId);
-    setSelectedId(spaceId);
+  const docs = useQuery({
+    queryKey: ['kb-docs', spaceId],
+    queryFn: async () => {
+      const r = await fetch(`/api/kb/documents?spaceId=${spaceId}`);
+      const j = await r.json();
+      return (j.documents ?? []) as Array<{ id: string; title: string; status: string }>;
+    },
+    enabled: depth === 'space',
+  });
+
+  /* --------------------------------------------------------------- seeds */
+
+  const seeds: FieldSeed[] = useMemo(() => {
+    if (depth === 'cortex') {
+      const visible = source ? spaces.filter((s) => s.intake[source] > 0) : spaces;
+      return visible.map((s) => ({
+        id: s.id,
+        label: s.name,
+        // Under a source filter the honest figure is documents of that source:
+        // fragments are counted through a join on spaces, not on sources, so
+        // there is no per-source fragment count to show and inventing one would
+        // make every other figure on this page suspect.
+        weight: source ? s.intake[source] : (s.chunkCount ?? s.documentCount),
+        mix: source ? { [source]: 1 } : s.intake,
+      }));
+    }
+    const nodes = graph.data?.nodes ?? [];
+    const kept = source ? nodes.filter((n) => n.source === source) : nodes;
+    const alive = new Set(kept.map((n) => n.id));
+    // Ties are the semantic edges: two documents about the same subject get
+    // drawn near each other, which is the one thing a relief map cannot say on
+    // its own and the reason the graph is worth carrying up here at all.
+    const ties = new Map<string, string[]>();
+    for (const edge of graph.data?.semantic ?? []) {
+      if (!alive.has(edge.a) || !alive.has(edge.b)) continue;
+      ties.set(edge.a, [...(ties.get(edge.a) ?? []), edge.b]);
+      ties.set(edge.b, [...(ties.get(edge.b) ?? []), edge.a]);
+    }
+    return kept.map((n) => ({
+      id: n.id,
+      label: n.title,
+      weight: n.chunks,
+      mix: { [n.source]: 1 },
+      ties: ties.get(n.id) ?? [],
+    }));
+  }, [depth, spaces, source, graph.data]);
+
+  /* -------------------------------------------------------------- the list */
+
+  const items: IndexItem[] = useMemo(() => {
+    if (depth === 'cortex') {
+      const visible = source ? spaces.filter((s) => s.intake[source] > 0) : spaces;
+      return visible.map((s) => ({
+        id: s.id,
+        label: s.name,
+        sub: [
+          s.kind === 'global' ? 'Común' : s.isMine ? 'Tuyo' : (s.ownerName ?? 'De otra persona'),
+          plural(s.documentCount, 'documento', 'documentos'),
+        ].join(' · '),
+        weight: source ? s.intake[source] : (s.chunkCount ?? s.documentCount),
+        badge:
+          s.failedCount > 0
+            ? { text: `${num(s.failedCount)} atascados`, tone: 'rose' as const }
+            : s.pendingCount > 0
+              ? { text: 'indexando', tone: 'amber' as const }
+              : null,
+      }));
+    }
+    // Every document, not only the ones with vectors: a file still being read
+    // belongs in the list that says what is in this space, marked as not yet
+    // retrievable. It simply raises no hill, because it is not memory yet.
+    const chunksOf = new Map((graph.data?.nodes ?? []).map((n) => [n.id, n.chunks] as const));
+    const sourceOf = new Map((graph.data?.nodes ?? []).map((n) => [n.id, n.source] as const));
+    return (docs.data ?? [])
+      .filter((d) => !source || sourceOf.get(d.id) === source)
+      .map((d) => ({
+        id: d.id,
+        label: d.title,
+        sub: chunksOf.has(d.id) ? 'en memoria' : 'sin fragmentos todavía',
+        weight: chunksOf.get(d.id) ?? 0,
+        badge:
+          d.status === 'failed'
+            ? { text: 'atascado', tone: 'rose' as const }
+            : d.status !== 'ready'
+              ? { text: 'indexando', tone: 'amber' as const }
+              : null,
+      }));
+  }, [depth, spaces, source, graph.data, docs.data]);
+
+  /* --------------------------------------------------------------- flare */
+
+  // Where the last question landed. The map reads this before the results have
+  // finished rendering underneath, which is the moment the two halves of the
+  // screen stop being two things.
+  const flare: FieldFlare | null = useMemo(() => {
+    if (!probe) return null;
+    const strength = new Map<string, number>();
+    for (const fragment of probe.fragments) {
+      if (fragment.verdict === 'dropped') continue;
+      const key = depth === 'cortex' ? fragment.spaceId : fragment.documentId;
+      const value = Math.max(0, Math.min(1, (fragment.cosine ?? 0.5) / 0.8));
+      strength.set(key, Math.max(strength.get(key) ?? 0, value));
+    }
+    return strength.size > 0 ? { strength, query: probe.query } : null;
+  }, [probe, depth]);
+
+  const working = useMemo(() => {
+    if (depth === 'cortex') {
+      return new Set(spaces.filter((s) => s.pendingCount > 0).map((s) => s.id));
+    }
+    return new Set(stats.digesting.map((d) => d.id));
+  }, [depth, spaces, stats.digesting]);
+
+  /* ------------------------------------------------------------ navigation */
+
+  // What you last walked into at each level, kept after you come back out so
+  // the map can mark it. Coming back from reading a document to a range of
+  // forty hills with no idea which one you were just inside is how a map loses
+  // the thread. Two values rather than one because the two levels draw
+  // different things and a document id means nothing on the map of spaces.
+  const [lastSpace, setLastSpace] = useState<string | null>(null);
+  const [lastDocument, setLastDocument] = useState<string | null>(null);
+
+  const openFragment = useCallback((docId: string, index: number) => {
+    setDocumentId(docId);
+    setFocusIndex(index);
+    setLastDocument(docId);
   }, []);
 
-  const selected = spaces.find((s) => s.id === selectedId) ?? null;
+  const openDocument = useCallback((docId: string) => {
+    setDocumentId(docId);
+    setFocusIndex(null);
+    setLastDocument(docId);
+  }, []);
 
-  if (selected) {
-    return (
-      <>
-        <SpaceDetail
-          space={selected}
-          allSpaces={spaces}
-          intake={intake}
-          onIntakeChange={setIntake}
-          onBack={() => {
-            setSelectedId(null);
-            setFocusDoc(null);
-          }}
-          viewerName={viewerName}
-          focusDocumentId={focusDoc}
-          found={found}
-        />
-        {creating && (
-          <SpaceDialog kind={creating} onClose={() => setCreating(null)} viewerName={viewerName} />
-        )}
-      </>
-    );
-  }
+  const enter = useCallback(
+    (id: string) => {
+      if (depth === 'cortex') {
+        setSpaceId(id);
+        setLastSpace(id);
+        setHovered(null);
+        return;
+      }
+      openDocument(id);
+    },
+    [depth, openDocument],
+  );
+
+  // Coming back up from a document lands you on the space it lives in, even if
+  // you arrived from a search across everything — otherwise "back" from a
+  // fragment is a jump to the top of the whole corpus and the place you were
+  // reading is gone.
+  const landedSpace = useMemo(() => {
+    if (!documentId || spaceId) return null;
+    return probe?.fragments.find((f) => f.documentId === documentId)?.spaceId ?? null;
+  }, [documentId, spaceId, probe]);
+
+  const backFromDocument = useCallback(() => {
+    setDocumentId(null);
+    setFocusIndex(null);
+    if (!spaceId && landedSpace) setSpaceId(landedSpace);
+  }, [spaceId, landedSpace]);
+
+  // A source filter that hides everything is a filter that has silently emptied
+  // the screen. Clearing it when the level changes keeps that from happening on
+  // the way down into a space that has nothing of that kind.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: depth is the trigger
+  useEffect(() => setSource(null), [depth]);
 
   if (spaces.length === 0) {
     return (
@@ -102,87 +300,189 @@ export function KnowledgeBase({
     );
   }
 
-  // With a lobe pressed, a space with nothing from that source has nothing to
-  // say about it and is left out rather than shown as an empty card.
-  const inFocus = (list: SpaceSummary[]) =>
-    openRegion ? list.filter((s) => s.intake[openRegion] > 0) : list;
+  const view = focusStats(stats, source);
+  const focusLabel = source ? { label: SOURCE_LABEL[source] } : null;
+  const unit = depth === 'cortex' && source ? 'documentos' : 'fragmentos';
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <BrainPanel
-          stats={stats}
-          openRegion={openRegion}
-          onOpenRegion={(key) => setOpenRegion((current) => (current === key ? null : key))}
-          hits={search.query.trim() ? countBySource(search.results ?? []) : null}
-          searching={search.running}
+      <Panel className="overflow-hidden">
+        <Breadcrumb
+          spaceName={space?.name ?? null}
+          documentOpen={depth === 'document'}
+          onCortex={() => {
+            setSpaceId(null);
+            setDocumentId(null);
+            setFocusIndex(null);
+          }}
+          onSpace={backFromDocument}
         />
-        <KnowsPanel stats={view} focus={focusLabel} />
-      </div>
 
-      {/* The search sits between the two instruments it drives: type here and
-          the lobe above and the ring below say where the answer lives, before
-          anything is opened. */}
-      <AskPanel spaces={spaces} search={search} onOpenDocument={openDocument} />
+        {depth === 'document' && documentId ? (
+          // The map flattens into the document's own ribbon. Same idea one
+          // level further down — where you are, how big each piece is, what has
+          // never been used — so descending never changes the kind of thing you
+          // are reading.
+          <div className="animate-rise">
+            <FragmentReader
+              documentId={documentId}
+              focusIndex={focusIndex}
+              onBack={backFromDocument}
+              backLabel={space ? `Volver a ${space.name}` : 'Volver al cerebro'}
+            />
+          </div>
+        ) : (
+          <div className="grid border-t border-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+            {/* ------------------------------------------------------- map */}
+            <div className="border-b border-border px-5 py-4 lg:border-b-0 lg:border-r">
+              <BrainField
+                seeds={seeds}
+                selectedId={depth === 'cortex' ? lastSpace : lastDocument}
+                hoveredId={hovered}
+                onSelect={enter}
+                onHover={setHovered}
+                flare={flare}
+                working={working}
+                unit={unit}
+                caption={
+                  depth === 'cortex'
+                    ? 'Cada colina es un espacio. Lo alto es cuánto recuerda de eso.'
+                    : 'Cada colina es un documento. Lo alto es en cuántos fragmentos quedó.'
+                }
+                emptyText={
+                  depth === 'cortex'
+                    ? 'Nada en memoria todavía. Dale el primer documento y aquí empieza a levantarse.'
+                    : graph.isLoading
+                      ? 'Leyendo lo que hay aquí…'
+                      : 'Este espacio no tiene nada indexado todavía.'
+                }
+              />
 
-      <RelationsPanel
-        {...(openRegion ? { source: openRegion } : {})}
-        onOpenDocument={(target) => {
-          if (target.spaceId) openDocument(target.spaceId, target.documentId);
-        }}
-        found={found}
-        query={search.query}
-      />
+              <SourceLegend
+                stats={stats}
+                active={source}
+                onToggle={(key) => setSource((was) => (was === key ? null : key))}
+              />
+            </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <DigestionPanel stats={view} focus={focusLabel} />
-        <GrowthPanel stats={view} focus={openRegion} />
-      </div>
+            {/* ---------------------------------------------------- console */}
+            <div className="flex min-h-0 flex-col lg:h-[600px]">
+              <div className="flex items-center gap-1 border-b border-border px-4 pt-3">
+                <TabButton on={tab === 'ask'} onClick={() => setTab('ask')}>
+                  Preguntar
+                </TabButton>
+                <TabButton on={tab === 'index'} onClick={() => setTab('index')}>
+                  Índice
+                  <span className="tabular ml-1.5 text-[10.5px] opacity-70">
+                    {num(items.length)}
+                  </span>
+                </TabButton>
+                {(graph.isFetching || docs.isFetching) && depth === 'space' && (
+                  <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin text-ink-faint motion-reduce:animate-none" />
+                )}
+              </div>
 
-      <IntakeChooser
-        spaces={spaces}
-        totals={stats.intake}
-        highlight={openRegion}
-        onFeed={(spaceId, key) => {
-          setIntake(key);
-          setSelectedId(spaceId);
-        }}
-        onCreateSpace={() => setCreating('personal')}
-      />
+              {tab === 'ask' ? (
+                <MemoryBench
+                  spaces={spaces}
+                  scopeId={spaceId ?? ''}
+                  onScopeChange={(id) => {
+                    setSpaceId(id || null);
+                    setDocumentId(null);
+                  }}
+                  onProbe={setProbe}
+                  onOpenFragment={openFragment}
+                />
+              ) : (
+                <>
+                  <IndexList
+                    items={items}
+                    unit={unit}
+                    placeholder={depth === 'cortex' ? 'Buscar un espacio…' : 'Buscar un documento…'}
+                    selectedId={depth === 'cortex' ? lastSpace : lastDocument}
+                    hoveredId={hovered}
+                    onHover={setHovered}
+                    onSelect={enter}
+                    emptyText={
+                      depth === 'cortex'
+                        ? 'Todavía no hay espacios.'
+                        : 'Este espacio está vacío. Métele algo abajo.'
+                    }
+                  />
+                  {depth === 'cortex' && (
+                    <div className="flex flex-wrap gap-2 border-t border-border px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setCreating('personal')}
+                        className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+                      >
+                        <Lock className="h-3.5 w-3.5" />
+                        Nuevo espacio propio
+                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setCreating('global')}
+                          className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+                        >
+                          <Building2 className="h-3.5 w-3.5" />
+                          Nuevo espacio común
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </Panel>
 
-      <SpaceGroup
-        title="Memoria de la empresa"
-        blurb="La lee todo el mundo. Solo un administrador puede añadir."
-        icon={Building2}
-        spaces={inFocus(company)}
-        focus={openRegion}
-        onOpen={setSelectedId}
-        action={
-          isAdmin
-            ? { label: 'Nuevo espacio común', onClick: () => setCreating('global') }
-            : undefined
-        }
-        emptyText={
-          openRegion
-            ? `Ningún espacio común tiene ${SOURCE_LABEL[openRegion].toLowerCase()} todavía.`
-            : 'Todavía no hay nada común. Lo que pongas aquí se lo responde Cortex a cualquiera.'
-        }
-      />
+      {/* ------------------------------------------------------ inside a space */}
+      {depth === 'space' && space && (
+        <SpaceTools
+          space={space}
+          allSpaces={spaces}
+          intake={intake}
+          onIntakeChange={setIntake}
+          onLeave={() => setSpaceId(null)}
+          onOpenDocument={openDocument}
+        />
+      )}
 
-      <SpaceGroup
-        title="Tu memoria"
-        blurb="Solo tú la lees. La búsqueda de nadie más llega hasta aquí."
-        icon={Lock}
-        spaces={inFocus(mine)}
-        focus={openRegion}
-        onOpen={setSelectedId}
-        action={{ label: 'Nuevo espacio propio', onClick: () => setCreating('personal') }}
-        emptyText={
-          openRegion
-            ? `No tienes ${SOURCE_LABEL[openRegion].toLowerCase()} en tus espacios.`
-            : 'Para tus notas de trabajo: las mañas de un cliente, un borrador que quieres que recuerde.'
-        }
-      />
+      {/* --------------------------------------------------------- the analysis */}
+      {depth !== 'document' && (
+        <Analysis
+          health={health}
+          shape={shape}
+          stale={stale}
+          onOpenDocument={openDocument}
+          onOpenFragment={openFragment}
+        />
+      )}
+
+      {/* ------------------------------------------------------------- the belt */}
+      {depth === 'cortex' && (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <DigestionPanel stats={view} focus={focusLabel} />
+            <KnowsPanel stats={view} focus={focusLabel} />
+          </div>
+
+          <IntakeChooser
+            spaces={spaces}
+            totals={stats.intake}
+            highlight={source}
+            onFeed={(id, key) => {
+              setIntake(key);
+              setSpaceId(id);
+            }}
+            onCreateSpace={() => setCreating('personal')}
+          />
+
+          <GrowthPanel stats={view} focus={source} />
+        </>
+      )}
 
       {creating && (
         <SpaceDialog kind={creating} onClose={() => setCreating(null)} viewerName={viewerName} />
@@ -191,368 +491,136 @@ export function KnowledgeBase({
   );
 }
 
-/* ------------------------------------------------------------------- search */
+/* -------------------------------------------------------------- furniture */
 
-/** Long enough that a word is finished, short enough to feel like typing. */
-const TYPING_PAUSE = 300;
-/** One letter matches everything and means nothing. */
-const MIN_QUERY = 2;
-
-interface KnowledgeSearch {
-  query: string;
-  setQuery: (q: string) => void;
-  scope: string;
-  setScope: (id: string) => void;
-  results: SearchResult[] | null;
-  running: boolean;
-  error: string | null;
-  /** The documents the current results point at, for the plate and the ring. */
-  found: Set<string>;
-  clear: () => void;
-}
-
-/**
- * Search as you type, without the two ways that usually goes wrong.
- *
- * FIRST: it waits. A keystroke is not a question, so nothing is sent until the
- * typing stops — otherwise "tarifa" is six embeddings and six retrievals to
- * answer one.
- *
- * SECOND: only the newest answer is allowed to land. A server action cannot be
- * aborted from here, so instead every request carries a ticket and a reply
- * whose ticket is no longer the current one is dropped on arrival. Without
- * that, a slow "tar" comes back after a fast "tarifa" and quietly overwrites
- * it — the results on screen would be answering a question nobody asked any
- * more.
- *
- * And the screen never goes blank while it thinks: the previous results stay,
- * dimmed, because a blank panel reads as "nothing found".
- */
-function useKnowledgeSearch(spaceId?: string): KnowledgeSearch {
-  const [query, setQuery] = useState('');
-  const [scope, setScope] = useState('');
-  const [results, setResults] = useState<SearchResult[] | null>(null);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const ticket = useRef(0);
-
-  const where = spaceId ?? scope;
-
-  useEffect(() => {
-    const text = query.trim();
-    if (text.length < MIN_QUERY) {
-      // Abandoning the query abandons its answer too, in flight or not.
-      ticket.current += 1;
-      setResults(null);
-      setError(null);
-      setRunning(false);
-      return;
-    }
-
-    ticket.current += 1;
-    const mine = ticket.current;
-    setRunning(true);
-    const timer = setTimeout(async () => {
-      const res = await searchKnowledge(text, where || undefined);
-      // Somebody has typed since. This answer is about an older question.
-      if (ticket.current !== mine) return;
-      setRunning(false);
-      if (res.ok) {
-        setResults(res.results);
-        setError(null);
-      } else {
-        setError(res.error);
-      }
-    }, TYPING_PAUSE);
-
-    return () => clearTimeout(timer);
-  }, [query, where]);
-
-  const found = useMemo(() => new Set((results ?? []).map((r) => r.documentId)), [results]);
-
-  const clear = useCallback(() => {
-    ticket.current += 1;
-    setQuery('');
-    setResults(null);
-    setError(null);
-    setRunning(false);
-  }, []);
-
-  return { query, setQuery, scope, setScope, results, running, error, found, clear };
-}
-
-function AskPanel({
-  spaces,
-  search,
-  onOpenDocument,
+function Breadcrumb({
+  spaceName,
+  documentOpen,
+  onCortex,
+  onSpace,
 }: {
-  spaces: SpaceSummary[];
-  search: KnowledgeSearch;
-  onOpenDocument: (spaceId: string, documentId: string) => void;
+  spaceName: string | null;
+  documentOpen: boolean;
+  onCortex: () => void;
+  onSpace: () => void;
 }) {
-  const { query, setQuery, scope, setScope, results, running, error, clear } = search;
-  const scopeName = spaces.find((s) => s.id === scope)?.name;
-  const typing = query.trim().length > 0 && query.trim().length < MIN_QUERY;
-
+  const crumb = 'rounded-pill px-2 py-0.5 text-[12px] font-semibold transition-colors';
   return (
-    <Panel>
-      <PanelHead
-        title="Buscar dentro del cerebro"
-        right={
-          running ? (
-            <span className="inline-flex items-center gap-1.5 text-ink-faint">
-              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-              buscando
-            </span>
-          ) : (
-            'la misma búsqueda que hace Cortex'
-          )
-        }
-      />
-      <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
-        Mientras escribes te marco arriba en qué fuente está y abajo en qué documentos. Si no sale
-        aquí, Cortex tampoco lo sabe.
-      </p>
-
-      <div className="flex flex-wrap gap-2 px-5 pb-4 pt-3">
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Tarifa de bodegaje, cómo se liquida una importación…"
-            aria-label="Buscar en la memoria"
-            className="h-9 w-full rounded-card border border-border bg-surface-2 pl-9 pr-9 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={clear}
-              aria-label="Limpiar la búsqueda"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-card p-1 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-
-        {spaces.length > 1 && (
-          <select
-            value={scope}
-            onChange={(e) => setScope(e.target.value)}
-            aria-label="Dónde buscar"
-            className="h-9 rounded-card border border-border bg-surface px-3 text-[12.5px] font-medium text-ink focus:border-border-strong"
-          >
-            <option value="">En todo lo que ves</option>
-            {spaces.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+    <nav aria-label="Dónde estás" className="flex flex-wrap items-center gap-0.5 px-3 pt-3">
+      <button
+        type="button"
+        onClick={onCortex}
+        className={clsx(
+          crumb,
+          spaceName ? 'text-ink-faint hover:bg-surface-2 hover:text-ink' : 'text-ink',
         )}
-      </div>
-
-      {error && (
-        <p className="mx-5 mb-4 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
-          {error}
-        </p>
-      )}
-
-      {typing && !results && (
-        <p className="px-5 pb-4 text-[12px] text-ink-faint">Escribe un poco más.</p>
-      )}
-
-      {results !== null && (
-        // Dimmed rather than emptied while a newer answer is on its way: what
-        // is on screen is still true, it is only about the previous keystroke.
-        <div
-          className={clsx(
-            'border-t border-border transition-opacity duration-200',
-            running && 'opacity-50',
-          )}
-          aria-busy={running}
-        >
-          {results.length === 0 ? (
-            <p className="px-5 py-4 text-[12.5px] leading-relaxed text-ink-muted">
-              No hay nada sobre eso{scopeName ? ` en ${scopeName}` : ''} todavía. Súbelo y en un
-              minuto lo puede citar.
-            </p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {results.map((r) => (
-                <li key={`${r.documentId}-${r.chunkIndex}`}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenDocument(r.spaceId, r.documentId)}
-                    className="block w-full px-5 py-3 text-left transition-colors hover:bg-surface-2"
-                  >
-                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-[12.5px] font-semibold text-ink">
-                        {r.documentTitle}
-                      </span>
-                      <span className="flex shrink-0 items-center gap-2">
-                        <SpaceChip kind={r.spaceKind} label={r.space} />
-                        <span className="tabular text-[10.5px] text-ink-faint">
-                          frag. {r.chunkIndex + 1}
-                        </span>
-                      </span>
-                    </div>
-                    <p className="line-clamp-3 text-[12.5px] leading-relaxed text-ink-muted">
-                      {r.content}
-                    </p>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-/* -------------------------------------------------------------------- cards */
-
-export function SpaceChip({ kind, label }: { kind: 'global' | 'personal'; label?: string }) {
-  const Icon = kind === 'global' ? Building2 : Lock;
-  return (
-    <span
-      className={clsx(
-        'inline-flex shrink-0 items-center gap-1 rounded-card px-2 py-0.5 text-[10.5px] font-bold',
-        kind === 'global' ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-muted',
-      )}
-    >
-      <Icon className="h-3 w-3" />
-      {label ?? (kind === 'global' ? 'Común' : 'Propio')}
-    </span>
-  );
-}
-
-function SpaceGroup({
-  title,
-  blurb,
-  icon: Icon,
-  spaces,
-  focus,
-  onOpen,
-  action,
-  emptyText,
-}: {
-  title: string;
-  blurb: string;
-  icon: typeof Building2;
-  spaces: SpaceSummary[];
-  /** The lobe in force, if any: the cards then count only that source. */
-  focus?: IntakeKey | null;
-  onOpen: (id: string) => void;
-  action?: { label: string; onClick: () => void };
-  emptyText: string;
-}) {
-  return (
-    <section>
-      <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="flex items-center gap-1.5 text-[14px] font-bold text-ink">
-            <Icon className="h-4 w-4 text-ink-faint" />
-            {title}
-          </h2>
-          <p className="mt-0.5 max-w-2xl text-[12px] text-ink-faint">{blurb}</p>
-        </div>
-        {action && (
+      >
+        Corteza
+      </button>
+      {spaceName && (
+        <>
+          <ChevronRight className="h-3 w-3 text-ink-faint" aria-hidden />
           <button
             type="button"
-            onClick={action.onClick}
-            className="inline-flex items-center gap-1.5 rounded-card border border-border px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+            onClick={onSpace}
+            className={clsx(
+              crumb,
+              documentOpen ? 'text-ink-faint hover:bg-surface-2 hover:text-ink' : 'text-ink',
+            )}
           >
-            <Plus className="h-3.5 w-3.5" />
-            {action.label}
+            {spaceName}
           </button>
-        )}
-      </div>
-
-      {spaces.length === 0 ? (
-        <Panel className="px-5 py-5 text-[12.5px] text-ink-faint">{emptyText}</Panel>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {spaces.map((s) => (
-            <SpaceCard key={s.id} space={s} focus={focus ?? null} onOpen={() => onOpen(s.id)} />
-          ))}
-        </div>
+        </>
       )}
-    </section>
+      {documentOpen && (
+        <>
+          <ChevronRight className="h-3 w-3 text-ink-faint" aria-hidden />
+          <span className={clsx(crumb, 'text-ink')}>Fragmentos</span>
+        </>
+      )}
+    </nav>
   );
 }
 
-function SpaceCard({
-  space,
-  focus,
-  onOpen,
-}: { space: SpaceSummary; focus: IntakeKey | null; onOpen: () => void }) {
+function TabButton({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <button type="button" onClick={onOpen} className="group block w-full text-left">
-      <Panel className="flex h-full flex-col gap-2.5 p-4 transition-colors group-hover:border-border-strong group-hover:bg-surface-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="truncate text-[13.5px] font-bold text-ink">{space.name}</div>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <SpaceChip kind={space.kind} />
-              {space.ownerName && (
-                <span className="truncate text-[11px] text-ink-faint">
-                  {space.isMine ? 'Tuyo' : space.ownerName}
-                </span>
-              )}
-            </div>
-          </div>
-          {/* The fragment count is what the space is worth to an answer; the
-              document count is only how it was filed. Under a lobe it is the
-              documents of that source, because fragments cannot be split by
-              source honestly. */}
-          <div className="shrink-0 text-right">
-            <div className="stat-num text-[22px] leading-none text-ink">
-              {num(focus ? space.intake[focus] : (space.chunkCount ?? space.documentCount))}
-            </div>
-            <div className="field-label mt-1">
-              {focus
-                ? SOURCE_LABEL[focus].toLowerCase()
-                : space.chunkCount !== null
-                  ? 'fragmentos'
-                  : 'documentos'}
-            </div>
-          </div>
-        </div>
-
-        {space.description && (
-          <p className="line-clamp-2 text-[12px] leading-relaxed text-ink-muted">
-            {space.description}
-          </p>
-        )}
-
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-border pt-2.5 text-[11.5px] text-ink-faint">
-          <span>
-            {plural(space.documentCount, 'documento', 'documentos')}
-            {space.spokenSeconds > 0 && ` · ${hours(space.spokenSeconds)} escuchadas`}
-            {space.lastAddedAt && ` · ${ago(space.lastAddedAt)}`}
-          </span>
-          {space.failedCount > 0 ? (
-            <span className="inline-flex shrink-0 items-center gap-1 text-rose">
-              <AlertTriangle className="h-3 w-3" />
-              <span className="tabular">{num(space.failedCount)}</span> atascados
-            </span>
-          ) : space.pendingCount > 0 ? (
-            <span className="inline-flex shrink-0 items-center gap-1 text-amber">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              indexando <span className="tabular">{num(space.pendingCount)}</span>
-            </span>
-          ) : null}
-        </div>
-      </Panel>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={clsx(
+        '-mb-px border-b-2 px-3 pb-2 pt-1 text-[12.5px] font-semibold transition-colors',
+        on ? 'border-primary text-primary' : 'border-transparent text-ink-faint hover:text-ink',
+      )}
+    >
+      {children}
     </button>
   );
 }
 
-/* -------------------------------------------------------------- empty state */
+/**
+ * The four lobes, named — and still a filter.
+ *
+ * The relief places material by what it is made of, so the anatomy is doing
+ * real work and has to be legible: without this, "why is that hill down there?"
+ * has no answer. It doubles as the source filter the page has always had,
+ * because the key of a plate is the one place it is natural to put it.
+ */
+function SourceLegend({
+  stats,
+  active,
+  onToggle,
+}: {
+  stats: BrainStats;
+  active: IntakeKey | null;
+  onToggle: (key: IntakeKey) => void;
+}) {
+  const keys: IntakeKey[] = ['upload', 'meeting', 'drive', 'record'];
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-1 border-t border-border pt-3 sm:grid-cols-4">
+      {keys.map((key) => {
+        const on = active === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onToggle(key)}
+            className={clsx(
+              'rounded-sm px-2 py-1.5 text-left transition-colors',
+              on ? 'bg-primary-soft' : 'hover:bg-surface-2',
+            )}
+          >
+            <span
+              className={clsx(
+                'block truncate text-[11px] font-semibold',
+                on ? 'text-primary' : 'text-ink-muted',
+              )}
+            >
+              {LOBE_NAME[key]}
+            </span>
+            <span className="stat-num block text-[13px] text-ink">{num(stats.indexed[key])}</span>
+          </button>
+        );
+      })}
+      <p className="col-span-full mt-0.5 text-[10.5px] text-ink-faint">
+        {active
+          ? `Solo ${LOBE_NAME[active].toLowerCase()}. Toca otra vez para ver todo.`
+          : 'Cada cosa se dibuja sobre el lóbulo del que viene. Toca uno para ver solo eso.'}
+      </p>
+    </div>
+  );
+}
 
+/** Kept from the old page: what a space is, said once, on a blank workspace. */
 function FirstRun({ isAdmin, onCreate }: { isAdmin: boolean; onCreate: () => void }) {
   return (
     <Panel className="px-6 py-10 text-center">
@@ -565,7 +633,7 @@ function FirstRun({ isAdmin, onCreate }: { isAdmin: boolean; onCreate: () => voi
         <button
           type="button"
           onClick={onCreate}
-          className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
+          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong"
         >
           <Plus className="h-3.5 w-3.5" />
           Crear el primer espacio
@@ -577,5 +645,21 @@ function FirstRun({ isAdmin, onCreate }: { isAdmin: boolean; onCreate: () => voi
           : 'Un espacio propio es solo tuyo. Para uno común, pídeselo a un administrador.'}
       </p>
     </Panel>
+  );
+}
+
+/** Still exported here: `SpaceTools` and the intake panels both use it. */
+export function SpaceChip({ kind, label }: { kind: 'global' | 'personal'; label?: string }) {
+  const Icon = kind === 'global' ? Building2 : Lock;
+  return (
+    <span
+      className={clsx(
+        'inline-flex shrink-0 items-center gap-1 rounded-pill px-2 py-0.5 text-[10.5px] font-bold',
+        kind === 'global' ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-muted',
+      )}
+    >
+      <Icon className="h-3 w-3" />
+      {label ?? (kind === 'global' ? 'Común' : 'Propio')}
+    </span>
   );
 }

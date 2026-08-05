@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { chunkText } from './chunker';
 import { embedDocuments } from './embedder';
+import { recordEmbeddingUsage } from './embedding-usage';
 
 /**
  * Ingest in-memory Markdown into the KB synchronously: create the document row,
@@ -45,7 +46,12 @@ export async function ingestMarkdown(
     // embedder.ts. Failures come back rather than thrown, so the reason ends up
     // in error_message, which is the sentence the person actually reads.
     const embedded = await embedDocuments(chunks.map((c) => c.content));
-    if (!embedded.ok && embedded.configured) throw new Error(embedded.reason);
+    // Only a genuinely transient failure is worth raising. A missing key, a
+    // rejected key and an exhausted quota all fail identically next time, and
+    // this function runs inside a user's turn — throwing would turn "your note
+    // is saved but not yet searchable by meaning" into an error they cannot act
+    // on, and would have the caller retry against a quota that is gone.
+    if (!embedded.ok && embedded.retryable) throw new Error(embedded.reason);
 
     // Somebody asked Cortex to remember something. Losing their text because
     // this deployment has no embedding key would be the wrong trade: the chunks
@@ -58,6 +64,10 @@ export async function ingestMarkdown(
         content: c.content,
         tokens: c.tokens,
         embedding: embedded.ok ? embedded.data[i] : null,
+        // The model travels with the vector or neither is written. Search
+        // filters on this column, so an unstamped vector is an invisible one
+        // (migration 0074).
+        embedding_model: embedded.ok ? embedded.usage.modelId : null,
         metadata: {},
       })),
     );
@@ -70,6 +80,11 @@ export async function ingestMarkdown(
           : { status: 'pending', error_message: embedded.reason },
       )
       .eq('id', documentId);
+
+    // The receipt. `db` is workspace-scoped, so the column fills itself.
+    if (embedded.ok) {
+      await recordEmbeddingUsage(db, { documentId, source: 'note', usage: embedded.usage });
+    }
 
     return { documentId, chunks: chunks.length };
   } catch (err) {

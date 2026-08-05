@@ -6,8 +6,35 @@ export { chunkTranscript, chunkOffsetMs, formatOffset } from './transcript-chunk
 export type { TranscriptChunk, TranscriptChunkMetadata } from './transcript-chunker';
 export { transcribeAudio, mapDeepgramResponse, DEEPGRAM_LISTEN_URL } from './transcribe';
 export type { SpeechTurn, Transcript, TranscribeResult, TranscribeFailure } from './transcribe';
-export { embedDocuments, embedQuery, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from './embedder';
-export type { EmbedFailure, EmbedResult } from './embedder';
+export {
+  embedDocuments,
+  embedQuery,
+  embedInBatches,
+  embeddingConfig,
+  embeddingModelId,
+  planEmbeddingBatches,
+  EMBEDDING_DIMENSIONS,
+  EMBEDDING_PROVIDERS,
+  PRICES_CHECKED_ON,
+} from './embedder';
+export type {
+  EmbedFailure,
+  EmbedResult,
+  EmbedUsage,
+  EmbeddingConfig,
+  EmbeddingProviderId,
+  EmbeddingModelFacts,
+} from './embedder';
+export {
+  EMBEDDING_USAGE_TABLE,
+  readEmbeddingSpend,
+  recordEmbeddingUsage,
+} from './embedding-usage';
+export type {
+  EmbeddingSpend,
+  EmbeddingSpendDocument,
+  EmbeddingUsageSource,
+} from './embedding-usage';
 export { kbSearch } from './search';
 export {
   assessCoverage,

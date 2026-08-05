@@ -245,6 +245,19 @@ export interface SearchSpacesOptions {
    * is present a degraded result as a complete one.
    */
   onDegraded?: (reason: string) => void;
+  /**
+   * Count this retrieval against the fragments it returns (migration 0073).
+   *
+   * OFF BY DEFAULT, and the default is the point. The question the counter
+   * answers is "does Cortex ever use this fragment to answer anybody" — the
+   * memory that is being paid for and never spent. Two callers must therefore
+   * NOT set it: the memory bench on the Brain Knowledge page, whose entire
+   * purpose is to run the real retrieval without it counting as one, and the
+   * search box on the same page, where a person is looking something up by
+   * hand. Turning it on by default would make every fragment anybody ever
+   * browsed look used, and the signal would be gone within a week of shipping.
+   */
+  recordRetrieval?: boolean;
 }
 
 /**
@@ -258,7 +271,7 @@ export interface SearchSpacesOptions {
  */
 export async function searchSpaces(
   db: SupabaseClient,
-  { userId, query, spaceIds, limit = 8, onDegraded }: SearchSpacesOptions,
+  { userId, query, spaceIds, limit = 8, onDegraded, recordRetrieval }: SearchSpacesOptions,
 ): Promise<SpaceHit[]> {
   // A caller that has lost track of who it is asking for must retrieve
   // nothing, not everything.
@@ -279,6 +292,13 @@ export async function searchSpaces(
     p_query_text: query,
     p_limit: limit,
     p_space_ids: spaceIds ?? null,
+    // The vector and the model that produced it always travel together. A query
+    // vector from voyage-4-lite scored against a chunk from voyage-3-large does
+    // not error, it returns a plausible number — so the database refuses to
+    // consider chunks written by any other model, and a search whose model is
+    // unknown degrades to keyword-only instead of ranking across spaces that
+    // have nothing to do with each other. See migration 0074.
+    p_embedding_model: embedded.ok ? embedded.usage.modelId : null,
   });
   if (error) throw error;
 
@@ -301,7 +321,26 @@ export async function searchSpaces(
     superseded_by_title?: string | null;
   };
 
-  return ((data as Row[]) ?? []).map((r) => ({
+  const rows = (data as Row[]) ?? [];
+
+  // Bookkeeping must never cost an answer. If the counter fails — an older
+  // deployment without 0073, a lock, anything — the person still gets their
+  // hits and the only thing lost is a statistic. Awaited rather than left
+  // dangling so a serverless invocation cannot be frozen mid-update, which is
+  // how a fire-and-forget write becomes a write that sometimes does not happen.
+  if (recordRetrieval) {
+    const chunkIds = rows.map((r) => r.chunk_id).filter((id): id is string => Boolean(id));
+    if (chunkIds.length > 0) {
+      try {
+        await db.rpc('kb_note_retrieval', { p_user_id: userId, p_chunk_ids: chunkIds });
+      } catch {
+        // Deliberately silent: the caller asked for search results, not for a
+        // report on the counter, and there is no action anybody could take.
+      }
+    }
+  }
+
+  return rows.map((r) => ({
     documentId: r.document_id,
     documentTitle: r.document_title,
     spaceId: r.space_id,

@@ -3,7 +3,7 @@
 import { Provenance } from '@/components/ui/provenance';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { AudioLines, FolderSearch, Loader2, Upload, Video } from 'lucide-react';
+import { AudioLines, FolderSearch, Loader2, ScanText, Upload, Video } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { deleteDocument, moveDocument } from '../actions';
@@ -109,6 +109,7 @@ export function DocumentList({
   moveTargets,
   pointedAt,
   found,
+  onOpenFragments,
 }: {
   spaceId: string;
   spaceName: string;
@@ -118,6 +119,12 @@ export function DocumentList({
   pointedAt?: string | null;
   /** Documents the current search landed on, marked wherever they appear. */
   found?: Set<string>;
+  /**
+   * Open the fragments this document was broken into. The row says what was
+   * handed over; this is the only way from here to what was understood, and
+   * every row that is in memory offers it.
+   */
+  onOpenFragments?: (documentId: string) => void;
 }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -249,6 +256,7 @@ export function DocumentList({
                   pointed={pointedAt === d.id}
                   hit={found?.has(d.id) ?? false}
                   register={(el) => register(d.id, el)}
+                  {...(onOpenFragments ? { onOpenFragments } : {})}
                   confirming={confirming === d.id}
                   onConfirm={(id) => setConfirming(id)}
                   onMove={move}
@@ -274,6 +282,7 @@ function Row({
   pointed,
   hit,
   register,
+  onOpenFragments,
   confirming,
   onConfirm,
   onMove,
@@ -291,6 +300,7 @@ function Row({
   /** One of the documents the current search found. */
   hit: boolean;
   register: (el: HTMLLIElement | null) => void;
+  onOpenFragments?: (documentId: string) => void;
   confirming: boolean;
   onConfirm: (id: string | null) => void;
   onMove: (doc: Doc, targetId: string) => void;
@@ -424,35 +434,50 @@ function Row({
           )}
         </div>
 
-        {canWrite && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            {moveTargets.length > 0 && (
-              <select
-                value=""
-                disabled={working}
-                onChange={(e) => onMove(d, e.target.value)}
-                className="h-7 rounded-card border border-border bg-surface px-2.5 text-[11.5px] font-medium text-ink-muted focus:border-border-strong disabled:opacity-50"
-                aria-label={`Mover ${d.title} a otro espacio`}
-              >
-                <option value="">Mover a…</option>
-                {moveTargets.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                    {t.kind === 'global' ? ' (todos)' : ''}
-                  </option>
-                ))}
-              </select>
-            )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Only what is actually in memory has fragments to look at. A
+              document still being read has none, and offering the link would
+              lead to an empty screen that looks like a fault. */}
+          {onOpenFragments && stage === 'memory' && (
             <button
               type="button"
-              disabled={working}
-              onClick={() => onConfirm(confirming ? null : d.id)}
-              className="rounded-card px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
+              onClick={() => onOpenFragments(d.id)}
+              className="inline-flex items-center gap-1 rounded-pill border border-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:border-primary/40 hover:text-primary"
             >
-              {working ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Quitar'}
+              <ScanText className="h-3.5 w-3.5" />
+              Ver sus fragmentos
             </button>
-          </div>
-        )}
+          )}
+          {canWrite && (
+            <>
+              {moveTargets.length > 0 && (
+                <select
+                  value=""
+                  disabled={working}
+                  onChange={(e) => onMove(d, e.target.value)}
+                  className="h-7 rounded-card border border-border bg-surface px-2.5 text-[11.5px] font-medium text-ink-muted focus:border-border-strong disabled:opacity-50"
+                  aria-label={`Mover ${d.title} a otro espacio`}
+                >
+                  <option value="">Mover a…</option>
+                  {moveTargets.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                      {t.kind === 'global' ? ' (todos)' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                disabled={working}
+                onClick={() => onConfirm(confirming ? null : d.id)}
+                className="rounded-pill px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
+              >
+                {working ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Quitar'}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {confirming && (

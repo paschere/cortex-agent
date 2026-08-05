@@ -145,6 +145,11 @@ export const kbSearch = registerTool({
       query: input.query,
       ...(spaceIds ? { spaceIds } : {}),
       limit: input.limit,
+      // This is the retrieval that answers somebody, so it is the one that
+      // counts. Everything the Brain Knowledge page runs — its search box, its
+      // memory bench — deliberately does not, so "fragments Cortex has never
+      // used" keeps meaning what it says. See migration 0073.
+      recordRetrieval: true,
       onDegraded: (reason) => {
         degraded = reason;
         ctx.logger.warn({ reason }, 'kb.search fell back to keyword-only retrieval');

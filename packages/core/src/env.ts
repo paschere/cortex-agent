@@ -19,11 +19,22 @@ const schema = z.object({
   HUBSPOT_CLIENT_ID: z.string().min(1).optional(),
   HUBSPOT_CLIENT_SECRET: z.string().min(1).optional(),
   HUBSPOT_REDIRECT_URI: z.string().url().optional(),
-  // Brain Knowledge embeddings (Voyage AI). Optional on purpose: without it the
-  // KB degrades to keyword search and queues what it cannot vectorise, which is
-  // not a reason to refuse to boot. GOOGLE_GENERATIVE_AI_API_KEY used to be
-  // required here for the same job and is gone — nothing reads Gemini any more.
+  // Brain Knowledge embeddings. Every key here is optional on purpose: without
+  // one the KB degrades to keyword search and queues what it cannot vectorise,
+  // which is not a reason to refuse to boot.
+  //
+  // WHICH ONE IS READ is decided by EMBEDDING_PROVIDER (default `voyage`) and
+  // EMBEDDING_MODEL (default `voyage-4-lite`). Neither is validated here: an
+  // unknown value must not stop the app from booting, so the embedder returns it
+  // as a plain refusal to embed — see `embeddingConfig()` — which surfaces on
+  // the document row and on the Integrations screen instead of at startup.
   VOYAGE_API_KEY: z.string().min(1).optional(),
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  COHERE_API_KEY: z.string().min(1).optional(),
+  // Gemini stopped being used for GENERATION long ago; it is back here only as
+  // an embedding option, and only because it is the one key that already exists
+  // in production.
+  GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1).optional(),
   PAYROLL_API_URL: z.string().url().optional(),
   PAYROLL_API_TOKEN: z.string().min(1).optional(),
   // Optional so the app can boot before Inngest Cloud is wired; the

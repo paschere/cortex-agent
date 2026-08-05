@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { EMBEDDING_DIMENSIONS } from '../../kb/embedder';
 import { BASE_FAMILIES, type SelectableTool, selectToolsForTurn } from '../index';
 import { toolEmbedText } from '../rank';
-import { hashText, resetToolVectorCache } from '../store';
+import { resetToolVectorCache, toolVectorHash } from '../store';
 
 const VOYAGE = 'https://api.voyageai.com/v1/embeddings';
 
@@ -114,7 +114,10 @@ async function seed(tools: SelectableTool[]): Promise<Map<string, StoredRow>> {
     rows.set(tool.id, {
       tool_key: tool.id,
       family: tool.family ?? (tool.id.split('.')[0] as string),
-      text_hash: await hashText(text),
+      // Hashed exactly as production hashes it — text AND model. Restating the
+      // rule here instead would let the fixture drift from the code and make a
+      // fully-indexed deployment look un-indexed to every test below.
+      text_hash: await toolVectorHash(text),
       embedding: toPgVector(bagOfWords(text)),
     });
   }
@@ -257,7 +260,7 @@ describe('a family nobody configured', () => {
     // Stale is treated exactly like missing: included now, re-indexed for later.
     expect(result.unrankedFamilies).toContain('vehicles');
     expect(store.rows.get('vehicles.action_0')?.text_hash).toBe(
-      await hashText(
+      await toolVectorHash(
         toolEmbedText(edited.find((t) => t.id === 'vehicles.action_0') as SelectableTool),
       ),
     );
@@ -418,5 +421,63 @@ describe('narrowing that actually narrows', () => {
     const present = familiesIn(result.tools);
     expect(present.has('payroll')).toBe(false);
     expect(present.has('vehicles')).toBe(false);
+  });
+});
+
+describe('the day the embedding model changes', () => {
+  /** Seed the table as a deployment running a DIFFERENT model would have left it. */
+  async function seedUnderOtherModel(tools: SelectableTool[]): Promise<Map<string, StoredRow>> {
+    process.env.EMBEDDING_MODEL = 'voyage-4';
+    const rows = await seed(tools);
+    process.env.EMBEDDING_MODEL = '';
+    return rows;
+  }
+
+  it('keeps sending every tool while the catalogue is re-indexed', async () => {
+    // The failure this guards against is not expense, it is silence. A tool
+    // vector from the old model and a query vector from the new one are
+    // coordinates in unrelated spaces: comparing them returns a plausible
+    // number, so the wrong family would win and the model would truthfully
+    // report it cannot do something it was granted. Treating them as stale
+    // instead means every family travels for one turn.
+    const tools = [...catalogue(), ...VEHICLES];
+    const store = fakeDb(await seedUnderOtherModel(tools));
+
+    const result = await selectToolsForTurn({ db: store.db, tools, query: PLATE_QUERY });
+    await result.indexing;
+
+    expect(result.unrankedFamilies).toContain('vehicles');
+    // Open failure: nothing was dropped, exactly as when Voyage is unreachable.
+    expect(result.tools).toHaveLength(tools.length);
+    expect(familiesIn(result.tools).has('vehicles')).toBe(true);
+  });
+
+  it('re-embeds once, not once per turn', async () => {
+    // The whole cost question in one assertion. A model switch invalidates every
+    // row, so the first turn pays to re-index; if the new hash were not written
+    // back, every turn afterwards would pay again — a real per-conversation cost
+    // hiding behind a change that was supposed to reduce spending.
+    const tools = [...catalogue(), ...VEHICLES];
+    const store = fakeDb(await seedUnderOtherModel(tools));
+
+    const first = await selectToolsForTurn({ db: store.db, tools, query: PLATE_QUERY });
+    await first.indexing;
+    expect(embedCalls.length).toBeGreaterThan(1); // the query, plus the backfill
+
+    // A warm instance on the next turn, and a cold one after it — neither may
+    // re-embed anything, because the table now holds the new model's hashes.
+    embedCalls = [];
+    const warm = await selectToolsForTurn({ db: store.db, tools, query: PLATE_QUERY });
+    await warm.indexing;
+    expect(embedCalls).toHaveLength(1);
+    expect(embedCalls[0]?.input_type).toBe('query');
+
+    resetToolVectorCache();
+    embedCalls = [];
+    const cold = await selectToolsForTurn({ db: store.db, tools, query: PLATE_QUERY });
+    await cold.indexing;
+    expect(embedCalls).toHaveLength(1);
+    // And selection is back to actually narrowing.
+    expect(cold.selectedFamilies[0]).toBe('vehicles');
   });
 });

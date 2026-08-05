@@ -28,7 +28,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { embedDocuments } from '../kb/embedder';
+import { embedDocuments, embeddingModelId } from '../kb/embedder';
 import { type SelectableTool, toolEmbedText, toolFamily } from './rank';
 
 export const TOOL_EMBEDDINGS_TABLE = 'tool_embeddings';
@@ -75,6 +75,41 @@ interface Digester {
 
 function subtle(): Digester | undefined {
   return (globalThis as unknown as { crypto?: { subtle?: Digester } }).crypto?.subtle;
+}
+
+/**
+ * The staleness marker for one tool's vector: its text AND the model that
+ * embedded it.
+ *
+ * WHY THE MODEL IS IN HERE. `tool_embeddings` holds vectors that are scored
+ * against an `embedQuery` result on every turn, so it has exactly the mixing
+ * problem `kb_chunks` has — a voyage-4-lite query vector compared against a
+ * voyage-3-large tool vector does not error, it returns a plausible number and
+ * ranks on it. Unlike `kb_chunks` this table has no model column to filter on,
+ * and it does not need one: the marker here is already "what we embedded
+ * changed", and the model is part of what was embedded. Folding it in makes a
+ * provider switch look exactly like an edit to every description — a state this
+ * module has always handled.
+ *
+ * WHAT IT COSTS WHEN THE MODEL CHANGES. Every row goes stale at once, so the
+ * catalogue is re-embedded in the background, 64 tools per call, once. It is
+ * NOT a per-turn cost: `backfillToolVectors` writes the new hash straight back
+ * to the table and into the process cache, so the following turn is a cache hit
+ * and the steady state is the same single `embedQuery` it always was.
+ *
+ * WHAT IT COSTS MEANWHILE. Nothing that can hurt. An unrankable tool is
+ * INCLUDED, never dropped (see `rankTools`), so during the re-index every
+ * family travels — the pre-selection behaviour, which this module's header
+ * calls the worst outcome it is allowed to produce. Ranking across two
+ * incomparable vector spaces, which is what leaving the model out would do,
+ * is not on that list at all: it would silently drop the right family on every
+ * turn, forever, and look exactly like working software.
+ *
+ * This is exported so the tests can build a fixture the same way production
+ * does, instead of restating the rule and drifting from it.
+ */
+export function toolVectorHash(text: string): Promise<string> {
+  return hashText(`${embeddingModelId()}\n${text}`);
 }
 
 export async function hashText(text: string): Promise<string> {
@@ -184,7 +219,7 @@ export async function prepareToolVectors(
   const texts = await Promise.all(
     tools.map(async (tool) => {
       const text = toolEmbedText(tool);
-      return { tool, text, hash: await hashText(text) };
+      return { tool, text, hash: await toolVectorHash(text) };
     }),
   );
 

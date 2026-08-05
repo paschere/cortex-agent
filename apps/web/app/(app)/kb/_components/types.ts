@@ -126,21 +126,251 @@ export interface SpaceSummary {
   intake: IntakeCounts;
 }
 
-export interface SearchResult {
-  documentId: string;
-  documentTitle: string;
-  space: string;
-  spaceId: string;
-  spaceKind: SpaceKind;
+/* --------------------------------------------------------------- fragments */
+
+/**
+ * Under this many tokens a fragment is a scrap rather than a statement.
+ *
+ * Six, measured against the chunker's own ruler (words × 1.3), and it must stay
+ * equal to the cut in `kb_fragment_health` (migration 0073 § 3). The analysis
+ * counts them in SQL and the reader marks them one by one in the browser; if
+ * the two numbers came from two different constants, the panel would say four
+ * and the document would show five, and there would be no way to tell which was
+ * lying. Twelve was tried first and flagged "Los sábados no se hacen despachos"
+ * — eight tokens and a perfectly good answer.
+ */
+export const TINY_FRAGMENT_TOKENS = 6;
+
+/**
+ * One fragment, as the reader shows it.
+ *
+ * This is the unit of memory. A document is what somebody handed over; a
+ * fragment is what Cortex actually retrieves and answers with, so everything
+ * that judges the quality of the memory judges these.
+ */
+export interface Fragment {
+  chunkId: string;
+  /** Its place in the document, zero-based. Printed one-based on screen. */
   chunkIndex: number;
   content: string;
-  score: number;
+  tokens: number;
+  /** How many times it has come back in an answer. Zero means never. */
+  retrievalCount: number;
+  lastRetrievedAt: string | null;
+  /** Present on anything spoken: who is talking, and from when to when. */
+  speaker: string | null;
+  startMs: number | null;
+  endMs: number | null;
+  /** Present on a parsed PDF: how many pages the document had. */
+  pages: number | null;
   /**
-   * Which mouth the document came in through. Carried so a hit can be shown
-   * where it lives — lit on the plate and on the ring — before anything is
-   * opened. Read off the document row, never guessed from the space.
+   * True when the text stops without the sentence stopping, and this is not
+   * the last fragment. That is the chunker running out of budget somewhere the
+   * text offered no break — half a statement here, half next door.
    */
+  cutOff: boolean;
+}
+
+/**
+ * A run of fragments, bucketed, for the ribbon that shows a whole document at
+ * once. Bucketed rather than sent one per fragment because a long transcript
+ * has thousands and a ribbon only has a few hundred pixels of width.
+ */
+export interface SpineBucket {
+  /** First and last fragment index this bucket covers, inclusive. */
+  from: number;
+  to: number;
+  /** Mean tokens across the bucket — how substantial these fragments are. */
+  tokens: number;
+  /** Fragments in this run that have never been retrieved. */
+  never: number;
+  /** Total retrievals across the run. */
+  retrievals: number;
+}
+
+export interface FragmentPage {
+  documentId: string;
+  documentTitle: string;
+  spaceId: string;
+  spaceName: string;
+  /** Fragments in the whole document, not in this page. */
+  total: number;
+  /** Index of the first fragment in `fragments`. */
+  from: number;
+  fragments: Fragment[];
+  /** The whole document at ribbon resolution. Null while it is being read. */
+  spine: SpineBucket[];
+  /** True when the document is longer than the spine could measure exactly. */
+  spineSampled: boolean;
+}
+
+/* -------------------------------------------------------------- the bench */
+
+/** What the retrieval decided about one fragment. Mirrors `rateHit`. */
+export type FragmentVerdict = 'strong' | 'weak' | 'dropped';
+
+export interface ProbeFragment {
+  chunkId: string;
+  documentId: string;
+  documentTitle: string;
+  spaceId: string;
+  spaceName: string;
+  spaceKind: SpaceKind;
   source: IntakeKey;
+  chunkIndex: number;
+  content: string;
+  /**
+   * Raw cosine similarity between the question and the passage — the only
+   * number here that means the same thing from one question to the next, and
+   * the one the thresholds are set on. Null when the semantic search could not
+   * run at all, which is not the same as a similarity of zero.
+   */
+  cosine: number | null;
+  /** ts_rank of the literal-word match. Zero for most fragments. */
+  keyword: number;
+  /** The 0.7/0.3 blend the database sorts by. Good order, meaningless size. */
+  blended: number;
+  verdict: FragmentVerdict;
+  /** Its age, in words, when the document has a date: "de hace 5 meses". */
+  age: string | null;
+  freshness: 'current' | 'aging' | 'old' | 'expired' | 'superseded';
+  /** `mm:ss` into the recording, on anything spoken. */
+  spokenAt: string | null;
+  speaker: string | null;
+  /** True while this fragment is inside the window Cortex actually receives. */
+  inWindow: boolean;
+}
+
+/** Two documents of different dates saying almost the same thing. */
+export interface ProbeConflict {
+  note: string;
+  documentTitle: string;
+  otherDocumentTitle: string;
+  otherSpace: string;
+  otherContent: string;
+  moreRecent: 'this' | 'other';
+  similarity: number;
+}
+
+export interface ProbeResult {
+  query: string;
+  coverage: 'answered' | 'thin' | 'nothing' | 'keyword-only';
+  /** The sentence Cortex is handed about its own results, in Spanish. */
+  summary: string;
+  /** Everything retrieval touched, best first — including what it threw away. */
+  fragments: ProbeFragment[];
+  /** How many fragments Cortex is allowed to receive for one question. */
+  window: number;
+  conflicts: ProbeConflict[];
+  /** Set when the semantic half could not run and only words were matched. */
+  degraded: string | null;
+  elapsedMs: number;
+}
+
+/* ------------------------------------------------------------- the analysis */
+
+/** One fragment in a summary list, truncated. */
+export interface FragmentBrief {
+  chunkId: string;
+  documentId: string;
+  documentTitle: string;
+  spaceId: string;
+  spaceName: string;
+  chunkIndex: number;
+  tokens: number;
+  /** How many byte-identical copies of this text are in the corpus. */
+  copies: number;
+  retrievalCount: number;
+  spoken: boolean;
+  content: string;
+}
+
+export interface DeadDocument {
+  documentId: string;
+  documentTitle: string;
+  spaceId: string;
+  spaceName: string;
+  /** Fragments of this document that have never been used to answer. */
+  never: number;
+  total: number;
+}
+
+/**
+ * What is wrong with how the corpus was cut up, and how much of it has never
+ * earned its keep. Every figure comes from a row; nothing is estimated.
+ */
+export interface FragmentHealth {
+  total: number;
+  documents: number;
+  embedded: number;
+  /** Stored but never embedded: findable by words only, not by meaning. */
+  unembedded: number;
+  neverUsed: number;
+  /** Retrievals recorded across the whole corpus. Zero means nothing yet. */
+  retrievals: number;
+  /**
+   * The oldest last-use still on record — NOT the moment counting began, which
+   * nothing stores. Deliberately not printed as one: the honest reading is "the
+   * least recently used fragment was last used then", which is a mouthful for a
+   * panel, so the interface shows `lastUsedAt` instead and leaves this for
+   * anything that wants the span.
+   */
+  firstUsedAt: string | null;
+  /** The last time Cortex retrieved anything at all from this memory. */
+  lastUsedAt: string | null;
+  medianTokens: number;
+  tiny: number;
+  cut: number;
+  repeated: number;
+  /**
+   * Distinct fragments with anything wrong with them. NOT the sum of the three
+   * above — a duplicate can also be truncated — so this is what the headline
+   * uses; adding them up overstates the damage.
+   */
+  flagged: number;
+  samples: {
+    tiny: FragmentBrief[];
+    cut: FragmentBrief[];
+    repeated: FragmentBrief[];
+    deadDocuments: DeadDocument[];
+  };
+}
+
+/** A document whose date, expiry or replacement makes it worth checking. */
+export interface StaleDocument {
+  id: string;
+  title: string;
+  spaceId: string;
+  spaceName: string;
+  status: 'expired' | 'superseded' | 'old' | 'aging';
+  /** Already in Spanish: "venció el 31 de enero de 2026". */
+  label: string;
+  ageDays: number | null;
+}
+
+/**
+ * How well corroborated one document is: how many OTHER documents talk about
+ * the same thing. Zero means the company knows this from exactly one place.
+ */
+export interface Corroboration {
+  documentId: string;
+  title: string;
+  spaceId: string | null;
+  spaceName: string | null;
+  source: IntakeKey;
+  chunks: number;
+  /** Other documents whose material sits on top of this one's. */
+  neighbours: number;
+}
+
+export interface KnowledgeShape {
+  /** Best corroborated first. */
+  corroborated: Corroboration[];
+  /** Documents nothing else backs up, newest first. */
+  alone: Corroboration[];
+  /** How many documents were compared — the newest of a possibly larger set. */
+  considered: number;
+  total: number;
 }
 
 /**

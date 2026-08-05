@@ -12,6 +12,18 @@ vi.mock('../../kb/embedder', () => ({
   embedDocuments: async (texts: string[]) => ({
     ok: true as const,
     data: texts.map(() => [0.1, 0.2, 0.3]),
+    // Part of the success shape since embeddings became multi-provider: the
+    // caller stamps `kb_chunks.embedding_model` from it, because a vector whose
+    // model is unknown is one search will never look at.
+    usage: {
+      provider: 'voyage' as const,
+      model: 'voyage-4-lite',
+      modelId: 'voyage:voyage-4-lite',
+      texts: texts.length,
+      requests: 1,
+      tokens: texts.length * 10,
+      estimated: false,
+    },
   }),
 }));
 
