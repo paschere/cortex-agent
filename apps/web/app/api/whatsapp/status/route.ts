@@ -1,6 +1,6 @@
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { listVisibleSpaces } from '@cortex/agent-tools';
+import { isGroupReplyScope, listVisibleSpaces } from '@cortex/agent-tools';
 import { NextResponse } from 'next/server';
 
 /**
@@ -44,7 +44,7 @@ export async function GET(): Promise<NextResponse> {
   const { data: groupRows } = await db
     .from('whatsapp_groups')
     .select(
-      'id, jid, subject, participant_count, archive_enabled, space_id, enabled_at, archive_from, last_message_at, last_ingested_at',
+      'id, jid, subject, participant_count, archive_enabled, space_id, enabled_at, archive_from, last_message_at, last_ingested_at, reply_enabled, reply_scope, reply_space_id, reply_enabled_at, reply_limit_per_hour',
     )
     .order('archive_enabled', { ascending: false })
     .order('last_message_at', { ascending: false })
@@ -102,6 +102,11 @@ export async function GET(): Promise<NextResponse> {
         archive_from: string | null;
         last_message_at: string | null;
         last_ingested_at: string | null;
+        reply_enabled: boolean;
+        reply_scope: string;
+        reply_space_id: string | null;
+        reply_enabled_at: string | null;
+        reply_limit_per_hour: number;
       }>
     ).map((g) => ({
       id: g.id,
@@ -114,12 +119,28 @@ export async function GET(): Promise<NextResponse> {
       archivingSince: g.archive_from ?? g.enabled_at,
       lastMessageAt: g.last_message_at,
       lastIngestedAt: g.last_ingested_at,
+      // Answering is a different permission from archiving and is reported as
+      // one. The screen has to be able to say, per group and without anybody
+      // guessing, whether Cortex can speak there and what it may reach for.
+      replying: g.reply_enabled,
+      replyScope: isGroupReplyScope(g.reply_scope) ? g.reply_scope : 'plain',
+      replySpaceId: g.reply_space_id,
+      replySpaceName: g.reply_space_id ? (spaceNames.get(g.reply_space_id) ?? null) : null,
+      replyingSince: g.reply_enabled_at,
+      replyLimitPerHour: g.reply_limit_per_hour,
     })),
     // Only the spaces this person may actually write to: offering a destination
     // that will be refused a second later is a worse experience than not
     // offering it, and the refusal is enforced again at write time regardless.
     spaces: spaces
       .filter((s) => (s.kind === 'global' ? isAdmin : s.ownerId === session.id))
+      .map((s) => ({ id: s.id, name: s.name, kind: s.kind })),
+    // Separate list, because the two settings accept different things: a group
+    // may be ARCHIVED into a personal space (it is one person choosing to keep
+    // a record) but may only ever CITE a company-wide one, since a personal
+    // space is private notes and the room contains outsiders.
+    citableSpaces: spaces
+      .filter((s) => s.kind === 'global')
       .map((s) => ({ id: s.id, name: s.name, kind: s.kind })),
     links: (
       (linkRows ?? []) as Array<{

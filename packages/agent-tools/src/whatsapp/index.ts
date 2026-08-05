@@ -40,6 +40,38 @@ export type {
   WindowIngestResult,
 } from './ingest-window';
 
+export {
+  GROUP_CONTEXT_MESSAGES,
+  GROUP_CONTEXT_MINUTES,
+  GROUP_REPLY_SCOPES,
+  GROUP_SCOPE_LABEL,
+  GROUP_SURFACE_NOTE,
+  UNKNOWN_GROUP_SENDER_REPLY,
+  detectMention,
+  groupToolFilter,
+  isGroupReplyScope,
+  renderGroupContext,
+  stripMention,
+} from './mentions';
+export type {
+  GroupContextMessage,
+  GroupReplyScope,
+  MentionKind,
+  MentionSignals,
+} from './mentions';
+
+export { handleGroupMention, shouldStageMessage } from './group-reply';
+export type {
+  GroupMentionInput,
+  GroupReplyDeps,
+  GroupReplyOutcome,
+  GroupReplyResult,
+  GroupReplyRow,
+  GroupTurnRequest,
+  GroupTurnResult,
+  ResolvedSender,
+} from './group-reply';
+
 export { flushGroup, flushWorkspace } from './flush';
 export type { FlushOptions, GroupFlushResult } from './flush';
 

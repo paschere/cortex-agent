@@ -127,6 +127,18 @@ export const kbSearch = registerTool({
       spaceName = space.name;
     }
 
+    // The surface's ceiling, when it set one. Intersected rather than replaced,
+    // so a model asking for a space outside the ceiling gets nothing instead of
+    // getting it. `[]` is a real value here — "no space at all" — and falling
+    // back to `spaceIds` on an empty array would turn the tightest possible
+    // restriction into none, which is the one way this can fail dangerously.
+    // See ToolContext.kbSpaceIds.
+    if (ctx.kbSpaceIds) {
+      spaceIds = spaceIds
+        ? spaceIds.filter((id) => ctx.kbSpaceIds?.includes(id))
+        : [...ctx.kbSpaceIds];
+    }
+
     let degraded: string | undefined;
     const raw = await searchSpaces(ctx.db, {
       userId: ctx.userId,

@@ -118,6 +118,23 @@ export interface ChatTurnRequest {
   surfaceNote?: string;
   /** Title prefix for the conversation row, so the history reads correctly. */
   titlePrefix?: string;
+  /**
+   * A further NARROWING of the tool catalogue, applied after the agent's grant
+   * and the caller's team deny-list.
+   *
+   * It exists for one situation and should stay that way: answering out loud in
+   * a WhatsApp group, where the room contains clients and suppliers and the
+   * reach has to be smaller than it is in a private conversation with the same
+   * person (migration 0072). It can only ever remove.
+   */
+  toolFilter?: (toolId: string) => boolean;
+  /**
+   * A ceiling on Brain Knowledge retrieval, for both the RAG prepend below and
+   * every `kb.*` tool the model calls — it rides on the ToolContext, so there
+   * is no second path that could miss it. `[]` means "no space at all";
+   * undefined means "whatever this person can see".
+   */
+  kbSpaceIds?: string[];
 }
 
 export interface ChatTurnDelivery {
@@ -341,6 +358,10 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
     userId: req.userId,
     agentId: agent.id,
     ...(conversationId ? { conversationId } : {}),
+    // Spread conditionally so an absent restriction stays absent — passing
+    // `undefined` explicitly would be the same thing, but an empty array must
+    // survive as an empty array, and being explicit here says so.
+    ...(req.kbSpaceIds ? { kbSpaceIds: req.kbSpaceIds } : {}),
   });
 
   // --- retrieval (same conditional RAG prepend as the web chat) -------------
@@ -372,9 +393,11 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
 
   // --- tools: agent allow-list minus the user's team deny-list --------------
   const denied = await deniedToolPatterns(db, req.userId);
-  const granted = filterTools(agent.allowedTools).filter(
-    (t) => denied.length === 0 || !isToolDenied(t.id, denied),
-  );
+  const granted = filterTools(agent.allowedTools)
+    .filter((t) => denied.length === 0 || !isToolDenied(t.id, denied))
+    // The surface's own ceiling, last, so it can only ever subtract from what
+    // the person was already allowed.
+    .filter((t) => (req.toolFilter ? req.toolFilter(t.id) : true));
 
   // ...then narrowed by meaning, the same way and by the same function as the
   // web chat. A Chat message is the shortest input any surface gets ("@cortex
@@ -520,8 +543,10 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
       model: chatModel(agent.defaultModel),
       system,
       messages,
-      tools: aiTools,
-      toolChoice: 'auto',
+      // An empty object is not the same as no tools: some providers reject a
+      // request that declares zero of them. A surface that deliberately offers
+      // none (a WhatsApp group at `plain` scope) must still get an answer.
+      ...(allowed.length > 0 ? { tools: aiTools, toolChoice: 'auto' as const } : {}),
       maxSteps: 12,
     });
     answer = result.text.trim();

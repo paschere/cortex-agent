@@ -5,18 +5,14 @@ import { Provenance } from '@/components/ui/provenance';
 import {
   type ConsoleState,
   applyEvent,
+  applyRunStatus,
   initialConsoleState,
 } from '@/lib/orchestrator/console-state';
 import { computeWaves } from '@/lib/orchestrator/graph';
+import { QUIET_AFTER_MS, STALE_AFTER_MS, silenceMs } from '@/lib/orchestrator/liveness';
 import { type EventView, type RunView, type TaskView, isTerminal } from '@/lib/orchestrator/types';
 import { clsx } from 'clsx';
-import {
-  ArrowLeft,
-  CircleStop,
-  Loader2,
-  RefreshCw,
-  TriangleAlert,
-} from 'lucide-react';
+import { ArrowLeft, CircleStop, Loader2, RadioTower, RefreshCw, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RunMarkdown } from '../../../schedules/_components/RunMarkdown';
@@ -45,7 +41,10 @@ function useNow(active: boolean): number {
   return now;
 }
 
-function CancelButton({ runId, onCancelled }: { runId: string; onCancelled: () => void }) {
+function CancelButton({
+  runId,
+  onCancelled,
+}: { runId: string; onCancelled: (settling: boolean) => void }) {
   const [busy, setBusy] = useState(false);
 
   async function cancel() {
@@ -58,8 +57,12 @@ function CancelButton({ runId, onCancelled }: { runId: string; onCancelled: () =
     }
     setBusy(true);
     try {
-      await fetch(`/api/orchestrator/${runId}/cancel`, { method: 'POST' });
-      onCancelled();
+      const res = await fetch(`/api/orchestrator/${runId}/cancel`, { method: 'POST' });
+      // `settling` means sub-agents were mid-step when the stop landed. The
+      // banner it turns on says so instead of implying the run froze on the
+      // spot — a tool call already in flight cannot be un-sent.
+      const body = (await res.json().catch(() => null)) as { settling?: boolean } | null;
+      onCancelled(Boolean(body?.settling));
     } finally {
       setBusy(false);
     }
@@ -123,6 +126,7 @@ export function Console({
   // Bumped to force a fresh EventSource when the server ends a stream while the
   // run is still going (the endpoint caps how long it holds one connection).
   const [generation, setGeneration] = useState(0);
+  const [settling, setSettling] = useState(false);
 
   const active = !isTerminal(state.run.status);
   const now = useNow(active);
@@ -163,6 +167,20 @@ export function Console({
         // A malformed frame is not worth killing the console over.
       }
     };
+    // The run's own row, re-sent as the server polls. The log cannot report
+    // that nothing is happening — this is what lets the pill stop claiming
+    // "Ejecutando" over a run that went quiet.
+    source.addEventListener('status', (message) => {
+      try {
+        const fresh = JSON.parse((message as MessageEvent).data ?? '{}') as {
+          status?: string;
+          lastHeartbeatAt?: string | null;
+        };
+        setState((prev) => applyRunStatus(prev, fresh));
+      } catch {
+        // A malformed frame is not worth killing the console over.
+      }
+    });
     source.addEventListener('closed', (message) => {
       stopped = true;
       source.close();
@@ -182,7 +200,8 @@ export function Console({
     };
   }, [runId, active, generation]);
 
-  const markCancelled = useCallback(() => {
+  const markCancelled = useCallback((wasSettling: boolean) => {
+    setSettling(wasSettling);
     setState((prev) => ({ ...prev, run: { ...prev.run, status: 'cancelled' } }));
   }, []);
 
@@ -208,6 +227,8 @@ export function Console({
   const duration = elapsedMs(run.startedAt ?? run.createdAt, run.finishedAt, now);
   const toolCallCount = Object.values(toolCalls).reduce((sum, list) => sum + list.length, 0);
   const planning = run.status === 'planning';
+  const quietMs = silenceMs(run, now);
+  const quiet = quietMs !== null && quietMs >= QUIET_AFTER_MS;
 
   return (
     <>
@@ -232,7 +253,7 @@ export function Console({
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <RunStatusPill status={run.status} />
+            <RunStatusPill status={run.status} quietMs={quietMs} />
             {active && <CancelButton runId={run.id} onCancelled={markCancelled} />}
             {!active && (
               <button
@@ -274,6 +295,44 @@ export function Console({
             />
           </div>
         </div>
+      )}
+
+      {/*
+       * Said out loud rather than hidden behind a spinner: the run claims to be
+       * working and has not produced a single line in minutes. The barrido will
+       * close it at STALE_AFTER_MS, and until then this is the only place the
+       * truth can appear.
+       */}
+      {quiet && (
+        <Panel className="mb-5 border-amber/40 bg-amber-soft px-4 py-3">
+          <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-amber">
+            <RadioTower className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="min-w-0">
+              Esta ejecución lleva {formatDuration(quietMs)} sin dar señales. Puede que un subagente
+              esté en una llamada larga, o puede que se haya caído el proceso que la ejecutaba. Si
+              sigue callada, a los {Math.round(STALE_AFTER_MS / 60_000)} minutos la damos por
+              interrumpida y cerramos lo que alcanzó a producir.
+            </span>
+          </p>
+        </Panel>
+      )}
+
+      {/*
+       * Cancelling is cooperative and always was. Now that the executor lives
+       * in Inngest the stop lands at the next step instead of the next wave —
+       * sooner, not instant — and pretending otherwise would just move the lie.
+       */}
+      {settling && (
+        <Panel className="mb-5 border-border-strong bg-surface-2 px-4 py-3">
+          <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-ink-muted">
+            <CircleStop className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint" />
+            <span className="min-w-0">
+              Pedimos detenerla. No se lanza ningún subagente nuevo, pero los que estaban a mitad de
+              una herramienta terminan ese paso: una llamada ya enviada no se puede devolver. Lo que
+              alcancen a entregar queda guardado abajo.
+            </span>
+          </p>
+        </Panel>
       )}
 
       {state.error && (

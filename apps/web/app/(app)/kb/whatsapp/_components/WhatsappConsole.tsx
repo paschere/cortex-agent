@@ -52,6 +52,13 @@ interface Group {
   archivingSince: string | null;
   lastMessageAt: string | null;
   lastIngestedAt: string | null;
+  /** Answering — a different permission from archiving. */
+  replying: boolean;
+  replyScope: 'plain' | 'knowledge' | 'internal';
+  replySpaceId: string | null;
+  replySpaceName: string | null;
+  replyingSince: string | null;
+  replyLimitPerHour: number;
 }
 
 interface Space {
@@ -78,6 +85,8 @@ interface Status {
   connection: Connection;
   groups: Group[];
   spaces: Space[];
+  /** Only company-wide spaces: a personal one can never be cited in a group. */
+  citableSpaces: Space[];
   links: Link[];
   people: Person[];
 }
@@ -207,54 +216,106 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
 
 /* ------------------------------------------------------------------- grupos */
 
+const SCOPE_COPY: Record<
+  Group['replyScope'],
+  { name: string; line: string; tone: 'sky' | 'amber' }
+> = {
+  plain: {
+    name: 'Solo la conversación',
+    line: 'Resume, traduce, saca cuentas y redacta con lo que se dijo en el grupo. No consulta ningún sistema de la empresa.',
+    tone: 'sky',
+  },
+  knowledge: {
+    name: 'Conversación + un espacio',
+    line: 'Además puede citar un espacio de empresa de Brain Knowledge. Nunca espacios personales.',
+    tone: 'sky',
+  },
+  internal: {
+    name: 'Grupo interno',
+    line: 'Además consulta los sistemas de trabajo de quien pregunta. Solo para grupos sin clientes ni proveedores adentro.',
+    tone: 'amber',
+  },
+};
+
+/**
+ * One group, two switches.
+ *
+ * They are drawn as two separate rows of controls with their own sentences,
+ * never as one "activar" toggle, because they are two different decisions with
+ * two different risks: archiving decides what the company remembers, answering
+ * decides what Cortex says out loud in a room that may contain the client. The
+ * screen has to make the answer to "¿qué puede decir Cortex aquí?" readable at
+ * a glance — nobody should discover the scope by way of something leaking.
+ */
 function GroupRow({
   group,
   spaces,
-  onSave,
+  citableSpaces,
+  onArchive,
+  onReply,
   busy,
 }: {
   group: Group;
   spaces: Space[];
-  onSave: (input: { jid: string; archiving: boolean; spaceId?: string }) => void;
+  citableSpaces: Space[];
+  onArchive: (input: { jid: string; archiving: boolean; spaceId?: string }) => void;
+  onReply: (input: {
+    jid: string;
+    replying: boolean;
+    replyScope?: string;
+    replySpaceId?: string | null;
+  }) => void;
   busy: boolean;
 }) {
   const [spaceId, setSpaceId] = useState(group.spaceId ?? spaces[0]?.id ?? '');
+  const [scope, setScope] = useState<Group['replyScope']>(group.replyScope);
+  const [replySpaceId, setReplySpaceId] = useState(
+    group.replySpaceId ?? citableSpaces[0]?.id ?? '',
+  );
+
+  const scopeCopy = SCOPE_COPY[group.replyScope];
 
   return (
-    <div className="flex flex-wrap items-start gap-3 border-t border-border px-5 py-3.5">
-      <IconChip tone={group.archiving ? 'emerald' : 'sky'}>
-        <Users className="h-4 w-4" />
-      </IconChip>
+    <div className="border-t border-border px-5 py-3.5">
+      <div className="flex flex-wrap items-start gap-3">
+        <IconChip tone={group.archiving || group.replying ? 'emerald' : 'sky'}>
+          <Users className="h-4 w-4" />
+        </IconChip>
 
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[13px] font-semibold text-ink">
-          {group.subject ?? 'Grupo sin nombre'}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-semibold text-ink">
+            {group.subject ?? 'Grupo sin nombre'}
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-faint">
+            {group.participants != null && (
+              <span className="tabular">{group.participants} personas</span>
+            )}
+            {group.lastMessageAt && (
+              <>
+                <span>&middot;</span>
+                <span className="tabular">último mensaje {fecha(group.lastMessageAt)}</span>
+              </>
+            )}
+          </div>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-faint">
-          {group.participants != null && (
-            <span className="tabular">{group.participants} personas</span>
-          )}
-          {group.lastMessageAt && (
-            <>
-              <span>&middot;</span>
-              <span className="tabular">último mensaje {fecha(group.lastMessageAt)}</span>
-            </>
-          )}
-        </div>
-
-        {group.archiving ? (
-          <p className="mt-1 text-[12px] leading-relaxed text-emerald">
-            Se archiva en <b className="font-semibold">{group.spaceName ?? 'un espacio borrado'}</b>{' '}
-            desde el {fecha(group.archivingSince)}.
-          </p>
-        ) : (
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-faint">
-            No se archiva. Cortex ve el grupo pero no guarda nada de él.
-          </p>
-        )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      {/* ---- archivar ---- */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-card bg-surface-2 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="field-label">Archivar</div>
+          {group.archiving ? (
+            <p className="text-[12px] leading-relaxed text-emerald">
+              Se guarda en{' '}
+              <b className="font-semibold">{group.spaceName ?? 'un espacio borrado'}</b> desde el{' '}
+              {fecha(group.archivingSince)}.
+            </p>
+          ) : (
+            <p className="text-[12px] leading-relaxed text-ink-faint">
+              No se guarda nada de este grupo.
+            </p>
+          )}
+        </div>
         {!group.archiving && (
           <select
             value={spaceId}
@@ -275,7 +336,7 @@ function GroupRow({
           variant={group.archiving ? 'outline' : 'default'}
           disabled={busy || (!group.archiving && !spaceId)}
           onClick={() =>
-            onSave(
+            onArchive(
               group.archiving
                 ? { jid: group.jid, archiving: false }
                 : { jid: group.jid, archiving: true, spaceId },
@@ -284,6 +345,90 @@ function GroupRow({
         >
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {group.archiving ? 'Dejar de archivar' : 'Archivar'}
+        </Button>
+      </div>
+
+      {/* ---- responder ---- */}
+      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-card bg-surface-2 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="field-label">Responder si lo mencionan</div>
+          {group.replying ? (
+            <>
+              <p className="text-[12px] leading-relaxed text-emerald">
+                Responde solo cuando lo mencionen con @, desde el {fecha(group.replyingSince)}.
+                Máximo {group.replyLimitPerHour} respuestas por hora.
+              </p>
+              <p
+                className={
+                  scopeCopy.tone === 'amber'
+                    ? 'mt-1 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11.5px] leading-relaxed text-ink'
+                    : 'mt-1 text-[11.5px] leading-relaxed text-ink-muted'
+                }
+              >
+                <b className="font-semibold">{scopeCopy.name}.</b> {scopeCopy.line}
+                {group.replyScope === 'knowledge' && (
+                  <>
+                    {' '}
+                    Espacio: <b className="font-semibold">{group.replySpaceName ?? 'ninguno'}</b>.
+                  </>
+                )}
+              </p>
+            </>
+          ) : (
+            <p className="text-[12px] leading-relaxed text-ink-faint">
+              Cortex lee pero nunca escribe en este grupo.
+            </p>
+          )}
+        </div>
+
+        {!group.replying && (
+          <>
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value as Group['replyScope'])}
+              aria-label="Qué puede responder"
+              className="h-9 rounded-card border border-border bg-surface px-2.5 text-[12.5px] text-ink"
+            >
+              <option value="plain">Solo la conversación</option>
+              <option value="knowledge">Conversación + un espacio</option>
+              <option value="internal">Grupo interno (sin gente de fuera)</option>
+            </select>
+            {scope === 'knowledge' && (
+              <select
+                value={replySpaceId}
+                onChange={(e) => setReplySpaceId(e.target.value)}
+                aria-label="Espacio que puede citar"
+                className="h-9 rounded-card border border-border bg-surface px-2.5 text-[12.5px] text-ink"
+              >
+                <option value="">¿Qué espacio puede citar?</option>
+                {citableSpaces.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
+
+        <Button
+          variant={group.replying ? 'outline' : 'default'}
+          disabled={busy || (!group.replying && scope === 'knowledge' && !replySpaceId)}
+          onClick={() =>
+            onReply(
+              group.replying
+                ? { jid: group.jid, replying: false }
+                : {
+                    jid: group.jid,
+                    replying: true,
+                    replyScope: scope,
+                    replySpaceId: scope === 'knowledge' ? replySpaceId : null,
+                  },
+            )
+          }
+        >
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {group.replying ? 'Dejar de responder' : 'Dejar que responda'}
         </Button>
       </div>
     </div>
@@ -408,6 +553,29 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['whatsapp-status'] });
 
+  const setReplying = useMutation({
+    mutationFn: async (input: {
+      jid: string;
+      replying: boolean;
+      replyScope?: string;
+      replySpaceId?: string | null;
+    }) => {
+      const r = await fetch('/api/whatsapp/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      const j = (await r.json()) as { note?: string; error?: string };
+      if (!r.ok) throw new Error(j.error ?? 'No se pudo guardar el cambio.');
+      return j.note ?? 'Listo.';
+    },
+    onSuccess: async (note) => {
+      setMessage({ tone: 'ok', text: note });
+      await invalidate();
+    },
+    onError: (err: Error) => setMessage({ tone: 'bad', text: err.message }),
+  });
+
   const saveGroup = useMutation({
     mutationFn: async (input: { jid: string; archiving: boolean; spaceId?: string }) => {
       const r = await fetch('/api/whatsapp/groups', {
@@ -467,9 +635,13 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
     return <div className="h-64 animate-pulse rounded-card bg-surface-2" />;
   }
 
-  const archiving = data.groups.filter((g) => g.archiving);
-  const rest = data.groups.filter((g) => !g.archiving);
-  const busy = saveGroup.isPending || linkNumber.isPending || unlinkNumber.isPending;
+  // Sorted by "does Cortex do anything here", not by archiving alone — the two
+  // permissions are independent and a reply-only group is just as configured as
+  // an archive-only one.
+  const active = data.groups.filter((g) => g.archiving || g.replying);
+  const rest = data.groups.filter((g) => !g.archiving && !g.replying);
+  const busy =
+    saveGroup.isPending || setReplying.isPending || linkNumber.isPending || unlinkNumber.isPending;
 
   return (
     <div className="flex flex-col gap-5">
@@ -490,13 +662,24 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
       <Panel>
         <PanelHead
           title="Grupos"
-          right={`${archiving.length} de ${data.groups.length} archivándose`}
+          right={`${data.groups.filter((g) => g.archiving).length} archivándose · ${data.groups.filter((g) => g.replying).length} respondiendo`}
         />
-        <p className="px-5 pb-3 pt-1 text-[12.5px] leading-relaxed text-ink-muted">
-          Elige grupo por grupo. Archivar guarda la conversación en Brain Knowledge con el nombre de
-          quien escribió cada mensaje — incluida gente que no trabaja aquí. Empieza a contar desde
-          el momento en que lo enciendes, nunca hacia atrás.
-        </p>
+        <div className="px-5 pb-3 pt-1 text-[12.5px] leading-relaxed text-ink-muted">
+          <p>
+            Cada grupo tiene <b className="font-semibold text-ink">dos permisos aparte</b>, y uno no
+            implica el otro.
+          </p>
+          <p className="mt-1.5">
+            <b className="font-semibold text-ink">Archivar</b> guarda la conversación en Brain
+            Knowledge con el nombre de quien escribió cada mensaje — incluida gente que no trabaja
+            aquí. Empieza a contar desde que lo enciendes, nunca hacia atrás.
+          </p>
+          <p className="mt-1.5">
+            <b className="font-semibold text-ink">Responder</b> deja que Cortex escriba en el grupo,
+            y solo cuando lo mencionen con @. Sin mención sigue callado. Ahí lo lee todo el mundo
+            del grupo, así que elige con cuidado qué puede consultar para responder.
+          </p>
+        </div>
 
         {data.spaces.length === 0 && (
           <p className="border-t border-border px-5 py-4 text-[12.5px] text-ink-faint">
@@ -511,13 +694,15 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
             algún grupo.
           </p>
         ) : (
-          [...archiving, ...rest].map((group) => (
+          [...active, ...rest].map((group) => (
             <GroupRow
               key={group.id}
               group={group}
               spaces={data.spaces}
+              citableSpaces={data.citableSpaces}
               busy={busy}
-              onSave={(input) => saveGroup.mutate(input)}
+              onArchive={(input) => saveGroup.mutate(input)}
+              onReply={(input) => setReplying.mutate(input)}
             />
           ))
         )}
@@ -535,7 +720,9 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
       <p className="flex items-start gap-2 px-1 text-[12px] leading-relaxed text-ink-faint">
         <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         Las conversaciones archivadas quedan como documentos normales: se buscan, se citan y se
-        borran desde Brain Knowledge, con los permisos del espacio donde las pusiste.
+        borran desde Brain Knowledge, con los permisos del espacio donde las pusiste. Cortex nunca
+        escribe primero: en los grupos solo contesta si lo mencionan, y por interno solo si le
+        escribieron.
       </p>
     </div>
   );

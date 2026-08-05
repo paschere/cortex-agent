@@ -22,7 +22,22 @@ export interface RemoteState {
 
 export interface HeartbeatReply {
   archiveGroups: Array<{ jid: string; archiveFrom: string | null }>;
+  /**
+   * Groups Cortex may SPEAK in — and even there, only when it is mentioned.
+   * A different list from `archiveGroups` on purpose: archiving and answering
+   * are separate permissions (migration 0072) and the same group rarely wants
+   * both.
+   */
+  replyGroups: string[];
   dmEnabled: boolean;
+}
+
+/** One line of the recent conversation, for context on a mention. */
+export interface GroupContextLine {
+  senderName: string | null;
+  senderJid: string | null;
+  sentAt: string;
+  text: string;
 }
 
 export interface OutboundMessage {
@@ -132,5 +147,34 @@ export class CortexClient {
     messageId: string;
   }): Promise<{ reply: string | null; delayMs?: number } | null> {
     return this.call('/api/whatsapp/bridge/dm', { method: 'POST', body, timeoutMs: 280_000 });
+  }
+
+  /**
+   * Cortex was mentioned in a group. Cortex decides whether that earns a reply
+   * — the bridge does not. `reply: null` is the normal, expected answer for a
+   * duplicate delivery, an unknown sender who has already been told, or a group
+   * that has had enough for one hour.
+   */
+  answerMention(body: {
+    groupJid: string;
+    messageId: string;
+    senderJid: string | null;
+    senderName: string | null;
+    text: string;
+    mentionedJids: string[];
+    quotedAuthorJid: string | null;
+    selfJids: string[];
+    recent: GroupContextLine[];
+  }): Promise<{
+    reply: string | null;
+    delayMs?: number;
+    /** Substance kept out of the room, for the asker's own chat. */
+    dm?: { jid: string; text: string } | null;
+  } | null> {
+    return this.call('/api/whatsapp/bridge/group-mention', {
+      method: 'POST',
+      body,
+      timeoutMs: 280_000,
+    });
   }
 }

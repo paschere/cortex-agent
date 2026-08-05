@@ -1,4 +1,11 @@
-import type { EventView, RunStatus, RunView, TaskStatus, TaskView } from './types';
+import {
+  type EventView,
+  type RunStatus,
+  type RunView,
+  TERMINAL_RUN_STATUSES,
+  type TaskStatus,
+  type TaskView,
+} from './types';
 
 /**
  * The live console's state machine.
@@ -79,6 +86,34 @@ export function initialConsoleState(
 ): ConsoleState {
   const base: ConsoleState = { run, tasks, toolCalls: {}, error: null, lastEventId: 0 };
   return events.reduce(applyEvent, base);
+}
+
+/**
+ * Fold in a `status` frame — the run's own row, not a log entry.
+ *
+ * The log can only report what happened; it has no frame for "nothing is
+ * happening", which is precisely the state the console has to be able to draw.
+ * So the SSE endpoint re-sends status and `last_heartbeat_at` as it polls, and
+ * this is where they land.
+ *
+ * A terminal status is never walked back to a live one: `run_done` may arrive
+ * a poll before the row is re-read, and the console must not flicker back to
+ * "Ejecutando" after it has shown the ending.
+ */
+export function applyRunStatus(
+  state: ConsoleState,
+  fresh: { status?: string | null; lastHeartbeatAt?: string | null },
+): ConsoleState {
+  const status = (fresh.status ?? null) as RunStatus | null;
+  const terminal = TERMINAL_RUN_STATUSES.includes(state.run.status);
+  return {
+    ...state,
+    run: {
+      ...state.run,
+      status: status && !terminal ? status : state.run.status,
+      lastHeartbeatAt: fresh.lastHeartbeatAt ?? state.run.lastHeartbeatAt,
+    },
+  };
 }
 
 export function applyEvent(state: ConsoleState, event: EventView): ConsoleState {

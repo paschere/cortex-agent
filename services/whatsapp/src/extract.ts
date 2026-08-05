@@ -196,3 +196,36 @@ export function extractDirectText(raw: proto.IWebMessageInfo): string | null {
   const text = message.conversation ?? message.extendedTextMessage?.text ?? null;
   return text?.trim() || null;
 }
+
+/**
+ * Who this message was addressed to, as far as WhatsApp is willing to say.
+ *
+ * `mentionedJid` is filled in only when the sender picked somebody out of the
+ * mention picker — it is a deliberate act with no other reading, which is why
+ * it is the signal the reply rule is built on. `participant` on the quoted
+ * context is who wrote the message being replied to.
+ *
+ * The DECISION about what these mean lives in agent-tools
+ * (`whatsapp/mentions.ts`) so that the bridge and Cortex cannot disagree about
+ * whether Cortex was spoken to. This function only reads the protobuf.
+ */
+export function extractMentionSignals(raw: proto.IWebMessageInfo): {
+  mentionedJids: string[];
+  quotedAuthorJid: string | null;
+} {
+  const message = unwrap(raw.message);
+  const context =
+    message?.extendedTextMessage?.contextInfo ??
+    message?.imageMessage?.contextInfo ??
+    message?.videoMessage?.contextInfo ??
+    message?.documentMessage?.contextInfo ??
+    message?.audioMessage?.contextInfo ??
+    null;
+
+  return {
+    mentionedJids: (context?.mentionedJid ?? []).filter(
+      (jid): jid is string => typeof jid === 'string',
+    ),
+    quotedAuthorJid: context?.quotedMessage ? (context.participant ?? null) : null,
+  };
+}

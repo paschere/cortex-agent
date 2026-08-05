@@ -4,7 +4,19 @@
  * app/(app)/orchestrator/[id]/_components imports from here too.
  */
 
-export type RunStatus = 'planning' | 'running' | 'completed' | 'failed' | 'cancelled';
+/**
+ * `interrupted` is the fourth ending, added by migration 0070: the run stopped
+ * signalling and nobody knows how it ended. It is deliberately not folded into
+ * `failed` (which blames the work for an infrastructure death) or `cancelled`
+ * (which blames the person). See lib/orchestrator/liveness.ts.
+ */
+export type RunStatus =
+  | 'planning'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted';
 
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
@@ -19,7 +31,12 @@ export type EventKind =
   | 'run_done';
 
 /** A run is done when nothing else will ever be appended to its event log. */
-export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = ['completed', 'failed', 'cancelled'];
+export const TERMINAL_RUN_STATUSES: readonly RunStatus[] = [
+  'completed',
+  'failed',
+  'cancelled',
+  'interrupted',
+];
 
 export function isTerminal(status: RunStatus): boolean {
   return TERMINAL_RUN_STATUSES.includes(status);
@@ -34,6 +51,12 @@ export interface RunView {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
+  /**
+   * Last moment the run was observably alive (migration 0070). The screen reads
+   * it to avoid claiming "ejecutando" over something that stopped talking —
+   * see lib/orchestrator/liveness.ts.
+   */
+  lastHeartbeatAt: string | null;
 }
 
 export interface TaskView {
@@ -80,7 +103,7 @@ export interface ToolResultPayload {
 }
 
 export const RUN_COLUMNS =
-  'id, organization_id, user_id, objective, status, plan, summary, total_tokens, started_at, finished_at, created_at';
+  'id, organization_id, user_id, objective, status, plan, summary, total_tokens, started_at, finished_at, created_at, last_heartbeat_at';
 
 export const TASK_COLUMNS =
   'id, run_id, seq, title, instruction, status, depends_on, agent_label, allowed_tools, result, error, tokens, started_at, finished_at';
@@ -95,6 +118,7 @@ export function toRunView(row: Record<string, unknown>): RunView {
     startedAt: (row.started_at as string | null) ?? null,
     finishedAt: (row.finished_at as string | null) ?? null,
     createdAt: row.created_at as string,
+    lastHeartbeatAt: (row.last_heartbeat_at as string | null) ?? null,
   };
 }
 

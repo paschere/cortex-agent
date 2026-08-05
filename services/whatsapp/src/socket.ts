@@ -10,8 +10,8 @@ import QRCode from 'qrcode';
 import qrTerminal from 'qrcode-terminal';
 import { usePostgresAuthState } from './auth-state';
 import type { Config } from './config';
-import { CortexClient, type OutboundMessage } from './cortex';
-import { extractDirectText, extractGroupMessage } from './extract';
+import { CortexClient, type GroupContextLine, type OutboundMessage } from './cortex';
+import { extractDirectText, extractGroupMessage, extractMentionSignals } from './extract';
 import { baileysLogger, logger } from './logger';
 
 /**
@@ -78,8 +78,24 @@ export class WhatsappBridge {
   private stopping = false;
   private connecting = false;
 
-  /** Group jids an operator switched on. Nothing else is even buffered. */
+  /** Group jids an operator switched ARCHIVING on for. Nothing else is buffered. */
   private allowed = new Map<string, number>();
+  /**
+   * Group jids Cortex may SPEAK in when mentioned. A different set from
+   * `allowed` on purpose: archiving a group and answering in it are separate
+   * permissions, and the same group rarely wants both.
+   */
+  private replyGroups = new Set<string>();
+  /**
+   * The last few messages of each reply-enabled group, IN MEMORY ONLY.
+   *
+   * "@Cortex mira esto" means nothing on its own, so a mention has to arrive
+   * with the conversation around it. Keeping that here rather than reading it
+   * back from the database is what lets a group have answering switched on and
+   * archiving switched off and genuinely store nothing: the context exists for
+   * the length of one turn and dies with the process.
+   */
+  private recent = new Map<string, GroupContextLine[]>();
   private dmEnabled = true;
 
   private buffer: OutboundMessage[] = [];
@@ -100,6 +116,7 @@ export class WhatsappBridge {
     hasQr: boolean;
     buffered: number;
     archivedGroups: number;
+    replyGroups: number;
     lastError: string | null;
   } {
     return {
@@ -108,6 +125,7 @@ export class WhatsappBridge {
       hasQr: Boolean(this.qrDataUrl),
       buffered: this.buffer.length,
       archivedGroups: this.allowed.size,
+      replyGroups: this.replyGroups.size,
       lastError: this.lastError,
     };
   }
@@ -293,6 +311,11 @@ export class WhatsappBridge {
     this.allowed = new Map(
       reply.archiveGroups.map((g) => [g.jid, g.archiveFrom ? Date.parse(g.archiveFrom) : 0]),
     );
+    this.replyGroups = new Set(reply.replyGroups ?? []);
+    // Stop holding context for a group Cortex is no longer allowed to speak in.
+    for (const jid of [...this.recent.keys()]) {
+      if (!this.replyGroups.has(jid)) this.recent.delete(jid);
+    }
     this.dmEnabled = reply.dmEnabled;
   }
 
@@ -331,21 +354,86 @@ export class WhatsappBridge {
   }
 
   /**
-   * THE FIRST OF TWO LOCKS on "only the groups somebody switched on".
+   * Digits of every way WhatsApp writes this account: with a device suffix, as
+   * a plain JID, and as a `@lid` in newer versions.
+   */
+  private selfJids(): string[] {
+    const user = this.sock?.user;
+    return [user?.id, (user as { lid?: string } | undefined)?.lid].filter(
+      (jid): jid is string => typeof jid === 'string' && jid.length > 0,
+    );
+  }
+
+  /**
+   * A CHEAP PRE-FILTER, not the decision.
    *
-   * A message from a group that is not on the allow-list is dropped here, in
-   * memory, on the Railway container — it never crosses the network, never
-   * reaches Cortex and never touches the database. The second lock is in the
-   * ingest route, which checks again against the database, so a bridge running
-   * a stale allow-list still cannot archive anything nobody chose.
+   * The real rule — what counts as being spoken to, and why the bare name in
+   * text does not — lives in `whatsapp/mentions.ts` in agent-tools, and Cortex
+   * applies it again on every request. This only avoids a round trip for the
+   * overwhelming majority of group messages that mention nobody. If the two
+   * ever disagree, Cortex wins and stays quiet, which is the safe direction.
+   */
+  private looksAddressedToUs(mentionedJids: string[], quotedAuthorJid: string | null): boolean {
+    const self = new Set(
+      this.selfJids().map((jid) => jid.split('@')[0]?.split(':')[0]?.replace(/\D/g, '') ?? ''),
+    );
+    self.delete('');
+    if (self.size === 0) return false;
+    const digits = (jid: string | null | undefined): string =>
+      jid?.split('@')[0]?.split(':')[0]?.replace(/\D/g, '') ?? '';
+    if (mentionedJids.some((jid) => self.has(digits(jid)))) return true;
+    return self.has(digits(quotedAuthorJid));
+  }
+
+  /** The rolling context a mention arrives with. Memory only, never written. */
+  private rememberForContext(jid: string, line: GroupContextLine): void {
+    if (!this.replyGroups.has(jid)) return;
+    const buffer = this.recent.get(jid) ?? [];
+    buffer.push(line);
+    // Bounded twice over: the tail is all that is ever sent, and an idle group
+    // must not hold a day of conversation in the heap.
+    if (buffer.length > 60) buffer.splice(0, buffer.length - 60);
+    this.recent.set(jid, buffer);
+  }
+
+  /**
+   * TWO INDEPENDENT PERMISSIONS, checked separately, in one place.
+   *
+   * `allowed` is archiving: a message from a group that is not on that list is
+   * dropped here, in memory, on the Railway container — it never crosses the
+   * network, never reaches Cortex, never touches the database. The second lock
+   * is in the ingest route, which checks the database again, so a bridge
+   * running a stale allow-list still cannot archive anything nobody chose.
+   *
+   * `replyGroups` is answering, and it grants nothing to archiving. A group can
+   * be on either list, both, or neither. A reply-only group's messages are held
+   * in memory for context and are never sent anywhere unless somebody mentions
+   * Cortex — and even then only the recent window travels, for one turn.
    */
   private async onGroupMessage(raw: Parameters<typeof extractGroupMessage>[0]): Promise<void> {
     const jid = raw.key?.remoteJid ?? '';
     const archiveFrom = this.allowed.get(jid);
-    if (archiveFrom === undefined) return;
+    const canReply = this.replyGroups.has(jid);
+    if (archiveFrom === undefined && !canReply) return;
 
     const extracted = extractGroupMessage(raw);
     if (!extracted) return;
+
+    if (canReply) {
+      const body = extracted.body ?? '';
+      if (body.trim()) {
+        this.rememberForContext(jid, {
+          senderName: extracted.senderName,
+          senderJid: extracted.senderJid,
+          sentAt: extracted.sentAt,
+          text: body,
+        });
+      }
+      // Fire and forget: answering must not hold up archiving the same message.
+      void this.maybeAnswerMention(raw, extracted);
+    }
+
+    if (archiveFrom === undefined) return;
     if (archiveFrom > 0 && Date.parse(extracted.sentAt) < archiveFrom) return;
 
     let mediaBase64: string | null = null;
@@ -423,6 +511,86 @@ export class WhatsappBridge {
       }
     } finally {
       this.flushing = false;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Answering in a group
+  // -------------------------------------------------------------------------
+
+  /**
+   * Somebody may have spoken to Cortex in a group.
+   *
+   * WHAT THIS ACCOUNT WILL DO IN A GROUP, COMPLETE: reply once to a message
+   * that mentioned it. That is the whole list. It does not greet, does not
+   * announce itself, does not follow up, does not react and does not speak
+   * because a keyword appeared. Writing in groups is a bigger signal to
+   * WhatsApp than reading, and the only thing that makes it defensible is that
+   * every message is a direct answer to somebody who asked for it by tapping
+   * the name.
+   *
+   * The reply QUOTES the mention, so in a busy room it is obvious what is being
+   * answered and Cortex never appears to be interjecting.
+   */
+  private async maybeAnswerMention(
+    raw: Parameters<typeof extractGroupMessage>[0],
+    extracted: NonNullable<ReturnType<typeof extractGroupMessage>>,
+  ): Promise<void> {
+    const sock = this.sock;
+    const jid = raw.key?.remoteJid;
+    if (!sock || !jid) return;
+
+    const signals = extractMentionSignals(raw);
+    if (!this.looksAddressedToUs(signals.mentionedJids, signals.quotedAuthorJid)) return;
+
+    let typing: NodeJS.Timeout | null = null;
+    try {
+      await sock.sendPresenceUpdate('composing', jid).catch(() => undefined);
+      typing = setInterval(() => {
+        void sock.sendPresenceUpdate('composing', jid).catch(() => undefined);
+      }, 5_000);
+
+      const answer = await this.cortex.answerMention({
+        groupJid: jid,
+        messageId: extracted.messageId,
+        senderJid: extracted.senderJid,
+        senderName: extracted.senderName,
+        text: extracted.body ?? '',
+        mentionedJids: signals.mentionedJids,
+        quotedAuthorJid: signals.quotedAuthorJid,
+        selfJids: this.selfJids(),
+        // Everything except this message, which Cortex receives as the question.
+        recent: (this.recent.get(jid) ?? []).filter((line) => line.sentAt !== extracted.sentAt),
+      });
+
+      if (typing) clearInterval(typing);
+      typing = null;
+      await sock.sendPresenceUpdate('paused', jid).catch(() => undefined);
+
+      // Null is the ordinary answer, not a failure: a duplicate delivery, a
+      // sender who has already been told, a group that has had enough this
+      // hour, or a mention Cortex decided was not one. Silence is correct for
+      // every single one of those, and a bot explaining its own silence is the
+      // noise this is trying to avoid.
+      if (!answer?.reply) return;
+
+      if (answer.delayMs) await sleep(Math.min(answer.delayMs, 6_000));
+      await sock.sendMessage(jid, { text: answer.reply }, { quoted: raw });
+
+      // The half that had to stay out of the room. Sent only to a chat the
+      // person has already opened with this number — Cortex answering privately
+      // is still Cortex answering, never Cortex starting a conversation. When
+      // there is no such chat, Cortex has already emailed it instead.
+      if (answer.dm?.jid && answer.dm.text) {
+        await sleep(600);
+        await sock.sendMessage(answer.dm.jid, { text: answer.dm.text }).catch(() => undefined);
+      }
+    } catch (err) {
+      // Silence on failure. In a 1:1 an apology is right because somebody is
+      // waiting on it; in a group it is one more message nobody wanted.
+      logger.error({ err: (err as Error).message }, 'could not answer a group mention');
+    } finally {
+      if (typing) clearInterval(typing);
     }
   }
 

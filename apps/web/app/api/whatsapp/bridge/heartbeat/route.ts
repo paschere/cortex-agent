@@ -74,17 +74,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data: session } = await db.from('whatsapp_sessions').select('dm_enabled').maybeSingle();
 
+  // Both lists in one read, and they are genuinely different lists. Since
+  // migration 0072 archiving a group and answering in it are separate
+  // permissions: a client group is often archived and never spoken in, and an
+  // internal coordination group is often the reverse.
   const { data: groups } = await db
     .from('whatsapp_groups')
-    .select('jid, archive_from')
-    .eq('archive_enabled', true);
+    .select('jid, archive_from, archive_enabled, reply_enabled')
+    .or('archive_enabled.eq.true,reply_enabled.eq.true');
+
+  const rows = (groups ?? []) as Array<{
+    jid: string;
+    archive_from: string | null;
+    archive_enabled: boolean;
+    reply_enabled: boolean;
+  }>;
 
   return NextResponse.json({
     ok: true,
-    /** The only groups the bridge may forward anything from. */
-    archiveGroups: ((groups ?? []) as Array<{ jid: string; archive_from: string | null }>).map(
-      (g) => ({ jid: g.jid, archiveFrom: g.archive_from }),
-    ),
+    /** The only groups the bridge may forward messages from, for archiving. */
+    archiveGroups: rows
+      .filter((g) => g.archive_enabled)
+      .map((g) => ({ jid: g.jid, archiveFrom: g.archive_from })),
+    /**
+     * The only groups the bridge may ever speak in — and even there, only when
+     * Cortex is actually mentioned. The bridge keeps a small in-memory buffer of
+     * recent messages for these so a mention arrives with context; nothing about
+     * them is written down unless the group is ALSO on the archive list.
+     */
+    replyGroups: rows.filter((g) => g.reply_enabled).map((g) => g.jid),
     dmEnabled: session?.dm_enabled !== false,
   });
 }

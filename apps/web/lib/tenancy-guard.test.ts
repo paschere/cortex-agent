@@ -107,6 +107,10 @@ const ALLOWED = new Map<string, string>([
     'A WhatsApp direct message carries a phone number and nothing else. Resolving it to a Cortex directory row is what determines the workspace, and the result is checked against the one the bridge claims before anything runs.',
   ],
   [
+    'app/api/whatsapp/bridge/group-mention/route.ts',
+    'Same as the direct-message route: a mention in a group carries a phone number, and resolving it to a Cortex directory row is what determines the workspace. The result is checked against the workspace the bridge claims before any tool is offered.',
+  ],
+  [
     'app/api/whatsapp/links/route.ts',
     'whatsapp_links is keyed by the phone number install-wide, so "already linked somewhere else" is invisible to a scoped read and would surface as a constraint error instead of an explanation. One read, for that message only; the write is scoped.',
   ],

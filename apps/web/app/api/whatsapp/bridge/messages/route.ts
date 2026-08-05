@@ -4,6 +4,7 @@ import { MAX_DOCUMENT_BYTES, MAX_VOICE_BYTES } from '@cortex/agent-tools';
 import {
   ingestGroupAttachment,
   isIngestibleDocument,
+  shouldStageMessage,
   transcribeVoiceNote,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
@@ -102,10 +103,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     .select('jid, subject, space_id, enabled_by, archive_enabled, archive_from')
     .in('jid', jids);
 
+  // Keyed by jid regardless of whether archiving is on: `shouldStageMessage`
+  // makes that call per message, and it is the ONLY place that does. Since
+  // migration 0072 a group can have Cortex answering in it with archiving
+  // switched off, and such a group must store nothing whatsoever — not a
+  // message, not a stub. Deciding it here as well would be a second copy of
+  // that rule, and second copies of rules are how they diverge.
   const groups = new Map<string, GroupRow>();
-  for (const row of (groupRows ?? []) as unknown as GroupRow[]) {
-    if (row.archive_enabled && row.space_id && row.enabled_by) groups.set(row.jid, row);
-  }
+  for (const row of (groupRows ?? []) as unknown as GroupRow[]) groups.set(row.jid, row);
 
   // Already stored: re-delivery is routine (Baileys replays after a reconnect
   // and during history sync). Skipping them here is not only about avoiding a
@@ -133,21 +138,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   for (const message of incoming) {
     const groupJid = message.groupJid as string;
     const group = groups.get(groupJid);
-    if (!group) {
-      ignored += 1;
-      continue;
-    }
     if (seen.has(`${groupJid}#${message.messageId}`)) {
       ignored += 1;
       continue;
     }
 
     const sentAtMs = Date.parse(message.sentAt as string);
-    if (!Number.isFinite(sentAtMs)) {
-      ignored += 1;
-      continue;
-    }
-    if (group.archive_from && sentAtMs < Date.parse(group.archive_from)) {
+    // The whole archiving decision, in one call: is the group switched on, does
+    // it have somewhere to put documents and somebody answerable for them, and
+    // is this message from after the moment archiving was chosen.
+    if (!group || !shouldStageMessage(group, sentAtMs)) {
       ignored += 1;
       continue;
     }

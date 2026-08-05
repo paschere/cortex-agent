@@ -1,5 +1,6 @@
-import { type StatusTone, CHIP_BASE, CHIP_TONE, DOT_TONE } from '@/lib/status-chip';
+import { QUIET_AFTER_MS } from '@/lib/orchestrator/liveness';
 import type { RunStatus, TaskStatus } from '@/lib/orchestrator/types';
+import { CHIP_BASE, CHIP_TONE, DOT_TONE, type StatusTone } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { Ban, Circle, CircleCheckBig, CircleSlash, CircleX, Loader2, Sparkles } from 'lucide-react';
 
@@ -19,6 +20,9 @@ export const RUN_TONE: Record<RunStatus, { label: string; tone: StatusTone }> = 
   completed: { label: 'Terminada', tone: 'emerald' },
   failed: { label: 'Falló', tone: 'rose' },
   cancelled: { label: 'Detenida', tone: 'neutral' },
+  // Amber, not rose: nobody has to fix anything, but somebody should know the
+  // run stopped talking and its report was never written.
+  interrupted: { label: 'Se interrumpió', tone: 'amber' },
 };
 
 export const TASK_TONE: Record<
@@ -32,7 +36,36 @@ export const TASK_TONE: Record<
   skipped: { label: 'Omitido', tone: 'neutral', ring: 'border-border', icon: CircleSlash },
 };
 
-export function RunStatusPill({ status, className }: { status: RunStatus; className?: string }) {
+/**
+ * The run's state, and — while it claims to be working — whether it has said
+ * anything lately.
+ *
+ * A live run that has gone quiet stops being drawn as "Ejecutando". The sweep
+ * has not closed it yet and might never (it could come back), so the chip does
+ * not assert an ending; it drops the claim and reports the silence instead.
+ * Saying "Ejecutando" over something that has not moved in ten minutes is the
+ * exact lie this whole change exists to remove, and the sweep's threshold is
+ * five times the screen's — so for most of that window the screen is the only
+ * thing that can tell the truth.
+ *
+ * @param quietMs how long the run has been silent (lib/orchestrator/liveness.ts
+ *   `silenceMs`), or null when the question does not apply.
+ */
+export function RunStatusPill({
+  status,
+  quietMs = null,
+  className,
+}: { status: RunStatus; quietMs?: number | null; className?: string }) {
+  const quiet = quietMs !== null && quietMs >= QUIET_AFTER_MS;
+  if (quiet) {
+    return (
+      <span className={clsx(CHIP_BASE, CHIP_TONE.amber, className)}>
+        <span className={clsx('h-1.5 w-1.5 rounded-full', DOT_TONE.amber)} />
+        Sin señales hace {formatDuration(quietMs)}
+      </span>
+    );
+  }
+
   const { label, tone } = RUN_TONE[status];
   const live = status === 'planning' || status === 'running';
   return (

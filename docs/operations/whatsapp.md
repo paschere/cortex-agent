@@ -1,6 +1,6 @@
 # WhatsApp
 
-Cortex can do two things with WhatsApp:
+Cortex can do three things with WhatsApp:
 
 1. **Read the company's groups and feed them into Brain Knowledge.** This is the
    main one. Half of a Colombian operation happens in WhatsApp groups —
@@ -10,6 +10,10 @@ Cortex can do two things with WhatsApp:
    like a Google Meet call.
 2. **Talk to the agent by direct message.** You write to it and it answers with
    the same tools and the same memory as the web.
+3. **Answer in a group when somebody @mentions it.** Only then. Without a
+   mention it stays exactly as silent as it was before.
+
+It never writes first. Not in a group, not in a chat, not ever.
 
 ---
 
@@ -28,9 +32,17 @@ So:
   banned, the person loses their own WhatsApp account.
 - A cheap prepaid SIM or a virtual number that can receive a verification SMS is
   enough. It only needs to receive that one code and then stay linked.
-- The bridge **never starts a conversation**, never posts in a group, and only
-  replies in chats where the other person wrote first. That is deliberate — the
-  behaviour that gets numbers banned is outbound.
+- The bridge **never starts a conversation**. It replies in a 1:1 only where the
+  other person wrote first, and in a group only when somebody @mentions it. It
+  does not greet, announce itself, follow up, react, or speak because a keyword
+  appeared. That is deliberate: the behaviour that gets numbers banned is
+  unsolicited outbound.
+- **Writing in groups raises the risk above read-only.** Every message is still
+  a direct answer to somebody who asked for it by tapping the name, which is
+  what makes it defensible — but it is more exposure than archiving alone, and
+  there is a per-group hourly ceiling to keep it from becoming a stream. If you
+  want the memory without the exposure, archive the group and leave answering
+  off; they are separate switches.
 - If the number is banned: everything already archived is safe (they are
   ordinary Brain Knowledge documents). Get a new number, pair it, and the group
   choices are still there.
@@ -137,6 +149,20 @@ working pairing).
 
 ---
 
+## The two group permissions
+
+Every group has **two independent switches** on the Cortex → WhatsApp screen,
+and neither implies the other:
+
+| | What it does | What it risks |
+|---|---|---|
+| **Archivar** | The conversation becomes searchable documents in Brain Knowledge | Disclosure *inside* the company — everyone who can read the space can read the group |
+| **Responder si lo mencionan** | Cortex replies in the group when @mentioned | Disclosure *outside* the company — clients and suppliers in the room read the answer |
+
+A client group is very often one you want archived and never want the agent
+talking in. An internal coordination group is often the reverse. Choose them
+separately, per group.
+
 ## Choosing which groups are archived
 
 Nothing is archived by default. Groups appear on the Cortex → WhatsApp screen a
@@ -186,6 +212,66 @@ document instead of making a second one.
   the company's memory.
 
 ---
+
+## Letting Cortex answer in a group
+
+Press **Dejar que responda** on the group and pick what it may reach for. The
+screen states each option in words and shows the current one on every group.
+
+### What counts as being mentioned
+
+- ✅ **A real @mention** — you type `@` and pick Cortex from WhatsApp's list.
+  This is the one that matters.
+- ✅ **A reply to something Cortex said** — quote its message and write
+  underneath. This is how you ask a follow-up without re-tagging.
+- ❌ **Just typing the name** — "cortex, mira esto" does **nothing**, on purpose.
+  "Yo le pregunto a Cortex y te cuento" is a sentence people say to each other
+  constantly, and a bot that answers it has interrupted a conversation between
+  two humans in a room with a client in it. A missed mention costs one tap; a
+  false one cannot be taken back.
+
+### What it may reach for — pick per group
+
+| Scope | What Cortex can use to answer |
+|---|---|
+| **Solo la conversación** (default) | The messages in the group and nothing else. It summarises what was agreed, translates, does the arithmetic, drafts the message. **It cannot reach a single company system**, so nothing it says can come from one. |
+| **Conversación + un espacio** | The above, plus read-only Brain Knowledge — limited to **one company-wide space you choose**. Personal spaces can never be cited in a group; the option is not offered and would be refused if it were. |
+| **Grupo interno** | The above, plus the asker's read-only work tools. **Only for groups with no clients or suppliers in them.** |
+
+Payroll, personal data, candidate records and Gmail are unreachable from a
+group at **every** scope, including the widest one.
+
+On top of that, if an answer still turns out to touch something sensitive,
+Cortex says so in the group **without the content** and sends the detail to the
+person who asked — by WhatsApp if they have written to it before, by email
+otherwise. Useful without leaking.
+
+### Who can trigger it
+
+The same rule as direct messages: **a number that is not linked to a Cortex
+person cannot make Cortex run anything.** A stranger in the group who taps the
+name gets one short line saying it only answers registered people — said once
+per person per day, so it never becomes noise — and no tool, no lookup and no
+model run happens at all.
+
+### Noise and loops
+
+- One reply per mention, ever. WhatsApp re-delivers messages; Cortex does not
+  re-answer them.
+- A ceiling of **10 replies per group per hour** by default. Past it Cortex goes
+  quiet rather than announcing that it has gone quiet.
+- It never replies to itself or to another bot.
+- It answers with a short human delay and the "escribiendo…" indicator, and the
+  reply quotes the message that mentioned it, so it is obvious what is being
+  answered.
+
+### Approvals
+
+Same as in a direct message and for a stronger reason: a group has nowhere to
+show an Approve/Decline card and nobody in it has authority over somebody else's
+approval. So **nothing that needs approval is ever run from a group.** It is
+staged, the card goes to the person who asked by email and Google Chat, and
+Cortex says one line in the group saying it is waiting.
 
 ## Linking numbers to people
 
@@ -247,6 +333,20 @@ The list refreshes when the number connects and when groups change. Make sure
 the dedicated number is actually a **member** of the group — Cortex can only see
 what that account can see. Then wait one heartbeat (30 s) and reload.
 
+### Cortex is not answering when we mention it
+
+Check, in order: is **Responder si lo mencionan** on for that group; did you use
+a real @mention (picking it from WhatsApp's list) rather than just typing the
+name; is the mentioning person's number **linked** on this screen; and has the
+group already had its 10 replies this hour. All four are visible on the Cortex →
+WhatsApp screen.
+
+### Cortex answered "te lo mandé por interno" and nothing else
+
+That is the privacy guard working. The answer touched something that should not
+be read by everyone in that room, so it went to the person who asked — their
+WhatsApp chat with the number if they have one, their email otherwise.
+
 ### A group is archiving but no documents appear
 
 Conversations only become documents once they finish — 45 minutes of silence.
@@ -271,8 +371,15 @@ archived, into which space, and since when. Turning one off takes one click.
 
 - `infra/supabase/migrations/0068_whatsapp.sql` — the tables, and the reasoning
   behind the grouping rule and the mandatory destination space.
+- `infra/supabase/migrations/0072_whatsapp_mentions.sql` — why answering and
+  archiving are separate permissions, and the three layers that stop a group
+  reply leaking.
 - `packages/agent-tools/src/whatsapp/windows.ts` — why conversations are grouped
   the way they are.
+- `packages/agent-tools/src/whatsapp/mentions.ts` — what counts as a mention and
+  what each scope may reach for.
+- `packages/agent-tools/src/whatsapp/group-reply.ts` — the order of the gates
+  between a mention and an answer.
 - `packages/agent-tools/src/whatsapp/media.ts` — what happens to voice notes,
   images and files.
 - `services/whatsapp/src/socket.ts` — the reconnection policy and what the

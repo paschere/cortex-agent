@@ -25,6 +25,8 @@ export function buildToolContext(opts: {
   conversationId?: UUID;
   surface?: ToolSurface;
   signal?: AbortSignal;
+  /** Ceiling on Brain Knowledge retrieval for this turn. See ToolContext. */
+  kbSpaceIds?: string[];
 }): ToolContext {
   const db = getOrgScopedClient(opts.organizationId);
   return {
@@ -36,6 +38,10 @@ export function buildToolContext(opts: {
     db,
     integrations: createIntegrationsClient(db, opts.userId, logger),
     logger,
+    // Passed through verbatim, INCLUDING an empty array: `[]` means "no space
+    // at all" and `undefined` means "no restriction", and collapsing the two
+    // would turn the tightest restriction into none.
+    kbSpaceIds: opts.kbSpaceIds,
     signal: opts.signal,
   };
 }

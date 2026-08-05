@@ -28,6 +28,8 @@ export class FakeQuery
     private readonly store: Record<string, Row[]>,
     private readonly table: string,
     private readonly nextId: () => string,
+    /** Columns a unique index covers, so an insert can be REJECTED like Postgres. */
+    private readonly uniqueBy: string[] | null = null,
   ) {}
 
   private get rows(): Row[] {
@@ -105,8 +107,24 @@ export class FakeQuery
     return this;
   }
 
-  private run(): { data: Row[]; error: null } {
+  private run(): { data: Row[]; error: { message: string } | null } {
     if (this.mode === 'insert') {
+      // A unique index is not decoration in the code under test — the claim on
+      // a mention IS an insert that is expected to fail on a re-delivery. A
+      // stand-in that always succeeds would make the dedupe test vacuous.
+      if (this.uniqueBy) {
+        for (const row of this.payload) {
+          const clash = this.rows.find((r) =>
+            (this.uniqueBy as string[]).every((k) => r[k] === row[k]),
+          );
+          if (clash) {
+            return {
+              data: [],
+              error: { message: 'duplicate key value violates unique constraint' },
+            };
+          }
+        }
+      }
       const created = this.payload.map((p) => ({ id: this.nextId(), ...p }));
       this.rows.push(...created);
       return { data: created, error: null };
@@ -145,12 +163,13 @@ export class FakeQuery
     return { data: this.limitTo != null ? found.slice(0, this.limitTo) : found, error: null };
   }
 
-  async maybeSingle(): Promise<{ data: Row | null; error: null }> {
-    const { data } = this.run();
-    return { data: data[0] ?? null, error: null };
+  async maybeSingle(): Promise<{ data: Row | null; error: { message: string } | null }> {
+    const { data, error } = this.run();
+    return { data: data[0] ?? null, error };
   }
   async single(): Promise<{ data: Row | null; error: { message: string } | null }> {
-    const { data } = this.run();
+    const { data, error } = this.run();
+    if (error) return { data: null, error };
     return data[0] ? { data: data[0], error: null } : { data: null, error: { message: 'no rows' } };
   }
   // biome-ignore lint/suspicious/noThenProperty: supabase-js query builders are thenables, so the stub must be one to stand in for them.
@@ -164,10 +183,25 @@ export class FakeQuery
   }
 }
 
-export function makeDb(store: Record<string, Row[]>): SupabaseClient {
-  let counter = 0;
+/**
+ * The row id counter belongs to the STORE, not to the handle.
+ *
+ * Learned the hard way: with a counter per client, code that builds a fresh
+ * handle per call — which is what a route does — handed every row the id
+ * `id_1`, and an update by primary key silently rewrote the whole table. Every
+ * assertion still passed until one depended on two rows differing.
+ */
+const COUNTER = new WeakMap<object, { n: number }>();
+
+export function makeDb(
+  store: Record<string, Row[]>,
+  uniqueBy: Record<string, string[]> = {},
+): SupabaseClient {
+  const counter = COUNTER.get(store) ?? { n: 0 };
+  COUNTER.set(store, counter);
   return {
-    from: (table: string) => new FakeQuery(store, table, () => `id_${++counter}`),
+    from: (table: string) =>
+      new FakeQuery(store, table, () => `id_${++counter.n}`, uniqueBy[table] ?? null),
   } as unknown as SupabaseClient;
 }
 

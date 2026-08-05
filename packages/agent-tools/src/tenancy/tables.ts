@@ -101,6 +101,7 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   whatsapp_groups: tenant(),
   whatsapp_messages: tenant(),
   whatsapp_ingest_windows: tenant(),
+  whatsapp_group_replies: tenant(),
 
   // --- Automation -----------------------------------------------------------
   scheduled_jobs: tenant(),

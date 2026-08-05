@@ -28,9 +28,16 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * exactly where it stopped — including across a reconnect — with no broker, no
  * missed-message window and no second connection to keep healthy.
  *
- * Every frame is a default `message` event carrying one row as JSON. The stream
- * ends with a named `closed` event, which is the client's signal to stop rather
- * than let EventSource reconnect forever.
+ * Every frame is a default `message` event carrying one row as JSON. Two named
+ * events punctuate them: `status`, whenever the run's own row is re-read, and
+ * `closed` at the end, which is the client's signal to stop rather than let
+ * EventSource reconnect forever.
+ *
+ * WHY `status` EXISTS. The log says what the run DID; it cannot say that the
+ * run has stopped doing anything, because silence has no frame. So the run row
+ * — its status and its `last_heartbeat_at` — rides along, and the console uses
+ * it to stop claiming "Ejecutando" over something that went quiet, without
+ * waiting for the sweep to make it official. See lib/orchestrator/liveness.ts.
  */
 export async function GET(
   req: NextRequest,
@@ -84,6 +91,11 @@ export async function GET(
       let tick = 0;
       let lastBeat = Date.now();
 
+      const sendStatus = (fresh: { status: string; lastHeartbeatAt: string | null }) =>
+        send(`event: status\ndata: ${JSON.stringify(fresh)}\n\n`);
+
+      sendStatus({ status: run.status, lastHeartbeatAt: run.lastHeartbeatAt });
+
       try {
         while (open) {
           const events = await loadEvents(db, id, cursor);
@@ -110,6 +122,10 @@ export async function GET(
             const fresh = await loadRun(db, id, user.organization.id);
             if (!fresh) break;
             status = fresh.status;
+            // Sent every time, not only on a change: the console is watching
+            // for SILENCE, and an unchanged heartbeat is exactly the news it
+            // needs in order to say so.
+            sendStatus({ status: fresh.status, lastHeartbeatAt: fresh.lastHeartbeatAt });
           }
 
           await sleep(POLL_MS);

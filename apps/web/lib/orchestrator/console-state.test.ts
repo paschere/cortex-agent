@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { type ConsoleState, applyEvent, initialConsoleState } from './console-state';
+import {
+  type ConsoleState,
+  applyEvent,
+  applyRunStatus,
+  initialConsoleState,
+} from './console-state';
 import type { EventView, RunView, TaskView } from './types';
 
 const run: RunView = {
@@ -11,6 +16,7 @@ const run: RunView = {
   startedAt: '2026-01-01T00:00:00.000Z',
   finishedAt: null,
   createdAt: '2026-01-01T00:00:00.000Z',
+  lastHeartbeatAt: '2026-01-01T00:00:00.000Z',
 };
 
 const task: TaskView = {
@@ -130,5 +136,31 @@ describe('applyEvent', () => {
     expect(state.run.summary).toBe('# Report');
     expect(state.run.totalTokens).toBe(4200);
     expect(state.run.finishedAt).not.toBeNull();
+  });
+});
+
+describe('applyRunStatus', () => {
+  it('carries the run row the log cannot describe: silence', () => {
+    const state = initialConsoleState(run, [task], []);
+    const next = applyRunStatus(state, {
+      status: 'running',
+      lastHeartbeatAt: '2026-01-01T00:05:00.000Z',
+    });
+
+    expect(next.run.lastHeartbeatAt).toBe('2026-01-01T00:05:00.000Z');
+  });
+
+  it('never walks a finished run back to a live one', () => {
+    const state = initialConsoleState({ ...run, status: 'completed' }, [task], []);
+    const next = applyRunStatus(state, { status: 'running', lastHeartbeatAt: null });
+
+    expect(next.run.status).toBe('completed');
+  });
+
+  it('accepts an ending the log has not delivered yet', () => {
+    const state = initialConsoleState(run, [task], []);
+    const next = applyRunStatus(state, { status: 'interrupted', lastHeartbeatAt: null });
+
+    expect(next.run.status).toBe('interrupted');
   });
 });

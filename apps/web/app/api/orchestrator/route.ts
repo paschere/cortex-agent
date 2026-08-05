@@ -1,16 +1,15 @@
-import { DEFAULT_CONCURRENCY, runOrchestration } from '@/lib/orchestrator/executor';
+import { inngest } from '@/lib/inngest';
+import { EVENT_RUN_STARTED } from '@/lib/orchestrator/contract';
+import { DEFAULT_CONCURRENCY } from '@/lib/orchestrator/executor';
 import { listRuns } from '@/lib/orchestrator/repository';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
-import { type NextRequest, NextResponse, after } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-// A full run is planner + several waves of sub-agents + synthesis. It has to
-// outlive the response, which `after()` keeps alive for the rest of this budget.
-export const maxDuration = 300;
 
 const Body = z.object({
   objective: z.string().trim().min(10).max(4000),
@@ -18,7 +17,21 @@ const Body = z.object({
   concurrency: z.number().int().min(1).max(8).optional(),
 });
 
-/** Launch a run. Returns the id straight away — the work happens after the response. */
+/**
+ * Launch a run. Returns the id straight away — the work happens in Inngest.
+ *
+ * THIS ROUTE USED TO EXECUTE THE RUN, inside `after()`, under
+ * `maxDuration = 300`. That tied a multi-agent orchestration to the lifetime of
+ * one serverless invocation, which gave it two endings nobody wrote a terminal
+ * state for: it outgrew five minutes (normal), or a deploy replaced the
+ * instance (six deploys in an afternoon). Either way the row said `running`
+ * for ever.
+ *
+ * Now the route does the two things a request is actually good at — write the
+ * row and hand the work off — and `orchestrator/run.started` carries the
+ * workspace and the person, because the function that picks it up has no
+ * session to ask. See inngest/functions/orchestrator-run.ts.
+ */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const user = await requireSession();
 
@@ -34,10 +47,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data, error } = await db
     .from('orchestration_runs')
     .insert({
-      organization_id: user.organization.id,
       user_id: user.id,
       objective: parsed.data.objective,
       status: 'planning',
+      // The clock the sweep reads starts here, not when the executor picks the
+      // run up: a run that never reaches Inngest at all has to be closable too.
+      last_heartbeat_at: new Date().toISOString(),
     })
     .select('id')
     .single();
@@ -51,32 +66,39 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const runId = data.id as string;
 
-  // Fire-and-forget on purpose: the console is driven by the event log, not by
-  // this response, so blocking here would only make the page wait for a plan it
-  // is about to receive over SSE anyway. `after()` (rather than a bare floating
-  // promise) is what stops the serverless runtime freezing the invocation the
-  // moment the response is flushed.
-  //
-  // Trade-off, deliberate: a run lives inside one function invocation, so it is
-  // bounded by `maxDuration` and does not survive a redeploy. Moving it onto
-  // Inngest (see inngest/functions/schedule-run.ts) is the upgrade path if runs
-  // start outgrowing five minutes.
-  after(async () => {
-    try {
-      await runOrchestration({
+  try {
+    await inngest.send({
+      name: EVENT_RUN_STARTED,
+      data: {
         runId,
-        userId: user.id,
         organizationId: user.organization.id,
+        userId: user.id,
         objective: parsed.data.objective,
         concurrency: parsed.data.concurrency ?? DEFAULT_CONCURRENCY,
-      });
-    } catch (err) {
-      logger.error('orchestrator: run crashed outside its own handler', {
-        runId,
-        error: (err as Error).message,
-      });
-    }
-  });
+      },
+    });
+  } catch (err) {
+    // The row exists but nothing will ever pick it up. Close it here rather
+    // than leave a run in `planning` for the sweep to bury fifteen minutes from
+    // now — this is the one failure the request itself can see and explain.
+    const message = (err as Error).message;
+    logger.error('orchestrator: could not queue the run', { runId, error: message });
+    await db
+      .from('orchestration_runs')
+      .update({
+        status: 'failed',
+        summary:
+          '**No se pudo encolar esta ejecución.**\n\nEl objetivo quedó guardado, pero la cola ' +
+          'de trabajo en segundo plano no respondió, así que ningún subagente llegó a arrancar. ' +
+          'Vuelve a lanzarlo.',
+        finished_at: new Date().toISOString(),
+      })
+      .eq('id', runId);
+    return NextResponse.json(
+      { error: 'No se pudo encolar la ejecución. Vuelve a intentarlo.' },
+      { status: 502 },
+    );
+  }
 
   return NextResponse.json({ runId }, { status: 201 });
 }

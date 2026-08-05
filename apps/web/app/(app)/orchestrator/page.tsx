@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { DEFAULT_CONCURRENCY } from '@/lib/orchestrator/executor';
+import { isQuiet, silenceMs } from '@/lib/orchestrator/liveness';
 import { listRuns } from '@/lib/orchestrator/repository';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -28,7 +29,16 @@ export default async function OrchestratorPage() {
   const runs = await listRuns(getOrgScopedClient(user.organization.id), user.organization.id);
 
   const now = Date.now();
-  const live = runs.filter((r) => r.status === 'planning' || r.status === 'running').length;
+  // "En vivo" means demonstrably alive, so a run that has gone quiet does not
+  // count towards it — the figure would otherwise keep asserting the very thing
+  // the pill beside it refuses to.
+  const working = runs.filter(
+    (r) => (r.status === 'planning' || r.status === 'running') && !isQuiet(r, now),
+  );
+  const live = working.length;
+  const quiet = runs.filter(
+    (r) => (r.status === 'planning' || r.status === 'running') && isQuiet(r, now),
+  ).length;
   const completed = runs.filter((r) => r.status === 'completed');
   const durations = completed
     .map((r) => elapsedMs(r.startedAt ?? r.createdAt, r.finishedAt, now))
@@ -42,7 +52,9 @@ export default async function OrchestratorPage() {
   const stats: Array<{ label: string; value: string; live?: boolean }> = [
     { label: 'Ejecuciones', value: String(runs.length) },
     { label: 'En vivo', value: String(live), live: live > 0 },
-    { label: 'Subagentes lanzados', value: String(subAgents) },
+    quiet > 0
+      ? { label: 'Sin señales', value: String(quiet) }
+      : { label: 'Subagentes lanzados', value: String(subAgents) },
     { label: 'Duración mediana', value: formatDuration(median) },
   ];
 
@@ -124,8 +136,12 @@ export default async function OrchestratorPage() {
                         )}
                       </div>
                     </div>
+                    {/* The history page tells the same truth as the console:
+                        a run that has gone quiet is not described as working,
+                        even before the sweep gets to it. */}
                     <RunStatusPill
                       status={run.status}
+                      quietMs={silenceMs(run, now)}
                       className="shrink-0 self-start sm:self-auto"
                     />
                   </Link>
