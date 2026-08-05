@@ -127,16 +127,22 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   ba_user: shared(
     'Identity. One row per human across every workspace they belong to; the per-workspace directory row is public.users.',
   ),
-  ba_session: shared('Identity. Sessions belong to a person, and name the workspace they are acting in.'),
+  ba_session: shared(
+    'Identity. Sessions belong to a person, and name the workspace they are acting in.',
+  ),
   ba_account: shared('Identity. The SSO provider link for a person.'),
   ba_verification: shared('Identity. Short-lived verification tokens.'),
   ba_two_factor: shared('Identity. TOTP secrets belong to a person, not a workspace.'),
-  ba_organization: shared('The workspaces themselves. Scoping this by workspace would be circular.'),
+  ba_organization: shared(
+    'The workspaces themselves. Scoping this by workspace would be circular.',
+  ),
   ba_member: shared('Which people belong to which workspace. This table IS the tenancy graph.'),
   ba_invitation: shared(
     'Pending invitations. Carries its own organizationId and is only ever read through better-auth, which checks the inviter belongs to it.',
   ),
-  oauth_clients: shared('Registered MCP OAuth clients. Client registration is install-wide and holds no tenant data.'),
+  oauth_clients: shared(
+    'Registered MCP OAuth clients. Client registration is install-wide and holds no tenant data.',
+  ),
   oauth_authorization_codes: shared(
     'Single-use handshake state keyed by a hash. Carries a user_id, and the workspace is resolved from that directory row the moment the code is exchanged.',
   ),
@@ -145,17 +151,14 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   ),
   oauth_refresh_tokens: shared('Bearer tokens keyed by a hash. See oauth_access_tokens.'),
   tool_embeddings: shared(
-    'Embeddings of the product\'s own tool descriptions, keyed by tool id. Product content, identical for every workspace; which tools a person may call is decided before ranking.',
+    "Embeddings of the product's own tool descriptions, keyed by tool id. Product content, identical for every workspace; which tools a person may call is decided before ranking.",
   ),
 };
 
 export class UnclassifiedTableError extends Error {
   constructor(table: string) {
     super(
-      `Table "${table}" has no tenancy classification. Add it to TABLE_TENANCY in ` +
-        'packages/agent-tools/src/tenancy/tables.ts: `tenant()` if it holds business data ' +
-        '(and give it an organization_id column in a migration), `derived(parent, key)` if it ' +
-        'is a child of a scoped table, or `shared(why)` if it genuinely is not tenant data.',
+      `Table "${table}" has no tenancy classification. Add it to TABLE_TENANCY in packages/agent-tools/src/tenancy/tables.ts: \`tenant()\` if it holds business data (and give it an organization_id column in a migration), \`derived(parent, key)\` if it is a child of a scoped table, or \`shared(why)\` if it genuinely is not tenant data.`,
     );
     this.name = 'UnclassifiedTableError';
   }
@@ -204,11 +207,7 @@ export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
 export class UnclassifiedFunctionError extends Error {
   constructor(fn: string) {
     super(
-      `Database function "${fn}" has no tenancy classification. Add it to RPC_TENANCY in ` +
-        'packages/agent-tools/src/tenancy/tables.ts and say how it is scoped: ' +
-        "'person' (takes p_user_id, which names the workspace), 'organization' (takes " +
-        "p_organization_id, which the scoped client fills in), or 'maintenance' (touches no " +
-        'tenant-visible data).',
+      `Database function "${fn}" has no tenancy classification. Add it to RPC_TENANCY in packages/agent-tools/src/tenancy/tables.ts and say how it is scoped: 'person' (takes p_user_id, which names the workspace), 'organization' (takes p_organization_id, which the scoped client fills in), or 'maintenance' (touches no tenant-visible data).`,
     );
     this.name = 'UnclassifiedFunctionError';
   }

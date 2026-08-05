@@ -1,9 +1,9 @@
-import "server-only";
-import { headers } from "next/headers";
-import { auth } from "./auth";
-import { getSupabaseServiceClient } from "./supabase/service";
-import { resolveActiveOrganization } from "./organization";
-import { UnauthorizedError, type Role, type SessionUser } from "@cortex/core";
+import 'server-only';
+import { type Role, type SessionUser, UnauthorizedError } from '@cortex/core';
+import { headers } from 'next/headers';
+import { auth } from './auth';
+import { resolveActiveOrganization } from './organization';
+import { getSupabaseServiceClient } from './supabase/service';
 
 /**
  * Who is asking, and which workspace they are asking inside.
@@ -29,9 +29,9 @@ export async function requireSession(): Promise<SessionUser> {
   // ships (`ALLOWED_EMAIL_DOMAIN=`) is not nullish, so `allowed` became '' and
   // no address could ever match it — every user, including the owner, was
   // rejected. Trim + truthiness check, mirroring the guard in lib/auth.ts.
-  const allowed = (process.env.ALLOWED_EMAIL_DOMAIN ?? "").trim().toLowerCase();
+  const allowed = (process.env.ALLOWED_EMAIL_DOMAIN ?? '').trim().toLowerCase();
   if (allowed) {
-    const emailDomain = session.user.email.split("@")[1]?.toLowerCase();
+    const emailDomain = session.user.email.split('@')[1]?.toLowerCase();
     if (emailDomain !== allowed) throw new UnauthorizedError();
   }
 
@@ -40,8 +40,7 @@ export async function requireSession(): Promise<SessionUser> {
   // a tenant on its next request instead of rendering a workspace-less app.
   const organization = await resolveActiveOrganization(
     session.user.id,
-    (session.session as { activeOrganizationId?: string | null } | undefined)
-      ?.activeOrganizationId,
+    (session.session as { activeOrganizationId?: string | null } | undefined)?.activeOrganizationId,
     session.user.name ?? null,
     session.user.email,
   );
@@ -50,10 +49,10 @@ export async function requireSession(): Promise<SessionUser> {
   const findRow = async () =>
     (
       await sb
-        .from("users")
-        .select("id,email,name,role")
-        .eq("organization_id", organization.id)
-        .eq("email", session.user.email)
+        .from('users')
+        .select('id,email,name,role')
+        .eq('organization_id', organization.id)
+        .eq('email', session.user.email)
         .maybeSingle()
     ).data;
 
@@ -70,17 +69,15 @@ export async function requireSession(): Promise<SessionUser> {
     // them an admin and everybody after them a permanent member, in workspaces
     // they own.
     const { data: inserted } = await sb
-      .from("users")
+      .from('users')
       .insert({
         organization_id: organization.id,
         email: session.user.email,
         name: session.user.name ?? null,
         role:
-          organization.role === "owner" || organization.role === "admin"
-            ? "org_admin"
-            : "member",
+          organization.role === 'owner' || organization.role === 'admin' ? 'org_admin' : 'member',
       })
-      .select("id,email,name,role")
+      .select('id,email,name,role')
       .single();
 
     // A fresh account fires several requests at once and every one of them

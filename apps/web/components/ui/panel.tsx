@@ -134,8 +134,6 @@ export function ProgressRow({
 /** Tiny uppercase section label. */
 export function Eyebrow({ children }: { children: ReactNode }) {
   return (
-    <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
-      {children}
-    </div>
+    <div className="field-label">{children}</div>
   );
 }

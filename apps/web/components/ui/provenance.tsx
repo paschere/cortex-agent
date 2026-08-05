@@ -6,8 +6,8 @@ import { clsx } from 'clsx';
  *
  * Cortex's whole claim is that nothing it says is unattributed: every figure
  * carries the system it was read from and the moment it was read. This is that
- * claim made visible — a stamp applied to the page, the way a customs officer
- * marks a form as checked.
+ * claim made visible — a soft capsule beside the value, because a claim that is
+ * actually trustworthy does not need to shout.
  *
  * Use it anywhere the product asserts a fact it did not get from the person
  * reading it: a SIMIT lookup, a bank balance, a quoted sentence from a call. If

@@ -76,7 +76,7 @@ const ALLOWED = new Map<string, string>([
   ],
   [
     'inngest/functions/memory-derive.ts',
-    'Cron. Scans yesterday\'s activity across the install; the workspace rides on the per-person event.',
+    "Cron. Scans yesterday's activity across the install; the workspace rides on the per-person event.",
   ],
   [
     'inngest/functions/reindex-embeddings.ts',
@@ -142,7 +142,9 @@ describe('unscoped database access', () => {
 
   it('gives a real reason for each exemption', () => {
     for (const [file, reason] of ALLOWED) {
-      expect(reason.length, `${file} needs a reason somebody can disagree with`).toBeGreaterThan(40);
+      expect(reason.length, `${file} needs a reason somebody can disagree with`).toBeGreaterThan(
+        40,
+      );
     }
   });
 });

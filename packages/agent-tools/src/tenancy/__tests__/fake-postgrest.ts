@@ -313,7 +313,10 @@ export interface FakeSupabase {
 
 type RpcImpl = (args: Record<string, unknown>, tables: Tables) => unknown;
 
-export function createFakeSupabase(tables: Tables, rpcs: Record<string, RpcImpl> = {}): FakeSupabase {
+export function createFakeSupabase(
+  tables: Tables,
+  rpcs: Record<string, RpcImpl> = {},
+): FakeSupabase {
   const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
   const client = {
     from: (table: string) => new Query(tables, table),

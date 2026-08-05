@@ -155,7 +155,12 @@ function fixture(): Tables {
     ],
     conversations: [
       { id: 'cv-acme', organization_id: ACME, user_id: ANA, title: 'Propuesta para el cliente' },
-      { id: 'cv-globex', organization_id: GLOBEX, user_id: CARLA, title: 'Propuesta para el cliente' },
+      {
+        id: 'cv-globex',
+        organization_id: GLOBEX,
+        user_id: CARLA,
+        title: 'Propuesta para el cliente',
+      },
     ],
     messages: [
       {
@@ -174,7 +179,13 @@ function fixture(): Tables {
       },
     ],
     pipelines: [
-      { id: 'p-acme', organization_id: ACME, slug: 'onboarding', name: 'Onboarding', archived: false },
+      {
+        id: 'p-acme',
+        organization_id: ACME,
+        slug: 'onboarding',
+        name: 'Onboarding',
+        archived: false,
+      },
       {
         id: 'p-globex',
         organization_id: GLOBEX,
@@ -218,7 +229,13 @@ function fixture(): Tables {
       { id: 'v-globex', organization_id: GLOBEX, user_id: CARLA, plate: 'XYZ789', archived: false },
     ],
     vehicle_fines: [
-      { id: 'f-acme', organization_id: ACME, vehicle_id: 'v-acme', code: 'C14', amount_cop: 500000 },
+      {
+        id: 'f-acme',
+        organization_id: ACME,
+        vehicle_id: 'v-acme',
+        code: 'C14',
+        amount_cop: 500000,
+      },
       {
         id: 'f-globex',
         organization_id: GLOBEX,
@@ -324,7 +341,9 @@ function stubEmbedding() {
     'fetch',
     vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }] }),
+      json: async () => ({
+        data: [{ embedding: Array.from({ length: 1024 }, () => 0.1), index: 0 }],
+      }),
       text: async () => '',
     }),
   );
@@ -403,7 +422,9 @@ describe('Brain Knowledge', () => {
     expect(acme.map((s) => s.id).sort()).toEqual([SPACE_ACME_GENERAL, SPACE_ACME_ANA].sort());
 
     const globex = await listVisibleSpaces(w.globex, CARLA);
-    expect(globex.map((s) => s.id).sort()).toEqual([SPACE_GLOBEX_GENERAL, SPACE_GLOBEX_CARLA].sort());
+    expect(globex.map((s) => s.id).sort()).toEqual(
+      [SPACE_GLOBEX_GENERAL, SPACE_GLOBEX_CARLA].sort(),
+    );
   });
 
   it('a colleague sees the company space but not a personal one', async () => {

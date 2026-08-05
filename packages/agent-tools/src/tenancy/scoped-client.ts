@@ -1,10 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import {
-  ORGANIZATION_COLUMN,
-  type RpcTenancy,
-  rpcTenancyOf,
-  tenancyOf,
-} from './tables';
+import { ORGANIZATION_COLUMN, type RpcTenancy, rpcTenancyOf, tenancyOf } from './tables';
 
 /**
  * The workspace-scoped database handle. This is the only way the product is
@@ -65,10 +60,7 @@ const COLUMN_FILTERS = new Set([
 export class DerivedScopeError extends Error {
   constructor(table: string, parentKey: string, parent: string) {
     super(
-      `Query on "${table}" does not constrain "${parentKey}". ${table} has no organization_id — ` +
-        `it inherits its workspace from ${parent} through ${parentKey} (migration 0064 § 12), so a ` +
-        'query that does not name the parent would read across every tenant. Filter by ' +
-        `${parentKey}, or give ${table} its own organization_id and reclassify it as tenant().`,
+      `Query on "${table}" does not constrain "${parentKey}". ${table} has no organization_id — it inherits its workspace from ${parent} through ${parentKey} (migration 0064 § 12), so a query that does not name the parent would read across every tenant. Filter by ${parentKey}, or give ${table} its own organization_id and reclassify it as tenant().`,
     );
     this.name = 'DerivedScopeError';
   }
@@ -77,9 +69,7 @@ export class DerivedScopeError extends Error {
 export class MissingOrganizationError extends Error {
   constructor(what: string) {
     super(
-      `${what} without a workspace. A scoped database handle needs the id of the workspace the ` +
-        'request is acting in (SessionUser.organization.id, or the organization_id of the row a ' +
-        'background job is working on). Refusing to run unscoped.',
+      `${what} without a workspace. A scoped database handle needs the id of the workspace the request is acting in (SessionUser.organization.id, or the organization_id of the row a background job is working on). Refusing to run unscoped.`,
     );
     this.name = 'MissingOrganizationError';
   }
@@ -185,7 +175,12 @@ function guardDerived(builder: Any, table: string, parentKey: string, parent: st
   return wrap(builder);
 }
 
-function assertParentOnRows(value: unknown, table: string, parentKey: string, parent: string): void {
+function assertParentOnRows(
+  value: unknown,
+  table: string,
+  parentKey: string,
+  parent: string,
+): void {
   const rows = Array.isArray(value) ? value : [value];
   for (const row of rows) {
     if (!row || typeof row !== 'object' || (row as AnyRecord)[parentKey] == null) {
