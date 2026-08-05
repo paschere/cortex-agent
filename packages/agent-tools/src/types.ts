@@ -15,10 +15,25 @@ export interface IntegrationsClient {
 export type ToolSurface = 'web' | 'mcp' | 'schedule';
 
 export interface ToolContext {
+  /**
+   * The workspace this call acts in. Required, and never derived inside a tool:
+   * an interactive turn takes it from the session, an unattended one takes it
+   * from the row of the job it is running. `db` is already pinned to it (see
+   * packages/agent-tools/src/tenancy/scoped-client.ts) so a tool never has to
+   * filter by it by hand; it is on the context for the few places that must
+   * STAMP it — audit rows, security events, and anything that hands work to
+   * another surface.
+   */
+  organizationId: string;
   userId: UUID;
   agentId: UUID;
   conversationId?: UUID;
   surface?: ToolSurface;
+  /**
+   * Workspace-scoped. Reads are filtered and writes are stamped with
+   * `organization_id` automatically; a raw service-role client must never be
+   * put here.
+   */
   db: SupabaseClient;
   integrations: IntegrationsClient;
   logger: Logger;

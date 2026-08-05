@@ -945,250 +945,57 @@ create index if not exists presentation_files_org_idx on public.presentation_fil
 -- ===========================================================================
 -- 11. Retrieval learns about workspaces
 -- ===========================================================================
--- 0049 moved "which spaces may this person see" into the database so no caller
--- could get it wrong, and 0057/0058/0062 built on it. That rule had one blind
--- spot it could not have known about: `scope = 'global'` meant every global
--- space IN THE INSTALL. With two companies in one database that is a
--- cross-tenant read on the most sensitive surface there is — one company's
--- Cortex answering from another company's documents, with a citation.
+-- 0049 moved "which spaces may this person see" into the database so that no
+-- caller could get it wrong, and everything that retrieves from Brain Knowledge
+-- has gone through `kb_visible_space_ids` ever since: `kb_search_scoped`
+-- (0049/0057/0058), `kb_brain_graph` (0062), `kb_conflict_candidates`. That rule
+-- had one blind spot it could not have known about — `scope = 'global'` meant
+-- every global space IN THE INSTALL. With two companies in one database that is
+-- a cross-tenant read on the most sensitive surface the product has: one
+-- company's Cortex answering out of another company's documents, with a
+-- citation.
 --
--- All three functions now take the workspace as their FIRST argument, with no
--- default. Adding an optional parameter would have been the compatible choice
--- and the wrong one: every existing call would have kept compiling and kept
--- returning the whole install. A required first argument breaks every call site
--- loudly, which is the only way a caller gets audited. The old signatures are
--- dropped for the same reason 0049 dropped `kb_hybrid_search`.
+-- THE FIX GOES INSIDE THE FUNCTION, AND ITS SIGNATURE DOES NOT CHANGE. The
+-- tempting move was to add `p_organization_id` as a required first argument, so
+-- every caller has to state the tenant. It is the wrong move here, for the
+-- reason this whole change exists: an argument is a thing a caller can get
+-- wrong, and every future function that wants to retrieve would have to
+-- remember to thread it through. Since § 3 made `public.users` per-workspace,
+-- the person IS the tenant — `p_user_id` already determines the workspace
+-- unambiguously — so the function derives it and there is nothing left to pass,
+-- forget, or pass wrongly.
 --
--- The bodies are otherwise unchanged from 0058 (search) and 0062 (graph),
--- including the 1024-dimension Voyage vectors from 0057 and the null-embedding
--- degradation, so ranking does not move on the day tenancy ships.
+-- The practical dividend is that every existing caller, in SQL and in
+-- TypeScript, becomes tenant-safe without being edited, and so does the next one
+-- somebody writes, including migrations that redefine `kb_search_scoped` around
+-- it without ever thinking about tenancy.
 
-drop function if exists public.kb_search_scoped(uuid, vector, text, int, uuid[]);
-drop function if exists public.kb_brain_graph(uuid, uuid[], text[], double precision, int, int);
-drop function if exists public.kb_visible_space_ids(uuid);
-
-create function public.kb_visible_space_ids(
-  p_organization_id text,
-  p_user_id uuid
-)
+create or replace function public.kb_visible_space_ids(p_user_id uuid)
 returns table (space_id uuid)
 language sql
 stable
 as $$
   select c.id
   from public.kb_collections c
-  where p_organization_id is not null
-    and p_organization_id <> ''
-    and p_user_id is not null
-    and c.organization_id = p_organization_id
+  join public.users u on u.id = p_user_id
+  where p_user_id is not null
+    and c.organization_id = u.organization_id
     and (
       c.scope = 'global'
       or (c.scope = 'user' and c.scope_id = p_user_id)
     )
 $$;
 
-comment on function public.kb_visible_space_ids(text, uuid) is
-  'The only definition of "which spaces may this person retrieve from": every global space OF THEIR WORKSPACE, plus their own personal ones. Both arguments are required, and a null or empty one yields nothing — a caller that has lost track of either the tenant or the person fails closed. There is still no admin branch: an org admin publishes global spaces, which is not the same as reading everyone''s notes.';
+comment on function public.kb_visible_space_ids(uuid) is
+  'The only definition of "which spaces may this person retrieve from": every global space OF THEIR WORKSPACE, plus their own personal ones. The workspace is read from public.users rather than taken as an argument — a directory row belongs to exactly one workspace (migration 0064 § 3), so there is no tenant to pass and therefore none to get wrong. A null or unknown user id joins to nothing and yields nothing, so a caller that has lost track of who it is asking for fails closed. There is still no admin branch: an org admin publishes global spaces, which is not the same as reading everyone''s notes.';
 
-create function public.kb_search_scoped(
-  p_organization_id text,
-  p_user_id uuid,
-  p_query_embedding vector(1024),
-  p_query_text text,
-  p_limit int default 8,
-  p_space_ids uuid[] default null
-)
-returns table (
-  document_id uuid,
-  document_title text,
-  space_id uuid,
-  space_name text,
-  space_scope kb_scope,
-  chunk_index int,
-  content text,
-  score double precision,
-  metadata jsonb
-)
-language sql
-stable
-as $$
-  with targets as (
-    -- The intersection is the whole guarantee: p_space_ids filters this set,
-    -- it does not define it.
-    select v.space_id as id
-    from public.kb_visible_space_ids(p_organization_id, p_user_id) v
-    where p_space_ids is null or v.space_id = any(p_space_ids)
-  ),
-  vec as (
-    select ch.document_id as doc_id, ch.chunk_index as idx, ch.content as body,
-           ch.metadata as meta,
-           1 - (ch.embedding <=> p_query_embedding) as vec_score
-    from public.kb_chunks ch
-    join public.kb_documents d on d.id = ch.document_id
-    -- A null embedding means the caller could not embed the query at all (no
-    -- provider key, provider down). Skipping the semantic arm entirely gives
-    -- keyword-only results, which is a degraded answer; letting the null
-    -- through would instead pull p_limit*4 arbitrary chunks at score zero and
-    -- present them as if they had been ranked.
-    where p_query_embedding is not null
-      and ch.embedding is not null
-      and d.collection_id in (select id from targets)
-    order by ch.embedding <=> p_query_embedding
-    limit p_limit * 4
-  ),
-  fts as (
-    select ch.document_id as doc_id, ch.chunk_index as idx, ch.content as body,
-           ch.metadata as meta,
-           ts_rank(to_tsvector('simple', ch.content),
-                   plainto_tsquery('simple', p_query_text)) as fts_score
-    from public.kb_chunks ch
-    join public.kb_documents d on d.id = ch.document_id
-    where d.collection_id in (select id from targets)
-      and to_tsvector('simple', ch.content) @@ plainto_tsquery('simple', p_query_text)
-    order by fts_score desc
-    limit p_limit * 4
-  ),
-  combined as (
-    select coalesce(v.doc_id, f.doc_id) as doc_id,
-           coalesce(v.idx, f.idx) as idx,
-           coalesce(v.body, f.body) as body,
-           coalesce(v.meta, f.meta) as meta,
-           coalesce(v.vec_score, 0) * 0.7 + coalesce(f.fts_score, 0) * 0.3 as blended
-    from vec v
-    full outer join fts f on v.doc_id = f.doc_id and v.idx = f.idx
-  )
-  select cb.doc_id,
-         d.title,
-         s.id,
-         s.name,
-         s.scope,
-         cb.idx,
-         cb.body,
-         cb.blended,
-         coalesce(cb.meta, '{}'::jsonb)
-  from combined cb
-  join public.kb_documents d on d.id = cb.doc_id
-  join public.kb_collections s on s.id = d.collection_id
-  order by cb.blended desc
-  limit p_limit;
-$$;
-
-comment on function public.kb_search_scoped(text, uuid, vector, text, int, uuid[]) is
-  'Hybrid Brain Knowledge search restricted to what p_user_id may see INSIDE p_organization_id. Query embeddings are voyage-3-large at 1024 dims, produced with input_type "query"; passing a null embedding degrades the call to keyword-only rather than failing it. p_space_ids narrows the result to a subset of the visible spaces and can never widen it. Returns each chunk''s metadata so a hit from a recording can be cited with its speaker and offset.';
-
-create function public.kb_brain_graph(
-  p_organization_id text,
-  p_user_id uuid,
-  p_space_ids uuid[] default null,
-  p_sources text[] default null,
-  p_min_similarity double precision default 0.6,
-  p_max_documents int default 60,
-  p_max_edges int default 400
-)
-returns jsonb
-language sql
-stable
-as $$
-  with targets as (
-    -- The intersection, never the union: p_space_ids narrows what this person
-    -- can already see and can never widen it.
-    select v.space_id as id
-    from public.kb_visible_space_ids(p_organization_id, p_user_id) v
-    where p_space_ids is null or v.space_id = any(p_space_ids)
-  ),
-  labelled as (
-    -- One name for "where did this come from", matching the four the interface
-    -- draws. `source` and `media_kind` disagree on purpose in one case: an
-    -- uploaded audio file has source 'audio', and it is a recording to a person
-    -- even though nobody recorded it here.
-    select d.id,
-           d.title,
-           d.collection_id,
-           d.created_at,
-           coalesce(d.speakers, '{}'::text[]) as speakers,
-           d.duration_seconds,
-           case
-             when d.source = 'gdrive' then 'drive'
-             when d.source = 'meeting' or d.media_kind = 'meeting' then 'meeting'
-             when d.source in ('recording', 'audio') or d.media_kind = 'audio' then 'record'
-             else 'upload'
-           end as bucket
-    from public.kb_documents d
-    where d.collection_id in (select id from targets)
-      -- Only what is actually retrievable. A document still being indexed has
-      -- no vectors, so it has no relationships to show — drawing it as an
-      -- unconnected dot would read as "related to nothing", which is a lie
-      -- about a document that simply has not been read yet.
-      and d.status = 'ready'
-  ),
-  docs as (
-    select *
-    from labelled
-    where p_sources is null or bucket = any(p_sources)
-    order by created_at desc
-    limit greatest(p_max_documents, 0)
-  ),
-  centroids as (
-    select ch.document_id as id,
-           count(*)::int as chunks,
-           avg(ch.embedding)::vector(1024) as centroid
-    from public.kb_chunks ch
-    join docs on docs.id = ch.document_id
-    where ch.embedding is not null
-    group by ch.document_id
-  ),
-  edges as (
-    select a.id as a,
-           b.id as b,
-           1 - (a.centroid <=> b.centroid) as similarity
-    from centroids a
-    join centroids b on a.id < b.id
-    where 1 - (a.centroid <=> b.centroid) >= p_min_similarity
-    order by similarity desc
-    limit greatest(p_max_edges, 0)
-  )
-  select jsonb_build_object(
-    'nodes', coalesce((
-      select jsonb_agg(jsonb_build_object(
-               'id', d.id,
-               'title', d.title,
-               'source', d.bucket,
-               'speakers', to_jsonb(d.speakers),
-               'durationSeconds', d.duration_seconds,
-               'chunks', coalesce(c.chunks, 0)
-             ) order by coalesce(c.chunks, 0) desc, d.created_at desc)
-      from docs d left join centroids c on c.id = d.id
-    ), '[]'::jsonb),
-    'edges', coalesce((
-      select jsonb_agg(jsonb_build_object(
-               'a', e.a,
-               'b', e.b,
-               'score', round(e.similarity::numeric, 3)
-             ) order by e.similarity desc)
-      from edges e
-    ), '[]'::jsonb),
-    -- What was left out, so the interface can say "the newest 60 of 214"
-    -- instead of presenting a slice as the whole.
-    'considered', (select count(*)::int from docs),
-    'total', (select count(*)::int from labelled where p_sources is null or bucket = any(p_sources))
-  );
-$$;
-
-comment on function public.kb_brain_graph(text, uuid, uuid[], text[], double precision, int, int) is
-  'The relationship graph of what p_user_id can see inside p_organization_id: nodes are indexed documents, edges are pairs whose chunk-centroid cosine similarity reaches p_min_similarity. Bounded by p_max_documents (newest first) and p_max_edges because pair similarity is quadratic. Returns `considered` and `total` so a caller can say it is showing a slice.';
-
--- PostgREST publishes every function in `public` under /rpc/, and these take the
--- workspace and the person as plain arguments, so anything holding an anon or
--- authenticated key could otherwise ask them for another company's notes.
-revoke all on function public.kb_visible_space_ids(text, uuid) from public, anon, authenticated;
-revoke all on function public.kb_search_scoped(text, uuid, vector, text, int, uuid[]) from public, anon, authenticated;
-revoke all on function public.kb_brain_graph(text, uuid, uuid[], text[], double precision, int, int) from public, anon, authenticated;
+-- PostgREST publishes every function in `public` under /rpc/, and this one takes
+-- a user id as a plain argument, so anything holding an anon or authenticated
+-- key could otherwise ask it directly.
+revoke all on function public.kb_visible_space_ids(uuid) from public, anon, authenticated;
 revoke all on function public.provision_organization_agents(text) from public, anon, authenticated;
-grant execute on function public.kb_visible_space_ids(text, uuid) to service_role;
-grant execute on function public.kb_search_scoped(text, uuid, vector, text, int, uuid[]) to service_role;
-grant execute on function public.kb_brain_graph(text, uuid, uuid[], text[], double precision, int, int) to service_role;
+grant execute on function public.kb_visible_space_ids(uuid) to service_role;
 grant execute on function public.provision_organization_agents(text) to service_role;
-
 
 -- ===========================================================================
 -- 12. The four tables that inherit instead of carrying the column
