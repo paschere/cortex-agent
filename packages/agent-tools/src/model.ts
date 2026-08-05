@@ -5,12 +5,12 @@ import { createAnthropic } from '@ai-sdk/anthropic';
  * the provider, so both happen in one custom `fetch`.
  *
  * SAMPLING PARAMETERS. AI SDK 4 sends `temperature` whether or not a caller
- * asked for it, and Claude Opus 5 rejects `temperature` / `top_p` / `top_k`
- * outright. Every call came back "`temperature` is deprecated for this model",
- * which the chat stream surfaced as a bare "An error occurred."
+ * asked for it, and the Claude 5 family rejects `temperature` / `top_p` /
+ * `top_k` outright. Every call came back "`temperature` is deprecated for this
+ * model", which the chat stream surfaced as a bare "An error occurred."
  *
- * THINKING. Opus 5 thinks by default but returns the reasoning empty unless the
- * request asks for `display: "summarized"`. The pinned provider predates that:
+ * THINKING. These models think by default but return the reasoning empty unless
+ * the request asks for `display: "summarized"`. The pinned provider predates it:
  * it only knows `thinking: {type: "enabled", budgetTokens}` and *requires* the
  * budget — which Opus 5 rejects with a 400, budgets having been replaced by
  * effort. So the provider cannot ask for what we need, and rewriting the body
@@ -39,13 +39,26 @@ function bodyRewriter(mode: ThinkingMode) {
     body.top_k = undefined;
     for (const key of ['temperature', 'top_p', 'top_k']) delete body[key];
 
-    body.thinking =
-      mode === 'summarized'
-        ? { type: 'adaptive', display: 'summarized' }
-        : // Disabled is only legal at effort `high` or below, which is the
-          // default. Short shape-constrained calls (titles, classification) get
-          // it so the token budget goes to the answer instead of the reasoning.
-          { type: 'disabled' };
+    if (mode === 'summarized') {
+      body.thinking = { type: 'adaptive', display: 'summarized' };
+      // `adaptive` decides for itself whether a turn is worth thinking about,
+      // and on Sonnet 5 the answer is almost always no: measured against the
+      // live API, an ordinary operational question ("three trucks, which do I
+      // handle first and why") returned 0 thinking tokens at the default effort
+      // and again at `high`, while Opus 5 spent 858 on the same prompt. The
+      // reasoning panel would simply have gone quiet, which is the feature this
+      // product was explicitly asked to keep.
+      //
+      // `max` is what actually moves it — the same prompt then spends ~2 355
+      // tokens. So the effort is not a performance dial here, it is the switch
+      // that decides whether the user sees Cortex think at all.
+      body.output_config = { ...(body.output_config as object), effort: 'max' };
+    } else {
+      // Short shape-constrained calls (titles, classification) skip reasoning so
+      // the budget goes to the answer. `disabled` is only legal at effort `high`
+      // or below, so this branch must not set `max`.
+      body.thinking = { type: 'disabled' };
+    }
 
     return fetch(input, { ...init, body: JSON.stringify(body) });
   };
@@ -67,11 +80,26 @@ const quietProvider = createAnthropic({ fetch: bodyRewriter('off') });
  * migration rather than a config change.
  */
 
-/** Conversation, tool calling, long-horizon agent work. */
-export const CHAT_MODEL = 'claude-opus-5';
+/**
+ * Conversation, tool calling, long-horizon agent work.
+ *
+ * Sonnet 5 rather than Opus 5: same 1M context, same adaptive thinking, and
+ * roughly half the cost on a product whose whole shape is many tool calls per
+ * turn. The reasoning stays visible — `adaptive` + `summarized` is the same
+ * contract on both, so nothing above this line changes.
+ */
+export const CHAT_MODEL = 'claude-sonnet-5';
 
-/** Short mechanical calls: titles, classification, ranking passes. */
-export const UTILITY_MODEL = 'claude-opus-5';
+/**
+ * Short mechanical calls: titles, classification, ranking passes.
+ *
+ * Deliberately the same model rather than something cheaper still. One of these
+ * passes ranks which tools the agent is offered, and a worse ranker does not
+ * produce a worse sentence — it produces an agent that says it cannot do
+ * something it can. That failure already happened once here and is expensive to
+ * notice, so the few cents are not worth reclaiming.
+ */
+export const UTILITY_MODEL = 'claude-sonnet-5';
 
 /**
  * Agent rows written before the migration to Claude still carry Gemini model

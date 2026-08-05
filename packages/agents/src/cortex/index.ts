@@ -40,7 +40,7 @@ export const cortexAgent: AgentDefinition = {
   id: 'cortex',
   name: 'Cortex',
   team: 'all',
-  defaultModel: 'claude-opus-5',
+  defaultModel: 'claude-sonnet-5',
   systemPrompt,
   allowedTools: [
     'hubspot.*',
