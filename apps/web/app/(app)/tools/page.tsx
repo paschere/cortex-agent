@@ -1,20 +1,38 @@
 import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
 import { CONFIRMATION_NOTES, confirmationReason } from '@/lib/confirmation-notes';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns } from '@/lib/tool-access';
 import {
   type BlastRadius,
+  type BlockReason,
   type RiskLevel,
   type Sensitivity,
+  credentialRequirement,
   familyOf,
+  groupOfFamily,
   matchesAnyPattern,
   matchesPattern,
+  toolActionLabel,
 } from '@/lib/tool-taxonomy';
-import { classify, decide, listTools } from '@cortex/agent-tools';
-import { Layers, Lock, PlugZap, ShieldAlert, Wrench } from 'lucide-react';
-import { type CatalogTeam, type CatalogTool, ToolsCatalog } from './_components/ToolsCatalog';
+import { USAGE_SCAN_LIMIT, USAGE_WINDOW_DAYS, fetchToolUsage } from '@/lib/tool-usage';
+import {
+  CUSTOM_TOOLS_TABLE,
+  type CustomToolRow,
+  SAFE_COLUMNS,
+  classify,
+  customToolId,
+  decide,
+  fetchEnabledExternalTools,
+  listTools,
+} from '@cortex/agent-tools';
+import { Wrench } from 'lucide-react';
+import {
+  type CatalogTeam,
+  type CatalogTool,
+  type McpServerSummary,
+  ToolsControlCentre,
+} from './_components/ToolsCatalog';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +45,7 @@ export const dynamic = 'force-dynamic';
  */
 
 interface AgentRow {
+  id: string;
   slug: string;
   name: string;
   allowed_tool_ids: string[] | null;
@@ -35,6 +54,17 @@ interface AgentRow {
 interface PermissionRow {
   team_id: string;
   tool_pattern: string;
+}
+
+interface McpServerRow {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  trusted: boolean;
+  tool_count: number | null;
+  last_checked_at: string | null;
+  last_error: string | null;
 }
 
 /**
@@ -58,28 +88,57 @@ export default async function ToolsPage({
 
   const sb = getOrgScopedClient(session.organization.id);
 
-  const [{ data: agentData }, { data: permissionData }, { data: integrationData }, myDenied] =
-    await Promise.all([
-      // Archived agents (0037, 0063) are history, not grants: listing them here
-      // would credit a retired agent with access nobody can actually exercise.
-      sb
-        .from('agents')
-        .select('slug, name, allowed_tool_ids')
-        .eq('archived', false),
-      // Team permissions are a DENY-list (0038_team_tool_permissions.sql): only
-      // allowed = false rows restrict anything.
-      sb
-        .from('team_tool_permissions')
-        .select('team_id, tool_pattern')
-        .eq('allowed', false),
-      sb.from('integrations').select('provider').eq('user_id', session.id),
-      // Patterns denied to the signed-in user by their own teams.
-      deniedToolPatterns(sb, session.id),
-    ]);
+  const [
+    { data: agentData },
+    { data: permissionData },
+    { data: integrationData },
+    { data: mcpServerData },
+    { data: customToolData },
+    myDenied,
+    externalServers,
+    usage,
+  ] = await Promise.all([
+    // Archived agents (0037, 0063) are history, not grants: listing them here
+    // would credit a retired agent with access nobody can actually exercise.
+    sb
+      .from('agents')
+      .select('id, slug, name, allowed_tool_ids')
+      .eq('archived', false),
+    // Team permissions are a DENY-list (0038_team_tool_permissions.sql): only
+    // allowed = false rows restrict anything.
+    sb
+      .from('team_tool_permissions')
+      .select('team_id, tool_pattern')
+      .eq('allowed', false),
+    sb.from('integrations').select('provider').eq('user_id', session.id),
+    // Every server this person registered, including the ones they switched
+    // off — "it is off" is an answer to why a tool did not run, and the fetch
+    // below only ever returns the enabled ones.
+    sb
+      .from('user_mcp_servers')
+      .select('id, name, url, enabled, trusted, tool_count, last_checked_at, last_error')
+      .eq('user_id', session.id)
+      .order('created_at', { ascending: true }),
+    // The workspace's own tools (0067), listed here whether they are on or off
+    // — "está apagada" is one of the answers this page exists to give.
+    // SAFE_COLUMNS deliberately: the encrypted secret never reaches a page.
+    sb
+      .from(CUSTOM_TOOLS_TABLE)
+      .select(SAFE_COLUMNS)
+      .order('slug', { ascending: true }),
+    // Patterns denied to the signed-in user by their own teams.
+    deniedToolPatterns(sb, session.id),
+    // The same call the chat turn makes, so this screen lists exactly what the
+    // model would be offered — and refreshes a stale manifest on the way past.
+    // Best-effort: an unreachable MCP server must not take the page down.
+    fetchEnabledExternalTools(sb, session.id).catch(() => []),
+    fetchToolUsage(sb),
+  ]);
 
   const agents = (agentData ?? []) as AgentRow[];
   const deniedRows = (permissionData ?? []) as PermissionRow[];
   const deniedPatterns = [...new Set(deniedRows.map((r) => r.tool_pattern))];
+  const mcpServerRows = (mcpServerData ?? []) as McpServerRow[];
 
   // HubSpot runs on a workspace-wide private app token when configured, so
   // nobody has to connect it individually.
@@ -120,7 +179,41 @@ export default async function ToolsPage({
   // to their own teams and nothing about anyone else's.
   const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
 
-  const tools: CatalogTool[] = listTools()
+  // Which of MY teams denies a pattern — the sentence a non-admin needs is
+  // "Operaciones lo bloqueó", not "algún equipo lo bloqueó".
+  const myTeamIds = new Set<string>();
+  if (myDenied.length > 0) {
+    const { data: myMemberships } = await sb
+      .from('team_members')
+      .select('team_id')
+      .eq('user_id', session.id);
+    for (const m of (myMemberships ?? []) as { team_id: string }[]) myTeamIds.add(m.team_id);
+  }
+  const myTeamNames = new Map<string, string[]>();
+  if (myTeamIds.size > 0) {
+    const { data: myTeams } = await sb
+      .from('teams')
+      .select('id, name')
+      .in('id', [...myTeamIds]);
+    for (const t of (myTeams ?? []) as { id: string; name: string }[]) {
+      for (const row of deniedRows.filter((r) => r.team_id === t.id)) {
+        const list = myTeamNames.get(row.tool_pattern) ?? [];
+        if (!list.includes(t.name)) list.push(t.name);
+        myTeamNames.set(row.tool_pattern, list);
+      }
+    }
+  }
+
+  /** Names of the teams of mine that block `toolId`, for the "why" sentence. */
+  function blockingTeamsFor(toolId: string): string[] {
+    const names = new Set<string>();
+    for (const [pattern, teamNames] of myTeamNames) {
+      if (matchesPattern(toolId, pattern)) for (const n of teamNames) names.add(n);
+    }
+    return [...names].sort();
+  }
+
+  const registryTools: CatalogTool[] = listTools()
     .filter((t) => !t.id.startsWith('test.'))
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((t) => {
@@ -147,6 +240,11 @@ export default async function ToolsPage({
         decide(classification) === 'confirm' ||
         decide(outbound) === 'confirm';
       const providers = [...new Set((t.requiredScopes ?? []).map((r) => r.provider as string))];
+      const missingProviders = providers.filter((p) => !connectedProviders.has(p));
+
+      const grantedBy = agents.filter((a) =>
+        (a.allowed_tool_ids ?? []).some((pat) => matchesToolPattern(t.id, pat)),
+      );
 
       const restrictedFor = isAdmin
         ? [
@@ -159,9 +257,24 @@ export default async function ToolsPage({
           ].sort()
         : [];
 
+      // The credential check is the only part of this that reads process.env,
+      // and it reads NAMES only — a value never leaves the server.
+      const requirement = credentialRequirement(t.id);
+      const missingCredentials = requirement ? requirement.vars.filter((v) => !process.env[v]) : [];
+
+      const deniedForMe = matchesAnyPattern(t.id, myDenied);
+      const blockedForMe: BlockReason[] = [];
+      if (grantedBy.length === 0) blockedForMe.push('not_granted');
+      if (deniedForMe) blockedForMe.push('team_blocked');
+      if (missingProviders.length > 0) blockedForMe.push('integration');
+      if (missingCredentials.length > 0 && requirement?.blocking) blockedForMe.push('credential');
+
       return {
         id: t.id,
+        kind: 'registry',
+        title: toolActionLabel(t.id),
         family: familyOf(t.id),
+        group: groupOfFamily(familyOf(t.id)),
         description: t.description,
         needsApproval,
         // Only tools with an explicit note get one — the generic fallback would
@@ -181,100 +294,198 @@ export default async function ToolsPage({
             : null,
         ratePerMinute: t.rateLimit?.perMinute ?? null,
         providers,
-        missingProviders: providers.filter((p) => !connectedProviders.has(p)),
-        agents: agents
-          .filter((a) => (a.allowed_tool_ids ?? []).some((pat) => matchesPattern(t.id, pat)))
-          .map((a) => a.name)
-          .sort(),
+        missingProviders,
+        agents: grantedBy.map((a) => a.name).sort(),
+        agentSlugs: grantedBy.map((a) => a.slug),
         restrictedFor,
         restrictedSomewhere: matchesAnyPattern(t.id, deniedPatterns),
-        deniedForMe: matchesAnyPattern(t.id, myDenied),
+        deniedForMe,
+        blockingTeams: deniedForMe ? blockingTeamsFor(t.id) : [],
+        missingCredentials,
+        credentialLabel: requirement && missingCredentials.length > 0 ? requirement.label : null,
+        credentialEffect: requirement && missingCredentials.length > 0 ? requirement.effect : null,
+        credentialBlocking: requirement?.blocking ?? true,
+        blockedForMe,
+        usage: usage.byTool[t.id] ?? null,
+        serverId: null,
+        serverName: null,
       } satisfies CatalogTool;
     });
 
-  const total = tools.length;
-  const familyCount = new Set(tools.map((t) => t.family)).size;
-  const approvalCount = tools.filter((t) => t.needsApproval).length;
-  const restrictedCount = tools.filter((t) => t.restrictedSomewhere).length;
-  const needsConnectionCount = tools.filter((t) => t.missingProviders.length > 0).length;
-
   /**
-   * The header of an inventory, not a row of dashboard tiles: one ruled block,
-   * counts in mono, each column naming what the organisation actually holds.
+   * Same rules as `matchPattern` inside the registry, INCLUDING the bare `*`
+   * grant that `matchesPattern` in the taxonomy does not know about. An agent
+   * granted `*` holds every tool; treating that as "no grant" would have
+   * reported the entire registry as unavailable.
    */
-  const stats = [
-    {
-      label: 'Herramientas',
-      value: total,
-      sub: 'en el registro activo',
-      icon: Wrench,
-      tone: 'text-ink',
-    },
-    {
-      label: 'Familias',
-      value: familyCount,
-      sub: 'sistemas a los que llega Cortex',
-      icon: Layers,
-      tone: 'text-ink',
-    },
-    {
-      label: 'Piden confirmación',
-      value: approvalCount,
-      sub: 'una persona aprueba primero',
-      icon: ShieldAlert,
-      tone: approvalCount > 0 ? 'text-amber' : 'text-ink',
-    },
-    {
-      label: 'Bloqueadas',
-      value: restrictedCount,
-      sub:
-        restrictedCount > 0 ? 'bloqueadas para al menos un equipo' : 'ningún equipo bloquea nada',
-      icon: Lock,
-      tone: restrictedCount > 0 ? 'text-rose' : 'text-emerald',
-    },
-    {
-      label: 'Sin conectar',
-      value: needsConnectionCount,
-      sub:
-        needsConnectionCount > 0
-          ? 'esperando una integración'
-          : 'todas las integraciones están listas',
-      icon: PlugZap,
-      tone: needsConnectionCount > 0 ? 'text-amber' : 'text-emerald',
-    },
-  ];
+  function matchesToolPattern(toolId: string, pattern: string): boolean {
+    if (pattern === '*') return true;
+    return matchesPattern(toolId, pattern);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tools proxied from the person's own MCP servers.
+  //
+  // These do NOT pass through runTool: the chat route calls them directly, so
+  // they carry no risk classification, no rate limit and no team pattern. The
+  // screen says so rather than borrowing a registry tool's chips for them.
+  // ---------------------------------------------------------------------------
+  const serverById = new Map(mcpServerRows.map((s) => [s.id, s]));
+  const mcpTools: CatalogTool[] = externalServers.flatMap(({ server, tools }) => {
+    const row = serverById.get(server.id);
+    const trusted = Boolean((server as { trusted?: boolean }).trusted ?? row?.trusted);
+    const serverName = row?.name ?? String((server as { name?: string }).name ?? 'Servidor MCP');
+    return tools.map((entry) => {
+      const id = `mcp:${server.id}:${entry.tool_name}`;
+      return {
+        id,
+        kind: 'mcp',
+        title: entry.tool_name,
+        family: `mcp:${server.id}`,
+        group: 'mcp',
+        description: entry.tool_description ?? 'El servidor no describió esta herramienta.',
+        needsApproval: !trusted,
+        approvalReason: trusted
+          ? null
+          : `Marcaste "${serverName}" como no confiable, así que Cortex te pregunta antes de cada llamada.`,
+        riskLevel: null,
+        sensitivity: null,
+        blastRadius: null,
+        canLeaveCompany: false,
+        outboundRiskLevel: null,
+        ratePerMinute: null,
+        providers: [],
+        missingProviders: [],
+        agents: [],
+        agentSlugs: [],
+        restrictedFor: [],
+        restrictedSomewhere: false,
+        deniedForMe: false,
+        blockingTeams: [],
+        missingCredentials: [],
+        credentialLabel: null,
+        credentialEffect: null,
+        credentialBlocking: true,
+        blockedForMe: [],
+        usage: usage.byTool[id] ?? null,
+        serverId: server.id,
+        serverName,
+      } satisfies CatalogTool;
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // The workspace's own tools (0067).
+  //
+  // By the time one of these reaches the chat it IS an ordinary ToolDef, so it
+  // goes through runTool and gets classified, gated, rate-limited and audited
+  // like everything else — and it passes the same agent grant and team deny
+  // gates. Two things differ, and both are visible here: it can be switched
+  // OFF from this page, and the team permission API only validates patterns
+  // against the static registry, so it gets no per-team toggle.
+  // ---------------------------------------------------------------------------
+  const customRows = (customToolData ?? []) as unknown as CustomToolRow[];
+  const customTools: CatalogTool[] = customRows.map((row) => {
+    const id = customToolId(row.slug);
+    const classification = classify({
+      tool: { id, requiresConfirmation: row.requires_confirmation },
+      input: {},
+      ctx: { now: CATALOG_CLOCK },
+      surface: 'web',
+    });
+    const grantedBy = agents.filter((a) =>
+      (a.allowed_tool_ids ?? []).some((pat) => matchesToolPattern(id, pat)),
+    );
+    const deniedForMe = matchesAnyPattern(id, myDenied);
+
+    const blockedForMe: BlockReason[] = [];
+    if (!row.enabled) blockedForMe.push('disabled');
+    if (grantedBy.length === 0) blockedForMe.push('not_granted');
+    if (deniedForMe) blockedForMe.push('team_blocked');
+
+    return {
+      id,
+      kind: 'custom',
+      title: row.name,
+      family: 'custom',
+      group: 'custom',
+      description: row.description,
+      needsApproval: row.requires_confirmation,
+      approvalReason: row.requires_confirmation
+        ? `Escribe en un sistema de la empresa (${row.http_method}), así que alguien la aprueba antes de cada ejecución.`
+        : null,
+      riskLevel: classification.riskLevel as RiskLevel,
+      sensitivity: classification.sensitivity as Sensitivity,
+      blastRadius: classification.blastRadius as BlastRadius,
+      canLeaveCompany: false,
+      outboundRiskLevel: null,
+      ratePerMinute: row.rate_limit_per_minute,
+      providers: [],
+      missingProviders: [],
+      agents: grantedBy.map((a) => a.name).sort(),
+      agentSlugs: grantedBy.map((a) => a.slug),
+      restrictedFor: isAdmin
+        ? [
+            ...new Set(
+              deniedRows
+                .filter((r) => matchesPattern(id, r.tool_pattern))
+                .map((r) => teamNameById.get(r.team_id) ?? 'Equipo desconocido'),
+            ),
+          ].sort()
+        : [],
+      restrictedSomewhere: matchesAnyPattern(id, deniedPatterns),
+      deniedForMe,
+      blockingTeams: deniedForMe ? blockingTeamsFor(id) : [],
+      missingCredentials: [],
+      credentialLabel: null,
+      credentialEffect: null,
+      credentialBlocking: true,
+      blockedForMe,
+      usage: usage.byTool[id] ?? null,
+      serverId: null,
+      serverName: null,
+      lastError: row.last_error ?? null,
+      enabled: row.enabled,
+    } satisfies CatalogTool;
+  });
+
+  const mcpServers: McpServerSummary[] = mcpServerRows.map((s) => ({
+    id: s.id,
+    name: s.name,
+    enabled: s.enabled,
+    trusted: s.trusted,
+    toolCount: s.tool_count ?? 0,
+    lastError: s.last_error,
+    lastCheckedAt: s.last_checked_at,
+  }));
+
+  const tools = [...registryTools, ...customTools, ...mcpTools];
 
   return (
     <>
       <PageHeader
         title="Herramientas"
-        subtitle="Lo que esta organización tiene habilitado en Cortex, agrupado por el sistema que toca. El acceso se da por equipo y lo riesgoso se le consulta primero a una persona."
+        subtitle="Todo lo que Cortex sabe hacer en esta organización: qué está listo, qué está frenado y por qué, y qué se ha usado últimamente."
         icon={<Wrench className="h-5 w-5" />}
       />
 
-      {/* Hairlines come from the gap showing the border colour through, so the
-          rules stay correct at every breakpoint the grid reflows to. */}
-      <Panel className="mb-5 overflow-hidden">
-        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-5">
-          {stats.map((s) => (
-            <div key={s.label} className="bg-surface p-4">
-              <div className="flex items-center gap-1.5">
-                <s.icon className={`h-3.5 w-3.5 ${s.tone}`} />
-                <span className="field-label">{s.label}</span>
-              </div>
-              <div className={`stat-num mt-1.5 text-[26px] leading-none ${s.tone}`}>{s.value}</div>
-              <div className="mt-1.5 text-[11px] leading-snug text-ink-faint">{s.sub}</div>
-            </div>
-          ))}
-        </div>
-      </Panel>
-
-      <ToolsCatalog
+      <ToolsControlCentre
         tools={tools}
         isAdmin={isAdmin}
         teams={teams}
         selectedTeamId={selectedTeamId}
         initialTeamDenied={teamDenied}
+        mcpServers={mcpServers}
+        agentCount={agents.length}
+        usageMeta={{
+          available: usage.available,
+          windowDays: USAGE_WINDOW_DAYS,
+          scanned: usage.scanned,
+          truncated: usage.truncated,
+          scanLimit: USAGE_SCAN_LIMIT,
+          oldest: usage.oldest,
+          distinctTools: usage.distinctTools,
+        }}
       />
     </>
   );

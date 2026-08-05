@@ -1,12 +1,16 @@
 import {
   type ExternalServerRow,
   type ToolContext,
+  type AnyTool,
   callExternalTool,
   createIntegrationsClient,
   createOrgScopedClient,
+  customToolDef,
+  fetchEnabledCustomTools,
   fetchEnabledExternalTools,
   getTool,
   runTool,
+  toolIdAllowed,
 } from '@cortex/agent-tools';
 import { getAgentTools, loadAgent } from '@cortex/agents';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
@@ -29,9 +33,40 @@ export async function listToolsForAuth(ctx: BridgeContext) {
   const sb = makeServiceClient(ctx.env, ctx.organizationId);
   const slug = await resolveAgentSlug(sb, ctx.agentId);
   const agent = await loadAgent(sb, slug);
-  const builtins = getAgentTools(agent);
-  const externals = await fetchEnabledExternalTools(sb, ctx.userId);
-  return { builtins, externals };
+  const [customs, externals] = await Promise.all([
+    workspaceCustomTools(sb, agent.allowedTools),
+    fetchEnabledExternalTools(sb, ctx.userId),
+  ]);
+  // Custom tools travel WITH the built-ins rather than beside them: by this
+  // point a `custom_tools` row is an ordinary ToolDef, and every consumer of
+  // this list (tools/list, /mcp/tools) only reads id, description and
+  // inputSchema. Keeping them in one list is also what keeps `callTool` below
+  // from needing a third branch.
+  return { builtins: [...getAgentTools(agent), ...customs], externals };
+}
+
+/**
+ * The workspace's own tools, gated by the agent's grant exactly as the registry
+ * ones are.
+ *
+ * A note on where these can actually run: the request they issue goes out
+ * through `node:http` so the connection can be pinned to the address the SSRF
+ * guard approved (see custom-tools/http.ts). Under the Workers runtime that
+ * this app deploys to, that may be unavailable — in which case the call returns
+ * a plain sentence saying so, rather than throwing. Advertising them here is
+ * still right: the tool exists, and a person asking through Claude should be
+ * told where to ask instead, not told the capability does not exist.
+ */
+async function workspaceCustomTools(sb: SupabaseClient, allowedTools: string[]): Promise<AnyTool[]> {
+  try {
+    const rows = await fetchEnabledCustomTools(sb);
+    return rows
+      .map((row) => customToolDef(row) as unknown as AnyTool)
+      .filter((t) => toolIdAllowed(allowedTools, t.id));
+  } catch {
+    // Never let a workspace's own tools break the whole tool list.
+    return [];
+  }
 }
 
 /**
@@ -61,13 +96,18 @@ export async function callTool(
 
   // Map MCP-safe built-in names back to dotted tool IDs. Tool IDs are
   // "namespace.verb_noun"; the MCP name replaces every dot with an underscore.
-  const builtins = getAgentTools(agent);
-  const builtinMap = new Map(builtins.map((t) => [t.id.replaceAll('.', '_'), t.id]));
+  const customs = await workspaceCustomTools(sb, agent.allowedTools);
+  const builtins = [...getAgentTools(agent), ...customs];
+  const byMcpName = new Map(builtins.map((t) => [t.id.replaceAll('.', '_'), t]));
 
-  const builtinId = builtinMap.get(toolName);
-  if (builtinId) {
-    const tool = getTool(builtinId);
-    if (!tool) return { ok: false, error: `Tool ${builtinId} not registered` };
+  const resolved = byMcpName.get(toolName);
+  if (resolved) {
+    // A custom tool is not in the global registry — it belongs to one
+    // workspace and was constructed a few lines ago — so the ToolDef we already
+    // hold IS the tool. Registry ids are still looked up by id so a stale
+    // agent grant naming a removed family fails loudly.
+    const tool = resolved.id.startsWith('custom.') ? resolved : getTool(resolved.id);
+    if (!tool) return { ok: false, error: `Tool ${resolved.id} not registered` };
 
     const toolCtx: ToolContext = {
       organizationId: ctx.organizationId,

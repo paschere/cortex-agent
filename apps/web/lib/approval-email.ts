@@ -84,7 +84,9 @@ export async function sendApprovalRequestEmail(opts: {
           ? 'your Claude conversation'
           : opts.surface === 'chat'
             ? 'Google Chat'
-            : 'Cortex';
+            : opts.surface === 'whatsapp'
+              ? 'WhatsApp'
+              : 'Cortex';
 
     const mail = renderApprovalRequestEmail({
       toolLabel: humanizeToolId(opts.toolId),

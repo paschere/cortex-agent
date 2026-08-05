@@ -54,6 +54,11 @@ const FAMILY_SYSTEM: Record<string, string> = {
   payroll: 'el servicio de nómina',
   kb: 'Brain Knowledge, la memoria compartida',
   vehicles: 'el registro de vehículos y, a través de él, el RUNT y el SIMIT',
+  // Custom tools (migración 0067) llevan el id `custom.<slug>`. No podemos
+  // nombrar el sistema — cada empresa apunta la suya a donde necesita — así que
+  // lo que se dice es lo único que sí sabemos y que sí importa a la hora de
+  // aprobar: es un sistema de la propia empresa y el cambio queda hecho allá.
+  custom: 'un sistema propio de tu empresa conectado por un administrador',
 };
 
 export function confirmationReason(toolId: string): string {

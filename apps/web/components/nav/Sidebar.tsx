@@ -7,6 +7,7 @@ import { clsx } from 'clsx';
 import {
   AlarmClock,
   BarChart3,
+  CalendarClock,
   BookOpen,
   Bot,
   Cable,
@@ -14,6 +15,7 @@ import {
   Hammer,
   Inbox,
   LayoutDashboard,
+  MessageCircle,
   MessageSquare,
   MessagesSquare,
   Network,
@@ -58,6 +60,11 @@ interface NavGroup {
 const PRIMARY: NavItem[] = [
   { href: '/chat', label: 'Chat', icon: MessageSquare },
   { href: '/approvals', label: 'Approvals', icon: Inbox, signal: 'approvals' },
+  // Spanish, because the page is: this one is opened first thing every morning
+  // by people who ask "¿qué se nos vence?", and the nav has to answer with the
+  // same word the page uses. See the note on /schedules below — one name per
+  // thing, wherever that name comes from.
+  { href: '/commitments', label: 'Vencimientos', icon: CalendarClock },
   { href: '/prospects', label: 'Prospects', icon: Radar },
   { href: '/conversations', label: 'Conversations', icon: MessagesSquare },
   // Promoted out of the old KNOWLEDGE group: once the rate calculator moved back
@@ -93,6 +100,10 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: '/integrations', label: 'Integrations', icon: Plug },
       { href: '/mcp-tokens', label: 'Connect Claude', icon: Cable },
+      // Lives here rather than under Brain Knowledge because pairing a phone is
+      // a connection, not a document. The screen itself sits at /kb/whatsapp:
+      // what it feeds is Brain Knowledge.
+      { href: '/kb/whatsapp', label: 'WhatsApp', icon: MessageCircle },
     ],
   },
   {

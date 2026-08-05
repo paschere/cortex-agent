@@ -33,8 +33,16 @@ export * from './slack';
 export * from './people';
 export * from './growth';
 export * from './vehicles';
+// Dated promises Cortex watches on its own — fleet paperwork, contracts,
+// customs deadlines, payments. Placed after ./vehicles because the fleet sync
+// reads what the RUNT consults left behind, and after ./kb because the
+// extraction path goes through the spaces boundary.
+export * from './commitments';
 export * from './pipeline';
 export * from './meetings';
+// Library only — no tools are registered here. WhatsApp is a surface Cortex
+// listens on, not a system it calls. See ./whatsapp/index.ts.
+export * from './whatsapp';
 export * from './cortex';
 export * from './memory';
 export * from './security';
@@ -52,6 +60,13 @@ export type {
   ExternalServerRow,
   EnabledExternalServer,
 } from './external-mcp';
+
+// Tools a customer defined for themselves, from the app, with no code. Rows of
+// `custom_tools` (migration 0067) become ordinary ToolDefs under `custom.<slug>`
+// and run through runTool like everything else. Placed after the barrels for
+// symmetry with them; it registers nothing, since these tools are per-workspace
+// and are built per request rather than at module load.
+export * from './custom-tools';
 
 // Semantic tool selection: which of the tools a user may call are worth
 // sending the model this turn. Placed after the tool barrels so the registry is

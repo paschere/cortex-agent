@@ -35,6 +35,20 @@ export function filterTools(allowed: string[]): AnyTool[] {
   return [...REGISTRY.values()].filter((t) => allowed.some((pat) => matchPattern(pat, t.id)));
 }
 
+/**
+ * Does an agent's grant cover this tool id?
+ *
+ * Exported because not every tool a turn can offer lives in the registry:
+ * custom tools (migration 0067) are built per request from the workspace's own
+ * rows, and they have to be gated by the SAME grant patterns as everything
+ * else. Without this they would either be ungated — a grant of `kb.*` would
+ * still hand the model every custom tool — or would need a second, parallel
+ * notion of "allowed", which is how two access rules drift apart.
+ */
+export function toolIdAllowed(patterns: string[], id: string): boolean {
+  return patterns.some((pat) => matchPattern(pat, id));
+}
+
 function matchPattern(pat: string, id: string): boolean {
   // A bare '*' means every family, including ones that do not exist yet. An
   // agent listing families one by one silently loses access to each new

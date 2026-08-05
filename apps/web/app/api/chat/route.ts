@@ -8,12 +8,16 @@ import {
   type AnyTool,
   type EnabledExternalServer,
   type ExternalServerRow,
+  CUSTOM_TOOL_FAMILY,
   callExternalTool,
+  customToolDef,
+  fetchEnabledCustomTools,
   fetchEnabledExternalTools,
   filterTools,
   kbSearch,
   runTool,
   selectToolsForTurn,
+  toolIdAllowed,
 } from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
@@ -224,9 +228,10 @@ export async function POST(req: NextRequest) {
   //
   // Per-user MCP failures must never break the turn, so that fetch is
   // best-effort.
-  const [deniedPatterns, externalServers] = await Promise.all([
+  const [deniedPatterns, externalServers, customRows] = await Promise.all([
     deniedToolPatterns(db, user.id),
     fetchEnabledExternalTools(db, user.id).catch(() => []),
+    fetchEnabledCustomTools(db).catch(() => []),
   ]);
 
   const registryCandidates: Candidate[] = filterTools(agent.allowedTools)
@@ -237,6 +242,37 @@ export async function POST(req: NextRequest) {
       description: t.description,
       kind: 'registry' as const,
       ref: t,
+    }));
+
+  // The workspace's own tools (migration 0067). They are `kind: 'registry'`
+  // candidates on purpose: a custom tool IS an ordinary ToolDef by the time it
+  // gets here, so it takes the same execute path below and therefore the same
+  // runTool guarantees — audit, confirmation, rate limit, risk classification.
+  // The only thing that differs is where the definition came from.
+  //
+  // They pass through the identical access gates: the agent's grant patterns
+  // (`toolIdAllowed`, the same matcher `filterTools` uses on the registry) and
+  // the team deny-list. A tool a company wrote for itself is not exempt from
+  // the permissions that company configured.
+  //
+  // One family for all of them, not one per tool. Ranking promotes whole
+  // families (see tool-selection/rank.ts), and one custom tool proving relevant
+  // pulling in the handful of others costs a few declarations — while a family
+  // per tool would compete for the six situational slots against gmail, kb and
+  // the rest, and start pushing real families out on vague requests.
+  const customCandidates: Candidate[] = customRows
+    .map((row) => customToolDef(row))
+    .filter(
+      (t) =>
+        toolIdAllowed(agent.allowedTools, t.id) &&
+        (deniedPatterns.length === 0 || !isToolDenied(t.id, deniedPatterns)),
+    )
+    .map((t) => ({
+      id: t.id,
+      family: CUSTOM_TOOL_FAMILY,
+      description: t.description,
+      kind: 'registry' as const,
+      ref: t as AnyTool,
     }));
 
   const externalCandidates: Candidate[] = externalServers.flatMap(({ server, tools }) =>
@@ -260,13 +296,13 @@ export async function POST(req: NextRequest) {
   // sending MORE tools, never fewer.
   const selection = await selectToolsForTurn({
     db,
-    tools: [...registryCandidates, ...externalCandidates],
+    tools: [...registryCandidates, ...customCandidates, ...externalCandidates],
     query: recentText,
   });
   logger.debug('chat tool selection', {
     reason: selection.reason,
     offered: selection.tools.length,
-    of: registryCandidates.length + externalCandidates.length,
+    of: registryCandidates.length + customCandidates.length + externalCandidates.length,
     families: selection.selectedFamilies,
     unranked: selection.unrankedFamilies,
   });

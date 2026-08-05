@@ -40,12 +40,16 @@ export const APPROVAL_DECISION_PARAM = 'decision';
 /** How much of the payload is worth putting on a phone screen. */
 const MAX_PAYLOAD_CHARS = 1200;
 
-export type ApprovalOrigin = 'mcp' | 'schedule' | 'web' | 'chat';
+export type ApprovalOrigin = 'mcp' | 'schedule' | 'web' | 'chat' | 'whatsapp';
 
 const ORIGIN_LABEL: Record<ApprovalOrigin, string> = {
   schedule: 'a scheduled routine',
   mcp: 'your Claude conversation',
   chat: 'Google Chat',
+  // WhatsApp has nowhere to render an Approve/Decline card, so a request that
+  // starts there is always answered somewhere else. Naming the origin is how
+  // the person knows which of their conversations this came out of.
+  whatsapp: 'WhatsApp',
   web: 'Cortex',
 };
 

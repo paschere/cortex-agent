@@ -1,3 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # Long-running processes that cannot be serverless. `services/whatsapp` holds
+  # an authenticated WebSocket to WhatsApp open for days at a time, which is the
+  # one thing Vercel structurally cannot do, so it is deployed on Railway and
+  # talks to Cortex over HTTP like any other client.
+  - "services/*"

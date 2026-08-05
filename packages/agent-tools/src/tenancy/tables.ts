@@ -90,6 +90,17 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   user_memories: tenant(),
   user_preferences: tenant(),
   google_chat_links: tenant(),
+  whatsapp_links: tenant(),
+
+  // --- WhatsApp (migration 0068) --------------------------------------------
+  // The bridge never touches Postgres itself; it posts to Cortex routes, which
+  // write through a scoped handle like everything else. So these are ordinary
+  // tenant tables even though the rows originate outside the request cycle.
+  whatsapp_sessions: tenant(),
+  whatsapp_session_keys: tenant(),
+  whatsapp_groups: tenant(),
+  whatsapp_messages: tenant(),
+  whatsapp_ingest_windows: tenant(),
 
   // --- Automation -----------------------------------------------------------
   scheduled_jobs: tenant(),
@@ -104,6 +115,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   integrations: tenant(),
   user_mcp_servers: tenant(),
   user_mcp_tools: derived('user_mcp_servers', 'server_id'),
+  // The HTTP tools an organization defined for itself (migration 0067). Tenant
+  // data in the strongest sense: the row names a destination inside — or
+  // dangerously near — the customer's own systems, and holds the credential
+  // used to reach it.
+  custom_tools: tenant(),
   mcp_tokens: tenant(),
   mcp_pending_actions: tenant(),
 
@@ -122,6 +138,15 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   vehicle_fines: tenant(),
   vehicle_consults: derived('vehicles', 'vehicle_id'),
   presentation_files: tenant(),
+
+  // --- Commitments (migration 0069) -----------------------------------------
+  // Dated promises and the notices already sent about them. Both carry their
+  // own organization_id rather than deriving the notice's tenant from its
+  // commitment: the daily watcher scans notices by workspace and date without
+  // naming a commitment, which a `derived` classification would (correctly)
+  // refuse.
+  commitments: tenant(),
+  commitment_notices: tenant(),
 
   // --- Not tenant data ------------------------------------------------------
   ba_user: shared(

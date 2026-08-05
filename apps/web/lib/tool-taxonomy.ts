@@ -30,152 +30,476 @@ export interface FamilyMeta {
  */
 export const FAMILY_META: Record<string, FamilyMeta> = {
   presentations: {
-    name: 'Presentations',
+    name: 'Presentaciones',
     blurb:
-      'Candidate write-ups prepared for clients as PDFs, and the history of what was already sent.',
+      'Perfiles de candidato armados en PDF para cliente, y el historial de lo que ya se envió.',
     tone: 'primary',
     icon: 'FileText',
   },
   people: {
-    name: 'People Directory',
-    blurb: 'Name to email address, from the Google Workspace directory and personal contacts.',
+    name: 'Directorio de personas',
+    blurb:
+      'De un nombre a un correo, usando el directorio de Google Workspace y los contactos personales.',
     tone: 'primary',
     icon: 'Users',
   },
   hubspot: {
     name: 'HubSpot',
-    blurb: 'The CRM — companies, contacts, deals, pipeline health and activity logging.',
+    blurb: 'El CRM: empresas, contactos, negocios, salud del embudo y registro de actividad.',
     tone: 'amber',
     icon: 'Building2',
   },
   growth: {
-    name: 'Growth Signals',
-    blurb: 'Buying signals from the market and the decision-makers behind them.',
+    name: 'Señales de mercado',
+    blurb: 'Señales de compra que aparecen afuera y las personas que deciden detrás de ellas.',
     tone: 'amber',
     icon: 'TrendingUp',
   },
   sales: {
-    name: 'Sales',
-    blurb: 'Client-facing proposal drafting, grounded in CRM and Brain Knowledge context.',
+    name: 'Propuestas',
+    blurb: 'Redacción de propuestas para cliente, apoyada en el CRM y en Brain Knowledge.',
     tone: 'amber',
     icon: 'Handshake',
   },
   payroll: {
-    name: 'Payroll',
+    name: 'Nómina',
     blurb:
-      'The separate payroll service: what people were actually paid, expenses, cost per client and cost projections.',
+      'El servicio aparte de nómina: lo que se pagó de verdad, gastos, costo por cliente y proyecciones.',
     tone: 'rose',
     icon: 'Wallet',
   },
   kb: {
     name: 'Brain Knowledge',
-    blurb: "The company's memory — search internal documents and write new ones back.",
+    blurb: 'La memoria de la empresa: busca en los documentos internos y escribe nuevos.',
     tone: 'sky',
     icon: 'BookOpen',
   },
   meetings: {
-    name: 'Meetings',
-    blurb: 'Recorded transcripts and the briefings Cortex prepares before a call.',
+    name: 'Reuniones',
+    blurb: 'Transcripciones grabadas y los briefings que Cortex prepara antes de una llamada.',
     tone: 'sky',
     icon: 'Mic',
   },
   inbox: {
-    name: 'Inbox',
-    blurb: 'The daily priority list and digests Cortex assembles from everything it can see.',
+    name: 'Bandeja del día',
+    blurb: 'La lista de prioridades y los resúmenes que Cortex arma con todo lo que alcanza a ver.',
     tone: 'sky',
     icon: 'Inbox',
   },
   gmail: {
     name: 'Gmail',
-    blurb: 'Read the mailbox, search threads, prepare drafts and send approved ones.',
+    blurb: 'Leer el buzón, buscar hilos, preparar borradores y enviar los que se aprueben.',
     tone: 'rose',
     icon: 'Mail',
   },
   gcal: {
     name: 'Google Calendar',
-    blurb: 'Upcoming meetings, availability and event creation with invitations.',
+    blurb: 'Lo que viene en la agenda, disponibilidad, y crear eventos con invitación.',
     tone: 'sky',
     icon: 'CalendarDays',
   },
   gdrive: {
     name: 'Google Drive',
-    blurb: 'Find and read documents stored in the shared Drive.',
+    blurb: 'Encontrar y leer documentos guardados en el Drive compartido.',
     tone: 'emerald',
     icon: 'FolderOpen',
   },
   gsheets: {
     name: 'Google Sheets',
-    blurb: 'Read ranges from shared spreadsheets and append rows to them.',
+    blurb: 'Leer rangos de hojas compartidas y agregarles filas.',
     tone: 'emerald',
     icon: 'Table2',
   },
   github: {
     name: 'GitHub',
-    blurb: 'Repositories, issues, pull requests and delivery metrics for engineering.',
+    blurb: 'Repositorios, issues, pull requests y métricas de entrega del equipo técnico.',
     tone: 'sky',
     icon: 'GitBranch',
   },
   linear: {
     name: 'Linear',
-    blurb: 'Issues, projects, cycles and team workload for the engineering roadmap.',
+    blurb: 'Issues, proyectos, ciclos y carga del equipo en la hoja de ruta.',
     tone: 'sky',
     icon: 'SquareKanban',
   },
   slack: {
     name: 'Slack',
-    blurb: 'Post messages into channels — including channels shared with clients.',
+    blurb: 'Publicar mensajes en canales, incluidos los que se comparten con clientes.',
     tone: 'amber',
     icon: 'MessageSquare',
   },
   chat: {
     name: 'Google Chat',
-    blurb: 'Direct messages and space posts Cortex sends to colleagues.',
+    blurb: 'Mensajes directos y publicaciones en espacios que Cortex le manda a tus colegas.',
     tone: 'emerald',
     icon: 'MessagesSquare',
   },
   pipeline: {
-    name: 'Pipelines',
-    blurb: 'Reusable playbooks anyone on the team can run from any surface.',
+    name: 'Procedimientos',
+    blurb: 'Instructivos reutilizables que cualquiera del equipo puede ejecutar desde donde esté.',
     tone: 'primary',
     icon: 'Workflow',
   },
   schedule: {
-    name: 'Routines',
-    blurb: 'Unattended jobs that keep running on a schedule until someone pauses them.',
+    name: 'Rutinas',
+    blurb:
+      'Trabajos desatendidos que siguen corriendo según su horario hasta que alguien los pause.',
     tone: 'primary',
     icon: 'AlarmClock',
   },
-  vehicles: {
-    name: 'Vehicles',
+  commitments: {
+    name: 'Vencimientos',
     blurb:
-      'Plates worth keeping an eye on — SOAT and RTM validity from RUNT, traffic fines from SIMIT, and what has changed since the last look.',
+      'Compromisos con fecha que Cortex vigila solo: SOAT y tecnomecánica de la flota, contratos, pólizas, plazos de aduana y pagos. Cada fecha carga de dónde salió.',
+    tone: 'amber',
+    // CalendarDays rather than CalendarClock: the catalogue resolves these
+    // names against its own icon map, and an unmapped name silently falls back.
+    icon: 'CalendarDays',
+  },
+  vehicles: {
+    name: 'Vehículos',
+    blurb:
+      'Placas que vale la pena vigilar: vigencia de SOAT y RTM desde el RUNT, comparendos desde el SIMIT, y qué cambió desde la última consulta.',
     tone: 'emerald',
     icon: 'Car',
   },
   web: {
-    name: 'Web',
-    blurb: 'Public search and page scraping — the only family that touches nothing internal.',
+    name: 'Internet',
+    blurb: 'Búsqueda pública y lectura de páginas — lo único que no toca nada interno.',
     tone: 'emerald',
     icon: 'Globe',
   },
   security: {
-    name: 'Security',
-    blurb: "Read-only introspection over the guardrail's own decisions and recent events.",
+    name: 'Seguridad',
+    blurb: 'Consulta de solo lectura sobre las decisiones de la barrera y sus eventos recientes.',
     tone: 'rose',
     icon: 'ShieldCheck',
   },
   cortex: {
     name: 'Cortex',
-    blurb: 'Meta tools the agent uses to orient itself inside the workspace.',
+    blurb: 'Herramientas con las que el agente se ubica dentro del espacio de trabajo.',
     tone: 'primary',
     icon: 'Sparkles',
   },
+  custom: {
+    name: 'Herramientas propias',
+    blurb: 'Llamadas a la API de esta empresa, definidas desde la app y no por nosotros.',
+    tone: 'primary',
+    icon: 'Boxes',
+  },
   format: {
-    name: 'Formatting',
-    blurb: 'Presentation helpers that shape data into something readable.',
+    name: 'Formato',
+    blurb: 'Ayudas de presentación que le dan forma legible a los datos.',
     tone: 'emerald',
     icon: 'Type',
   },
+};
+
+// ---------------------------------------------------------------------------
+// Capability groups: what a PERSON would say Cortex knows how to do
+// ---------------------------------------------------------------------------
+
+/**
+ * Families are the technical seam (`hubspot`, `gsheets`, `gcal`) — useful for
+ * permission patterns and for the audit log, useless as a first impression.
+ * Nobody arrives at this screen wondering what lives under the `gcal` prefix;
+ * they arrive wondering whether Cortex can move a meeting.
+ *
+ * These groups are that second question. They are a PRESENTATION layer only:
+ * grants, deny-lists and the registry keep speaking families, and a family that
+ * is not mapped here still renders — it falls into `other` rather than
+ * disappearing, which is the failure mode that let a whole shipped family stay
+ * invisible for a day (see migration 0065).
+ */
+export interface CapabilityGroup {
+  id: string;
+  /** Section title — how a person would name this capability. */
+  name: string;
+  /** One line: what Cortex can actually do for you here. */
+  blurb: string;
+  tone: FamilyTone;
+  /** Lucide icon name; the client maps it to a component. */
+  icon: string;
+}
+
+export const CAPABILITY_GROUPS: CapabilityGroup[] = [
+  {
+    id: 'clients',
+    name: 'Clientes y negocios',
+    blurb:
+      'Buscar empresas y contactos, mirar el embudo, dejar registro de lo que pasó y preparar una propuesta.',
+    tone: 'amber',
+    icon: 'Handshake',
+  },
+  {
+    id: 'comms',
+    name: 'Escribir y responder',
+    blurb:
+      'Leer el correo, redactar borradores, mandar un mensaje por Slack o Google Chat y averiguar la dirección de alguien.',
+    tone: 'rose',
+    icon: 'Mail',
+  },
+  {
+    id: 'agenda',
+    name: 'Agenda y reuniones',
+    blurb:
+      'Ver qué viene, agendar con invitación, y recuperar lo que se dijo en una llamada grabada.',
+    tone: 'sky',
+    icon: 'CalendarDays',
+  },
+  {
+    id: 'docs',
+    name: 'Documentos y memoria',
+    blurb:
+      'Buscar en Brain Knowledge, abrir archivos del Drive y leer o escribir hojas de cálculo.',
+    tone: 'primary',
+    icon: 'BookOpen',
+  },
+  {
+    id: 'eng',
+    name: 'Ingeniería',
+    blurb: 'Issues, repositorios, ciclos y entregas del equipo técnico.',
+    tone: 'sky',
+    icon: 'GitBranch',
+  },
+  {
+    id: 'money',
+    name: 'Nómina y costos',
+    blurb: 'Lo que se pagó de verdad, los gastos y el costo por cliente.',
+    tone: 'rose',
+    icon: 'Wallet',
+  },
+  {
+    id: 'vehicles',
+    name: 'Vehículos y trámites',
+    blurb:
+      'SOAT y RTM desde el RUNT, comparendos desde el SIMIT, y todo lo que se vence con fecha: contratos, pólizas, plazos de aduana y pagos.',
+    tone: 'emerald',
+    icon: 'Car',
+  },
+  {
+    id: 'auto',
+    name: 'Automatización',
+    blurb: 'Procedimientos que cualquiera puede ejecutar y rutinas que corren solas.',
+    tone: 'primary',
+    icon: 'Workflow',
+  },
+  {
+    id: 'external',
+    name: 'Información pública',
+    blurb: 'Buscar en internet y leer páginas — lo único que no toca nada interno.',
+    tone: 'emerald',
+    icon: 'Globe',
+  },
+  {
+    id: 'control',
+    name: 'Control y seguridad',
+    blurb: 'Lo que Cortex usa para ubicarse y para revisar sus propias decisiones.',
+    tone: 'rose',
+    icon: 'ShieldCheck',
+  },
+  {
+    id: 'mcp',
+    name: 'Tus servidores MCP',
+    blurb:
+      'Herramientas que llegan de un servidor MCP que tú conectaste. Aparecen y desaparecen con el servidor.',
+    tone: 'sky',
+    icon: 'Server',
+  },
+  {
+    id: 'custom',
+    name: 'Herramientas propias',
+    blurb: 'Llamadas a la API de tu empresa que un administrador definió acá mismo.',
+    tone: 'primary',
+    icon: 'Boxes',
+  },
+  {
+    id: 'other',
+    name: 'Otras herramientas',
+    blurb: 'Familias registradas que todavía no tienen un grupo asignado en esta pantalla.',
+    tone: 'primary',
+    icon: 'Wrench',
+  },
+];
+
+const GROUP_BY_ID = new Map(CAPABILITY_GROUPS.map((g) => [g.id, g]));
+
+/** Family prefix → capability group id. Anything unlisted falls into `other`. */
+const FAMILY_GROUP: Record<string, string> = {
+  hubspot: 'clients',
+  growth: 'clients',
+  sales: 'clients',
+  presentations: 'clients',
+  gmail: 'comms',
+  slack: 'comms',
+  chat: 'comms',
+  people: 'comms',
+  gcal: 'agenda',
+  meetings: 'agenda',
+  inbox: 'agenda',
+  kb: 'docs',
+  gdrive: 'docs',
+  gsheets: 'docs',
+  format: 'docs',
+  github: 'eng',
+  linear: 'eng',
+  payroll: 'money',
+  vehicles: 'vehicles',
+  // Sits with the fleet rather than with automation: a SOAT that lapses is a
+  // truck off the road, and the person who cares about one cares about the
+  // other. The watcher being automatic is an implementation detail to them.
+  commitments: 'vehicles',
+  pipeline: 'auto',
+  schedule: 'auto',
+  cortex: 'auto',
+  web: 'external',
+  security: 'control',
+};
+
+export function groupOfFamily(family: string): string {
+  // Every tool proxied from a connected MCP server carries an `mcp:<uuid>`
+  // family, so the prefix — not the whole string — is what decides the group.
+  if (family.startsWith('mcp:')) return 'mcp';
+  if (family === 'custom') return 'custom';
+  return FAMILY_GROUP[family] ?? 'other';
+}
+
+export function groupMeta(id: string): CapabilityGroup {
+  return GROUP_BY_ID.get(id) ?? (GROUP_BY_ID.get('other') as CapabilityGroup);
+}
+
+/** Display order, so a group never moves between renders. */
+export const GROUP_ORDER: string[] = CAPABILITY_GROUPS.map((g) => g.id);
+
+// ---------------------------------------------------------------------------
+// Server-side credentials a family needs before it can work at all
+// ---------------------------------------------------------------------------
+
+/**
+ * The difference between "you have not connected Google" and "nobody put the
+ * RUNT scraper's key on the server" is the whole difference between a problem
+ * you can fix in thirty seconds and one you have to ask somebody for. The
+ * catalogue used to show neither, so a tool that could not possibly run looked
+ * exactly like one that was working.
+ *
+ * PURE DATA: the env vars are named here and READ in the server component —
+ * this module is imported by a client bundle and must never touch process.env.
+ */
+export interface CredentialRequirement {
+  /** Env vars that must ALL be present. Names only; never values. */
+  vars: string[];
+  /** What the credential is for, in the words of the person reading. */
+  label: string;
+  /**
+   * False when the tool still does something useful without it. Brain
+   * Knowledge without a Voyage key falls back to keyword search: degraded, not
+   * dead, and saying "blocked" would be a lie.
+   */
+  blocking: boolean;
+  /** What is lost while it is missing. */
+  effect: string;
+}
+
+/** Keyed by family prefix. A per-tool entry in TOOL_CREDENTIALS wins over this. */
+export const FAMILY_CREDENTIALS: Record<string, CredentialRequirement> = {
+  vehicles: {
+    vars: ['VEHICLES_SCRAPER_URL', 'VEHICLES_SCRAPER_API_KEY'],
+    label: 'el servicio que consulta el RUNT y el SIMIT',
+    blocking: true,
+    effect: 'Sin él no se puede consultar ninguna placa.',
+  },
+  payroll: {
+    vars: ['PAYROLL_API_URL', 'PAYROLL_API_TOKEN'],
+    label: 'el servicio de nómina',
+    blocking: true,
+    effect: 'Sin él no hay pagos, gastos ni costos por cliente.',
+  },
+  slack: {
+    vars: ['SLACK_BOT_TOKEN'],
+    label: 'el bot de Slack del espacio de trabajo',
+    blocking: true,
+    effect: 'Sin él no se puede publicar nada en Slack.',
+  },
+  chat: {
+    vars: ['GOOGLE_CHAT_SERVICE_ACCOUNT_JSON'],
+    label: 'la cuenta de servicio de Google Chat',
+    blocking: true,
+    effect: 'Sin ella Cortex no puede escribirle a nadie por Google Chat.',
+  },
+  growth: {
+    vars: ['TAVILY_API_KEY'],
+    label: 'el buscador web',
+    blocking: true,
+    effect: 'Sin él no hay señales de mercado, porque salen de una búsqueda pública.',
+  },
+  kb: {
+    vars: ['VOYAGE_API_KEY'],
+    label: 'el motor de embeddings de Brain Knowledge',
+    blocking: false,
+    effect: 'Sin él la búsqueda solo empareja palabras, no significado.',
+  },
+};
+
+/** Overrides for single tools whose family requirement does not apply to them. */
+export const TOOL_CREDENTIALS: Record<string, CredentialRequirement> = {
+  // web.scrape falls back to Jina when Firecrawl is absent, so only the search
+  // half of the family actually depends on a key.
+  'web.search': {
+    vars: ['TAVILY_API_KEY'],
+    label: 'el buscador web',
+    blocking: true,
+    effect: 'Sin él no se puede buscar en internet.',
+  },
+};
+
+export function credentialRequirement(toolId: string): CredentialRequirement | null {
+  return TOOL_CREDENTIALS[toolId] ?? FAMILY_CREDENTIALS[familyOf(toolId)] ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Why a tool did not run
+// ---------------------------------------------------------------------------
+
+/**
+ * The four things that stop a tool, in the order the runtime hits them:
+ * the agent never offered it, a team subtracted it, the integration is not
+ * connected, or the deployment has no credential for it.
+ */
+export type BlockReason =
+  | 'disabled'
+  | 'not_granted'
+  | 'team_blocked'
+  | 'integration'
+  | 'credential';
+
+export const BLOCK_ORDER: BlockReason[] = [
+  'disabled',
+  'not_granted',
+  'team_blocked',
+  'integration',
+  'credential',
+];
+
+export const BLOCK_LABEL: Record<BlockReason, string> = {
+  disabled: 'Está apagada',
+  not_granted: 'Ningún agente la tiene habilitada',
+  team_blocked: 'Tu equipo la tiene bloqueada',
+  integration: 'Falta conectar la integración',
+  credential: 'Falta una credencial en el servidor',
+};
+
+/** Short subtitle for the diagnosis panel — what this cause means, in one line. */
+export const BLOCK_BLURB: Record<BlockReason, string> = {
+  disabled:
+    'Alguien la apagó desde esta misma pantalla. Sigue definida, pero no se le ofrece al modelo.',
+  not_granted:
+    'Está en el registro, pero ningún agente activo la lista entre sus herramientas, así que Cortex nunca la ve.',
+  team_blocked:
+    'Un equipo al que perteneces la bloqueó. Los equipos solo restan: estar en otro equipo no te la devuelve.',
+  integration:
+    'Cortex necesita entrar al sistema con tu cuenta y esa cuenta todavía no está conectada.',
+  credential:
+    'La herramienta depende de un servicio cuya llave se configura en el servidor, no en tu cuenta.',
 };
 
 /** Words that must not be title-cased naively. */
@@ -255,25 +579,25 @@ export type BlastRadius = 'read' | 'internal_write' | 'external_send' | 'bulk';
 export const RISK_ORDER: RiskLevel[] = ['low', 'medium', 'high', 'critical'];
 
 export const RISK_LABEL: Record<RiskLevel, string> = {
-  low: 'Low risk',
-  medium: 'Medium risk',
-  high: 'High risk',
-  critical: 'Critical',
+  low: 'Riesgo bajo',
+  medium: 'Riesgo medio',
+  high: 'Riesgo alto',
+  critical: 'Crítica',
 };
 
 export const SENSITIVITY_LABEL: Record<Sensitivity, string> = {
-  public: 'Public data',
-  internal: 'Internal data',
-  client: 'Client data',
-  pii: 'Personal data',
-  financial: 'Compensation data',
+  public: 'Datos públicos',
+  internal: 'Datos internos',
+  client: 'Datos del cliente',
+  pii: 'Datos personales',
+  financial: 'Datos de sueldos',
 };
 
 export const BLAST_LABEL: Record<BlastRadius, string> = {
-  read: 'Read-only',
-  internal_write: 'Writes internally',
-  external_send: 'Leaves the company',
-  bulk: 'Bulk operation',
+  read: 'Solo lectura',
+  internal_write: 'Escribe adentro',
+  external_send: 'Sale de la empresa',
+  bulk: 'Operación masiva',
 };
 
 /** Human name for an integration provider a tool depends on. */

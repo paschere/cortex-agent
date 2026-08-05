@@ -67,6 +67,10 @@ const ALLOWED = new Map<string, string>([
     'Cron. "Every routine due this minute" spans the install; each event then carries the workspace of the job it names.',
   ],
   [
+    'inngest/functions/commitments-watch.ts',
+    'Cron. "Which workspaces have deadlines to watch" spans the install; each event then carries one workspace, and every handle inside the per-workspace function is built from it.',
+  ],
+  [
     'inngest/functions/drive-sync.ts',
     'Cron. Scans every synced folder; each sync-state row names its workspace and the per-collection step is scoped to it.',
   ],
@@ -77,6 +81,10 @@ const ALLOWED = new Map<string, string>([
   [
     'inngest/functions/memory-derive.ts',
     "Cron. Scans yesterday's activity across the install; the workspace rides on the per-person event.",
+  ],
+  [
+    'inngest/functions/orchestrator-sweep.ts',
+    'Cron. "Which orchestrator runs anywhere in the install have gone quiet" spans every workspace and there is no session behind a cron; the raw handle runs one SELECT and every write goes through a handle pinned to the run\'s own workspace.',
   ],
   [
     'inngest/functions/reindex-embeddings.ts',
@@ -93,6 +101,14 @@ const ALLOWED = new Map<string, string>([
   [
     'inngest/functions/dev-task-intake.ts',
     'Settles the webhook delivery ledger row, which was written before the delivery had a workspace, and stamps it once the intake resolved one.',
+  ],
+  [
+    'app/api/whatsapp/bridge/dm/route.ts',
+    'A WhatsApp direct message carries a phone number and nothing else. Resolving it to a Cortex directory row is what determines the workspace, and the result is checked against the one the bridge claims before anything runs.',
+  ],
+  [
+    'app/api/whatsapp/links/route.ts',
+    'whatsapp_links is keyed by the phone number install-wide, so "already linked somewhere else" is invisible to a scoped read and would surface as a constraint error instead of an explanation. One read, for that message only; the write is scoped.',
   ],
 ]);
 

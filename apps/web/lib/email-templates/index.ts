@@ -41,3 +41,5 @@ export { renderApprovalRequestEmail } from './approval-request';
 export type { ApprovalRequestEmailInput } from './approval-request';
 export { renderDevTaskEmail } from './dev-task-result';
 export type { DevTaskEmailCheck, DevTaskEmailInput } from './dev-task-result';
+export { renderCommitmentNoticeEmail } from './commitment-notice';
+export type { CommitmentNoticeEmailInput, CommitmentNoticeKind } from './commitment-notice';

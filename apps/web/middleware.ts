@@ -35,6 +35,12 @@ const PUBLIC_PATHS = [
   // that signature against the raw body itself and rejects anything unsigned,
   // stale or unconfigured.
   '/api/webhooks',
+  // The WhatsApp bridge (services/whatsapp on Railway) posts here with a
+  // shared bearer token compared in constant time — it is a service, not a
+  // browser, so it has no session cookie. ONLY the /bridge subtree is public;
+  // the screens' own endpoints under /api/whatsapp stay behind the session.
+  // Without WHATSAPP_BRIDGE_TOKEN set, every one of these routes refuses.
+  '/api/whatsapp/bridge',
   // Brand assets fetched by external services that have no session: Google
   // Chat renders the app avatar from /icon.png, and link unfurls hit these
   // too. They are public images by nature.

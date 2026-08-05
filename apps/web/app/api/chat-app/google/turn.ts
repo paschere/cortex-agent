@@ -104,6 +104,20 @@ export interface ChatTurnRequest {
   userText: string;
   /** Extra instruction from a slash command, folded into the system prompt. */
   directive?: string;
+  /**
+   * Which messaging surface this turn came from. Google Chat by default.
+   *
+   * WhatsApp reuses this whole function rather than growing a second copy of
+   * it: the brain, the tool wiring, the retrieval, the persistence and the
+   * privacy guard are the same on any messaging surface, and the only things
+   * that differ are what the model should be told about the room and what the
+   * audit row should say. Both are strings, so both are parameters.
+   */
+  surfaceKey?: 'google_chat' | 'whatsapp';
+  /** Replaces the default note describing the room to the model. */
+  surfaceNote?: string;
+  /** Title prefix for the conversation row, so the history reads correctly. */
+  titlePrefix?: string;
 }
 
 export interface ChatTurnDelivery {
@@ -301,10 +315,11 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
   const db = getOrgScopedClient(req.organizationId);
   const agent = await loadAgent(db, 'cortex');
 
+  const prefix = req.titlePrefix ?? 'Chat';
   const title =
     req.audience === 'dm'
-      ? `Chat · ${req.senderName ?? 'Google Chat'}`
-      : `Chat · ${req.spaceDisplayName ?? req.space}`;
+      ? `${prefix} · ${req.senderName ?? 'Google Chat'}`
+      : `${prefix} · ${req.spaceDisplayName ?? req.space}`;
 
   const conversationId = await getOrCreateConversation({
     organizationId: req.organizationId,
@@ -433,7 +448,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
                 userId: req.userId,
                 toolId: err.toolId,
                 input: err.input,
-                surface: 'chat',
+                surface: req.surfaceKey === 'whatsapp' ? 'whatsapp' : 'chat',
                 ...(id ? { pendingActionId: id } : {}),
                 expiresAt,
               });
@@ -483,9 +498,10 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
 
   // --- system prompt --------------------------------------------------------
   const surfaceNote =
-    req.audience === 'space'
+    req.surfaceNote ??
+    (req.audience === 'space'
       ? 'You are answering in a Google Chat SPACE — a group room where everyone present reads your reply. People reach you by @mentioning you. Keep answers short and chat-shaped (a few lines, no headings, no tables). Anything involving compensation, payroll or personal data is delivered to the person privately instead of being posted here; do not restate such details in your reply.'
-      : 'You are answering in a 1:1 Google Chat DM. Keep answers short and chat-shaped (a few lines, no headings, no tables) unless the person asks for detail.';
+      : 'You are answering in a 1:1 Google Chat DM. Keep answers short and chat-shaped (a few lines, no headings, no tables) unless the person asks for detail.');
 
   // The same builder the web chat and MCP use, so a person's memories reach
   // every surface or none. `audience: 'group'` adds the do-not-repeat rule to
@@ -533,7 +549,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
           latency_ms: 0,
           metadata: {
             model: agent.defaultModel,
-            surface: 'google_chat',
+            surface: req.surfaceKey ?? 'google_chat',
             audience: req.audience,
             space: req.space,
             tokensIn: result.usage?.promptTokens ?? 0,
