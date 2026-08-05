@@ -79,7 +79,13 @@ function statusComment(status: DevTaskStatus, row: TaskRow, ev: DevTaskStatusEve
 }
 
 export const devTaskStatus = inngest.createFunction(
-  { id: 'dev-task-status', concurrency: { limit: 10 } },
+  // Capped at the account's plan limit, not at what this function could take.
+  // Inngest validates concurrency at sync time and rejects the *whole* app when
+  // any one function asks for more than the plan allows — so a single number
+  // over the line does not degrade this function, it leaves every background
+  // job unregistered and every event queued with nothing to consume it. These
+  // are status comments posted back to Linear; five at a time is ample.
+  { id: 'dev-task-status', concurrency: { limit: 5 } },
   { event: EVENT_TASK_STATUS },
   async ({ event, step }) => {
     const ev = event.data as unknown as DevTaskStatusEvent;
