@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   MEET_READONLY_SCOPE,
   type MeetingImportContext,
@@ -41,7 +41,7 @@ interface ImportedMeetingRow {
 
 export async function GET(req: NextRequest) {
   const session = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(session.organization.id);
 
   const spaceId = new URL(req.url).searchParams.get('spaceId');
   if (!spaceId) {
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(session.organization.id);
 
   const body = (await req.json().catch(() => ({}))) as {
     spaceId?: string;
@@ -129,6 +129,7 @@ export async function POST(req: NextRequest) {
   }
 
   const ctx: MeetingImportContext = {
+    organizationId: session.organization.id,
     userId: session.id,
     db,
     integrations: createIntegrationsClient(db, session.id, logger),

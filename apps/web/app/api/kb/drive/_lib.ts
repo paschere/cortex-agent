@@ -1,6 +1,6 @@
 import 'server-only';
 import { inngest } from '@/lib/inngest';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   type ToolContext,
   assertCanWriteToSpace,
@@ -9,7 +9,7 @@ import {
 } from '@cortex/agent-tools';
 import { NotFoundError, type SessionUser, logger } from '@cortex/core';
 
-type Db = ReturnType<typeof getSupabaseServiceClient>;
+type Db = ReturnType<typeof getOrgScopedClient>;
 
 /** Google Drive read-only OAuth scope required to call the Drive API. */
 export const DRIVE_READONLY = 'https://www.googleapis.com/auth/drive.readonly';
@@ -32,7 +32,7 @@ export type DriveContext = Pick<ToolContext, 'integrations' | 'signal'>;
 export async function getDriveContext(
   session: SessionUser,
 ): Promise<{ integrations: ToolContext['integrations']; token: string }> {
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(session.organization.id);
   const integrations = createIntegrationsClient(db, session.id, logger);
   const { token } = await integrations.getAccessToken('google');
   return { integrations, token };

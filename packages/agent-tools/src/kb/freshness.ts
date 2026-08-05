@@ -92,7 +92,9 @@ export function describeAge(ageDays: number): string {
   if (ageDays < 365) return months <= 1 ? 'de hace un mes' : `de hace ${months} meses`;
   const years = Math.floor(ageDays / 365);
   const remainder = ageDays - years * 365;
-  if (remainder >= 180) return `de hace más de ${years === 1 ? 'año y medio' : `${years} años y medio`}`;
+  if (remainder >= 180) {
+    return `de hace más de ${years === 1 ? 'un año y medio' : `${years} años y medio`}`;
+  }
   return years === 1 ? 'de hace un año' : `de hace ${years} años`;
 }
 

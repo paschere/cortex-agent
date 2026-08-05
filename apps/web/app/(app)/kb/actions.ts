@@ -1,7 +1,7 @@
 'use server';
 
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   assertCanWriteToSpace,
   getVisibleDocument,
@@ -12,10 +12,12 @@ import { ForbiddenError, NotFoundError } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
 import type {
   ActionResult,
+  IntakeKey,
   SearchResult,
   SimpleActionResult,
   SpaceKind,
 } from './_components/types';
+import { intakeOf } from './_lib/brain';
 
 const PATH = '/kb';
 
@@ -53,7 +55,7 @@ export async function createSpace(
     };
   }
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   const { error } = await db.from('kb_collections').insert({
     scope: kind === 'global' ? 'global' : 'user',
     scope_id: kind === 'global' ? null : user.id,
@@ -70,7 +72,7 @@ export async function createSpace(
 
 export async function deleteSpace(spaceId: string): Promise<SimpleActionResult> {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   try {
     await assertCanWriteToSpace(db, user.id, spaceId);
@@ -92,7 +94,7 @@ export async function moveDocument(
   targetSpaceId: string,
 ): Promise<ActionResult<{ space: string }>> {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   try {
     // Both ends are checked. Being able to see a document does not mean being
@@ -119,7 +121,7 @@ export async function moveDocument(
 
 export async function deleteDocument(documentId: string): Promise<SimpleActionResult> {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   try {
     const doc = await getVisibleDocument(db, user.id, documentId);
@@ -148,7 +150,7 @@ export async function searchKnowledge(
   const user = await requireSession();
   if (!query.trim()) return { ok: true, results: [] };
 
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
   try {
     if (spaceId) await getVisibleSpace(db, user.id, spaceId);
     const hits = await searchSpaces(db, {
@@ -157,16 +159,38 @@ export async function searchKnowledge(
       ...(spaceId ? { spaceIds: [spaceId] } : {}),
       limit: 12,
     });
+
+    // Which mouth each hit came in through, so the plate and the ring can light
+    // up where the answer lives before anything is opened. One read of at most
+    // twelve rows by primary key, and only over documents the search has
+    // already decided this person may see — it widens nothing.
+    const ids = [...new Set(hits.map((h) => h.documentId))];
+    const sourceOf = new Map<string, IntakeKey>();
+    if (ids.length > 0) {
+      const { data: rows } = await db
+        .from('kb_documents')
+        .select('id, source, media_kind')
+        .in('id', ids);
+      for (const row of rows ?? []) {
+        sourceOf.set(
+          row.id as string,
+          intakeOf({ source: row.source as string, media_kind: row.media_kind as string | null }),
+        );
+      }
+    }
+
     return {
       ok: true,
       results: hits.map((h) => ({
         documentId: h.documentId,
         documentTitle: h.documentTitle,
         space: h.spaceName,
+        spaceId: h.spaceId,
         spaceKind: h.spaceKind,
         chunkIndex: h.chunkIndex,
         content: h.content,
         score: h.score,
+        source: sourceOf.get(h.documentId) ?? 'upload',
       })),
     };
   } catch (err) {

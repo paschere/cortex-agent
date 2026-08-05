@@ -9,6 +9,24 @@ export type { SpeechTurn, Transcript, TranscribeResult, TranscribeFailure } from
 export { embedDocuments, embedQuery, EMBEDDING_DIMENSIONS, EMBEDDING_MODEL } from './embedder';
 export type { EmbedFailure, EmbedResult } from './embedder';
 export { kbSearch } from './search';
+export {
+  assessCoverage,
+  rateHit,
+  STRONG_MATCH,
+  WEAK_FLOOR,
+} from './relevance';
+export type { Coverage, CoverageVerdict, HitRelevance, ScoredHit } from './relevance';
+export { assessFreshness, describeAge, formatDateEs, isSuperseded } from './freshness';
+export type { Freshness, FreshnessStatus } from './freshness';
+export {
+  CONFLICT_MIN_SIMILARITY,
+  NEAR_DUPLICATE_SIMILARITY,
+  SAME_EVENT_DAYS,
+  extractFigures,
+  figuresDiverge,
+  findConflicts,
+} from './conflicts';
+export type { Conflict, ConflictRival, ConflictSourceHit } from './conflicts';
 export { kbListSpaces } from './list-spaces';
 export { kbCreateDocument } from './create-document';
 export { kbContext } from './context';

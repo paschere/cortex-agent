@@ -43,7 +43,33 @@ export interface SpaceHit {
   spaceKind: SpaceKind;
   chunkIndex: number;
   content: string;
+  /**
+   * The 0.7 semantic / 0.3 keyword blend the database sorts by. A good ORDER
+   * and a meaningless magnitude — threshold on `semanticScore` instead, and see
+   * relevance.ts for what that cost when nobody did.
+   */
   score: number;
+  /** Identifies the chunk itself, which is what a conflict lookup starts from. */
+  chunkId: string;
+  /**
+   * Raw cosine similarity between question and passage: the only number here
+   * that means the same thing from one query to the next. Null — never 0 —
+   * when the semantic arm did not run for this row, because 0 is a real
+   * similarity and would read as a certain miss.
+   */
+  semanticScore: number | null;
+  /** ts_rank of the literal-word match. Zero for most rows. */
+  keywordScore: number;
+  /**
+   * The document's own date: when the call happened or the note was written,
+   * not when the file was uploaded. This is the date a citation should carry.
+   */
+  datedAt: string | null;
+  /** When the document says it stops being true, if it says so at all. */
+  validUntil: string | null;
+  /** Set when somebody filed a replacement for this document. */
+  supersededById: string | null;
+  supersededByTitle: string | null;
   /**
    * Whatever the chunk was filed with. `{pages}` for a parsed document,
    * `{speaker, speakers, startMs, endMs}` for a chunk of a recording — which
@@ -266,6 +292,13 @@ export async function searchSpaces(
     content: string;
     score: number;
     metadata?: Record<string, unknown> | null;
+    chunk_id?: string | null;
+    vec_score?: number | null;
+    fts_score?: number | null;
+    dated_at?: string | null;
+    valid_until?: string | null;
+    superseded_by?: string | null;
+    superseded_by_title?: string | null;
   };
 
   return ((data as Row[]) ?? []).map((r) => ({
@@ -277,9 +310,18 @@ export async function searchSpaces(
     chunkIndex: r.chunk_index,
     content: r.content,
     score: Number(r.score),
-    // Optional on the row rather than required: the column arrived in 0058 and
-    // a deployment whose migrations lag by one should degrade to "no timestamp",
-    // not to a crash on every search.
+    // Everything from here down is optional on the row rather than required,
+    // for the same reason `metadata` has been since 0058: a deployment whose
+    // migrations lag by one should lose the extra columns, not crash on every
+    // search. Missing `vec_score` degrades to null, which relevance.ts already
+    // reads as "not measured" and handles as keyword-only.
+    chunkId: r.chunk_id ?? '',
+    semanticScore: r.vec_score === null || r.vec_score === undefined ? null : Number(r.vec_score),
+    keywordScore: Number(r.fts_score ?? 0),
+    datedAt: r.dated_at ?? null,
+    validUntil: r.valid_until ?? null,
+    supersededById: r.superseded_by ?? null,
+    supersededByTitle: r.superseded_by_title ?? null,
     metadata: r.metadata ?? {},
   }));
 }

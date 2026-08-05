@@ -19,6 +19,8 @@ export function SpaceDetail({
   onIntakeChange,
   onBack,
   viewerName,
+  focusDocumentId,
+  found,
 }: {
   space: SpaceSummary;
   allSpaces: SpaceSummary[];
@@ -26,11 +28,18 @@ export function SpaceDetail({
   onIntakeChange: (key: IntakeKey) => void;
   onBack: () => void;
   viewerName: string;
+  /** Arrived here by opening a document — the list points at it on landing. */
+  focusDocumentId?: string | null;
+  /** What the search on the front page found, still lit on this ring. */
+  found?: Set<string>;
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Opening from the ring inside this space points the list at the row rather
+  // than navigating anywhere: the document is already on this page.
+  const [pointedAt, setPointedAt] = useState<string | null>(focusDocumentId ?? null);
 
   // Somewhere to move a document to: any other space this person may write to.
   const moveTargets = allSpaces.filter((s) => s.canWrite && s.id !== space.id);
@@ -186,7 +195,11 @@ export function SpaceDetail({
       )}
 
       {/* ------------------------------------------------------- relations */}
-      <RelationsPanel spaceId={space.id} />
+      <RelationsPanel
+        spaceId={space.id}
+        onOpenDocument={(target) => setPointedAt(target.documentId)}
+        {...(found ? { found } : {})}
+      />
 
       {/* --------------------------------------------------------- documents */}
       <Panel>
@@ -204,6 +217,8 @@ export function SpaceDetail({
             spaceName={space.name}
             canWrite={space.canWrite}
             moveTargets={moveTargets.map((s) => ({ id: s.id, name: s.name, kind: s.kind }))}
+            pointedAt={pointedAt}
+            {...(found ? { found } : {})}
           />
         </div>
       </Panel>

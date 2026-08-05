@@ -54,6 +54,29 @@ export interface WeekPoint {
 }
 
 /**
+ * The same reading, kept for one source only.
+ *
+ * Why it exists: the plate is a control, and choosing a lobe narrows the rest
+ * of the page to that source. Every figure below has to be re-counted for the
+ * chosen source, and re-counting it in the browser from a total is impossible —
+ * so the server, which is already walking every row, keeps four running
+ * tallies as it goes. No extra query.
+ *
+ * Fragments are missing on purpose: they are counted with a join on spaces, not
+ * on sources, so there is no honest per-source figure and the panel prints
+ * nothing rather than a number it cannot stand behind.
+ */
+export interface SourceStats {
+  stages: StageCounts;
+  growth: WeekPoint[];
+  spokenSeconds: number;
+  namedVoices: number;
+  unnamedRecordings: number;
+  lastAddedAt: string | null;
+  digesting: DigestingDoc[];
+}
+
+/**
  * What this brain knows, in figures that come from rows and nothing else.
  *
  * `chunks` is null when the count could not be read — the page then leaves the
@@ -76,6 +99,8 @@ export interface BrainStats {
   unnamedRecordings: number;
   lastAddedAt: string | null;
   digesting: DigestingDoc[];
+  /** The same reading again, split four ways, so a lobe can narrow the page. */
+  bySource: Record<IntakeKey, SourceStats>;
 }
 
 export interface SpaceSummary {
@@ -105,10 +130,17 @@ export interface SearchResult {
   documentId: string;
   documentTitle: string;
   space: string;
+  spaceId: string;
   spaceKind: SpaceKind;
   chunkIndex: number;
   content: string;
   score: number;
+  /**
+   * Which mouth the document came in through. Carried so a hit can be shown
+   * where it lives — lit on the plate and on the ring — before anything is
+   * opened. Read off the document row, never guessed from the space.
+   */
+  source: IntakeKey;
 }
 
 /**

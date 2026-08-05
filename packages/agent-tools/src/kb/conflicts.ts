@@ -1,12 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { assessFreshness, formatDateEs } from './freshness';
+import { assessFreshness, formatDateEs, isSuperseded } from './freshness';
 
 /**
- * Noticing that the brain contradicts itself.
+ * Noticing when the brain contradicts itself.
  *
  * THE CASE. The framework contract from March says the senior React rate is
  * 8.500 and the renegotiation call from July says 9.200. Both are indexed, both
- * are true of their own date, and retrieval hands them over as equals — often
+ * were true on their own date, and retrieval hands them over as equals — often
  * with the older one first, because a contract is worded more like a rate card
  * than a conversation is. The answer that comes out is confident and wrong.
  *
@@ -14,68 +14,95 @@ import { assessFreshness, formatDateEs } from './freshness';
  * is 8.500" and "the rate is not 8.500" sit almost on top of each other. That
  * limitation is the mechanism here rather than an obstacle to it: two passages
  * that land on top of each other are RESTATEMENTS OF THE SAME FACT, and two
- * restatements of the same fact from documents of different dates are exactly
- * where a contradiction or an update lives. So this never decides who is right.
- * It puts both texts and both dates in front of the model, which can read, and
- * which is infinitely better placed than a cosine to tell "we raised the rate"
- * from "we also mention the rate over here".
+ * restatements from documents of different dates are exactly where an update or
+ * a contradiction lives. So nothing here decides who is right. It puts both
+ * texts and both dates in front of the model, which can read, and which is far
+ * better placed than a cosine to tell "we raised the rate" from "we happen to
+ * mention the rate over here too".
  *
- * THE FALSE POSITIVE THAT MATTERS. Two chunks that are nearly identical are
- * usually the same thing stored twice — a re-uploaded contract, a signed scan
- * next to the original, a policy pasted into a summary. Flagging those as
- * contradictions would be worse than not flagging anything: the model would
- * hedge every single answer and the signal would be trained out of it within a
- * day. Three cuts, in order, kill that:
+ * THE MEASUREMENT. Every cross-document chunk pair in the ten-document test
+ * corpus, by cosine similarity:
  *
- *   1. NEAR-DUPLICATE. Similarity at or above 0.985 is the same passage, not a
- *      second version of it. Measured on the local corpus: an identical chunk
- *      stored under two documents comes back at 1.000, while the March contract
- *      and the July call — the real conflict — sit at 0.87.
- *   2. SAME EVENT. Documents dated within a fortnight of each other are one
- *      event filed twice (a contract and its signed copy, a call and the notes
- *      from it), not a revision. A revision that genuinely happens inside two
- *      weeks is missed; that is the trade, and it is the right way round.
- *   3. NOTHING ACTUALLY CHANGED. Restating a fact is not contradicting it. The
- *      figures in both passages are compared, and a pair only survives if both
- *      sides carry figures AND they differ. A rate that appears as 8.500 in two
- *      places is agreement, and the pair is dropped.
+ *   1.0000  the contract and its signed scan — the same passage, twice
+ *   0.8590  the March contract rates × the July call rates — THE conflict
+ *   0.7758  vacation policy × payroll manual        ) same subject area,
+ *   0.7557  private-health benefit × payroll manual ) different facts,
+ *   0.7495  the contract's payment terms × the call's payment terms
+ *   0.7467  onboarding guide × recruiting playbook  ) no disagreement
+ *   …and everything else below 0.75
+ *
+ * The band between 0.776 (the highest pair that is NOT a conflict) and 0.859
+ * (the conflict) is where the cut belongs, so it sits at 0.82. That does miss
+ * the second real conflict in the corpus — the payment terms moving from 30 to
+ * 45 days pair at only 0.7495 — and lowering the cut to catch it would drag in
+ * four unrelated pairs first. Missing a conflict costs the status quo; inventing
+ * them costs the signal itself, because a model that is warned about everything
+ * stops reading the warnings.
+ *
+ * THE FALSE POSITIVE THAT MATTERS. Two nearly identical chunks are usually the
+ * same thing stored twice — a re-uploaded contract, a signed scan beside the
+ * original, a policy pasted into a summary. Three cuts, in order, kill those:
+ *
+ *   1. NEAR-DUPLICATE, at 0.985. Measured: an identical chunk under two
+ *      documents comes back at 1.0000 while the real conflict sits at 0.859, so
+ *      anything from 0.87 up would work; 0.985 is chosen to leave room for a
+ *      scan or an OCR pass of the same page, which differs by a few characters
+ *      and lands around 0.99.
+ *   2. SAME EVENT, at 14 days. Documents dated within a fortnight are one event
+ *      filed twice — the contract (5 March) and its signed copy (11 March) are
+ *      6 days apart. A genuine revision inside two weeks is missed; that is the
+ *      trade and it is the right way round.
+ *   3. NOTHING ACTUALLY CHANGED. Restating a fact is not contradicting it, so
+ *      the figures in both passages are compared and a pair only survives if
+ *      both carry figures AND they differ. 8.500 in two places is agreement.
  *
  * WHAT IS STILL ACCEPTED AS A FALSE POSITIVE, on purpose:
  *   - A later document that QUOTES an earlier one ("as agreed in March, 8.500,
  *     which now becomes 9.200") flags against it. The model sees both and
- *     resolves it in one sentence.
- *   - Two rate cards for two different clients that happen to be worded the
- *     same and carry different numbers. Rare, cheap to dismiss, and the
- *     alternative — requiring the same client — is a rule about content that
- *     this layer has no business inventing.
- *   - Purely textual contradictions with no figures in them ("the contract is
- *     exclusive" vs "it is not exclusive") are NOT caught. Cut 3 needs numbers.
+ *     resolves it in one sentence — the flag was even useful.
+ *   - Two rate cards for two different clients, worded the same, with different
+ *     numbers. Rare, cheap to dismiss, and the alternative — a rule about which
+ *     client a document belongs to — is content knowledge this layer has no
+ *     business inventing.
+ *   - Contradictions with no figures in them ("the contract is exclusive" vs
+ *     "it is not exclusive") are NOT caught at all. Cut 3 needs numbers.
  *     Catching them would mean asking a model to compare every near-neighbour
- *     pair on every search, which is not proportionate to the problem.
+ *     pair on every search, which is not proportionate.
+ *   - A document filed twice raises the same disagreement twice: the contract
+ *     and its signed scan are correctly NOT flagged against each other, but
+ *     each is separately flagged against the July call. Observed end to end on
+ *     the test corpus. Collapsing them would mean deciding that two documents
+ *     are "the same document", which is a claim about the corpus rather than
+ *     about this pair, and the second note is a repetition rather than a lie.
  */
 
 /**
- * Below this two passages are simply about the same subject, which the whole
- * corpus is. Measured: unrelated chunks inside this corpus pair at 0.35–0.60,
- * the two versions of the Acme rate at 0.87, an identical chunk at 1.000.
+ * Below this, two passages are merely about the same subject — which, inside
+ * one company's brain, nearly everything is. Measured cut: see above.
  */
-export const CONFLICT_MIN_SIMILARITY = 0.86;
+export const CONFLICT_MIN_SIMILARITY = 0.82;
 
-/** At or above this it is the same passage stored twice. See cut 1 above. */
+/** At or above this it is the same passage stored twice, not a new version. */
 export const NEAR_DUPLICATE_SIMILARITY = 0.985;
 
-/** Documents closer together than this are one event filed twice. See cut 2. */
+/** Documents closer together in time than this are one event filed twice. */
 export const SAME_EVENT_DAYS = 14;
 
-/** How many rivals to look for per retrieved chunk. Three is plenty to notice. */
+/** Rivals to look for per retrieved chunk. Three is plenty to notice a change. */
 const CANDIDATES_PER_CHUNK = 3;
+
+/** How many of the retrieved chunks get a rival lookup, at one probe each. */
+const DEFAULT_MAX_SOURCES = 5;
 
 export interface ConflictSourceHit {
   chunkId: string;
   documentId: string;
   documentTitle: string;
   chunkIndex: number;
+  /** The document's own date — `recorded_at` if it has one, else `created_at`. */
   datedAt: string | null;
+  /** The passage itself. Cut 3 compares the figures in it. */
+  content: string;
 }
 
 export interface ConflictRival {
@@ -88,25 +115,25 @@ export interface ConflictRival {
 }
 
 export interface Conflict {
-  /** The chunk the search actually returned. */
+  /** The chunk the search returned. */
   hit: ConflictSourceHit;
-  /** The passage elsewhere in the brain that says almost the same thing. */
+  /** The passage elsewhere in the brain that restates it differently. */
   rival: ConflictRival;
   similarity: number;
   /** Which of the two is more recent. A fact, not a verdict. */
   newer: 'hit' | 'rival';
-  /** Spanish, ready to show next to the citation. */
+  /** Colombian Spanish, ready to show next to the citation. */
   note: string;
 }
 
 /**
- * Every number in a passage, normalised so that "8.500" and "8500" are the same
- * figure and "1,25" is not confused with "125".
+ * Every number in a passage, normalised so that "8.500" and "8500" are one
+ * figure and "1,25" is not read as "125".
  *
- * Colombian formatting: dot groups thousands, comma is the decimal separator.
- * Speaker labels are stripped first — every diarised transcript chunk opens
- * with "Speaker 1:", and a 1 that means "the first person talking" would make
- * every recording look like it disagreed with every document.
+ * Colombian formatting: the dot groups thousands, the comma is the decimal
+ * separator. Speaker labels are stripped first — every diarised transcript
+ * chunk opens with "Speaker 1:", and a 1 that means "the first person talking"
+ * would make every recording look like it disagreed with every document.
  */
 export function extractFigures(text: string): Set<string> {
   const cleaned = text.replace(/\b(?:speaker|hablante|ponente|interlocutor)\s*\d+/gi, ' ');
@@ -158,7 +185,6 @@ function shortDate(value: string | null): string {
 export interface FindConflictsOptions {
   userId: string;
   hits: ConflictSourceHit[];
-  /** Cap on how many retrieved chunks get a rival lookup. */
   maxSources?: number;
   now?: Date;
 }
@@ -179,17 +205,16 @@ type CandidateRow = {
 
 /**
  * Given the chunks a search returned, find the ones the rest of the brain
- * disagrees with. One RPC for the whole batch; the judgement is all here, where
- * it can be unit-tested without a database.
+ * disagrees with. One RPC for the whole batch; every judgement is made here,
+ * where it can be tested without a database.
  *
- * Never throws: a conflict check is an enrichment of an answer that already
- * exists, and losing the whole answer because the extra probe failed would be a
- * strictly worse outcome than not mentioning the conflict.
+ * NEVER THROWS. A conflict check enriches an answer that already exists, so
+ * losing the answer because the extra probe failed would be strictly worse than
+ * not mentioning the conflict. The reason goes to the caller's logger instead.
  */
 export async function findConflicts(
   db: SupabaseClient,
-  { userId, hits, maxSources = 5, now = new Date() }: FindConflictsOptions,
-  /** Called with the reason when the check could not run. */
+  { userId, hits, maxSources = DEFAULT_MAX_SOURCES, now = new Date() }: FindConflictsOptions,
   onFailure?: (reason: string) => void,
 ): Promise<Conflict[]> {
   const sources = hits.filter((h) => h.chunkId).slice(0, maxSources);
@@ -210,19 +235,19 @@ export async function findConflicts(
     return [];
   }
 
-  const byChunkId = new Map(sources.map((h) => [h.chunkId, h]));
+  const bySourceId = new Map(sources.map((h) => [h.chunkId, h]));
   const conflicts: Conflict[] = [];
   // One flag per pair of DOCUMENTS: three chunks of the same contract landing
   // against three chunks of the same call is one disagreement, said once.
   const seenPairs = new Set<string>();
 
   for (const row of rows) {
-    const hit = byChunkId.get(row.source_chunk_id);
+    const hit = bySourceId.get(row.source_chunk_id);
     if (!hit) continue;
 
     const similarity = Number(row.similarity);
     // Cut 1 — the same passage stored twice.
-    if (similarity >= NEAR_DUPLICATE_SIMILARITY) continue;
+    if (!Number.isFinite(similarity) || similarity >= NEAR_DUPLICATE_SIMILARITY) continue;
 
     // Cut 2 — one event, filed twice. An undated side cannot be ruled out this
     // way, so it is let through: not knowing when something was written is a
@@ -231,10 +256,7 @@ export async function findConflicts(
     if (gap !== null && gap < SAME_EVENT_DAYS) continue;
 
     // Cut 3 — a restatement that changes no number is agreement.
-    const rivalHit = sources.find((s) => s.chunkId === row.source_chunk_id);
-    if (!rivalHit) continue;
-    const sourceText = sourceTextOf(hits, row.source_chunk_id);
-    if (sourceText !== null && !figuresDiverge(sourceText, row.content)) continue;
+    if (!figuresDiverge(hit.content, row.content)) continue;
 
     const pairKey = [hit.documentId, row.document_id].sort().join('|');
     if (seenPairs.has(pairKey)) continue;
@@ -242,12 +264,16 @@ export async function findConflicts(
 
     const hitTime = hit.datedAt ? new Date(hit.datedAt).getTime() : Number.NaN;
     const rivalTime = row.dated_at ? new Date(row.dated_at).getTime() : Number.NaN;
+    // With a date missing on either side there is no "more recent", so the
+    // retrieved hit is named and the note says the dates instead of asserting
+    // an order that was never established.
     const newer: 'hit' | 'rival' =
       Number.isNaN(hitTime) || Number.isNaN(rivalTime)
         ? 'hit'
         : rivalTime > hitTime
           ? 'rival'
           : 'hit';
+    const datesKnown = !Number.isNaN(hitTime) && !Number.isNaN(rivalTime);
 
     const rivalFreshness = assessFreshness({
       datedAt: row.dated_at,
@@ -257,6 +283,12 @@ export async function findConflicts(
 
     const newerTitle = newer === 'rival' ? row.document_title : hit.documentTitle;
     const newerDate = shortDate(newer === 'rival' ? row.dated_at : hit.datedAt);
+    const which = datesKnown
+      ? `La versión más reciente es «${newerTitle}» (${newerDate})`
+      : 'No hay fecha en las dos, así que no se puede decir cuál manda';
+    const replacedNote = isSuperseded(rivalFreshness.status)
+      ? `; además «${row.document_title}» está ${rivalFreshness.label}`
+      : '';
 
     conflicts.push({
       hit,
@@ -270,34 +302,9 @@ export async function findConflicts(
       },
       similarity: Number(similarity.toFixed(3)),
       newer,
-      note:
-        `«${hit.documentTitle}» (${shortDate(hit.datedAt)}) y «${row.document_title}» (${shortDate(row.dated_at)}) ` +
-        `dicen cosas distintas sobre lo mismo. La versión más reciente es «${newerTitle}» (${newerDate})` +
-        (rivalFreshness.status === 'expired' || rivalFreshness.status === 'superseded'
-          ? `; además «${row.document_title}» está ${rivalFreshness.label}`
-          : '') +
-        '. Contrástalas antes de dar una cifra por buena.',
+      note: `«${hit.documentTitle}» (${shortDate(hit.datedAt)}) y «${row.document_title}» (${shortDate(row.dated_at)}) dicen cosas distintas sobre lo mismo. ${which}${replacedNote}. Contrasta las dos antes de dar una cifra por buena, y di de cuándo es la que uses.`,
     });
   }
 
   return conflicts;
-}
-
-/**
- * The text of a retrieved chunk, which `findConflicts` needs for the figure
- * test but which callers do not always carry on the same object.
- */
-let sourceTexts = new WeakMap<object, Map<string, string>>();
-
-export function rememberSourceText(hits: ConflictSourceHit[], texts: Map<string, string>): void {
-  sourceTexts.set(hits, texts);
-}
-
-function sourceTextOf(hits: ConflictSourceHit[], chunkId: string): string | null {
-  return sourceTexts.get(hits)?.get(chunkId) ?? null;
-}
-
-/** Test seam: drops every remembered text so cases cannot leak into each other. */
-export function resetSourceTexts(): void {
-  sourceTexts = new WeakMap();
 }

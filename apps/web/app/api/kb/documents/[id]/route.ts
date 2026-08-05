@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { assertCanWriteToSpace, getVisibleDocument } from '@cortex/agent-tools';
 import { NotFoundError } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -7,7 +7,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
   const { id } = await params;
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(session.organization.id);
 
   // Visibility first: a document in someone else's personal space must read as
   // missing, not as forbidden.

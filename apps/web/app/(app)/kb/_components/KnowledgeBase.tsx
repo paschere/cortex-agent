@@ -2,13 +2,14 @@
 
 import { Panel, PanelHead } from '@/components/ui/panel';
 import { clsx } from 'clsx';
-import { AlertTriangle, Building2, Loader2, Lock, Plus, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { AlertTriangle, Building2, Loader2, Lock, Plus, Search, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { countBySource, focusStats } from '../_lib/view';
 import { searchKnowledge } from '../actions';
 import { BrainPanel, GrowthPanel } from './BrainPlate';
 import { DigestionPanel, KnowsPanel, useDigest } from './Digestion';
 import { IntakeChooser } from './Intake';
-import { RelationsPanel } from './RelationsGraph';
+import { RelationsPanel, SOURCE_LABEL } from './RelationsGraph';
 import { SpaceDetail } from './SpaceDetail';
 import { SpaceDialog } from './SpaceDialog';
 import { ago, hours, num, plural } from './format';
@@ -42,12 +43,28 @@ export function KnowledgeBase({
   const stats = useDigest(serverStats);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [intake, setIntake] = useState<IntakeKey>('upload');
-  // Which lobe of the plate is open. Null means the map is closed.
+  // Which lobe of the plate is pressed. Null is "todo".
   const [openRegion, setOpenRegion] = useState<IntakeKey | null>(null);
   const [creating, setCreating] = useState<'personal' | 'global' | null>(null);
+  // A document opened from the ring: which space to walk into, and what to
+  // point at once we are there.
+  const [focusDoc, setFocusDoc] = useState<string | null>(null);
+
+  const search = useKnowledgeSearch();
+  const found = search.found;
+
+  // Everything under the plate reads the focused view; the plate itself keeps
+  // the whole reading, because it is the control and has to draw all four.
+  const view = useMemo(() => focusStats(stats, openRegion), [stats, openRegion]);
+  const focusLabel = openRegion ? { label: SOURCE_LABEL[openRegion] } : null;
 
   const company = useMemo(() => spaces.filter((s) => s.kind === 'global'), [spaces]);
   const mine = useMemo(() => spaces.filter((s) => s.kind === 'personal'), [spaces]);
+
+  const openDocument = useCallback((spaceId: string, documentId: string) => {
+    setFocusDoc(documentId);
+    setSelectedId(spaceId);
+  }, []);
 
   const selected = spaces.find((s) => s.id === selectedId) ?? null;
 
@@ -59,8 +76,13 @@ export function KnowledgeBase({
           allSpaces={spaces}
           intake={intake}
           onIntakeChange={setIntake}
-          onBack={() => setSelectedId(null)}
+          onBack={() => {
+            setSelectedId(null);
+            setFocusDoc(null);
+          }}
           viewerName={viewerName}
+          focusDocumentId={focusDoc}
+          found={found}
         />
         {creating && (
           <SpaceDialog kind={creating} onClose={() => setCreating(null)} viewerName={viewerName} />
@@ -80,6 +102,11 @@ export function KnowledgeBase({
     );
   }
 
+  // With a lobe pressed, a space with nothing from that source has nothing to
+  // say about it and is left out rather than shown as an empty card.
+  const inFocus = (list: SpaceSummary[]) =>
+    openRegion ? list.filter((s) => s.intake[openRegion] > 0) : list;
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
@@ -87,20 +114,35 @@ export function KnowledgeBase({
           stats={stats}
           openRegion={openRegion}
           onOpenRegion={(key) => setOpenRegion((current) => (current === key ? null : key))}
+          hits={search.query.trim() ? countBySource(search.results ?? []) : null}
+          searching={search.running}
         />
-        <KnowsPanel stats={stats} />
+        <KnowsPanel stats={view} focus={focusLabel} />
       </div>
 
-      {openRegion && <RelationsPanel source={openRegion} onClose={() => setOpenRegion(null)} />}
+      {/* The search sits between the two instruments it drives: type here and
+          the lobe above and the ring below say where the answer lives, before
+          anything is opened. */}
+      <AskPanel spaces={spaces} search={search} onOpenDocument={openDocument} />
+
+      <RelationsPanel
+        {...(openRegion ? { source: openRegion } : {})}
+        onOpenDocument={(target) => {
+          if (target.spaceId) openDocument(target.spaceId, target.documentId);
+        }}
+        found={found}
+        query={search.query}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <DigestionPanel stats={stats} />
-        <GrowthPanel stats={stats} />
+        <DigestionPanel stats={view} focus={focusLabel} />
+        <GrowthPanel stats={view} focus={openRegion} />
       </div>
 
       <IntakeChooser
         spaces={spaces}
         totals={stats.intake}
+        highlight={openRegion}
         onFeed={(spaceId, key) => {
           setIntake(key);
           setSelectedId(spaceId);
@@ -108,30 +150,38 @@ export function KnowledgeBase({
         onCreateSpace={() => setCreating('personal')}
       />
 
-      <AskPanel spaces={spaces} onOpenSpace={setSelectedId} />
-
       <SpaceGroup
         title="Memoria de la empresa"
         blurb="La lee todo el mundo. Solo un administrador puede añadir."
         icon={Building2}
-        spaces={company}
+        spaces={inFocus(company)}
+        focus={openRegion}
         onOpen={setSelectedId}
         action={
           isAdmin
             ? { label: 'Nuevo espacio común', onClick: () => setCreating('global') }
             : undefined
         }
-        emptyText="Todavía no hay nada común. Lo que pongas aquí se lo responde Cortex a cualquiera."
+        emptyText={
+          openRegion
+            ? `Ningún espacio común tiene ${SOURCE_LABEL[openRegion].toLowerCase()} todavía.`
+            : 'Todavía no hay nada común. Lo que pongas aquí se lo responde Cortex a cualquiera.'
+        }
       />
 
       <SpaceGroup
         title="Tu memoria"
         blurb="Solo tú la lees. La búsqueda de nadie más llega hasta aquí."
         icon={Lock}
-        spaces={mine}
+        spaces={inFocus(mine)}
+        focus={openRegion}
         onOpen={setSelectedId}
         action={{ label: 'Nuevo espacio propio', onClick: () => setCreating('personal') }}
-        emptyText="Para tus notas de trabajo: las mañas de un cliente, un borrador que quieres que recuerde."
+        emptyText={
+          openRegion
+            ? `No tienes ${SOURCE_LABEL[openRegion].toLowerCase()} en tus espacios.`
+            : 'Para tus notas de trabajo: las mañas de un cliente, un borrador que quieres que recuerde.'
+        }
       />
 
       {creating && (
@@ -143,40 +193,125 @@ export function KnowledgeBase({
 
 /* ------------------------------------------------------------------- search */
 
-function AskPanel({
-  spaces,
-  onOpenSpace,
-}: {
-  spaces: SpaceSummary[];
-  onOpenSpace: (id: string) => void;
-}) {
+/** Long enough that a word is finished, short enough to feel like typing. */
+const TYPING_PAUSE = 300;
+/** One letter matches everything and means nothing. */
+const MIN_QUERY = 2;
+
+interface KnowledgeSearch {
+  query: string;
+  setQuery: (q: string) => void;
+  scope: string;
+  setScope: (id: string) => void;
+  results: SearchResult[] | null;
+  running: boolean;
+  error: string | null;
+  /** The documents the current results point at, for the plate and the ring. */
+  found: Set<string>;
+  clear: () => void;
+}
+
+/**
+ * Search as you type, without the two ways that usually goes wrong.
+ *
+ * FIRST: it waits. A keystroke is not a question, so nothing is sent until the
+ * typing stops — otherwise "tarifa" is six embeddings and six retrievals to
+ * answer one.
+ *
+ * SECOND: only the newest answer is allowed to land. A server action cannot be
+ * aborted from here, so instead every request carries a ticket and a reply
+ * whose ticket is no longer the current one is dropped on arrival. Without
+ * that, a slow "tar" comes back after a fast "tarifa" and quietly overwrites
+ * it — the results on screen would be answering a question nobody asked any
+ * more.
+ *
+ * And the screen never goes blank while it thinks: the previous results stay,
+ * dimmed, because a blank panel reads as "nothing found".
+ */
+function useKnowledgeSearch(spaceId?: string): KnowledgeSearch {
   const [query, setQuery] = useState('');
   const [scope, setScope] = useState('');
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const ticket = useRef(0);
 
-  async function run() {
-    if (!query.trim()) return;
-    setRunning(true);
-    setError(null);
-    const res = await searchKnowledge(query, scope || undefined);
-    setRunning(false);
-    if (res.ok) {
-      setResults(res.results);
-    } else {
+  const where = spaceId ?? scope;
+
+  useEffect(() => {
+    const text = query.trim();
+    if (text.length < MIN_QUERY) {
+      // Abandoning the query abandons its answer too, in flight or not.
+      ticket.current += 1;
       setResults(null);
-      setError(res.error);
+      setError(null);
+      setRunning(false);
+      return;
     }
-  }
 
+    ticket.current += 1;
+    const mine = ticket.current;
+    setRunning(true);
+    const timer = setTimeout(async () => {
+      const res = await searchKnowledge(text, where || undefined);
+      // Somebody has typed since. This answer is about an older question.
+      if (ticket.current !== mine) return;
+      setRunning(false);
+      if (res.ok) {
+        setResults(res.results);
+        setError(null);
+      } else {
+        setError(res.error);
+      }
+    }, TYPING_PAUSE);
+
+    return () => clearTimeout(timer);
+  }, [query, where]);
+
+  const found = useMemo(() => new Set((results ?? []).map((r) => r.documentId)), [results]);
+
+  const clear = useCallback(() => {
+    ticket.current += 1;
+    setQuery('');
+    setResults(null);
+    setError(null);
+    setRunning(false);
+  }, []);
+
+  return { query, setQuery, scope, setScope, results, running, error, found, clear };
+}
+
+function AskPanel({
+  spaces,
+  search,
+  onOpenDocument,
+}: {
+  spaces: SpaceSummary[];
+  search: KnowledgeSearch;
+  onOpenDocument: (spaceId: string, documentId: string) => void;
+}) {
+  const { query, setQuery, scope, setScope, results, running, error, clear } = search;
   const scopeName = spaces.find((s) => s.id === scope)?.name;
+  const typing = query.trim().length > 0 && query.trim().length < MIN_QUERY;
 
   return (
     <Panel>
-      <PanelHead title="Pruébale la memoria" right="la misma búsqueda que hace Cortex" />
+      <PanelHead
+        title="Buscar dentro del cerebro"
+        right={
+          running ? (
+            <span className="inline-flex items-center gap-1.5 text-ink-faint">
+              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+              buscando
+            </span>
+          ) : (
+            'la misma búsqueda que hace Cortex'
+          )
+        }
+      />
       <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
-        Si no sale aquí, Cortex tampoco lo sabe.
+        Mientras escribes te marco arriba en qué fuente está y abajo en qué documentos. Si no sale
+        aquí, Cortex tampoco lo sabe.
       </p>
 
       <div className="flex flex-wrap gap-2 px-5 pb-4 pt-3">
@@ -185,16 +320,27 @@ function AskPanel({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && run()}
             placeholder="Tarifa de bodegaje, cómo se liquida una importación…"
-            className="h-9 w-full rounded-card border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface"
+            aria-label="Buscar en la memoria"
+            className="h-9 w-full rounded-card border border-border bg-surface-2 pl-9 pr-9 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface"
           />
+          {query && (
+            <button
+              type="button"
+              onClick={clear}
+              aria-label="Limpiar la búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-card p-1 text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {spaces.length > 1 && (
           <select
             value={scope}
             onChange={(e) => setScope(e.target.value)}
+            aria-label="Dónde buscar"
             className="h-9 rounded-card border border-border bg-surface px-3 text-[12.5px] font-medium text-ink focus:border-border-strong"
           >
             <option value="">En todo lo que ves</option>
@@ -205,16 +351,6 @@ function AskPanel({
             ))}
           </select>
         )}
-
-        <button
-          type="button"
-          onClick={run}
-          disabled={running || !query.trim()}
-          className="inline-flex h-9 items-center gap-1.5 rounded-card bg-primary px-4 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong disabled:opacity-40"
-        >
-          {running && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Buscar
-        </button>
       </div>
 
       {error && (
@@ -223,8 +359,20 @@ function AskPanel({
         </p>
       )}
 
-      {results !== null && !error && (
-        <div className="border-t border-border">
+      {typing && !results && (
+        <p className="px-5 pb-4 text-[12px] text-ink-faint">Escribe un poco más.</p>
+      )}
+
+      {results !== null && (
+        // Dimmed rather than emptied while a newer answer is on its way: what
+        // is on screen is still true, it is only about the previous keystroke.
+        <div
+          className={clsx(
+            'border-t border-border transition-opacity duration-200',
+            running && 'opacity-50',
+          )}
+          aria-busy={running}
+        >
           {results.length === 0 ? (
             <p className="px-5 py-4 text-[12.5px] leading-relaxed text-ink-muted">
               No hay nada sobre eso{scopeName ? ` en ${scopeName}` : ''} todavía. Súbelo y en un
@@ -233,39 +381,30 @@ function AskPanel({
           ) : (
             <ul className="divide-y divide-border">
               {results.map((r) => (
-                <li key={`${r.documentId}-${r.chunkIndex}`} className="px-5 py-3">
-                  <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-[12.5px] font-semibold text-ink">
-                      {r.documentTitle}
-                    </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      <SpaceChip kind={r.spaceKind} label={r.space} />
-                      <span className="tabular text-[10.5px] text-ink-faint">
-                        frag. {r.chunkIndex + 1}
+                <li key={`${r.documentId}-${r.chunkIndex}`}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenDocument(r.spaceId, r.documentId)}
+                    className="block w-full px-5 py-3 text-left transition-colors hover:bg-surface-2"
+                  >
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-[12.5px] font-semibold text-ink">
+                        {r.documentTitle}
                       </span>
-                    </span>
-                  </div>
-                  <p className="line-clamp-3 text-[12.5px] leading-relaxed text-ink-muted">
-                    {r.content}
-                  </p>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <SpaceChip kind={r.spaceKind} label={r.space} />
+                        <span className="tabular text-[10.5px] text-ink-faint">
+                          frag. {r.chunkIndex + 1}
+                        </span>
+                      </span>
+                    </div>
+                    <p className="line-clamp-3 text-[12.5px] leading-relaxed text-ink-muted">
+                      {r.content}
+                    </p>
+                  </button>
                 </li>
               ))}
             </ul>
-          )}
-
-          {results.length > 0 && (
-            <div className="border-t border-border px-5 py-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  const first = spaces.find((s) => s.name === results[0]?.space);
-                  if (first) onOpenSpace(first.id);
-                }}
-                className="rounded-card px-2 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
-              >
-                Abrir {results[0]?.space}
-              </button>
-            </div>
           )}
         </div>
       )}
@@ -295,6 +434,7 @@ function SpaceGroup({
   blurb,
   icon: Icon,
   spaces,
+  focus,
   onOpen,
   action,
   emptyText,
@@ -303,6 +443,8 @@ function SpaceGroup({
   blurb: string;
   icon: typeof Building2;
   spaces: SpaceSummary[];
+  /** The lobe in force, if any: the cards then count only that source. */
+  focus?: IntakeKey | null;
   onOpen: (id: string) => void;
   action?: { label: string; onClick: () => void };
   emptyText: string;
@@ -334,7 +476,7 @@ function SpaceGroup({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {spaces.map((s) => (
-            <SpaceCard key={s.id} space={s} onOpen={() => onOpen(s.id)} />
+            <SpaceCard key={s.id} space={s} focus={focus ?? null} onOpen={() => onOpen(s.id)} />
           ))}
         </div>
       )}
@@ -342,7 +484,11 @@ function SpaceGroup({
   );
 }
 
-function SpaceCard({ space, onOpen }: { space: SpaceSummary; onOpen: () => void }) {
+function SpaceCard({
+  space,
+  focus,
+  onOpen,
+}: { space: SpaceSummary; focus: IntakeKey | null; onOpen: () => void }) {
   return (
     <button type="button" onClick={onOpen} className="group block w-full text-left">
       <Panel className="flex h-full flex-col gap-2.5 p-4 transition-colors group-hover:border-border-strong group-hover:bg-surface-2">
@@ -359,13 +505,19 @@ function SpaceCard({ space, onOpen }: { space: SpaceSummary; onOpen: () => void 
             </div>
           </div>
           {/* The fragment count is what the space is worth to an answer; the
-              document count is only how it was filed. */}
+              document count is only how it was filed. Under a lobe it is the
+              documents of that source, because fragments cannot be split by
+              source honestly. */}
           <div className="shrink-0 text-right">
             <div className="stat-num text-[22px] leading-none text-ink">
-              {num(space.chunkCount ?? space.documentCount)}
+              {num(focus ? space.intake[focus] : (space.chunkCount ?? space.documentCount))}
             </div>
             <div className="field-label mt-1">
-              {space.chunkCount !== null ? 'fragmentos' : 'documentos'}
+              {focus
+                ? SOURCE_LABEL[focus].toLowerCase()
+                : space.chunkCount !== null
+                  ? 'fragmentos'
+                  : 'documentos'}
             </div>
           </div>
         </div>

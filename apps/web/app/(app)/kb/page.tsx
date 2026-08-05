@@ -1,6 +1,6 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { BookOpen } from 'lucide-react';
 import { KnowledgeBase } from './_components/KnowledgeBase';
 import type { SpaceSummary } from './_components/types';
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function KnowledgeBasePage() {
   const user = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(user.organization.id);
 
   // Everything on this page — the cycle, the figures, the space cards — comes
   // out of one reading, so nothing on screen can disagree with anything else.

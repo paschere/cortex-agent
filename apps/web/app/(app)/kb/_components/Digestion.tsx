@@ -4,8 +4,10 @@ import { Panel, PanelHead } from '@/components/ui/panel';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import { useEffect, useRef, useState } from 'react';
+import { arrivedInMemory } from '../_lib/view';
 import { ago, hours, num } from './format';
-import type { BrainStats, DigestStage } from './types';
+import { usePrefersReducedMotion } from './motion';
+import type { BrainStats, DigestStage, DigestingDoc } from './types';
 
 /**
  * The machine panel.
@@ -94,26 +96,107 @@ export function useDigest(initial: BrainStats) {
     },
   });
 
-  return data ?? initial;
+  const stats = data ?? initial;
+
+  // The one poll on this page is also what tells the graph it has gone stale.
+  // A document that has just been indexed has vectors it did not have two and a
+  // half seconds ago, and therefore relationships that were not drawable then;
+  // a second timer asking the same question on its own schedule would only
+  // double the traffic to learn it later.
+  const remembered = useRef(stats.stages.memory);
+  useEffect(() => {
+    if (stats.stages.memory > remembered.current) {
+      qc.invalidateQueries({ queryKey: ['kb-graph'] });
+    }
+    remembered.current = stats.stages.memory;
+  }, [stats.stages.memory, qc]);
+
+  return stats;
 }
 
-export function DigestionPanel({ stats }: { stats: BrainStats }) {
+/**
+ * What has crossed into memory since the last reading, named.
+ *
+ * Fed by the same poll — no timer of its own. A document leaves the in-flight
+ * list either because it was indexed or because it broke, so the rise in the
+ * remembered count is what decides which of the departed may be announced.
+ *
+ * `scope` is which lobe the panel is showing. Changing it swaps one set of
+ * figures for a different set, and comparing across that swap would read a
+ * filter change as a document finishing — so the comparison starts over.
+ */
+function useJustRemembered(stats: BrainStats, scope: string): DigestingDoc[] {
+  const [arrived, setArrived] = useState<DigestingDoc[]>([]);
+  const previous = useRef({ digesting: stats.digesting, memory: stats.stages.memory, scope });
+
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = { digesting: stats.digesting, memory: stats.stages.memory, scope };
+    if (before.scope !== scope) {
+      setArrived([]);
+      return;
+    }
+    const done = arrivedInMemory(
+      before.digesting,
+      stats.digesting,
+      stats.stages.memory - before.memory,
+    );
+    if (done.length === 0) return;
+    setArrived(done);
+    const t = setTimeout(() => setArrived([]), 5000);
+    return () => clearTimeout(t);
+  }, [stats.digesting, stats.stages.memory, scope]);
+
+  return arrived;
+}
+
+/** The three steps a document takes, so waiting has a shape and not just a dot. */
+const BELT: Array<{ key: 'waiting' | 'digesting' | 'memory'; label: string }> = [
+  { key: 'waiting', label: 'en cola' },
+  { key: 'digesting', label: 'leyendo' },
+  { key: 'memory', label: 'en memoria' },
+];
+
+/**
+ * One document's progress along the belt. Three ticks, filled up to where it
+ * actually is — never further: the last one only lights when the row is gone
+ * from the in-flight list, which is the only proof there is that it landed.
+ */
+function BeltTicks({ stage, done }: { stage: DigestStage; done: boolean }) {
+  const reached = done ? 3 : stage === 'digesting' ? 2 : 1;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5" aria-hidden>
+      {BELT.map((slot, i) => (
+        <span
+          key={slot.key}
+          className={clsx(
+            'h-1 w-3 rounded-pill transition-colors duration-500',
+            i + 1 > reached
+              ? 'bg-border'
+              : done
+                ? 'bg-emerald'
+                : i + 1 === reached && stage === 'digesting'
+                  ? 'bg-primary'
+                  : 'bg-amber',
+          )}
+        />
+      ))}
+    </span>
+  );
+}
+
+export function DigestionPanel({
+  stats,
+  focus,
+}: { stats: BrainStats; focus?: { label: string } | null }) {
   const inFlight = stats.stages.waiting + stats.stages.digesting;
   const total = STAGES.reduce((sum, s) => sum + stats.stages[s.key], 0);
+  const reduced = usePrefersReducedMotion();
 
-  // The transition worth noticing: something crossed into memory while you
+  // Named, not just counted: which documents crossed into memory while you
   // were looking at it.
-  const [arrived, setArrived] = useState(false);
-  const previous = useRef(stats.stages.memory);
-  useEffect(() => {
-    if (stats.stages.memory > previous.current) {
-      setArrived(true);
-      const t = setTimeout(() => setArrived(false), 2600);
-      previous.current = stats.stages.memory;
-      return () => clearTimeout(t);
-    }
-    previous.current = stats.stages.memory;
-  }, [stats.stages.memory]);
+  const landed = useJustRemembered(stats, focus?.label ?? 'todo');
+  const arrived = landed.length > 0;
 
   return (
     <Panel>
@@ -122,7 +205,7 @@ export function DigestionPanel({ stats }: { stats: BrainStats }) {
         right={
           inFlight > 0 ? (
             <span className="inline-flex items-center gap-1.5 text-primary">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
               <span className="tabular">{num(inFlight)}</span> en proceso
             </span>
           ) : (
@@ -133,6 +216,7 @@ export function DigestionPanel({ stats }: { stats: BrainStats }) {
 
       <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
         Nada se puede recordar hasta que termina de pasar por aquí.
+        {focus ? ` Aquí solo ${focus.label.toLowerCase()}.` : ''}
       </p>
 
       {/* Ruled, not boxed: the gap is the hairline, so the columns are divided
@@ -156,7 +240,9 @@ export function DigestionPanel({ stats }: { stats: BrainStats }) {
                   className={clsx(
                     'h-1.5 w-1.5 rounded-full',
                     quiet ? 'bg-border-strong' : stage.dot,
-                    !quiet && stage.key === 'digesting' && 'animate-pulse',
+                    !quiet &&
+                      stage.key === 'digesting' &&
+                      'animate-pulse motion-reduce:animate-none',
                   )}
                 />
                 <span className="field-label">{stage.label}</span>
@@ -194,6 +280,34 @@ export function DigestionPanel({ stats }: { stats: BrainStats }) {
         </div>
       )}
 
+      {/* What just landed, by name, for the few seconds after it lands. This is
+          the whole point of the poll: the answer to "¿ya está listo?" arriving
+          without anybody reloading. One line, then it goes. */}
+      {landed.length > 0 && (
+        <div
+          className={clsx(
+            'border-t border-border px-5 py-3 transition-colors duration-1000',
+            reduced ? 'bg-surface' : 'bg-emerald-soft',
+          )}
+          aria-live="polite"
+        >
+          <div className="field-label text-emerald">Acaba de entrar en memoria</div>
+          <ul className="mt-1.5 space-y-1">
+            {landed.slice(0, 3).map((doc) => (
+              <li key={doc.id} className="flex flex-wrap items-center gap-x-2">
+                <BeltTicks stage="memory" done />
+                <span className="min-w-0 max-w-full truncate text-[12.5px] font-medium text-ink">
+                  {doc.title}
+                </span>
+                <span className="text-[11.5px] text-ink-faint">
+                  Cortex ya puede citarlo{doc.spaceName ? ` · ${doc.spaceName}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="border-t border-border px-5 py-4">
         {stats.digesting.length === 0 ? (
           <p className="text-[12.5px] text-ink-muted">
@@ -209,12 +323,7 @@ export function DigestionPanel({ stats }: { stats: BrainStats }) {
             <ul className="mt-2 space-y-1.5">
               {stats.digesting.slice(0, 4).map((doc) => (
                 <li key={doc.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <span
-                    className={clsx(
-                      'h-1.5 w-1.5 shrink-0 rounded-full',
-                      doc.stage === 'digesting' ? 'animate-pulse bg-primary' : 'bg-amber',
-                    )}
-                  />
+                  <BeltTicks stage={doc.stage} done={false} />
                   <span className="min-w-0 max-w-full truncate text-[12.5px] font-medium text-ink">
                     {doc.title}
                   </span>
@@ -248,12 +357,21 @@ export function DigestionPanel({ stats }: { stats: BrainStats }) {
  * not be read, and then the line simply is not printed — a figure this page
  * cannot stand behind is worse than a missing one.
  */
-export function KnowsPanel({ stats }: { stats: BrainStats }) {
+export function KnowsPanel({
+  stats,
+  focus,
+}: { stats: BrainStats; focus?: { label: string } | null }) {
   return (
     <Panel>
-      <PanelHead title="Cuánto sabe" />
+      <PanelHead
+        title="Cuánto sabe"
+        right={focus ? `solo ${focus.label.toLowerCase()}` : undefined}
+      />
       <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
         Contado ahora, sobre lo que ya indexó.
+        {focus
+          ? ' Los fragmentos se cuentan por espacio, no por fuente, así que ahí no hay cifra.'
+          : ''}
       </p>
 
       <dl className="mt-3 divide-y divide-border border-t border-border">

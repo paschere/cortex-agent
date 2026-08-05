@@ -235,11 +235,18 @@ grant execute on function public.kb_search_scoped(uuid, vector, text, int, uuid[
 -- is deliberately left to the caller, together with the date gap and the
 -- has-the-figure-actually-changed test, because those are judgements worth
 -- unit-testing rather than judgements worth burying in a query plan.
+--
+-- The 0.82 default is measured, not guessed. Over every cross-document chunk
+-- pair in a ten-document test corpus: the identical contract and its signed
+-- scan pair at 1.0000, the March rates and the July rates — the real conflict —
+-- at 0.8590, and the highest pair that is NOT a disagreement (vacation policy
+-- against payroll manual) at 0.7758. The cut sits in that gap. See the header
+-- of packages/agent-tools/src/kb/conflicts.ts for the full table.
 
 create or replace function public.kb_conflict_candidates(
   p_user_id uuid,
   p_chunk_ids uuid[],
-  p_min_similarity double precision default 0.86,
+  p_min_similarity double precision default 0.82,
   p_per_chunk int default 3
 )
 returns table (

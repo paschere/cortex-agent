@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type ToolContext, createIntegrationsClient } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -47,7 +47,7 @@ async function listWithBackoff(
 
 export async function GET(req: NextRequest) {
   const session = await requireSession();
-  const db = getSupabaseServiceClient();
+  const db = getOrgScopedClient(session.organization.id);
   const integrations = createIntegrationsClient(db, session.id, logger);
 
   if (!(await integrations.hasScopes('google', [DRIVE_READONLY]))) {

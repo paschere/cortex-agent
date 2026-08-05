@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readBrain } from '@/app/(app)/kb/_lib/brain';
 import { inngest } from '@/lib/inngest';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { assertCanWriteToSpace, ensurePersonalSpace, getVisibleSpace } from '@cortex/agent-tools';
 import { ForbiddenError, NotFoundError } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -57,7 +57,7 @@ function baseMime(mime: string): string {
  */
 export async function GET(req: NextRequest) {
   const session = await requireSession();
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(session.organization.id);
   const url = new URL(req.url);
   const spaceId = url.searchParams.get('spaceId');
 
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await requireSession();
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(session.organization.id);
 
   let formData: FormData;
   try {

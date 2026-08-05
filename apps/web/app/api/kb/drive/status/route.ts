@@ -1,13 +1,13 @@
 import { DRIVE_READONLY } from '@/app/api/kb/drive/_lib';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { createIntegrationsClient, getVisibleSpace } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
   const session = await requireSession();
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(session.organization.id);
 
   const collectionId = new URL(req.url).searchParams.get('spaceId');
   if (!collectionId) {

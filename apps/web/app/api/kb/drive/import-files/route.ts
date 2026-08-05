@@ -1,5 +1,5 @@
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type ToolContext, driveGet } from '@cortex/agent-tools';
 import { NotFoundError } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -42,7 +42,7 @@ function parseFiles(files: unknown): ImportFile[] | null {
 
 export async function POST(req: NextRequest) {
   const session = await requireSession();
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(session.organization.id);
 
   let body: ImportFilesBody;
   try {

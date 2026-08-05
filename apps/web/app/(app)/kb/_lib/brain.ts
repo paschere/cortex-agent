@@ -5,6 +5,8 @@ import type {
   DigestStage,
   DigestingDoc,
   IntakeCounts,
+  IntakeKey,
+  SourceStats,
   WeekPoint,
 } from '../_components/types';
 
@@ -57,6 +59,34 @@ export interface BrainReading {
 
 function emptyIntake(): IntakeCounts {
   return { upload: 0, record: 0, meeting: 0, drive: 0 };
+}
+
+const SOURCES: IntakeKey[] = ['upload', 'record', 'meeting', 'drive'];
+
+/**
+ * Four running tallies kept beside the totals as the rows go past, so that
+ * choosing a lobe on the plate narrows the page without asking the database
+ * anything a second time.
+ */
+function emptySourceStats(weeks: Date[]): SourceStats {
+  return {
+    stages: { waiting: 0, digesting: 0, memory: 0, stuck: 0 },
+    growth: weeks.map((start) => ({ start: start.toISOString(), added: 0 })),
+    spokenSeconds: 0,
+    namedVoices: 0,
+    unnamedRecordings: 0,
+    lastAddedAt: null,
+    digesting: [],
+  };
+}
+
+function emptyBySource(weeks: Date[]): Record<IntakeKey, SourceStats> {
+  return {
+    upload: emptySourceStats(weeks),
+    record: emptySourceStats(weeks),
+    meeting: emptySourceStats(weeks),
+    drive: emptySourceStats(weeks),
+  };
 }
 
 function emptyFacts(): SpaceFacts {
@@ -140,6 +170,7 @@ export async function readBrain(
     unnamedRecordings: 0,
     lastAddedAt: null,
     digesting: [],
+    bySource: emptyBySource(weeks),
   };
 
   if (spaceIds.length === 0) return { spaces, facts, stats };
@@ -147,6 +178,12 @@ export async function readBrain(
   const { data } = await db.from('kb_documents').select(DOC_COLUMNS).in('collection_id', spaceIds);
 
   const named = new Set<string>();
+  const namedBySource: Record<IntakeKey, Set<string>> = {
+    upload: new Set(),
+    record: new Set(),
+    meeting: new Set(),
+    drive: new Set(),
+  };
 
   for (const row of (data ?? []) as DocRow[]) {
     const entry = facts.get(row.collection_id);
@@ -161,9 +198,11 @@ export async function readBrain(
     }
 
     const source = intakeOf(row);
+    const slice = stats.bySource[source];
     entry.intake[source] += 1;
     stats.intake[source] += 1;
     stats.stages[stage] += 1;
+    slice.stages[stage] += 1;
     // The plate is drawn from what is actually retrievable, so a document only
     // enlarges its region once it can be quoted.
     if (stage === 'memory') stats.indexed[source] += 1;
@@ -172,10 +211,15 @@ export async function readBrain(
     if (bucket !== -1) {
       const point = stats.growth[bucket];
       if (point) point.added += 1;
+      const slicePoint = slice.growth[bucket];
+      if (slicePoint) slicePoint.added += 1;
     }
 
     if (!stats.lastAddedAt || row.created_at > stats.lastAddedAt) {
       stats.lastAddedAt = row.created_at;
+    }
+    if (!slice.lastAddedAt || row.created_at > slice.lastAddedAt) {
+      slice.lastAddedAt = row.created_at;
     }
 
     // Only digested audio counts as heard. A recording still in the queue has
@@ -184,29 +228,44 @@ export async function readBrain(
     if (spoken && stage === 'memory' && row.duration_seconds && row.duration_seconds > 0) {
       entry.spokenSeconds += row.duration_seconds;
       stats.spokenSeconds += row.duration_seconds;
+      slice.spokenSeconds += row.duration_seconds;
     }
 
     if (spoken && row.speakers?.length) {
       const withNames = row.speakers.filter((s) => s && !UNNAMED_SPEAKER.test(s));
-      for (const s of withNames) named.add(s.trim().toLowerCase());
-      if (withNames.length === 0) stats.unnamedRecordings += 1;
+      for (const s of withNames) {
+        named.add(s.trim().toLowerCase());
+        namedBySource[source].add(s.trim().toLowerCase());
+      }
+      if (withNames.length === 0) {
+        stats.unnamedRecordings += 1;
+        slice.unnamedRecordings += 1;
+      }
     }
 
     if (stage === 'waiting' || stage === 'digesting') {
-      stats.digesting.push({
+      const inFlight: DigestingDoc = {
         id: row.id,
         title: row.title ?? 'Sin título',
         spaceName: nameOf.get(row.collection_id) ?? '',
         stage,
         transcribing: row.transcript_status === 'transcribing',
-      });
+      };
+      stats.digesting.push(inFlight);
+      slice.digesting.push(inFlight);
     }
   }
 
   stats.namedVoices = named.size;
+  for (const source of SOURCES) {
+    stats.bySource[source].namedVoices = namedBySource[source].size;
+  }
   // Whatever is furthest along the belt goes first: it is the one about to
   // change state, and the one worth watching.
-  stats.digesting.sort((a, b) => (a.stage === b.stage ? 0 : a.stage === 'digesting' ? -1 : 1));
+  const beltOrder = (a: DigestingDoc, b: DigestingDoc) =>
+    a.stage === b.stage ? 0 : a.stage === 'digesting' ? -1 : 1;
+  stats.digesting.sort(beltOrder);
+  for (const source of SOURCES) stats.bySource[source].digesting.sort(beltOrder);
 
   stats.chunks = await countChunks(db, spaceIds);
 

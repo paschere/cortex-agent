@@ -2,8 +2,10 @@
 
 import { Panel, PanelHead } from '@/components/ui/panel';
 import { clsx } from 'clsx';
+import { X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { num, weekLabel } from './format';
+import { usePrefersReducedMotion } from './motion';
 import type { BrainStats, IntakeKey } from './types';
 
 /**
@@ -89,6 +91,12 @@ const REGIONS: Region[] = [
   },
 ];
 
+/** What each region is called, for the sentences the panel writes about it. */
+const LABEL_OF = Object.fromEntries(REGIONS.map((r) => [r.key, r.label])) as Record<
+  IntakeKey,
+  string
+>;
+
 /** Engraved gyri. They carry no data — they are what makes it a drawing. */
 const SULCI = [
   'M 32 74 C 42 66 54 60 66 57',
@@ -119,30 +127,60 @@ export function BrainPanel({
   stats,
   openRegion,
   onOpenRegion,
+  /** Where the current search landed, counted by source. */
+  hits,
+  searching,
 }: {
   stats: BrainStats;
   openRegion?: IntakeKey | null;
-  /** Opening a region asks for its relationships; the page renders them. */
+  /** Choosing a region narrows the whole page to that source. */
   onOpenRegion?: (key: IntakeKey) => void;
+  hits?: Record<IntakeKey, number> | null;
+  searching?: boolean;
 }) {
   const total =
     stats.stages.waiting + stats.stages.digesting + stats.stages.memory + stats.stages.stuck;
   const pct = total > 0 ? Math.round((stats.stages.memory / total) * 100) : 0;
   const peak = Math.max(...REGIONS.map((r) => stats.indexed[r.key]), 1);
+  const active = openRegion ?? null;
 
   return (
     <Panel>
       <PanelHead
         title="Alimentación"
-        right={total > 0 ? `${num(total)} en total` : 'sin nada dentro'}
+        right={
+          active && onOpenRegion ? (
+            <button
+              type="button"
+              onClick={() => onOpenRegion(active)}
+              className="inline-flex items-center gap-1 rounded-card px-1.5 py-0.5 text-[11.5px] font-semibold text-primary transition-colors hover:bg-surface-2"
+            >
+              <X className="h-3.5 w-3.5" />
+              Ver todo
+            </button>
+          ) : total > 0 ? (
+            `${num(total)} en total`
+          ) : (
+            'sin nada dentro'
+          )
+        }
       />
       <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
-        Cada región es una fuente. El nivel de tinta la compara con la mayor.
+        {active
+          ? `Toda la página está mostrando solo ${LABEL_OF[active].toLowerCase()}.`
+          : 'Cada región es una fuente. Toca una y el resto de la página se filtra a ella.'}
       </p>
 
       <div className="mt-3 grid gap-px border-t border-border bg-border sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
         <div className="bg-surface px-5 py-4">
-          <Plate stats={stats} peak={peak} active={openRegion ?? null} onOpen={onOpenRegion} />
+          <Plate
+            stats={stats}
+            peak={peak}
+            active={active}
+            onOpen={onOpenRegion}
+            hits={hits ?? null}
+            searching={searching ?? false}
+          />
         </div>
 
         <div className="flex flex-col bg-surface">
@@ -160,42 +198,59 @@ export function BrainPanel({
 
           {/* The key: plate number, what it is, and the count the shape stands
               for. The figure is the evidence; the drawing is the comparison. */}
-          {/* The key doubles as the way in: opening a region asks the graph
-              what the documents of that source have to do with each other. */}
+          {/* The key is the same control written out, for the same reason a
+              plate has a key at all: an odd-shaped lobe is a poor target for a
+              thumb and impossible to name out loud. */}
           <ul className="mt-3 divide-y divide-border border-t border-border">
-            {REGIONS.map((r) => (
-              <li key={r.key}>
-                <button
-                  type="button"
-                  onClick={() => onOpenRegion?.(r.key)}
-                  disabled={!onOpenRegion}
-                  className={clsx(
-                    'flex w-full items-center justify-between gap-3 px-5 py-2 text-left transition-colors',
-                    openRegion === r.key ? 'bg-primary-soft' : 'hover:bg-surface-2',
-                    !onOpenRegion && 'cursor-default',
-                  )}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="stat-num w-4 shrink-0 text-[11px] text-primary">
-                      {r.index}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate text-[12px] font-semibold text-ink">
-                        {r.label}
+            {REGIONS.map((r) => {
+              const on = openRegion === r.key;
+              const found = hits?.[r.key] ?? 0;
+              return (
+                <li key={r.key}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => onOpenRegion?.(r.key)}
+                    disabled={!onOpenRegion}
+                    className={clsx(
+                      'flex w-full items-center justify-between gap-3 px-5 py-2 text-left transition-colors',
+                      on ? 'bg-primary-soft' : 'hover:bg-surface-2',
+                      !onOpenRegion && 'cursor-default',
+                    )}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="stat-num w-4 shrink-0 text-[11px] text-primary">
+                        {r.index}
                       </span>
-                      <span className="block truncate text-[10px] text-ink-faint">{r.latin}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[12px] font-semibold text-ink">
+                          {r.label}
+                        </span>
+                        <span className="block truncate text-[10px] text-ink-faint">
+                          {found > 0 ? `${num(found)} de tu búsqueda` : r.latin}
+                        </span>
+                      </span>
                     </span>
-                  </span>
-                  <span className="stat-num shrink-0 text-[15px] text-ink">
-                    {num(stats.indexed[r.key])}
-                  </span>
-                </button>
-              </li>
-            ))}
+                    <span className="flex shrink-0 items-center gap-2">
+                      {found > 0 && (
+                        <span className="rounded-card bg-amber-soft px-1.5 py-0.5 text-[10.5px] font-bold text-amber">
+                          {num(found)}
+                        </span>
+                      )}
+                      <span className="stat-num text-[15px] text-ink">
+                        {num(stats.indexed[r.key])}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
           {onOpenRegion && (
             <p className="px-5 pb-4 pt-2 text-[11px] text-ink-faint">
-              Abre una región y verás cómo se relaciona lo que hay dentro.
+              {openRegion
+                ? 'Toca la misma región otra vez, o «Ver todo», para quitar el filtro.'
+                : 'Toca una región y abajo verás solo eso: su indexación, su crecimiento y sus relaciones.'}
             </p>
           )}
         </div>
@@ -204,41 +259,53 @@ export function BrainPanel({
   );
 }
 
-/** The drawing itself. */
+/** The drawing itself, and the control it turned out to be. */
 function Plate({
   stats,
   peak,
   active,
   onOpen,
+  hits,
+  searching,
 }: {
   stats: BrainStats;
   peak: number;
   active: IntakeKey | null;
   onOpen?: (key: IntakeKey) => void;
+  hits: Record<IntakeKey, number> | null;
+  searching: boolean;
 }) {
   const uid = useId();
+  const reduced = usePrefersReducedMotion();
   const [grown, setGrown] = useState<IntakeKey | null>(null);
+  const [pointed, setPointed] = useState<IntakeKey | null>(null);
+  const [focused, setFocused] = useState<IntakeKey | null>(null);
   const before = useRef(stats.indexed);
 
   // A region that has just gained a document is worth one quiet second of
-  // attention. Once, then it settles back into the drawing.
+  // attention. Once, then it settles back into the drawing. Someone who has
+  // asked for less movement gets the sentence underneath and no wash: the level
+  // still rises, it simply arrives instead of travelling.
   useEffect(() => {
     const risen = REGIONS.find((r) => stats.indexed[r.key] > before.current[r.key]);
     before.current = stats.indexed;
     if (!risen) return;
     setGrown(risen.key);
-    const t = setTimeout(() => setGrown(null), 1800);
+    const t = setTimeout(() => setGrown(null), reduced ? 3200 : 1800);
     return () => clearTimeout(t);
-  }, [stats.indexed]);
+  }, [stats.indexed, reduced]);
 
   const empty = REGIONS.every((r) => stats.indexed[r.key] === 0);
+  const grownRegion = REGIONS.find((r) => r.key === grown) ?? null;
+  const anyHits = hits ? REGIONS.some((r) => (hits[r.key] ?? 0) > 0) : false;
 
   return (
     <div>
-      {/* The key beside the plate is the accessible control; the drawing is
-          the same four buttons made visual, so it is hidden from readers that
-          would otherwise hear every region twice. */}
-      <svg viewBox="0 0 230 180" className="w-full text-primary" aria-hidden="true">
+      {/* The regions are the control, so they are buttons: reachable by Tab,
+          operated by Enter or Space, and drawn with their own focus ring
+          because an outline on an SVG group is not to be relied on. */}
+      <svg viewBox="0 0 230 180" className="w-full text-primary">
+        <title>Las cuatro fuentes de Brain Knowledge</title>
         <defs>
           {REGIONS.map((r) => (
             <clipPath key={r.key} id={`${uid}-${r.key}`}>
@@ -251,14 +318,55 @@ function Plate({
           const level = Math.min(1, stats.indexed[r.key] / peak);
           const height = (r.bottom - r.top) * level;
           const y = r.bottom - height;
+          const on = active === r.key;
+          const near = pointed === r.key || focused === r.key;
+          // The wash is the one flourish, and it is the first thing to go when
+          // somebody has asked for less movement: with transitions flattened it
+          // would be a blink rather than a rise. The line underneath says it
+          // in words instead, which nobody has to be able to see move.
+          const rose = grown === r.key && !reduced;
+          const found = hits?.[r.key] ?? 0;
+          // While a search is on, the regions it did not touch step back so the
+          // ones that hold the answer are the ones you see.
+          const quiet = anyHits && found === 0;
+          const ink = rose ? 0.36 : on ? 0.28 : near ? 0.24 : quiet ? 0.07 : 0.16;
           return (
-            // biome-ignore lint/a11y/useKeyWithClickEvents: the plate is aria-hidden and each region already has a real focusable button in the key beside it — this is that same control, drawn.
             <g
               key={r.key}
+              role={onOpen ? 'button' : undefined}
+              tabIndex={onOpen ? 0 : undefined}
+              aria-pressed={onOpen ? on : undefined}
+              aria-label={
+                onOpen
+                  ? `${r.label}: ${num(stats.indexed[r.key])} indexados${
+                      found > 0 ? `, ${num(found)} de tu búsqueda` : ''
+                    }. ${on ? 'Quitar el filtro' : 'Filtrar la página a esta fuente'}`
+                  : undefined
+              }
               onClick={onOpen ? () => onOpen(r.key) : undefined}
-              className={onOpen ? 'cursor-pointer' : undefined}
+              onKeyDown={
+                onOpen
+                  ? (e) => {
+                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                      e.preventDefault();
+                      onOpen(r.key);
+                    }
+                  : undefined
+              }
+              onPointerEnter={(e) => {
+                if (e.pointerType === 'mouse') setPointed(r.key);
+              }}
+              onPointerLeave={(e) => {
+                if (e.pointerType === 'mouse') setPointed((was) => (was === r.key ? null : was));
+              }}
+              onFocus={() => setFocused(r.key)}
+              onBlur={() => setFocused((was) => (was === r.key ? null : was))}
+              className={clsx('outline-none', onOpen && 'cursor-pointer')}
             >
               <title>{`${r.label}: ${stats.indexed[r.key]}`}</title>
+              {/* The whole lobe is the target, filled or not: an empty region
+                  is exactly the one somebody wants to press to find out why. */}
+              <path d={r.path} fill="transparent" />
               <rect
                 x={0}
                 y={y}
@@ -266,19 +374,50 @@ function Plate({
                 height={height}
                 clipPath={`url(#${uid}-${r.key})`}
                 fill="currentColor"
-                opacity={grown === r.key ? 0.34 : active === r.key ? 0.26 : 0.16}
+                opacity={ink}
+                pointerEvents="none"
                 // Geometry properties animate where the browser supports them
-                // as CSS; where it does not, the level simply snaps.
+                // as CSS; where it does not, the level simply snaps. The
+                // reduced-motion rule in globals.css flattens all three.
                 style={{ transition: 'y 700ms ease-out, height 700ms ease-out, opacity 600ms' }}
               />
               <path
                 d={r.path}
                 fill="none"
                 stroke="currentColor"
-                strokeWidth={grown === r.key || active === r.key ? 1.6 : 1}
+                strokeWidth={rose || on ? 1.6 : near ? 1.3 : 1}
                 strokeLinejoin="round"
+                pointerEvents="none"
                 style={{ transition: 'stroke-width 400ms' }}
               />
+              {/* A search hit outlines the lobe in the same amber the ring uses,
+                  so "it is in the recordings" is legible before anything opens. */}
+              {found > 0 && (
+                <path
+                  d={r.path}
+                  fill="none"
+                  className="text-amber"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinejoin="round"
+                  opacity={searching ? 0.45 : 0.9}
+                  pointerEvents="none"
+                />
+              )}
+              {/* The focus ring, drawn rather than outlined: browsers disagree
+                  about outlines on SVG, and they agree about paths. */}
+              {focused === r.key && (
+                <path
+                  d={r.path}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.4}
+                  strokeDasharray="3 3"
+                  opacity={0.5}
+                  pointerEvents="none"
+                  className="text-primary"
+                />
+              )}
             </g>
           );
         })}
@@ -323,10 +462,19 @@ function Plate({
         ))}
       </svg>
 
-      <p className="mt-1 text-center text-[11px] text-ink-faint">
-        {empty
-          ? 'Vacío. Lo que le des se va viendo aquí.'
-          : 'El nivel sube cuando algo termina de indexarse.'}
+      {/* The moment the page exists for, said out loud as well as drawn: a
+          region grew because something finished indexing while you watched.
+          `aria-live` so it is announced once and never repeated. */}
+      <p className="mt-1 text-center text-[11px] text-ink-faint" aria-live="polite">
+        {grownRegion ? (
+          <span className="font-semibold text-emerald">
+            {grownRegion.label}: acaba de entrar algo en memoria.
+          </span>
+        ) : empty ? (
+          'Vacío. Lo que le des se va viendo aquí.'
+        ) : (
+          'El nivel sube cuando algo termina de indexarse.'
+        )}
       </p>
     </div>
   );
@@ -373,7 +521,7 @@ function ReadyBar({ stats, total }: { stats: BrainStats; total: number }) {
  * a document is what a person remembers handing over, and because the count is
  * one this page already holds — no figure here is derived from another chart.
  */
-export function GrowthPanel({ stats }: { stats: BrainStats }) {
+export function GrowthPanel({ stats, focus }: { stats: BrainStats; focus?: IntakeKey | null }) {
   const peak = Math.max(...stats.growth.map((w) => w.added), 1);
   const anything = stats.growth.some((w) => w.added > 0);
   const quarter = stats.growth.reduce((sum, w) => sum + w.added, 0);
@@ -382,11 +530,16 @@ export function GrowthPanel({ stats }: { stats: BrainStats }) {
 
   return (
     <Panel>
-      <PanelHead title="Lo que ha aprendido" right="últimas 12 semanas" />
+      <PanelHead
+        title="Lo que ha aprendido"
+        right={focus ? `solo ${LABEL_OF[focus].toLowerCase()}` : 'últimas 12 semanas'}
+      />
       <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
         {anything
           ? `${num(quarter)} documentos entraron en este trimestre.`
-          : 'No ha entrado nada en las últimas 12 semanas.'}
+          : focus
+            ? `No ha entrado nada de ${LABEL_OF[focus].toLowerCase()} en las últimas 12 semanas.`
+            : 'No ha entrado nada en las últimas 12 semanas.'}
       </p>
 
       <div className="border-t border-border px-5 pb-4 pt-4">

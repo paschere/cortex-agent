@@ -103,6 +103,11 @@ const CHUNKS: ChunkRow[] = [
   },
 ];
 
+/** A chunk id per fixture row, so the RPC can return the shape 0066 returns. */
+function chunkIdOf(c: ChunkRow): string {
+  return `${c.documentId.slice(0, -1)}${c.chunkIndex}`;
+}
+
 /** The rule, once: every global space plus the caller's own personal ones. */
 function visibleSpaceIds(userId: string | null): string[] {
   if (!userId) return [];
@@ -134,6 +139,10 @@ function resolvingTo<T>(rows: T[]) {
 
 function makeCtx(userId: string) {
   const rpc = vi.fn(async (fn: string, args: ScopedSearchArgs) => {
+    // Nothing in this fixture is a near-duplicate of anything else, so the
+    // conflict probe correctly finds nothing. It is answered rather than left
+    // undefined because kb.search calls it on every strong hit.
+    if (fn === 'kb_conflict_candidates') return { data: [], error: null };
     if (fn !== 'kb_search_scoped') return { data: null, error: null };
 
     // Mirrors kb_search_scoped: the visible set is derived from p_user_id, and
@@ -158,6 +167,17 @@ function makeCtx(userId: string) {
             chunk_index: c.chunkIndex,
             content: c.content,
             score: c.score,
+            // 0066 returns the two components next to the blend. The fixture
+            // scores are all comfortably above the relevance floor, so what
+            // these tests assert about visibility is not quietly turned into an
+            // assertion about thresholds.
+            chunk_id: chunkIdOf(c),
+            vec_score: c.score,
+            fts_score: 0,
+            dated_at: '2026-02-01T00:00:00Z',
+            valid_until: null,
+            superseded_by: null,
+            superseded_by_title: null,
           },
         ];
       });
@@ -226,6 +246,7 @@ function makeCtx(userId: string) {
   };
 
   return {
+    organizationId: 'org-test',
     userId,
     agentId: 'agent-1',
     db: db as unknown as ToolContext['db'],
@@ -240,6 +261,8 @@ function makeCtx(userId: string) {
 type SearchTool = ToolDef<
   { query: string; space?: string; limit?: number },
   {
+    coverage: 'answered' | 'thin' | 'nothing' | 'keyword-only';
+    summary: string;
     hits: Array<{
       documentId: string;
       documentTitle: string;
@@ -248,6 +271,9 @@ type SearchTool = ToolDef<
       chunkIndex: number;
       content: string;
       score: number;
+      relevance: 'strong' | 'weak';
+      freshness: 'current' | 'aging' | 'old' | 'expired' | 'superseded';
+      age?: string;
     }>;
   }
 >;

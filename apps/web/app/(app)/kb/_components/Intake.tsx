@@ -74,11 +74,14 @@ function haul(count: number, unit: [string, string]): string {
 export function IntakeChooser({
   spaces,
   totals,
+  highlight,
   onFeed,
   onCreateSpace,
 }: {
   spaces: SpaceSummary[];
   totals: IntakeCounts;
+  /** The lobe in force upstairs, so the matching mouth is the obvious one. */
+  highlight?: IntakeKey | null;
   onFeed: (spaceId: string, intake: IntakeKey) => void;
   onCreateSpace: () => void;
 }) {
@@ -135,7 +138,10 @@ export function IntakeChooser({
                 key={key}
                 type="button"
                 onClick={() => target && onFeed(target, key)}
-                className="group flex flex-col gap-1.5 bg-surface px-5 py-4 text-left transition-colors hover:bg-surface-2"
+                className={clsx(
+                  'group flex flex-col gap-1.5 px-5 py-4 text-left transition-colors',
+                  highlight === key ? 'bg-primary-soft' : 'bg-surface hover:bg-surface-2',
+                )}
               >
                 <span className="flex items-center gap-2">
                   <Icon className="h-4 w-4 shrink-0 text-primary" />

@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { deleteDocument, moveDocument } from '../actions';
 import { clock, num, plural, shortDate } from './format';
+import { usePrefersReducedMotion } from './motion';
 import type { DigestStage, SpaceKind } from './types';
 
 interface Doc {
@@ -106,14 +107,21 @@ export function DocumentList({
   spaceName,
   canWrite,
   moveTargets,
+  pointedAt,
+  found,
 }: {
   spaceId: string;
   spaceName: string;
   canWrite: boolean;
   moveTargets: Array<{ id: string; name: string; kind: SpaceKind }>;
+  /** Opened from the ring or from a search hit: scrolled to and marked. */
+  pointedAt?: string | null;
+  /** Documents the current search landed on, marked wherever they appear. */
+  found?: Set<string>;
 }) {
   const qc = useQueryClient();
   const router = useRouter();
+  const reduced = usePrefersReducedMotion();
   const [busy, setBusy] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -153,6 +161,18 @@ export function DocumentList({
     }, 4000);
     return () => clearTimeout(t);
   }, [docs]);
+
+  // Landing on a space because a document was opened elsewhere should put that
+  // document in front of your eyes, not leave you to find it in a list of
+  // eighty. Done as the row registers rather than in an effect, because the row
+  // does not exist until the list has been fetched and an effect would fire
+  // into an empty page. `led` keeps it to once per document.
+  const led = useRef<string | null>(null);
+  const register = (id: string, el: HTMLLIElement | null) => {
+    if (!el || pointedAt !== id || led.current === id) return;
+    led.current = id;
+    el.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+  };
 
   function clearError(id: string) {
     setErrors(({ [id]: _gone, ...rest }) => rest);
@@ -208,17 +228,17 @@ export function DocumentList({
   return (
     <div className="space-y-4">
       {GROUPS.map((group) => {
-        const rows = docs.filter((d) => group.stages.includes(stageOf(d)));
-        if (rows.length === 0) return null;
+        const members = docs.filter((d) => group.stages.includes(stageOf(d)));
+        if (members.length === 0) return null;
         return (
           <section key={group.label}>
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-border pb-1.5">
               <span className="field-label">{group.label}</span>
-              <span className="tabular text-[11px] text-ink-faint">{num(rows.length)}</span>
+              <span className="tabular text-[11px] text-ink-faint">{num(members.length)}</span>
               <span className="text-[11px] text-ink-faint">· {group.hint}</span>
             </div>
             <ul className="divide-y divide-border">
-              {rows.map((d) => (
+              {members.map((d) => (
                 <Row
                   key={d.id}
                   doc={d}
@@ -226,6 +246,9 @@ export function DocumentList({
                   moveTargets={moveTargets}
                   working={busy === d.id}
                   fresh={justRemembered.has(d.id)}
+                  pointed={pointedAt === d.id}
+                  hit={found?.has(d.id) ?? false}
+                  register={(el) => register(d.id, el)}
                   confirming={confirming === d.id}
                   onConfirm={(id) => setConfirming(id)}
                   onMove={move}
@@ -248,6 +271,9 @@ function Row({
   moveTargets,
   working,
   fresh,
+  pointed,
+  hit,
+  register,
   confirming,
   onConfirm,
   onMove,
@@ -260,6 +286,11 @@ function Row({
   moveTargets: Array<{ id: string; name: string; kind: SpaceKind }>;
   working: boolean;
   fresh: boolean;
+  /** The document somebody just opened from the ring or from a search hit. */
+  pointed: boolean;
+  /** One of the documents the current search found. */
+  hit: boolean;
+  register: (el: HTMLLIElement | null) => void;
   confirming: boolean;
   onConfirm: (id: string | null) => void;
   onMove: (doc: Doc, targetId: string) => void;
@@ -279,15 +310,32 @@ function Row({
 
   return (
     <li
+      ref={register}
       className={clsx(
         '-mx-2 px-2 py-2.5 transition-colors duration-1000',
-        fresh ? 'bg-emerald-soft' : 'bg-transparent',
+        fresh
+          ? 'bg-emerald-soft'
+          : pointed
+            ? 'bg-primary-soft'
+            : hit
+              ? 'bg-amber-soft'
+              : 'bg-transparent',
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="min-w-0 truncate text-[13px] font-medium text-ink">{d.title}</span>
+            {(pointed || hit) && !fresh && (
+              <span
+                className={clsx(
+                  'shrink-0 rounded-card px-2 py-0.5 text-[10.5px] font-semibold',
+                  pointed ? 'bg-primary text-white' : 'bg-amber-soft text-amber',
+                )}
+              >
+                {pointed ? 'este' : 'lo encontró la búsqueda'}
+              </span>
+            )}
             <span
               className={clsx(
                 'inline-flex shrink-0 items-center gap-1 rounded-card px-2 py-0.5 text-[10.5px] font-semibold',

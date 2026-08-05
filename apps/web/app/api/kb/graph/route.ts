@@ -1,6 +1,6 @@
 import { intakeOf } from '@/app/(app)/kb/_lib/brain';
 import { requireSession } from '@/lib/session';
-import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { listVisibleSpaces } from '@cortex/agent-tools';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -68,7 +68,7 @@ function namedSpeakers(node: GraphNode): string[] {
 
 export async function GET(req: NextRequest) {
   const session = await requireSession();
-  const sb = getSupabaseServiceClient();
+  const sb = getOrgScopedClient(session.organization.id);
   const url = new URL(req.url);
 
   const spaceId = url.searchParams.get('spaceId');
