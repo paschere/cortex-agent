@@ -21,6 +21,19 @@ const config = {
     // the path-based protected-resource metadata). The handler lives at /api/mcp.
     return [{ source: '/mcp', destination: '/api/mcp' }];
   },
+  async redirects() {
+    return [
+      {
+        // WhatsApp moved out of Brain Knowledge and into Integrations: it is a
+        // connection somebody pairs, not a document. The old address was live
+        // and shareable, so it keeps working — permanently, because the screen
+        // is never coming back to /kb.
+        source: '/kb/whatsapp',
+        destination: '/integrations/whatsapp',
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     return [
       {

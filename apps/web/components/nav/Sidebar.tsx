@@ -100,10 +100,10 @@ const GROUPS: NavGroup[] = [
     items: [
       { href: '/integrations', label: 'Integrations', icon: Plug },
       { href: '/mcp-tokens', label: 'Connect Claude', icon: Cable },
-      // Lives here rather than under Brain Knowledge because pairing a phone is
-      // a connection, not a document. The screen itself sits at /kb/whatsapp:
-      // what it feeds is Brain Knowledge.
-      { href: '/kb/whatsapp', label: 'WhatsApp', icon: MessageCircle },
+      // The screen moved to match where the nav already pointed: pairing a
+      // phone is a connection, not a document, so it sits under Integrations
+      // with the other systems Cortex is wired into. /kb/whatsapp redirects.
+      { href: '/integrations/whatsapp', label: 'WhatsApp', icon: MessageCircle },
     ],
   },
   {
@@ -148,6 +148,10 @@ function isActive(pathname: string, href: string): boolean {
   // up at the same time as the entry for the bare path.
   if (href.includes('?')) return false;
   if (href === '/dashboard') return pathname === '/dashboard';
+  // Integrations owns a child route that has a nav entry of its own (WhatsApp),
+  // so the parent matches exactly instead of by prefix. Prefix matching would
+  // light up two rows at once and make "where am I" unanswerable.
+  if (href === '/integrations') return pathname === '/integrations';
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

@@ -2,27 +2,39 @@
 
 import { Button } from '@/components/ui/button';
 import { IconChip, Panel, PanelHead } from '@/components/ui/panel';
+import { type SetupFacts, setupSteps, wouldAnswerMe } from '@/lib/whatsapp-setup';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { clsx } from 'clsx';
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Loader2,
   MessageCircle,
   Plug,
   QrCode,
+  Send,
   Trash2,
   UserRound,
   Users,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
 /**
  * The one screen for the WhatsApp connection.
  *
- * Three questions, in the order somebody actually asks them: is it connected,
- * which groups are being archived, and whose numbers can talk to Cortex. The
- * pairing QR appears inside the first block only while it is relevant — a
- * screen that always shows a QR code trains people to ignore it.
+ * IT OPENS WITH A SEQUENCE, and that is the whole reason this screen moved out
+ * of Brain Knowledge. What people want first is to text the number and be
+ * answered, and that needs three things in order: pair the company line, link
+ * your own number to your Cortex user, then decide which groups are read. The
+ * middle step is invisible until it bites — an unlinked number gets a polite
+ * "no te reconozco" — so the checklist states it up front instead of letting
+ * somebody discover it with their thumb.
+ *
+ * Below the checklist the three blocks appear in that same order. The pairing
+ * QR shows inside the first one only while it is relevant: a screen that always
+ * shows a QR code trains people to ignore it.
  *
  * The copy is deliberately blunt about what archiving means. This is the one
  * screen in the product where switching something on files other people's
@@ -67,7 +79,7 @@ interface Space {
   kind: 'global' | 'personal';
 }
 
-interface Link {
+interface NumberLink {
   phone: string;
   userId: string;
   personName: string;
@@ -80,6 +92,13 @@ interface Person {
   email: string;
 }
 
+/** A number that wrote to the line and was turned away. */
+interface UnlinkedNumber {
+  phone: string;
+  attempts: number;
+  lastAt: string;
+}
+
 interface Status {
   isAdmin: boolean;
   connection: Connection;
@@ -87,8 +106,10 @@ interface Status {
   spaces: Space[];
   /** Only company-wide spaces: a personal one can never be cited in a group. */
   citableSpaces: Space[];
-  links: Link[];
+  links: NumberLink[];
   people: Person[];
+  me: { id: string; name: string; phone: string | null };
+  unlinkedNumbers: UnlinkedNumber[];
 }
 
 async function fetchStatus(): Promise<Status> {
@@ -111,8 +132,111 @@ function fecha(iso: string | null): string {
 
 function telefono(phone: string): string {
   // Grouped for reading, never re-formatted for storage: the stored value is
-  // the digits WhatsApp keys on.
+  // the digits WhatsApp keys on, and `normalizePhone` on the server is the only
+  // thing allowed to decide what those digits are.
   return `+${phone.slice(0, 2)} ${phone.slice(2, 5)} ${phone.slice(5, 8)} ${phone.slice(8)}`.trim();
+}
+
+/* --------------------------------------------------------------- la secuencia */
+
+const STEP_COPY: Record<'pair' | 'link' | 'groups', { title: string; line: string }> = {
+  pair: {
+    title: 'Empareja el número de la empresa',
+    line: 'Escanea el código con el teléfono dedicado. Sin esto no entra ni sale nada.',
+  },
+  link: {
+    title: 'Vincula tu número',
+    line: 'Cortex solo le responde a números que sabe de quién son. Si el tuyo no está, te contesta que no te reconoce.',
+  },
+  groups: {
+    title: 'Elige los grupos',
+    line: 'Cuáles se archivan en Brain Knowledge y en cuáles puede responder si lo mencionan.',
+  },
+};
+
+/**
+ * What is missing, in the order en que hay que hacerlo.
+ *
+ * Shown while anything is pending and reduced to one green line when nothing
+ * is: a permanent checklist of ticks is furniture.
+ */
+function SetupChecklist({ facts }: { facts: SetupFacts }) {
+  const steps = setupSteps(facts);
+  const answer = wouldAnswerMe(facts);
+
+  if (answer.yes && facts.groupsConfigured > 0) {
+    return (
+      <Panel className="flex items-start gap-3 px-5 py-4">
+        <IconChip tone="emerald">
+          <CheckCircle2 className="h-4 w-4" />
+        </IconChip>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold text-ink">Listo para usarse</div>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+            El número está en línea, el tuyo está vinculado y hay{' '}
+            <span className="tabular">{facts.groupsConfigured}</span>{' '}
+            {facts.groupsConfigured === 1 ? 'grupo configurado' : 'grupos configurados'}. Escríbele
+            desde tu teléfono cuando quieras.
+          </p>
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel>
+      <PanelHead
+        title="Para que Cortex te conteste"
+        right={answer.yes ? 'ya te contesta' : 'todavía no te contesta'}
+      />
+      <p className="px-5 pt-1 text-[12.5px] leading-relaxed text-ink-muted">
+        Tres pasos, en este orden. El del medio es el que se olvida: sin él el número queda en línea
+        y aun así te responde que no sabe quién eres.
+      </p>
+      <ol className="mt-3 divide-y divide-border border-t border-border">
+        {steps.map((step, i) => {
+          const copy = STEP_COPY[step.key];
+          return (
+            <li key={step.key} className="flex items-start gap-3 px-5 py-3">
+              <span
+                className={clsx(
+                  'grid h-7 w-7 shrink-0 place-items-center rounded-sm text-[12px] font-bold',
+                  step.state === 'done' && 'bg-emerald-soft text-emerald',
+                  step.state === 'now' && 'bg-amber-soft text-amber',
+                  step.state === 'later' && 'bg-surface-2 text-ink-faint',
+                )}
+              >
+                {step.state === 'done' ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div
+                  className={clsx(
+                    'text-[13px] font-semibold',
+                    step.state === 'later' ? 'text-ink-faint' : 'text-ink',
+                  )}
+                >
+                  {copy.title}
+                </div>
+                <p
+                  className={clsx(
+                    'mt-0.5 text-[12px] leading-relaxed',
+                    step.state === 'later' ? 'text-ink-faint' : 'text-ink-muted',
+                  )}
+                >
+                  {copy.line}
+                </p>
+              </div>
+              {step.state === 'now' && (
+                <span className="shrink-0 rounded-pill border border-amber/40 bg-amber-soft px-2.5 py-0.5 text-[10.5px] font-semibold text-amber">
+                  Sigue esto
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </Panel>
+  );
 }
 
 /* ----------------------------------------------------------------- conexión */
@@ -171,7 +295,7 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
   return (
     <Panel>
       <PanelHead
-        title="Conexión"
+        title="1 · Conexión"
         right={connection.lastSeenAt ? `visto ${fecha(connection.lastSeenAt)}` : 'sin señales'}
       />
       <div className="flex items-start gap-3 px-5 py-4">
@@ -210,6 +334,187 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
           número.
         </p>
       </div>
+    </Panel>
+  );
+}
+
+/* ------------------------------------------------------------- tu propio número */
+
+/**
+ * The step everybody skips, made into one click.
+ *
+ * THE PROBLEM IT SOLVES: linking a number used to mean typing it, and a number
+ * typed with the wrong country code produces a link that matches nobody — so
+ * the screen said "vinculado" and WhatsApp kept answering "no te reconozco".
+ *
+ * THE FIX: never ask for the digits. You tap "Escribirle" (a wa.me link that
+ * opens WhatsApp with the message ready), your number reaches the line, the
+ * refusal is filed with the number already through `normalizePhone`, and it
+ * comes back here as a button. What gets stored is what WhatsApp sent, so it
+ * cannot be wrong. Nothing about the format is computed in the browser.
+ *
+ * WHO MAY PRESS IT: an org admin, unchanged. A link is an authorisation — it
+ * decides that messages from a number run with a named person's integrations
+ * and permissions — and `/api/whatsapp/links` refuses anybody else. Making the
+ * gesture one click does not make it self-service.
+ */
+function MyNumberPanel({
+  me,
+  connection,
+  unlinked,
+  isAdmin,
+  onLink,
+  busy,
+}: {
+  me: Status['me'];
+  connection: Connection;
+  unlinked: UnlinkedNumber[];
+  isAdmin: boolean;
+  onLink: (input: { phone: string; userId: string }) => void;
+  busy: boolean;
+}) {
+  const paired = connection.status === 'connected';
+  const waHref = connection.phoneNumber
+    ? `https://wa.me/${connection.phoneNumber}?text=${encodeURIComponent('Hola')}`
+    : null;
+
+  if (me.phone) {
+    return (
+      <Panel>
+        <PanelHead title="2 · Tu número" right="vinculado" />
+        <div className="flex flex-wrap items-start gap-3 px-5 py-4">
+          <IconChip tone="emerald">
+            <CheckCircle2 className="h-4 w-4" />
+          </IconChip>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-semibold text-ink">Cortex ya te contesta</div>
+            <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+              Escribe desde{' '}
+              <span className="font-mono text-[12px] text-ink">{telefono(me.phone)}</span> y la
+              conversación corre con tu identidad y tus permisos, igual que en la web.
+            </p>
+          </div>
+          {waHref && (
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+            >
+              <Send className="h-3.5 w-3.5" />
+              Escribirle
+            </a>
+          )}
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel>
+      <PanelHead title="2 · Tu número" right="sin vincular" />
+      <div className="flex items-start gap-3 px-5 py-4">
+        <IconChip tone="amber">
+          <UserRound className="h-4 w-4" />
+        </IconChip>
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold text-ink">
+            Hoy Cortex te respondería que no te reconoce
+          </div>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+            Un mensaje directo corre con la identidad de la persona dueña del número. Mientras el
+            tuyo no esté aquí, recibes una negativa corta y no se ejecuta nada.
+          </p>
+        </div>
+      </div>
+
+      {!paired ? (
+        <p className="border-t border-border px-5 py-3.5 text-[12.5px] leading-relaxed text-ink-faint">
+          Primero hay que emparejar el número de la empresa, arriba. Sin línea no hay a quién
+          escribirle.
+        </p>
+      ) : (
+        <>
+          <div className="border-t border-border px-5 py-3.5">
+            <div className="field-label">Cómo se hace sin teclear tu número</div>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+              Escríbele <b className="font-semibold text-ink">“Hola”</b> al número de la empresa
+              desde tu teléfono. Te va a decir que no te reconoce —es lo esperado— y tu número
+              aparece abajo para vincularlo con un clic, tal como WhatsApp lo escribe.
+            </p>
+            {waHref && (
+              <a
+                href={waHref}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2.5 inline-flex items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+              >
+                <Send className="h-3.5 w-3.5" />
+                Escribirle al número
+              </a>
+            )}
+          </div>
+
+          {/* Only an admin gets the list, and only an admin gets it from the
+              API: these are other people's numbers, including strangers who
+              found the line, and nobody else can act on them anyway. */}
+          <div className="border-t border-border px-5 py-3.5">
+            <div className="field-label">
+              {isAdmin ? 'Números que escribieron y no reconocemos' : 'Quién lo vincula'}
+              {isAdmin && unlinked.length > 0 && (
+                <>
+                  {' · '}
+                  <span className="tabular">{unlinked.length}</span>
+                </>
+              )}
+            </div>
+
+            {!isAdmin ? (
+              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+                Vincular un número da permisos, así que lo hace un administrador. Escríbele al
+                número y pídele a un administrador que abra esta pantalla: el tuyo le aparece ahí
+                para vincularlo de una.
+              </p>
+            ) : unlinked.length === 0 ? (
+              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-faint">
+                Todavía no ha escrito nadie desconocido. En cuanto lo hagas, tu número sale aquí en
+                segundos.
+              </p>
+            ) : (
+              <ul className="mt-2 flex flex-col gap-1.5">
+                {unlinked.map((n) => (
+                  <li
+                    key={n.phone}
+                    className="flex flex-wrap items-center gap-2 rounded-card bg-surface-2 px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono text-[12.5px] text-ink">{telefono(n.phone)}</div>
+                      <div className="mt-0.5 text-[11px] text-ink-faint">
+                        <span className="tabular">{n.attempts}</span>{' '}
+                        {n.attempts === 1 ? 'intento' : 'intentos'} · último {fecha(n.lastAt)}
+                      </div>
+                    </div>
+                    <Button
+                      disabled={busy}
+                      onClick={() => onLink({ phone: n.phone, userId: me.id })}
+                    >
+                      {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Es mío
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {isAdmin && unlinked.length > 0 && (
+              <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">
+                Si alguno es de un compañero, vincúlalo abajo eligiendo a quién pertenece. “Es mío”
+                lo vincula a ti, {me.name}.
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </Panel>
   );
 }
@@ -445,7 +750,7 @@ function LinksPanel({
   onUnlink,
   busy,
 }: {
-  links: Link[];
+  links: NumberLink[];
   people: Person[];
   isAdmin: boolean;
   onLink: (input: { phone: string; userId: string }) => void;
@@ -457,45 +762,52 @@ function LinksPanel({
 
   return (
     <Panel>
-      <PanelHead title="Quién puede escribirle" right={`${links.length} números`} />
+      <PanelHead title="Quién más puede escribirle" right={`${links.length} números`} />
       <p className="px-5 pt-1 text-[12.5px] leading-relaxed text-ink-muted">
         Cada mensaje directo corre con la identidad y los permisos de la persona del número. Un
         número que no esté aquí recibe una negativa corta y queda registrado; nunca se ejecuta nada.
       </p>
 
       {isAdmin && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border px-5 py-3">
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+57 300 111 2233"
-            aria-label="Número de WhatsApp"
-            className="tabular h-9 w-full max-w-[190px] rounded-card border border-border bg-surface px-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40"
-          />
-          <select
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            aria-label="Persona"
-            className="h-9 rounded-card border border-border bg-surface px-2.5 text-[12.5px] text-ink"
-          >
-            <option value="">¿De quién es?</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <Button
-            disabled={busy || !phone.trim() || !userId}
-            onClick={() => {
-              onLink({ phone, userId });
-              setPhone('');
-              setUserId('');
-            }}
-          >
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Vincular
-          </Button>
+        <div className="mt-3 border-t border-border px-5 py-3">
+          <div className="field-label">Vincular a mano</div>
+          <p className="mt-1 text-[11.5px] leading-relaxed text-ink-faint">
+            Para alguien que no está frente a la pantalla. Escríbelo con indicativo; nosotros lo
+            dejamos en el formato que WhatsApp usa.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+57 300 111 2233"
+              aria-label="Número de WhatsApp"
+              className="h-9 w-full max-w-[190px] rounded-card border border-border bg-surface px-3 font-mono text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40"
+            />
+            <select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              aria-label="Persona"
+              className="h-9 rounded-card border border-border bg-surface px-2.5 text-[12.5px] text-ink"
+            >
+              <option value="">¿De quién es?</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              disabled={busy || !phone.trim() || !userId}
+              onClick={() => {
+                onLink({ phone, userId });
+                setPhone('');
+                setUserId('');
+              }}
+            >
+              {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Vincular
+            </Button>
+          </div>
         </div>
       )}
 
@@ -514,7 +826,7 @@ function LinksPanel({
             </IconChip>
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] font-semibold text-ink">{link.personName}</div>
-              <div className="tabular mt-0.5 text-[11.5px] text-ink-faint">
+              <div className="mt-0.5 font-mono text-[11.5px] text-ink-faint">
                 {telefono(link.phone)}
                 {link.lastSeenAt ? ` · escribió ${fecha(link.lastSeenAt)}` : ' · nunca ha escrito'}
               </div>
@@ -547,7 +859,8 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
     queryKey: ['whatsapp-status'],
     queryFn: fetchStatus,
     // The QR rotates every few seconds and the connection state changes on its
-    // own; a screen somebody is staring at while pairing has to keep up.
+    // own; a screen somebody is staring at while pairing has to keep up. It is
+    // also what makes "escríbele y tu número aparece abajo" feel immediate.
     refetchInterval: 8_000,
   });
 
@@ -595,17 +908,23 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
   });
 
   const linkNumber = useMutation({
-    mutationFn: async (input: { phone: string; userId: string }) => {
+    mutationFn: async (input: { phone: string; userId: string; mine?: boolean }) => {
       const r = await fetch('/api/whatsapp/links', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ phone: input.phone, userId: input.userId }),
       });
       const j = (await r.json()) as { error?: string };
       if (!r.ok) throw new Error(j.error ?? 'No se pudo vincular el número.');
+      return input.mine === true;
     },
-    onSuccess: async () => {
-      setMessage({ tone: 'ok', text: 'Número vinculado. Ya puede escribirle a Cortex.' });
+    onSuccess: async (mine) => {
+      setMessage({
+        tone: 'ok',
+        text: mine
+          ? 'Tu número quedó vinculado. Vuelve a escribirle y ya te contesta.'
+          : 'Número vinculado. Ya puede escribirle a Cortex.',
+      });
       await invalidate();
     },
     onError: (err: Error) => setMessage({ tone: 'bad', text: err.message }),
@@ -643,6 +962,12 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
   const busy =
     saveGroup.isPending || setReplying.isPending || linkNumber.isPending || unlinkNumber.isPending;
 
+  const facts: SetupFacts = {
+    connected: data.connection.status === 'connected' && data.connection.bridgeAlive,
+    myNumberLinked: data.me.phone !== null,
+    groupsConfigured: active.length,
+  };
+
   return (
     <div className="flex flex-col gap-5">
       {message && (
@@ -657,11 +982,22 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
         </p>
       )}
 
+      <SetupChecklist facts={facts} />
+
       <ConnectionPanel connection={data.connection} />
+
+      <MyNumberPanel
+        me={data.me}
+        connection={data.connection}
+        unlinked={data.unlinkedNumbers}
+        isAdmin={isAdmin && data.isAdmin}
+        busy={busy}
+        onLink={(input) => linkNumber.mutate({ ...input, mine: true })}
+      />
 
       <Panel>
         <PanelHead
-          title="Grupos"
+          title="3 · Grupos"
           right={`${data.groups.filter((g) => g.archiving).length} archivándose · ${data.groups.filter((g) => g.replying).length} respondiendo`}
         />
         <div className="px-5 pb-3 pt-1 text-[12.5px] leading-relaxed text-ink-muted">
@@ -720,9 +1056,13 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
       <p className="flex items-start gap-2 px-1 text-[12px] leading-relaxed text-ink-faint">
         <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         Las conversaciones archivadas quedan como documentos normales: se buscan, se citan y se
-        borran desde Brain Knowledge, con los permisos del espacio donde las pusiste. Cortex nunca
-        escribe primero: en los grupos solo contesta si lo mencionan, y por interno solo si le
-        escribieron.
+        borran desde{' '}
+        <Link href="/kb" className="inline-flex items-center gap-0.5 font-semibold text-primary">
+          Brain Knowledge
+          <ArrowRight className="h-3 w-3" />
+        </Link>
+        , con los permisos del espacio donde las pusiste. Cortex nunca escribe primero: en los
+        grupos solo contesta si lo mencionan, y por interno solo si le escribieron.
       </p>
     </div>
   );

@@ -16,6 +16,13 @@ import { NextResponse } from 'next/server';
  * read there, subject to the space permissions that were chosen when the group
  * was switched on. A "recent messages" preview here would be a second way to
  * read a group's contents that answers to nothing.
+ *
+ * `me` and `unlinkedNumbers` were added when the surface moved to Integrations,
+ * for one reason: linking your own number used to mean typing it into a box,
+ * and a number typed with the wrong country code produces a link that silently
+ * matches nobody. Both fields exist so the screen can offer the number back to
+ * the person instead of asking for it — the digits come from WhatsApp itself,
+ * already through `normalizePhone`, so there is nothing to get wrong.
  */
 
 export const dynamic = 'force-dynamic';
@@ -77,6 +84,51 @@ export async function GET(): Promise<NextResponse> {
     .select('id, name, email')
     .order('name', { ascending: true })
     .limit(500);
+
+  // Numbers that wrote to the line and were turned away.
+  //
+  // `recordUnknownSender` files every refusal in `security_events`, with the
+  // number already normalised. That makes this the one list in the product that
+  // knows a person's real WhatsApp number without anybody typing it: they write
+  // "hola" from their own phone, it lands here, and linking it becomes a click
+  // on a value WhatsApp itself supplied.
+  //
+  // The stored message preview is NOT read back. A refusal row is evidence that
+  // somebody wrote, and this screen has no business republishing a stranger's
+  // words to whoever opens Integrations.
+  //
+  // ADMINS ONLY, because the list is other people's phone numbers — including
+  // strangers who found the line. Only an admin can act on it (linking is an
+  // authorisation and `/api/whatsapp/links` refuses everybody else), so sending
+  // it to anybody else would be handing out numbers for no purpose.
+  const linkedPhones = new Set(
+    ((linkRows ?? []) as Array<{ phone_e164: string }>).map((l) => l.phone_e164),
+  );
+  const { data: refusals } = isAdmin
+    ? await db
+        .from('security_events')
+        .select('signals, created_at')
+        .eq('tool_id', 'whatsapp.inbound')
+        .eq('decision', 'block')
+        .order('created_at', { ascending: false })
+        .limit(200)
+    : { data: [] };
+
+  const unlinked = new Map<string, { phone: string; attempts: number; lastAt: string }>();
+  for (const row of (refusals ?? []) as Array<{ signals: unknown; created_at: string }>) {
+    const signals = row.signals;
+    if (!signals || typeof signals !== 'object' || Array.isArray(signals)) continue;
+    const phone = (signals as { phone?: unknown }).phone;
+    if (typeof phone !== 'string' || !phone) continue;
+    if (linkedPhones.has(phone)) continue;
+    const seen = unlinked.get(phone);
+    if (seen) seen.attempts += 1;
+    else unlinked.set(phone, { phone, attempts: 1, lastAt: row.created_at });
+  }
+
+  const myLink = ((linkRows ?? []) as Array<{ phone_e164: string; user_id: string }>).find(
+    (l) => l.user_id === session.id,
+  );
 
   return NextResponse.json({
     isAdmin,
@@ -158,5 +210,14 @@ export async function GET(): Promise<NextResponse> {
     people: ((directory ?? []) as Array<{ id: string; name: string | null; email: string }>).map(
       (p) => ({ id: p.id, name: p.name ?? p.email, email: p.email }),
     ),
+    // Who is reading, and whether Cortex would answer them today.
+    me: {
+      id: session.id,
+      name: session.name ?? session.email,
+      phone: myLink?.phone_e164 ?? null,
+    },
+    // Newest first, capped: this is an offer to link, not a log. The security
+    // page is where the full history of refusals is read.
+    unlinkedNumbers: [...unlinked.values()].slice(0, 8),
   });
 }

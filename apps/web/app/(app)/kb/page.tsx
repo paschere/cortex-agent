@@ -1,4 +1,5 @@
 import { PageHeader } from '@/components/ui/page-header';
+import { WhatsappInBrain } from '@/components/whatsapp/WhatsappInBrain';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { BookOpen } from 'lucide-react';
@@ -74,6 +75,9 @@ export default async function KnowledgeBasePage() {
         subtitle="Lo que Cortex memorizó, fragmento por fragmento — y la prueba de que lo encuentra."
         icon={<BookOpen className="h-5 w-5" />}
       />
+      {/* A view, not a control panel: WhatsApp is configured in Integrations,
+          and this only says which conversations are arriving from there. */}
+      <WhatsappInBrain organizationId={user.organization.id} />
       <KnowledgeBase
         spaces={summaries}
         stats={stats}

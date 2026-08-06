@@ -20,6 +20,7 @@ import {
   Globe,
   ListTodo,
   Mail,
+  MessageCircle,
   MessageSquare,
   Plug,
   Server,
@@ -53,6 +54,10 @@ interface ProviderCard {
   /** Who turned it on — or who would have to. */
   owner: string;
   connectHref?: string;
+  /** Overrides the "Conectar" label when the card leads to a settings screen. */
+  ctaLabel?: string;
+  /** Replaces the tool count for a system that is a channel, not a toolbox. */
+  footNote?: string;
 }
 
 /**
@@ -154,6 +159,36 @@ export default async function IntegrationsPage({
   const webOn = !!process.env.TAVILY_API_KEY;
   const slackOn = !!process.env.SLACK_BOT_TOKEN;
 
+  // WhatsApp is not a credential somebody pastes: it is a phone that was paired
+  // and a set of decisions about it. The card reports the connection and hands
+  // off to /integrations/whatsapp, where all of it is configured.
+  const { data: waSession } = await db
+    .from('whatsapp_sessions')
+    .select('status, phone_number, last_seen_at')
+    .maybeSingle();
+  const waStatus = (waSession?.status as string | null) ?? 'disconnected';
+  const waAlive =
+    Date.now() - Date.parse((waSession?.last_seen_at as string | null) ?? '') < 3 * 60_000;
+  const waOn = waStatus === 'connected' && waAlive;
+
+  const { data: waGroupRows } = await db
+    .from('whatsapp_groups')
+    .select('archive_enabled, reply_enabled')
+    .or('archive_enabled.eq.true,reply_enabled.eq.true')
+    .limit(500);
+  const waGroups = (waGroupRows ?? []).length;
+
+  const { count: waLinkCount } = await db
+    .from('whatsapp_links')
+    .select('phone_e164', { count: 'exact', head: true });
+  const waLinks = waLinkCount ?? 0;
+  // The one fact that decides whether Cortex answers this person on WhatsApp.
+  const { data: myWaLink } = await db
+    .from('whatsapp_links')
+    .select('phone_e164')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
   const providers: ProviderCard[] = [
     {
       key: 'google',
@@ -169,6 +204,29 @@ export default async function IntegrationsPage({
         ? `La conectaste tú${googleScopes ? ` · ${googleScopes} permisos otorgados` : ''}`
         : 'Se otorga al entrar. Si la saltaste, conéctala aquí',
       connectHref: mine.google ? undefined : '/api/integrations/google?preset=all',
+    },
+    {
+      key: 'whatsapp',
+      name: 'WhatsApp',
+      icon: MessageCircle,
+      families: [],
+      state: waOn ? 'workspace' : 'disconnected',
+      unlocks:
+        'Escribirle a Cortex por mensaje directo desde tu teléfono, y guardar en Brain Knowledge los grupos que elijas, con quién dijo qué y cuándo.',
+      offline:
+        'Nadie puede conversar con Cortex por WhatsApp y no entra nada de los grupos a Brain Knowledge.',
+      owner: waOn
+        ? myWaLink
+          ? 'Número de la empresa en línea · el tuyo ya está vinculado'
+          : 'Número de la empresa en línea · falta vincular el tuyo para que te conteste'
+        : waStatus === 'pairing'
+          ? 'Hay un código de emparejamiento esperando a que alguien lo escanee'
+          : 'Falta emparejar el número dedicado de la empresa',
+      connectHref: '/integrations/whatsapp',
+      ctaLabel: waOn ? 'Configurar' : 'Emparejar',
+      footNote: waOn
+        ? `${waGroups} ${waGroups === 1 ? 'grupo' : 'grupos'} · ${waLinks} ${waLinks === 1 ? 'número' : 'números'}`
+        : 'sin emparejar',
     },
     {
       key: 'hubspot',
@@ -583,14 +641,23 @@ export default async function IntegrationsPage({
 
               <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2.5">
                 <span className="inline-flex items-center gap-1 text-[11px] text-ink-faint">
-                  <Wrench className="h-3 w-3" />
-                  {tools > 0 ? (
+                  {p.footNote ? (
                     <>
-                      <span className="tabular">{tools}</span>{' '}
-                      {tools === 1 ? 'herramienta' : 'herramientas'}
+                      <MessageCircle className="h-3 w-3" />
+                      <span className="tabular">{p.footNote}</span>
                     </>
                   ) : (
-                    'todavía sin herramientas'
+                    <>
+                      <Wrench className="h-3 w-3" />
+                      {tools > 0 ? (
+                        <>
+                          <span className="tabular">{tools}</span>{' '}
+                          {tools === 1 ? 'herramienta' : 'herramientas'}
+                        </>
+                      ) : (
+                        'todavía sin herramientas'
+                      )}
+                    </>
                   )}
                 </span>
                 {p.connectHref && (
@@ -598,7 +665,7 @@ export default async function IntegrationsPage({
                     href={p.connectHref}
                     className="rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
                   >
-                    Conectar
+                    {p.ctaLabel ?? 'Conectar'}
                   </Link>
                 )}
               </div>
