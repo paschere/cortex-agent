@@ -224,7 +224,12 @@ export async function probeMemory(
     const verdict = assessCoverage(hits, {
       query: trimmed,
       degraded: Boolean(degraded),
+      // Which model's scale these cosines are on. The thresholds differ per
+      // embedding model, and judging a score against another model's cuts is
+      // the bug this bench exists to make visible — see relevance.ts.
+      embeddingModel: hits.find((h) => h.embeddingModel)?.embeddingModel ?? null,
     });
+    const scale = verdict.calibration;
 
     const ids = [...new Set(hits.map((h) => h.documentId))];
     const sourceOf = new Map<string, IntakeKey>();
@@ -263,7 +268,7 @@ export async function probeMemory(
         cosine: h.semanticScore,
         keyword: h.keywordScore,
         blended: h.score,
-        verdict: rateHit(h) ?? 'dropped',
+        verdict: rateHit(h, scale) ?? 'dropped',
         age: freshness.label || null,
         freshness: freshness.status,
         spokenAt: offsetMs === null ? null : formatOffset(offsetMs),
@@ -275,7 +280,7 @@ export async function probeMemory(
     // Same rule the tool follows: only what is worth defending gets a second
     // opinion, and only from what would really have reached the model.
     const strong = hits
-      .filter((h, rank) => rank < CORTEX_WINDOW && rateHit(h) === 'strong')
+      .filter((h, rank) => rank < CORTEX_WINDOW && rateHit(h, scale) === 'strong')
       .map((h) => ({
         chunkId: h.chunkId,
         documentId: h.documentId,
@@ -309,6 +314,15 @@ export async function probeMemory(
         conflicts,
         degraded,
         elapsedMs: Date.now() - started,
+        scale: {
+          modelId: scale.modelId,
+          strongMatch: scale.strongMatch,
+          weakFloor: scale.weakFloor,
+          railCeiling: scale.railCeiling,
+          measured: scale.measured,
+          measuredOn: scale.measuredOn,
+          note: scale.note,
+        },
       },
     };
   } catch (err) {

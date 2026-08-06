@@ -160,7 +160,18 @@ export const kbSearch = registerTool({
       query: input.query,
       degraded: Boolean(degraded),
       ...(spaceName ? { spaceName } : {}),
+      // Which scale these cosines are on. The thresholds differ per embedding
+      // model and a score judged against the wrong model's cuts is how a full
+      // brain reports "no hay nada sobre eso" — see relevance.ts.
+      embeddingModel: raw.find((h) => h.embeddingModel)?.embeddingModel ?? null,
     });
+
+    if (!verdict.calibration.measured && !degraded) {
+      ctx.logger.warn(
+        { model: verdict.calibration.modelId },
+        'kb.search is judging relevance with unmeasured thresholds — run the corpus and add the model to CALIBRATIONS in relevance.ts',
+      );
+    }
 
     const now = new Date();
     const hits = verdict.kept.map(({ hit, relevance }) => {

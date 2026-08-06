@@ -265,6 +265,29 @@ export interface ProbeResult {
   /** Set when the semantic half could not run and only words were matched. */
   degraded: string | null;
   elapsedMs: number;
+  /**
+   * The scale these scores were judged on, so the rail is engraved with the
+   * cuts that were really applied rather than with a copy that may have drifted.
+   * Cosine thresholds are per embedding model — see relevance.ts — and a bench
+   * drawing one model's cuts under another model's verdicts is an instrument
+   * that lies about the very thing it exists to show.
+   */
+  scale: ProbeScale;
+}
+
+/** The cuts one probe was judged with, and whether anyone ever measured them. */
+export interface ProbeScale {
+  /** Provider-qualified, e.g. `voyage:voyage-4-lite`. */
+  modelId: string;
+  strongMatch: number;
+  weakFloor: number;
+  railCeiling: number;
+  /** False when these thresholds are a provisional guess for this model. */
+  measured: boolean;
+  /** ISO date the corpus was run, or null when it never was. */
+  measuredOn: string | null;
+  /** One line in Colombian Spanish, worth showing when `measured` is false. */
+  note: string;
 }
 
 /* ------------------------------------------------------------- the analysis */

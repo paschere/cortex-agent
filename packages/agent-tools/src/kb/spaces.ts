@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { ForbiddenError, NotFoundError } from '@cortex/core';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { embedQuery } from './embedder';
 
 /**
@@ -60,6 +60,18 @@ export interface SpaceHit {
   semanticScore: number | null;
   /** ts_rank of the literal-word match. Zero for most rows. */
   keywordScore: number;
+  /**
+   * The provider-qualified model behind `semanticScore` — the same one on both
+   * sides, because `kb_search_scoped` will not rank a query vector against a
+   * chunk written by any other model (migration 0074). Null when the semantic
+   * arm did not run.
+   *
+   * It travels on the hit because cosine similarity has no meaning without it:
+   * relevance.ts keeps a different pair of thresholds per model, and a score
+   * that arrives without saying which scale it is on is exactly how thresholds
+   * measured for one embedder went on being applied to another.
+   */
+  embeddingModel: string | null;
   /**
    * The document's own date: when the call happened or the note was written,
    * not when the file was uploaded. This is the date a citation should carry.
@@ -357,6 +369,13 @@ export async function searchSpaces(
     chunkId: r.chunk_id ?? '',
     semanticScore: r.vec_score === null || r.vec_score === undefined ? null : Number(r.vec_score),
     keywordScore: Number(r.fts_score ?? 0),
+    // The scale the cosine above is on. Null whenever there is no cosine —
+    // either the query could not be embedded, or this row came back from the
+    // keyword arm alone and was never scored by meaning.
+    embeddingModel:
+      embedded.ok && r.vec_score !== null && r.vec_score !== undefined
+        ? embedded.usage.modelId
+        : null,
     datedAt: r.dated_at ?? null,
     validUntil: r.valid_until ?? null,
     supersededById: r.superseded_by ?? null,

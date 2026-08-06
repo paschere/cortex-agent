@@ -372,19 +372,45 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
     // a workspace with an empty brain that it has one.
     const { count } = await db.from('kb_documents').select('id', { count: 'exact', head: true });
     if ((count ?? 0) > 0 && shouldRunRag(req.userText)) {
-      const ragOut = (await runTool(kbSearch, { query: req.userText, limit: 3 }, ctx).catch(() => ({
-        hits: [],
-      }))) as {
-        hits: Array<{ score?: number; documentTitle: string; chunkIndex: number; content: string }>;
-      };
-      const relevant = (ragOut.hits ?? []).filter((h) => (h.score ?? 1) >= 0.65);
-      if (relevant.length > 0) {
-        ragBlock = `<context>\n${relevant
+      // THE CUT THAT USED TO LIVE HERE WAS THE BUG, AND IT OUTLIVED ITS OWN FIX.
+      //
+      // This block filtered `score >= 0.65` on the BLENDED rank — 0.7 × cosine
+      // plus 0.3 × ts_rank — long after `kb.search` had moved the decision onto
+      // cosine similarity, where a threshold means something. On a corpus with
+      // no literal keyword overlap the blend never reaches 0.65: a passage that
+      // answers the question perfectly scores about 0.63 cosine, which is 0.44
+      // blended. So this surface discarded every correct result it was ever
+      // handed and then said nothing about it — no empty-context sentence, no
+      // log line, just a missing <context> block and a model quietly answering
+      // from its own head. The web chat route was fixed; this one was not, and
+      // a silent omission leaves no trace to notice it by.
+      //
+      // The tool has already applied the relevance cuts for the model that
+      // produced the scores, dropped what is below the floor, and written a
+      // sentence about what it concluded. There is nothing left to threshold.
+      const ragOut = await runTool(kbSearch, { query: req.userText, limit: 3 }, ctx).catch(
+        () => null,
+      );
+
+      if (ragOut && ragOut.coverage === 'nothing') {
+        // Stated, not skipped — for the same reason the web chat states it. An
+        // absent context block is indistinguishable from "retrieval did not
+        // run", and a model that cannot tell the difference fills the silence.
+        ragBlock = `<context>\n${ragOut.summary}\n</context>`;
+      } else if (ragOut && ragOut.hits.length > 0) {
+        // The age and the "coincidencia débil" marker travel with each citation
+        // because they change what it is worth: a rate quoted from a year-old
+        // document is a different claim from the same rate quoted last week,
+        // and a tangential hit presented like an answer is the original bug.
+        const cited = ragOut.hits
           .map(
             (h, i) =>
-              `[^${i + 1}] (${(h.score ?? 0).toFixed(2)}) ${h.documentTitle} chunk ${h.chunkIndex}:\n${h.content}`,
+              `[^${i + 1}] ${h.documentTitle} chunk ${h.chunkIndex}` +
+              `${h.age ? ` · ${h.age}` : ''}` +
+              `${h.relevance === 'weak' ? ' · coincidencia débil' : ''}:\n${h.content}`,
           )
-          .join('\n\n')}\n</context>`;
+          .join('\n\n');
+        ragBlock = `<context>\n${ragOut.summary}\n\n${cited}\n</context>`;
       }
     }
   } catch {

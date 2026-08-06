@@ -19,24 +19,45 @@
  *
  * These are copies, and copies drift. `kb-relevance-shape.test.ts` runs in Node,
  * imports the real module, and fails if the two ever disagree.
+ *
+ * THEY ARE ALSO ONLY THE DEFAULT MODEL'S NUMBERS. The real thresholds are keyed
+ * by embedding model — a cosine has no meaning without saying which model
+ * produced it — so a probe result carries the cuts that were really applied and
+ * the bench draws THOSE. These constants are the fallback for a rail drawn
+ * before any search has run, and the thing the test pins.
  */
 
 /** A passage that answers the question. Raw cosine, not the blended score. */
-export const STRONG_MATCH = 0.55;
+export const STRONG_MATCH = 0.46;
 
 /** Below this a passage is not offered as a citation at all. */
-export const WEAK_FLOOR = 0.45;
+export const WEAK_FLOOR = 0.34;
 
 /**
  * The top of the rail. Not a threshold — a drawing decision.
  *
  * Cosine similarity between a question and a passage that answers it lands
- * between 0.55 and 0.70 in practice (see the measurement in relevance.ts), and
- * a rail drawn to 1.0 would squash every real result into its bottom two
- * thirds and make the thresholds indistinguishable. 0.80 keeps the interesting
- * band legible while leaving headroom above the best score ever measured.
+ * between 0.49 and 0.63 under the model this deployment runs (see the
+ * measurement in relevance.ts), and a rail drawn to 1.0 would squash every real
+ * result into its bottom half and make the thresholds indistinguishable. 0.75
+ * keeps the interesting band legible while leaving headroom above the best
+ * score the measurement saw.
  */
-export const RAIL_CEILING = 0.8;
+export const RAIL_CEILING = 0.75;
+
+/** The three numbers the rail is drawn from, whoever supplies them. */
+export interface RailCuts {
+  strongMatch: number;
+  weakFloor: number;
+  railCeiling: number;
+}
+
+/** What to draw before a search has run, or if a result arrives without cuts. */
+export const DEFAULT_CUTS: RailCuts = {
+  strongMatch: STRONG_MATCH,
+  weakFloor: WEAK_FLOOR,
+  railCeiling: RAIL_CEILING,
+};
 
 /** What a fragment's rating is called on screen, in the reader's language. */
 export type FragmentVerdict = 'strong' | 'weak' | 'dropped';
@@ -55,15 +76,19 @@ export const VERDICT_LABEL: Record<FragmentVerdict, string> = {
  * bench draws no bar at all rather than a bar at zero, which would read as a
  * measured certain miss.
  */
-export function railPosition(cosine: number | null): number | null {
+export function railPosition(cosine: number | null, ceiling = RAIL_CEILING): number | null {
   if (cosine === null || !Number.isFinite(cosine)) return null;
-  return Math.max(0, Math.min(1, cosine / RAIL_CEILING));
+  return Math.max(0, Math.min(1, cosine / ceiling));
 }
 
 /** The same cut relevance.ts makes, so the rail and the verdict never disagree. */
-export function verdictOf(cosine: number | null, keyword: number): FragmentVerdict {
+export function verdictOf(
+  cosine: number | null,
+  keyword: number,
+  cuts: RailCuts = DEFAULT_CUTS,
+): FragmentVerdict {
   if (cosine === null) return keyword > 0 ? 'weak' : 'dropped';
-  if (cosine >= STRONG_MATCH) return 'strong';
-  if (cosine >= WEAK_FLOOR) return 'weak';
+  if (cosine >= cuts.strongMatch) return 'strong';
+  if (cosine >= cuts.weakFloor) return 'weak';
   return 'dropped';
 }

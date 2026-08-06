@@ -1,6 +1,7 @@
 'use client';
 
 import { Provenance } from '@/components/ui/provenance';
+import type { RailCuts } from '@/lib/kb-relevance-shape';
 import { clsx } from 'clsx';
 import { AlertTriangle, ArrowRight, CornerDownLeft, Loader2, Scale, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -251,6 +252,14 @@ export function MemoryBench({
               </p>
             </div>
 
+            {!probe.scale.measured && (
+              <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[11.5px] leading-relaxed text-ink">
+                Los cortes de esta regla no están medidos para «{probe.scale.modelId}», el modelo de
+                embeddings que está corriendo. Son un margen provisional y amplio: lee estos
+                veredictos con pinzas y no tomes un «no hay nada» como prueba de que no hay nada.
+              </p>
+            )}
+
             {probe.degraded && (
               <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[11.5px] leading-relaxed text-ink">
                 {probe.degraded} Que no aparezca algo aquí no prueba que no esté guardado.
@@ -291,7 +300,7 @@ export function MemoryBench({
                 Qué tan cerca está cada fragmento de tu pregunta
               </div>
               <div className="mt-2">
-                <RailLegend />
+                <RailLegend cuts={probe.scale} />
               </div>
             </div>
           )}
@@ -315,6 +324,7 @@ export function MemoryBench({
                   fragment={fragment}
                   rank={rank}
                   generation={generation}
+                  cuts={probe.scale}
                   onOpen={() => onOpenFragment(fragment.documentId, fragment.chunkIndex)}
                 />
               </li>
@@ -338,11 +348,14 @@ function Row({
   fragment,
   rank,
   generation,
+  cuts,
   onOpen,
 }: {
   fragment: ProbeFragment;
   rank: number;
   generation: number;
+  /** The cuts this probe was really judged with — see ProbeResult.scale. */
+  cuts: RailCuts;
   onOpen: () => void;
 }) {
   const dropped = fragment.verdict === 'dropped';
@@ -434,6 +447,7 @@ function Row({
             verdict={fragment.verdict}
             rank={rank}
             generation={generation}
+            cuts={cuts}
           />
         </div>
       </div>

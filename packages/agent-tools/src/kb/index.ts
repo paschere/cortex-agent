@@ -38,11 +38,23 @@ export type {
 export { kbSearch } from './search';
 export {
   assessCoverage,
+  calibrationFor,
+  AWAITING_MEASUREMENT,
   rateHit,
+  uncalibrated,
+  CALIBRATIONS,
+  DEFAULT_CALIBRATION,
+  DEFAULT_MODEL_ID,
   STRONG_MATCH,
   WEAK_FLOOR,
 } from './relevance';
-export type { Coverage, CoverageVerdict, HitRelevance, ScoredHit } from './relevance';
+export type {
+  Coverage,
+  CoverageVerdict,
+  HitRelevance,
+  RelevanceCalibration,
+  ScoredHit,
+} from './relevance';
 export { assessFreshness, describeAge, formatDateEs, isSuperseded } from './freshness';
 export type { Freshness, FreshnessStatus } from './freshness';
 export {
