@@ -31,7 +31,16 @@ import { describe, expect, it } from 'vitest';
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 
 /** Anything that spends money with a third party per call. */
-const PAID_CALLS = ['embedDocuments(', 'embedInBatches(', 'embedQuery(', 'transcribeAudio('];
+const PAID_CALLS = [
+  'embedDocuments(',
+  'embedInBatches(',
+  'embedQuery(',
+  'transcribeAudio(',
+  // Two model calls over a whole document (migration 0076): classify it, then
+  // read its fields. Same failure shape as the embeddings — outside a step, a
+  // retry pays for both again — so it is guarded the same way.
+  'extractDocumentData(',
+];
 
 function functionFiles(): string[] {
   return readdirSync(HERE)

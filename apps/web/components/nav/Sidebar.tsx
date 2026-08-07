@@ -7,11 +7,13 @@ import { clsx } from 'clsx';
 import {
   AlarmClock,
   BarChart3,
+  Building2,
   CalendarClock,
   BookOpen,
   Bot,
   Cable,
   ChevronRight,
+  FileBarChart,
   Hammer,
   Inbox,
   LayoutDashboard,
@@ -24,6 +26,7 @@ import {
   Plug,
   Radar,
   ScrollText,
+  Send,
   Settings,
   ShieldCheck,
   Trash2,
@@ -60,11 +63,25 @@ interface NavGroup {
 const PRIMARY: NavItem[] = [
   { href: '/chat', label: 'Chat', icon: MessageSquare },
   { href: '/approvals', label: 'Approvals', icon: Inbox, signal: 'approvals' },
+  // Spanish for the same reason /commitments is: this is opened by whoever
+  // asks "¿qué hay para mandar hoy?", and the nav answers with the page's own
+  // word. Sits next to Approvals because they are the same gesture — one is a
+  // tool call waiting on a yes, the other is a message waiting on one.
+  { href: '/actions', label: 'Acciones', icon: Send },
   // Spanish, because the page is: this one is opened first thing every morning
   // by people who ask "¿qué se nos vence?", and the nav has to answer with the
   // same word the page uses. See the note on /schedules below — one name per
   // thing, wherever that name comes from.
   { href: '/commitments', label: 'Vencimientos', icon: CalendarClock },
+  // The axis the rest of the product hangs off (migration 0075). Spanish, like
+  // its neighbours, and placed high because it is where a question about a
+  // customer STARTS — "¿qué tenemos de Coltrans?" is answered here and then
+  // followed into the mail, the meeting or the deadline.
+  { href: '/clients', label: 'Clientes', icon: Building2 },
+  // Spanish for the same reason as Vencimientos above: the people who ask
+  // "pásame el informe de este mes" say informe, and a rail that answers with
+  // "Reports" is a rail they have to translate every time.
+  { href: '/reports', label: 'Informes', icon: FileBarChart },
   { href: '/prospects', label: 'Prospects', icon: Radar },
   { href: '/conversations', label: 'Conversations', icon: MessagesSquare },
   // Promoted out of the old KNOWLEDGE group: once the rate calculator moved back

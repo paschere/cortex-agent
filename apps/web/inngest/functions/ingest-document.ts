@@ -8,6 +8,7 @@ import {
   driveGetBytes,
   driveGetText,
 } from '@cortex/agent-tools';
+import { extractDocumentData } from '@cortex/agent-tools/src/documents/ingest';
 import { chunkText } from '@cortex/agent-tools/src/kb/chunker';
 import { embedInBatches, embeddingModelId } from '@cortex/agent-tools/src/kb/embedder';
 import { recordEmbeddingUsage } from '@cortex/agent-tools/src/kb/embedding-usage';
@@ -396,7 +397,7 @@ export const ingestDocument = inngest.createFunction(
     // -----------------------------------------------------------------------
     // 3. Settle the document
     // -----------------------------------------------------------------------
-    return await step.run('finalize', async () => {
+    const settled = await step.run('finalize', async () => {
       const { count } = await sb
         .from('kb_chunks')
         .select('id', { count: 'exact', head: true })
@@ -426,6 +427,29 @@ export const ingestDocument = inngest.createFunction(
         .eq('id', documentId);
       return { ok: true, chunks: chunkCount, embedded };
     });
+
+    // -----------------------------------------------------------------------
+    // 4. Read it as a BUSINESS document — its own step, for the same reason
+    // -----------------------------------------------------------------------
+    // Two model calls over the whole text (classify, then extract), which makes
+    // this the second most expensive thing in the function after transcription.
+    // It gets its own `step.run` so an Inngest retry of anything around it never
+    // buys those calls again, exactly as section 2 does for the embeddings —
+    // `embedding-cost-guard.test.ts` lists `extractDocumentData` among the paid
+    // calls and fails CI if it ever appears outside a step.
+    //
+    // It runs after `finalize` and never before it: the document must already be
+    // stored, chunked and marked, because a failure here is not a failure of
+    // ingestion. `extractDocumentData` does not throw — it returns its reason —
+    // so a model outage leaves a perfectly good searchable document with no
+    // structured reading, which is precisely what this codebase looked like
+    // before migration 0076. Everything it does write lands `pending`, counts
+    // towards nothing, and waits for a person on /documents.
+    const extraction = await step.run('extract-document-data', async () => {
+      return await extractDocumentData(sb, documentId, { createdBy: null });
+    });
+
+    return { ...settled, extraction };
     } catch (err) {
       await sb
         .from('kb_documents')

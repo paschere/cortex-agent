@@ -2,7 +2,13 @@ import { z } from 'zod';
 import { registerTool } from '../index';
 import { gmailFetch } from './client';
 
-function buildRfc822({
+/**
+ * Exported for `gmail.send_message` (see ./send-message.ts), which composes the
+ * same envelope but posts it to /messages/send instead of /drafts. One encoder
+ * for both, because a second copy is how the reply headers end up right in one
+ * path and wrong in the other.
+ */
+export function buildRfc822({
   to,
   subject,
   body,
@@ -34,7 +40,7 @@ function buildRfc822({
   return lines.join('\r\n');
 }
 
-function b64url(s: string): string {
+export function b64url(s: string): string {
   return Buffer.from(s, 'utf-8')
     .toString('base64')
     .replace(/\+/g, '-')

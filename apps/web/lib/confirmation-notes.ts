@@ -10,6 +10,8 @@
 export const CONFIRMATION_NOTES: Record<string, string> = {
   'gmail.send_draft':
     'Envía un correo real desde tu Gmail a sus destinatarios. Una vez enviado no se puede recuperar, y te representa a ti y a la empresa ante quien lo reciba.',
+  'gmail.send_message':
+    'Envía este mensaje, tal cual está escrito acá, desde tu Gmail. Lo que apruebas es exactamente lo que sale — no hay borrador de por medio que alguien pueda cambiar después. Una vez enviado no se puede recuperar.',
   'gmail.draft': 'Crea un borrador en tu Gmail. No se envía nada, pero aparece en tu bandeja.',
   'gcal.create_event':
     'Crea un evento y manda la invitación por correo a todos los asistentes — la gente de fuera la ve de inmediato.',

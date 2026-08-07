@@ -45,6 +45,14 @@ export interface SystemPromptResult {
    * into a room — see `findMemoryEcho`.
    */
   memories: MemoryContextEntry[];
+  /**
+   * The rendered memory block, exactly as it was concatenated into `system`.
+   *
+   * Returned so a caller weighing what the turn cost can measure the real
+   * string rather than re-rendering it or subtracting lengths. Empty when the
+   * person has no memories.
+   */
+  memoryBlock: string;
 }
 
 export interface SystemPromptOptions {
@@ -86,5 +94,5 @@ export async function buildSystemPrompt(opts: SystemPromptOptions): Promise<Syst
     .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
     .join('\n\n');
 
-  return { system, memories };
+  return { system, memories, memoryBlock: block };
 }

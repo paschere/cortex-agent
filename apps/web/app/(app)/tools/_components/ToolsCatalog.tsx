@@ -25,6 +25,7 @@ import {
 import { clsx } from 'clsx';
 import {
   AlarmClock,
+  BarChart3,
   BookOpen,
   Bot,
   Boxes,
@@ -174,6 +175,7 @@ export interface UsageMeta {
 
 const ICONS: Record<string, typeof Wrench> = {
   AlarmClock,
+  BarChart3,
   BookOpen,
   Boxes,
   Building2,

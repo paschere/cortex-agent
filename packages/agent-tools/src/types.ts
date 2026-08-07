@@ -53,12 +53,76 @@ export interface ToolContext {
    * enforced at each call site would be a rule that eventually is not.
    */
   kbSpaceIds?: string[];
+  /**
+   * Told what a Brain Knowledge retrieval really returned, at the moment it
+   * returned it — losers included.
+   *
+   * WHY THIS EXISTS AT ALL. `kb.search` drops everything below the relevance
+   * floor before it returns, which is correct: a model handed a list of
+   * near-misses reads it as evidence. But those near-misses are usually the
+   * answer to "why did it reply that", and once the call is over they are gone
+   * — the only way to get them back would be to run the search again, and a
+   * second search is a DIFFERENT search. Thresholds get recalibrated, documents
+   * get re-indexed, the embedding model changes. A screen that re-derived what
+   * "would have" been retrieved would agree with the truth on every turn except
+   * the ones somebody opened it for.
+   *
+   * So the capture is handed the real result set from inside the call that
+   * produced it. Synchronous, and it must stay synchronous: it is a couple of
+   * object literals, it runs while the turn is already waiting on nothing, and
+   * an implementation that did I/O here would put diagnostics on the critical
+   * path of an answer. Errors thrown by an observer are swallowed by the caller.
+   */
+  onRetrieval?: (observation: RetrievalObservation) => void;
   signal?: AbortSignal;
   withSpan?: <T>(
     name: string,
     attrs: Record<string, string | number>,
     fn: () => Promise<T>,
   ) => Promise<T>;
+}
+
+/**
+ * One retrieval, as it really came back.
+ *
+ * Declared here rather than in `turn-context/` so that `ToolContext` stays a
+ * leaf type with no dependency on the capture module — the retrieval side
+ * should not have to know that anything is watching.
+ */
+export interface RetrievalObservation {
+  query: string;
+  /** How many fragments the caller asked for. */
+  limit: number;
+  coverage: 'answered' | 'thin' | 'nothing' | 'keyword-only';
+  /** The exact sentence handed to the model about its own results. */
+  summary: string;
+  /** The cuts that judged these scores, and the scale they are on. */
+  cuts: {
+    modelId: string;
+    strongMatch: number;
+    weakFloor: number;
+    railCeiling: number;
+    measured: boolean;
+  };
+  /** Every row the search returned, in rank order, before the floor was applied. */
+  hits: RetrievalObservationHit[];
+}
+
+export interface RetrievalObservationHit {
+  chunkId: string;
+  documentId: string;
+  documentTitle: string;
+  spaceId: string;
+  spaceName: string;
+  spaceKind: 'global' | 'personal';
+  chunkIndex: number;
+  content: string;
+  /** Raw cosine. Null when the semantic arm did not run for this row. */
+  cosine: number | null;
+  keyword: number;
+  blended: number;
+  /** How the cuts above rated it. 'dropped' is below the floor. */
+  verdict: 'strong' | 'weak' | 'dropped';
 }
 
 export interface ToolDef<I, O> {

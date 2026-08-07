@@ -1,6 +1,6 @@
 import 'server-only';
 import { createIntegrationsClient } from '@cortex/agent-tools';
-import type { ToolContext, ToolSurface } from '@cortex/agent-tools';
+import type { RetrievalObservation, ToolContext, ToolSurface } from '@cortex/agent-tools';
 import { type UUID, logger } from '@cortex/core';
 import { getOrgScopedClient } from './supabase/service';
 
@@ -27,6 +27,8 @@ export function buildToolContext(opts: {
   signal?: AbortSignal;
   /** Ceiling on Brain Knowledge retrieval for this turn. See ToolContext. */
   kbSpaceIds?: string[];
+  /** Watches what retrieval really returned, losers included. See ToolContext. */
+  onRetrieval?: (observation: RetrievalObservation) => void;
 }): ToolContext {
   const db = getOrgScopedClient(opts.organizationId);
   return {
@@ -42,6 +44,7 @@ export function buildToolContext(opts: {
     // at all" and `undefined` means "no restriction", and collapsing the two
     // would turn the tightest restriction into none.
     kbSpaceIds: opts.kbSpaceIds,
+    onRetrieval: opts.onRetrieval,
     signal: opts.signal,
   };
 }

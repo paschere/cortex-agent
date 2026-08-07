@@ -113,6 +113,10 @@ const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   payroll: 'financial',
   people: 'pii',
   gmail: 'pii',
+  // Same mailbox, different vendor. It must carry the same sensitivity as gmail
+  // or a workspace on Microsoft would get a quieter guardrail for identical
+  // data — which is exactly the drift a second integration invites.
+  outlook: 'pii',
   // Candidate write-ups name a real person and quote assessments of them, so
   // the family that produces them is personal data even though it holds no
   // rates.
@@ -126,6 +130,7 @@ const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   linear: 'internal',
   github: 'internal',
   gcal: 'internal',
+  mscal: 'internal',
   slack: 'internal',
   schedule: 'internal',
   pipeline: 'internal',
@@ -193,6 +198,23 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // Creating a draft delivers nothing: it sits in the author's mailbox until a
   // human sends it. Gating it would be friction with no exposure.
   'gmail.draft': { blastRadius: 'internal_write' },
+  // The Microsoft 365 twins, classified identically on purpose — see the note
+  // on the gmail entries above for the reasoning, which is the same word for
+  // word. A guardrail that depends on which mail vendor a customer bought is
+  // not a guardrail.
+  'outlook.send_draft': {
+    sensitivity: 'client',
+    blastRadius: 'external_send',
+    deliversContent: true,
+    recipientsExplicit: true,
+  },
+  'outlook.draft': { blastRadius: 'internal_write' },
+  // Archiving a client thread copies correspondence into Brain Knowledge, where
+  // colleagues can retrieve it. Nothing leaves the company, but it is a real
+  // widening of who can read it, so it is a write rather than the read its
+  // 'archive' verb would otherwise imply.
+  'outlook.archive_thread': { blastRadius: 'internal_write' },
+  'mscal.create_event': { blastRadius: 'internal_write' },
   // A channel is opaque — Slack Connect channels include client guests — so a
   // post always counts as leaving the company.
   'slack.post_message': { blastRadius: 'external_send', deliversContent: true },

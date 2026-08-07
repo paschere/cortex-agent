@@ -18,6 +18,12 @@ export { consumeToken } from './rate-limit';
 export { createIntegrationsClient } from './integrations';
 export * from './gmail';
 export * from './gcal';
+// Microsoft 365 through Graph: the same mail and calendar surface as the two
+// above, for the customers who run Outlook instead. `./msgraph` is the shared
+// client and registers nothing.
+export * from './msgraph';
+export * from './outlook';
+export * from './mscal';
 export * from './gsheets';
 export * from './hubspot';
 export * from './github';
@@ -38,6 +44,23 @@ export * from './vehicles';
 // reads what the RUNT consults left behind, and after ./kb because the
 // extraction path goes through the spaces boundary.
 export * from './commitments';
+// The customer companies everything else hangs off (migration 0075). Placed
+// after ./commitments because the client card reads commitment rows and adopts
+// the ones whose counterparty already named the client by hand.
+export * from './clients';
+// Facturas, guías, declaraciones and the rest, read into fields that can be
+// summed (migration 0076). Placed after ./clients because a confirmed NIT is
+// matched against the client list, and after ./kb because the text it reads and
+// the visibility rule it obeys both live there.
+export * from './documents';
+// The tissue between an answer and something done about it: a drafted action
+// waiting on a human. Placed after ./commitments and ./gmail because it reads
+// commitment rows to draft from them and binds gmail.send_message to run.
+export * from './actions';
+// Informes: text and charts, read on screen, saved as a snapshot, shareable
+// (migration 0079). Placed after ./commitments and ./vehicles because it reads
+// both to build its reports; it registers no source of truth of its own.
+export * from './reports';
 export * from './pipeline';
 export * from './meetings';
 // Library only — no tools are registered here. WhatsApp is a surface Cortex
@@ -73,6 +96,11 @@ export * from './custom-tools';
 // fully populated, though it takes its candidates as an argument and never
 // reads the registry itself — Google Chat and the web chat pass different sets.
 export * from './tool-selection';
+
+// What a turn actually handed the model, captured as it happened (migration
+// 0080). Placed after ./tool-selection and ./kb because it records what those
+// two produced; it calls neither, and holds no tools of its own.
+export * from './turn-context';
 
 // Side-effect import: registers the sales.draft_proposal composite tool.
 // Placed last so the registry + all primitive tools are initialized first.

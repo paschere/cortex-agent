@@ -1,5 +1,7 @@
 'use client';
 
+import { ProposedActionCard } from '@/components/actions/ProposedActionCard';
+import type { ActionView } from '@/lib/actions-shape';
 import type { Message, ToolInvocation } from 'ai';
 import { Brain, Check, Copy, RotateCw } from 'lucide-react';
 import { useState } from 'react';
@@ -31,6 +33,26 @@ function isConfirmationSentinel(v: unknown): v is ConfirmationSentinel {
 
 function isProposalTool(toolName: string): boolean {
   return toolName === 'sales_draft_proposal' || toolName === 'sales.draft_proposal';
+}
+
+/**
+ * The turn that ends in something you can say yes to.
+ *
+ * `actions.propose` returns a drafted email; rendering it as a plain tool card
+ * would show the JSON of a message and leave the person to go find where to
+ * approve it, which is the exact gap this whole feature exists to close. So the
+ * card comes up in the thread, with the text, the recipient and the buttons.
+ */
+function isProposedActionTool(toolName: string): boolean {
+  return toolName === 'actions_propose' || toolName === 'actions.propose';
+}
+
+function isProposedActionResult(v: unknown): v is { action: ActionView } {
+  if (!v || typeof v !== 'object' || '__error' in v) return false;
+  const action = (v as { action?: unknown }).action;
+  if (!action || typeof action !== 'object') return false;
+  const a = action as Record<string, unknown>;
+  return typeof a.id === 'string' && typeof a.contentHash === 'string';
 }
 
 /**
@@ -126,6 +148,20 @@ export function MessageBubble({
         {toolInvocations && toolInvocations.length > 0 && (
           <div className="mt-2 space-y-1.5">
             {toolInvocations.map((inv) => {
+              const actionResult =
+                isProposedActionTool(inv.toolName) && inv.state === 'result'
+                  ? (inv as { result?: unknown }).result
+                  : undefined;
+              if (actionResult !== undefined && isProposedActionResult(actionResult)) {
+                return (
+                  <ProposedActionCard
+                    key={inv.toolCallId}
+                    action={actionResult.action}
+                    dense
+                    onSettled={onConfirmed}
+                  />
+                );
+              }
               const proposalResult =
                 isProposalTool(inv.toolName) && inv.state === 'result'
                   ? (inv as { result?: unknown }).result

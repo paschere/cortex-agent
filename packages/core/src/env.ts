@@ -19,6 +19,21 @@ const schema = z.object({
   HUBSPOT_CLIENT_ID: z.string().min(1).optional(),
   HUBSPOT_CLIENT_SECRET: z.string().min(1).optional(),
   HUBSPOT_REDIRECT_URI: z.string().url().optional(),
+  // Microsoft 365 (Outlook mail + calendar) through Microsoft Graph. Every key
+  // is optional: a deployment with no Microsoft customer must still boot, and
+  // the connect route answers 409 with a sentence naming what is missing rather
+  // than crashing the app at startup.
+  //
+  // DELEGATED PERMISSIONS ONLY — there is deliberately no client-credentials
+  // path here. See docs/operations/microsoft.md § "Why delegated".
+  MICROSOFT_CLIENT_ID: z.string().min(1).optional(),
+  MICROSOFT_CLIENT_SECRET: z.string().min(1).optional(),
+  MICROSOFT_REDIRECT_URI: z.string().url().optional(),
+  // The Entra ID tenant the sign-in goes through. `common` (the default) lets
+  // any work account connect; a customer that wants Cortex reachable only by
+  // its own directory sets its tenant GUID here and Microsoft refuses everyone
+  // else at the door, before a token is ever minted.
+  MICROSOFT_TENANT_ID: z.string().min(1).optional(),
   // Brain Knowledge embeddings. Every key here is optional on purpose: without
   // one the KB degrades to keyword search and queues what it cannot vectorise,
   // which is not a reason to refuse to boot.

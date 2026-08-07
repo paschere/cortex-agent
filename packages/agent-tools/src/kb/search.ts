@@ -3,9 +3,18 @@ import { z } from 'zod';
 import { registerTool } from '../index';
 import { type Conflict, findConflicts } from './conflicts';
 import { assessFreshness } from './freshness';
-import { assessCoverage } from './relevance';
+import { assessCoverage, rateHit } from './relevance';
 import { listVisibleSpaces, resolveSpaceByName, searchSpaces } from './spaces';
 import { chunkOffsetMs, formatOffset } from './transcript-chunker';
+
+/**
+ * How many fragments a caller gets when it does not say. Named rather than
+ * inline in the schema because zod's `.default()` leaves the field optional in
+ * the INPUT type, so anything that has to state the limit as a number — the
+ * retrieval observation below — needs the same value to fall back on, and two
+ * copies of it would drift.
+ */
+const DEFAULT_LIMIT = 5;
 
 const HitSchema = z.object({
   documentId: z.string().uuid(),
@@ -91,7 +100,7 @@ export const kbSearch = registerTool({
       .max(200)
       .optional()
       .describe('Name of a single space to search in, e.g. "Rates" — omit to search everything'),
-    limit: z.number().int().min(1).max(20).default(5),
+    limit: z.number().int().min(1).max(20).default(DEFAULT_LIMIT),
   }),
   outputSchema: z.object({
     /** What the brain turned out to know about this. See the description. */
@@ -165,6 +174,49 @@ export const kbSearch = registerTool({
       // brain reports "no hay nada sobre eso" — see relevance.ts.
       embeddingModel: raw.find((h) => h.embeddingModel)?.embeddingModel ?? null,
     });
+
+    // Hand the whole result set to whoever is watching this turn, BEFORE the
+    // floor is applied below — the rows that are about to be discarded are the
+    // ones worth keeping a record of, and this is the last moment they exist.
+    // See ToolContext.onRetrieval for why it cannot be done anywhere else.
+    // Never allowed to affect the search: an observer that throws is a bug in
+    // the observer, not a failed retrieval.
+    if (ctx.onRetrieval) {
+      try {
+        ctx.onRetrieval({
+          query: input.query,
+          limit: input.limit ?? DEFAULT_LIMIT,
+          coverage: verdict.coverage,
+          summary: verdict.summary,
+          cuts: {
+            modelId: verdict.calibration.modelId,
+            strongMatch: verdict.calibration.strongMatch,
+            weakFloor: verdict.calibration.weakFloor,
+            railCeiling: verdict.calibration.railCeiling,
+            measured: verdict.calibration.measured,
+          },
+          hits: raw.map((h) => ({
+            chunkId: h.chunkId,
+            documentId: h.documentId,
+            documentTitle: h.documentTitle,
+            spaceId: h.spaceId,
+            spaceName: h.spaceName,
+            spaceKind: h.spaceKind,
+            chunkIndex: h.chunkIndex,
+            content: h.content,
+            cosine: h.semanticScore,
+            keyword: h.keywordScore,
+            blended: h.score,
+            // The rating that was really applied, by the calibration that was
+            // really in force — not re-judged later against whatever the
+            // thresholds have become.
+            verdict: rateHit(h, verdict.calibration) ?? 'dropped',
+          })),
+        });
+      } catch {
+        // Deliberately silent. Diagnostics never break an answer.
+      }
+    }
 
     if (!verdict.calibration.measured && !degraded) {
       ctx.logger.warn(

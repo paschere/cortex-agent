@@ -18,6 +18,7 @@ import {
   Gauge,
   GitBranch,
   Globe,
+  Inbox,
   ListTodo,
   Mail,
   MessageCircle,
@@ -140,6 +141,11 @@ export default async function IntegrationsPage({
     families.reduce((sum, f) => sum + (toolsByFamily[f] ?? 0), 0);
 
   const googleScopes = (mine.google?.scopes ?? []).length;
+  const microsoftScopes = (mine.microsoft?.scopes ?? []).length;
+  // Whether the Azure app registration exists at all. Without it the card says
+  // "ask the technical team" instead of offering a button that answers 409.
+  const microsoftConfigured =
+    !!process.env.MICROSOFT_CLIENT_ID && !!process.env.MICROSOFT_REDIRECT_URI;
   const hubspotWorkspace = !!process.env.HUBSPOT_PRIVATE_APP_TOKEN;
   const matcherOn = !!process.env.MATCHER_URL;
   const payrollOn = !!process.env.PAYROLL_API_URL;
@@ -204,6 +210,27 @@ export default async function IntegrationsPage({
         ? `La conectaste tú${googleScopes ? ` · ${googleScopes} permisos otorgados` : ''}`
         : 'Se otorga al entrar. Si la saltaste, conéctala aquí',
       connectHref: mine.google ? undefined : '/api/integrations/google?preset=all',
+    },
+    {
+      key: 'microsoft',
+      name: 'Microsoft 365',
+      icon: Inbox,
+      families: ['outlook', 'mscal'],
+      state: mine.microsoft ? 'user' : 'disconnected',
+      unlocks:
+        'Leer y buscar tu correo de Outlook, leer un hilo completo, dejar borradores y enviarlos, ver y crear eventos del calendario, y guardar en Brain Knowledge la correspondencia con clientes y proveedores.',
+      offline:
+        'Sin correo ni calendario para quienes trabajan en Outlook: Cortex no ve nada de su día.',
+      // The one thing this line has to make unmissable: nobody's mailbox is
+      // read because an administrator approved something. Each person connects
+      // their own, and only their own.
+      owner: mine.microsoft
+        ? `La conectaste tú${microsoftScopes ? ` · ${microsoftScopes} permisos otorgados` : ''}`
+        : microsoftConfigured
+          ? 'Cada quien conecta su propio buzón. Nadie ve el correo de otro'
+          : 'Falta que el equipo técnico registre la aplicación en Azure',
+      connectHref:
+        !mine.microsoft && microsoftConfigured ? '/api/integrations/microsoft?preset=all' : undefined,
     },
     {
       key: 'whatsapp',

@@ -26,7 +26,14 @@ import type { EmbedUsage } from './embedder';
 export const EMBEDDING_USAGE_TABLE = 'kb_embedding_usage';
 
 /** Which pipeline paid. Matches the `source` column's prose in migration 0074. */
-export type EmbeddingUsageSource = 'ingest' | 'reindex' | 'meeting' | 'whatsapp' | 'note';
+export type EmbeddingUsageSource =
+  | 'ingest'
+  | 'reindex'
+  | 'meeting'
+  | 'whatsapp'
+  | 'note'
+  // Outlook mail threads archived into Brain Knowledge (migration 0078).
+  | 'outlook';
 
 export interface RecordEmbeddingUsage {
   /**

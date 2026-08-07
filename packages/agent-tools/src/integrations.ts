@@ -7,6 +7,7 @@ import {
   type Logger,
   type UUID,
 } from '@cortex/core';
+import { microsoftTokenUrl, normalizeGraphScopes } from './msgraph/client';
 import type { IntegrationsClient } from './types';
 
 interface RefreshFn {
@@ -52,6 +53,61 @@ const REFRESHERS: Partial<Record<IntegrationProvider, RefreshFn>> = {
       refresh_token: string;
       expires_in: number;
     }>;
+  },
+  /**
+   * Microsoft 365 (Graph), delegated. Two things differ from the two above.
+   *
+   * REFRESH TOKENS ROTATE. Entra ID returns a NEW refresh token on every
+   * exchange and retires the one just used, so the response's `refresh_token`
+   * must be persisted — which the caller below already does, because HubSpot
+   * behaves the same way. A deployment that kept the original would work for
+   * exactly one refresh and then look like a revocation.
+   *
+   * A FAILURE HERE IS USUALLY PERMANENT. Microsoft answers 400 with
+   * `invalid_grant` for every end of the grant: the user changed their
+   * password, an administrator revoked the app or the user's sessions, the
+   * 90-day inactivity window lapsed, or a conditional-access policy now demands
+   * a fresh sign-in. None of those get better by retrying, and "Microsoft
+   * refresh failed: 400" would send a person to a log they cannot read. So the
+   * message says the one thing that fixes it.
+   */
+  async microsoft(rt) {
+    const r = await fetch(microsoftTokenUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.MICROSOFT_CLIENT_ID ?? '',
+        client_secret: process.env.MICROSOFT_CLIENT_SECRET ?? '',
+        refresh_token: rt,
+        grant_type: 'refresh_token',
+      }),
+    });
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      // Never log or echo the body wholesale: the error payload from Entra ID
+      // carries correlation ids and, on some flows, the request that was sent.
+      const revoked = r.status === 400 || r.status === 401 || /invalid_grant/i.test(body);
+      throw new IntegrationError(
+        revoked
+          ? 'Your Microsoft 365 connection is no longer valid — Microsoft rejected the stored refresh token. That happens when the password changed, an administrator revoked the app, or nobody used the connection for 90 days. Reconnect Microsoft 365 from the Integrations screen; retrying will not help.'
+          : `Microsoft could not refresh the connection right now (${r.status}). Nothing is broken on our side — try again in a few minutes, and reconnect from the Integrations screen if it keeps failing.`,
+        'microsoft',
+      );
+    }
+    const tok = (await r.json()) as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in: number;
+      scope?: string;
+    };
+    return {
+      ...tok,
+      // Entra ID hands scopes back resource-qualified
+      // ("https://graph.microsoft.com/Mail.Read"). Normalising on the way in
+      // keeps the column in one spelling, so `hasScopes` compares like with
+      // like and a refresh never silently narrows what a tool is allowed to do.
+      scope: tok.scope ? normalizeGraphScopes(tok.scope).join(' ') : undefined,
+    };
   },
 };
 

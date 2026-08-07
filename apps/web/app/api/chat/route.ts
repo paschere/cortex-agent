@@ -8,13 +8,19 @@ import {
   type AnyTool,
   type EnabledExternalServer,
   type ExternalServerRow,
+  type RetrievalObservation,
   CUSTOM_TOOL_FAMILY,
+  TurnContextRecorder,
   callExternalTool,
   customToolDef,
+  familiesFrom,
   fetchEnabledCustomTools,
   fetchEnabledExternalTools,
   filterTools,
+  fragmentKey,
+  hasOverrides,
   kbSearch,
+  loadOverrides,
   runTool,
   selectToolsForTurn,
   toolIdAllowed,
@@ -27,6 +33,13 @@ import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
+
+/**
+ * How many Brain Knowledge fragments get pasted above the question when nobody
+ * has said otherwise. Unchanged from the number this route has always used; it
+ * is a named constant now only because a conversation may override it.
+ */
+const DEFAULT_FRAGMENTS = 3;
 
 const ACKNOWLEDGMENT_RE =
   /^(ok|yes|no|sure|thanks|got it|sounds good|proceed|continue|sí|claro|dale|perfecto|de acuerdo)[.!?]?$/i;
@@ -152,11 +165,32 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // What this turn handed the model, written down as it is assembled and saved
+  // once the answer has already been delivered. Accumulating is pure assignment
+  // — no I/O, nothing awaited — so nothing here is on the path of the reply.
+  // See packages/agent-tools/src/turn-context.
+  const recorder = new TurnContextRecorder({
+    organizationId: user.organization.id,
+    conversationId,
+    userId: user.id,
+    agentId: agent.id,
+    model: agent.defaultModel,
+    logger,
+  });
+  // The retrieval as it really came back, near-misses included. It can only be
+  // taken from inside the search that ran: kb.search drops everything below the
+  // floor before returning, and running a second search later would answer a
+  // different question with today's thresholds. See ToolContext.onRetrieval.
+  let retrievalSeen: RetrievalObservation | null = null;
+
   const ctx = buildToolContext({
     organizationId: user.organization.id,
     userId: user.id,
     agentId: agent.id,
     conversationId,
+    onRetrieval: (observation) => {
+      retrievalSeen = observation;
+    },
   });
 
   // RAG prepend: kb.search top 3 on the last user message (conditional).
@@ -169,10 +203,33 @@ export async function POST(req: NextRequest) {
   // organization_id (they inherit it from their document, see migration 0064
   // § 12), so a count across every chunk in the install used to make a brand-new
   // company run retrieval because SOMEBODY ELSE had uploaded a file.
-  const { count: chunkCount } = await db
-    .from('kb_documents')
-    .select('id', { count: 'exact', head: true });
-  if ((chunkCount ?? 0) > 0 && shouldRunRag(ragQuery)) {
+  //
+  // The per-conversation adjustments ride along with the count that was already
+  // being awaited here. Concurrent on purpose: it is one indexed lookup by
+  // primary key and it hides entirely behind a query the turn was making
+  // anyway, so the knobs cost the chat no wall-clock at all. `loadOverrides`
+  // never throws — a diagnostics setting that fails to load costs the default
+  // behaviour, never the answer.
+  const [{ count: chunkCount }, overrides] = await Promise.all([
+    db.from('kb_documents').select('id', { count: 'exact', head: true }),
+    loadOverrides(db, conversationId),
+  ]);
+  recorder.adjusted(hasOverrides(overrides));
+  const fragmentLimit = overrides.fragmentLimit ?? DEFAULT_FRAGMENTS;
+  if ((chunkCount ?? 0) === 0) {
+    recorder.retrievalSkipped('Todavía no hay nada indexado en Brain Knowledge.', fragmentLimit);
+  } else if (fragmentLimit === 0) {
+    recorder.retrievalSkipped(
+      'Alguien puso en cero los fragmentos para esta conversación.',
+      fragmentLimit,
+    );
+  } else if (!shouldRunRag(ragQuery)) {
+    recorder.retrievalSkipped(
+      'El mensaje es muy corto o es un acuse de recibo, así que no valía la pena buscar.',
+      fragmentLimit,
+    );
+  }
+  if ((chunkCount ?? 0) > 0 && fragmentLimit > 0 && shouldRunRag(ragQuery)) {
     // The relevance cut used to live here, as `score >= 0.65` on the blended
     // rank — a number that could not be interpreted and that, measured against
     // a real corpus, never got there at all: semantic matching alone tops out
@@ -181,7 +238,16 @@ export async function POST(req: NextRequest) {
     // threshold means something, and reports what it concluded in `coverage`.
     // See packages/agent-tools/src/kb/relevance.ts for the measurement.
     const ragOut = ragQuery
-      ? await runTool(kbSearch, { query: ragQuery, limit: 3 }, ctx).catch(() => null)
+      ? await runTool(
+          kbSearch,
+          { query: ragQuery, limit: fragmentLimit },
+          // A conversation-scoped narrowing, passed the same way the abort
+          // signal is below. It can only ever restrict: Postgres intersects it
+          // with what this person can already see, so an id for somebody else's
+          // space contributes nothing. Spread conditionally because `undefined`
+          // means "no restriction" while `[]` would mean "no space at all".
+          overrides.spaceIds ? { ...ctx, kbSpaceIds: overrides.spaceIds } : ctx,
+        ).catch(() => null)
       : null;
 
     if (ragOut && ragOut.coverage === 'nothing') {
@@ -212,6 +278,20 @@ export async function POST(req: NextRequest) {
           ? `\n\n${ragOut.conflicts.map((c) => `⚠ CONFLICTO: ${c.note}`).join('\n')}`
           : '') +
         '\n</context>';
+    }
+
+    // Written down from the block that was just built, not from the scores.
+    // `ragOut.hits` IS what got pasted above the question — anything the floor
+    // dropped never appears in it — so this set is the ground truth for which
+    // fragments the model really saw, and `retrievalSeen` supplies the ones it
+    // did not. Neither is re-derived: see ToolContext.onRetrieval.
+    if (retrievalSeen) {
+      const prepended = new Set(
+        ragBlock && ragOut ? ragOut.hits.map((h) => fragmentKey(h.documentId, h.chunkIndex)) : [],
+      );
+      recorder.retrieved(retrievalSeen, prepended);
+    } else if (!ragOut) {
+      recorder.retrievalSkipped('La búsqueda en Brain Knowledge falló en este turno.', fragmentLimit);
     }
   }
 
@@ -294,21 +374,51 @@ export async function POST(req: NextRequest) {
   // editing this file — see packages/agent-tools/src/tool-selection. Everything
   // it can fail on (Voyage, the vector table, an unindexed tool) degrades to
   // sending MORE tools, never fewer.
+  const allCandidates = [...registryCandidates, ...customCandidates, ...externalCandidates];
   const selection = await selectToolsForTurn({
     db,
-    tools: [...registryCandidates, ...customCandidates, ...externalCandidates],
+    tools: allCandidates,
     query: recentText,
   });
+  // A conversation may withhold a whole family. Applied AFTER ranking rather
+  // than by removing candidates before it, so the capture can still show what
+  // the muted family would have scored — "you turned this off and it was the
+  // best match" is the thing somebody needs to see to undo the decision. It
+  // only ever removes: nothing here can offer a tool the agent's grants and the
+  // team deny-list did not already allow.
+  const mutedFamilies = new Set(overrides.mutedFamilies);
+  const selectedTools =
+    mutedFamilies.size === 0
+      ? selection.tools
+      : selection.tools.filter((t) => !mutedFamilies.has(t.family));
   logger.debug('chat tool selection', {
     reason: selection.reason,
-    offered: selection.tools.length,
-    of: registryCandidates.length + customCandidates.length + externalCandidates.length,
+    offered: selectedTools.length,
+    of: allCandidates.length,
     families: selection.selectedFamilies,
     unranked: selection.unrankedFamilies,
   });
 
+  // The ranking as it happened. It cannot be recovered afterwards even in
+  // principle — the query vector is not kept and a tool's vector is re-embedded
+  // the moment somebody edits its description — so it is written down here or
+  // it is lost. `offered` is read off the declarations actually built, below,
+  // rather than from this list, so the record is of what the model saw.
+  recorder.toolOffer({
+    reason: selection.reason,
+    candidates: allCandidates.length,
+    offered: selectedTools.map((t) => t.id),
+    families: familiesFrom({
+      scores: selection.familyScores,
+      alwaysFamilies: selection.alwaysFamilies,
+      selected: selection.selectedFamilies,
+      unranked: selection.unrankedFamilies,
+      muted: overrides.mutedFamilies,
+    }),
+  });
+
   const aiTools: Record<string, CoreTool> = {};
-  for (const candidate of selection.tools) {
+  for (const candidate of selectedTools) {
     if (candidate.kind === 'registry') {
       const t = candidate.ref;
       // AI SDK requires tool names matching ^[a-zA-Z0-9_-]+$ — replace dots with underscores
@@ -415,12 +525,34 @@ export async function POST(req: NextRequest) {
 
   // Shared with Google Chat and MCP so a person's standing instructions cannot
   // apply on one surface and silently not on another. See lib/system-prompt.ts.
-  const { system } = await buildSystemPrompt({
+  const { system, memories, memoryBlock } = await buildSystemPrompt({
     organizationId: user.organization.id,
     userId: user.id,
     basePrompt: agent.systemPrompt,
     sections: [ragBlock],
   });
+
+  // Weigh the turn from the strings that were really concatenated — every one
+  // of these is the exact text that went into the request, so `chars` is a
+  // measurement and not a guess. (Tokens are derived from it and are labelled
+  // as an estimate on screen; the provider's true count is recorded below.)
+  //
+  // The tool part is measured as the ids and descriptions the model reads. The
+  // JSON envelope around them is not counted, because serialising every
+  // parameter schema per turn is real work on the hot path for a number the
+  // descriptions already dominate — a catalogue's descriptions run to hundreds
+  // of characters each. The page says so rather than implying the breakdown is
+  // the whole request.
+  recorder.basePrompt(agent.systemPrompt);
+  recorder.memory(memories.map((m) => ({ id: m.id, text: m.content })));
+  recorder.part('instructions', agent.systemPrompt);
+  recorder.part('memory', memoryBlock);
+  recorder.part('knowledge', ragBlock);
+  recorder.part('tools', selectedTools.map((t) => `${t.id}: ${t.description}`).join('\n'));
+  // Split at the last message rather than by role, so the two parts are exactly
+  // the array that was sent and cannot double-count a single character.
+  recorder.part('history', coreMessages.slice(0, -1).map((m) => String(m.content)).join('\n'));
+  recorder.part('question', String(coreMessages[coreMessages.length - 1]?.content ?? ''));
 
   const result = streamText({
     model: chatModel(agent.defaultModel),
@@ -430,14 +562,20 @@ export async function POST(req: NextRequest) {
     toolChoice: 'auto',
     maxSteps: 12,
     onFinish: async ({ text, toolCalls, toolResults, usage }) => {
+      let assistantMessageId: string | null = null;
       try {
-        await db.from('messages').insert({
-          conversation_id: conversationId,
-          role: 'assistant',
-          content: text,
-          tool_calls: toolCalls as unknown as object,
-          tool_results: toolResults as unknown as object,
-        });
+        const { data: assistantRow } = await db
+          .from('messages')
+          .insert({
+            conversation_id: conversationId,
+            role: 'assistant',
+            content: text,
+            tool_calls: toolCalls as unknown as object,
+            tool_results: toolResults as unknown as object,
+          })
+          .select('id')
+          .single();
+        assistantMessageId = (assistantRow?.id as string | undefined) ?? null;
         // Auto-generate title on first turn
         const isFirstTurn = coreMessages.filter((m) => m.role === 'assistant').length <= 1;
         if (isFirstTurn && lastUserMessage) {
@@ -478,6 +616,20 @@ export async function POST(req: NextRequest) {
       } catch {
         // Non-fatal: don't kill the stream if persistence fails
       }
+
+      // The turn's context, written after the last token has already reached
+      // the person. Outside the try above on purpose: a turn whose message
+      // failed to persist is exactly the turn somebody will want to inspect, so
+      // the capture must not be skipped by the same failure. `save` swallows
+      // its own errors and is awaited only so the serverless invocation is not
+      // frozen mid-write — nobody is waiting on it, the response is finished.
+      await recorder.save(db, {
+        messageId: assistantMessageId,
+        usage: {
+          promptTokens: usage?.promptTokens,
+          completionTokens: usage?.completionTokens,
+        },
+      });
     },
   });
 

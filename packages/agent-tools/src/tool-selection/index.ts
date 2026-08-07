@@ -98,6 +98,14 @@ export interface ToolSelectionResult<T> {
   /** Families included because they are not indexed yet. For logs. */
   unrankedFamilies: string[];
   /**
+   * What every scored family scored, best first — including the ones that lost.
+   * Empty whenever ranking did not run (see `reason`). Carried so a turn can
+   * record why it was offered what it was; nothing in selection reads it back.
+   */
+  familyScores: Array<{ family: string; score: number }>;
+  /** The always-on families this call used, so a capture need not guess them. */
+  alwaysFamilies: string[];
+  /**
    * Resolves when any background embedding this call triggered has finished.
    * Production callers ignore it — the turn must not wait on it. Tests await it.
    */
@@ -117,6 +125,8 @@ export async function selectToolsForTurn<T extends SelectableTool>(
     reason,
     selectedFamilies: [],
     unrankedFamilies: [],
+    familyScores: [],
+    alwaysFamilies: [...alwaysFamilies],
     indexing,
   });
 
@@ -157,6 +167,8 @@ export async function selectToolsForTurn<T extends SelectableTool>(
     reason: 'semantic',
     selectedFamilies: ranked.selectedFamilies,
     unrankedFamilies: ranked.unrankedFamilies,
+    familyScores: ranked.familyScores,
+    alwaysFamilies: [...alwaysFamilies],
     indexing,
   };
 }

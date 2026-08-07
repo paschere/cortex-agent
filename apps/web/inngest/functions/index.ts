@@ -1,3 +1,4 @@
+import { actionsSweepDispatch, actionsSweepWorkspace } from './actions-sweep';
 import { commitmentsWatchDispatch, commitmentsWatchWorkspace } from './commitments-watch';
 import { devTaskIntake } from './dev-task-intake';
 import { devTaskRun } from './dev-task-run';
@@ -11,8 +12,11 @@ import { orchestratorSweep } from './orchestrator-sweep';
 import { reindexEmbeddings } from './reindex-embeddings';
 import { scheduleDispatch } from './schedule-dispatch';
 import { scheduleRun } from './schedule-run';
+import { turnContextPurge } from './turn-context-purge';
 
 export {
+  actionsSweepDispatch,
+  actionsSweepWorkspace,
   commitmentsWatchDispatch,
   commitmentsWatchWorkspace,
   ingestDocument,
@@ -27,9 +31,12 @@ export {
   memoryDeriveUser,
   orchestratorRun,
   orchestratorSweep,
+  turnContextPurge,
 };
 export const functions = [
   ingestDocument,
+  actionsSweepDispatch,
+  actionsSweepWorkspace,
   commitmentsWatchDispatch,
   commitmentsWatchWorkspace,
   reindexEmbeddings,
@@ -44,4 +51,5 @@ export const functions = [
   memoryDeriveUser,
   orchestratorRun,
   orchestratorSweep,
+  turnContextPurge,
 ];

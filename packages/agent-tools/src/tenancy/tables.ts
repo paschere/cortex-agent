@@ -129,6 +129,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   mcp_pending_actions: tenant(),
 
   // --- Oversight ------------------------------------------------------------
+  // What one turn actually handed the model (migration 0080), and the
+  // per-conversation adjustments to it. Both tenant: a capture quotes the
+  // workspace's own corpus, and a setting changes that workspace's assistant.
+  turn_contexts: tenant(),
+  turn_context_settings: tenant(),
   audit_events: tenant(),
   security_events: tenant(),
   security_policies: tenant(),
@@ -152,6 +157,58 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // refuse.
   commitments: tenant(),
   commitment_notices: tenant(),
+
+  // --- Reports (migration 0079) ---------------------------------------------
+  // Saved informes: the resolved document, not the query behind it. Tenant in
+  // the strongest sense — a row holds an aggregate OF a workspace's data, so a
+  // missing filter would not leak a visible row, it would silently move one
+  // company's totals into another's report. The share link reads this table by
+  // token through the service client, outside the scoped handle, because a link
+  // clicked from WhatsApp carries no session to scope by.
+  reports: tenant(),
+
+  // --- Proposed actions (migration 0077) ------------------------------------
+  // Drafted emails waiting on a human, and the record of every human edit to
+  // one. Tenant on both: an action holds a client's address and the text that
+  // will be sent over an employee's own signature, and the revisions hold both
+  // sides of every rewrite. `action_revisions` carries its own organization_id
+  // rather than deriving it from the action, because the interesting question
+  // ("what does this workspace keep rewriting?") is asked across actions
+  // without naming one — which a `derived` classification would refuse.
+  actions: tenant(),
+  action_revisions: tenant(),
+
+  // --- Microsoft 365 (migration 0078) ---------------------------------------
+  // The ledger of Outlook threads folded into Brain Knowledge: what was
+  // archived, which document it became, and which client it belongs to. Tenant
+  // in the strongest sense — the row names a client's correspondence.
+  microsoft_mail_ingests: tenant(),
+
+  // --- Clients (migration 0075) ---------------------------------------------
+  // The customer companies everything else hangs off, and the three tables that
+  // attach things to them. Tenant on all four: a client row IS the customer
+  // list, `client_domains` says which mail belongs to whom, `client_contacts`
+  // holds outsiders' names and addresses, and `client_links` names, one by one,
+  // the documents and threads a workspace has decided are about a customer.
+  // None of them is derivable from a parent — the review list reads
+  // `client_links` across every client, and the search reads `client_domains`
+  // by domain alone, both of which a `derived` classification would refuse.
+  clients: tenant(),
+  client_domains: tenant(),
+  client_contacts: tenant(),
+  client_links: tenant(),
+
+  // --- Document extraction (migration 0076) ---------------------------------
+  // What was read out of each document, field by field, with the sentence each
+  // value came from, plus the log of what humans corrected. Tenant on all three
+  // rather than deriving the fields from their extraction: the review screen
+  // counts what is pending across every document at once, and the corrections
+  // are grouped by (document type, field) across the whole workspace to find
+  // where the extractor is wrong — both are questions asked without naming a
+  // parent row, which a `derived` classification would correctly refuse.
+  document_extractions: tenant(),
+  document_fields: tenant(),
+  document_field_corrections: tenant(),
 
   // --- Not tenant data ------------------------------------------------------
   ba_user: shared(
@@ -238,6 +295,11 @@ export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   consume_rate_limit_token: 'person',
   provision_organization_agents: 'organization',
   kb_mark_reindexed_documents: 'maintenance',
+  // Migration 0080. The retention sweep for captured turn contexts: strips
+  // quoted material past its detail window, deletes rows past their purge date.
+  // Takes no workspace and returns two counts — there is no session behind the
+  // cron that calls it, and nothing tenant-visible comes back.
+  turn_context_purge: 'maintenance',
 };
 
 export class UnclassifiedFunctionError extends Error {

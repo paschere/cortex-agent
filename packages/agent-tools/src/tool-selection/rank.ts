@@ -120,6 +120,18 @@ export interface RankResult<T> {
   selectedFamilies: string[];
   /** Families included only because nothing has embedded them yet. */
   unrankedFamilies: string[];
+  /**
+   * Every family that was scored, and what it scored — the losers included.
+   *
+   * This was already being computed and thrown away. It is now returned because
+   * "why was this tool offered, and what nearly was" is unanswerable afterwards
+   * in principle: the query vector is not kept, and a tool's vector is
+   * re-embedded the moment somebody edits its description. Reconstructing the
+   * ranking later would produce today's ranking for yesterday's question.
+   *
+   * Best first. Purely informational — nothing in selection reads it back.
+   */
+  familyScores: Array<{ family: string; score: number }>;
 }
 
 /**
@@ -167,6 +179,9 @@ export function rankTools<T extends SelectableTool>(input: RankInput<T>): RankRe
     tools: scoped.length >= MIN_TOOLS ? scoped : tools,
     selectedFamilies: selected,
     unrankedFamilies: [...unranked],
+    familyScores: [...scoreByFamily.entries()]
+      .map(([family, score]) => ({ family, score }))
+      .sort((a, b) => b.score - a.score),
   };
 }
 

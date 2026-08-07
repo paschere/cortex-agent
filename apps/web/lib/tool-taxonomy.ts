@@ -43,6 +43,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'primary',
     icon: 'Users',
   },
+  clients: {
+    name: 'Clientes',
+    blurb:
+      'Las empresas cliente, con su NIT y sus contactos, y todo lo que Cortex ya guardó colgado de cada una: correos, reuniones, documentos, grupos y vencimientos.',
+    tone: 'amber',
+    icon: 'Building2',
+  },
   hubspot: {
     name: 'HubSpot',
     blurb: 'El CRM: empresas, contactos, negocios, salud del embudo y registro de actividad.',
@@ -86,6 +93,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'sky',
     icon: 'Inbox',
   },
+  actions: {
+    name: 'Acciones propuestas',
+    blurb:
+      'Mensajes que Cortex deja redactados y listos: un cobro, un recordatorio de vencimiento, una respuesta a un cliente. No envía nada hasta que alguien los aprueba.',
+    tone: 'primary',
+    icon: 'Send',
+  },
   gmail: {
     name: 'Gmail',
     blurb: 'Leer el buzón, buscar hilos, preparar borradores y enviar los que se aprueben.',
@@ -95,6 +109,19 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   gcal: {
     name: 'Google Calendar',
     blurb: 'Lo que viene en la agenda, disponibilidad, y crear eventos con invitación.',
+    tone: 'sky',
+    icon: 'CalendarDays',
+  },
+  outlook: {
+    name: 'Outlook',
+    blurb:
+      'El correo de Microsoft 365: buscar, leer un hilo completo, dejar borradores, enviarlos y archivar en Brain Knowledge lo que se habla con clientes.',
+    tone: 'rose',
+    icon: 'Mail',
+  },
+  mscal: {
+    name: 'Calendario de Outlook',
+    blurb: 'La agenda de Microsoft 365: qué hay en una ventana de tiempo y crear eventos.',
     tone: 'sky',
     icon: 'CalendarDays',
   },
@@ -155,6 +182,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     // CalendarDays rather than CalendarClock: the catalogue resolves these
     // names against its own icon map, and an unmapped name silently falls back.
     icon: 'CalendarDays',
+  },
+  reports: {
+    name: 'Informes',
+    blurb:
+      'Informes con texto y gráficos que se leen en pantalla, quedan guardados tal como se calcularon y se pueden compartir. Cada cifra dice de dónde salió.',
+    tone: 'primary',
+    icon: 'BarChart3',
   },
   vehicles: {
     name: 'Vehículos',
@@ -326,21 +360,29 @@ const GROUP_BY_ID = new Map(CAPABILITY_GROUPS.map((g) => [g.id, g]));
 
 /** Family prefix → capability group id. Anything unlisted falls into `other`. */
 const FAMILY_GROUP: Record<string, string> = {
+  clients: 'clients',
   hubspot: 'clients',
   growth: 'clients',
   sales: 'clients',
   presentations: 'clients',
   gmail: 'comms',
+  actions: 'comms',
+  outlook: 'comms',
   slack: 'comms',
   chat: 'comms',
   people: 'comms',
   gcal: 'agenda',
+  mscal: 'agenda',
   meetings: 'agenda',
   inbox: 'agenda',
   kb: 'docs',
   gdrive: 'docs',
   gsheets: 'docs',
   format: 'docs',
+  // A report is a document Cortex writes, so it sits with the rest of what it
+  // reads and writes rather than with the fleet — the person who asks for one
+  // is asking for a document, whatever the numbers inside it are about.
+  reports: 'docs',
   github: 'eng',
   linear: 'eng',
   payroll: 'money',
@@ -431,6 +473,22 @@ export const FAMILY_CREDENTIALS: Record<string, CredentialRequirement> = {
     label: 'el buscador web',
     blocking: true,
     effect: 'Sin él no hay señales de mercado, porque salen de una búsqueda pública.',
+  },
+  // Two different walls, and the catalogue shows the outer one first. Even a
+  // person who wants to connect their own Outlook cannot until somebody has
+  // registered the application in Azure — so a missing registration is a
+  // credential problem, not "you have not connected it".
+  outlook: {
+    vars: ['MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET', 'MICROSOFT_REDIRECT_URI'],
+    label: 'la aplicación de Cortex registrada en Azure',
+    blocking: true,
+    effect: 'Sin ella nadie puede conectar su buzón de Outlook, ni siquiera para leerlo.',
+  },
+  mscal: {
+    vars: ['MICROSOFT_CLIENT_ID', 'MICROSOFT_CLIENT_SECRET', 'MICROSOFT_REDIRECT_URI'],
+    label: 'la aplicación de Cortex registrada en Azure',
+    blocking: true,
+    effect: 'Sin ella no se puede conectar el calendario de Microsoft 365.',
   },
   kb: {
     vars: ['VOYAGE_API_KEY'],

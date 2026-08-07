@@ -5,11 +5,15 @@ import { conversationSurface } from '@/lib/conversation-surface';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { NO_OVERRIDES, listVisibleSpaces, loadOverrides, promptDigest } from '@cortex/agent-tools';
 import { ArrowLeft, MessagesSquare, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { SurfaceBadge } from '../_components/SurfaceBadge';
 import { TranscriptMessage, type TranscriptMessageRow } from './_components/TranscriptMessage';
+import { ContextAdjust } from './_components/context/ContextAdjust';
+import type { SpaceOption } from './_components/context/types';
+import { loadTurnViews } from './_lib/turn-context-view';
 
 interface ConversationRow {
   id: string;
@@ -62,6 +66,46 @@ export default async function ConversationDetailPage({
     .order('created_at', { ascending: true });
 
   const messages = (msgData ?? []) as unknown as TranscriptMessageRow[];
+
+  // What each turn was really handed. Everything below is best-effort by
+  // construction — `loadTurnViews` swallows its own failures — because a
+  // transcript that renders without its diagnostics is a far better page than a
+  // transcript that does not render.
+  //
+  // The agent's prompt is fingerprinted as it stands NOW, so an old turn can
+  // say whether the instructions it ran under are still the ones on file.
+  const { data: agentRow } = await sb
+    .from('agents')
+    .select('system_prompt')
+    .eq('id', conv.agent_id)
+    .maybeSingle();
+  const livePromptDigest = agentRow?.system_prompt
+    ? promptDigest(agentRow.system_prompt as string)
+    : null;
+
+  const [{ byMessage: turnsByMessage }, overrides, visibleSpaces] = await Promise.all([
+    loadTurnViews(sb, { conversationId: id, viewerId: user.id, livePromptDigest }),
+    // Only the owner may change anything, so only the owner needs the current
+    // settings read at all.
+    isOwner ? loadOverrides(sb, id) : Promise.resolve(NO_OVERRIDES),
+    isOwner ? listVisibleSpaces(sb, user.id).catch(() => []) : Promise.resolve([]),
+  ]);
+
+  const spaceOptions: SpaceOption[] = visibleSpaces.map((s) => ({
+    id: s.id,
+    name: s.name,
+    kind: s.kind,
+  }));
+
+  // The families this conversation has actually seen, rather than an abstract
+  // catalogue: a control offering to mute something that has never come up here
+  // is a control nobody can reason about.
+  const familiesSeen = [
+    ...new Set(
+      [...turnsByMessage.values()].flatMap((t) => t.tools.families.map((f) => f.family)),
+    ),
+  ].sort();
+
   const agentName = relName(conv.agents) ?? 'Cortex';
   const surface = conversationSurface(conv);
   const title = conv.title?.trim() || 'Conversación sin título';
@@ -108,8 +152,35 @@ export default async function ConversationDetailPage({
       ) : (
         <div className="space-y-3">
           {messages.map((m) => (
-            <TranscriptMessage key={m.id} message={m} agentName={agentName} />
+            <TranscriptMessage
+              key={m.id}
+              message={m}
+              agentName={agentName}
+              turn={turnsByMessage.get(m.id)}
+            />
           ))}
+        </div>
+      )}
+
+      {/* The controls sit AFTER the transcript, not before it. They change the
+          next turn, so they belong at the end of the evidence rather than at
+          the top of it — you should have read what happened before you reach
+          for a knob. Absent entirely for an org admin reading somebody else's
+          conversation: seeing why it answered is oversight, changing how
+          another person's assistant behaves is not. */}
+      {messages.length > 0 && isOwner && (
+        <div className="mt-4">
+          <ContextAdjust
+            conversationId={conv.id}
+            initial={{
+              fragmentLimit: overrides.fragmentLimit,
+              spaceIds: overrides.spaceIds,
+              mutedFamilies: overrides.mutedFamilies,
+            }}
+            spaces={spaceOptions}
+            families={familiesSeen}
+            canEdit
+          />
         </div>
       )}
     </>

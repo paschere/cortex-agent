@@ -4,6 +4,8 @@ import { Eyebrow, Panel } from '@/components/ui/panel';
 import { toToolInvocations } from '@/lib/tool-invocations';
 import { clsx } from 'clsx';
 import { Sparkles, User } from 'lucide-react';
+import { TurnContextPanel } from './context/TurnContextPanel';
+import type { TurnView } from './context/types';
 
 export interface TranscriptMessageRow {
   id: string;
@@ -28,9 +30,16 @@ function speakerLabel(role: string, agentName: string): string {
 export function TranscriptMessage({
   message,
   agentName,
+  turn,
 }: {
   message: TranscriptMessageRow;
   agentName: string;
+  /**
+   * What this turn was really handed, when it was captured. Absent for user
+   * messages, for turns from before the capture existed, and for turns whose
+   * row has already aged out entirely.
+   */
+  turn?: TurnView;
 }) {
   const isUser = message.role === 'user';
   const invocations = toToolInvocations(message.tool_calls, message.tool_results);
@@ -82,6 +91,11 @@ export function TranscriptMessage({
           </div>
         </div>
       )}
+
+      {/* "Lo que hizo" is above; this is "lo que recibió". The two together are
+          the whole turn — what went in and what came out — and they belong on
+          the same card for that reason. */}
+      {turn && <TurnContextPanel turn={turn} />}
     </Panel>
   );
 }

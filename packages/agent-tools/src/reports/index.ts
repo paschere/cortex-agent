@@ -1,0 +1,80 @@
+/**
+ * Informes — a report Cortex builds, that is read on screen, saved as a
+ * snapshot, and can be shared.
+ *
+ * Not the same thing as `presentations/`, and deliberately not built on it: a
+ * PDF is a document you mail to a client and archive. This is a document you
+ * READ, reopen in November and cite a figure out of. Different artifact,
+ * different storage, different sharing posture — see the header of `store.ts`
+ * for the three-way split between the link, the export and the PDF.
+ *
+ * The four decisions, each argued where it lives:
+ *
+ *   document.ts  why the model produces a DATA STRUCTURE and never markup
+ *   render.ts    why there is exactly one renderer, and why it emits a string
+ *   charts.ts    why the charts are server-side SVG with no client JavaScript
+ *   store.ts     why saving means photographing, and how the freeze is checked
+ */
+
+// Side-effect import: registers reports.generate / list / open / share.
+import './tools';
+
+export { reportsGenerate, reportsList, reportsOpen, reportsShare } from './tools';
+
+export {
+  REPORT_DOCUMENT_VERSION,
+  REPORT_KINDS,
+  REPORT_KIND_BLURB,
+  REPORT_KIND_LABEL,
+  UnsourcedFigureError,
+  figuresOf,
+  reportDocumentSchema,
+  sourceById,
+  sourceIndex,
+  validateDocument,
+} from './document';
+export type {
+  ChartBody,
+  Figure,
+  Metric,
+  ReportDocument,
+  ReportKind,
+  ReportSection,
+  ReportSource,
+  ReportTable,
+  Tone as ReportTone,
+} from './document';
+
+export { buildReport } from './build';
+export type { BuildInput as ReportBuildInput, ReportParams } from './build';
+
+export {
+  REPORT_CSS,
+  RENDERER_VERSION,
+  describeDocument,
+  renderReportHtml,
+  renderStandaloneHtml,
+} from './render';
+
+export {
+  DEFAULT_SHARE_DAYS,
+  REPORTS_TABLE,
+  REPORT_COLUMNS,
+  appBaseUrl as reportsAppBaseUrl,
+  canonicalize,
+  documentHash,
+  exportUrl,
+  getReport,
+  hydrateRow,
+  listReports,
+  mintShareToken,
+  reportUrl,
+  revokeShare,
+  safeFilename as safeReportFilename,
+  saveReport,
+  shareExpiresIn,
+  shareIsLive,
+  shareReport,
+  shareUrl,
+} from './store';
+export type { ReportRow, StoredReport, ShareResult } from './store';

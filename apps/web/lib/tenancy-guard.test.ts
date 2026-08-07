@@ -55,6 +55,14 @@ const ALLOWED = new Map<string, string>([
     'A public download link. The row is found by an unguessable token and there is no session to scope by.',
   ],
   [
+    'app/api/files/report/[token]/route.ts',
+    'The same posture as the presentation link, on purpose: a shared report is opened from WhatsApp or Outlook where no Cortex cookie exists, so the token is the credential. The row it finds carries its own workspace; nothing widens from there.',
+  ],
+  [
+    'inngest/functions/turn-context-purge.ts',
+    'Retention sweep over captured turn contexts. It redacts and deletes by date across every workspace, which is the point — a per-tenant sweep would need a tenant to run it, and the rows nobody is looking at are exactly the ones that must still expire.',
+  ],
+  [
     'app/api/mcp/route.ts',
     'Bearer-token surface. The token lookup determines the workspace; everything after it is scoped.',
   ],
@@ -69,6 +77,10 @@ const ALLOWED = new Map<string, string>([
   [
     'inngest/functions/commitments-watch.ts',
     'Cron. "Which workspaces have deadlines to watch" spans the install; each event then carries one workspace, and every handle inside the per-workspace function is built from it.',
+  ],
+  [
+    'inngest/functions/actions-sweep.ts',
+    'Cron. "Which workspaces have something to propose, or something sent that is still waiting on an answer" spans the install; the raw handle runs two SELECTs of organization_id and nothing else, and every event then carries one workspace that the per-workspace function builds every handle from.',
   ],
   [
     'inngest/functions/drive-sync.ts',
