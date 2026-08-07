@@ -25,8 +25,23 @@ function slugify(input: string): string {
   return base || 'workspace';
 }
 
-/** A human name for a first workspace: "Ana's workspace", else the email local part. */
-function defaultWorkspaceName(name: string | null, email: string): string {
+/**
+ * A human name for a first workspace.
+ *
+ * The company somebody typed at signup wins, because it is the only one of the
+ * three that is actually the answer to "what is this workspace" — the other two
+ * are guesses made in its absence, and they are the reason a colleague opening
+ * an invitation used to be asked to join "ana's workspace" instead of the
+ * company they both work at. Falls back to the old behaviour exactly, so an
+ * account created any other way is unaffected.
+ */
+function defaultWorkspaceName(
+  name: string | null,
+  email: string,
+  preferredName?: string | null,
+): string {
+  const company = (preferredName ?? '').trim();
+  if (company) return company.slice(0, 120);
   const who = (name ?? '').trim() || (email.split('@')[0] ?? 'My');
   return `${who}'s workspace`;
 }
@@ -112,9 +127,14 @@ async function createWorkspace(
   baUserId: string,
   name: string | null,
   email: string,
+  preferredName?: string | null,
 ): Promise<ActiveOrganization> {
-  const workspaceName = defaultWorkspaceName(name, email);
-  const baseSlug = slugify(name ?? email.split('@')[0] ?? 'workspace');
+  const workspaceName = defaultWorkspaceName(name, email, preferredName);
+  // The slug follows the same preference, so `acme.cortex` beats `ana-restrepo`
+  // — but the derived tie-break below is untouched, because a random suffix here
+  // would reintroduce the duplicate-workspace race this function exists to
+  // avoid.
+  const baseSlug = slugify(preferredName?.trim() || name || email.split('@')[0] || 'workspace');
   const orgId = firstWorkspaceId(baUserId);
   const tieBreak = createHash('sha256').update(baUserId).digest('hex');
 
@@ -165,19 +185,26 @@ async function claimOwnership(orgId: string, baUserId: string): Promise<void> {
  * @param activeOrganizationId what the session claims is active — honoured only
  *   when the user is still a member (leaving a workspace must not keep granting
  *   access through a stale session).
+ * @param preferredName the company somebody typed at signup, if it survived the
+ *   trip (see WORKSPACE_NAME_COOKIE). Used ONLY when a workspace is being
+ *   created, and only to name it — it reaches no other branch, so a stale or
+ *   forged value cannot affect who is a member of what.
  */
 export async function resolveActiveOrganization(
   baUserId: string,
   activeOrganizationId: string | null | undefined,
   name: string | null,
   email: string,
+  preferredName?: string | null,
 ): Promise<ActiveOrganization> {
   if (activeOrganizationId) {
     const claimed = await findMembership(baUserId, activeOrganizationId);
     if (claimed) return claimed;
   }
 
-  const resolved = (await findFirstMembership(baUserId)) ?? (await createWorkspace(baUserId, name, email));
+  const resolved =
+    (await findFirstMembership(baUserId)) ??
+    (await createWorkspace(baUserId, name, email, preferredName));
 
   // Write the choice back so the next request reads it from the session instead
   // of re-deriving it. Best-effort: a failure here costs a lookup, not access.

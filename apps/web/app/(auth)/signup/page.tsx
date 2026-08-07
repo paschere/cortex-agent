@@ -2,6 +2,11 @@
 
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import {
+  WORKSPACE_NAME_COOKIE,
+  WORKSPACE_NAME_MAX_AGE_SECONDS,
+  WORKSPACE_NAME_MAX_LENGTH,
+} from '@/lib/workspace-cookie';
 import Link from 'next/link';
 import { useState } from 'react';
 import {
@@ -14,8 +19,18 @@ import {
   AuthTitle,
 } from '../_components/AuthDocument';
 
+/** Carry the company name to the request that provisions the workspace. */
+function rememberCompany(company: string): void {
+  const trimmed = company.trim().slice(0, WORKSPACE_NAME_MAX_LENGTH);
+  if (!trimmed) return;
+  document.cookie =
+    `${WORKSPACE_NAME_COOKIE}=${encodeURIComponent(trimmed)}; Path=/; ` +
+    `Max-Age=${WORKSPACE_NAME_MAX_AGE_SECONDS}; SameSite=Lax`;
+}
+
 export default function SignupPage() {
   const [name, setName] = useState('');
+  const [company, setCompany] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState<'google' | 'email' | null>(null);
@@ -25,6 +40,7 @@ export default function SignupPage() {
   async function signUpGoogle() {
     setLoading('google');
     setErr(null);
+    rememberCompany(company);
     try {
       await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
     } catch (e) {
@@ -41,6 +57,7 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading('email');
     setErr(null);
+    rememberCompany(company);
     const { error } = await authClient.signUp.email({
       name,
       email,
@@ -100,7 +117,7 @@ export default function SignupPage() {
       <AuthMasthead />
 
       <AuthBody>
-        <AuthTitle hint="Empieza gratis. Invita a tu equipo a un espacio compartido cuando quieras.">
+        <AuthTitle hint="Empieza gratis, sin tarjeta. Creas el espacio de tu empresa e invitas a tu equipo tú mismo.">
           Crea tu cuenta
         </AuthTitle>
 
@@ -113,6 +130,19 @@ export default function SignupPage() {
             placeholder="Ana Restrepo"
             value={name}
             onChange={(e) => setName(e.target.value)}
+          />
+          {/* Optional on purpose. It names the workspace and it is the first
+              thing the person's colleagues will see, but a required field
+              between somebody and the product they have not tried yet is a
+              field that loses signups. Left blank, the workspace gets their
+              name and can be renamed later. */}
+          <AuthField
+            label="Empresa"
+            type="text"
+            autoComplete="organization"
+            placeholder="Transportes del Valle"
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
           />
           <AuthField
             label="Correo"

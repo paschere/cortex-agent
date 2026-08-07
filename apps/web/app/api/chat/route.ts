@@ -10,8 +10,10 @@ import {
   type ExternalServerRow,
   type RetrievalObservation,
   CUSTOM_TOOL_FAMILY,
+  TurnClock,
   TurnContextRecorder,
   callExternalTool,
+  checkMeter,
   customToolDef,
   familiesFrom,
   fetchEnabledCustomTools,
@@ -19,8 +21,10 @@ import {
   filterTools,
   fragmentKey,
   hasOverrides,
+  isRefused,
   kbSearch,
   loadOverrides,
+  readWorkspacePlan,
   runTool,
   selectToolsForTurn,
   toolIdAllowed,
@@ -108,6 +112,13 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // The clock starts before anything else happens, including the session
+  // lookup, because the person's wait started before that too. Constructing it
+  // is one `performance.now()`; it holds no handle to anything and writes
+  // nothing until the answer has already been delivered. See
+  // packages/agent-tools/src/latency.
+  const started = performance.now();
+
   const user = await requireSession();
 
   let body: unknown;
@@ -125,6 +136,38 @@ export async function POST(req: NextRequest) {
   const { agentSlug, messages } = parsed.data;
 
   const db = getOrgScopedClient(user.organization.id);
+
+  // THE GATE, AND WHERE IT IS.
+  //
+  // Here — before the conversation row, before the user's message is persisted,
+  // and a long way before the model is called. That position IS the policy: a
+  // turn that has started always finishes, because there is no point after this
+  // one at which the plan is consulted again. Nothing can truncate an answer
+  // somebody is already reading.
+  //
+  // It only ever refuses the START of a new turn, and only once the plan's limit
+  // AND its courtesy margin are both spent. Crossing the limit mid-conversation
+  // puts a banner on the screen and keeps answering; see the long note in
+  // packages/agent-tools/src/billing/plans.ts.
+  //
+  // Nothing is persisted on the refusal path, so a refused turn costs the person
+  // nothing and is not metered — the meter counts answers, and there was none.
+  const answers = await checkMeter(db, 'answers');
+  if (isRefused(answers)) {
+    const { plan } = await readWorkspacePlan(db);
+    return NextResponse.json(
+      {
+        error:
+          `Se acabaron las respuestas de tu plan ${plan.name} en este mes: ` +
+          `${answers.used} de ${answers.limit}, con el margen de cortesía ya incluido. ` +
+          'Todo lo que ya está adentro se sigue guardando y se sigue consultando. ' +
+          'Para que Cortex vuelva a responder, amplía el plan en Plan y consumo.',
+        reason: 'plan_limit',
+        meter: 'answers',
+      },
+      { status: 402 },
+    );
+  }
 
   // Load agent from DB (gets UUID + system prompt stored in DB)
   let agent: Awaited<ReturnType<typeof loadAgent>>;
@@ -177,6 +220,24 @@ export async function POST(req: NextRequest) {
     model: agent.defaultModel,
     logger,
   });
+  // How long this turn takes, and where the time goes. Same contract as the
+  // recorder above and for the same reason: it accumulates in memory and writes
+  // one row from `onFinish`, so measuring how slow the product is can never be
+  // the thing that makes it slow. `started` was taken on the first line of the
+  // handler — everything up to here is the person's wait too.
+  const clock = new TurnClock({
+    organizationId: user.organization.id,
+    conversationId,
+    userId: user.id,
+    agentId: agent.id,
+    model: agent.defaultModel,
+    surface: 'web',
+    startedAt: started,
+    logger,
+  });
+  // Session, plan check, agent row, conversation row, the user's message. All
+  // of it before a single decision about the answer has been made.
+  clock.setup();
   // The retrieval as it really came back, near-misses included. It can only be
   // taken from inside the search that ran: kb.search drops everything below the
   // floor before returning, and running a second search later would answer a
@@ -229,6 +290,28 @@ export async function POST(req: NextRequest) {
       fragmentLimit,
     );
   }
+  // ---------------------------------------------------------------------------
+  // THE TWO EMBEDDINGS, SIDE BY SIDE
+  //
+  // Retrieval and the semantic tool ranking each spend one round-trip to Voyage,
+  // and neither reads a thing the other produces. They ran one after the other
+  // because that is the order they were written in, and measured over real
+  // turns that cost 496 ms + 247 ms of an 840 ms prelude (p50) — a quarter of a
+  // second of pure waiting, on the part of the turn that happens before anything
+  // at all is on the screen.
+  //
+  // Started here, awaited together below. Nothing inside either block changed:
+  // same calls, same order within each, same values handed to the recorder. What
+  // changed is only that the second no longer waits for the first. The stage
+  // offsets in `turn_latencies.stages` are what proves it stayed that way — two
+  // stages that begin at the same `at` really ran at once, and a future edit that
+  // quietly re-serialises them will show up there.
+  //
+  // The transcript read joins them: it is pure I/O, it depends on neither, and
+  // it was costing its 9 ms in a queue behind both.
+  // ---------------------------------------------------------------------------
+  const closeRetrieval = clock.open('retrieval');
+  const retrieving = (async (): Promise<string> => {
   if ((chunkCount ?? 0) > 0 && fragmentLimit > 0 && shouldRunRag(ragQuery)) {
     // The relevance cut used to live here, as `score >= 0.65` on the blended
     // rank — a number that could not be interpreted and that, measured against
@@ -294,6 +377,8 @@ export async function POST(req: NextRequest) {
       recorder.retrievalSkipped('La búsqueda en Brain Knowledge falló en este turno.', fragmentLimit);
     }
   }
+    return ragBlock;
+  })().finally(closeRetrieval);
 
   const recentText = messages
     .filter((m) => m.role === 'user')
@@ -301,6 +386,12 @@ export async function POST(req: NextRequest) {
     .map((m) => m.content)
     .join('\n');
 
+  // The permissions, the connected servers, the workspace's own tools and the
+  // ranking that chooses between them are one stage: everything the turn does to
+  // work out which tools the model is offered. Runs beside retrieval — see the
+  // note above the two of them.
+  const closeSelection = clock.open('selection');
+  const selecting = (async () => {
   // Team tool permissions are a deny-list layered on the agent's tools:
   // anything blocked by ANY of the user's teams never reaches the model. Run
   // alongside the external-MCP fetch — neither depends on the other, and both
@@ -380,6 +471,37 @@ export async function POST(req: NextRequest) {
     tools: allCandidates,
     query: recentText,
   });
+    return { selection, allCandidates };
+  })().finally(closeSelection);
+
+  // The transcript. Fired alongside the two above and joined with them: it
+  // reads a table neither of them touches and was previously queued behind both.
+  const closeHistory = clock.open('history');
+  const loadingHistory = (async () => {
+    if (!conversationId) return null;
+    try {
+      const { data } = await db
+        .from('messages')
+        .select('role, content')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      return data;
+    } catch {
+      // non-fatal, use client messages
+      return null;
+    }
+  })().finally(closeHistory);
+
+  const [ragBlockResolved, { selection, allCandidates }, dbMessages] = await Promise.all([
+    retrieving,
+    selecting,
+    loadingHistory,
+  ]);
+  // Taken from the resolved value rather than left to the closure's assignment,
+  // so the block is provably finished before anything downstream reads it.
+  ragBlock = ragBlockResolved;
+
   // A conversation may withhold a whole family. Applied AFTER ranking rather
   // than by removing candidates before it, so the capture can still show what
   // the muted family would have scored — "you turned this off and it was the
@@ -426,6 +548,11 @@ export async function POST(req: NextRequest) {
         description: t.description,
         parameters: t.inputSchema,
         execute: async (args, { abortSignal }) => {
+          // Counted and summed here; the per-tool breakdown already exists, one
+          // row per call with its own latency, in `audit_events`. What that
+          // table cannot say is how much of ONE TURN was spent in tools, because
+          // it has no notion of a turn — so only the count and the sum are kept.
+          const toolStarted = performance.now();
           try {
             return await runTool(t, args, { ...ctx, signal: abortSignal });
           } catch (err) {
@@ -445,6 +572,10 @@ export async function POST(req: NextRequest) {
               tool: t.id,
               message: toToolErrorMessage(err),
             } as unknown as never;
+          } finally {
+            // In `finally` so a tool that failed still counts. A turn that spent
+            // eleven seconds discovering it had no Gmail scope spent them.
+            clock.toolFinished(performance.now() - toolStarted);
           }
         },
       });
@@ -470,6 +601,10 @@ export async function POST(req: NextRequest) {
             input: args,
           } as unknown as never;
         }
+        // A connected MCP server is somebody else's network, and it is the most
+        // likely source of a turn that hangs. Timed on the same footing as the
+        // built-in tools so a slow server shows up in the same number.
+        const toolStarted = performance.now();
         try {
           return await callExternalTool(
             server as unknown as ExternalServerRow,
@@ -487,6 +622,8 @@ export async function POST(req: NextRequest) {
             tool: `${server.name}/${entry.tool_name}`,
             message: toToolErrorMessage(err),
           } as unknown as never;
+        } finally {
+          clock.toolFinished(performance.now() - toolStarted);
         }
       },
     });
@@ -497,40 +634,32 @@ export async function POST(req: NextRequest) {
     content: m.content,
   }));
 
-  if (conversationId) {
-    try {
-      const { data: dbMessages } = await db
-        .from('messages')
-        .select('role, content')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: false })
-        .limit(20);
-      if (dbMessages && dbMessages.length > 0) {
-        const dbSet = new Set(dbMessages.map((m) => `${m.role}::${m.content}`));
-        const clientOnly = coreMessages.filter(
-          (m) => !dbSet.has(`${m.role}::${String(m.content)}`),
-        );
-        coreMessages = [
-          ...dbMessages.reverse().map((m) => ({
-            role: m.role as 'user' | 'assistant' | 'system',
-            content: m.content as string,
-          })),
-          ...clientOnly,
-        ];
-      }
-    } catch (err) {
-      // non-fatal, use client messages
-    }
+  // Read far above, alongside retrieval and the tool ranking. Merged here, where
+  // it always was — the merge is pure array work and belongs next to what uses
+  // it, not next to the query that fetched the rows.
+  if (dbMessages && dbMessages.length > 0) {
+    const dbSet = new Set(dbMessages.map((m) => `${m.role}::${m.content}`));
+    const clientOnly = coreMessages.filter((m) => !dbSet.has(`${m.role}::${String(m.content)}`));
+    coreMessages = [
+      ...dbMessages.reverse().map((m) => ({
+        role: m.role as 'user' | 'assistant' | 'system',
+        content: m.content as string,
+      })),
+      ...clientOnly,
+    ];
   }
 
   // Shared with Google Chat and MCP so a person's standing instructions cannot
   // apply on one surface and silently not on another. See lib/system-prompt.ts.
-  const { system, memories, memoryBlock } = await buildSystemPrompt({
-    organizationId: user.organization.id,
-    userId: user.id,
-    basePrompt: agent.systemPrompt,
-    sections: [ragBlock],
-  });
+  const { system, memories, memoryBlock } = await clock.span(
+    'prompt',
+    buildSystemPrompt({
+      organizationId: user.organization.id,
+      userId: user.id,
+      basePrompt: agent.systemPrompt,
+      sections: [ragBlock],
+    }),
+  );
 
   // Weigh the turn from the strings that were really concatenated — every one
   // of these is the exact text that went into the request, so `chars` is a
@@ -554,6 +683,10 @@ export async function POST(req: NextRequest) {
   recorder.part('history', coreMessages.slice(0, -1).map((m) => String(m.content)).join('\n'));
   recorder.part('question', String(coreMessages[coreMessages.length - 1]?.content ?? ''));
 
+  // Everything before this line is Cortex's own work, and it is the only part
+  // of the wait that can be shortened without touching the model or the answer.
+  clock.handedToModel();
+
   const result = streamText({
     model: chatModel(agent.defaultModel),
     system,
@@ -561,7 +694,29 @@ export async function POST(req: NextRequest) {
     tools: aiTools,
     toolChoice: 'auto',
     maxSteps: 12,
+    // The one measurement that has to happen mid-stream, because it is the only
+    // moment that matters and it is over before `onFinish` runs. The callback is
+    // a comparison and an assignment — the SDK pauses the stream until it
+    // resolves, so anything more here would literally slow the answer down in
+    // order to time it.
+    //
+    // Reasoning counts as visible: `sendReasoning` is on, the client draws it in
+    // the reasoning trail, and a person watching words appear is not watching a
+    // blank screen. It is recorded apart from the answer all the same — see
+    // TurnLatency.firstAnswerMs.
+    onChunk: ({ chunk }) => {
+      if (chunk.type === 'text-delta') clock.visible('answer');
+      else if (chunk.type === 'reasoning' || chunk.type === 'tool-call') clock.visible('reasoning');
+    },
+    // One round-trip finished. Recorded per step and not per turn because the
+    // prompt cache works per request: on a turn that calls tools, the first
+    // request writes the prefix and the rest should read it back. A per-turn
+    // figure would blur exactly the distinction that says whether it works.
+    onStepFinish: ({ usage, providerMetadata }) => {
+      clock.modelStep(usage, providerMetadata);
+    },
     onFinish: async ({ text, toolCalls, toolResults, usage }) => {
+      clock.finished(usage);
       let assistantMessageId: string | null = null;
       try {
         const { data: assistantRow } = await db
@@ -606,11 +761,20 @@ export async function POST(req: NextRequest) {
           tool_id: '__agent_turn',
           input_hash: 'turn',
           status: 'ok',
-          latency_ms: 0,
+          // Was a hardcoded 0 on every turn this route has ever served — the one
+          // row that claimed to say how long a turn took, saying nothing. The
+          // admin usage page computes its p50/p95 over this column, so those
+          // percentiles were being dragged toward zero by every chat turn in the
+          // workspace. Now it is the measurement.
+          latency_ms: Math.round(performance.now() - started),
           metadata: {
             model: agent.defaultModel,
             tokensIn: usage?.promptTokens ?? 0,
             tokensOut: usage?.completionTokens ?? 0,
+            // The number the total does not contain: how long the person waited
+            // before anything appeared. Kept here as well as in turn_latencies
+            // so the audit drawer, which nobody joins from, still says it.
+            firstVisibleMs: clock.snapshot().firstVisibleMs,
           },
         });
       } catch {
@@ -623,13 +787,20 @@ export async function POST(req: NextRequest) {
       // the capture must not be skipped by the same failure. `save` swallows
       // its own errors and is awaited only so the serverless invocation is not
       // frozen mid-write — nobody is waiting on it, the response is finished.
-      await recorder.save(db, {
-        messageId: assistantMessageId,
-        usage: {
-          promptTokens: usage?.promptTokens,
-          completionTokens: usage?.completionTokens,
-        },
-      });
+      // Both captures go out together, and both after the answer. Concurrent
+      // rather than sequential so the invocation is held open for one write and
+      // not two — nobody is waiting on either, but a serverless function billed
+      // for the wait may as well wait once.
+      await Promise.all([
+        recorder.save(db, {
+          messageId: assistantMessageId,
+          usage: {
+            promptTokens: usage?.promptTokens,
+            completionTokens: usage?.completionTokens,
+          },
+        }),
+        clock.save(db, { messageId: assistantMessageId }),
+      ]);
     },
   });
 

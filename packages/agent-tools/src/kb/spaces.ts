@@ -270,7 +270,40 @@ export interface SearchSpacesOptions {
    * browsed look used, and the signal would be gone within a week of shipping.
    */
   recordRetrieval?: boolean;
+  /**
+   * Reorder the result set before it is cut to `limit`, counted, or returned.
+   *
+   * WHY THE HOOK IS HERE AND NOT AT THE CALL SITE. Postgres already applied the
+   * limit, so a caller that reordered afterwards would only be shuffling rows
+   * that were all going to be used anyway — it could never change WHICH
+   * fragments the model is handed, which is the only thing worth changing. So
+   * the extra rows have to be fetched here, and once they are fetched they must
+   * be discarded here too: the surplus must not be counted as retrieved
+   * (migration 0073's "has Cortex ever used this fragment" would rot within a
+   * week) and must not reach the caller, where it would quietly widen the set
+   * `assessCoverage` judges.
+   *
+   * The reranker may only REORDER. This function does the cutting, so a
+   * reranker cannot lengthen a result set, and a reranker that returns the rows
+   * unchanged produces byte-identical behaviour to having no reranker at all.
+   *
+   * Used by the learning loop (migration 0083), whose implementation is barred
+   * from moving a fragment across a relevance band. See learning/apply.ts.
+   */
+  rerank?: (hits: SpaceHit[]) => SpaceHit[];
 }
+
+/**
+ * How many extra rows are fetched when a reranker is present.
+ *
+ * Small on purpose. It is what lets a demoted fragment actually fall out of the
+ * prepended set — without it a reranker can only reorder what was going to be
+ * used regardless — and every one of them is a row Postgres ranked and returned
+ * for nothing when learning has no opinion. Three covers the realistic case (a
+ * couple of fragments under a doubt, out of a limit of three to eight) without
+ * turning every search into a materially bigger one.
+ */
+const RERANK_MARGIN = 3;
 
 /**
  * The single retrieval entry point. Embeds the query and hands the USER — not
@@ -283,7 +316,7 @@ export interface SearchSpacesOptions {
  */
 export async function searchSpaces(
   db: SupabaseClient,
-  { userId, query, spaceIds, limit = 8, onDegraded, recordRetrieval }: SearchSpacesOptions,
+  { userId, query, spaceIds, limit = 8, onDegraded, recordRetrieval, rerank }: SearchSpacesOptions,
 ): Promise<SpaceHit[]> {
   // A caller that has lost track of who it is asking for must retrieve
   // nothing, not everything.
@@ -302,7 +335,9 @@ export async function searchSpaces(
     p_user_id: userId,
     p_query_embedding: embedded.ok ? embedded.data : null,
     p_query_text: query,
-    p_limit: limit,
+    // The surplus exists only so a reranker has something to choose from, and
+    // it never leaves this function. See `rerank` above.
+    p_limit: rerank ? limit + RERANK_MARGIN : limit,
     p_space_ids: spaceIds ?? null,
     // The vector and the model that produced it always travel together. A query
     // vector from voyage-4-lite scored against a chunk from voyage-3-large does
@@ -335,24 +370,7 @@ export async function searchSpaces(
 
   const rows = (data as Row[]) ?? [];
 
-  // Bookkeeping must never cost an answer. If the counter fails — an older
-  // deployment without 0073, a lock, anything — the person still gets their
-  // hits and the only thing lost is a statistic. Awaited rather than left
-  // dangling so a serverless invocation cannot be frozen mid-update, which is
-  // how a fire-and-forget write becomes a write that sometimes does not happen.
-  if (recordRetrieval) {
-    const chunkIds = rows.map((r) => r.chunk_id).filter((id): id is string => Boolean(id));
-    if (chunkIds.length > 0) {
-      try {
-        await db.rpc('kb_note_retrieval', { p_user_id: userId, p_chunk_ids: chunkIds });
-      } catch {
-        // Deliberately silent: the caller asked for search results, not for a
-        // report on the counter, and there is no action anybody could take.
-      }
-    }
-  }
-
-  return rows.map((r) => ({
+  const mapped: SpaceHit[] = rows.map((r) => ({
     documentId: r.document_id,
     documentTitle: r.document_title,
     spaceId: r.space_id,
@@ -382,6 +400,44 @@ export async function searchSpaces(
     supersededByTitle: r.superseded_by_title ?? null,
     metadata: r.metadata ?? {},
   }));
+
+  // Reorder, then cut. The cut is not the reranker's to make: it may say which
+  // fragments it prefers, never how many there are. A reranker that throws is a
+  // bug in the reranker and not a failed search — the plain scores are always
+  // an acceptable answer, and the loop that supplies this hook is an
+  // improvement on retrieval, never a precondition for it.
+  let ordered = mapped;
+  if (rerank) {
+    try {
+      ordered = rerank(mapped);
+    } catch {
+      ordered = mapped;
+    }
+    ordered = ordered.slice(0, limit);
+  }
+
+  // Bookkeeping must never cost an answer. If the counter fails — an older
+  // deployment without 0073, a lock, anything — the person still gets their
+  // hits and the only thing lost is a statistic. Awaited rather than left
+  // dangling so a serverless invocation cannot be frozen mid-update, which is
+  // how a fire-and-forget write becomes a write that sometimes does not happen.
+  //
+  // Counted from `ordered`, not from the raw rows: the surplus fetched for the
+  // reranker was never shown to anybody and must not make an unused fragment
+  // look used.
+  if (recordRetrieval) {
+    const chunkIds = ordered.map((h) => h.chunkId).filter((id): id is string => Boolean(id));
+    if (chunkIds.length > 0) {
+      try {
+        await db.rpc('kb_note_retrieval', { p_user_id: userId, p_chunk_ids: chunkIds });
+      } catch {
+        // Deliberately silent: the caller asked for search results, not for a
+        // report on the counter, and there is no action anybody could take.
+      }
+    }
+  }
+
+  return ordered;
 }
 
 /**

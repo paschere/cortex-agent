@@ -6,6 +6,7 @@ import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { readOnboarding } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -20,6 +21,7 @@ import {
   Workflow,
 } from 'lucide-react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +48,20 @@ function relName(rel: { name: string } | { name: string }[] | null): string | un
 export default async function DashboardPage() {
   const user = await requireSession();
   const sb = getOrgScopedClient(user.organization.id);
+
+  // A NEW COMPANY NEVER LANDS HERE.
+  //
+  // `/` redirects to this page, so before the guide existed the first screen of
+  // a brand-new workspace was four zeros and two empty panels — a product that
+  // cannot show what it is for and gives no clue what to do about it. Somebody
+  // whose only step is still "answer one question" is sent to the guide instead,
+  // and stays sent until they finish it or close it themselves.
+  //
+  // Costs one indexed read on a table with one row per workspace, and returns
+  // `show: false` for every workspace that has ever done anything — including,
+  // by way of migration 0085 § 8, every workspace that existed before it.
+  const onboarding = await readOnboarding(sb);
+  if (onboarding.show) redirect('/onboarding');
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);

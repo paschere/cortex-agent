@@ -105,6 +105,9 @@ export const commitmentsConfirmExtracted = registerTool({
       userId: ctx.userId,
       dueOn: input.dueOn,
       noticeDays: input.noticeDays,
+      // So the review also counts as evidence about the document the date was
+      // read out of. See learning/derive.ts on why a correction weighs three.
+      organizationId: ctx.organizationId,
     });
     const [hydrated] = await hydrate(ctx.db, [row]);
     const commitment = adaptCommitment(hydrated ?? row, today);
@@ -135,6 +138,7 @@ export const commitmentsRejectExtracted = registerTool({
       id: input.commitmentId,
       userId: ctx.userId,
       reason: input.reason,
+      organizationId: ctx.organizationId,
     });
     return {
       ok: true,

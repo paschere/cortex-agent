@@ -33,13 +33,25 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { embedQuery } from '../kb/embedder';
-import { SELECTION_THRESHOLD, type SelectableTool, rankTools } from './rank';
+import { embedQuery, embeddingModelId } from '../kb/embedder';
+import {
+  SELECTION_THRESHOLD,
+  type SelectableTool,
+  rankTools,
+  selectionCalibrationFor,
+} from './rank';
 import { backfillToolVectors, prepareToolVectors } from './store';
 
 export {
   type SelectableTool,
+  type SelectionCalibration,
   SELECTION_THRESHOLD,
+  SELECTION_CALIBRATIONS,
+  AWAITING_SELECTION_MEASUREMENT,
+  DEFAULT_SELECTION_CALIBRATION,
+  DEFAULT_SELECTION_MODEL_ID,
+  selectionCalibrationFor,
+  uncalibratedSelection,
   toolEmbedText,
   toolFamily,
   rankTools,
@@ -160,6 +172,11 @@ export async function selectToolsForTurn<T extends SelectableTool>(
     queryVector: embedded.data,
     vectors: prepared.vectors,
     alwaysFamilies,
+    // The cuts belong to the model that produced these vectors, not to whatever
+    // the file was written against. Naming it here is what stops migration 0074
+    // from happening again: change EMBEDDING_MODEL and the cuts move with it, or
+    // the model is openly unmeasured and the floor opens up instead of closing.
+    calibration: selectionCalibrationFor(embeddingModelId()),
   });
 
   return {

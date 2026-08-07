@@ -1,8 +1,8 @@
 import 'server-only';
-import { fragmentKey, heaviest, loadTurnContexts, shareOf } from '@cortex/agent-tools';
-import type { ReadableTurnContext } from '@cortex/agent-tools';
+import { fragmentKey, heaviest, loadTurnContexts, loadTurnLatencies, shareOf } from '@cortex/agent-tools';
+import type { ReadableTurnContext, StoredTurnLatency } from '@cortex/agent-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { FragmentView, PartKey, TurnView } from '../_components/context/types';
+import type { FragmentView, LatencyView, PartKey, TurnView } from '../_components/context/types';
 
 /**
  * Turning a stored capture into what the page draws.
@@ -42,7 +42,34 @@ function toFragment(f: ReadableTurnContext['retrieval']['fragments'][number]): F
   };
 }
 
-function toTurn(row: ReadableTurnContext, livePromptDigest: string | null): TurnView {
+/**
+ * The timing of a turn, copied off its row.
+ *
+ * The cache is summarised to two numbers here rather than shipped whole: the
+ * page answers "did the prefix get reused" and not "what did each of the four
+ * round-trips do", and the per-step detail belongs to the aggregate report, not
+ * to one turn's panel.
+ */
+function toLatency(row: StoredTurnLatency): LatencyView {
+  return {
+    firstVisibleMs: row.firstVisibleMs,
+    firstAnswerMs: row.firstAnswerMs,
+    totalMs: row.totalMs,
+    preludeMs: row.preludeMs,
+    stages: row.stages.map((s) => ({ stage: s.stage as string, at: s.at, ms: s.ms })),
+    steps: row.steps,
+    toolCalls: row.toolCalls,
+    toolMs: row.toolMs,
+    cacheReadSteps: row.cache.filter((s) => s.read > 0).length,
+    cacheTokensRead: row.cache.reduce((sum, s) => sum + s.read, 0),
+  };
+}
+
+function toTurn(
+  row: ReadableTurnContext,
+  livePromptDigest: string | null,
+  latency: LatencyView | null,
+): TurnView {
   const parts = row.parts.map((p) => ({
     key: p.key as PartKey,
     chars: p.chars,
@@ -86,6 +113,7 @@ function toTurn(row: ReadableTurnContext, livePromptDigest: string | null): Turn
           ? null
           : livePromptDigest === row.instructions.digest,
     },
+    latency,
     overridden: row.overridden,
     redacted: row.redacted,
   };
@@ -117,10 +145,28 @@ export async function loadTurnViews(
     return { byMessage: new Map(), orphans: [] };
   }
 
+  // Timings live in their own table (0084) and are joined here by the assistant
+  // message, which is the only key both sides are sure to agree on. A separate
+  // read rather than a join: it is one indexed lookup, it fails independently,
+  // and a conversation whose timings are missing still draws its contexts.
+  const timings = new Map<string, LatencyView>();
+  try {
+    const measured = await loadTurnLatencies(db, { conversationId: opts.conversationId });
+    for (const row of measured) {
+      if (row.messageId) timings.set(row.messageId, toLatency(row));
+    }
+  } catch {
+    // Same posture as above: diagnostics never break the thing they diagnose.
+  }
+
   const byMessage = new Map<string, TurnView>();
   const orphans: TurnView[] = [];
   for (const row of rows) {
-    const view = toTurn(row, opts.livePromptDigest);
+    const view = toTurn(
+      row,
+      opts.livePromptDigest,
+      (row.messageId && timings.get(row.messageId)) || null,
+    );
     if (view.messageId) byMessage.set(view.messageId, view);
     else orphans.push(view);
   }

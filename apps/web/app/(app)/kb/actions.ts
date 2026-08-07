@@ -268,7 +268,7 @@ export async function probeMemory(
         cosine: h.semanticScore,
         keyword: h.keywordScore,
         blended: h.score,
-        verdict: rateHit(h, scale) ?? 'dropped',
+        verdict: rateHit(h, scale, trimmed) ?? 'dropped',
         age: freshness.label || null,
         freshness: freshness.status,
         spokenAt: offsetMs === null ? null : formatOffset(offsetMs),
@@ -280,7 +280,7 @@ export async function probeMemory(
     // Same rule the tool follows: only what is worth defending gets a second
     // opinion, and only from what would really have reached the model.
     const strong = hits
-      .filter((h, rank) => rank < CORTEX_WINDOW && rateHit(h, scale) === 'strong')
+      .filter((h, rank) => rank < CORTEX_WINDOW && rateHit(h, scale, trimmed) === 'strong')
       .map((h) => ({
         chunkId: h.chunkId,
         documentId: h.documentId,

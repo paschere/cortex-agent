@@ -54,3 +54,32 @@ export const turnContextPurge = inngest.createFunction(
     });
   },
 );
+
+/**
+ * The retention sweep for turn latencies (migration 0084).
+ *
+ * ONE PASS, NOT TWO. The context capture needs a redaction step because it
+ * quotes the corpus; a latency row is integers, so there is nothing to strip
+ * and the row either exists or does not. Ninety days, matching the skeleton
+ * window above so a turn's shape and a turn's timing disappear together instead
+ * of leaving half a record behind.
+ *
+ * A separate function rather than a branch of the one above, and on the same
+ * cron ten minutes later: the two tables fail independently, and a latency
+ * sweep that errored must not be able to stop quoted material from being
+ * stripped on schedule. That is the one of the two with a promise attached.
+ */
+export const turnLatencyPurge = inngest.createFunction(
+  { id: 'turn-latency-purge' },
+  [{ event: 'turn-latency/purge' }, { cron: '50 8 * * *' }],
+  async ({ step }) => {
+    return await step.run('sweep', async () => {
+      const db = getSupabaseServiceClient();
+      const { data, error } = await db.rpc('turn_latency_purge');
+      if (error) throw new Error(`turn_latency_purge failed: ${error.message}`);
+      const deleted = Number((Array.isArray(data) ? data[0] : data) ?? 0);
+      logger.info('turn latency retention sweep', { deleted });
+      return { deleted };
+    });
+  },
+);

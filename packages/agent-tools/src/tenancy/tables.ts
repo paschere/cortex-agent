@@ -134,6 +134,23 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // workspace's own corpus, and a setting changes that workspace's assistant.
   turn_contexts: tenant(),
   turn_context_settings: tenant(),
+  // How long each turn took (migration 0084). Tenant: latency is not comparable
+  // across workspaces — corpus size, tool count and connected integrations all
+  // move it — so a distribution that mixed them would describe nobody.
+  turn_latencies: tenant(),
+
+  // --- Learning (migration 0083) --------------------------------------------
+  // What using Cortex taught it. Tenant in the strongest sense there is: this
+  // is the one module in the product that GENERALISES from how a company works,
+  // so a lost filter here would not leak a visible row — it would take one
+  // customer's usage and quietly use it to answer another one. All three carry
+  // their own organization_id rather than deriving it from the document they
+  // point at, because every question the module asks ("what has this workspace
+  // learned", "what is still waiting on somebody") is asked across documents
+  // without naming one, which a `derived` classification would correctly refuse.
+  learning_signals: tenant(),
+  learning_adjustments: tenant(),
+  learning_proposals: tenant(),
   audit_events: tenant(),
   security_events: tenant(),
   security_policies: tenant(),
@@ -210,7 +227,40 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   document_fields: tenant(),
   document_field_corrections: tenant(),
 
+  // --- Plans, consumption and first run (migration 0085) --------------------
+  // What a workspace is on, what it has consumed, and where it is in its first
+  // ten minutes. `usage_events` and `usage_counters` are tenant in the strongest
+  // sense the product has: a missing filter here would not show one company
+  // another's rows, it would put another company's consumption on their
+  // invoice — a leak that looks like a number rather than like data.
+  //
+  // Neither is written by application code. Both are filled by triggers on the
+  // tables that already record the work (migration 0085 § 9), so the workspace
+  // is copied from the row being metered and is never chosen.
+  organization_subscriptions: tenant(),
+  usage_events: tenant(),
+  usage_counters: tenant(),
+  organization_onboarding: tenant(),
+
+  // --- Answer-quality evaluation (migration 0082) ---------------------------
+  // What the suite scored, run by run. Tenant on the run: the questions and the
+  // corpus are the same everywhere (they live in git), but the configuration
+  // under test is a workspace's own — its embedding model, its thresholds, its
+  // tool catalogue. `evaluation_case_results` is derived rather than tenant
+  // because every read of it is "the detail of THIS run", and a second copy of
+  // the workspace id on a child row is a second thing that can be wrong.
+  evaluation_runs: tenant(),
+  evaluation_case_results: derived('evaluation_runs', 'run_id'),
+
   // --- Not tenant data ------------------------------------------------------
+  // The price list. Product content, identical for every workspace, exactly
+  // like `tool_embeddings`: four rows that only a migration changes, and no
+  // workspace ever writes here. Scoping it by workspace would mean a copy of
+  // the catalogue per tenant and a plan that could differ from the one on the
+  // pricing page.
+  plans: shared(
+    'The plan catalogue. Product content: the same four rows for every workspace, written only by migrations. Which plan a workspace is ON is organization_subscriptions, which is tenant.',
+  ),
   ba_user: shared(
     'Identity. One row per human across every workspace they belong to; the per-workspace directory row is public.users.',
   ),
@@ -300,6 +350,14 @@ export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   // Takes no workspace and returns two counts — there is no session behind the
   // cron that calls it, and nothing tenant-visible comes back.
   turn_context_purge: 'maintenance',
+  // Migration 0084. Same shape and the same cron as the sweep above: deletes
+  // expired latency rows and returns a count. No workspace, nothing visible.
+  turn_latency_purge: 'maintenance',
+  // Migration 0085. Re-derives every consumption counter from the ledger it
+  // summarises and returns only the ones that disagree — which should be none.
+  // Takes no workspace and returns no tenant content: a workspace id, a period,
+  // a meter and two integers that ought to be equal.
+  usage_counter_drift: 'maintenance',
 };
 
 export class UnclassifiedFunctionError extends Error {

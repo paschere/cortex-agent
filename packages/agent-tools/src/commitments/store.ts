@@ -1,5 +1,8 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+// Imported from the leaf module rather than the package barrel: this file is
+// reached from the barrel itself, and a round trip through it would be a cycle.
+import { recordSignal } from '../learning/store';
 import {
   COMMITMENT_COLUMNS,
   type CommitmentKind,
@@ -387,7 +390,19 @@ export async function dropCommitment(
  */
 export async function confirmExtracted(
   db: SupabaseClient,
-  input: { id: string; userId: string; dueOn?: string; noticeDays?: number },
+  input: {
+    id: string;
+    userId: string;
+    dueOn?: string;
+    noticeDays?: number;
+    /**
+     * Supplied by the surfaces that have it, so this review can also be
+     * recorded as evidence about the document the date was read out of
+     * (migration 0083). Optional because it is not needed to confirm anything:
+     * the learning row is a by-product and must never be a precondition.
+     */
+    organizationId?: string;
+  },
 ): Promise<CommitmentRow> {
   const current = await getCommitment(db, input.id);
   if (!current) throw new NotFoundError('That commitment no longer exists.');
@@ -423,12 +438,47 @@ export async function confirmExtracted(
     .select(COMMITMENT_COLUMNS)
     .single();
   if (error) throw error;
+
+  // The gold signal, and the reason this hook is here rather than derived from
+  // the row later: a corrected date is INVISIBLE afterwards. `due_on` is
+  // overwritten in place and nothing keeps what the extractor originally read,
+  // so "a human vouched for this unchanged" and "a human had to fix it" become
+  // the same row the instant this update lands. The difference is only knowable
+  // at this exact moment, so it is written down at this exact moment.
+  //
+  // Fire-and-forget inside `recordSignal`, which swallows everything: somebody
+  // confirming a deadline must never be made to care that a learning row failed.
+  if (input.organizationId && current.source_document_id) {
+    const corrected = Boolean(input.dueOn) && input.dueOn !== current.due_on;
+    await recordSignal(db, input.organizationId, {
+      kind: corrected ? 'extraction_corrected' : 'extraction_confirmed',
+      polarity: corrected ? -1 : 1,
+      weight: 3,
+      documentId: current.source_document_id,
+      // The whole document, not a chunk: "we read this paper wrong" is a
+      // statement about the paper, not about where the chunker cut it.
+      chunkIndex: -1,
+      actorUserId: input.userId,
+      detail: {
+        kind: corrected ? 'extraction_corrected' : 'extraction_confirmed',
+        readAs: current.due_on,
+        ...(corrected ? { correctedTo: input.dueOn } : {}),
+        quote: current.source_quote,
+        note: corrected
+          ? 'Cortex leyó una fecha de este documento y alguien tuvo que corregirla a mano.'
+          : 'Alguien revisó la fecha que Cortex leyó de este documento y la dio por buena.',
+      },
+      dedupeKey: `${corrected ? 'extraction_corrected' : 'extraction_confirmed'}:${input.id}`,
+      observedAt: now,
+    });
+  }
+
   return data as CommitmentRow;
 }
 
 export async function rejectExtracted(
   db: SupabaseClient,
-  input: { id: string; userId: string; reason?: string },
+  input: { id: string; userId: string; reason?: string; organizationId?: string },
 ): Promise<CommitmentRow> {
   const now = new Date().toISOString();
   const { data, error } = await db
@@ -446,7 +496,32 @@ export async function rejectExtracted(
     .select(COMMITMENT_COLUMNS)
     .single();
   if (error) throw error;
-  return data as CommitmentRow;
+
+  // A thrown-out extraction is the bluntest possible statement that the reading
+  // of this document was wrong. Read off the row that came back, so it is the
+  // document the rejected commitment really named.
+  const row = data as CommitmentRow;
+  if (input.organizationId && row.source_document_id) {
+    await recordSignal(db, input.organizationId, {
+      kind: 'extraction_rejected',
+      polarity: -1,
+      weight: 3,
+      documentId: row.source_document_id,
+      chunkIndex: -1,
+      actorUserId: input.userId,
+      detail: {
+        kind: 'extraction_rejected',
+        readAs: row.due_on,
+        quote: row.source_quote,
+        reason: input.reason?.trim().slice(0, 200) ?? null,
+        note: 'Alguien descartó por completo un vencimiento que Cortex leyó de este documento.',
+      },
+      dedupeKey: `extraction_rejected:${input.id}`,
+      observedAt: now,
+    });
+  }
+
+  return row;
 }
 
 /** Move a due date deliberately. Reopens the notices for the new date. */

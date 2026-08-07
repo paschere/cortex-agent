@@ -5,6 +5,7 @@ import { devTaskRun } from './dev-task-run';
 import { devTaskStatus } from './dev-task-status';
 import { driveSync } from './drive-sync';
 import { ingestDocument } from './ingest-document';
+import { learningPassDispatch, learningPassWorkspace } from './learning-pass';
 import { meetingImportSweep } from './meeting-import';
 import { memoryDeriveDispatch, memoryDeriveUser } from './memory-derive';
 import { orchestratorRun } from './orchestrator-run';
@@ -12,7 +13,7 @@ import { orchestratorSweep } from './orchestrator-sweep';
 import { reindexEmbeddings } from './reindex-embeddings';
 import { scheduleDispatch } from './schedule-dispatch';
 import { scheduleRun } from './schedule-run';
-import { turnContextPurge } from './turn-context-purge';
+import { turnContextPurge, turnLatencyPurge } from './turn-context-purge';
 
 export {
   actionsSweepDispatch,
@@ -20,6 +21,8 @@ export {
   commitmentsWatchDispatch,
   commitmentsWatchWorkspace,
   ingestDocument,
+  learningPassDispatch,
+  learningPassWorkspace,
   reindexEmbeddings,
   driveSync,
   meetingImportSweep,
@@ -32,9 +35,12 @@ export {
   orchestratorRun,
   orchestratorSweep,
   turnContextPurge,
+  turnLatencyPurge,
 };
 export const functions = [
   ingestDocument,
+  learningPassDispatch,
+  learningPassWorkspace,
   actionsSweepDispatch,
   actionsSweepWorkspace,
   commitmentsWatchDispatch,
@@ -52,4 +58,5 @@ export const functions = [
   orchestratorRun,
   orchestratorSweep,
   turnContextPurge,
+  turnLatencyPurge,
 ];

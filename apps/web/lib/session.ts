@@ -1,9 +1,10 @@
 import 'server-only';
 import { type Role, type SessionUser, UnauthorizedError } from '@cortex/core';
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { auth } from './auth';
 import { resolveActiveOrganization } from './organization';
 import { getSupabaseServiceClient } from './supabase/service';
+import { WORKSPACE_NAME_COOKIE } from './workspace-cookie';
 
 /**
  * Who is asking, and which workspace they are asking inside.
@@ -38,11 +39,20 @@ export async function requireSession(): Promise<SessionUser> {
   // The workspace this request acts in. Provisioned on demand, so an account
   // that predates multi-tenancy (or one created straight in the DB) still gets
   // a tenant on its next request instead of rendering a workspace-less app.
+  //
+  // The cookie carries the company name typed on the signup screen, one
+  // navigation earlier — see WORKSPACE_NAME_COOKIE. It is read here because this
+  // is the request that provisions, it is used for nothing but the workspace's
+  // TITLE, and it is ignored entirely on every request where a workspace already
+  // exists. `cookies()` costs nothing extra: this function is already dynamic
+  // through `headers()`.
+  const preferredName = (await cookies()).get(WORKSPACE_NAME_COOKIE)?.value ?? null;
   const organization = await resolveActiveOrganization(
     session.user.id,
     (session.session as { activeOrganizationId?: string | null } | undefined)?.activeOrganizationId,
     session.user.name ?? null,
     session.user.email,
+    preferredName,
   );
 
   const sb = getSupabaseServiceClient();

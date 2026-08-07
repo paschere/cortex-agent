@@ -156,6 +156,86 @@
  *     hay política de mascotas; el edificio no lo permite." It is a correct
  *     retrieval mislabelled by the group it was filed under, not a leak.)
  *
+ * ---------------------------------------------------------------------------
+ * RE-MEASURED 2026-08-07 ON A CORPUS THAT LIVES IN THE REPOSITORY — AND THE
+ * CUTS DID NOT MOVE, WHICH IS THE FINDING
+ * ---------------------------------------------------------------------------
+ * Everything above was run once, by hand, and typed into this comment. That is
+ * the same shape as the bug it was fixing: evidence nobody can re-run is
+ * evidence that goes stale without a sound. So the evidence base moved into
+ * `packages/agent-tools/src/evaluation` — eight documents of the length people
+ * really upload, twenty-two questions in these same three groups, chunked by the
+ * real `chunkText`, every cosine measured against the live API and committed.
+ * It replays through THIS file on every `pnpm test`.
+ *
+ * Its first run reported that the strong cut had run out of margin: "¿plan de
+ * arranque de cortex?" scored 0.458 against a cut of 0.46. Two thousandths — the
+ * production incident, again, on a corpus of realistic length.
+ *
+ * SO THE CUT WAS SWEPT, AND MOVING IT DOWN IS NOT A FIX. Best cosine per
+ * question, in the contested band, with the group each one belongs to:
+ *
+ *     0.426  answered   «dias de la casa cuantos son»
+ *     0.429  ABSENT     «puedo trabajar permanentemente desde el exterior»
+ *     0.441  answered   «por que le subimos el precio a nexa»
+ *     0.446  ABSENT     «tarifa hora de un ingeniero de datos»
+ *     0.456  ABSENT     «cual es la penalidad ... con bbic»
+ *     0.456  ABSENT     «la poliza cubre un ataque de ransomware»
+ *     0.458  answered   «¿plan de arranque de cortex?»   ← the one that started it
+ *     0.459  ABSENT     «licencia de paternidad cuantas semanas da cortex»
+ *     0.470  answered   «preaviso para terminar el contrato de nexa»
+ *
+ * THE GROUPS INTERLEAVE. A question the corpus does not answer outscores the
+ * question it does, so no cut on the cosine admits the start-up plan and
+ * excludes paternity leave. The whole trade, measured:
+ *
+ *     cut     questions answered   questions sold as answered that are not
+ *     0.46      8 of 12              0      ← where it is, and where it stays
+ *     0.458     9 of 12              1
+ *     0.456     9 of 12              3
+ *     0.44     10 of 12              4
+ *     0.425    11 of 12              5      ← every absent question, "answered"
+ *
+ * 0.46 is on the frontier. Every thousandth of "margin" bought below it is paid
+ * for immediately in the opposite failure, one for one or worse. The evaluation
+ * counts the two separately — `missedByFloor` and `overclaimed` — precisely so
+ * that trade cannot be passed off as an improvement, and it is written down here
+ * so the next person handed "the cut is two thousandths too high" does not spend
+ * a day rediscovering that lowering it is the other bug.
+ *
+ * THE WEAK FLOOR IS IN THE SAME POSITION. "cuanto dan para estudiar al año" is
+ * discarded outright at 0.298 over a document that states the figure — and the
+ * genuinely unrelated group reaches 0.319 ("a que hora juega la seleccion
+ * colombia"), so every floor low enough to save that question also lets football
+ * fixtures into Brain Knowledge's citations. It is left failing, counted, and on
+ * the record, rather than traded for a leak nobody would notice.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT DID MOVE: EVIDENCE THAT IS NOT A COSINE
+ * ---------------------------------------------------------------------------
+ * If no cut works, the score has to carry something the cosine does not. Two
+ * candidates were measured and both failed, and they are recorded so they are
+ * not tried again: the TOP-1 MARGIN (how far the best chunk beats the second)
+ * does not separate the groups — 0.086 for the start-up plan against 0.104 for
+ * the ransomware question — and neither does the margin over the best chunk of
+ * any OTHER document (0.086 against 0.216). Both look like signal and are not.
+ *
+ * WHAT DOES SEPARATE THEM IS THE TITLE, and it separates them cleanly. See
+ * `queryNamesDocument` below. Briefly: measured over every hit of all twenty-two
+ * questions, the fraction of a question's content words that appear in the
+ * TITLE of the document a hit came from reaches 1.00 exactly once — the start-up
+ * plan — while the highest any question the corpus does not answer reaches is
+ * 0.25. That is a margin of three quarters, against the two thousandths the cut
+ * had. One hit is promoted, one verdict changes, nothing is sold as answered
+ * that is not.
+ *
+ * It also fires precisely where the cosine is known to be weakest. The ladder at
+ * the top of this file measures a terse fragment scoring 0.163 below the same
+ * question well formed; a question short enough for EVERY one of its words to be
+ * in a title is a question of exactly that shape. The rule does not raise the
+ * bar or lower it — it adds the one piece of evidence the embedding cannot see,
+ * for the one class of question that needs it.
+ *
  * WHAT THE OLDEST NUMBERS WERE DOING. Before any of this, both thresholds were
  * on the BLEND, and on a corpus with no literal keyword overlap the blend never
  * exceeded 0.496 for any query, including the ones answered perfectly.
@@ -213,8 +293,8 @@ export const CALIBRATIONS: Readonly<Record<string, RelevanceCalibration>> = {
     weakFloor: 0.34,
     railCeiling: 0.75,
     measured: true,
-    measuredOn: '2026-08-05',
-    note: 'Medido el 5 de agosto de 2026 sobre un corpus de once documentos y veintidós preguntas, con la redacción corta que la gente escribe de verdad.',
+    measuredOn: '2026-08-07',
+    note: 'Medido el 5 de agosto de 2026 y vuelto a medir el 7 con la evaluación continua, sobre documentos del largo que la gente sube de verdad y con la redacción corta que escribe de verdad. Los dos cortes se barrieron: moverlos hacia abajo cambia una falla por la otra, así que se quedaron donde estaban.',
   },
   /**
    * The previous default. Kept because a deployment whose reindex has not
@@ -340,11 +420,164 @@ export type Coverage =
    */
   | 'keyword-only';
 
+/**
+ * Words that carry no evidence about WHICH document is being asked for. Kept
+ * deliberately short: this is not a linguistic stopword list, it is the set of
+ * words whose presence or absence in a title says nothing, and every word added
+ * to it makes `queryNamesDocument` easier to satisfy. Erring towards leaving a
+ * word IN is the safe direction.
+ */
+const NAMING_STOPWORDS: ReadonlySet<string> = new Set([
+  'de',
+  'del',
+  'la',
+  'el',
+  'los',
+  'las',
+  'un',
+  'una',
+  'unos',
+  'unas',
+  'y',
+  'o',
+  'u',
+  'a',
+  'al',
+  'en',
+  'con',
+  'por',
+  'para',
+  'que',
+  'cual',
+  'cuales',
+  'cuanto',
+  'cuanta',
+  'cuantos',
+  'cuantas',
+  'como',
+  'cuando',
+  'donde',
+  'quien',
+  'es',
+  'son',
+  'ser',
+  'esta',
+  'este',
+  'estos',
+  'estas',
+  'ese',
+  'esa',
+  'eso',
+  'se',
+  'si',
+  'no',
+  'lo',
+  'le',
+  'les',
+  'me',
+  'mi',
+  'mis',
+  'su',
+  'sus',
+  'nos',
+  'hay',
+  'ha',
+  'han',
+  'he',
+  'tiene',
+  'tienen',
+  'da',
+  'dan',
+  'dar',
+  'hace',
+  'hacer',
+  'mas',
+  'muy',
+  'ya',
+  'pero',
+  'sobre',
+  'desde',
+  'hasta',
+  'entre',
+  'tambien',
+  'nuestro',
+  'nuestra',
+]);
+
+/**
+ * A question has to say at least this much before naming a document counts.
+ * One word is not naming anything: "cortex" appears in half these titles, and a
+ * single-word query matching one of them would promote every chunk of it.
+ */
+const MIN_NAMING_WORDS = 2;
+
+/**
+ * The combining marks that `normalize('NFD')` splits an accented letter into.
+ * Stripping them is what makes "cortex" match "CÓRTEX" — people do not type
+ * accents into a search box and a title is not going to stop carrying them.
+ */
+const COMBINING_MARKS = new RegExp('[\\u0300-\\u036f]', 'g');
+
+/** Lowercase, unaccented, punctuation-free content words. */
+function contentWords(text: string): string[] {
+  return text
+    .normalize('NFD')
+    .replaceAll(COMBINING_MARKS, '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 1 && !NAMING_STOPWORDS.has(word));
+}
+
+/**
+ * Did the person name this document rather than ask about its contents?
+ *
+ * WHY THIS EXISTS. The cosine cannot get "¿plan de arranque de cortex?" over the
+ * strong cut without also promoting four questions the corpus does not answer —
+ * the sweep is in the header, and the groups genuinely interleave. So this is
+ * the second kind of evidence: not "how close is this passage to the question"
+ * but "is this passage from the document the question NAMED".
+ *
+ * THE RULE IS ALL-OR-NOTHING, AND THAT IS WHAT MAKES IT SAFE. Every content word
+ * of the question has to appear in the title. Measured across every hit of all
+ * twenty-two evaluation questions on 2026-08-07: exactly one pair reaches 1.00
+ * (the question above against "CÓRTEX · Plan de arranque para BBIC S.A.S."), and
+ * the best any question the corpus does NOT answer manages is 0.25 —
+ * "penalidad/terminar/contrato/bbic" finding the word "contrato" in a Nexa
+ * contract, which is one word out of four and nowhere near. A partial-credit
+ * version of this rule would have promoted all of those; requiring all of them
+ * is the difference between evidence and a coincidence.
+ *
+ * IT CANNOT INVENT A HIT, only re-read one. `rateHit` consults it exclusively
+ * for passages that already cleared the weak floor — so the worst it can do is
+ * promote something that was going to be shown anyway from "related" to
+ * "answers this", and it can never resurrect a passage the floor discarded.
+ *
+ * The failure mode it accepts is a false negative: one extra word in the
+ * question ("plan de arranque de cortex para bbic sas" would still pass, "cuando
+ * arranca el plan de cortex" would not) and the rule simply does not fire,
+ * leaving the cosine to decide exactly as before. Failing closed is the right
+ * direction for a promotion.
+ */
+export function queryNamesDocument(query: string, title: string | null | undefined): boolean {
+  if (!title) return false;
+  const asked = [...new Set(contentWords(query))];
+  if (asked.length < MIN_NAMING_WORDS) return false;
+  const named = new Set(contentWords(title));
+  return asked.every((word) => named.has(word));
+}
+
 export interface ScoredHit {
   /** Raw cosine similarity. Null when the semantic arm did not run. */
   semanticScore: number | null;
   /** ts_rank of the literal-word match. Zero for most rows. */
   keywordScore: number;
+  /**
+   * The title of the document this passage came from, when the caller has it.
+   * Read only by `queryNamesDocument`. Optional because a hand-built hit in a
+   * test has no document; every real hit carries one, and `SpaceHit` already
+   * did before this field existed.
+   */
+  documentTitle?: string | null;
   /**
    * The provider-qualified model that produced BOTH the query vector and the
    * chunk vector this score came from — they are always the same model, because
@@ -367,11 +600,26 @@ export interface ScoredHit {
  * In keyword-only mode there is no cosine to judge, so anything the full-text
  * arm matched at all counts as weak: it literally contains the words asked
  * about, which is evidence, just not graded evidence.
+ *
+ * `query` is optional and is the second kind of evidence: a passage from a
+ * document the question NAMED is an answer even when its cosine is a couple of
+ * thousandths short, which is the production incident in one sentence. Callers
+ * that omit it get exactly the behaviour this function had before the argument
+ * existed — which is what `apps/web/lib/kb-relevance-shape.ts` mirrors for the
+ * browser, where no title is at hand.
  */
-export function rateHit(hit: ScoredHit, calibration: RelevanceCalibration): HitRelevance | null {
+export function rateHit(
+  hit: ScoredHit,
+  calibration: RelevanceCalibration,
+  query?: string,
+): HitRelevance | null {
   if (hit.semanticScore === null) return hit.keywordScore > 0 ? 'weak' : null;
   if (hit.semanticScore >= calibration.strongMatch) return 'strong';
-  if (hit.semanticScore >= calibration.weakFloor) return 'weak';
+  if (hit.semanticScore >= calibration.weakFloor) {
+    // Only ever an upgrade, and only for a passage that was already going to be
+    // shown. See `queryNamesDocument` for why it is all-or-nothing.
+    return query && queryNamesDocument(query, hit.documentTitle) ? 'strong' : 'weak';
+  }
   return null;
 }
 
@@ -428,7 +676,7 @@ export function assessCoverage<T extends ScoredHit>(
   const calibration = calibrationFor(
     embeddingModel ?? hits.find((h) => h.embeddingModel)?.embeddingModel ?? null,
   );
-  const rated = hits.map((hit) => ({ hit, relevance: rateHit(hit, calibration) }));
+  const rated = hits.map((hit) => ({ hit, relevance: rateHit(hit, calibration, query) }));
   const kept = rated.filter((r): r is { hit: T; relevance: HitRelevance } => r.relevance !== null);
   const discarded = rated.length - kept.length;
   const scored = hits

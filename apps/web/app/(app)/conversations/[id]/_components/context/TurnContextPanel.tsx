@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { Brain, ChevronDown, FileClock, Layers, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { ContextFragments } from './ContextFragments';
+import { ContextTiming } from './ContextTiming';
 import { ContextTools } from './ContextTools';
 import { ContextWeight } from './ContextWeight';
 import type { TurnView } from './types';
@@ -48,6 +49,14 @@ export function TurnContextPanel({ turn }: { turn: TurnView }) {
               {retrieval.prependedCount}/{retrieval.fragments.length} fragmentos
             </span>
           )}
+          {turn.latency?.firstVisibleMs !== null && turn.latency !== null && (
+            <span title="Cuánto esperó la persona antes de ver la primera letra">
+              {turn.latency.firstVisibleMs < 1000
+                ? `${turn.latency.firstVisibleMs} ms`
+                : `${(turn.latency.firstVisibleMs / 1000).toLocaleString(LOCALE, { maximumFractionDigits: 1 })} s`}{' '}
+              a la 1.ª letra
+            </span>
+          )}
           {turn.promptTokens !== null && (
             <span title="Tokens de entrada que reportó el proveedor">
               {turn.promptTokens.toLocaleString(LOCALE)} tokens
@@ -82,6 +91,7 @@ export function TurnContextPanel({ turn }: { turn: TurnView }) {
             </p>
           )}
 
+          {turn.latency && <ContextTiming latency={turn.latency} />}
           <ContextWeight turn={turn} />
           <ContextFragments turn={turn} />
           <ContextTools turn={turn} />

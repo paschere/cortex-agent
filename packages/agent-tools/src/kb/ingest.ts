@@ -1,8 +1,27 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { checkMeter, isDegraded } from '../billing';
 import { chunkText } from './chunker';
 import { embedDocuments } from './embedder';
 import { recordEmbeddingUsage } from './embedding-usage';
+
+/**
+ * What a workspace past its document allowance is told, and what actually
+ * happens to its file.
+ *
+ * The document IS saved. Its text IS stored, and it stays readable and findable
+ * by keyword. What it does not get is an embedding, so it is absent from
+ * retrieval by meaning until there is room — and `kb-reindex-embeddings`, the
+ * drain that already exists for chunks stored without a key, fills it in on its
+ * next pass once the plan changes or the month rolls over. Nothing has to be
+ * uploaded again.
+ *
+ * Refusing the upload outright was the alternative and it is indefensible:
+ * somebody has already handed us their contract, and losing it to a billing rule
+ * is not a trade any plan is worth. See LIMIT_POLICY in ../billing/plans.ts.
+ */
+export const OVER_DOCUMENT_LIMIT_MESSAGE =
+  'Te pasaste del número de documentos de tu plan, así que este quedó guardado pero sin indexar: se puede leer y buscar por palabra, pero todavía no entra en las respuestas. Amplía el plan y se indexa solo.';
 
 /**
  * Ingest in-memory Markdown into the KB synchronously: create the document row,
@@ -42,10 +61,19 @@ export async function ingestMarkdown(
     const chunks = chunkText(content);
     if (chunks.length === 0) throw new Error('No chunks produced');
 
+    // Asked AFTER the row exists, on purpose: the meter counts documents, the
+    // trigger on kb_documents has already counted this one, and the question is
+    // whether to pay to embed it — not whether to accept it. There is no branch
+    // here that loses the customer's text.
+    const allowance = await checkMeter(db, 'documents');
+    const overLimit = isDegraded(allowance);
+
     // Indexed as documents, never as queries — see the note on asymmetry in
     // embedder.ts. Failures come back rather than thrown, so the reason ends up
     // in error_message, which is the sentence the person actually reads.
-    const embedded = await embedDocuments(chunks.map((c) => c.content));
+    const embedded = overLimit
+      ? ({ ok: false, retryable: false, reason: OVER_DOCUMENT_LIMIT_MESSAGE } as const)
+      : await embedDocuments(chunks.map((c) => c.content));
     // Only a genuinely transient failure is worth raising. A missing key, a
     // rejected key and an exhausted quota all fail identically next time, and
     // this function runs inside a user's turn — throwing would turn "your note

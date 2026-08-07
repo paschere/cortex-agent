@@ -1,10 +1,12 @@
 import { ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { indexAdjustments, rerankByLearning } from '../learning/apply';
+import { loadActiveAdjustments } from '../learning/store';
 import { type Conflict, findConflicts } from './conflicts';
 import { assessFreshness } from './freshness';
-import { assessCoverage, rateHit } from './relevance';
-import { listVisibleSpaces, resolveSpaceByName, searchSpaces } from './spaces';
+import { assessCoverage, calibrationFor, rateHit } from './relevance';
+import { type SpaceHit, listVisibleSpaces, resolveSpaceByName, searchSpaces } from './spaces';
 import { chunkOffsetMs, formatOffset } from './transcript-chunker';
 
 /**
@@ -119,6 +121,14 @@ export const kbSearch = registerTool({
   }),
   rateLimit: { perMinute: 60 },
   handler: async (input, ctx) => {
+    // What this workspace has learned about its own material (migration 0083).
+    // Started before anything is awaited so it overlaps with the space lookup
+    // when there is one, and it is cached in process for a few seconds so a
+    // burst of turns pays for it once. It never throws: an ordering preference
+    // that fails to load costs the plain scores, which is exactly the retrieval
+    // this tool had before the loop existed.
+    const learning = loadActiveAdjustments(ctx.db, ctx.organizationId);
+
     let spaceIds: string[] | undefined;
     let spaceName: string | undefined;
 
@@ -149,11 +159,36 @@ export const kbSearch = registerTool({
     }
 
     let degraded: string | undefined;
+
+    // The one place learning touches an answer, and the fence around it lives
+    // in learning/apply.ts: this may reorder fragments WITHIN a relevance band
+    // and may do nothing else. The band is computed here, from the calibration
+    // that is really in force for the model that produced these scores — the
+    // same expression `assessCoverage` uses below — because a module that
+    // guessed at the thresholds would be able to guess its way past them.
+    //
+    // Spread conditionally: with nothing learned, no reranker is passed at all,
+    // and both the query and its result set are byte-identical to what they
+    // were before this module existed.
+    const index = indexAdjustments(await learning);
+    const rerank = index.empty
+      ? undefined
+      : (hits: SpaceHit[]): SpaceHit[] => {
+          const calibration = calibrationFor(
+            hits.find((h) => h.embeddingModel)?.embeddingModel ?? null,
+          );
+          return rerankByLearning(hits, index, {
+            key: (h) => ({ documentId: h.documentId, chunkIndex: h.chunkIndex }),
+            band: (h) => rateHit(h, calibration, input.query) ?? 'dropped',
+          });
+        };
+
     const raw = await searchSpaces(ctx.db, {
       userId: ctx.userId,
       query: input.query,
       ...(spaceIds ? { spaceIds } : {}),
       limit: input.limit,
+      ...(rerank ? { rerank } : {}),
       // This is the retrieval that answers somebody, so it is the one that
       // counts. Everything the Brain Knowledge page runs — its search box, its
       // memory bench — deliberately does not, so "fragments Cortex has never
@@ -210,7 +245,7 @@ export const kbSearch = registerTool({
             // The rating that was really applied, by the calibration that was
             // really in force — not re-judged later against whatever the
             // thresholds have become.
-            verdict: rateHit(h, verdict.calibration) ?? 'dropped',
+            verdict: rateHit(h, verdict.calibration, input.query) ?? 'dropped',
           })),
         });
       } catch {

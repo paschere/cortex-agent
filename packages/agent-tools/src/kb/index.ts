@@ -41,6 +41,7 @@ export {
   calibrationFor,
   AWAITING_MEASUREMENT,
   rateHit,
+  queryNamesDocument,
   uncalibrated,
   CALIBRATIONS,
   DEFAULT_CALIBRATION,
@@ -66,6 +67,7 @@ export {
   findConflicts,
 } from './conflicts';
 export type { Conflict, ConflictRival, ConflictSourceHit } from './conflicts';
+export { ingestMarkdown, OVER_DOCUMENT_LIMIT_MESSAGE } from './ingest';
 export { kbListSpaces } from './list-spaces';
 export { kbCreateDocument } from './create-document';
 export { kbContext } from './context';

@@ -3,8 +3,21 @@
 import { Provenance } from '@/components/ui/provenance';
 import type { RailCuts } from '@/lib/kb-relevance-shape';
 import { clsx } from 'clsx';
-import { AlertTriangle, ArrowRight, CornerDownLeft, Loader2, Scale, Search, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  Copy,
+  CornerDownLeft,
+  Loader2,
+  Scale,
+  Search,
+  X,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+// A server action, so importing it here does not drag the tools package into
+// the browser bundle — see apps/web/lib/commitments-shape.ts for the trap.
+import { noteFragmentCopied } from '../../../learning/actions';
 import { probeMemory } from '../../actions';
 import { num } from '../format';
 import type { ProbeFragment, ProbeResult, SpaceSummary } from '../types';
@@ -437,6 +450,7 @@ function Row({
                 por debajo del mínimo — Cortex no lo puede citar
               </span>
             )}
+            {!dropped && <CopyFragment fragment={fragment} />}
           </div>
         </div>
 
@@ -452,5 +466,46 @@ function Row({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Copy the passage — and, as a side effect, tell the learning loop it was worth
+ * copying.
+ *
+ * THE SIGNAL IS THE POINT, AND SO IS THE FACT THAT NOBODY IS BEING ASKED FOR
+ * IT. A thumbs-up button collects the opinions of the two people who enjoy
+ * pressing thumbs-up buttons. Copying a fragment is somebody taking it away to
+ * use in a quote, an email or a call — an unambiguous positive that costs the
+ * person nothing extra and that no amount of reading the logs could infer. It
+ * feeds `learning_signals` (migration 0083), where it can only ever contribute
+ * to a fragment being quoted EARLIER among fragments that already cleared the
+ * relevance floor.
+ *
+ * The write is deliberately not awaited before the clipboard: the person asked
+ * for text on their clipboard, not for a round trip. `recordSignal` swallows
+ * its own failures for the same reason.
+ */
+function CopyFragment({ fragment }: { fragment: ProbeFragment }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard?.writeText(fragment.content).then(
+          () => setCopied(true),
+          () => undefined,
+        );
+        void noteFragmentCopied(fragment.documentId, fragment.chunkIndex);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      }}
+      className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-faint transition-colors hover:text-primary"
+      title="Copiar el fragmento. Cortex apunta que este te sirvió."
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? 'copiado' : 'copiar'}
+    </button>
   );
 }

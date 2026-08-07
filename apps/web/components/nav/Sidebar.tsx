@@ -14,6 +14,7 @@ import {
   Cable,
   ChevronRight,
   FileBarChart,
+  Gauge,
   Hammer,
   Inbox,
   LayoutDashboard,
@@ -25,10 +26,13 @@ import {
   PanelLeftOpen,
   Plug,
   Radar,
+  Receipt,
   ScrollText,
   Send,
   Settings,
   ShieldCheck,
+  Sprout,
+  Target,
   Trash2,
   Users,
   UsersRound,
@@ -88,6 +92,15 @@ const PRIMARY: NavItem[] = [
   // into the chat, that group held a single link, and "Knowledge › Brain
   // Knowledge" was a disclosure wrapped around one destination people open daily.
   { href: '/kb', label: 'Brain Knowledge', icon: BookOpen },
+  // Next to Brain Knowledge because it is about the same material: what using
+  // Cortex taught it about its own memory, and what it changed as a result.
+  // Spanish, like Vencimientos and Informes — the question it answers is
+  // "¿esto está aprendiendo o está empeorando?" and the rail should say so.
+  { href: '/learning', label: 'Aprendizaje', icon: Sprout },
+  // Next to Aprendizaje on purpose: that page says what Cortex learned, this one
+  // says whether the answers got better or worse because of it. Spanish, and
+  // named for the question rather than for the machinery ("Suite de pruebas").
+  { href: '/evaluation', label: 'Evaluación', icon: Target },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 ];
 
@@ -139,7 +152,14 @@ const GROUPS: NavGroup[] = [
 
 // Chrome rather than workflow, so it is pinned to the bottom instead of
 // competing for a slot in a group.
-const FOOTER: NavItem[] = [{ href: '/settings', label: 'Settings', icon: Settings }];
+const FOOTER: NavItem[] = [
+  // Beside Settings rather than inside the admin group: what a workspace has
+  // consumed and what it is about to run out of is not an administrator's
+  // report, it is the thing anybody wondering "why did Cortex stop" needs to
+  // find without asking.
+  { href: '/plan', label: 'Plan y consumo', icon: Receipt },
+  { href: '/settings', label: 'Settings', icon: Settings },
+];
 
 const COLLAPSE_KEY = 'sidebar_collapsed';
 const OPEN_GROUPS_KEY = 'sidebar_open_groups';

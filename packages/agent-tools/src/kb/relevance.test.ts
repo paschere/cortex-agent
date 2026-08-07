@@ -4,6 +4,7 @@ import {
   STRONG_MATCH,
   WEAK_FLOOR,
   assessCoverage,
+  queryNamesDocument,
   rateHit,
 } from './relevance';
 
@@ -61,6 +62,73 @@ describe('rateHit', () => {
     expect(rateHit(hit(STRONG_MATCH - 0.001), cal)).toBe('weak');
     expect(rateHit(hit(WEAK_FLOOR), cal)).toBe('weak');
     expect(rateHit(hit(WEAK_FLOOR - 0.001), cal)).toBeNull();
+  });
+});
+
+/**
+ * The second kind of evidence, and the reason the strong cut did NOT have to
+ * move. On the evaluation corpus the question that started all of this scores
+ * 0.458 against a cut of 0.46, and every cut low enough to admit it also admits
+ * questions the corpus does not answer — the sweep is in relevance.ts. So a
+ * passage from a document the question NAMED is read as an answer instead.
+ */
+describe('naming a document', () => {
+  const PLAN = 'CÓRTEX · Plan de arranque para BBIC S.A.S.';
+
+  it('recognises the question that started this, typed the way it was typed', () => {
+    expect(queryNamesDocument('¿plan de arranque de cortex?', PLAN)).toBe(true);
+    // Accents and case are the person's business, not the rule's.
+    expect(queryNamesDocument('plan de arranque cortex', PLAN)).toBe(true);
+  });
+
+  it('needs every word, because partial credit is what would let the misses in', () => {
+    // Measured on the evaluation corpus: the best a question the corpus does not
+    // answer manages is one content word out of four.
+    expect(
+      queryNamesDocument(
+        'cual es la penalidad por terminar el contrato con bbic',
+        'Contrato de prestación de servicios — Nexa Logística S.A.S.',
+      ),
+    ).toBe(false);
+    expect(
+      queryNamesDocument(
+        'licencia de paternidad cuantas semanas da cortex',
+        'Política de vacaciones y ausencias',
+      ),
+    ).toBe(false);
+    // A word the title does not carry is enough to stop it, on purpose: the rule
+    // fails closed and leaves the cosine to decide.
+    expect(queryNamesDocument('cuando arranca el plan de cortex', PLAN)).toBe(false);
+  });
+
+  it('refuses to be satisfied by a single word', () => {
+    // "cortex" is in half these titles. One word names nothing.
+    expect(queryNamesDocument('cortex', PLAN)).toBe(false);
+    expect(queryNamesDocument('¿el plan?', PLAN)).toBe(false);
+  });
+
+  it('promotes a named document over the cut, and only from inside the band', () => {
+    const named = { semanticScore: 0.458, keywordScore: 0, documentTitle: PLAN };
+    expect(rateHit(named, cal, '¿plan de arranque de cortex?')).toBe('strong');
+    // Same hit, nobody passed the question: the cosine decides, as before.
+    expect(rateHit(named, cal)).toBe('weak');
+    // Below the floor it cannot be resurrected — a promotion may re-read a
+    // passage that was going to be shown, never bring back a discarded one.
+    const belowFloor = { semanticScore: 0.2, keywordScore: 0, documentTitle: PLAN };
+    expect(rateHit(belowFloor, cal, '¿plan de arranque de cortex?')).toBeNull();
+  });
+
+  it('turns the verdict into an answer, which is the whole point', () => {
+    const v = assessCoverage(
+      [
+        { semanticScore: 0.458, keywordScore: 0, documentTitle: PLAN },
+        { semanticScore: 0.372, keywordScore: 0, documentTitle: 'Guía de onboarding' },
+      ],
+      { query: '¿plan de arranque de cortex?' },
+    );
+    expect(v.coverage).toBe('answered');
+    expect(v.kept[0]?.relevance).toBe('strong');
+    expect(v.kept[1]?.relevance).toBe('weak');
   });
 });
 

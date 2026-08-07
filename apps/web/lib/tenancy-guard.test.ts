@@ -71,6 +71,10 @@ const ALLOWED = new Map<string, string>([
     'Signature-authenticated webhook with no session. Writes the delivery ledger row before the delivery can be attributed to anything.',
   ],
   [
+    'inngest/functions/learning-pass.ts',
+    'Cron. The dispatcher asks "which workspaces asked anything yesterday", which spans the install; it selects organization_id off turn_contexts and nothing else. Every event then carries one workspace, and runLearningPass takes a single scoped handle and no list of workspaces — so the one module that generalises from usage is structurally unable to generalise across customers.',
+  ],
+  [
     'inngest/functions/schedule-dispatch.ts',
     'Cron. "Every routine due this minute" spans the install; each event then carries the workspace of the job it names.',
   ],

@@ -66,6 +66,34 @@ export interface CutsView {
   measured: boolean;
 }
 
+/**
+ * How long the turn took, and where the time went.
+ *
+ * Every field is milliseconds, measured on the turn and stored (migration
+ * 0084). Nothing here is derived on this page; the stages carry the offset at
+ * which they began so two that ran at the same time read as concurrent instead
+ * of summing to more than the turn.
+ *
+ * Null when the turn predates the measurement, which is a different sentence
+ * from "it was instant" and the panel says so.
+ */
+export interface LatencyView {
+  /** To the first character on screen — reasoning counts. The headline. */
+  firstVisibleMs: number | null;
+  /** To the first character of the answer itself. */
+  firstAnswerMs: number | null;
+  totalMs: number;
+  /** Everything Cortex did before the request left for the model. */
+  preludeMs: number;
+  stages: Array<{ stage: string; at: number; ms: number }>;
+  steps: number;
+  toolCalls: number;
+  toolMs: number;
+  /** Model round-trips that read the prompt cache, out of how many. */
+  cacheReadSteps: number;
+  cacheTokensRead: number;
+}
+
 export interface TurnView {
   id: string;
   messageId: string | null;
@@ -114,6 +142,9 @@ export interface TurnView {
      */
     unchanged: boolean | null;
   };
+
+  /** How long it took. Null for turns captured before 0084 existed. */
+  latency: LatencyView | null;
 
   /** A conversation-scoped adjustment was in force on this turn. */
   overridden: boolean;

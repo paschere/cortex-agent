@@ -149,7 +149,13 @@ export async function confirmCommitment(
   }
   try {
     const db = getOrgScopedClient(user.organization.id);
-    await confirmExtracted(db, { id, userId: user.id, dueOn: correctedDueOn });
+    await confirmExtracted(db, {
+      id,
+      userId: user.id,
+      dueOn: correctedDueOn,
+      // Also recorded as evidence about the document (migration 0083).
+      organizationId: user.organization.id,
+    });
     await nudgeCalendar(user.organization.id, id);
     revalidatePath(PATH);
     return { ok: true };
@@ -162,7 +168,12 @@ export async function rejectCommitment(id: string, reason?: string): Promise<Act
   const user = await requireSession();
   try {
     const db = getOrgScopedClient(user.organization.id);
-    await rejectExtracted(db, { id, userId: user.id, reason });
+    await rejectExtracted(db, {
+      id,
+      userId: user.id,
+      reason,
+      organizationId: user.organization.id,
+    });
     revalidatePath(PATH);
     return { ok: true };
   } catch (err) {

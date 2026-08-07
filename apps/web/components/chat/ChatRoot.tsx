@@ -2,7 +2,9 @@
 
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
+import { clsx } from 'clsx';
 import { Brain, Menu } from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
@@ -34,6 +36,7 @@ export function ChatRoot({
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [draft, setDraft] = useState('');
+  const [blocked, setBlocked] = useState<{ message: string; isLimit: boolean } | null>(null);
   const { setOpen: setSidebarOpen } = useMobileSidebar();
 
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
@@ -55,7 +58,31 @@ export function ChatRoot({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return body as any;
     },
+    // A refused turn has to SAY so.
+    //
+    // `useChat` had no error handler at all, so a non-2xx reply — including the
+    // 402 the plan gate returns — vanished: the composer re-enabled itself and
+    // nothing appeared, which reads as "Cortex is broken", not as "you ran out".
+    // A limit somebody cannot see is indistinguishable from a bug, and it is the
+    // one moment where being clear costs us nothing and being vague costs the
+    // account. The route puts a whole Spanish sentence in `error`; this pulls it
+    // out and puts it on the screen with the way out.
+    onError: (error) => {
+      const raw = error instanceof Error ? error.message : String(error);
+      try {
+        const parsed = JSON.parse(raw) as { error?: string; reason?: string };
+        if (parsed.error) {
+          setBlocked({ message: parsed.error, isLimit: parsed.reason === 'plan_limit' });
+          return;
+        }
+      } catch {
+        // not JSON — fall through to the raw message
+      }
+      setBlocked({ message: raw.slice(0, 300), isLimit: false });
+    },
     onResponse: (response) => {
+      // Any successful send clears whatever the last failure said.
+      setBlocked(null);
       const newConvId = response.headers.get('X-Conversation-Id');
       if (newConvId && newConvId !== conversationId) {
         setConversationId(newConvId);
@@ -133,6 +160,28 @@ export function ChatRoot({
         onRegenerate={handleRegenerate}
         onSuggestion={setDraft}
       />
+
+      {blocked && (
+        <div
+          role="status"
+          className={clsx(
+            'mx-4 mb-2 rounded-card border px-4 py-3 text-[12.5px] leading-relaxed',
+            blocked.isLimit
+              ? 'border-amber/25 bg-amber-soft text-amber'
+              : 'border-rose/25 bg-rose-soft text-rose',
+          )}
+        >
+          {blocked.message}
+          {blocked.isLimit && (
+            <>
+              {' '}
+              <Link href="/plan" className="font-semibold underline">
+                Ver plan y consumo
+              </Link>
+            </>
+          )}
+        </div>
+      )}
 
       <InputBar
         onSend={handleSend}

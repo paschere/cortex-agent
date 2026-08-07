@@ -28,6 +28,10 @@ export * from './gsheets';
 export * from './hubspot';
 export * from './github';
 export * from './linear';
+// What using Cortex taught it (migration 0083). Placed before ./kb because
+// retrieval reads its adjustments, and its own leaf modules import nothing from
+// this package.
+export * from './learning';
 export * from './kb';
 export * from './schedule';
 export * from './gdrive';
@@ -102,6 +106,18 @@ export * from './tool-selection';
 // two produced; it calls neither, and holds no tools of its own.
 export * from './turn-context';
 
+// How long a turn took and where the time went (migration 0084). Beside the
+// capture above rather than inside it: same turn, but a numeric series read in
+// aggregate, not a forensic record read one row at a time.
+export * from './latency';
+
+// Whether a change made the answers better or worse, with a number (migration
+// 0082). Placed last of the library modules because it reads almost all of
+// them — the chunker, the embedder, the relevance cuts, the tool ranker, the
+// registry — and is read by none of them. Registers no tools: an evaluation the
+// agent could run on itself would be one more thing to grade.
+export * from './evaluation';
+
 // Side-effect import: registers the sales.draft_proposal composite tool.
 // Placed last so the registry + all primitive tools are initialized first.
 export { salesDraftProposal } from './composite/sales-draft-proposal';
@@ -109,3 +125,8 @@ export { salesDraftProposal } from './composite/sales-draft-proposal';
 // The dev-task executor's pure core. Registers no tools — it is a library for
 // the Inngest worker that turns a Linear issue into a pull request.
 export * from './dev';
+
+// Plans, consumption and the first ten minutes of a new company (migration
+// 0085). Registers no tools: it is what decides whether the rest of them may
+// run, and what a workspace is shown about what it has used.
+export * from './billing';

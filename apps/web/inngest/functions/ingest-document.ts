@@ -3,10 +3,13 @@ import { inngest } from '@/lib/inngest';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   type ToolContext,
+  OVER_DOCUMENT_LIMIT_MESSAGE,
+  checkMeter,
   createIntegrationsClient,
   driveGet,
   driveGetBytes,
   driveGetText,
+  isDegraded,
 } from '@cortex/agent-tools';
 import { extractDocumentData } from '@cortex/agent-tools/src/documents/ingest';
 import { chunkText } from '@cortex/agent-tools/src/kb/chunker';
@@ -323,7 +326,27 @@ export const ingestDocument = inngest.createFunction(
     let embedded = 0;
     let halted: string | null = null;
 
-    const steps = Math.min(MAX_EMBED_STEPS, Math.ceil(chunkCount / CHUNKS_PER_EMBED_STEP));
+    // THE PLAN, ASKED ONCE, AFTER THE TEXT IS ALREADY SAFE.
+    //
+    // Note what is NOT gated: section 1 above already downloaded, parsed and — if
+    // this was a recording — transcribed and stored the chunks. A workspace past
+    // its document allowance loses none of that. What it does not get is the
+    // embedding, which is the one part that can be added later for nothing.
+    //
+    // Skipping straight to `finalize` leaves the row exactly where a missing
+    // embedding key leaves it: status `pending`, a sentence in `error_message`,
+    // and every chunk stored and findable by keyword. `kb-reindex-embeddings`
+    // already drains that state, so the document indexes itself once the plan
+    // changes or the month rolls over — with nothing to re-upload and no second
+    // transcription to pay for.
+    const overDocumentLimit = await step.run('document-allowance', async () =>
+      isDegraded(await checkMeter(sb, 'documents')),
+    );
+    if (overDocumentLimit) halted = OVER_DOCUMENT_LIMIT_MESSAGE;
+
+    const steps = overDocumentLimit
+      ? 0
+      : Math.min(MAX_EMBED_STEPS, Math.ceil(chunkCount / CHUNKS_PER_EMBED_STEP));
     for (let i = 0; i < steps; i++) {
       const result = await step.run(`embed-batch-${i}`, async () => {
         const { data, error } = await sb
