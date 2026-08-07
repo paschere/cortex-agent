@@ -516,13 +516,27 @@ const MIN_NAMING_WORDS = 2;
  * Stripping them is what makes "cortex" match "CÓRTEX" — people do not type
  * accents into a search box and a title is not going to stop carrying them.
  */
-const COMBINING_MARKS = new RegExp('[\\u0300-\\u036f]', 'g');
+const COMBINING_FIRST = 0x0300;
+const COMBINING_LAST = 0x036f;
+
+/**
+ * Written as a loop rather than a regex on purpose: a character class holding
+ * combining marks is exactly the construct that silently matches the wrong
+ * thing, and the linter says so. Only ever runs over a question and a title.
+ */
+function stripAccents(text: string): string {
+  let out = '';
+  for (const character of text.normalize('NFD')) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code >= COMBINING_FIRST && code <= COMBINING_LAST) continue;
+    out += character;
+  }
+  return out;
+}
 
 /** Lowercase, unaccented, punctuation-free content words. */
 function contentWords(text: string): string[] {
-  return text
-    .normalize('NFD')
-    .replaceAll(COMBINING_MARKS, '')
+  return stripAccents(text)
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((word) => word.length > 1 && !NAMING_STOPWORDS.has(word));
