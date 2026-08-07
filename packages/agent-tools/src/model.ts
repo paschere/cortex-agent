@@ -60,8 +60,67 @@ function bodyRewriter(mode: ThinkingMode) {
       body.thinking = { type: 'disabled' };
     }
 
+    markCacheBreakpoint(body);
+
     return fetch(input, { ...init, body: JSON.stringify(body) });
   };
+}
+
+/**
+ * Ask Anthropic to cache the static head of the request.
+ *
+ * WHAT IS BEING PAID FOR TODAY. Every turn resends the system prompt and the
+ * full JSON schema of each tool on offer — the biggest fixed cost in a product
+ * whose shape is many tool calls per turn, and it is identical from one turn to
+ * the next inside a conversation. A cache read is a tenth of the price of a
+ * fresh read.
+ *
+ * WHERE THE BREAKPOINT GOES. The cache is a PREFIX: a hit requires everything
+ * before the mark to be byte-identical. Anthropic orders a request `tools` →
+ * `system` → `messages`, so one mark at the end of `system` covers both the
+ * tool definitions and the instructions, which is the whole static head.
+ *
+ * THE CATCH, AND IT IS SPECIFIC TO THIS PRODUCT. Cortex picks tools per turn by
+ * semantic relevance, so the `tools` array is NOT guaranteed stable — and a
+ * changed tool list moves the prefix and misses the cache. Within one
+ * conversation the selection usually holds (consecutive questions are about the
+ * same thing), so hits are common but not certain. That is still the right
+ * trade: a write costs 1.25× and a read 0.1×, so it pays from roughly one hit
+ * in three. Where it does not pay is a workspace whose every turn jumps subject
+ * — worth watching in `cache_read_input_tokens` before assuming a saving.
+ *
+ * Messages are deliberately NOT marked. The tail grows every turn, so a mark
+ * there would write a new entry each time and read almost none of it back.
+ */
+function markCacheBreakpoint(body: Record<string, unknown>): void {
+  const system = body.system;
+
+  // Anthropic accepts `system` as a plain string, which has nowhere to hang
+  // cache_control — so it becomes a one-block array, which is the same prompt.
+  if (typeof system === 'string' && system.length > 0) {
+    body.system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
+    return;
+  }
+
+  // Already blocks: mark the last one, so the mark sits at the end of the head.
+  if (Array.isArray(system) && system.length > 0) {
+    const last = system[system.length - 1];
+    if (last && typeof last === 'object') {
+      (last as Record<string, unknown>).cache_control = { type: 'ephemeral' };
+    }
+    return;
+  }
+
+  // No system prompt at all — mark the last tool instead, so the definitions
+  // still get cached. Utility calls that carry neither are left alone: there is
+  // no head worth caching and a needless write would cost 1.25×.
+  const tools = body.tools;
+  if (Array.isArray(tools) && tools.length > 0) {
+    const last = tools[tools.length - 1];
+    if (last && typeof last === 'object') {
+      (last as Record<string, unknown>).cache_control = { type: 'ephemeral' };
+    }
+  }
 }
 
 /** Conversation: reasoning is asked for, and shown to the user. */

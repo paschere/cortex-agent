@@ -232,7 +232,9 @@ export function formatRecipients(list: GraphRecipient[] | undefined | null): str
 }
 
 /** Bare addresses, lowercased — what domain matching and the internal test need. */
-export function addressesOf(...lists: Array<GraphRecipient[] | GraphRecipient | undefined>): string[] {
+export function addressesOf(
+  ...lists: Array<GraphRecipient[] | GraphRecipient | undefined>
+): string[] {
   const out: string[] = [];
   for (const entry of lists) {
     if (!entry) continue;

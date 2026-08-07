@@ -121,7 +121,10 @@ export interface ThreadAudience {
 export function domainOf(address: string): string | null {
   const at = address.lastIndexOf('@');
   if (at === -1 || at === address.length - 1) return null;
-  return address.slice(at + 1).trim().toLowerCase();
+  return address
+    .slice(at + 1)
+    .trim()
+    .toLowerCase();
 }
 
 /** Who on this thread is outside the company — the whole archivability test. */
@@ -354,10 +357,7 @@ interface LedgerRow {
   sha256: string | null;
 }
 
-async function findLedger(
-  db: SupabaseClient,
-  conversationId: string,
-): Promise<LedgerRow | null> {
+async function findLedger(db: SupabaseClient, conversationId: string): Promise<LedgerRow | null> {
   const { data } = await db
     .from('microsoft_mail_ingests')
     .select('id, document_id, sha256')

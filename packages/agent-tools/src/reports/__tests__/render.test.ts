@@ -26,31 +26,40 @@ const ATTR_BREAK = '" onerror="alert(1)" x="';
 const STYLE_BREAK = '</style><script>alert(2)</script><style>';
 const SVG_BREAK = '</text></svg><script>alert(3)</script>';
 const QUOTE_BREAK = "' onload='alert(4)";
-/** The other half of a break-out: a URL that executes rather than navigates. */
-const URL_BREAK = 'javascript:alert(5)';
+const JS_URL = 'javascript:alert(5)';
 
 /**
- * Asserts no LIVE event handler survived into the output.
+ * No LIVE event handler anywhere in the output.
  *
- * The naive check — "the text `onerror=` never appears" — fails on a correct
- * renderer, because the escaped attack is supposed to survive as readable text:
- * `&quot; onerror=&quot;alert(1)&quot;` contains that substring and is exactly
- * what right looks like. What separates a live handler from an escaped one is
- * the quote directly after the equals sign: a real attribute opens with `"` or
- * `'`, an escaped one has `&quot;` there instead. So the pattern is the whole
- * assertion, and loosening it to a plain `toContain` would make this test pass
- * on output that executes.
+ * The naive form of this check — "the output contains no ` onerror=`" — cannot
+ * be used, and not because it is too strict: it is WRONG. Escaping is not
+ * deleting, so a counterparty genuinely named `" onerror="…` has to survive
+ * into the report as readable text, and that text legitimately contains the
+ * characters ` onerror=`. A test that forbade them would force the renderer to
+ * start dropping customer data to stay green, which is a different bug.
+ *
+ * What actually distinguishes an attribute from text is the character right
+ * after the `=`. In markup it opens a value: `"`, `'`, or a bare token. In
+ * escaped text it is always the start of an entity — `&quot;`, `&#39;`. So the
+ * assertion is: every ` on…=` in the output is followed by an entity.
+ *
+ * That is stricter than requiring a real quote, because it also catches the
+ * unquoted form `onerror=alert(1)`, which a quote-only check would wave through.
  */
 function expectNoLiveEventHandler(html: string): void {
-  expect(html).not.toMatch(/[\s"']on[a-z]+\s*=\s*["']/i);
+  const live = [...html.matchAll(/\son[a-z]+\s*=/gi)].filter(
+    (m) => !html.slice((m.index ?? 0) + m[0].length).startsWith('&'),
+  );
+  expect(
+    live.map((m) => html.slice(Math.max(0, (m.index ?? 0) - 60), (m.index ?? 0) + 60)),
+  ).toEqual([]);
 }
-
 /** Every string field carries an attack. Nothing in here is innocent. */
 function hostileDocument(): ReportDocument {
   return validateDocument({
     version: 1,
     kind: 'expiries',
-    title: `Informe ${XSS}`,
+    title: `Informe ${XSS} ${JS_URL}`,
     subtitle: `Subtítulo ${STYLE_BREAK}`,
     periodLabel: `Periodo ${ATTR_BREAK}`,
     generatedAt: '2026-08-04T15:18:00.000Z',
@@ -62,7 +71,7 @@ function hostileDocument(): ReportDocument {
         detail: `Detalle ${ATTR_BREAK}`,
         readAt: '2026-08-04T15:18:00.000Z',
         rowCount: 3,
-        caveat: `Salvedad ${QUOTE_BREAK} ${URL_BREAK}`,
+        caveat: `Salvedad ${QUOTE_BREAK} ${JS_URL}`,
       },
     ],
     sections: [

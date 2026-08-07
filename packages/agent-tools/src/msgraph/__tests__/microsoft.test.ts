@@ -1,12 +1,12 @@
 import { IntegrationError, ValidationError } from '@cortex/core';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createIntegrationsClient } from '../../integrations';
 import { runTool } from '../../index';
+import { createIntegrationsClient } from '../../integrations';
 import { classifyAudience, matchClientByDomain } from '../../outlook/ingest-thread';
 import { outlookListThreads } from '../../outlook/list-threads';
 import { outlookSearch } from '../../outlook/search';
-import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import { type Tables, createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
+import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import type { ToolContext } from '../../types';
 import { normalizeGraphScopes } from '../client';
 
@@ -247,7 +247,9 @@ describe('microsoft token lifecycle', () => {
     expect(
       normalizeGraphScopes('https://graph.microsoft.com/Mail.Send Mail.Read offline_access'),
     ).toEqual(['Mail.Send', 'Mail.Read', 'offline_access']);
-    expect(normalizeGraphScopes(normalizeGraphScopes('Mail.Read').join(' '))).toEqual(['Mail.Read']);
+    expect(normalizeGraphScopes(normalizeGraphScopes('Mail.Read').join(' '))).toEqual([
+      'Mail.Read',
+    ]);
     expect(normalizeGraphScopes(undefined)).toEqual([]);
   });
 });

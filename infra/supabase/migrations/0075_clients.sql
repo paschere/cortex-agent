@@ -657,7 +657,13 @@ begin
      )
   ),
   unambiguous as (
-    select id, min(client_id) as client_id
+    -- The HAVING is what carries the meaning: keep only the rows whose match
+    -- resolved to exactly ONE client. Given that, picking the first element of
+    -- the aggregate is picking the only one — this is not a tie-break, and
+    -- there is no tie to break. (`min()` would read the same but Postgres has
+    -- no aggregate for uuid, which is how this surfaced: on apply, not in any
+    -- typecheck or test.)
+    select id, (array_agg(client_id))[1] as client_id
     from hit
     group by id
     having count(distinct client_id) = 1

@@ -230,7 +230,9 @@ export default async function IntegrationsPage({
           ? 'Cada quien conecta su propio buzón. Nadie ve el correo de otro'
           : 'Falta que el equipo técnico registre la aplicación en Azure',
       connectHref:
-        !mine.microsoft && microsoftConfigured ? '/api/integrations/microsoft?preset=all' : undefined,
+        !mine.microsoft && microsoftConfigured
+          ? '/api/integrations/microsoft?preset=all'
+          : undefined,
     },
     {
       key: 'whatsapp',

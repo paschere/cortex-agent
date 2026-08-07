@@ -125,9 +125,10 @@ create table if not exists public.microsoft_mail_ingests (
 create unique index if not exists microsoft_mail_ingests_org_conversation_idx
   on public.microsoft_mail_ingests (organization_id, conversation_id);
 
-create index if not exists microsoft_mail_ingests_org_client_idx
-  on public.microsoft_mail_ingests (organization_id, client_id)
-  where client_id is not null;
+-- The index on `client_id` is NOT here: the column is added further down, in
+-- the block that also decides whether the foreign key can exist. Indexing a
+-- column before creating it fails on apply while every typecheck and test stays
+-- green, which is exactly how this shipped the first time.
 
 create index if not exists microsoft_mail_ingests_org_recent_idx
   on public.microsoft_mail_ingests (organization_id, last_message_at desc);
@@ -166,6 +167,10 @@ comment on table public.microsoft_mail_ingests is
 alter table public.microsoft_mail_ingests
   add column if not exists client_id uuid;
 
+create index if not exists microsoft_mail_ingests_org_client_idx
+  on public.microsoft_mail_ingests (organization_id, client_id)
+  where client_id is not null;
+
 do $$
 begin
   if exists (
@@ -201,6 +206,11 @@ comment on column public.microsoft_mail_ingests.client_id is
 -- read. The chunks still carry `{speaker, startMs, endMs}` in their metadata,
 -- exactly like a Meet call or a WhatsApp window, so "who wrote this and how far
 -- into the exchange" works on mail for free.
-create index if not exists kb_documents_outlook_idx
-  on public.kb_documents (collection_id, recorded_at desc)
-  where source = 'outlook';
+alter type document_source add value if not exists 'outlook';
+
+-- The index that would narrow to `source = 'outlook'` lives in 0081, not here,
+-- and the reason is a Postgres rule rather than taste: a value added to an enum
+-- cannot be USED in the same transaction that adds it, and the CLI runs one
+-- migration per transaction. Adding the value and indexing on it together fails
+-- on apply — invisibly to typecheck, tests and build, all of which were green
+-- when this first shipped. Splitting them is what makes both safe.

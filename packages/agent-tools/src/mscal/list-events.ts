@@ -26,10 +26,7 @@ export const mscalListEvents = registerTool({
       .string()
       .optional()
       .describe('ISO 8601 start of the window. Defaults to now when timeMax is given.'),
-    timeMax: z
-      .string()
-      .optional()
-      .describe('ISO 8601 end of the window. Defaults to 30 days out.'),
+    timeMax: z.string().optional().describe('ISO 8601 end of the window. Defaults to 30 days out.'),
     q: z.string().optional().describe('Only events whose title or preview contains this text'),
     maxResults: z.number().int().min(1).max(50).default(10),
     timeZone: z
