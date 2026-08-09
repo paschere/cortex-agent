@@ -1,6 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_PATHS = [
+  // The landing page. Safe to list even though every path starts with '/',
+  // because isPublic() only matches a prefix at a segment boundary: the root
+  // matches itself via `pathname === '/'`, and the nested test becomes
+  // `startsWith('//')`, which nothing satisfies. app/page.tsx decides what to
+  // render — signed-in visitors are still sent to /dashboard from there.
+  '/',
   '/login',
   // SaaS auth surface: signup, password recovery and the post-password 2FA
   // challenge all run without a full session cookie.
