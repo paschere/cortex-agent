@@ -123,8 +123,36 @@ function markCacheBreakpoint(body: Record<string, unknown>): void {
   }
 }
 
-/** Conversation: reasoning is asked for, and shown to the user. */
-const thinkingProvider = createAnthropic({ fetch: bodyRewriter('summarized') });
+/**
+ * Is the reasoning panel switched on?
+ *
+ * OFF, and the machinery to turn it back on is deliberately left in place.
+ *
+ * WHAT THE MEASUREMENT SHOWED. On Sonnet 5 the reasoning only appears at
+ * `effort: max` — at the default and at `high` an ordinary operational question
+ * ("three trucks, which do I handle first and why") spends zero thinking
+ * tokens. But `max` does not merely cost more: measured against the live API on
+ * that same question with a 3 000-token ceiling, thinking consumed the ENTIRE
+ * budget — 3 000 thinking tokens and an EMPTY answer. The same question with
+ * thinking disabled answered completely in 749 tokens.
+ *
+ * So the choice was never "pay a little extra to see it think". It was: pay
+ * four times as much in output tokens — the expensive kind — and risk the
+ * reasoning eating the answer's budget on exactly the long, tool-heavy turns
+ * this product is made of. The latency measurement points the same way: 85 % of
+ * the 5,7 s before the first visible character is the model thinking.
+ *
+ * WHY THE SWITCH STAYS. Nothing about the shape was wrong; the model's current
+ * behaviour at `max` is. A future model, or an effort tier between `high` and
+ * `max`, makes this worth turning back on — and then it is one boolean, not a
+ * rewrite. `chatModel()` keeps its signature either way.
+ */
+const REASONING_VISIBLE = false;
+
+/** Conversation. Reasoning shown only when `REASONING_VISIBLE` says so. */
+const thinkingProvider = createAnthropic({
+  fetch: bodyRewriter(REASONING_VISIBLE ? 'summarized' : 'off'),
+});
 
 /** Short internal calls: no reasoning, all the budget on the answer. */
 const quietProvider = createAnthropic({ fetch: bodyRewriter('off') });
