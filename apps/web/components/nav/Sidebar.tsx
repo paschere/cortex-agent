@@ -64,9 +64,19 @@ interface NavGroup {
 // the handful people open every day and it sits unlabelled under the brand, so
 // the eye lands on it first. Everything else lives in GROUPS, which start closed
 // — twelve monthly destinations rendered flat is what made the old rail noisy.
+//
+// EVERY LABEL IS SPANISH, and the rule that produced them is the one the notes
+// below already argued case by case: the rail says the same word the page says.
+// It got there one destination at a time, which left the rail half-translated —
+// a state worse than either language, because a reader scanning it has to
+// switch twice. Each label was checked against its own screen's title before
+// being changed; "Uso" and "Resumen" come from the pages, not from a
+// dictionary. Untranslated on purpose: Chat and WhatsApp read the same in both,
+// Brain Knowledge is the product's own name for the thing, and Conectar Claude
+// names an external product.
 const PRIMARY: NavItem[] = [
   { href: '/chat', label: 'Chat', icon: MessageSquare },
-  { href: '/approvals', label: 'Approvals', icon: Inbox, signal: 'approvals' },
+  { href: '/approvals', label: 'Aprobaciones', icon: Inbox, signal: 'approvals' },
   // Spanish for the same reason /commitments is: this is opened by whoever
   // asks "¿qué hay para mandar hoy?", and the nav answers with the page's own
   // word. Sits next to Approvals because they are the same gesture — one is a
@@ -86,8 +96,8 @@ const PRIMARY: NavItem[] = [
   // "pásame el informe de este mes" say informe, and a rail that answers with
   // "Reports" is a rail they have to translate every time.
   { href: '/reports', label: 'Informes', icon: FileBarChart },
-  { href: '/prospects', label: 'Prospects', icon: Radar },
-  { href: '/conversations', label: 'Conversations', icon: MessagesSquare },
+  { href: '/prospects', label: 'Prospectos', icon: Radar },
+  { href: '/conversations', label: 'Conversaciones', icon: MessagesSquare },
   // Promoted out of the old KNOWLEDGE group: once the rate calculator moved back
   // into the chat, that group held a single link, and "Knowledge › Brain
   // Knowledge" was a disclosure wrapped around one destination people open daily.
@@ -101,24 +111,24 @@ const PRIMARY: NavItem[] = [
   // says whether the answers got better or worse because of it. Spanish, and
   // named for the question rather than for the machinery ("Suite de pruebas").
   { href: '/evaluation', label: 'Evaluación', icon: Target },
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Resumen', icon: LayoutDashboard },
 ];
 
 const GROUPS: NavGroup[] = [
   {
     id: 'automation',
-    label: 'Automation',
+    label: 'Automatización',
     items: [
-      { href: '/agents', label: 'Agents', icon: Bot },
-      { href: '/dev-work', label: 'Dev Work', icon: Hammer },
+      { href: '/agents', label: 'Agentes', icon: Bot },
+      { href: '/dev-work', label: 'Desarrollo', icon: Hammer },
       // Sits above Pipelines on purpose: a pipeline is a flow somebody wrote
       // down, an orchestration is one Cortex works out for itself.
-      { href: '/orchestrator', label: 'Orchestrator', icon: Network },
-      { href: '/pipelines', label: 'Pipelines', icon: Workflow },
+      { href: '/orchestrator', label: 'Orquestador', icon: Network },
+      { href: '/pipelines', label: 'Flujos', icon: Workflow },
       // The page calls these Routines; the nav used to call them Scheduled Jobs.
       // One name per thing.
-      { href: '/schedules', label: 'Routines', icon: AlarmClock },
-      { href: '/tools', label: 'Tools', icon: Wrench },
+      { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
+      { href: '/tools', label: 'Herramientas', icon: Wrench },
     ],
   },
   {
@@ -126,10 +136,10 @@ const GROUPS: NavGroup[] = [
     // systems, the other is an AI client reaching in. They used to read as
     // duplicates when they sat in different groups under similar names.
     id: 'connections',
-    label: 'Connections',
+    label: 'Conexiones',
     items: [
-      { href: '/integrations', label: 'Integrations', icon: Plug },
-      { href: '/mcp-tokens', label: 'Connect Claude', icon: Cable },
+      { href: '/integrations', label: 'Integraciones', icon: Plug },
+      { href: '/mcp-tokens', label: 'Conectar Claude', icon: Cable },
       // The screen moved to match where the nav already pointed: pairing a
       // phone is a connection, not a document, so it sits under Integrations
       // with the other systems Cortex is wired into. /kb/whatsapp redirects.
@@ -138,14 +148,14 @@ const GROUPS: NavGroup[] = [
   },
   {
     id: 'admin',
-    label: 'Admin',
+    label: 'Administración',
     adminOnly: true,
     items: [
-      { href: '/admin/users', label: 'Users', icon: Users },
-      { href: '/admin/teams', label: 'Teams', icon: UsersRound },
-      { href: '/admin/usage', label: 'Analytics', icon: BarChart3 },
-      { href: '/admin/audit', label: 'Audit Logs', icon: ScrollText },
-      { href: '/admin/security', label: 'Security', icon: ShieldCheck },
+      { href: '/admin/users', label: 'Usuarios', icon: Users },
+      { href: '/admin/teams', label: 'Equipos', icon: UsersRound },
+      { href: '/admin/usage', label: 'Uso', icon: BarChart3 },
+      { href: '/admin/audit', label: 'Auditoría', icon: ScrollText },
+      { href: '/admin/security', label: 'Seguridad', icon: ShieldCheck },
     ],
   },
 ];
@@ -158,7 +168,7 @@ const FOOTER: NavItem[] = [
   // report, it is the thing anybody wondering "why did Cortex stop" needs to
   // find without asking.
   { href: '/plan', label: 'Plan y consumo', icon: Receipt },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/settings', label: 'Ajustes', icon: Settings },
 ];
 
 const COLLAPSE_KEY = 'sidebar_collapsed';
