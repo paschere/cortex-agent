@@ -36,6 +36,12 @@ interface MessageListProps {
   onConfirmed?: () => void;
   onRegenerate?: () => void;
   onSuggestion?: (text: string) => void;
+  /**
+   * Follow-ups already saved, by message id. Only the newest answer can ever
+   * show any, so this holds at most one entry — it is a map rather than a
+   * single value so nothing here has to work out which message that is.
+   */
+  storedFollowups?: Record<string, string[]>;
 }
 
 export function MessageList({
@@ -46,6 +52,7 @@ export function MessageList({
   onConfirmed,
   onRegenerate,
   onSuggestion,
+  storedFollowups,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<TurnMetrics | null>(null);
@@ -116,6 +123,7 @@ export function MessageList({
                 isStreaming={isLast && isLoading && m.role === 'assistant'}
                 metrics={isLast ? metrics : null}
                 onCompose={onSuggestion}
+                storedFollowups={storedFollowups?.[m.id]}
               />
             );
           })}

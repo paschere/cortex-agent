@@ -28,12 +28,30 @@ import { useEffect, useState } from 'react';
  * Because it must never be able to slow the answer down or break it. It runs
  * after `isStreaming` goes false, on a cheap model, and every failure path ends
  * in an empty array. See `/api/chat/followups`.
+ *
+ * ===========================================================================
+ * AND WHY, MOST OF THE TIME, IT NOW FETCHES NOTHING AT ALL
+ * ===========================================================================
+ * The suggestions are stored on the message that produced them (migration
+ * 0090), so a conversation being reopened arrives with them already in hand and
+ * `stored` is set. The fetch is then skipped entirely — not deduplicated, not
+ * cached, simply never made — and the chips are byte-for-byte the ones that
+ * were there yesterday.
+ *
+ * The three states are distinct and all three matter:
+ *   stored === undefined   nobody knows yet. This is the LIVE turn, whose
+ *                          answer has only just finished streaming. Fetch.
+ *   stored is an array     settled, including `[]`. Render it. Never fetch.
+ *
+ * `[]` renders exactly the same nothing an absent strip does — the difference
+ * is only that it costs no model call to find out, ever again.
  */
 
 export function FollowUps({
   conversationId,
   messageId,
   ready,
+  stored,
   onPick,
 }: {
   conversationId?: string;
@@ -41,12 +59,18 @@ export function FollowUps({
   messageId: string;
   /** False while the turn is still streaming. */
   ready: boolean;
+  /**
+   * What was saved with this message, when the transcript came from the
+   * database. `undefined` means unknown — a live turn — and only that state
+   * asks the server for anything.
+   */
+  stored?: string[];
   onPick: (question: string) => void;
 }) {
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>(stored ?? []);
 
   useEffect(() => {
-    if (!ready || !conversationId) return;
+    if (!ready || !conversationId || stored) return;
     let alive = true;
 
     // A beat after the last token, so the request never competes with the
@@ -55,7 +79,11 @@ export function FollowUps({
       fetch('/api/chat/followups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId, messageId }),
+        // No message id. The route resolves the answer these belong to from
+        // the conversation itself, because it now WRITES the result and a
+        // client-generated id would file somebody's questions under the wrong
+        // answer. See the route.
+        body: JSON.stringify({ conversationId }),
       })
         .then((r) => (r.ok ? r.json() : { suggestions: [] }))
         .then((data: { suggestions?: string[] }) => {
@@ -71,7 +99,7 @@ export function FollowUps({
       alive = false;
       clearTimeout(timer);
     };
-  }, [conversationId, messageId, ready]);
+  }, [conversationId, messageId, ready, stored]);
 
   if (suggestions.length === 0) return null;
 

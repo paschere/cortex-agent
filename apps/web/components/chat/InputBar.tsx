@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachmentTray } from './AttachmentTray';
 import { ScopePicker, ScopeStrip } from './MemoryScope';
+import { TeachFlowDialog } from '@/components/browser/TeachFlowDialog';
 import { VoiceDictation } from './VoiceDictation';
 
 interface AgentInfo {
@@ -547,6 +548,12 @@ export function InputBar({
                   getBaseText={() => textRef.current}
                   onText={setComposerText}
                 />
+
+                {/* Enseñar un trámite sin salir de la conversación. The whole
+                    recorder is the same component the Trámites screen uses;
+                    see components/browser/TeachFlowDialog.tsx for why the
+                    person starts it rather than the agent offering it. */}
+                <TeachFlowDialog onCompose={setComposerText} />
 
                 <ScopePicker selected={scope} onChange={onScopeChange} disabled={disabled} />
               </div>

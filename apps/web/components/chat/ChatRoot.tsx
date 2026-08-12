@@ -31,6 +31,12 @@ interface ChatRootProps {
    * default and the state a brand-new chat always starts in.
    */
   initialScope?: ScopeSpace[];
+  /**
+   * Follow-ups saved with the answers of a resumed conversation, by message id.
+   * They are generated once, when the answer is written, and read from then on
+   * — see migration 0090. Absent on a brand-new chat, which has no answers yet.
+   */
+  initialFollowups?: Record<string, string[]>;
 }
 
 export function ChatRoot({
@@ -39,6 +45,7 @@ export function ChatRoot({
   initialMessages,
   initialAgentSlug,
   initialScope,
+  initialFollowups,
 }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
@@ -217,6 +224,7 @@ export function ChatRoot({
         onConfirmed={reload}
         onRegenerate={handleRegenerate}
         onSuggestion={setDraft}
+        storedFollowups={initialFollowups}
       />
 
       {blocked && (

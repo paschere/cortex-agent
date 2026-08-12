@@ -24,7 +24,11 @@ export default async function ResumeChatPage({
   // Load messages from DB — only user/assistant roles for useChat
   const { data: msgs } = await db
     .from('messages')
-    .select('id, role, content, tool_calls, tool_results, created_at')
+    // `followups` rides along with the transcript rather than in a query of its
+    // own. That is the whole reason they live on the message row (migration
+    // 0090): reopening a conversation now costs the same one read it always
+    // did, and no model call at all.
+    .select('id, role, content, tool_calls, tool_results, followups, created_at')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 
@@ -59,6 +63,23 @@ export default async function ResumeChatPage({
   const convAgentSlug = Array.isArray(convAgents) ? convAgents[0]?.slug : convAgents?.slug;
 
   /**
+   * The follow-ups already written for the LAST answer, and only for it.
+   *
+   * A transcript with a strip of chips after every message is a transcript of
+   * chips, so the composer only ever shows the newest one's — and passing the
+   * rest down would be handing the client twenty lists it is going to throw
+   * away. `undefined` for that message (never generated) is left out of the map
+   * entirely, which is exactly the signal `FollowUps` reads as "ask the server
+   * once". A stored `[]` IS included: it means somebody already asked and there
+   * was nothing, and that is the answer that must never be paid for twice.
+   */
+  const lastAnswer = [...(msgs ?? [])].reverse().find((m) => m.role === 'assistant');
+  const storedFollowups =
+    lastAnswer && Array.isArray(lastAnswer.followups)
+      ? { [lastAnswer.id as string]: lastAnswer.followups as string[] }
+      : undefined;
+
+  /**
    * The memory filter this conversation was left on, resolved back into names.
    *
    * NAMES, NOT IDS, AND RESOLVED THROUGH `listVisibleSpaces`. The strip in the
@@ -87,6 +108,7 @@ export default async function ResumeChatPage({
       initialMessages={initialMessages}
       initialAgentSlug={convAgentSlug}
       initialScope={initialScope}
+      {...(storedFollowups ? { initialFollowups: storedFollowups } : {})}
     />
   );
 }

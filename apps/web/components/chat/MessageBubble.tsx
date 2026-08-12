@@ -24,6 +24,12 @@ interface MessageBubbleProps {
   metrics?: TurnMetrics | null;
   /** Puts text in the composer — used by follow-ups and by the selection menu. */
   onCompose?: (text: string) => void;
+  /**
+   * The follow-ups saved with this answer, when the transcript came from the
+   * database. Undefined on a live turn, which is the only case that asks the
+   * server to make some.
+   */
+  storedFollowups?: string[];
 }
 
 type ConfirmationSentinel = {
@@ -131,6 +137,7 @@ export function MessageBubble({
   isStreaming,
   metrics,
   onCompose,
+  storedFollowups,
 }: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
   // Scopes the selection menu to THIS answer: a selection that starts in one
@@ -207,7 +214,11 @@ export function MessageBubble({
                   );
                   continue;
                 }
-                if (isProposalTool(inv.toolName) && result !== undefined && isProposalResult(result)) {
+                if (
+                  isProposalTool(inv.toolName) &&
+                  result !== undefined &&
+                  isProposalResult(result)
+                ) {
                   cards.push(<ProposalCard key={inv.toolCallId} result={result} />);
                   continue;
                 }
@@ -218,9 +229,7 @@ export function MessageBubble({
                       <ChartCard
                         key={inv.toolCallId}
                         chartId={chartId}
-                        heading={
-                          (result as { heading?: string } | undefined)?.heading ?? 'Gráfico'
-                        }
+                        heading={(result as { heading?: string } | undefined)?.heading ?? 'Gráfico'}
                       />,
                     );
                     continue;
@@ -295,6 +304,7 @@ export function MessageBubble({
             conversationId={conversationId}
             messageId={message.id}
             ready={!isStreaming}
+            stored={storedFollowups}
             onPick={onCompose}
           />
         )}
