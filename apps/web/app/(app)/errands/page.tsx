@@ -23,10 +23,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function ErrandsPage() {
   const user = await requireSession();
-  const errands = await listErrands(
-    getOrgScopedClient(user.organization.id),
-    user.organization.id,
-  );
+  const errands = await listErrands(getOrgScopedClient(user.organization.id), user.organization.id);
 
   const waiting = errands.filter((e) => e.state === 'blocked');
   const working = errands.filter((e) => e.state === 'working' || e.state === 'queued');

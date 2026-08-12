@@ -1,7 +1,7 @@
-import { EVENT_RUN_CANCELLED } from '@/lib/orchestrator/contract';
 import { type ErrandDb, closeErrand, withdrawOpenQuestions } from '@/lib/errands/lifecycle';
 import { loadErrand } from '@/lib/errands/repository';
 import { inngest } from '@/lib/inngest';
+import { EVENT_RUN_CANCELLED } from '@/lib/orchestrator/contract';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';

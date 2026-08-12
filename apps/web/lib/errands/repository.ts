@@ -137,7 +137,11 @@ export async function loadSnapshot(
   db: SupabaseClient,
   errandId: string,
   organizationId: string,
-): Promise<{ row: ErrandRow; legs: Array<LegSnapshot & { id: string }>; snapshot: ErrandSnapshot } | null> {
+): Promise<{
+  row: ErrandRow;
+  legs: Array<LegSnapshot & { id: string }>;
+  snapshot: ErrandSnapshot;
+} | null> {
   const row = await loadErrand(db, errandId, organizationId);
   if (!row) return null;
   const [legs, questions] = await Promise.all([
@@ -282,10 +286,7 @@ export async function harvestSources(db: SupabaseClient, runId: string): Promise
 }
 
 /** Harvested entries win; claimed ones fill the gaps. See `harvestSources`. */
-export function mergeSources(
-  harvested: ErrandSource[],
-  claimed: ErrandSource[],
-): ErrandSource[] {
+export function mergeSources(harvested: ErrandSource[], claimed: ErrandSource[]): ErrandSource[] {
   const byUrl = new Map<string, ErrandSource>();
   for (const source of harvested) {
     if (source.url) byUrl.set(source.url, source);

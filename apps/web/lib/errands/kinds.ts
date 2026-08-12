@@ -73,7 +73,7 @@ export const ERRAND_KIND_SPECS: Record<ErrandKind, ErrandKindSpec> = {
       'not fill and why.',
     objectiveFraming:
       'Research the subject below and gather, for each option you find, the concrete facts a person ' +
-      'would compare them on. Prefer primary sources — the operator\'s own site, a registry, a filing ' +
+      "would compare them on. Prefer primary sources — the operator's own site, a registry, a filing " +
       '— over aggregator pages. Record the URL of everything you use.',
     defaultLegCeiling: 3,
     defaultTokenCeiling: 400_000,

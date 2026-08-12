@@ -28,13 +28,7 @@
  * difference between an errand and a lucky button.
  */
 
-import {
-  type Spend,
-  type StopReason,
-  canStartLeg,
-  exhaustedNote,
-  spentFraction,
-} from './budget';
+import { type Spend, type StopReason, canStartLeg, exhaustedNote, spentFraction } from './budget';
 import type { ErrandKind, ErrandSource, ErrandState, LegStatus } from './types';
 import { isErrandTerminal } from './types';
 

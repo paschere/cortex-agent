@@ -1,5 +1,5 @@
-import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { MAX_LIVE_ERRANDS, ceilingsFor } from '@/lib/errands/budget';
+import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import {
   DEFAULT_MONITOR_CADENCE_MINUTES,
   ERRAND_KIND_SPECS,
@@ -61,7 +61,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
-      { error: 'Dile qué quieres que haga, con al menos 10 caracteres, y de cuál de los tres tipos.' },
+      {
+        error:
+          'Dile qué quieres que haga, con al menos 10 caracteres, y de cuál de los tres tipos.',
+      },
       { status: 400 },
     );
   }
@@ -100,7 +103,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const isMonitor = parsed.data.kind === 'monitor_change';
   const cadence =
-    isMonitor && parsed.data.checkIntervalMinutes && isMonitorCadence(parsed.data.checkIntervalMinutes)
+    isMonitor &&
+    parsed.data.checkIntervalMinutes &&
+    isMonitorCadence(parsed.data.checkIntervalMinutes)
       ? parsed.data.checkIntervalMinutes
       : isMonitor
         ? DEFAULT_MONITOR_CADENCE_MINUTES
@@ -159,9 +164,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 /** Errand history for the active workspace. */
 export async function GET(): Promise<NextResponse> {
   const user = await requireSession();
-  const errands = await listErrands(
-    getOrgScopedClient(user.organization.id),
-    user.organization.id,
-  );
+  const errands = await listErrands(getOrgScopedClient(user.organization.id), user.organization.id);
   return NextResponse.json({ errands });
 }

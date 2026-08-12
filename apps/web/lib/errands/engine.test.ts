@@ -98,7 +98,9 @@ describe('decideNext', () => {
     // The one shape that could hang an errand permanently: a leg row written,
     // the worker killed, and no run behind it. Nothing is ever coming.
     const orphan = snapshot({
-      legs: [leg({ status: 'running', runId: null, startedAt: new Date(NOW - 10_000).toISOString() })],
+      legs: [
+        leg({ status: 'running', runId: null, startedAt: new Date(NOW - 10_000).toISOString() }),
+      ],
       spend: spend({ legsUsed: 1 }),
     });
     // Inside the grace window the two writes may still be catching up.

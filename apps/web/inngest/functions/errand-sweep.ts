@@ -1,6 +1,6 @@
-import { inngest } from '@/lib/inngest';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { ERRAND_STALE_MS } from '@/lib/errands/lifecycle';
+import { inngest } from '@/lib/inngest';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 
@@ -184,7 +184,9 @@ export const errandSweep = inngest.createFunction(
     }
 
     if (abandoned.length > 0) {
-      logger.info(`errand-sweep: wrote off ${abandoned.length} errand(s) past ${ERRAND_STALE_MS}ms`);
+      logger.info(
+        `errand-sweep: wrote off ${abandoned.length} errand(s) past ${ERRAND_STALE_MS}ms`,
+      );
     }
 
     return { scanned: found.length, nudged: toNudge.length, abandoned: abandoned.length };

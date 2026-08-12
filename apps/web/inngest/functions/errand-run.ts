@@ -1,6 +1,6 @@
-import { inngest } from '@/lib/inngest';
 import { EVENT_ERRAND_ADVANCE, type ErrandAdvanceEvent } from '@/lib/errands/contract';
 import { advanceErrand } from '@/lib/errands/worker';
+import { inngest } from '@/lib/inngest';
 import { logger } from '@cortex/core';
 
 /**

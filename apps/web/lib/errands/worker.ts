@@ -7,6 +7,7 @@ import { logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { assertProposalOnly, errandToolAllowlist } from './boundary';
 import { canStartLeg, exhaustedNote } from './budget';
+import { MAX_MONITOR_CHECKS } from './budget';
 import { type Transition, decideNext, foldAssessment } from './engine';
 import { ERRAND_KIND_SPECS, toolsFor } from './kinds';
 import {
@@ -30,7 +31,6 @@ import {
   mergeSources,
   readRunOutcome,
 } from './repository';
-import { MAX_MONITOR_CHECKS } from './budget';
 import type { ErrandSource, LegStatus } from './types';
 
 /**
@@ -502,9 +502,7 @@ function carryForward(existing: string | null, legSummary: string | null): strin
  * a leg that could come back as "still running" would let the errand wait on
  * something already settled.
  */
-function runStatusToLegStatus(
-  status: string,
-): Exclude<LegStatus, 'running'> {
+function runStatusToLegStatus(status: string): Exclude<LegStatus, 'running'> {
   switch (status) {
     case 'completed':
       return 'completed';

@@ -1,5 +1,5 @@
-import { CHIP_BASE, CHIP_TONE, DOT_TONE, type StatusTone } from '@/lib/status-chip';
 import type { ErrandState } from '@/lib/errands/types';
+import { CHIP_BASE, CHIP_TONE, DOT_TONE, type StatusTone } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 
 /**
@@ -31,10 +31,7 @@ export const ERRAND_TONE: Record<ErrandState, { label: string; tone: StatusTone 
   exhausted: { label: 'Llegó a su tope', tone: 'neutral' },
 };
 
-export function ErrandStatusPill({
-  state,
-  className,
-}: { state: ErrandState; className?: string }) {
+export function ErrandStatusPill({ state, className }: { state: ErrandState; className?: string }) {
   const { label, tone } = ERRAND_TONE[state];
   const live = state === 'working' || state === 'queued';
   return (

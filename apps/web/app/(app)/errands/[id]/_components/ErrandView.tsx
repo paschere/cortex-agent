@@ -303,9 +303,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
           <>
             <div className="rule-double" />
             <div className="px-4 py-3">
-              <div className="field-label mb-2">
-                Fuentes ({errand.sources.length})
-              </div>
+              <div className="field-label mb-2">Fuentes ({errand.sources.length})</div>
               <ol className="flex flex-col gap-1.5">
                 {errand.sources.map((source, i) => (
                   <li

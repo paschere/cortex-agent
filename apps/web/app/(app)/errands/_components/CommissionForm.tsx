@@ -99,10 +99,7 @@ export function CommissionForm({ kinds }: { kinds: ErrandKindSpec[] }) {
               )}
             >
               <div
-                className={clsx(
-                  'text-[13px] font-bold',
-                  active ? 'text-primary-ink' : 'text-ink',
-                )}
+                className={clsx('text-[13px] font-bold', active ? 'text-primary-ink' : 'text-ink')}
               >
                 {option.label}
               </div>

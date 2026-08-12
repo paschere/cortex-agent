@@ -3,8 +3,8 @@ import { NO_THINKING, chatModel } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { ERRAND_KIND_SPECS } from './kinds';
 import type { Assessment } from './engine';
+import { ERRAND_KIND_SPECS } from './kinds';
 import type { ErrandKind, ErrandSource } from './types';
 
 /**
@@ -77,7 +77,9 @@ const TriageSchema = z.object({
     .describe('One sentence: what goes wrong if this is guessed. Empty string when ready is true.'),
   options: z
     .array(z.string())
-    .describe('Two to four concrete answers the person could pick. Empty array when ready is true.'),
+    .describe(
+      'Two to four concrete answers the person could pick. Empty array when ready is true.',
+    ),
 });
 
 export type TriageOutcome =
@@ -167,21 +169,33 @@ const AssessSchema = z.object({
     ),
   deliverable: z
     .string()
-    .describe('The finished answer in markdown, following the required shape. Empty unless deliver.'),
-  note: z.string().describe('One sentence closing the errand for the person. Empty unless deliver.'),
-  sources: z.array(SourceSchema).describe('Everything the deliverable rests on. Empty unless deliver.'),
+    .describe(
+      'The finished answer in markdown, following the required shape. Empty unless deliver.',
+    ),
+  note: z
+    .string()
+    .describe('One sentence closing the errand for the person. Empty unless deliver.'),
+  sources: z
+    .array(SourceSchema)
+    .describe('Everything the deliverable rests on. Empty unless deliver.'),
   question: z.string().describe('The single question. Empty unless ask.'),
   why: z.string().describe('Why the errand cannot sensibly continue without it. Empty unless ask.'),
   options: z.array(z.string()).describe('Two to four concrete answers. Empty unless ask.'),
   nextObjective: z
     .string()
-    .describe('A self-contained objective for the next leg, naming the specific gap. Empty unless continue.'),
+    .describe(
+      'A self-contained objective for the next leg, naming the specific gap. Empty unless continue.',
+    ),
   findings: z
     .string()
-    .describe('Everything established so far, rewritten to stand alone. Required for continue, useful otherwise.'),
+    .describe(
+      'Everything established so far, rewritten to stand alone. Required for continue, useful otherwise.',
+    ),
   reading: z
     .string()
-    .describe('The current reading, in the same line-per-value shape as the baseline. Empty unless unchanged.'),
+    .describe(
+      'The current reading, in the same line-per-value shape as the baseline. Empty unless unchanged.',
+    ),
 });
 
 const ASSESS_SYSTEM = `You are running an autonomous errand. A leg of work just finished and you are the only one who sees both what was asked and what came back. Decide what happens next.
