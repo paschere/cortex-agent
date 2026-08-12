@@ -1,10 +1,9 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
-import { spentFraction } from '@/lib/errands/budget';
-import { ERRAND_KIND_LIST, ERRAND_KIND_SPECS } from '@/lib/errands/kinds';
 import { listErrands } from '@/lib/errands/repository';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { ERRAND_KIND_LIST, ERRAND_KIND_SPECS, spentFraction } from '@cortex/agent-tools';
 import { Briefcase, MessageCircleQuestion } from 'lucide-react';
 import Link from 'next/link';
 import { CommissionForm } from './_components/CommissionForm';
@@ -53,7 +52,14 @@ export default async function ErrandsPage() {
       />
 
       <div className="mb-5">
-        <CommissionForm kinds={ERRAND_KIND_LIST} />
+        <CommissionForm
+          kinds={ERRAND_KIND_LIST.map((k) => ({
+            kind: k.kind,
+            label: k.label,
+            blurb: k.blurb,
+            example: k.example,
+          }))}
+        />
       </div>
 
       {errands.length > 0 && (

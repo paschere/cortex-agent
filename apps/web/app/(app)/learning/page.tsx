@@ -2,7 +2,8 @@ import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildLearningReport } from '@cortex/agent-tools';
-import { Sprout } from 'lucide-react';
+import { ArrowRight, Sprout } from 'lucide-react';
+import Link from 'next/link';
 import { Learning } from './_components/Learning';
 import { toView } from './_lib/view';
 
@@ -28,10 +29,27 @@ export default async function LearningPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
+      {/*
+        Evaluación came off the sidebar — it is the most specialised screen in
+        the product (the runs happen in `pnpm test` and on somebody's terminal,
+        and this page has no button that starts one), and nothing else in the
+        app linked to it, so removing the nav entry would have orphaned it.
+        Its door is here because this is the screen it belongs to: this page
+        says what Cortex changed about itself, that one says whether the answers
+        got better or worse for it. Cause and measurement, one click apart.
+      */}
       <PageHeader
         title="Aprendizaje"
         subtitle="Lo que Cortex fue cambiando solo a punta de usarlo, con qué evidencia, y qué queda esperando a que alguien decida."
         icon={<Sprout className="h-5 w-5" />}
+        actions={
+          <Link
+            href="/evaluation"
+            className="inline-flex items-center gap-1 rounded-pill border border-border px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:border-border-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+          >
+            ¿Mejoraron las respuestas? <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        }
       />
       <Learning view={toView(report)} />
     </div>

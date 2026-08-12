@@ -1,7 +1,7 @@
 import type { Download, Page, Response } from 'playwright';
 import type { Config } from './config';
 import { describeTarget, isResolved, resolveTarget } from './locators';
-import { bodyText, countLandmarks, snapshotPage } from './snapshot';
+import { bodyText, countLandmarks, observeTargets, snapshotPage } from './snapshot';
 import type {
   FailureEvidence,
   ReplayRequest,
@@ -9,6 +9,7 @@ import type {
   Step,
   StepOutcome,
   StepValue,
+  Target,
 } from './types';
 
 /**
@@ -26,7 +27,37 @@ import type {
  * rewrites the step so the survivor leads next time.
  */
 
+/**
+ * What a trámite is allowed to bring back.
+ *
+ * 10MB is the same ceiling `kb-uploads` was created with in migration 0013, and
+ * it is deliberately the same number: a file that cannot be stored is a file
+ * that should not have been carried across the wire, base64-encoded, through a
+ * JSON body, to be thrown away at the other end.
+ *
+ * The extension list is a floor rather than a fence. A portal that hands out a
+ * `.exe` is not doing paperwork, and a step that downloads one is either a
+ * misread recording or a page that changed into something else -- in both cases
+ * the honest answer is to stop and say so. Content type is not checked instead
+ * of the extension because portals lie about it constantly: certificates are
+ * served as `application/octet-stream` by half the government stack.
+ */
 const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024;
+const ALLOWED_DOWNLOAD_EXTENSIONS = [
+  'pdf',
+  'xml',
+  'csv',
+  'txt',
+  'json',
+  'xls',
+  'xlsx',
+  'doc',
+  'docx',
+  'zip',
+  'png',
+  'jpg',
+  'jpeg',
+];
 
 /** Fill a template's {{holes}} from the run's inputs. */
 export function renderTemplate(text: string, inputs: Record<string, string>): string {
@@ -64,7 +95,12 @@ async function performStep(
   config: Config,
   output: Record<string, unknown>,
   lastStatus: { code: number | null; failed: boolean },
-): Promise<{ matchedTarget: string | null; matchedRank: number | null; preview: string | null }> {
+): Promise<{
+  matchedTarget: string | null;
+  matchedRank: number | null;
+  preview: string | null;
+  observedTargets?: Target[];
+}> {
   const stepDeadline = Date.now() + config.stepTimeoutMs;
   const { text, preview } = resolveValue(step.value, request.inputs, request.secrets);
 
@@ -100,6 +136,11 @@ async function performStep(
   }
   const { locator, rank, target } = found;
   const remaining = () => Math.max(1_000, stepDeadline - Date.now());
+
+  // Read before acting. A click can navigate, and an element on a page that is
+  // gone cannot describe itself -- so the one moment this element is both
+  // identified and still there is now.
+  const observedTargets = await observeTargets(locator);
 
   switch (step.action) {
     case 'click':
@@ -145,42 +186,132 @@ async function performStep(
   }
 
   await settle(page, step, stepDeadline);
-  return { matchedTarget: describeTarget(target), matchedRank: rank, preview };
+  return { matchedTarget: describeTarget(target), matchedRank: rank, preview, observedTargets };
 }
+
+/**
+ * How long an `expect` may hold the step up before we stop believing it.
+ *
+ * Short on purpose. It is a wait, not a verdict, and a page that has not shown
+ * the expected words in six seconds is either slower than that -- in which case
+ * the next step's own resolution loop will keep waiting anyway -- or was never
+ * going to show them.
+ */
+const EXPECT_WAIT_MS = 6_000;
 
 /**
  * Wait for the step to have landed.
  *
- * `expect` is the honest signal and is used when the step carries one: the text
- * a person would look for to know it worked. Without one, all that is available
- * is the network going quiet, which is a guess -- so it is bounded tightly and
- * a timeout here is not a failure.
+ * ---------------------------------------------------------------------------
+ * AN UNMET `expect` IS NOT A FAILURE, AND USED TO BE
+ * ---------------------------------------------------------------------------
+ * `expect` is a caption the model wrote while looking at a PICTURE of the page
+ * after the step: "Consulta realizada", "Novedad radicada". When it is right it
+ * is the best possible thing to wait for -- far better than the network going
+ * quiet, which is a guess about a page rather than a fact about this errand.
+ *
+ * But it is written from a photograph and it is routinely wrong in one specific,
+ * harmless way: the model reports what it SAW, and what it saw includes text
+ * that lives in a field's value rather than in the page. Typing a name into an
+ * input makes the name visible on screen and adds no text node anywhere, so
+ * `getByText` will never find it. `browser:cases` caught this on the first run:
+ * a fill step that had worked perfectly sat here for the full step timeout and
+ * then reported the whole errand as failed. Twenty wasted seconds, and a
+ * verdict of `transient/unknown` on a flow that was fine.
+ *
+ * So: the action already threw if it could not be performed -- Playwright does
+ * not silently fail to click. What `expect` adds is knowing WHEN to move on, and
+ * that is all it is now allowed to decide. If the words never arrive we fall
+ * back to waiting for the network, exactly as a step with no `expect` does, and
+ * the errand continues. A step that genuinely did not take effect still fails,
+ * one step later, on the element that is not there -- with better evidence than
+ * a missing caption, because "the control I need is absent" is a fact about the
+ * page and "the sentence I was promised is absent" is a fact about the model.
  */
 async function settle(page: Page, step: Step, deadline: number): Promise<void> {
   if (step.expect) {
-    await page
+    const budget = Math.min(EXPECT_WAIT_MS, Math.max(1_000, deadline - Date.now()));
+    const arrived = await page
       .getByText(step.expect, { exact: false })
       .first()
-      .waitFor({ state: 'visible', timeout: Math.max(1_000, deadline - Date.now()) });
-    return;
+      .waitFor({ state: 'visible', timeout: budget })
+      .then(() => true)
+      .catch(() => false);
+    if (arrived) return;
   }
   await page.waitForLoadState('networkidle', { timeout: 3_000 }).catch(() => undefined);
 }
 
+/** Guessed from the name, because portals routinely lie in the header. */
+function mimeFor(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+  const known: Record<string, string> = {
+    pdf: 'application/pdf',
+    xml: 'application/xml',
+    csv: 'text/csv',
+    txt: 'text/plain',
+    json: 'application/json',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    zip: 'application/zip',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+  };
+  return known[ext] ?? 'application/octet-stream';
+}
+
+/**
+ * The file the errand went to fetch.
+ *
+ * A refusal here is a plain sentence rather than a stack trace, and it is
+ * returned rather than thrown for the same reason the rest of this module
+ * returns failures: a portal that hands out a 400MB archive is an operating
+ * condition, not a bug, and the person asking for a certificate needs to be
+ * told what happened in a language that suggests what to do next.
+ */
 async function readDownload(download: Download): Promise<Record<string, unknown>> {
   const filename = download.suggestedFilename();
+  const extension = filename.split('.').pop()?.toLowerCase() ?? '';
   const path = await download.path();
-  if (!path) return { filename, sizeBytes: 0, base64: null };
+  if (!path) {
+    return { filename, sizeBytes: 0, base64: null, refused: 'el portal no entregó el archivo' };
+  }
+
+  if (!ALLOWED_DOWNLOAD_EXTENSIONS.includes(extension)) {
+    await download.delete().catch(() => undefined);
+    return {
+      filename,
+      sizeBytes: 0,
+      base64: null,
+      refused: `el portal entregó un archivo «.${extension || 'sin extensión'}», que no es de los tipos que un trámite puede traer (${ALLOWED_DOWNLOAD_EXTENSIONS.join(', ')})`,
+    };
+  }
+
   const { readFile, stat } = await import('node:fs/promises');
   const info = await stat(path);
   if (info.size > MAX_DOWNLOAD_BYTES) {
-    // The errand worked; the file is simply too big to post back inline. Said
+    await download.delete().catch(() => undefined);
+    // The errand worked; the file is simply too big to carry back inline. Said
     // plainly rather than failing the run, because the person asked for a
     // certificate and the certificate exists.
-    return { filename, sizeBytes: info.size, base64: null, tooLarge: true };
+    return {
+      filename,
+      sizeBytes: info.size,
+      base64: null,
+      tooLarge: true,
+      refused: `el archivo pesa ${Math.round(info.size / (1024 * 1024))} MB y el límite son ${MAX_DOWNLOAD_BYTES / (1024 * 1024)} MB`,
+    };
   }
   const bytes = await readFile(path);
-  return { filename, sizeBytes: info.size, base64: bytes.toString('base64') };
+  return {
+    filename,
+    mimeType: mimeFor(filename),
+    sizeBytes: info.size,
+    base64: bytes.toString('base64'),
+  };
 }
 
 class StepNotFound extends Error {
@@ -240,6 +371,8 @@ export async function replay(
           done.preview,
           true,
           Date.now() - stepStart,
+          undefined,
+          done.observedTargets,
         ),
       );
     } catch (err) {
@@ -301,6 +434,7 @@ function outcome(
   ok: boolean,
   durationMs: number,
   error?: string,
+  observedTargets?: Target[],
 ): StepOutcome {
   return {
     index,
@@ -313,6 +447,7 @@ function outcome(
     ok,
     durationMs,
     ...(error ? { error } : {}),
+    ...(observedTargets && observedTargets.length > 0 ? { observedTargets } : {}),
   };
 }
 

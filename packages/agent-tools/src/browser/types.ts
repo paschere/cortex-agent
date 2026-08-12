@@ -123,6 +123,13 @@ export interface Flow {
   status: FlowStatus;
   source: 'recording' | 'manual';
   credentialId: string | null;
+  /**
+   * The site demands a session this flow cannot create on its own -- proven by
+   * a run that landed on a login form with no login step to answer it. Set by
+   * the verification pass, cleared when the flow is re-taught with the login in
+   * the recording. See migration 0091.
+   */
+  loginRequired: boolean;
   variables: Variable[];
   steps: Step[];
   version: number;
@@ -172,6 +179,12 @@ export interface StepOutcome {
   ok: boolean;
   durationMs: number;
   error?: string;
+  /**
+   * What the element this step acted on calls itself, read off the live DOM the
+   * moment it resolved. See `refine.ts`: this is what lets a flow read from a
+   * video be rewritten with the identifiers a picture could never show.
+   */
+  observedTargets?: Target[];
 }
 
 /** Facts about the page at the moment a step failed. No judgement. */
@@ -204,8 +217,15 @@ export interface ReplayResponse {
   };
 }
 
-/** Why a run failed, and therefore whether the model is allowed near the flow. */
-export type FailureKind = 'transient' | 'legitimate' | 'site-changed';
+/**
+ * Why a run failed, and therefore whether the model is allowed near the flow.
+ *
+ * `needs-login` is the odd one and the useful one: it is not a failure of the
+ * errand at all but an unanswered QUESTION -- which account should Cortex use --
+ * left over from a recording made by somebody who was already signed in. It
+ * never marks a flow broken and never reaches a model. See migration 0091.
+ */
+export type FailureKind = 'transient' | 'legitimate' | 'site-changed' | 'needs-login';
 
 export interface ModelSpend {
   calls: number;

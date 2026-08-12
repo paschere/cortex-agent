@@ -42,12 +42,23 @@ export {
   type RunOutcome as BrowserRunOutcome,
 } from './execute';
 export {
+  alignFirstGoto,
   extractFlowFromRecording,
   MAX_FRAMES,
   proposalSchema,
   type Frame,
   type Proposal,
 } from './extract';
+export { mergeTargets, refineFromDom, refinementNote, type Refinement } from './refine';
+export {
+  currentDocumentSink,
+  producesDocument,
+  separateDownload,
+  setDocumentSink,
+  type DocumentSink,
+  type DownloadedFile,
+  type DownloadSummary,
+} from './download';
 export { runReasoned, type ReasonedResult } from './reasoned';
 export {
   enforceSecrets,

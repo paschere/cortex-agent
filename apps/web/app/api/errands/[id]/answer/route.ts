@@ -1,9 +1,9 @@
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
-import { type ErrandDb, answerQuestion } from '@/lib/errands/lifecycle';
 import { loadErrand } from '@/lib/errands/repository';
 import { inngest } from '@/lib/inngest';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { type ErrandDb, answerQuestion } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -22,7 +22,7 @@ const Body = z.object({
  * ── WHY THIS IS A RESUMPTION AND NOT A RELAUNCH ───────────────────────────
  *
  * Nothing here rewinds anything. The errand's `findings` were written BEFORE
- * it blocked (lib/errands/lifecycle.ts `askAndBlock`), its finished legs are
+ * it blocked (packages/agent-tools/src/errands/lifecycle.ts `askAndBlock`), its finished legs are
  * still on the table with their reports, and the answer is folded into the
  * objective of the NEXT leg alongside them (`composeObjective`). So an errand
  * that spent thirty minutes discovering a fork and then asked about it comes

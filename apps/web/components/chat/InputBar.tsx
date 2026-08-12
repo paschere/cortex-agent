@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachmentTray } from './AttachmentTray';
 import { ScopePicker, ScopeStrip } from './MemoryScope';
+import { type ScreenViewSession, ScreenViewButton, ScreenViewStrip } from './ScreenView';
 import { TeachFlowDialog } from '@/components/browser/TeachFlowDialog';
 import { VoiceDictation } from './VoiceDictation';
 
@@ -37,6 +38,11 @@ interface InputBarProps {
   /** The spaces this conversation is narrowed to. Empty means everything visible. */
   scope: ScopeSpace[];
   onScopeChange: (next: ScopeSpace[]) => void;
+  /**
+   * The shared-tab session, owned by ChatRoot because the frame has to reach
+   * the request body. The composer only draws its control and its live strip.
+   */
+  screen?: ScreenViewSession;
 }
 
 const CHAR_COUNT_THRESHOLD = 3500;
@@ -61,10 +67,10 @@ const CHAR_COUNT_THRESHOLD = 3500;
  * ===========================================================================
  * WHAT ELSE IS IN HERE, AND THE FOUR THINGS THAT ARE NOT
  * ===========================================================================
- * Four controls, and the count is the design. A composer with a button for
- * everything is a composer where the person stops seeing any of them, so a
- * control gets in only if it lets somebody do something they otherwise could
- * NOT do — never because it saves a step.
+ * The count is the design. A composer with a button for everything is a
+ * composer where the person stops seeing any of them, so a control gets in only
+ * if it lets somebody do something they otherwise could NOT do — never because
+ * it saves a step.
  *
  *   agent pill   Which agent answers. It changes what Cortex is ALLOWED to do,
  *                which is the person's business. Already here.
@@ -73,6 +79,13 @@ const CHAR_COUNT_THRESHOLD = 3500;
  *                of these people are standing, attaching was impossible.
  *   🎙 dictar    Hands full, phone in a pocket. See VoiceDictation.tsx.
  *   🧠 memoria   Which part of the brain answers. See MemoryScope.tsx.
+ *   👁 mirar     Ask about what is ON THE SCREEN. It is admitted against the
+ *                rule above and not around it: without it there is no way to
+ *                ask about the page in front of you at all. The fallback is not
+ *                "one more click" — it is take an OS screenshot, find the file,
+ *                drag it in, and do it again for the follow-up, which is why
+ *                what people actually do is describe the screen in words and
+ *                get an answer about the description. See ScreenView.tsx.
  *
  * REJECTED, with the reason each time:
  *   MODEL SELECTOR   see above; the one idea from the reference thrown out.
@@ -139,6 +152,23 @@ const COMMANDS: Command[] = [
     hint: 'Programar algo que se repita',
     expands: 'Todos los lunes a las 8 de la mañana, ',
   },
+  // Encargos and trámites, the two ways of handing over work that outlives the
+  // turn. Commands rather than buttons for exactly the reason argued above: a
+  // written command costs no room in the composer, and neither of these adds a
+  // capability the sentence alone would not have — `/encargo` expands to
+  // "Investígame " and a typed "investígame " reaches the same tool by the same
+  // route. What they buy is DISCOVERABILITY: nobody guesses that a chat can be
+  // handed a forty-minute job, and the `/` menu is where people look.
+  {
+    name: '/encargo',
+    hint: 'Que investigue algo por su cuenta',
+    expands: 'Investígame ',
+  },
+  {
+    name: '/tramite',
+    hint: 'Correr un trámite web ya aprendido',
+    expands: 'Corre el trámite ',
+  },
   {
     name: '/briefing',
     hint: 'Estado del negocio desde HubSpot',
@@ -192,6 +222,7 @@ export function InputBar({
   onDraftConsumed,
   scope,
   onScopeChange,
+  screen,
 }: InputBarProps) {
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
@@ -410,6 +441,14 @@ export function InputBar({
             onClear={() => onScopeChange([])}
             disabled={disabled}
           />
+          {/*
+            And here, for the same reason and with more at stake. A memory
+            filter somebody forgot costs them an answer; a screen share somebody
+            forgot is the worst thing this product can do to a person. So it is
+            a band on the screen for as long as the share is, never a menu item
+            and never a dot — see ScreenView.tsx.
+          */}
+          {screen && <ScreenViewStrip session={screen} />}
           {menuOpen && options.length > 0 && (
             /*
               A real listbox, not a styled div: arrow keys move `aria-activedescendant`
@@ -554,6 +593,14 @@ export function InputBar({
                     see components/browser/TeachFlowDialog.tsx for why the
                     person starts it rather than the agent offering it. */}
                 <TeachFlowDialog onCompose={setComposerText} />
+
+                {/* Preguntarle a Cortex por lo que tienes en pantalla. The
+                    fifth control, and the argument for admitting it is in
+                    ScreenView.tsx: without it there is no way to ask about
+                    what is on screen at all, which is the only test a control
+                    has to pass to get in here. MIRAR, not GRABAR — the
+                    recorder beside it does the other thing. */}
+                {screen && <ScreenViewButton session={screen} disabled={disabled} />}
 
                 <ScopePicker selected={scope} onChange={onScopeChange} disabled={disabled} />
               </div>

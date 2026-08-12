@@ -8,9 +8,10 @@ import { classify, decide } from '../../security/policy';
 import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import { type Row, makeDb } from '../../whatsapp/__tests__/fake-db';
 import { canRunFlow } from '../access';
-import { classifyFailure } from '../classify';
+import { classifyFailure, hasLoginSteps } from '../classify';
 import { runFlow } from '../execute';
 import { REDACTED, enforceSecrets, redactValue, safeInputs } from '../redact';
+import { mergeTargets, refineFromDom } from '../refine';
 import { STEP_ACTIONS, TARGET_KINDS } from '../types';
 import {
   ORG,
@@ -648,6 +649,235 @@ describe('access to a flow that carries a credential', () => {
     expect((await canRunFlow(db(store), { id: 'ana', role: 'member' }, flow)).allowed).toBe(true);
     expect((await canRunFlow(db(store), { id: 'ben', role: 'contador' }, flow)).allowed).toBe(true);
     expect((await canRunFlow(db(store), { id: 'ben', role: 'member' }, flow)).allowed).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. A door nobody recorded is a question, not a defect.
+// ---------------------------------------------------------------------------
+
+describe('a trámite that was taught from inside a session', () => {
+  const loginWall = emptySnapshot({
+    title: 'Ingreso al portal',
+    text: 'Debe iniciar sesión para continuar.',
+    elements: [
+      {
+        ref: 'e1',
+        role: 'textbox',
+        name: 'Contraseña',
+        tag: 'input',
+        type: 'password',
+        targets: [{ kind: 'label', value: 'Contraseña' }],
+        disabled: false,
+        value: '***',
+      },
+    ],
+  });
+  const atTheDoor = evidence({
+    landmarksPresent: 0,
+    bodyTextSample: 'Ingreso al portal. Debe iniciar sesión para continuar.',
+    candidates: [{ kind: 'role', value: 'link', matches: 0 }],
+  });
+
+  it('asks for the account instead of reporting a failure, and never marks it broken', async () => {
+    const store = baseStore();
+    // No login steps anywhere: the recording began after the door.
+    const flow = makeFlow({ status: 'draft' });
+    store.browser_flows = [{ id: flow.id, organization_id: ORG, version: 1, status: 'draft' }];
+
+    const outcome = await runFlow({
+      db: db(store),
+      organizationId: ORG,
+      actor: { id: USER, role: 'member' },
+      flow,
+      inputs: { placa: 'ABC123' },
+      transport: scriptedTransport([failedAt(flow.steps, 1, atTheDoor, loginWall)]),
+      logger: silent,
+      // A login form is the single most dangerous thing to hand a repairer: it
+      // would rewrite a good errand to fill in a username box.
+      repairer: forbiddenRepairer,
+      trigger: 'verify',
+      verifying: true,
+    });
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.failureKind).toBe('needs-login');
+    expect(outcome.pendingQuestion).toBe('credential');
+    // It names what to do, including the part nobody guesses.
+    expect(outcome.message).toContain('cerrando sesión primero');
+
+    const saved = (store.browser_flows as Row[])[0] as Row;
+    expect(saved.login_required).toBe(true);
+    // Not broken, not demoted: it is propuesto and it is waiting for an answer.
+    expect(saved.status).toBe('draft');
+    expect(store.browser_flow_versions).toHaveLength(0);
+    expect((store.browser_flow_runs as Row[])[0]?.failure_kind).toBe('needs-login');
+  });
+
+  it('does not open a browser at all once it knows the credential is missing', async () => {
+    const store = baseStore();
+    const flow = makeFlow({ loginRequired: true, credentialId: null });
+    const transport = scriptedTransport([succeeded(flow.steps)]);
+
+    const outcome = await runFlow({
+      db: db(store),
+      organizationId: ORG,
+      actor: { id: USER, role: 'member' },
+      flow,
+      inputs: { placa: 'ABC123' },
+      transport,
+      logger: silent,
+      trigger: 'chat',
+      repairer: forbiddenRepairer,
+    });
+
+    expect(outcome.failureKind).toBe('needs-login');
+    expect(transport.calls).toHaveLength(0);
+    // And no run row: nothing was attempted, so there is nothing to audit.
+    expect(store.browser_flow_runs).toHaveLength(0);
+  });
+
+  it('still calls a rejected credential a refusal when the flow DOES know how to log in', () => {
+    const withLogin = [
+      step({
+        action: 'fill',
+        label: 'Contraseña',
+        value: { kind: 'secret', field: 'clave' },
+      }),
+      step({ action: 'click', label: 'Consultar' }),
+    ];
+    const verdict = classifyFailure({
+      evidence: atTheDoor,
+      snapshot: loginWall,
+      step: step({ label: 'Consultar' }),
+      flow: { hasCredential: true, hasLoginSteps: hasLoginSteps(withLogin) },
+    });
+    // The flow tried and was turned away. That is the portal answering, and the
+    // old rule -- do not touch the flow -- still governs it.
+    expect(verdict.kind).toBe('legitimate');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. The DOM has the last word on what things are called.
+// ---------------------------------------------------------------------------
+
+describe('refining a flow against the live page', () => {
+  it('ranks by how well a locator survives, with the page winning ties', () => {
+    const merged = mergeTargets(
+      [
+        { kind: 'name', value: 'txtPlaca' },
+        { kind: 'label', value: 'Número de placa' },
+        { kind: 'css', value: '#form > input' },
+      ],
+      [
+        { kind: 'label', value: 'Numero de placa' },
+        { kind: 'role', value: 'textbox', name: 'Placa' },
+      ],
+    );
+    // role before label before name before css, regardless of who proposed it.
+    expect(merged.map((t) => t.kind)).toEqual(['role', 'label', 'label', 'name', 'css']);
+    // And within `label`, the page's own spelling leads.
+    expect(merged[1]).toEqual({ kind: 'label', value: 'Número de placa' });
+  });
+
+  it('leaves a step that never resolved exactly as it was', () => {
+    const steps = [step({ label: 'Consultar' })];
+    const refined = refineFromDom(steps, [
+      {
+        index: 0,
+        action: 'click',
+        label: 'Consultar',
+        url: 'u',
+        matchedTarget: null,
+        matchedRank: null,
+        valuePreview: null,
+        ok: false,
+        durationMs: 1,
+        observedTargets: [{ kind: 'testid', value: 'no-deberia-usarse' }],
+      },
+    ]);
+    expect(refined.changed).toEqual([]);
+    expect(refined.steps[0]?.targets).toEqual(steps[0]?.targets);
+  });
+
+  it('rewrites the flow after the proving run and keeps the proof', async () => {
+    const store = baseStore();
+    const flow = makeFlow({ status: 'draft', verifiedAt: null });
+    store.browser_flows = [{ id: flow.id, organization_id: ORG, version: 1, status: 'draft' }];
+
+    const outcome = await runFlow({
+      db: db(store),
+      organizationId: ORG,
+      actor: { id: USER, role: 'member' },
+      flow,
+      inputs: { placa: 'ABC123' },
+      transport: scriptedTransport([
+        succeeded(flow.steps, { estado: 'ACTIVO' }, 0, (s) =>
+          s.action === 'goto' ? undefined : [{ kind: 'testid', value: `qa-${s.action}` }],
+        ),
+      ]),
+      logger: silent,
+      repairer: forbiddenRepairer,
+      trigger: 'verify',
+      verifying: true,
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(outcome.spend.calls).toBe(0);
+    expect(outcome.newVersion).toBe(2);
+
+    const version = (store.browser_flow_versions as Row[])[0] as Row;
+    expect(version.reason).toBe('refined');
+    const saved = (store.browser_flows as Row[])[0] as Row;
+    const savedSteps = saved.steps as (typeof PLATE_FLOW_STEPS)[number][];
+    // A `data-testid` cannot be photographed; it can only come from the page.
+    expect(savedSteps[1]?.targets[0]).toEqual({ kind: 'testid', value: 'qa-fill' });
+    // The model's reading is kept underneath rather than thrown away.
+    expect(savedSteps[1]?.targets.some((t) => t.kind === 'label')).toBe(true);
+    // The verification survives: these locators came off the run that proved it.
+    expect(saved.status).toBe('ready');
+    expect(saved.verified_at).toBeTruthy();
+  });
+
+  it('does not rewrite an ordinary run, only the one that is still a hypothesis', async () => {
+    const store = baseStore();
+    const flow = makeFlow();
+    await runFlow({
+      db: db(store),
+      organizationId: ORG,
+      actor: { id: USER, role: 'member' },
+      flow,
+      inputs: { placa: 'ABC123' },
+      transport: scriptedTransport([
+        succeeded(flow.steps, {}, 0, () => [{ kind: 'testid', value: 'qa' }]),
+      ]),
+      logger: silent,
+      repairer: forbiddenRepairer,
+      trigger: 'chat',
+    });
+    expect(store.browser_flow_versions).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. Two things answering to one description is not a retry.
+// ---------------------------------------------------------------------------
+
+describe('when several elements match', () => {
+  it('calls it site-changed so a repair can make the step specific', () => {
+    const verdict = classifyFailure({
+      evidence: evidence({
+        // Five rows, five links that read the same. `resolveTarget` refuses to
+        // guess, and no amount of waiting changes the page.
+        candidates: [{ kind: 'text', value: 'Ver detalle', matches: 5 }],
+        visibleButBlocked: true,
+      }),
+      snapshot: emptySnapshot(),
+      step: step({ label: 'Abrir el detalle de la factura' }),
+    });
+    expect(verdict).toMatchObject({ kind: 'site-changed', rule: 'ambiguous' });
+    expect(verdict.reason).toContain('5');
   });
 });
 

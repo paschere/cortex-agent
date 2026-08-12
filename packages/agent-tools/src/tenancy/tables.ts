@@ -124,6 +124,16 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   errand_legs: tenant(),
   errand_questions: tenant(),
 
+  // --- Configuración guiada (migration 0094) --------------------------------
+  // La entrevista de puesta en marcha: lo que una empresa contó, lo que se le
+  // propuso a partir de eso y qué se creó. Ambas tenant, y la segunda tenant y
+  // no `derived` sobre la sesión a propósito: la pregunta que justifica la
+  // tabla — "de lo que se configuró hablando, ¿qué sigue vivo dos semanas
+  // después?" — se hace sobre TODA la empresa sin nombrar una sesión, que es
+  // exactamente lo que una clasificación `derived` prohibiría.
+  guided_setup_sessions: tenant(),
+  guided_setup_items: tenant(),
+
   // --- Integrations and tokens ----------------------------------------------
   integrations: tenant(),
   user_mcp_servers: tenant(),

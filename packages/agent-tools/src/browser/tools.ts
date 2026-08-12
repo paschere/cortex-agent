@@ -153,7 +153,7 @@ export const browserRunFlow = registerTool({
       seconds: Math.round(outcome.durationMs / 100) / 10,
       message: outcome.message,
       guidance: outcome.ok
-        ? 'Dile a la persona qué se obtuvo. Si hay una descarga, está en result.download.'
+        ? documentGuidance(outcome.output)
         : failureGuidance(outcome.failureKind),
     };
   },
@@ -205,7 +205,29 @@ export const browserSubmitFlow = registerTool({
   },
 });
 
+/**
+ * What to say when the errand came back with a file.
+ *
+ * The bytes are deliberately not here -- see browser/download.ts. What the
+ * model gets is the name and the id of a document that is, by the time it reads
+ * this, being parsed and indexed like any other. So the useful thing to tell a
+ * person is not "here is a blob" but "the certificate is in, ask me about it".
+ */
+function documentGuidance(output: Record<string, unknown>): string {
+  const download = output.download as { filename?: string; documentId?: string; refused?: string } | undefined;
+  if (download?.refused) {
+    return `Dile a la persona qué se obtuvo, y que el archivo no se pudo traer: ${download.refused}. El trámite en sí sí funcionó.`;
+  }
+  if (download?.documentId) {
+    return `Dile a la persona qué se obtuvo y que el archivo «${download.filename}» quedó guardado en su espacio personal de Brain Knowledge, listo para consultarlo o citarlo. No pegues el contenido del archivo.`;
+  }
+  return 'Dile a la persona qué se obtuvo. Si hay una descarga, está en result.download.';
+}
+
 function failureGuidance(kind: string | undefined): string {
+  if (kind === 'needs-login') {
+    return 'No falló: falta la cuenta con la que se entra a ese portal. Dile a la persona exactamente eso y que se vincula desde Trámites; no lo reintentes, la respuesta va a ser la misma.';
+  }
   if (kind === 'legitimate') {
     return 'El portal respondió y rechazó el trámite. Repítele a la persona lo que dijo el portal; no vale la pena reintentar sin cambiar el dato.';
   }

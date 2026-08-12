@@ -1,7 +1,7 @@
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
-import { ERRAND_STALE_MS } from '@/lib/errands/lifecycle';
 import { inngest } from '@/lib/inngest';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
+import { ERRAND_STALE_MS } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
 /**
@@ -49,7 +49,18 @@ import { logger } from '@cortex/core';
  */
 const CRON = '* * * * *';
 
-/** Silence after which a live errand gets a look. */
+/**
+ * Silence after which a live errand gets a look.
+ *
+ * A QUEUED errand is exempt from this and is picked up on the very next pass,
+ * with no silence requirement at all. It has never been touched, so there is
+ * nothing to wait for, and it is the case that matters most now that an errand
+ * can be started by talking: the tool has no way to send an Inngest event
+ * (packages/agent-tools does not depend on Inngest, deliberately — it is a
+ * library), so the sweep IS how a chat-commissioned errand starts. Making it
+ * wait a minute to have been silent for a minute would have doubled the delay
+ * between «investígame esto» and anything happening.
+ */
 const NUDGE_AFTER_MS = 60_000;
 
 /**
@@ -79,7 +90,14 @@ export const errandSweep = inngest.createFunction(
     const found = await step.run('scan', async () => {
       const raw = getSupabaseServiceClient();
 
-      const [live, due] = await Promise.all([
+      const [fresh, live, due] = await Promise.all([
+        // Never started. Picked up immediately — see NUDGE_AFTER_MS.
+        raw
+          .from('errands')
+          .select('id, organization_id, user_id, last_heartbeat_at')
+          .eq('state', 'queued')
+          .order('created_at', { ascending: true })
+          .limit(MAX_PER_PASS),
         raw
           .from('errands')
           .select('id, organization_id, user_id, last_heartbeat_at')
@@ -96,12 +114,17 @@ export const errandSweep = inngest.createFunction(
           .limit(MAX_PER_PASS),
       ]);
 
+      if (fresh.error) throw new Error(`Could not scan queued errands: ${fresh.error.message}`);
       if (live.error) throw new Error(`Could not scan live errands: ${live.error.message}`);
       if (due.error) throw new Error(`Could not scan due monitors: ${due.error.message}`);
 
       const seen = new Set<string>();
       const candidates: Candidate[] = [];
-      for (const row of [...(live.data ?? []), ...(due.data ?? [])] as Record<string, unknown>[]) {
+      for (const row of [
+        ...(fresh.data ?? []),
+        ...(live.data ?? []),
+        ...(due.data ?? []),
+      ] as Record<string, unknown>[]) {
         const id = row.id as string;
         const organizationId = (row.organization_id as string | null) ?? '';
         if (!id || !organizationId || seen.has(id)) continue;

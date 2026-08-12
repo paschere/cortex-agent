@@ -28,7 +28,10 @@ export default async function ResumeChatPage({
     // own. That is the whole reason they live on the message row (migration
     // 0090): reopening a conversation now costs the same one read it always
     // did, and no model call at all.
-    .select('id, role, content, tool_calls, tool_results, followups, created_at')
+    // `screen_glance_at` rides along for the same reason `followups` does
+    // (migration 0092): it is a property of the message and is only ever wanted
+    // with it, so annotating a reopened thread costs no additional query.
+    .select('id, role, content, tool_calls, tool_results, followups, screen_glance_at, created_at')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 
@@ -80,6 +83,21 @@ export default async function ResumeChatPage({
       : undefined;
 
   /**
+   * Which questions were asked while Cortex was looking at a shared tab.
+   *
+   * Two weeks later this line is the difference between a legible thread and a
+   * confusing one: «¿qué significa este error?» followed by a precise answer
+   * about a DIAN screen reads as invention unless the transcript says what was
+   * being looked at. The image was never stored — this timestamp is the entire
+   * footprint of a screen question, and it is on screen rather than only in the
+   * database on purpose. See migration 0092.
+   */
+  const initialGlances: Record<string, string> = {};
+  for (const m of msgs ?? []) {
+    if (m.screen_glance_at) initialGlances[m.id as string] = m.screen_glance_at as string;
+  }
+
+  /**
    * The memory filter this conversation was left on, resolved back into names.
    *
    * NAMES, NOT IDS, AND RESOLVED THROUGH `listVisibleSpaces`. The strip in the
@@ -109,6 +127,7 @@ export default async function ResumeChatPage({
       initialAgentSlug={convAgentSlug}
       initialScope={initialScope}
       {...(storedFollowups ? { initialFollowups: storedFollowups } : {})}
+      {...(Object.keys(initialGlances).length > 0 ? { initialGlances } : {})}
     />
   );
 }

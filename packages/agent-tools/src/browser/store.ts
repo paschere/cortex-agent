@@ -16,7 +16,7 @@ import type { FailureKind, Flow, ModelSpend, Step, StepOutcome, Variable } from 
 
 const FLOW_COLUMNS = `
   id, organization_id, slug, name, description, start_url, host, effect, status, source,
-  credential_id, variables, steps, version, verified_at, verified_run_id,
+  credential_id, login_required, variables, steps, version, verified_at, verified_run_id,
   repairs_in_window, repair_window_started_at, last_run_at, last_run_status, last_error,
   recording_frames, extraction_cost_usd, created_by, created_at, updated_at
 `;
@@ -34,6 +34,7 @@ export function rowToFlow(row: Record<string, unknown>): Flow {
     status: row.status as Flow['status'],
     source: (row.source as Flow['source']) ?? 'recording',
     credentialId: (row.credential_id as string | null) ?? null,
+    loginRequired: Boolean(row.login_required),
     variables: (row.variables as Variable[]) ?? [],
     steps: (row.steps as Step[]) ?? [],
     version: (row.version as number) ?? 1,
@@ -149,6 +150,13 @@ export async function writeVersion(
     changedStep?: number;
     note: string;
     by: string | null;
+    /**
+     * Keep the verification. Only true when the new steps were DERIVED FROM the
+     * run that just completed -- selector drift, or the DOM refinement pass --
+     * so the flow being described is literally the one that was proven. Any
+     * other rewrite invalidates the proof and must re-earn it.
+     */
+    keepProof?: boolean;
   },
 ): Promise<number> {
   const version = flow.version + 1;
@@ -160,10 +168,12 @@ export async function writeVersion(
       steps: input.steps,
       variables,
       version,
-      // Drift is the one reason that does NOT invalidate the proof: the step
-      // list is materially the same procedure with one selector reordered, and
-      // the run that discovered the drift is the run that just completed it.
-      ...(input.reason === 'drifted' ? {} : { verified_at: null, verified_run_id: null }),
+      // Drift and refinement do NOT invalidate the proof: in both cases the
+      // step list is materially the same procedure, rewritten from the run that
+      // just completed it. Everything else does.
+      ...(input.reason === 'drifted' || input.keepProof
+        ? {}
+        : { verified_at: null, verified_run_id: null }),
       updated_at: new Date().toISOString(),
     })
     .eq('id', flow.id);
@@ -195,6 +205,26 @@ export async function markVerified(
       last_error: null,
       updated_at: new Date().toISOString(),
     })
+    .eq('id', flowId);
+}
+
+/**
+ * The flow is fine; it is missing a key.
+ *
+ * Deliberately NOT `markBroken`. Broken means somebody has to go and re-teach
+ * an errand that used to work. This means somebody has to answer one question
+ * -- which account -- and the flow keeps whatever status it had, so a trámite
+ * that has never been proven stays PROPUESTO rather than being demoted to a
+ * failure state it did not earn.
+ */
+export async function markNeedsLogin(
+  db: SupabaseClient,
+  flowId: string,
+  why: string,
+): Promise<void> {
+  await db
+    .from('browser_flows')
+    .update({ login_required: true, last_error: why, updated_at: new Date().toISOString() })
     .eq('id', flowId);
 }
 

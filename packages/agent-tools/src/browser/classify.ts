@@ -22,6 +22,8 @@ import type { FailureEvidence, FailureKind, PageSnapshot, Step } from './types';
  * ---------------------------------------------------------------------------
  * THE ORDER, AND WHY EACH RULE SITS WHERE IT DOES
  * ---------------------------------------------------------------------------
+ *  0  a login page, and this flow has   needs-login not a failure: a question
+ *     no login in it at all
  *  1  the page never arrived            transient   nothing to read, nothing to fix
  *  2  5xx / 429                         transient   their server, not our flow
  *  3  maintenance or back-off wording   transient   the site said so itself
@@ -29,7 +31,9 @@ import type { FailureEvidence, FailureKind, PageSnapshot, Step } from './types';
  *  5  401 / 403                         legitimate  a credential problem, not a layout one
  *  6  we are staring at a login form    legitimate  THE IMPORTANT ONE -- see below
  *  7  404 on a navigation               site-changed  our stored URL no longer exists
- *  8  the element is there but blocked  transient   the selector was right; something
+ *  8a several things match             site-changed  the description is not specific
+ *                                                   enough for this page
+ *  8b the element is there but blocked  transient   the selector was right; something
  *                                                   was covering it or still loading
  *  9  landmarks gone                    site-changed  this is not the page we learned
  * 10  element missing, page healthy     site-changed  one control moved
@@ -161,13 +165,84 @@ export interface Classification {
   rule: string;
 }
 
+/**
+ * Whether this flow is even capable of opening the door it is standing at.
+ *
+ * A flow that carries login steps and a bound credential and STILL lands on a
+ * login form has had its credential rejected or its session cut -- an ordinary
+ * refusal, and the flow is fine. A flow with no login steps at all has never
+ * been taught to log in: it was recorded by somebody who was already inside,
+ * and it was never going to work from a clean browser. Those are different
+ * situations with different answers, and telling them apart needs one fact
+ * about the flow that the failing step does not carry.
+ *
+ * Omitted, it defaults to the old behaviour -- assume the flow can log in, and
+ * call a login page a legitimate refusal.
+ */
+export interface FlowLoginFacts {
+  /** A credential is bound, so a login step would have something to type. */
+  hasCredential: boolean;
+  /** The step list contains a login: a password field is filled somewhere. */
+  hasLoginSteps: boolean;
+}
+
+/** Does any step in this flow type a credential? */
+export function hasLoginSteps(steps: Step[]): boolean {
+  return steps.some(
+    (s) =>
+      s.value?.kind === 'secret' ||
+      containsAny(normalize(`${s.label} ${s.targets.map((t) => t.value).join(' ')}`), [
+        'contrasena',
+        'password',
+        'clave',
+      ]) !== null,
+  );
+}
+
 export function classifyFailure(input: {
   evidence: FailureEvidence;
   snapshot: PageSnapshot;
   step: Step;
+  flow?: FlowLoginFacts;
 }): Classification {
   const { evidence, snapshot, step } = input;
   const text = normalize(`${evidence.alertText ?? ''} ${evidence.bodyTextSample}`);
+
+  // 0. THE DOOR NOBODY RECORDED.
+  //
+  //    This sits above everything because of what it is competing with: a login
+  //    page says "debe iniciar sesión", which rule 4 reads as the portal
+  //    refusing the errand. That reading is right when the flow TRIED to log in
+  //    and was turned away, and wrong when the flow never had a login in it --
+  //    in which case nothing was refused, we simply arrived at a door with no
+  //    key and no instructions for opening it.
+  //
+  //    The difference matters because the answers are opposite. A refusal is
+  //    over: fix the data. A missing login is a QUESTION -- which account, and
+  //    would you record the way in -- and it is answerable, by a person, once.
+  //    Filing it as a failure is how a trámite ends up marked broken for a
+  //    reason nobody can act on.
+  //
+  //    Guarded twice: the failing step must not itself be a login step, and the
+  //    flow must contain no login at all. Both together mean this flow was
+  //    taught from inside a session it does not know how to create.
+  const passwordOnPage = snapshot.elements.some(
+    (el) => (el.type ?? '').toLowerCase() === 'password',
+  );
+  const stepIsLogin =
+    containsAny(
+      normalize(`${step.label} ${step.value?.kind === 'secret' ? step.value.field : ''}`),
+      LOGIN_STEP_WORDS,
+    ) !== null;
+
+  if (passwordOnPage && !stepIsLogin && input.flow && !input.flow.hasLoginSteps) {
+    return {
+      kind: 'needs-login',
+      rule: 'login-never-taught',
+      reason:
+        'Este trámite empieza dentro de una sesión: quien lo enseñó ya estaba adentro, así que la grabación nunca mostró el ingreso. Desde un navegador limpio caemos en la pantalla de acceso y no hay con qué entrar.',
+    };
+  }
 
   // 1. Nothing arrived. There is no page to read and nothing about the flow to
   //    conclude, so the only safe verdict is "try again".
@@ -226,14 +301,8 @@ export function classifyFailure(input: {
 
   // 6. The login-page guard. See the header note -- this is the rule that stops
   //    an expired session from getting a good flow rewritten against a login
-  //    form and stamped "repaired".
-  const passwordOnPage = snapshot.elements.some(
-    (el) => (el.type ?? '').toLowerCase() === 'password',
-  );
-  const stepIsLogin = containsAny(
-    normalize(`${step.label} ${step.value?.kind === 'secret' ? step.value.field : ''}`),
-    LOGIN_STEP_WORDS,
-  );
+  //    form and stamped "repaired". Rule 0 has already taken the flows that
+  //    never knew how to log in; what reaches here tried and was turned away.
   if (passwordOnPage && !stepIsLogin) {
     return {
       kind: 'legitimate',
@@ -254,9 +323,34 @@ export function classifyFailure(input: {
     };
   }
 
-  // 8. We found it and could not use it. The selector was right, so there is
-  //    nothing for a model to fix -- something was on top of it, or the page
-  //    was still settling.
+  // 8a. SEVERAL things answer to the same description.
+  //
+  //     This looks like rule 8 and is its opposite. `resolveTarget` takes a
+  //     candidate only when it matches EXACTLY ONE visible element, so a
+  //     candidate reporting two or more matches did not fail to find anything --
+  //     it found a crowd, and refused to guess which one. That is not a
+  //     transient condition and no retry will change it: the description the
+  //     step carries is simply not specific enough for this page, which is
+  //     precisely what a repair is for.
+  //
+  //     The case that produces it is a results table -- five rows, five links
+  //     that all read "Ver detalle", told apart only by an `aria-label` that no
+  //     recording could show. Before this rule the run was filed as
+  //     `transient/blocked` and retried forever against a page that would never
+  //     answer differently.
+  const ambiguous = evidence.candidates.filter((c) => c.matches > 1);
+  if (ambiguous.length > 0) {
+    const worst = ambiguous.reduce((a, b) => (b.matches > a.matches ? b : a));
+    return {
+      kind: 'site-changed',
+      rule: 'ambiguous',
+      reason: `«${step.label}» no se puede señalar sin ambigüedad: en la página hay ${worst.matches} elementos que responden a la misma descripción. Actuar sobre uno al azar no es una opción.`,
+    };
+  }
+
+  // 8b. We found it and could not use it. Exactly one match, so the selector
+  //     was right and there is nothing for a model to fix -- something was on
+  //     top of it, or the page was still settling.
   if (evidence.visibleButBlocked) {
     return {
       kind: 'transient',

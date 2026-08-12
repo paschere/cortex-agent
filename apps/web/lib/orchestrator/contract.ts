@@ -50,7 +50,7 @@ export interface OrchestratorRunStartedEvent {
    *
    * Absent for a run launched from /orchestrator, which is a person asking for
    * work with their own permissions. Present for an errand
-   * (lib/errands/boundary.ts), which is unattended and may only read: the
+   * (packages/agent-tools/src/errands/boundary.ts), which is unattended and may only read: the
    * allow-list it passes contains nothing that can send, buy or book, so the
    * sub-agents are never handed such a tool in the first place.
    */

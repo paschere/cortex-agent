@@ -42,6 +42,14 @@ interface MessageListProps {
    * single value so nothing here has to work out which message that is.
    */
   storedFollowups?: Record<string, string[]>;
+  /**
+   * Which questions were asked with a look at the person's shared tab, by
+   * message id, and when the picture was taken. The picture itself was never
+   * stored anywhere — see migration 0092 — so this timestamp is the whole of
+   * what a screen question leaves behind, and it is drawn under the question
+   * because a record somebody cannot see is not a record.
+   */
+  glances?: Record<string, string>;
 }
 
 export function MessageList({
@@ -53,6 +61,7 @@ export function MessageList({
   onRegenerate,
   onSuggestion,
   storedFollowups,
+  glances,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<TurnMetrics | null>(null);
@@ -124,6 +133,7 @@ export function MessageList({
                 metrics={isLast ? metrics : null}
                 onCompose={onSuggestion}
                 storedFollowups={storedFollowups?.[m.id]}
+                glanceAt={glances?.[m.id]}
               />
             );
           })}

@@ -6,12 +6,12 @@ import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
 import { Brain, Menu } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
+import { useCallback, useRef, useState } from 'react';
+import type { ScreenGlance } from '@/lib/tab-recorder';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
-import { CommandPalette } from './CommandPalette';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
+import { useScreenView } from './ScreenView';
 
 interface AgentInfo {
   slug: string;
@@ -37,6 +37,12 @@ interface ChatRootProps {
    * — see migration 0090. Absent on a brand-new chat, which has no answers yet.
    */
   initialFollowups?: Record<string, string[]>;
+  /**
+   * Which questions in a resumed conversation were asked with a look at the
+   * person's shared tab, by message id, and when the picture was taken. Read
+   * from `messages.screen_glance_at` — the image itself was never stored.
+   */
+  initialGlances?: Record<string, string>;
 }
 
 export function ChatRoot({
@@ -46,10 +52,10 @@ export function ChatRoot({
   initialAgentSlug,
   initialScope,
   initialFollowups,
+  initialGlances,
 }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
-  const [paletteOpen, setPaletteOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [blocked, setBlocked] = useState<{ message: string; isLimit: boolean } | null>(null);
   const { setOpen: setSidebarOpen } = useMobileSidebar();
@@ -75,6 +81,26 @@ export function ChatRoot({
   const [scope, setScope] = useState<ScopeSpace[]>(initialScope ?? []);
   const scopeRef = useRef<ScopeSpace[]>(initialScope ?? []);
 
+  /**
+   * THE SHARED TAB, AND WHEN IT IS ACTUALLY LOOKED AT.
+   *
+   * The session lives here rather than in the composer because the frame has to
+   * reach the request body, and this is the component that builds it. The
+   * composer only draws the control and the live strip.
+   *
+   * ONE FRAME PER QUESTION, TAKEN AT SEND. `handleSend` grabs it and parks it
+   * in a ref that `experimental_prepareRequestBody` empties on the way out —
+   * which is what makes `reload()` behave correctly for free: regenerating an
+   * answer finds the ref empty and re-asks with the text alone, rather than
+   * quietly photographing the screen again for a question the person did not
+   * retype. A silent second capture is precisely the thing this feature must
+   * never do.
+   */
+  const screen = useScreenView();
+  const pendingGlance = useRef<ScreenGlance | null>(null);
+  /** Which of THIS session's questions carried a picture, by message id. */
+  const [glances, setGlances] = useState<Record<string, string>>({});
+
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
 
   const { messages, append, reload, isLoading, setMessages } = useChat({
@@ -96,6 +122,11 @@ export function ChatRoot({
       // exactly the chat it was before this existed.
       const scopeIds = scopeRef.current.map((s) => s.id);
       if (scopeIds.length > 0) body.spaceIds = scopeIds;
+      // Taken a moment ago by `handleSend`, and consumed here so it can only
+      // ever travel with the one question it was taken for.
+      const glance = pendingGlance.current;
+      pendingGlance.current = null;
+      if (glance) body.screen = glance;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return body as any;
     },
@@ -148,18 +179,29 @@ export function ChatRoot({
   });
 
   const handleSend = useCallback(
-    (text: string) => void append({ role: 'user', content: text }),
-    [append],
+    (text: string) => {
+      // The picture is taken here, not on focus and not on a timer: by the time
+      // somebody presses send, the shared tab is showing the last thing they
+      // painted before coming to ask about it. `grab` returns null whenever
+      // nothing is being shared, which is the ordinary case.
+      const glance = screen.grab();
+      // The id is minted here so the note under the question can be drawn
+      // immediately, without waiting for the message to come back from the
+      // database with the server's own id. The map is by id and not by index
+      // because `reload()` rewrites the tail of the array.
+      const id = crypto.randomUUID();
+      if (glance) {
+        pendingGlance.current = glance;
+        setGlances((prev) => ({ ...prev, [id]: glance.takenAt }));
+      }
+      void append({ id, role: 'user', content: text });
+    },
+    [append, screen],
   );
 
-  const hotkeys = useMemo(
-    () => ({
-      'mod+k': () => setPaletteOpen((v) => !v),
-      escape: () => setPaletteOpen(false),
-    }),
-    [],
-  );
-  useGlobalHotkeys(hotkeys);
+  // ⌘K used to be registered here, which is why it only worked on /chat. The
+  // palette is now mounted by the shell (nav/CommandMenuContext) so every
+  // screen answers the shortcut — see the note there.
 
   const handleScopeChange = useCallback(
     (next: ScopeSpace[]) => {
@@ -225,6 +267,7 @@ export function ChatRoot({
         onRegenerate={handleRegenerate}
         onSuggestion={setDraft}
         storedFollowups={initialFollowups}
+        glances={initialGlances ? { ...initialGlances, ...glances } : glances}
       />
 
       {blocked && (
@@ -260,9 +303,8 @@ export function ChatRoot({
         onDraftConsumed={() => setDraft('')}
         scope={scope}
         onScopeChange={handleScopeChange}
+        screen={screen}
       />
-
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }

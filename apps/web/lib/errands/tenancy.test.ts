@@ -119,13 +119,69 @@ describe('errands stay inside their workspace', () => {
     expect(routes.length).toBeGreaterThan(2);
     for (const { path, source } of routes) {
       expect(source, `${path} must authenticate`).toContain('requireSession()');
-      expect(source, `${path} must scope its handle`).toContain(
-        'getOrgScopedClient(user.organization.id)',
-      );
+      // Either it builds the scoped handle itself, or it builds a ToolContext
+      // — which builds the same scoped handle from the same session field.
+      expect(
+        source.includes('getOrgScopedClient(user.organization.id)') ||
+          source.includes('organizationId: user.organization.id'),
+        `${path} must pin its handle to the session's workspace`,
+      ).toBe(true);
       expect(source, `${path} must not take a workspace from the caller`).not.toMatch(
         /organizationId:\s*(?:body|parsed|req|searchParams)/,
       );
     }
+  });
+
+  it('lets neither way in skip the admission checks', () => {
+    // THE POINT OF THIS TEST. There are now two ways to start an errand — the
+    // form and a sentence in the chat — and the second is far easier to reach.
+    // The checks (the no-buying line, the plan meter, the live cap) live in
+    // `commissionErrand` and BOTH callers go through it. A caller that grew its
+    // own insert would be a caller with a private door, and the door a model
+    // opens from natural language is the last one that should be private.
+    const route = readFileSync(join(ROOT, 'app', 'api', 'errands', 'route.ts'), 'utf8');
+    const tools = readFileSync(
+      join(ROOT, '..', '..', 'packages', 'agent-tools', 'src', 'errands', 'tools.ts'),
+      'utf8',
+    );
+
+    for (const [name, source] of [
+      ['the /api/errands route', route],
+      ['the errands.start tool', tools],
+    ] as const) {
+      expect(source, `${name} must commission through the shared door`).toContain(
+        'commissionErrand',
+      );
+      // And must not write the row itself, which is how the checks get skipped.
+      expect(source, `${name} must not insert an errand directly`).not.toMatch(
+        /\.from\(\s*'errands'\s*\)[\s\S]{0,80}\.insert\(/,
+      );
+    }
+
+    // The shared door is where the line is drawn, before anything is written.
+    const store = readFileSync(
+      join(ROOT, '..', '..', 'packages', 'agent-tools', 'src', 'errands', 'store.ts'),
+      'utf8',
+    );
+    expect(store).toContain('assertProposalOnly');
+    expect(store).toContain('checkMeter');
+    expect(store).toContain('MAX_LIVE_ERRANDS');
+    // Ordering matters: the boundary is asserted before the insert, so a
+    // refusal never leaves a half-created errand behind.
+    expect(store.indexOf('assertProposalOnly')).toBeLessThan(store.indexOf(".from('errands')"));
+  });
+
+  it('runs the errand tools on the caller\u2019s own scoped handle', () => {
+    // A tool reaches the database through ctx.db, which the tool runner has
+    // already pinned to the caller's workspace. A tool that built its own
+    // client would be a tool that could read another company's errands.
+    const tools = readFileSync(
+      join(ROOT, '..', '..', 'packages', 'agent-tools', 'src', 'errands', 'tools.ts'),
+      'utf8',
+    );
+    expect(tools).not.toContain('getSupabaseServiceClient');
+    expect(tools).not.toContain('createClient');
+    expect(tools).toContain('ctx.db');
   });
 
   it('carries the workspace on the event, because a background job has no session', () => {

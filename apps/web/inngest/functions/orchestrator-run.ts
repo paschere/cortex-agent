@@ -115,7 +115,7 @@ export const orchestratorRun = inngest.createFunction(
       objective: started.objective ?? '',
       concurrency: started.concurrency ?? DEFAULT_CONCURRENCY,
       // Present only when the caller narrowed the catalogue — an errand does
-      // (read-only tools only, see lib/errands/boundary.ts); a person
+      // (read-only tools only, see packages/agent-tools/src/errands/boundary.ts); a person
       // launching from /orchestrator does not.
       toolAllowlist: started.toolAllowlist,
     };

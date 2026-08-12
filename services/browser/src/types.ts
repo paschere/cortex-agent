@@ -91,6 +91,16 @@ export interface StepOutcome {
   ok: boolean;
   durationMs: number;
   error?: string;
+  /**
+   * What the element this step acted on calls ITSELF, read off the live DOM at
+   * the moment it resolved. Absent when the step found nothing, and absent for
+   * `goto` and `wait_for`, which act on no element.
+   *
+   * This is the half of a learned errand a recording cannot supply: a video
+   * shows which steps there are, and only the page knows their test ids, their
+   * accessible names and their form field names.
+   */
+  observedTargets?: Target[];
 }
 
 /**

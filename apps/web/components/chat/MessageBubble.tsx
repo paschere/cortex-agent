@@ -11,6 +11,7 @@ import { ConfirmationPrompt } from './ConfirmationPrompt';
 import { FollowUps } from './FollowUps';
 import { ProposalCard, type ProposalResult } from './ProposalCard';
 import { ReasoningTrail } from './ReasoningTrail';
+import { GlanceNote } from './ScreenView';
 import { SelectionActions } from './SelectionActions';
 import { TaskRows, type TurnMetrics } from './TaskRows';
 
@@ -30,6 +31,12 @@ interface MessageBubbleProps {
    * server to make some.
    */
   storedFollowups?: string[];
+  /**
+   * When Cortex took one frame of the shared tab in order to answer this
+   * question, ISO 8601. Only ever set on user messages, and only on the few
+   * that were asked with a tab shared. See ScreenView.tsx.
+   */
+  glanceAt?: string;
 }
 
 type ConfirmationSentinel = {
@@ -138,6 +145,7 @@ export function MessageBubble({
   metrics,
   onCompose,
   storedFollowups,
+  glanceAt,
 }: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
   // Scopes the selection menu to THIS answer: a selection that starts in one
@@ -159,10 +167,14 @@ export function MessageBubble({
     // What the person said gets the one saturated fill in the transcript, and
     // a corner softened on the side it was sent from.
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end">
         <div className="max-w-[82%] whitespace-pre-wrap rounded-card rounded-br-sm bg-primary px-4 py-2.5 text-sm text-white shadow-card">
           {content}
         </div>
+        {/* Under the question, not inside it: the person wrote the question and
+            Cortex took the picture, and a line in the bubble would put the
+            product's words in somebody else's mouth. */}
+        {glanceAt && <GlanceNote at={glanceAt} />}
       </div>
     );
   }

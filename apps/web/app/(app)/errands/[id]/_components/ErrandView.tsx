@@ -2,11 +2,13 @@
 
 import { Panel } from '@/components/ui/panel';
 import { Provenance } from '@/components/ui/provenance';
-import { ERRAND_BOUNDARY_NOTICE } from '@/lib/errands/boundary';
-import { spentFraction } from '@/lib/errands/budget';
-import { describeState } from '@/lib/errands/engine';
-import { ERRAND_KIND_SPECS } from '@/lib/errands/kinds';
-import { type ErrandDetail, isErrandTerminal } from '@/lib/errands/types';
+import {
+  ERRAND_BOUNDARY_NOTICE,
+  ERRAND_KIND_LABEL,
+  type ErrandDetail,
+  isErrandTerminal,
+  spentFraction,
+} from '@/lib/errands-shape';
 import { clsx } from 'clsx';
 import {
   ArrowLeft,
@@ -87,7 +89,6 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
 
   const openQuestion = questions.find((q) => q.state === 'open') ?? null;
   const answered = questions.filter((q) => q.state === 'answered');
-  const spec = ERRAND_KIND_SPECS[errand.kind];
   const spent = Math.round(spentFraction(errand) * 100);
 
   async function stop() {
@@ -130,7 +131,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
       <div className="mb-5 pt-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1 basis-[20rem]">
-            <div className="field-label">{spec.label}</div>
+            <div className="field-label">{ERRAND_KIND_LABEL[errand.kind]}</div>
             <h1 className="mt-1 text-[19px] font-extrabold leading-snug tracking-tight text-ink">
               {errand.request}
             </h1>
@@ -165,23 +166,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
 
         {/* Said in words, always. A forty-minute job that only shows a spinner
             is indistinguishable from a hung one. */}
-        <p className="mt-3 text-[13px] leading-relaxed text-ink-muted">
-          {describeState({
-            state: errand.state,
-            kind: errand.kind,
-            legsUsed: errand.legsUsed,
-            legCeiling: errand.legCeiling,
-            checksDone: errand.checksDone,
-            nextCheckAt: errand.nextCheckAt,
-            openQuestion: Boolean(openQuestion),
-            spend: {
-              tokensSpent: errand.tokensSpent,
-              tokenCeiling: errand.tokenCeiling,
-              legsUsed: errand.legsUsed,
-              legCeiling: errand.legCeiling,
-            },
-          })}
-        </p>
+        <p className="mt-3 text-[13px] leading-relaxed text-ink-muted">{detail.situation}</p>
 
         <Panel className="mt-3 overflow-hidden">
           <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">

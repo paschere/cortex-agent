@@ -1,5 +1,5 @@
-import type { Page } from 'playwright';
-import type { PageSnapshot } from './types';
+import type { Locator, Page } from 'playwright';
+import type { PageSnapshot, Target } from './types';
 
 /**
  * What the page looks like, described the way a person describes it.
@@ -35,8 +35,18 @@ import type { PageSnapshot } from './types';
  * rank 8. That is the whole reason a flow taught in August still runs in March.
  */
 
-const SNAPSHOT_SCRIPT = /* js */ `(() => {
-  const MAX_ELEMENTS = 140;
+/**
+ * How an element describes itself, as source shared by the two callers.
+ *
+ * It is a string rather than a module because both callers run it INSIDE the
+ * page: the snapshot evaluates it over every interactive element, and
+ * `observeTargets` evaluates it over the single element a step just acted on.
+ * Keeping one copy is what makes "the locators a repair proposes" and "the
+ * locators a successful step reports" the same locators, computed by the same
+ * rules -- which is the property that lets a flow learned from a video be
+ * rewritten with what the DOM says without changing what it means.
+ */
+const LOCATOR_HELPERS = /* js */ `
   const MAX_TEXT = 90;
 
   const clean = (s) => (s || '').replace(/\\s+/g, ' ').trim().slice(0, MAX_TEXT);
@@ -178,6 +188,11 @@ const SNAPSHOT_SCRIPT = /* js */ `(() => {
     const style = getComputedStyle(el);
     return style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0';
   }
+`;
+
+const SNAPSHOT_SCRIPT = /* js */ `(() => {
+  const MAX_ELEMENTS = 140;
+${LOCATOR_HELPERS}
 
   const INTERACTIVE = 'a[href], button, input, select, textarea, summary, [role], [onclick], [tabindex]';
 
@@ -244,6 +259,66 @@ const SNAPSHOT_SCRIPT = /* js */ `(() => {
     elements: elements,
   };
 })()`;
+
+/**
+ * What the element a step just acted on calls itself.
+ *
+ * ---------------------------------------------------------------------------
+ * THE DIVISION OF LABOUR BETWEEN THE VIDEO AND THE DOM
+ * ---------------------------------------------------------------------------
+ * A recording can say WHICH STEPS THERE ARE AND IN WHAT ORDER -- that is what a
+ * sequence of pictures is evidence of, and no amount of markup would say it
+ * better. What a recording cannot say is what anything is CALLED underneath: a
+ * `data-testid` put there for automation, the accessible name a screen reader
+ * would read, the server-generated `name` attribute a JSF form hangs its state
+ * on. Those are invisible to a camera and permanent in the page.
+ *
+ * So the model proposes a step, this pass runs it, and the moment it resolves
+ * the element hands over its own description -- computed by the same rules the
+ * repair snapshot uses. The flow is then rewritten with what the page said
+ * rather than what the model inferred from a picture of it, and the difference
+ * shows up as steps that resolve on their FIRST locator instead of limping
+ * along on a fallback.
+ *
+ * Never throws. A step that worked must not be reported as failed because its
+ * self-description could not be read.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY IT IS INSTALLED INTO THE PAGE INSTEAD OF SENT WITH THE CALL
+ * ---------------------------------------------------------------------------
+ * Playwright evaluates a STRING as an expression, never as a function -- which
+ * is right for the snapshot (an IIFE that returns an object) and useless for a
+ * call that has to receive the element. And a real function handed to
+ * `evaluate` is serialised without its closure, so it cannot call helpers
+ * defined out here.
+ *
+ * So the helpers are installed once per context as an init script, under one
+ * namespaced global, and the call is an ordinary arrow function that finds them
+ * there. No `new Function`, which a portal with a strict `script-src` would
+ * refuse -- and refusing quietly, on exactly the kind of site this module
+ * exists for.
+ */
+export const LOCATOR_INSTALL_SCRIPT = /* js */ `(() => {
+${LOCATOR_HELPERS}
+  Object.defineProperty(window, '__cortexTargets', {
+    value: (el) => targetsFor(el, roleOf(el), accessibleName(el)),
+    writable: false,
+    enumerable: false,
+    configurable: true,
+  });
+})()`;
+
+export async function observeTargets(locator: Locator): Promise<Target[]> {
+  try {
+    const found = await locator.evaluate((el) => {
+      const read = (window as unknown as Record<string, unknown>).__cortexTargets;
+      return typeof read === 'function' ? (read as (node: Element) => unknown)(el) : [];
+    });
+    return Array.isArray(found) ? (found as Target[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 /** Read the page. Never throws: a snapshot is diagnostics, not the errand. */
 export async function snapshotPage(page: Page): Promise<PageSnapshot> {

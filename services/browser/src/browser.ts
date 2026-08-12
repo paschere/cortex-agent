@@ -3,7 +3,7 @@ import type { Config } from './config';
 import { buildLocator, describeTarget, isResolved, resolveTarget } from './locators';
 import { logger } from './logger';
 import { replay } from './replay';
-import { snapshotPage } from './snapshot';
+import { LOCATOR_INSTALL_SCRIPT, snapshotPage } from './snapshot';
 import type { PageSnapshot, ReplayRequest, ReplayResponse, Target } from './types';
 
 /**
@@ -95,7 +95,7 @@ export class BrowserWorker {
 
   private async newContext(): Promise<BrowserContext> {
     const browser = await this.ensureBrowser();
-    return browser.newContext({
+    const context = await browser.newContext({
       viewport: { width: this.config.viewportWidth, height: this.config.viewportHeight },
       ...(this.config.userAgent ? { userAgent: this.config.userAgent } : {}),
       acceptDownloads: true,
@@ -108,6 +108,11 @@ export class BrowserWorker {
       locale: 'es-CO',
       timezoneId: 'America/Bogota',
     });
+    // How an element describes itself, installed before any document runs so
+    // that a step which resolves can ask the element what it is called. See
+    // `observeTargets` in snapshot.ts for why it is installed rather than sent.
+    await context.addInitScript({ content: LOCATOR_INSTALL_SCRIPT });
+    return context;
   }
 
   /** Run a learned flow. One context, created and destroyed here. */

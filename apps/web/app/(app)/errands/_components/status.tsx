@@ -1,4 +1,4 @@
-import type { ErrandState } from '@/lib/errands/types';
+import type { ErrandState } from '@/lib/errands-shape';
 import { CHIP_BASE, CHIP_TONE, DOT_TONE, type StatusTone } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 

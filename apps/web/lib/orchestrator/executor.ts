@@ -81,7 +81,7 @@ export interface RunOptions {
    * Tool-id patterns this run may draw from, on top of the agent's grants.
    * SUBTRACTIVE ONLY — see `openCatalogue`. Used by errands, which run
    * unattended and are restricted to a read-only catalogue
-   * (apps/web/lib/errands/boundary.ts).
+   * (packages/agent-tools/src/errands/boundary.ts).
    */
   toolAllowlist?: string[];
 }
@@ -153,7 +153,7 @@ async function openCatalogue(
   // A caller may narrow further, and ONLY narrow: the allow-list is
   // intersected with what the grants already permit, so it can never hand out
   // a tool the agent or the team refused. An errand passes a read-only list
-  // here (apps/web/lib/errands/boundary.ts) — that intersection is what makes
+  // here (packages/agent-tools/src/errands/boundary.ts) — that intersection is what makes
   // "an errand cannot send anything" a property of the toolset rather than a
   // promise in a prompt.
   if (toolAllowlist && toolAllowlist.length > 0) {

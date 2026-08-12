@@ -1,11 +1,12 @@
 import 'server-only';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ErrandSnapshot, LegSnapshot } from './engine';
+// The WIRE contract, declared once in the browser-safe mirror and imported by
+// both ends. Typing the response against the file the screen reads is what
+// stops the two drifting without anything failing.
+import type { ErrandDetail } from '@/lib/errands-shape';
 import {
   ERRAND_COLUMNS,
   ERRAND_LEG_COLUMNS,
   ERRAND_QUESTION_COLUMNS,
-  type ErrandDetail,
   type ErrandLegView,
   type ErrandQuestionView,
   type ErrandSource,
@@ -13,7 +14,9 @@ import {
   toErrandLegView,
   toErrandQuestionView,
   toErrandView,
-} from './types';
+} from '@cortex/agent-tools';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { type ErrandSnapshot, type LegSnapshot, describeState } from './engine';
 
 /**
  * Every read the errand surface and the engine do, in one place.
@@ -76,19 +79,6 @@ export async function listErrands(
       openQuestions: questions.filter((q) => q.state === 'open').length,
     };
   });
-}
-
-/** How many errands this workspace already has in flight. Admission control. */
-export async function countLiveErrands(
-  db: SupabaseClient,
-  organizationId: string,
-): Promise<number> {
-  const { count } = await db
-    .from('errands')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', organizationId)
-    .in('state', ['queued', 'working', 'blocked', 'watching']);
-  return count ?? 0;
 }
 
 export async function loadLegs(db: SupabaseClient, errandId: string): Promise<ErrandLegView[]> {
@@ -344,5 +334,27 @@ export async function loadDetail(
     }
   }
 
-  return { errand: row.view, legs, questions, currentLeg };
+  return {
+    errand: row.view,
+    legs,
+    questions,
+    currentLeg,
+    // Computed here, from the same rows the engine reads, and sent down. See
+    // the note on ErrandDetail.situation in lib/errands-shape.ts.
+    situation: describeState({
+      state: row.view.state,
+      kind: row.view.kind,
+      legsUsed: row.view.legsUsed,
+      legCeiling: row.view.legCeiling,
+      checksDone: row.view.checksDone,
+      nextCheckAt: row.view.nextCheckAt,
+      openQuestion: questions.some((q) => q.state === 'open'),
+      spend: {
+        tokensSpent: row.view.tokensSpent,
+        tokenCeiling: row.view.tokenCeiling,
+        legsUsed: row.view.legsUsed,
+        legCeiling: row.view.legCeiling,
+      },
+    }),
+  };
 }

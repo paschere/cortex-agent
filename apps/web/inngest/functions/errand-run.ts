@@ -69,7 +69,7 @@ export const errandRun = inngest.createFunction(
   {
     id: 'errand-run',
     concurrency: [
-      // One worker per errand. The lease in lib/errands/lifecycle.ts is the
+      // One worker per errand. The lease in packages/agent-tools/src/errands/lifecycle.ts is the
       // second layer, and it is the one that also covers a re-sent event and
       // the older invocation still finishing during a deploy.
       { key: 'event.data.errandId', limit: 1 },

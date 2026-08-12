@@ -1,3 +1,4 @@
+import { CommandMenuProvider } from '@/components/nav/CommandMenuContext';
 import { MobileSidebarProvider } from '@/components/nav/MobileSidebarContext';
 import { Sidebar } from '@/components/nav/Sidebar';
 import { Topbar } from '@/components/nav/Topbar';
@@ -15,15 +16,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const pendingApprovals = await countPendingApprovals(user.organization.id, user.id);
   return (
     <MobileSidebarProvider>
-      <div className="flex h-screen overflow-hidden bg-canvas">
-        <Sidebar role={user.role} pendingApprovals={pendingApprovals} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar email={user.email} />
-          <main className="scroll-slim flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
-          </main>
+      <CommandMenuProvider role={user.role}>
+        <div className="flex h-screen overflow-hidden bg-canvas">
+          <Sidebar role={user.role} pendingApprovals={pendingApprovals} />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Topbar email={user.email} />
+            <main className="scroll-slim flex-1 overflow-y-auto">
+              <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
+            </main>
+          </div>
         </div>
-      </div>
+      </CommandMenuProvider>
     </MobileSidebarProvider>
   );
 }

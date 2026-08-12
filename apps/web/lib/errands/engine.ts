@@ -28,9 +28,15 @@
  * difference between an errand and a lucky button.
  */
 
-import { type Spend, type StopReason, canStartLeg, exhaustedNote, spentFraction } from './budget';
-import type { ErrandKind, ErrandSource, ErrandState, LegStatus } from './types';
-import { isErrandTerminal } from './types';
+import {
+  type Spend,
+  type StopReason,
+  canStartLeg,
+  exhaustedNote,
+  spentFraction,
+} from '@cortex/agent-tools';
+import type { ErrandKind, ErrandSource, ErrandState, LegStatus } from '@cortex/agent-tools';
+import { isErrandTerminal } from '@cortex/agent-tools';
 
 // ---------------------------------------------------------------------------
 // What the engine is looking at

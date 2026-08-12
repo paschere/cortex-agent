@@ -98,6 +98,102 @@ export function alreadyConnected(startUrl: string): AlreadyConnected | null {
   return null;
 }
 
+/* ---------------------------------------------------------------------------
+ * QUÉ PRODUCE Y DÓNDE LLEGA (migration 0093)
+ * -------------------------------------------------------------------------*/
+
+/**
+ * What the errand comes back with. Decides what a notification can SAY: the
+ * difference between «el trámite corrió» and «el certificado de tradición de
+ * ABC123 está listo» is entirely here.
+ */
+export const OUTPUT_KINDS = ['document', 'data', 'confirmation'] as const;
+export type OutputKind = (typeof OUTPUT_KINDS)[number];
+
+export const OUTPUT_KIND_LABEL: Record<OutputKind, string> = {
+  document: 'Un documento',
+  data: 'Un dato',
+  confirmation: 'Sólo saber que salió bien',
+};
+
+export const OUTPUT_KIND_HINT: Record<OutputKind, string> = {
+  document: 'El certificado, el paz y salvo, el extracto: algo que se descarga.',
+  data: 'Un valor de la última pantalla: un estado, una fecha, un monto.',
+  confirmation: 'No trae nada que guardar; la noticia es que funcionó.',
+};
+
+/**
+ * Where the result lands. There is no «para:» — siempre le llega a quien pidió
+ * el trámite. La razón está en la migración: un destinatario libre aquí sería
+ * la única forma sin revisar de que un dato de la empresa salga de la empresa.
+ */
+export const DELIVER_TO = ['none', 'chat', 'email'] as const;
+export type DeliverTo = (typeof DELIVER_TO)[number];
+
+export const DELIVER_TO_LABEL: Record<DeliverTo, string> = {
+  none: 'Guardado y ya',
+  chat: 'Avísame en el chat',
+  email: 'Mándamelo por correo',
+};
+
+export const DELIVER_TO_HINT: Record<DeliverTo, string> = {
+  none: 'Queda en la pantalla del trámite, con su resultado y su hora.',
+  chat: 'Un mensaje en la conversación donde se pidió.',
+  email: 'A tu correo. Y como Chat de Google, si lo tienes vinculado.',
+};
+
+export const DELIVER_WHEN = ['always', 'failure'] as const;
+export type DeliverWhen = (typeof DELIVER_WHEN)[number];
+
+export const DELIVER_WHEN_LABEL: Record<DeliverWhen, string> = {
+  always: 'Siempre',
+  failure: 'Sólo cuando falle',
+};
+
+export interface FlowDelivery {
+  outputKind: OutputKind;
+  outputLabel: string;
+  deliverTo: DeliverTo;
+  deliverWhen: DeliverWhen;
+}
+
+export const DEFAULT_DELIVERY: FlowDelivery = {
+  outputKind: 'confirmation',
+  outputLabel: '',
+  deliverTo: 'none',
+  deliverWhen: 'always',
+};
+
+/**
+ * Lo que produce el trámite, leído de la propia grabación.
+ *
+ * Asking somebody cold what their errand produces gets «pues… el trámite». Ask
+ * them right after they taught it, with the answer already filled in from what
+ * the recording did, and they either nod or correct one word. A `download`
+ * step means a document and the step's own label is what it is called; an
+ * `extract` step means a datum and the name it was extracted under is what it
+ * is called. Neither is a guess about intent — both are what the recording
+ * literally contains.
+ *
+ * The last matching step wins: an errand that downloads two things ends on the
+ * one it went there for.
+ */
+export function proposeOutput(steps: ProposedStep[]): {
+  outputKind: OutputKind;
+  outputLabel: string;
+} {
+  let found: { outputKind: OutputKind; outputLabel: string } | null = null;
+  for (const step of steps) {
+    if (step.action === 'download') {
+      found = { outputKind: 'document', outputLabel: step.label.trim() };
+    } else if (step.action === 'extract' && !found) {
+      const name = (step.extractAs ?? '').replaceAll(/[._-]/g, ' ').trim();
+      found = { outputKind: 'data', outputLabel: name || step.label.trim() };
+    }
+  }
+  return found ?? { outputKind: 'confirmation', outputLabel: '' };
+}
+
 /** What a flow does to the site it runs on. Decides whether it needs approval. */
 export const FLOW_EFFECTS = ['read', 'write'] as const;
 export type FlowEffect = (typeof FLOW_EFFECTS)[number];
@@ -203,6 +299,8 @@ export interface FlowSummary {
   hasCredential: boolean;
   variables: { name: string; label: string; example: string; required: boolean }[];
   stepCount: number;
+  /** Qué produce y dónde llega. See migration 0093. */
+  delivery: FlowDelivery;
   lastRunAt: string | null;
   lastRunStatus: string | null;
   lastError: string | null;

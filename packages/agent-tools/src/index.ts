@@ -69,6 +69,14 @@ export * from './actions';
 // (migration 0079). Placed after ./commitments and ./vehicles because it reads
 // both to build its reports; it registers no source of truth of its own.
 export * from './reports';
+// Encargos (migration 0089): a job handed over and worked unattended for
+// minutes or hours. The EXECUTION engine lives in apps/web/lib/errands, which
+// needs Inngest and the orchestrator; what is here is the vocabulary every
+// surface shares, the spend ceilings, and the three tools the chat calls by
+// name. It reaches ./billing (the plan meter gates commissioning) and ./web
+// (its legs search the internet) through direct module imports rather than
+// this barrel, so the position of this line does not decide anything.
+export * from './errands';
 export * from './pipeline';
 export * from './meetings';
 // Library only — no tools are registered here. WhatsApp is a surface Cortex
@@ -129,6 +137,15 @@ export { salesDraftProposal } from './composite/sales-draft-proposal';
 // The dev-task executor's pure core. Registers no tools — it is a library for
 // the Inngest worker that turns a Linear issue into a pull request.
 export * from './dev';
+
+// Two modules independently coined `ClaimResult`: an errand being claimed by a
+// person, and a dev task being claimed by a worker. Both are legitimate names
+// in their own file and neither knows about the other, which is what a flat
+// barrel turns into an error (TS2308). The errand one wins the bare name
+// because it is the product concept; the executor's is reached from
+// `agent-tools/src/dev/claim` by the one worker that needs it, and nothing
+// imports either through the barrel today.
+export type { ClaimResult } from './errands';
 
 // Plans, consumption and the first ten minutes of a new company (migration
 // 0085). Registers no tools: it is what decides whether the rest of them may

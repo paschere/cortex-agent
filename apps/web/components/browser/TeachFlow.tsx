@@ -11,13 +11,15 @@ import {
   TARGET_LABEL,
   TARGET_WHY,
   alreadyConnected,
+  DEFAULT_DELIVERY,
+  type FlowDelivery,
+  proposeOutput,
 } from '@/lib/browser-shape';
 import { chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
+import { CaptureContract } from '@/components/privacy/CaptureContract';
 import {
   AlertTriangle,
-  AppWindow,
-  Asterisk,
   ChevronDown,
   Circle,
   Loader2,
@@ -26,10 +28,10 @@ import {
   Plug,
   Square,
   Video,
-  VideoOff,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { DeliveryFields } from './DeliveryFields';
 import {
   type CapturedFrame,
   NotATabError,
@@ -126,6 +128,7 @@ export function TeachFlow({
   const [hint, setHint] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sample, setSample] = useState<Record<string, string>>({});
+  const [delivery, setDelivery] = useState<FlowDelivery>(DEFAULT_DELIVERY);
   const recorder = useRef<RecorderHandle | null>(null);
 
   const finish = useCallback(
@@ -159,6 +162,11 @@ export function TeachFlow({
       const seeded: Record<string, string> = {};
       for (const v of payload.proposal.variables) seeded[v.name] = v.example;
       setSample(seeded);
+      // Filled in from what the recording actually did — a download step means
+      // a document, an extract step means a datum — so the question on the
+      // review screen is "is this right?" and not "what does your errand
+      // produce?", which nobody answers well in the abstract.
+      setDelivery({ ...DEFAULT_DELIVERY, ...proposeOutput(payload.proposal.steps) });
       setStage({
         name: 'review',
         proposal: payload.proposal,
@@ -200,6 +208,7 @@ export function TeachFlow({
         sample,
         frames: stage.frames,
         costUsd: stage.costUsd,
+        delivery,
       }),
     });
     const payload = (await response.json()) as {
@@ -216,13 +225,14 @@ export function TeachFlow({
     }
     setStage({ name: 'idle' });
     setHint('');
+    setDelivery(DEFAULT_DELIVERY);
     noteTaught();
     onSaved({
       name: stage.proposal.name,
       message: payload.message ?? 'Guardado.',
       verified: payload.verified ?? false,
     });
-  }, [stage, sample, onSaved]);
+  }, [stage, sample, delivery, onSaved]);
 
   if (!canRecordTab()) {
     return (
@@ -265,7 +275,7 @@ export function TeachFlow({
             )}
           </p>
 
-          <CaptureContract />
+          <CaptureContract kind="teach" />
           <HowToRecord />
 
           <div className="mt-5 max-w-xl">
@@ -384,55 +394,14 @@ export function TeachFlow({
           costUsd={stage.costUsd}
           sample={sample}
           onSample={setSample}
+          delivery={delivery}
+          onDelivery={setDelivery}
           onChange={(proposal) => setStage({ ...stage, proposal })}
           onDiscard={() => setStage({ name: 'idle' })}
           onSave={() => void save()}
         />
       )}
     </Panel>
-  );
-}
-
-/**
- * Qué se captura y qué no, antes de pedir la pestaña.
- *
- * Three cells rather than three bullets: the same three facts as a list read as
- * terms and conditions, and the one that people actually need — no video is
- * kept — was buried in the middle of a four-line paragraph. Hairlines come from
- * the gap showing the border colour through, so they stay correct when the grid
- * reflows to one column on a phone.
- */
-function CaptureContract() {
-  const cells = [
-    {
-      icon: AppWindow,
-      title: 'Sólo la pestaña que elijas',
-      body: 'Nada de tus otras ventanas, ni del escritorio, ni del correo que tengas abierto.',
-    },
-    {
-      icon: VideoOff,
-      title: 'No se guarda video',
-      body: 'Sólo quedan los fotogramas donde la imagen cambió, y se borran al extraer el trámite.',
-    },
-    {
-      icon: Asterisk,
-      title: 'Las claves no se transcriben',
-      body: 'Se ven como puntos y no las leo. Si vas a escribir algo que no debe quedar, pausa.',
-    },
-  ];
-
-  return (
-    <div className="mt-5 grid gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-3">
-      {cells.map((cell) => (
-        <div key={cell.title} className="bg-surface-2 p-3.5">
-          <div className="flex items-center gap-1.5">
-            <cell.icon className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
-            <p className="text-[12.5px] font-semibold text-ink">{cell.title}</p>
-          </div>
-          <p className="mt-1 text-[11.5px] leading-snug text-ink-muted">{cell.body}</p>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -560,6 +529,8 @@ function Review({
   costUsd,
   sample,
   onSample,
+  delivery,
+  onDelivery,
   onChange,
   onDiscard,
   onSave,
@@ -570,6 +541,8 @@ function Review({
   costUsd: number;
   sample: Record<string, string>;
   onSample: (next: Record<string, string>) => void;
+  delivery: FlowDelivery;
+  onDelivery: (next: FlowDelivery) => void;
   onChange: (next: Proposal) => void;
   onDiscard: () => void;
   onSave: () => void;
@@ -689,6 +662,17 @@ function Review({
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="p-5">
+        <h3 className="text-[13.5px] font-semibold text-ink">Qué produce y dónde te llega</h3>
+        <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+          Lo pregunto ahora, mientras te acuerdas de a qué fuiste. Un {MODULE.one} que corre solo
+          de madrugada y deja el resultado en una pantalla que nadie abre no le sirve a nadie.
+        </p>
+        <div className="mt-3.5">
+          <DeliveryFields value={delivery} onChange={onDelivery} />
+        </div>
       </div>
 
       <div className="p-5">

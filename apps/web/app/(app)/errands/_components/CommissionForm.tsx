@@ -1,12 +1,12 @@
 'use client';
 
-import { ERRAND_BOUNDARY_NOTICE } from '@/lib/errands/boundary';
 import {
   DEFAULT_MONITOR_CADENCE_MINUTES,
-  type ErrandKindSpec,
+  ERRAND_BOUNDARY_NOTICE,
+  type ErrandKind,
+  type ErrandKindOption,
   MONITOR_CADENCES,
-} from '@/lib/errands/kinds';
-import type { ErrandKind } from '@/lib/errands/types';
+} from '@/lib/errands-shape';
 import { clsx } from 'clsx';
 import { CornerDownLeft, Loader2, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -36,7 +36,7 @@ import { useMemo, useState } from 'react';
 
 const MIN_CHARS = 10;
 
-export function CommissionForm({ kinds }: { kinds: ErrandKindSpec[] }) {
+export function CommissionForm({ kinds }: { kinds: ErrandKindOption[] }) {
   const router = useRouter();
   const [kind, setKind] = useState<ErrandKind>(kinds[0]?.kind ?? 'research_compare');
   const [request, setRequest] = useState('');

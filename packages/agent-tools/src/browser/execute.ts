@@ -2,16 +2,24 @@ import type { Logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Actor } from './access';
 import { canRunFlow } from './access';
-import { classifyFailure } from './classify';
+import { classifyFailure, hasLoginSteps } from './classify';
 import type { BrowserTransport } from './client';
 import { unlockForRun } from './credentials';
+import {
+  currentDocumentSink,
+  type DocumentSink,
+  type DownloadedFile,
+  separateDownload,
+} from './download';
 import { safeInputs } from './redact';
+import { refineFromDom, refinementNote } from './refine';
 import type { Repairer } from './repair';
 import { modelRepairer } from './repair';
 import {
   countRepair,
   finishRun,
   markBroken,
+  markNeedsLogin,
   markVerified,
   noteRun,
   recordSteps,
@@ -79,6 +87,13 @@ export interface RunOptions {
    * break.
    */
   verifying?: boolean;
+  /**
+   * Where a downloaded file goes. Defaults to whatever the process registered
+   * at boot (see `setDocumentSink`); passed explicitly only by tests. Absent
+   * altogether, the errand still runs and the file is described in the result
+   * but not kept.
+   */
+  documentSink?: DocumentSink;
 }
 
 export interface RunOutcome {
@@ -90,9 +105,72 @@ export interface RunOutcome {
   steps: StepOutcome[];
   durationMs: number;
   spend: ModelSpend;
-  failureKind?: 'transient' | 'legitimate' | 'site-changed';
+  failureKind?: 'transient' | 'legitimate' | 'site-changed' | 'needs-login';
   repaired?: boolean;
   newVersion?: number;
+  /**
+   * The run did not fail so much as stop and ask something. Nothing is wrong
+   * with the flow, nothing was retried, and the answer is a person's to give.
+   */
+  pendingQuestion?: 'credential';
+}
+
+/**
+ * Put the file somewhere it can be used, if this caller has somewhere.
+ *
+ * A trámite that ends at a results page and drops the certificate is somebody
+ * sent to do a errand who comes back without the paper. Filing it as an
+ * ordinary Brain Knowledge document is what makes it usable afterwards -- the
+ * ingestion the sink triggers is the same one an upload goes through, so the
+ * certificate gets parsed, chunked, indexed and run through the structured
+ * extraction of migration 0076 without this module knowing any of that exists.
+ */
+async function fileDownload(
+  options: RunOptions,
+  file: DownloadedFile,
+  runId: string,
+): Promise<{ documentId: string; title: string } | null> {
+  const sink = options.documentSink ?? currentDocumentSink();
+  if (!sink) return null;
+  const filed = await sink(file, {
+    organizationId: options.organizationId,
+    flowId: options.flow.id,
+    flowName: options.flow.name,
+    host: options.flow.host,
+    runId,
+    userId: options.actor.id,
+  });
+  if (filed) {
+    options.logger.info(
+      { flowId: options.flow.id, documentId: filed.documentId, bytes: file.sizeBytes },
+      'browser flow filed the document it downloaded',
+    );
+  }
+  return filed;
+}
+
+/**
+ * What this flow can do about a login, which is what tells a locked door apart
+ * from a rejected password.
+ */
+function loginFacts(flow: Flow): { hasCredential: boolean; hasLoginSteps: boolean } {
+  return { hasCredential: Boolean(flow.credentialId), hasLoginSteps: hasLoginSteps(flow.steps) };
+}
+
+/**
+ * The sentence a person can act on, which is the whole value of this state.
+ *
+ * It names the site, says what is missing and says what to do -- including the
+ * part nobody guesses, which is that the recording has to be made again with
+ * the sign-in inside it. A recording that starts after the door cannot be
+ * patched by adding a password: there are no steps to put it in.
+ */
+function credentialQuestion(flow: Flow, alsoNeedsSteps: boolean): string {
+  const site = flow.host || 'ese portal';
+  if (!alsoNeedsSteps) {
+    return `Para hacer «${flow.name}» necesito la cuenta de ${site}. Vincúlale una credencial en Trámites y vuelve a intentarlo; la clave queda cifrada y no se muestra en ninguna parte.`;
+  }
+  return `«${flow.name}» empieza después de iniciar sesión en ${site}, y la grabación arrancó cuando ya estabas adentro: no tiene los pasos del ingreso. Enséñamelo otra vez cerrando sesión primero, de modo que la grabación incluya el ingreso, y vincúlale la credencial de esa cuenta.`;
 }
 
 function missingVariables(flow: Flow, inputs: Record<string, string>): string[] {
@@ -151,6 +229,22 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
       message:
         'El servicio de navegador no está conectado en este espacio de trabajo, así que no puedo ejecutar trámites en sitios web.',
       durationMs: 0,
+      ...empty,
+    };
+  }
+
+  // Asked before a browser is even opened, because the answer will not change
+  // by trying: a run already known to need a login it does not have would spend
+  // twenty seconds arriving at the same question.
+  if (flow.loginRequired && !flow.credentialId) {
+    const facts = loginFacts(flow);
+    return {
+      ok: false,
+      runId: null,
+      message: credentialQuestion(flow, !facts.hasLoginSteps),
+      failureKind: 'needs-login',
+      pendingQuestion: 'credential',
+      durationMs: Date.now() - startedAt,
       ...empty,
     };
   }
@@ -217,6 +311,27 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
   // It worked.
   // -------------------------------------------------------------------------
   if (result.ok) {
+    // The file, if there is one, comes out of the result before anything
+    // persists it. See download.ts: base64 belongs in object storage, not in a
+    // JSONB column and not in a model's context.
+    const carried = separateDownload(result.output);
+    result.output = carried.output;
+    const filed = carried.file
+      ? await fileDownload(options, carried.file, runId).catch((err: unknown) => {
+          logger.error(
+            { err: (err as Error).message, flowId: flow.id },
+            'browser flow could not file the document it downloaded',
+          );
+          return null;
+        })
+      : null;
+    if (filed && carried.summary) {
+      result.output = {
+        ...result.output,
+        download: { ...carried.summary, documentId: filed.documentId },
+      };
+    }
+
     await finishRun(db, runId, {
       status: 'succeeded',
       result: result.output,
@@ -225,6 +340,46 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
     });
     await noteRun(db, flow.id, 'succeeded', null);
     await markVerified(db, flow.id, runId);
+
+    // ---------------------------------------------------------------------
+    // The flow just ran. Every step that resolved was asked what it is called.
+    //
+    // Only on the verification run, which is the one moment the step list is
+    // still a reading of a photograph. After that the locators came from the
+    // page already and re-asking would rewrite a proven flow every time it ran,
+    // for nothing.
+    // ---------------------------------------------------------------------
+    if (options.verifying) {
+      const refined = refineFromDom(flow.steps, result.steps);
+      if (refined.changed.length > 0) {
+        const version = await writeVersion(db, flow, {
+          steps: refined.steps,
+          reason: 'refined',
+          changedStep: refined.changed[0],
+          note: refinementNote(refined),
+          by: actor.id,
+          // The proof survives: these locators were read off the elements that
+          // THIS run acted on, so the errand this version describes is the one
+          // that just completed. Clearing the verification would demand a second
+          // identical run to re-earn what the first one proved.
+          keepProof: true,
+        });
+        logger.info(
+          { flowId: flow.id, version, steps: refined.changed.length },
+          'browser flow rewritten with the locators the DOM reported',
+        );
+        return {
+          ok: true,
+          runId,
+          message: 'Listo.',
+          output: result.output,
+          steps: result.steps,
+          durationMs: result.durationMs,
+          spend: EMPTY_SPEND,
+          newVersion: version,
+        };
+      }
+    }
 
     const drift = promoteDrift(flow.steps, result.steps);
     let newVersion: number | undefined;
@@ -278,10 +433,12 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
   }
 
   const step = flow.steps[failure.index];
+  const facts = loginFacts(flow);
   const verdict = classifyFailure({
     evidence: failure.evidence,
     snapshot: failure.snapshot,
     step: step ?? { action: 'click', label: failure.label, targets: [], landmarks: [] },
+    flow: facts,
   });
 
   await finishRun(db, runId, {
@@ -297,6 +454,29 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
     { flowId: flow.id, rule: verdict.rule, kind: verdict.kind, stepIndex: failure.index },
     'browser flow failed',
   );
+
+  // -------------------------------------------------------------------------
+  // It is not broken. It is locked, and nobody was ever asked for the key.
+  //
+  // Remembered on the flow so the NEXT run asks up front instead of driving a
+  // browser to the same door, and reported as a question rather than a defeat:
+  // the flow keeps its status, no model is called, and nothing is retried.
+  // -------------------------------------------------------------------------
+  if (verdict.kind === 'needs-login') {
+    const question = credentialQuestion(flow, !facts.hasLoginSteps);
+    await markNeedsLogin(db, flow.id, question);
+    return {
+      ok: false,
+      runId,
+      message: question,
+      failureKind: 'needs-login',
+      pendingQuestion: 'credential',
+      steps: result.steps,
+      output: result.output,
+      durationMs: result.durationMs,
+      spend: EMPTY_SPEND,
+    };
+  }
 
   // A transient or legitimate failure ends here, and ends WITHOUT touching the
   // flow. This early return is the guard the whole module depends on.

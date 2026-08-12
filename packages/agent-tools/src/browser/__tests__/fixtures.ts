@@ -66,6 +66,7 @@ export function makeFlow(overrides: Partial<Flow> = {}): Flow {
     status: 'ready',
     source: 'recording',
     credentialId: null,
+    loginRequired: false,
     variables: [{ name: 'placa', label: 'Placa', example: 'ABC123', required: true }],
     steps: PLATE_FLOW_STEPS,
     version: 1,
@@ -84,7 +85,12 @@ export function makeFlow(overrides: Partial<Flow> = {}): Flow {
   };
 }
 
-export function okOutcomes(steps: Step[], matchedRank = 0): StepOutcome[] {
+export function okOutcomes(
+  steps: Step[],
+  matchedRank = 0,
+  /** What the live DOM said each element calls itself. See refine.ts. */
+  observed?: (step: Step, index: number) => StepOutcome['observedTargets'],
+): StepOutcome[] {
   return steps.map((s, index) => ({
     index,
     action: s.action,
@@ -97,6 +103,7 @@ export function okOutcomes(steps: Step[], matchedRank = 0): StepOutcome[] {
     valuePreview: s.value?.kind === 'secret' ? '***' : (s.value?.text ?? null),
     ok: true,
     durationMs: 120,
+    ...(observed ? { observedTargets: observed(s, index) } : {}),
   }));
 }
 
@@ -156,14 +163,19 @@ export function scriptedTransport(replies: TransportResult<ReplayResponse>[]): S
   };
 }
 
-export function succeeded(steps: Step[], output: Record<string, unknown> = {}, matchedRank = 0) {
+export function succeeded(
+  steps: Step[],
+  output: Record<string, unknown> = {},
+  matchedRank = 0,
+  observed?: (step: Step, index: number) => StepOutcome['observedTargets'],
+) {
   return {
     ok: true as const,
     data: {
       ok: true,
       runId: 'r',
       durationMs: 3_400,
-      steps: okOutcomes(steps, matchedRank),
+      steps: okOutcomes(steps, matchedRank, observed),
       output,
     } satisfies ReplayResponse,
   };

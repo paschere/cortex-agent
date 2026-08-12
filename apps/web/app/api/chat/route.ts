@@ -125,7 +125,102 @@ const Body = z.object({
    * it produced before the field existed. See components/chat/MemoryScope.tsx.
    */
   spaceIds: z.array(z.string().uuid()).max(32).optional(),
+  /**
+   * ONE FRAME of the tab this person is sharing, taken at the instant they
+   * pressed send. See components/chat/ScreenView.tsx and migration 0092.
+   *
+   * It rides on the request and dies with it: nothing below writes it anywhere,
+   * and the only trace a screen question leaves is a timestamp and a token
+   * count on the user's message row.
+   *
+   * Absent means unchanged — a request without this field produces byte for
+   * byte the turn it produced before the field existed.
+   */
+  screen: z
+    .object({
+      // ~1,4 MB of base64 is a 1 MB JPEG, comfortably above a 1280px frame at
+      // quality 0.85 and low enough that a malformed client cannot post a film.
+      base64: z.string().min(1).max(1_400_000),
+      mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+      width: z.number().int().positive().max(4096),
+      height: z.number().int().positive().max(4096),
+      takenAt: z.string().datetime(),
+    })
+    .optional(),
 });
+
+/**
+ * What one frame costs the model: `width × height / 750` input tokens.
+ *
+ * Anthropic's published formula, and it is a function of the frame's size and
+ * of nothing else — the same monitor costs the same whether it is showing a
+ * spreadsheet or a photograph. Written onto the message row because the
+ * dimensions vanish with the image; see migration 0092.
+ */
+function glanceTokens(width: number, height: number): number {
+  return Math.max(1, Math.round((width * height) / 750));
+}
+
+/**
+ * What the model is told about the picture it has been handed.
+ *
+ * ===========================================================================
+ * THE PART THAT MAKES THIS CORTEX AND NOT A CAMERA
+ * ===========================================================================
+ * An assistant that can see a screen answers questions about the screen. This
+ * one is attached to a company's memory, its tools and its provenance rules, so
+ * the questions worth asking are the ones that cross the two: «este contrato en
+ * pantalla, ¿dice lo mismo que el que firmamos en marzo?». Nothing about the
+ * turn had to change for that to be possible — retrieval still runs, the tool
+ * ranker still ranks, `kb` is always on offer (see BASE_FAMILIES) — so this
+ * block's job is only to make sure the model KNOWS the crossing is available
+ * and that the citation rules did not go away just because the question arrived
+ * as an image.
+ *
+ * The three instructions below are each here because of a specific way this
+ * goes wrong:
+ *
+ *   IT IS NOT MEMORY. A frame is not a document, nobody else can open it, and
+ *   it will not exist in a minute. A model that treats it as a source will
+ *   produce a citation the reader cannot follow, which is the exact failure
+ *   this product exists to prevent. Same argument, same wording as an
+ *   ephemeral attachment — see lib/chat-attachments.ts.
+ *
+ *   SAY WHAT YOU CANNOT SEE. A screenshot is a viewport: the rest of the page
+ *   is below the fold, the small print is small, a column is cut off. A model
+ *   that quietly fills in the part it cannot read produces a confident answer
+ *   about a field that was never on screen, and the person has no way to tell.
+ *
+ *   DO NOT READ SECRETS ALOUD. The capture contract promises that passwords are
+ *   not transcribed. Password fields render as dots, but a revealed field, a
+ *   password manager, an API key in a config screen or a one-time code do not —
+ *   so the promise has to be enforced here as well as trusted to the browser.
+ */
+function screenBlock(takenAt: string): string {
+  return [
+    '<pantalla>',
+    'La persona está compartiendo UNA pestaña de su navegador y esta pregunta trae UN cuadro de',
+    `esa pestaña, tomado en el momento exacto en que la envió (${takenAt}). Es lo que tiene al`,
+    'frente ahora mismo.',
+    '',
+    'NO es un documento ni parte de la memoria de la empresa: no está indexado, nadie más lo puede',
+    'abrir y deja de existir cuando termines de responder. Úsalo con toda libertad para responder,',
+    'pero refiérete a él como «lo que tienes en pantalla», nunca como algo que estuviera guardado.',
+    '',
+    'Si la pregunta compara lo que se ve con lo que la empresa sabe — un contrato, una tarifa, un',
+    'cliente, un compromiso, lo que se acordó antes — BÚSCALO con tus herramientas y cita la fuente',
+    'como en cualquier otra respuesta. Esa es la parte que vale: leer la pantalla lo hace cualquiera,',
+    'cruzarla con lo que ya sabemos lo haces tú. Una comparación sin fuente no sirve.',
+    '',
+    'Di qué NO alcanzas a ver. Un cuadro es sólo la parte visible de la página: si la respuesta',
+    'depende de algo que quedó cortado, borroso o más abajo, dilo y pide que lo muestre, en vez de',
+    'suponerlo.',
+    '',
+    'Si en la imagen se alcanza a ver una contraseña, una clave, un token o un código de',
+    'verificación, no lo transcribas ni completo ni en parte, y avísale que quedó a la vista.',
+    '</pantalla>',
+  ].join('\n');
+}
 
 export async function POST(req: NextRequest) {
   // The clock starts before anything else happens, including the session
@@ -221,11 +316,22 @@ export async function POST(req: NextRequest) {
   }
 
   // Persist the user's last message
+  const glance = parsed.data.screen;
   if (lastUserMessage) {
     await db.from('messages').insert({
       conversation_id: conversationId,
       role: 'user',
       content: lastUserMessage.content,
+      // The whole footprint of a screen question: when it was looked at and
+      // what the looking cost. Never the picture — see migration 0092. Written
+      // on the same insert the message was already making, so a glance adds no
+      // round-trip to the turn.
+      ...(glance
+        ? {
+            screen_glance_at: glance.takenAt,
+            screen_glance_tokens: glanceTokens(glance.width, glance.height),
+          }
+        : {}),
     });
   }
 
@@ -761,7 +867,7 @@ export async function POST(req: NextRequest) {
       // The attachment block is deliberately NOT folded into `ragBlock`: an
       // ephemeral file must not look like something that lives in the brain, or
       // the answer cites a document nobody can open. See lib/chat-attachments.ts.
-      sections: [scopeBlock, ragBlock, attachmentBlock],
+      sections: [scopeBlock, ragBlock, attachmentBlock, glance && screenBlock(glance.takenAt)],
     }),
   );
 
@@ -795,6 +901,35 @@ export async function POST(req: NextRequest) {
       .join('\n'),
   );
   recorder.part('question', String(coreMessages[coreMessages.length - 1]?.content ?? ''));
+
+  /**
+   * The frame goes in LAST, after the turn has been weighed.
+   *
+   * Two reasons it is here and not up where `coreMessages` is built. The
+   * measurement above counts CHARACTERS of text that really went in, and a
+   * message whose content became an array of parts would have been stringified
+   * into "[object Object]" — a made-up number in a table whose whole purpose is
+   * that its numbers are measured. And putting it at the very end means the
+   * image is the last thing added before the call, so nothing between here and
+   * `streamText` can accidentally read a message shape it was not written for.
+   *
+   * It attaches to the LAST user message rather than to a message of its own:
+   * the picture is part of the question, not a separate turn, and a model that
+   * receives it as its own message has to guess which question it belongs to.
+   */
+  if (glance) {
+    const lastUserAt = coreMessages.map((m) => m.role).lastIndexOf('user');
+    const target = lastUserAt >= 0 ? coreMessages[lastUserAt] : undefined;
+    if (target) {
+      coreMessages[lastUserAt] = {
+        role: 'user',
+        content: [
+          { type: 'image', image: glance.base64, mimeType: glance.mimeType },
+          { type: 'text', text: String(target.content) },
+        ],
+      };
+    }
+  }
 
   // Everything before this line is Cortex's own work, and it is the only part
   // of the wait that can be shortened without touching the model or the answer.

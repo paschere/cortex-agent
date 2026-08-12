@@ -118,10 +118,29 @@ export default async function ApprovalsPage() {
 
   return (
     <>
+      {/*
+        The subtitle used to say "todo lo que espera una decisión tuya, en una
+        sola fila", and /actions made that untrue: a drafted email waiting on a
+        yes is exactly that and is not here. Two options were to merge the
+        screens or to stop overclaiming. Merging would have to throw away one of
+        two halves that do not fit each other — an approval is a tool call parked
+        mid-turn that expires, an action is a draft that keeps being watched
+        after it is sent. So the claim narrows to what this page really holds,
+        and the queue next door gets a door instead of a footnote: it is the only
+        queue in the product with no badge and, until now, no inbound link.
+      */}
       <PageHeader
         title="Aprobaciones"
-        subtitle="Todo lo que espera una decisión tuya, en una sola fila"
+        subtitle="Lo que Cortex quiere hacer y no hace sin tu permiso"
         icon={<Inbox className="h-5 w-5" />}
+        actions={
+          <Link
+            href="/actions"
+            className="inline-flex items-center gap-1 rounded-pill border border-border px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:border-border-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+          >
+            Lo redactado, en Acciones <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        }
       />
 
       {nothingPending ? (
@@ -129,8 +148,13 @@ export default async function ApprovalsPage() {
           <Inbox className="mx-auto mb-3 h-7 w-7 text-primary" />
           <p className="mb-1 text-[15px] font-bold text-ink">No hay nada pendiente</p>
           <p className="mx-auto max-w-md leading-relaxed">
-            Aquí aparece todo lo que necesita tu visto bueno: una acción que Cortex no ejecuta sin
-            permiso, un prospecto nuevo por revisar o una rutina que falló.
+            Aquí aparece lo que Cortex no hace sin permiso: una acción que necesita tu visto bueno,
+            un prospecto nuevo por revisar o una rutina que falló. Los correos que ya redactó y
+            faltan por mandar están en{' '}
+            <Link href="/actions" className="font-semibold text-primary hover:underline">
+              Acciones
+            </Link>
+            .
           </p>
         </Panel>
       ) : (

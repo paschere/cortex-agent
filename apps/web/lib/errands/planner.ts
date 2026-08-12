@@ -1,11 +1,11 @@
 import 'server-only';
 import { NO_THINKING, chatModel } from '@cortex/agent-tools';
+import { ERRAND_KIND_SPECS } from '@cortex/agent-tools';
+import type { ErrandKind, ErrandSource } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import type { Assessment } from './engine';
-import { ERRAND_KIND_SPECS } from './kinds';
-import type { ErrandKind, ErrandSource } from './types';
 
 /**
  * The two model calls an errand makes on its own behalf.

@@ -2,14 +2,10 @@ import 'server-only';
 import { inngest } from '@/lib/inngest';
 import { EVENT_RUN_STARTED } from '@/lib/orchestrator/contract';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { loadAgent } from '@cortex/agents';
-import { logger } from '@cortex/core';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { assertProposalOnly, errandToolAllowlist } from './boundary';
-import { canStartLeg, exhaustedNote } from './budget';
-import { MAX_MONITOR_CHECKS } from './budget';
-import { type Transition, decideNext, foldAssessment } from './engine';
-import { ERRAND_KIND_SPECS, toolsFor } from './kinds';
+import { assertProposalOnly, errandToolAllowlist } from '@cortex/agent-tools';
+import { canStartLeg, exhaustedNote } from '@cortex/agent-tools';
+import { MAX_MONITOR_CHECKS } from '@cortex/agent-tools';
+import { ERRAND_KIND_SPECS, toolsFor } from '@cortex/agent-tools';
 import {
   type ErrandDb,
   acceptBrief,
@@ -22,7 +18,13 @@ import {
   openLeg,
   parkForNextCheck,
   releaseErrand,
-} from './lifecycle';
+} from '@cortex/agent-tools';
+import type { ErrandSource, LegStatus } from '@cortex/agent-tools';
+import { loadAgent } from '@cortex/agents';
+import { logger } from '@cortex/core';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { type Transition, decideNext, foldAssessment } from './engine';
+import { askInConversation, deliverInConversation } from './notify';
 import { assessLeg, triageRequest } from './planner';
 import {
   harvestSources,
@@ -31,7 +33,6 @@ import {
   mergeSources,
   readRunOutcome,
 } from './repository';
-import type { ErrandSource, LegStatus } from './types';
 
 /**
  * ONE TRANSITION OF THE ERRAND MACHINE.
@@ -53,7 +54,7 @@ import type { ErrandSource, LegStatus } from './types';
  * `assertProposalOnly` runs before the orchestration row is even written. An
  * errand cannot commission a run that could send, buy or book — not because
  * the prompt asks it not to, but because the toolset handed to that run does
- * not contain anything that can. See lib/errands/boundary.ts.
+ * not contain anything that can. See packages/agent-tools/src/errands/boundary.ts.
  */
 
 /** How much of a leg's report is carried forward as `findings`. */
@@ -68,6 +69,76 @@ export interface AdvanceResult {
 }
 
 const errandDb = (db: SupabaseClient): ErrandDb => db as unknown as ErrandDb;
+
+/**
+ * Block on a question AND tell the person, in one call.
+ *
+ * A wrapper rather than two calls at each of the two ask sites, because the
+ * failure mode of forgetting the second one is invisible: the errand is
+ * correctly stopped, the question is correctly stored, and nobody ever finds
+ * out. Bundling them makes "ask" mean "ask somebody" everywhere.
+ *
+ * The store write happens first and its result is not conditional on the
+ * notification — the question must survive a chat that cannot be posted to.
+ */
+async function askAndTell(
+  db: SupabaseClient,
+  edb: ErrandDb,
+  input: {
+    errandId: string;
+    organizationId: string;
+    conversationId: string | null;
+    request: string;
+    leg: number;
+    question: string;
+    why: string;
+    options: string[];
+    findings?: string | null;
+  },
+): Promise<void> {
+  const asked = await askAndBlock(edb, {
+    errandId: input.errandId,
+    organizationId: input.organizationId,
+    leg: input.leg,
+    question: input.question,
+    why: input.why,
+    options: input.options,
+    findings: input.findings,
+  });
+  // Only the worker that actually WROTE the question announces it. A second
+  // worker that lost the one-open-question index would otherwise post a
+  // duplicate into the thread for a question that is not the open one.
+  if (!asked) return;
+  await askInConversation(db, {
+    conversationId: input.conversationId,
+    errandId: input.errandId,
+    request: input.request,
+    question: input.question,
+    why: input.why,
+    options: input.options,
+  });
+}
+
+/** Close the errand AND report back, same argument as `askAndTell`. */
+async function closeAndTell(
+  db: SupabaseClient,
+  edb: ErrandDb,
+  input: Parameters<typeof closeErrand>[1] & { conversationId: string | null; request: string },
+): Promise<void> {
+  const closed = await closeErrand(edb, input);
+  // Somebody else already ended it — a person cancelling owns that ending and
+  // has just been told about it by the screen they clicked on.
+  if (!closed) return;
+  await deliverInConversation(db, {
+    conversationId: input.conversationId,
+    errandId: input.errandId,
+    request: input.request,
+    state: input.state,
+    deliverable: input.deliverable ?? null,
+    closingNote: input.closingNote,
+    sourceCount: input.sources?.length ?? 0,
+  });
+}
 
 export async function advanceErrand(input: {
   errandId: string;
@@ -94,11 +165,13 @@ export async function advanceErrand(input: {
         return await assess(db, edb, loaded, input.organizationId, transition.seq);
       case 'stop': {
         const spend = loaded.snapshot.spend;
-        await closeErrand(edb, {
+        await closeAndTell(db, edb, {
           errandId: input.errandId,
           state: 'exhausted',
           closingNote: exhaustedNote(spend, transition.reason),
           deliverable: loaded.row.view.deliverable ?? loaded.row.view.findings,
+          conversationId: loaded.row.view.conversationId,
+          request: loaded.row.view.request,
         });
         return { did: 'stop', again: false, detail: transition.reason };
       }
@@ -136,9 +209,11 @@ async function runTriage(
   await chargeTokens(edb, view.id, view.tokensSpent, outcome.tokens);
 
   if (!outcome.ready) {
-    await askAndBlock(edb, {
+    await askAndTell(db, edb, {
       errandId: view.id,
       organizationId,
+      conversationId: view.conversationId,
+      request: view.request,
       leg: 0,
       question: outcome.question,
       why: outcome.why,
@@ -168,9 +243,11 @@ async function launchLeg(
     // The person whose grants the legs inherit is gone. Refusing is correct:
     // running with somebody else's permissions is how a deleted account's
     // access outlives the account.
-    await closeErrand(edb, {
+    await closeAndTell(db, edb, {
       errandId: view.id,
       state: 'failed',
+      conversationId: view.conversationId,
+      request: view.request,
       closingNote:
         'Este encargo quedó sin dueño —la cuenta que lo pidió ya no está en el espacio de ' +
         'trabajo—, y un encargo corre con los permisos de quien lo pidió. Vuelve a encargarlo ' +
@@ -414,9 +491,11 @@ async function assess(
 
   switch (resolution.outcome) {
     case 'ask':
-      await askAndBlock(edb, {
+      await askAndTell(db, edb, {
         errandId: view.id,
         organizationId,
+        conversationId: view.conversationId,
+        request: view.request,
         leg: seq,
         question: resolution.question,
         why: resolution.why,
@@ -442,20 +521,24 @@ async function assess(
       return { did: 'assess_leg', again: false, detail: 'no change; watching' };
 
     case 'exhausted':
-      await closeErrand(edb, {
+      await closeAndTell(db, edb, {
         errandId: view.id,
         state: 'exhausted',
         deliverable: resolution.deliverable,
         sources: await sourcesFor(db, leg.runId, resolution.sources),
         closingNote: resolution.closingNote,
+        conversationId: view.conversationId,
+        request: view.request,
       });
       return { did: 'assess_leg', again: false, detail: 'ceiling' };
 
     case 'deliver': {
       const monitorChanged = view.kind === 'monitor_change';
-      await closeErrand(edb, {
+      await closeAndTell(db, edb, {
         errandId: view.id,
         state: 'delivered',
+        conversationId: view.conversationId,
+        request: view.request,
         deliverable: resolution.deliverable,
         sources: await sourcesFor(db, leg.runId, resolution.sources),
         closingNote: monitorChanged

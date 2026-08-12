@@ -1,5 +1,5 @@
+import { LEG_RESERVE_TOKENS, type Spend, canStartLeg, exhaustedNote } from '@cortex/agent-tools';
 import { describe, expect, it } from 'vitest';
-import { LEG_RESERVE_TOKENS, type Spend, canStartLeg, exhaustedNote } from './budget';
 import {
   type Assessment,
   type ErrandSnapshot,

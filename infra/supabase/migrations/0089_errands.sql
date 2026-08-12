@@ -104,6 +104,21 @@ create table if not exists public.errands (
   -- something a person would call a change.
   baseline               text,
 
+  -- ── Where it came from ─────────────────────────────────────────────────
+  -- The conversation it was commissioned in, when it was one. Null for an
+  -- errand started from the /errands form.
+  --
+  -- This column is the whole answer to "what happens when an errand needs to
+  -- ask something". A question waiting on a screen nobody has open is a
+  -- question nobody answers, and a blocked errand costs the same as a running
+  -- one while it waits. So an errand born in a chat WRITES ITS QUESTION BACK
+  -- INTO THAT CHAT, as an assistant message — the same mechanism a scheduled
+  -- routine already uses to deliver its result (scheduled_jobs.conversation_id,
+  -- inngest/functions/schedule-run.ts). The question itself stays in
+  -- errand_questions and is answered through the same conditional UPDATE
+  -- wherever the answer comes from; only the DELIVERY is new.
+  conversation_id  uuid references public.conversations(id) on delete set null,
+
   -- ── What it is doing right now ─────────────────────────────────────────
   -- The orchestration run currently working, or null between legs. This is the
   -- ONLY execution state here; everything else about that run lives in
@@ -170,6 +185,12 @@ create index if not exists errands_due_idx
 create index if not exists errands_org_live_idx
   on public.errands (organization_id)
   where state in ('queued', 'working', 'blocked', 'watching');
+
+-- "Which errands in this conversation are waiting on me" — read when a chat
+-- turn starts, so a question asked half an hour ago is not lost to scrollback.
+create index if not exists errands_conversation_idx
+  on public.errands (conversation_id)
+  where conversation_id is not null;
 
 comment on column public.errands.current_run_id is
   'The orchestration run currently doing this errand''s work, or null between legs. An errand does not execute anything itself: it commissions runs (0055) and reads their rows.';

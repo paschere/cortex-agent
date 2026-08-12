@@ -1,3 +1,4 @@
+import { CommandMenuProvider } from '@/components/nav/CommandMenuContext';
 import { MobileSidebarProvider } from '@/components/nav/MobileSidebarContext';
 import { Sidebar } from '@/components/nav/Sidebar';
 import { countPendingApprovals } from '@/lib/nav-signals';
@@ -27,10 +28,12 @@ export default async function ChatLayout({ children }: { children: ReactNode }) 
     <MobileSidebarProvider>
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: our own stylesheet, scoped to .rp-doc; see REPORT_CSS. */}
       <style dangerouslySetInnerHTML={{ __html: REPORT_CSS }} />
-      <div className="flex flex-row h-screen overflow-hidden">
-        <Sidebar role={user.role} pendingApprovals={pendingApprovals} />
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">{children}</div>
-      </div>
+      <CommandMenuProvider role={user.role}>
+        <div className="flex flex-row h-screen overflow-hidden">
+          <Sidebar role={user.role} pendingApprovals={pendingApprovals} />
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">{children}</div>
+        </div>
+      </CommandMenuProvider>
     </MobileSidebarProvider>
   );
 }
