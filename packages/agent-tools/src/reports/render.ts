@@ -391,6 +391,24 @@ export interface RenderOptions {
    * href and an id.
    */
   idPrefix?: string;
+  /**
+   * Drop the masthead — the eyebrow, the 29px title and the three stamps —
+   * and render only the sections, the notes and the source ledger.
+   *
+   * WHAT THIS IS FOR, AND WHAT IT IS NOT. A chart drawn inside a chat message
+   * already sits under a heading the conversation gave it, in a bubble a few
+   * hundred pixels wide; a document masthead there is a second title competing
+   * with the first and a type size that fights the transcript. So the chat asks
+   * for the body only.
+   *
+   * It is NOT a "small" or "summary" mode. The source ledger stays — that is
+   * the part that makes the figures citable, and a chart worth showing is worth
+   * showing where its numbers came from. Nothing is omitted that a reader would
+   * need in order to check a value. The full page (`/reports/:id`) renders the
+   * same document without this flag and shows the masthead, which is the only
+   * difference between the two.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -418,18 +436,24 @@ export function renderReportHtml(doc: ReportDocument, opts: RenderOptions = {}):
         ])
       : '';
 
+  const head = opts.compact
+    ? ''
+    : join([
+        '<header class="rp-head">',
+        `<p class="rp-eyebrow">Informe · ${escapeHtml(REPORT_KIND_LABEL[validated.kind])}</p>`,
+        `<h1 class="rp-title">${escapeHtml(validated.title)}</h1>`,
+        validated.subtitle ? `<p class="rp-sub">${escapeHtml(validated.subtitle)}</p>` : '',
+        '<dl class="rp-stamp-row">',
+        `<div class="rp-stamp"><dt>Periodo</dt><dd>${escapeHtml(validated.periodLabel)}</dd></div>`,
+        `<div class="rp-stamp"><dt>Calculado</dt><dd>${escapeHtml(stamp(validated.generatedAt, validated.timezone))}</dd></div>`,
+        `<div class="rp-stamp"><dt>Zona horaria</dt><dd>${escapeHtml(validated.timezone)}</dd></div>`,
+        '</dl>',
+        '</header>',
+      ]);
+
   return join([
     `<article class="rp-doc" lang="es-CO">`,
-    '<header class="rp-head">',
-    `<p class="rp-eyebrow">Informe · ${escapeHtml(REPORT_KIND_LABEL[validated.kind])}</p>`,
-    `<h1 class="rp-title">${escapeHtml(validated.title)}</h1>`,
-    validated.subtitle ? `<p class="rp-sub">${escapeHtml(validated.subtitle)}</p>` : '',
-    '<dl class="rp-stamp-row">',
-    `<div class="rp-stamp"><dt>Periodo</dt><dd>${escapeHtml(validated.periodLabel)}</dd></div>`,
-    `<div class="rp-stamp"><dt>Calculado</dt><dd>${escapeHtml(stamp(validated.generatedAt, validated.timezone))}</dd></div>`,
-    `<div class="rp-stamp"><dt>Zona horaria</dt><dd>${escapeHtml(validated.timezone)}</dd></div>`,
-    '</dl>',
-    '</header>',
+    head,
     validated.sections.map((s, i) => renderSection(validated, s, i, idPrefix)).join('\n'),
     notes,
     renderSources(validated, idPrefix),

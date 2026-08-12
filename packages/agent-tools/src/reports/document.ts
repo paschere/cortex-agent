@@ -79,7 +79,26 @@ import { z } from 'zod';
  */
 export const REPORT_DOCUMENT_VERSION = 1;
 
-export const REPORT_KINDS = ['expiries', 'fleet', 'client_activity'] as const;
+/**
+ * The three reports `build.ts` knows how to compute from scratch.
+ *
+ * Split out from `REPORT_KINDS` when the chat gained the ability to save a
+ * chart. The distinction is not cosmetic: these three are the only kinds that
+ * can be produced from a KIND plus PARAMETERS, which is what the picker on
+ * /reports offers and what `reports.generate` lets the model ask for. A saved
+ * chat chart has no parameters to re-run — it was already resolved when it was
+ * drawn — so offering it in either place would be offering a button that cannot
+ * work. Keeping the two lists apart is what makes that impossible to get wrong:
+ * `buildReport` takes this narrower type and the compiler refuses the rest.
+ */
+export const GENERATED_REPORT_KINDS = ['expiries', 'fleet', 'client_activity'] as const;
+export type GeneratedReportKind = (typeof GENERATED_REPORT_KINDS)[number];
+
+/**
+ * Every kind a stored report may have. Wider than the list above by exactly one:
+ * `chart`, which arrives from the chat rather than from the builder.
+ */
+export const REPORT_KINDS = [...GENERATED_REPORT_KINDS, 'chart'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 /** Spanish names, because this is what the report calls itself on screen. */
@@ -87,6 +106,7 @@ export const REPORT_KIND_LABEL: Record<ReportKind, string> = {
   expiries: 'Vencimientos',
   fleet: 'Estado de la flota',
   client_activity: 'Actividad por cliente',
+  chart: 'Gráfico del chat',
 };
 
 export const REPORT_KIND_BLURB: Record<ReportKind, string> = {
@@ -96,6 +116,8 @@ export const REPORT_KIND_BLURB: Record<ReportKind, string> = {
     'SOAT, tecnomecánica y multas de cada placa, con la fecha en que se consultó cada registro. Un dato de RUNT o SIMIT es un hecho de un momento, no una verdad permanente.',
   client_activity:
     'Qué tiene comprometido cada contraparte, cuánto pesa en plata y qué se le vence primero.',
+  chart:
+    'Un gráfico que salió de una conversación y alguien decidió conservar. Se guarda igual que los demás: la fotografía, con la fuente y el método de cada cifra.',
 };
 
 /**

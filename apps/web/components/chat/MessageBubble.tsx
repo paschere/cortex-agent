@@ -4,12 +4,15 @@ import { ProposedActionCard } from '@/components/actions/ProposedActionCard';
 import type { ActionView } from '@/lib/actions-shape';
 import type { Message, ToolInvocation } from 'ai';
 import { Brain, Check, Copy, RotateCw } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { ChartCard } from './ChartCard';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
+import { FollowUps } from './FollowUps';
 import { ProposalCard, type ProposalResult } from './ProposalCard';
 import { ReasoningTrail } from './ReasoningTrail';
-import { ToolCallCard } from './ToolCallCard';
+import { SelectionActions } from './SelectionActions';
+import { TaskRows, type TurnMetrics } from './TaskRows';
 
 interface MessageBubbleProps {
   message: Message;
@@ -17,6 +20,10 @@ interface MessageBubbleProps {
   onConfirmed?: () => void;
   onRegenerate?: () => void;
   isStreaming?: boolean;
+  /** Real per-call durations for the newest turn. Null until they land. */
+  metrics?: TurnMetrics | null;
+  /** Puts text in the composer — used by follow-ups and by the selection menu. */
+  onCompose?: (text: string) => void;
 }
 
 type ConfirmationSentinel = {
@@ -71,6 +78,21 @@ function reasoningOf(message: Message): string {
   return fromParts.trim() || (message.reasoning ?? '');
 }
 
+function isChartTool(toolName: string): boolean {
+  return toolName === 'reports_chart' || toolName === 'reports.chart';
+}
+
+/**
+ * The tool returns an id, not a picture — the SVG would otherwise be replayed
+ * into the model's context on every later turn of the conversation. `ChartCard`
+ * fetches the drawing by that id.
+ */
+function chartIdOf(v: unknown): string | null {
+  if (!v || typeof v !== 'object' || '__error' in v) return null;
+  const id = (v as { chartId?: unknown }).chartId;
+  return typeof id === 'string' ? id : null;
+}
+
 function isProposalResult(v: unknown): v is ProposalResult {
   if (!v || typeof v !== 'object') return false;
   const o = v as Record<string, unknown>;
@@ -107,8 +129,14 @@ export function MessageBubble({
   onConfirmed,
   onRegenerate,
   isStreaming,
+  metrics,
+  onCompose,
 }: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
+  // Scopes the selection menu to THIS answer: a selection that starts in one
+  // message and ends in another offers nothing, because a quote spanning two
+  // answers has no single source to attribute it to.
+  const bodyRef = useRef<HTMLDivElement>(null);
   if (role === 'data') return null;
   const isUser = role === 'user';
 
@@ -143,35 +171,76 @@ export function MessageBubble({
             entirely on the many turns that carry no reasoning. */}
         <ReasoningTrail text={reasoningOf(message)} live={isStreaming && !content?.trim()} />
 
-        {content && <ChatMarkdown content={content} isStreaming={isStreaming} />}
+        <div ref={bodyRef}>
+          {content && <ChatMarkdown content={content} isStreaming={isStreaming} />}
+        </div>
 
+        {/*
+          Tool calls now split three ways. A call whose RESULT is something the
+          person acts on — a drafted email, a proposal, a chart — keeps its own
+          card, because those are the turn's output rather than a step toward
+          it. Everything else is a step, and steps are rows: see TaskRows for
+          why twelve of them cannot be twelve cards.
+        */}
         {toolInvocations && toolInvocations.length > 0 && (
-          <div className="mt-2 space-y-1.5">
-            {toolInvocations.map((inv) => {
-              const actionResult =
-                isProposedActionTool(inv.toolName) && inv.state === 'result'
-                  ? (inv as { result?: unknown }).result
-                  : undefined;
-              if (actionResult !== undefined && isProposedActionResult(actionResult)) {
-                return (
-                  <ProposedActionCard
-                    key={inv.toolCallId}
-                    action={actionResult.action}
-                    dense
-                    onSettled={onConfirmed}
+          <>
+            {(() => {
+              const cards: React.ReactNode[] = [];
+              const steps: ToolInvocation[] = [];
+
+              for (const inv of toolInvocations) {
+                const result =
+                  inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
+
+                if (
+                  isProposedActionTool(inv.toolName) &&
+                  result !== undefined &&
+                  isProposedActionResult(result)
+                ) {
+                  cards.push(
+                    <ProposedActionCard
+                      key={inv.toolCallId}
+                      action={result.action}
+                      dense
+                      onSettled={onConfirmed}
+                    />,
+                  );
+                  continue;
+                }
+                if (isProposalTool(inv.toolName) && result !== undefined && isProposalResult(result)) {
+                  cards.push(<ProposalCard key={inv.toolCallId} result={result} />);
+                  continue;
+                }
+                if (isChartTool(inv.toolName)) {
+                  const chartId = chartIdOf(result);
+                  if (chartId) {
+                    cards.push(
+                      <ChartCard
+                        key={inv.toolCallId}
+                        chartId={chartId}
+                        heading={
+                          (result as { heading?: string } | undefined)?.heading ?? 'Gráfico'
+                        }
+                      />,
+                    );
+                    continue;
+                  }
+                }
+                steps.push(inv);
+              }
+
+              return (
+                <>
+                  <TaskRows
+                    invocations={steps}
+                    metrics={metrics ?? null}
+                    isStreaming={isStreaming}
                   />
-                );
-              }
-              const proposalResult =
-                isProposalTool(inv.toolName) && inv.state === 'result'
-                  ? (inv as { result?: unknown }).result
-                  : undefined;
-              if (proposalResult !== undefined && isProposalResult(proposalResult)) {
-                return <ProposalCard key={inv.toolCallId} result={proposalResult} />;
-              }
-              return <ToolCallCard key={inv.toolCallId} invocation={inv} />;
-            })}
-          </div>
+                  {cards.length > 0 && <div className="space-y-1.5">{cards}</div>}
+                </>
+              );
+            })()}
+          </>
         )}
 
         {confirmationData && conversationId && (
@@ -184,6 +253,21 @@ export function MessageBubble({
               onConfirmed={onConfirmed}
             />
           </div>
+        )}
+
+        {!isStreaming && content && onCompose && (
+          <SelectionActions
+            containerRef={bodyRef}
+            provenance={{
+              conversationId,
+              saidAt: new Date(message.createdAt ?? Date.now()).toLocaleDateString('es-CO', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              }),
+            }}
+            onAsk={(quote) => onCompose(`Sobre esto que dijiste:\n\n> ${quote}\n\n`)}
+          />
         )}
 
         {!isStreaming && content && (
@@ -202,6 +286,17 @@ export function MessageBubble({
               </button>
             )}
           </div>
+        )}
+
+        {/* Only under the newest answer: a transcript with a strip of
+            suggestions after every message is a transcript of suggestions. */}
+        {onRegenerate && onCompose && content && (
+          <FollowUps
+            conversationId={conversationId}
+            messageId={message.id}
+            ready={!isStreaming}
+            onPick={onCompose}
+          />
         )}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { buildToolContext } from '@/lib/agent';
+import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
@@ -498,14 +499,19 @@ export async function POST(req: NextRequest) {
     }
   })().finally(closeHistory);
 
-  const [ragBlockResolved, { selection, allCandidates }, dbMessages] = await Promise.all([
-    retrieving,
-    selecting,
-    loadingHistory,
-  ]);
+  // Files attached to this conversation that the person chose NOT to remember
+  // (migration 0088). Joined with the three above rather than awaited on its
+  // own: it is one indexed lookup by conversation_id, it depends on nothing,
+  // and run here it costs the prelude no wall-clock at all. It never throws —
+  // see lib/chat-attachments.ts.
+  const loadingAttachments = loadTurnAttachments(db, conversationId);
+
+  const [ragBlockResolved, { selection, allCandidates }, dbMessages, turnAttachments] =
+    await Promise.all([retrieving, selecting, loadingHistory, loadingAttachments]);
   // Taken from the resolved value rather than left to the closure's assignment,
   // so the block is provably finished before anything downstream reads it.
   ragBlock = ragBlockResolved;
+  const attachmentBlock = renderTurnAttachmentBlock(turnAttachments);
 
   // A conversation may withhold a whole family. Applied AFTER ranking rather
   // than by removing candidates before it, so the capture can still show what
@@ -662,7 +668,10 @@ export async function POST(req: NextRequest) {
       organizationId: user.organization.id,
       userId: user.id,
       basePrompt: agent.systemPrompt,
-      sections: [ragBlock],
+      // The attachment block is deliberately NOT folded into `ragBlock`: an
+      // ephemeral file must not look like something that lives in the brain, or
+      // the answer cites a document nobody can open. See lib/chat-attachments.ts.
+      sections: [ragBlock, attachmentBlock],
     }),
   );
 

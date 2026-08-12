@@ -2,9 +2,10 @@
 
 import { toolDisplayName } from '@/lib/tool-labels';
 import type { Message } from 'ai';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EmptyState } from './EmptyState';
 import { MessageBubble } from './MessageBubble';
+import type { TurnMetrics } from './TaskRows';
 import { TypingIndicator } from './TypingIndicator';
 
 /**
@@ -47,6 +48,42 @@ export function MessageList({
   onSuggestion,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [metrics, setMetrics] = useState<TurnMetrics | null>(null);
+
+  /**
+   * The real timings, fetched once the turn is over.
+   *
+   * They are written from `onFinish` on the server, so they cannot be read
+   * before the answer is complete — which is fine, because they are not
+   * progress, they are the record. The task rows show an elapsed counter while
+   * a call is in flight and swap in the measurement when it arrives.
+   *
+   * Only for the newest turn. Older ones keep whatever they were rendered with;
+   * fetching a timing row per message would be one query per message on every
+   * scroll, for a number almost nobody looks at twice.
+   */
+  useEffect(() => {
+    if (isLoading || !conversationId) return;
+    const last = messages[messages.length - 1];
+    if (last?.role !== 'assistant') return;
+
+    let alive = true;
+    const timer = setTimeout(() => {
+      fetch(`/api/chat/turn-metrics?conversationId=${encodeURIComponent(conversationId)}`)
+        .then((r) => (r.ok ? r.json() : { metrics: null }))
+        .then((data: { metrics: TurnMetrics | null }) => {
+          if (alive && data.metrics) setMetrics(data.metrics);
+        })
+        .catch(() => {
+          // No numbers is a fine outcome: the rows simply show none.
+        });
+    }, 600);
+
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [isLoading, conversationId, messages]);
 
   useEffect(() => {
     const el = ref.current;
@@ -77,6 +114,8 @@ export function MessageList({
                 onConfirmed={onConfirmed}
                 onRegenerate={isLast && m.role === 'assistant' ? onRegenerate : undefined}
                 isStreaming={isLast && isLoading && m.role === 'assistant'}
+                metrics={isLast ? metrics : null}
+                onCompose={onSuggestion}
               />
             );
           })}

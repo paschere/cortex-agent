@@ -18,10 +18,35 @@
 
 // Side-effect import: registers reports.generate / list / open / share.
 import './tools';
+// …and reports.chart, which draws inside a conversation. Separate module
+// because it is the one report that is not computed from a kind and some
+// parameters — see the header of `chat-chart.ts`.
+import './chat-chart';
 
 export { reportsGenerate, reportsList, reportsOpen, reportsShare } from './tools';
 
 export {
+  CHAT_CHARTS_TABLE,
+  CHAT_CHART_COLUMNS,
+  CHAT_CHART_KEEP_DAYS,
+  chartReportUrl,
+  chatChartDocument,
+  getChatChart,
+  insertChatChart,
+  purgeChatCharts,
+  renderChatChartHtml,
+  reportsChart,
+  saveChartAsReport,
+} from './chat-chart';
+export type { ChatChartInput, ChatChartRow } from './chat-chart';
+
+// The four chart shapes as markup. Exported so a surface that renders one
+// section on its own does not have to reach into the module.
+export { renderChart } from './charts';
+export type { ChartRenderOptions } from './charts';
+
+export {
+  GENERATED_REPORT_KINDS,
   REPORT_DOCUMENT_VERSION,
   REPORT_KINDS,
   REPORT_KIND_BLURB,
@@ -36,6 +61,7 @@ export {
 export type {
   ChartBody,
   Figure,
+  GeneratedReportKind,
   Metric,
   ReportDocument,
   ReportKind,

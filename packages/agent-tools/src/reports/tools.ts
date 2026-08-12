@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { registerTool } from '../index';
 import { buildReport } from './build';
 import {
+  GENERATED_REPORT_KINDS,
   REPORT_KINDS,
   REPORT_KIND_BLURB,
   REPORT_KIND_LABEL,
@@ -37,10 +38,21 @@ import {
  * translate the titles back, badly, on the way to the user.
  */
 
+/**
+ * What a STORED report may be — four kinds, because a chat chart can be saved.
+ * Used by `reports.list` and `reports.open`, which read whatever is in the table.
+ */
 const kindEnum = z.enum(REPORT_KINDS);
 
-const kindHelp = REPORT_KINDS.map((k) => `"${k}" (${REPORT_KIND_LABEL[k]}): ${REPORT_KIND_BLURB[k]}`)
-  .join(' ');
+/**
+ * What `reports.generate` may be ASKED for — the three the builder computes.
+ * A saved chat chart has no parameters to re-run, so it cannot be requested.
+ */
+const generatedKindEnum = z.enum(GENERATED_REPORT_KINDS);
+
+const kindHelp = GENERATED_REPORT_KINDS.map(
+  (k) => `"${k}" (${REPORT_KIND_LABEL[k]}): ${REPORT_KIND_BLURB[k]}`,
+).join(' ');
 
 // ---------------------------------------------------------------------------
 // Shared shaping
@@ -154,7 +166,7 @@ export const reportsGenerate = registerTool({
     'El informe queda guardado tal como se calculó: es una fotografía, no una consulta que se vuelve a correr. Cada cifra que devuelve trae la fuente y el método con que se sacó — cítalos cuando hables de los números, nunca los des como afirmación tuya. ' +
     'No inventes cifras ni redactes conclusiones que el informe no traiga: si el número no está en la respuesta de esta herramienta, no existe. Si lo que piden no es ninguno de los tres informes, dilo en vez de forzar el más parecido.',
   inputSchema: z.object({
-    kind: kindEnum.describe(kindHelp),
+    kind: generatedKindEnum.describe(kindHelp),
     horizonDays: z
       .number()
       .int()

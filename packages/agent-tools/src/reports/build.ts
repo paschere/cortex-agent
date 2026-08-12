@@ -15,8 +15,8 @@ import {
   type Figure,
   REPORT_DOCUMENT_VERSION,
   REPORT_KIND_LABEL,
+  type GeneratedReportKind,
   type ReportDocument,
-  type ReportKind,
   type ReportSection,
   type ReportSource,
   type ReportTable,
@@ -477,7 +477,7 @@ async function buildExpiries(input: Required<Omit<BuildInput, 'params'>> & { par
 
   return validateDocument({
     version: REPORT_DOCUMENT_VERSION,
-    kind: 'expiries' satisfies ReportKind,
+    kind: 'expiries' satisfies GeneratedReportKind,
     title: `${REPORT_KIND_LABEL.expiries} — próximos ${horizonDays} días`,
     subtitle: `Lo que se le vence a la empresa entre hoy y el ${longDate(horizonEnd)}, y lo que ya se pasó y sigue abierto.`,
     periodLabel: `hoy · ${longDate(today)} → ${longDate(horizonEnd)}`,
@@ -911,7 +911,7 @@ async function buildFleet(input: Required<Omit<BuildInput, 'params'>> & { params
 
   return validateDocument({
     version: REPORT_DOCUMENT_VERSION,
-    kind: 'fleet' satisfies ReportKind,
+    kind: 'fleet' satisfies GeneratedReportKind,
     title: `${REPORT_KIND_LABEL.fleet} — ${longDate(today)}`,
     subtitle:
       'SOAT, tecnomecánica y comparendos de cada placa activa, con la fecha en que se consultó cada registro.',
@@ -1278,7 +1278,7 @@ async function buildClientActivity(
 
   return validateDocument({
     version: REPORT_DOCUMENT_VERSION,
-    kind: 'client_activity' satisfies ReportKind,
+    kind: 'client_activity' satisfies GeneratedReportKind,
     title: clientFilter
       ? `${REPORT_KIND_LABEL.client_activity} — ${params.client}`
       : `${REPORT_KIND_LABEL.client_activity} — ${longDate(today)}`,
@@ -1305,7 +1305,7 @@ function clampInt(value: number | undefined, min: number, max: number, fallback:
  * come through here so a report generated from the chat and one generated from
  * the button are the same document.
  */
-export async function buildReport(kind: ReportKind, input: BuildInput): Promise<ReportDocument> {
+export async function buildReport(kind: GeneratedReportKind, input: BuildInput): Promise<ReportDocument> {
   const resolved = {
     db: input.db,
     today: input.today ?? bogotaToday(input.now),
