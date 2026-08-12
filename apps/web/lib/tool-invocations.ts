@@ -13,7 +13,7 @@ interface StoredToolResult {
 
 /**
  * Rebuilds AI SDK tool invocations from the `tool_calls` / `tool_results`
- * columns so a persisted conversation renders the same ToolCallCards the live
+ * columns so a persisted conversation renders the same task rows the live
  * chat showed, instead of dropping everything the agent actually did.
  *
  * A call with no matching result stays in the 'call' state — that is a turn

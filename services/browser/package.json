@@ -1,0 +1,22 @@
+{
+  "name": "@cortex/browser-service",
+  "version": "0.0.0",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "biome check src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "playwright": "1.49.1"
+  },
+  "devDependencies": {
+    "@types/node": "20.17.10",
+    "tsx": "4.19.2",
+    "typescript": "5.7.2"
+  }
+}

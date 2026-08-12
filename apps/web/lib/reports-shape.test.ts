@@ -1,9 +1,11 @@
 import {
+  GENERATED_REPORT_KINDS as CANONICAL_GENERATED,
   REPORT_KINDS as CANONICAL_KINDS,
   REPORT_KIND_LABEL as CANONICAL_LABEL,
 } from '@cortex/agent-tools';
 import { describe, expect, it } from 'vitest';
 import {
+  GENERATED_REPORT_KINDS,
   REPORT_KINDS,
   REPORT_KIND_ICON,
   REPORT_KIND_LABEL,
@@ -34,5 +36,22 @@ describe('report vocabulary mirrored for the client', () => {
       expect(REPORT_KIND_PITCH[kind]?.length ?? 0).toBeGreaterThan(10);
       expect(REPORT_KIND_ICON[kind]?.length ?? 0).toBeGreaterThan(0);
     }
+  });
+
+  /**
+   * The two lists are not the same list, and the difference is load-bearing:
+   * the picker iterates the generated ones, so a kind that leaked into it would
+   * render a "Generar" button for something `buildReport` cannot build.
+   */
+  it('mirrors the generated kinds too, and keeps them a strict subset', () => {
+    expect([...GENERATED_REPORT_KINDS]).toEqual([...CANONICAL_GENERATED]);
+    for (const kind of GENERATED_REPORT_KINDS) {
+      expect(REPORT_KINDS as readonly string[]).toContain(kind);
+    }
+  });
+
+  it('keeps the chat chart out of the generated list', () => {
+    expect(GENERATED_REPORT_KINDS as readonly string[]).not.toContain('chart');
+    expect(REPORT_KINDS as readonly string[]).toContain('chart');
   });
 });

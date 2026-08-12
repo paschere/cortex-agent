@@ -2,11 +2,11 @@
 
 import { Button } from '@/components/ui/button';
 import {
-  REPORT_KINDS,
+  GENERATED_REPORT_KINDS,
   REPORT_KIND_ICON,
   REPORT_KIND_LABEL,
   REPORT_KIND_PITCH,
-  type ReportKind,
+  type GeneratedReportKind,
 } from '@/lib/reports-shape';
 import { clsx } from 'clsx';
 import { Building2, CalendarClock, Loader2, Truck } from 'lucide-react';
@@ -52,7 +52,7 @@ const MONTHS: Array<{ value: number; label: string }> = [
   { value: 12, label: 'un año' },
 ];
 
-const TONE: Record<ReportKind, { chip: string; icon: string }> = {
+const TONE: Record<GeneratedReportKind, { chip: string; icon: string }> = {
   expiries: { chip: 'bg-amber-soft', icon: 'text-amber' },
   fleet: { chip: 'bg-emerald-soft', icon: 'text-emerald' },
   client_activity: { chip: 'bg-primary-soft', icon: 'text-primary' },
@@ -61,15 +61,15 @@ const TONE: Record<ReportKind, { chip: string; icon: string }> = {
 export function GenerateReport() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [busyKind, setBusyKind] = useState<ReportKind | null>(null);
-  const [span, setSpan] = useState<Record<ReportKind, number>>({
+  const [busyKind, setBusyKind] = useState<GeneratedReportKind | null>(null);
+  const [span, setSpan] = useState<Record<GeneratedReportKind, number>>({
     expiries: 30,
     fleet: 90,
     client_activity: 6,
   });
   const [error, setError] = useState<string | null>(null);
 
-  const run = (kind: ReportKind) => {
+  const run = (kind: GeneratedReportKind) => {
     setError(null);
     setBusyKind(kind);
     startTransition(async () => {
@@ -90,7 +90,7 @@ export function GenerateReport() {
   return (
     <div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {REPORT_KINDS.map((kind) => {
+        {GENERATED_REPORT_KINDS.map((kind) => {
           const Icon = ICONS[REPORT_KIND_ICON[kind]] ?? CalendarClock;
           const tone = TONE[kind];
           const options = kind === 'client_activity' ? MONTHS : HORIZON;

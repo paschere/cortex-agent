@@ -28,6 +28,9 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   sales_draft_proposal: { label: 'Redactar propuesta', icon: 'FileText' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },
+  browser_list_flows: { label: 'Ver los trámites web aprendidos', icon: 'Globe' },
+  browser_run_flow: { label: 'Hacer el trámite en el portal', icon: 'Globe' },
+  browser_submit_flow: { label: 'Radicar el trámite en el portal', icon: 'Send' },
   gdrive_search_files: { label: 'Buscar archivos en Drive', icon: 'FolderSearch' },
   gdrive_read_doc: { label: 'Leer documento de Drive', icon: 'FileSearch' },
   schedule_create: { label: 'Programar rutina', icon: 'AlarmClockPlus' },
@@ -98,6 +101,8 @@ export function confirmationSummary(toolId: string, input: Record<string, unknow
       return `Crear el contacto ${[input.firstName, input.lastName].filter(Boolean).join(' ')} <${input.email}>`;
     case 'hubspot_log_activity':
       return `Registrar ${input.type} "${input.subject}" en ${input.associatedObjectType} ${input.associatedObjectId}`;
+    case 'browser_submit_flow':
+      return `Ejecutar el trámite "${input.flow}" en el portal, que radica o envía algo con la identidad de la empresa`;
     case 'gmail_send_draft':
       return `Enviar el correo redactado ${input.draftId}`;
     case 'gcal_create_event':

@@ -34,6 +34,10 @@ const KIND_TONE: Record<ReportKind, string> = {
   expiries: 'bg-amber-soft text-amber',
   fleet: 'bg-emerald-soft text-emerald',
   client_activity: 'bg-primary-soft text-primary',
+  // Neutral: a chart kept from a conversation can be about anything, so a tone
+  // here would be asserting a meaning the report does not have. The three above
+  // are subjects with a fixed colour; this one is a provenance.
+  chart: 'bg-surface-2 text-ink-muted',
 };
 
 export default async function ReportsPage() {

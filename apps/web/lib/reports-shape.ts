@@ -18,13 +18,24 @@
  * duplication is checked rather than trusted.
  */
 
-export const REPORT_KINDS = ['expiries', 'fleet', 'client_activity'] as const;
+/**
+ * The three the builder can compute from a kind plus parameters. This is what
+ * the picker offers, and it is deliberately narrower than the list below: a
+ * saved chat chart has no parameters to re-run, so a fourth card offering to
+ * "generate" one would be a button that cannot work.
+ */
+export const GENERATED_REPORT_KINDS = ['expiries', 'fleet', 'client_activity'] as const;
+export type GeneratedReportKind = (typeof GENERATED_REPORT_KINDS)[number];
+
+/** Every kind a STORED report may have — the three above plus the chat chart. */
+export const REPORT_KINDS = [...GENERATED_REPORT_KINDS, 'chart'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 export const REPORT_KIND_LABEL: Record<ReportKind, string> = {
   expiries: 'Vencimientos',
   fleet: 'Estado de la flota',
   client_activity: 'Actividad por cliente',
+  chart: 'Gráfico del chat',
 };
 
 /**
@@ -36,6 +47,7 @@ export const REPORT_KIND_PITCH: Record<ReportKind, string> = {
   expiries: 'Qué se vence, cuándo, y cuánto cuesta si se pasa.',
   fleet: 'SOAT, tecnomecánica y comparendos de cada placa.',
   client_activity: 'Qué tiene comprometido cada contraparte y qué se le vence primero.',
+  chart: 'Un gráfico que salió de una conversación y alguien decidió conservar.',
 };
 
 /** Lucide icon names, resolved by the client component's own map. */
@@ -43,8 +55,14 @@ export const REPORT_KIND_ICON: Record<ReportKind, string> = {
   expiries: 'CalendarClock',
   fleet: 'Truck',
   client_activity: 'Building2',
+  chart: 'ChartNoAxesColumn',
 };
 
 export function isReportKind(value: string): value is ReportKind {
   return (REPORT_KINDS as readonly string[]).includes(value);
+}
+
+/** Narrower guard for the one surface that may only accept a buildable kind. */
+export function isGeneratedReportKind(value: string): value is GeneratedReportKind {
+  return (GENERATED_REPORT_KINDS as readonly string[]).includes(value);
 }

@@ -16,6 +16,11 @@ export const CONFIRMATION_NOTES: Record<string, string> = {
   'gcal.create_event':
     'Crea un evento y manda la invitación por correo a todos los asistentes — la gente de fuera la ve de inmediato.',
   'slack.post_message': 'Publica un mensaje en Slack que todos en el canal ven apenas cae.',
+  // Trámites web (migration 0087). The note has to say the two things that
+  // make this different from every other write on the list: it happens on a
+  // system nobody here administers, and with the company's own login.
+  'browser.submit_flow':
+    'Entra al portal con la credencial de la empresa y radica o envía lo que diga el trámite. Pasa en el sistema de un tercero: desde acá no se puede deshacer ni cancelar.',
   'hubspot.create_contact':
     'Crea un registro permanente en el CRM que todo el equipo comercial va a ver y usar.',
   'hubspot.create_deal':
@@ -56,6 +61,7 @@ const FAMILY_SYSTEM: Record<string, string> = {
   payroll: 'el servicio de nómina',
   kb: 'Brain Knowledge, la memoria compartida',
   vehicles: 'el registro de vehículos y, a través de él, el RUNT y el SIMIT',
+  browser: 'un portal de un tercero, con la credencial de la empresa',
   // Custom tools (migración 0067) llevan el id `custom.<slug>`. No podemos
   // nombrar el sistema — cada empresa apunta la suya a donde necesita — así que
   // lo que se dice es lo único que sí sabemos y que sí importa a la hora de

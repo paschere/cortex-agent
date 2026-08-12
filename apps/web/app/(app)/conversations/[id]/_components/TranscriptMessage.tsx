@@ -1,5 +1,5 @@
 import { ChatMarkdown } from '@/components/chat/ChatMarkdown';
-import { ToolCallCard } from '@/components/chat/ToolCallCard';
+import { TaskRows } from '@/components/chat/TaskRows';
 import { Eyebrow, Panel } from '@/components/ui/panel';
 import { toToolInvocations } from '@/lib/tool-invocations';
 import { clsx } from 'clsx';
@@ -24,8 +24,15 @@ function speakerLabel(role: string, agentName: string): string {
 
 /**
  * One archived turn. Deliberately renders through the very same pieces the
- * live chat uses — ChatMarkdown and ToolCallCard — so a transcript is the chat
- * you had, not a second interpretation of it.
+ * live chat uses — ChatMarkdown and TaskRows — so a transcript is the chat you
+ * had, not a second interpretation of it.
+ *
+ * The rows carry no durations here. `turn-metrics` only serves the newest turn
+ * of a live conversation, and fetching a timing row per archived message would
+ * be one query per message on every scroll for a number almost nobody opens
+ * twice. The steps, their arguments and their outcomes are all still here — the
+ * part an archive is read for — and `TurnContextPanel` below already answers
+ * the timing question for the turn as a whole.
  */
 export function TranscriptMessage({
   message,
@@ -84,11 +91,7 @@ export function TranscriptMessage({
           <div className="mb-1.5">
             <Eyebrow>Lo que hizo {agentName}</Eyebrow>
           </div>
-          <div className="space-y-1.5">
-            {invocations.map((inv) => (
-              <ToolCallCard key={inv.toolCallId} invocation={inv} />
-            ))}
-          </div>
+          <TaskRows invocations={invocations} metrics={null} />
         </div>
       )}
 

@@ -43,6 +43,18 @@ export interface OrchestratorRunStartedEvent {
   objective: string;
   /** Sub-agents in flight at once. Clamped by the executor. */
   concurrency: number;
+  /**
+   * Optional narrowing of the catalogue this run may draw from, as tool-id
+   * patterns. Intersected with the agent's grants and the team deny-list, so
+   * it can only ever SUBTRACT — a caller cannot use it to grant itself a tool.
+   *
+   * Absent for a run launched from /orchestrator, which is a person asking for
+   * work with their own permissions. Present for an errand
+   * (lib/errands/boundary.ts), which is unattended and may only read: the
+   * allow-list it passes contains nothing that can send, buy or book, so the
+   * sub-agents are never handed such a tool in the first place.
+   */
+  toolAllowlist?: string[];
 }
 
 export interface OrchestratorRunCancelledEvent {

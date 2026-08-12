@@ -11,10 +11,12 @@ import {
   CalendarClock,
   BookOpen,
   Bot,
+  Briefcase,
   Cable,
   ChevronRight,
   FileBarChart,
   Gauge,
+  Globe,
   Hammer,
   Inbox,
   LayoutDashboard,
@@ -120,6 +122,11 @@ const GROUPS: NavGroup[] = [
     label: 'Automatización',
     items: [
       { href: '/agents', label: 'Agentes', icon: Bot },
+      // Above the Orchestrator on purpose, and it is the same escalation the
+      // note below draws: a pipeline is a flow somebody wrote down, an
+      // orchestration is one Cortex works out for a single objective, and an
+      // encargo is one it works out, pauses to ask about, and comes back to.
+      { href: '/errands', label: 'Encargos', icon: Briefcase },
       { href: '/dev-work', label: 'Desarrollo', icon: Hammer },
       // Sits above Pipelines on purpose: a pipeline is a flow somebody wrote
       // down, an orchestration is one Cortex works out for itself.
@@ -129,6 +136,10 @@ const GROUPS: NavGroup[] = [
       // One name per thing.
       { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
       { href: '/tools', label: 'Herramientas', icon: Wrench },
+      // Trámites web (migration 0087). Under Automatización rather than
+      // Conexiones because a learned errand is not a system Cortex is wired
+      // into — it is work somebody used to do by hand and now does not.
+      { href: '/browser', label: 'Trámites web', icon: Globe },
     ],
   },
   {

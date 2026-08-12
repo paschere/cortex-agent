@@ -77,6 +77,13 @@ export interface RunOptions {
   organizationId: string;
   objective: string;
   concurrency?: number;
+  /**
+   * Tool-id patterns this run may draw from, on top of the agent's grants.
+   * SUBTRACTIVE ONLY — see `openCatalogue`. Used by errands, which run
+   * unattended and are restricted to a read-only catalogue
+   * (apps/web/lib/errands/boundary.ts).
+   */
+  toolAllowlist?: string[];
 }
 
 /** Current status straight from the row — the cancel endpoint writes it from another request. */
@@ -134,6 +141,7 @@ async function addTokens(db: SupabaseClient, runId: string, delta: number): Prom
 async function openCatalogue(
   db: SupabaseClient,
   userId: string,
+  toolAllowlist?: string[],
 ): Promise<{ agent: Awaited<ReturnType<typeof loadAgent>>; catalogue: AnyTool[] }> {
   const agent = await loadAgent(db, 'cortex');
   // The catalogue the planner may draw from is exactly the catalogue the
@@ -141,7 +149,17 @@ async function openCatalogue(
   // user's teams denies. Narrowing here means a sub-agent can never be handed
   // a tool the security layer would refuse three steps later.
   const denied = await deniedToolPatterns(db, userId);
-  const catalogue = filterTools(agent.allowedTools).filter((t) => !isToolDenied(t.id, denied));
+  let catalogue = filterTools(agent.allowedTools).filter((t) => !isToolDenied(t.id, denied));
+  // A caller may narrow further, and ONLY narrow: the allow-list is
+  // intersected with what the grants already permit, so it can never hand out
+  // a tool the agent or the team refused. An errand passes a read-only list
+  // here (apps/web/lib/errands/boundary.ts) — that intersection is what makes
+  // "an errand cannot send anything" a property of the toolset rather than a
+  // promise in a prompt.
+  if (toolAllowlist && toolAllowlist.length > 0) {
+    const permitted = new Set(filterTools(toolAllowlist).map((t) => t.id));
+    catalogue = catalogue.filter((t) => permitted.has(t.id));
+  }
   return { agent, catalogue };
 }
 
@@ -204,7 +222,7 @@ export async function planRun(opts: RunOptions): Promise<PlanOutcome> {
   if (existing.length > 0) return { planned: existing.length, stopped: false };
   if (!(await stillLive(db, runId))) return { planned: 0, stopped: true };
 
-  const { agent, catalogue } = await openCatalogue(db, opts.userId);
+  const { agent, catalogue } = await openCatalogue(db, opts.userId, opts.toolAllowlist);
   const plan = await planObjective({ objective, tools: catalogue, model: agent.defaultModel });
   if (plan.tasks.length === 0) throw new Error('The planner returned an empty plan.');
 
@@ -308,7 +326,7 @@ export async function runWave(opts: RunOptions): Promise<WaveOutcome> {
   if (ready.length === 0)
     return { executed: 0, skipped, remaining: remainingAfter(), stopped: false };
 
-  const { agent, catalogue } = await openCatalogue(db, opts.userId);
+  const { agent, catalogue } = await openCatalogue(db, opts.userId, opts.toolAllowlist);
 
   const outcomes = await mapWithConcurrency(ready, concurrency, async (seq) => {
     const task = bySeq.get(seq);

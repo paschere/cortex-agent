@@ -203,6 +203,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'emerald',
     icon: 'Globe',
   },
+  browser: {
+    name: 'Trámites web',
+    blurb:
+      'Vueltas aprendidas en portales ajenos: entra, llena el formulario y trae el resultado. Los que radican algo piden aprobación.',
+    tone: 'amber',
+    icon: 'Globe',
+  },
   security: {
     name: 'Seguridad',
     blurb: 'Consulta de solo lectura sobre las decisiones de la barrera y sus eventos recientes.',
@@ -395,6 +402,7 @@ const FAMILY_GROUP: Record<string, string> = {
   schedule: 'auto',
   cortex: 'auto',
   web: 'external',
+  browser: 'external',
   security: 'control',
 };
 
@@ -455,6 +463,12 @@ export const FAMILY_CREDENTIALS: Record<string, CredentialRequirement> = {
     label: 'el servicio de nómina',
     blocking: true,
     effect: 'Sin él no hay pagos, gastos ni costos por cliente.',
+  },
+  browser: {
+    vars: ['BROWSER_SERVICE_URL', 'BROWSER_SERVICE_TOKEN'],
+    label: 'el servicio de navegador en Railway',
+    blocking: true,
+    effect: 'Sin él no se puede ejecutar ningún trámite aprendido.',
   },
   slack: {
     vars: ['SLACK_BOT_TOKEN'],

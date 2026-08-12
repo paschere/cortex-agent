@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // CommonJS, like services/whatsapp and for the same reason: this is a
+    // standalone process that nothing imports, so the ESM/CJS interop tax buys
+    // nothing. Playwright itself is dual-published and does not care.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "verbatimModuleSyntax": false,
+    "isolatedModules": false,
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": false,
+    "declarationMap": false,
+    "tsBuildInfoFile": "./.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"]
+}

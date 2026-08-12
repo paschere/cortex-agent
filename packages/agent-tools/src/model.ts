@@ -20,7 +20,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
  * Rewriting request bodies is a liberty, so it is confined to this file and
  * these two fields.
  */
-type ThinkingMode = 'summarized' | 'off';
+type ThinkingMode = 'summarized' | 'off' | 'absent';
 
 function bodyRewriter(mode: ThinkingMode) {
   return async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {
@@ -53,11 +53,45 @@ function bodyRewriter(mode: ThinkingMode) {
       // tokens. So the effort is not a performance dial here, it is the switch
       // that decides whether the user sees Cortex think at all.
       body.output_config = { ...(body.output_config as object), effort: 'max' };
-    } else {
+    } else if (mode === 'off') {
       // Short shape-constrained calls (titles, classification) skip reasoning so
       // the budget goes to the answer. `disabled` is only legal at effort `high`
       // or below, so this branch must not set `max`.
       body.thinking = { type: 'disabled' };
+    } else {
+      // `absent` — say nothing about thinking at all, and do not mark a cache
+      // breakpoint. It exists for the one caller that is NOT a Claude 5 model:
+      // Haiku 4.5 (see SUGGESTION_MODEL). Two reasons the other two branches are
+      // wrong there, and both are about a 4.x model being handed 5-family shapes:
+      //
+      //   THINKING. On the 4.x family "no thinking" is the default you get by
+      //   omitting the field; `{type:'disabled'}` is a 5-family spelling. Saying
+      //   nothing gets the behaviour we want without asserting a shape this
+      //   model was never sent before, and a rejected body would surface as a
+      //   dead suggestion row rather than an error anybody sees.
+      //
+      //   THE CACHE MARK. Haiku 4.5 will not cache a prefix under 4 096 tokens —
+      //   it just returns `cache_creation_input_tokens: 0`. The follow-up prompt
+      //   is a few hundred tokens by construction, so a breakpoint here could
+      //   only ever be a no-op or, if the prompt ever grew, a 1,25× write on a
+      //   one-shot call that is never read back. Neither is worth having.
+      //
+      // The sampling parameters are still stripped above. Haiku 4.5 would accept
+      // a temperature, but there is no reason to send one AI SDK invented.
+      //
+      // `effort` is removed rather than the whole of `output_config`: effort is
+      // a 4.6-and-later dial and Haiku 4.5 errors on it, but `output_config`
+      // also carries structured-output `format`, and a caller that asks for a
+      // schema should get one rather than silently get prose.
+      delete body.thinking;
+      const outputConfig = body.output_config;
+      if (outputConfig && typeof outputConfig === 'object') {
+        delete (outputConfig as Record<string, unknown>).effort;
+        if (Object.keys(outputConfig as Record<string, unknown>).length === 0) {
+          delete body.output_config;
+        }
+      }
+      return fetch(input, { ...init, body: JSON.stringify(body) });
     }
 
     markCacheBreakpoint(body);
@@ -157,6 +191,9 @@ const thinkingProvider = createAnthropic({
 /** Short internal calls: no reasoning, all the budget on the answer. */
 const quietProvider = createAnthropic({ fetch: bodyRewriter('off') });
 
+/** The one caller outside the Claude 5 family. See `suggestionModel()`. */
+const cheapProvider = createAnthropic({ fetch: bodyRewriter('absent') });
+
 /**
  * The one place that decides which LLM Cortex talks to.
  *
@@ -187,6 +224,47 @@ export const CHAT_MODEL = 'claude-sonnet-5';
  * notice, so the few cents are not worth reclaiming.
  */
 export const UTILITY_MODEL = 'claude-sonnet-5';
+
+/**
+ * Throwaway text nobody waits for, and the ONE place a cheaper model is right.
+ *
+ * WHY THIS IS NOT `UTILITY_MODEL`. The note above that constant is the rule and
+ * it still holds: a worse ranker produces an agent that says it cannot do
+ * something it can, and that failure is expensive to notice. The exception here
+ * is narrow and it is about CONSEQUENCE, not about cost. The only caller is the
+ * three follow-up questions under an answer (see the `/api/chat/followups`
+ * route). Nothing downstream reads them, they never enter the transcript, and
+ * they are generated after the answer has already been delivered — so the worst
+ * a bad one can do is sit there being ignored, and the worst a failed call can
+ * do is show nothing at all. That is the whole test for putting work on a
+ * cheaper model, and almost nothing else in this product passes it.
+ *
+ * 200K OF CONTEXT, NOT 1M. Haiku 4.5's window is a fifth of the conversation
+ * model's, so the caller must hand it a slice rather than a transcript. It gets
+ * the last exchange and nothing else; the route caps what it sends rather than
+ * trusting the window.
+ *
+ * WHAT IT COSTS. $1 per million input tokens and $5 per million output. A
+ * follow-up call sends roughly 900 input tokens — the instruction plus a
+ * clipped question and answer — and returns about 90: 0,0009 USD in and
+ * 0,00045 out, so **about 0,0014 USD per answer**, and 0,0024 at the ceilings
+ * the route enforces. That is on the order of six Colombian pesos, and about
+ * 14 USD for ten thousand answers in a month.
+ *
+ * The same call on Sonnet 5 would be roughly three times that at its
+ * introductory $3/$10 and five times at the standard $3/$15 — which is a real
+ * saving and is still not the argument. The argument is the paragraph above:
+ * this is work whose failure mode is a blank strip.
+ */
+export const SUGGESTION_MODEL = 'claude-haiku-4-5';
+
+/**
+ * The model for text that is offered, never asserted. Reasoning is off (by
+ * omission — see the `absent` branch), and no cache breakpoint is marked.
+ */
+export function suggestionModel() {
+  return cheapProvider(SUGGESTION_MODEL);
+}
 
 /**
  * Agent rows written before the migration to Claude still carry Gemini model

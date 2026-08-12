@@ -218,6 +218,16 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // A channel is opaque — Slack Connect channels include client guests — so a
   // post always counts as leaving the company.
   'slack.post_message': { blastRadius: 'external_send', deliversContent: true },
+  // Trámites web (migration 0087). A learned errand that only consults a portal
+  // is an ordinary internal write: the verb heuristic would call it a read,
+  // which understates it, because it acts as the company on somebody else's
+  // system even when it only looks.
+  'browser.run_flow': { blastRadius: 'internal_write' },
+  // Filing something with a government body or a customer's portal leaves the
+  // company in the fullest sense there is — it is a legal act performed with
+  // the company's credentials, on a system nobody here can roll back. Nothing
+  // in the verb 'submit' would have said so.
+  'browser.submit_flow': { blastRadius: 'external_send', deliversContent: true },
   // Sheets can be shared outside; an external address in the payload says so.
   'gsheets.append_row': { blastRadius: 'internal_write', deliversContent: true },
   // A calendar write is internal bookkeeping; the invite email is a side effect

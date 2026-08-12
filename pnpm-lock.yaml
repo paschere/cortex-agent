@@ -312,6 +312,22 @@ importers:
         specifier: 2.1.8
         version: 2.1.8(@types/node@20.17.10)(msw@2.7.0(@types/node@20.17.10)(typescript@5.7.2))(terser@5.48.0)
 
+  services/browser:
+    dependencies:
+      playwright:
+        specifier: 1.49.1
+        version: 1.49.1
+    devDependencies:
+      '@types/node':
+        specifier: 20.17.10
+        version: 20.17.10
+      tsx:
+        specifier: 4.19.2
+        version: 4.19.2
+      typescript:
+        specifier: 5.7.2
+        version: 5.7.2
+
   services/whatsapp:
     dependencies:
       '@hapi/boom':

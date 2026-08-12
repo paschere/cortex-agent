@@ -37,6 +37,10 @@ export * from './schedule';
 export * from './gdrive';
 export * from './payroll';
 export * from './web';
+// Next to ./web because it is the same axis -- the open internet -- one step
+// further along: ./web reads pages, ./browser fills in their forms. See
+// packages/agent-tools/src/browser/index.ts.
+export * from './browser';
 export * from './format';
 export * from './presentations';
 export * from './slack';

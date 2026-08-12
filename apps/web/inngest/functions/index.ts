@@ -4,6 +4,8 @@ import { devTaskIntake } from './dev-task-intake';
 import { devTaskRun } from './dev-task-run';
 import { devTaskStatus } from './dev-task-status';
 import { driveSync } from './drive-sync';
+import { errandRun } from './errand-run';
+import { errandSweep } from './errand-sweep';
 import { ingestDocument } from './ingest-document';
 import { learningPassDispatch, learningPassWorkspace } from './learning-pass';
 import { meetingImportSweep } from './meeting-import';
@@ -34,6 +36,8 @@ export {
   memoryDeriveUser,
   orchestratorRun,
   orchestratorSweep,
+  errandRun,
+  errandSweep,
   turnContextPurge,
   turnLatencyPurge,
 };
@@ -57,6 +61,8 @@ export const functions = [
   memoryDeriveUser,
   orchestratorRun,
   orchestratorSweep,
+  errandRun,
+  errandSweep,
   turnContextPurge,
   turnLatencyPurge,
 ];

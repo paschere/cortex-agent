@@ -1,7 +1,7 @@
 'use server';
 
 import { buildToolContext } from '@/lib/agent';
-import { type ReportKind, isReportKind } from '@/lib/reports-shape';
+import { type GeneratedReportKind, isGeneratedReportKind } from '@/lib/reports-shape';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
@@ -44,10 +44,14 @@ export async function generateReportAction(input: {
   client?: string;
 }): Promise<ReportActionResult> {
   try {
-    if (!isReportKind(input.kind)) {
-      return { ok: false, error: 'Ese tipo de informe no existe.' };
+    // The GENERATED kinds, not every kind a stored report may have. `chart`
+    // exists as a stored kind but is not buildable — it is a chart kept out of
+    // a conversation, and there are no parameters to re-run. Guarding on the
+    // wider list would let this action be asked for one and fail deeper in.
+    if (!isGeneratedReportKind(input.kind)) {
+      return { ok: false, error: 'Ese tipo de informe no se puede generar.' };
     }
-    const kind: ReportKind = input.kind;
+    const kind: GeneratedReportKind = input.kind;
     const user = await requireSession();
     const db = getOrgScopedClient(user.organization.id);
 

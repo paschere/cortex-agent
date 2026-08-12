@@ -115,6 +115,14 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   orchestration_runs: tenant(),
   orchestration_tasks: tenant(),
   orchestration_events: derived('orchestration_runs', 'run_id'),
+  // Errands (migration 0089): a long-running commission that owns a sequence of
+  // orchestration runs. All three carry their own organization_id — an errand
+  // belongs to the company that asked for it, and its legs and its questions
+  // are read on their own (the sweep scans legs across errands, the nav counts
+  // open questions across the workspace), so neither is `derived`.
+  errands: tenant(),
+  errand_legs: tenant(),
+  errand_questions: tenant(),
 
   // --- Integrations and tokens ----------------------------------------------
   integrations: tenant(),
@@ -166,6 +174,25 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   vehicle_consults: derived('vehicles', 'vehicle_id'),
   presentation_files: tenant(),
 
+  // --- Trámites web (migration 0087) ----------------------------------------
+  // Errands on third-party portals, taught from a screen recording and replayed
+  // without a model. Tenant in the strongest sense there is: a flow row names
+  // the customer's own portals, and `browser_credentials` holds the login the
+  // company uses on them. A lost filter here would not leak a record -- it
+  // would let one workspace spend another workspace's password.
+  //
+  // The three children are derived rather than tenant because every read of
+  // them is "the detail of THIS flow" or "the detail of THIS run", and a second
+  // copy of the workspace id on a child row is a second thing that can be wrong.
+  // `browser_flow_runs` is tenant because the screen lists a workspace's recent
+  // runs across every flow, which naming a flow would make impossible.
+  browser_credentials: tenant(),
+  browser_flows: tenant(),
+  browser_flow_versions: derived('browser_flows', 'flow_id'),
+  browser_flow_grants: derived('browser_flows', 'flow_id'),
+  browser_flow_runs: tenant(),
+  browser_flow_run_steps: derived('browser_flow_runs', 'run_id'),
+
   // --- Commitments (migration 0069) -----------------------------------------
   // Dated promises and the notices already sent about them. Both carry their
   // own organization_id rather than deriving the notice's tenant from its
@@ -183,6 +210,20 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // token through the service client, outside the scoped handle, because a link
   // clicked from WhatsApp carries no session to scope by.
   reports: tenant(),
+  // A chart drawn inside a conversation, resolved and stored the moment it was
+  // drawn so that keeping it costs no second query (migration 0088). Tenant for
+  // exactly the reason above: the row is an aggregate of one workspace's data.
+  // Not `derived` on conversations even though it carries a conversation_id —
+  // the id is nullable (a chart can outlive the thread it was drawn in, and the
+  // saved informe outlives both), and a derived table whose parent key may be
+  // null has no tenancy at all.
+  chat_charts: tenant(),
+  // A file dropped into a chat and the destination the person chose for it
+  // (migration 0088). Tenant rather than derived on conversations even though
+  // the conversation id is not null here: on the 'turn' path the row HOLDS the
+  // document's text, so it is the thing being protected rather than a pointer
+  // to it, and it should carry the workspace itself.
+  chat_attachments: tenant(),
 
   // --- Proposed actions (migration 0077) ------------------------------------
   // Drafted emails waiting on a human, and the record of every human edit to
@@ -363,6 +404,10 @@ export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   // Migration 0084. Same shape and the same cron as the sweep above: deletes
   // expired latency rows and returns a count. No workspace, nothing visible.
   turn_latency_purge: 'maintenance',
+  // Migration 0088. The same shape again, for the chat's own scratch: expired
+  // charts nobody kept and expired attachments. Skips a chart that became an
+  // informe, and never touches a document that entered Brain Knowledge.
+  chat_surface_purge: 'maintenance',
   // Migration 0085. Re-derives every consumption counter from the ledger it
   // summarises and returns only the ones that disagree — which should be none.
   // Takes no workspace and returns no tenant content: a workspace id, a period,

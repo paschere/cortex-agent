@@ -127,9 +127,22 @@ const ALLOWED = new Map<string, string>([
     'Same as the direct-message route: a mention in a group carries a phone number, and resolving it to a Cortex directory row is what determines the workspace. The result is checked against the workspace the bridge claims before any tool is offered.',
   ],
   [
+    'inngest/functions/errand-sweep.ts',
+    'Cron. "Which errands anywhere in the install need a look, and which monitors are due" spans every workspace and there is no session behind a cron; the raw handle runs two SELECTs and every write goes through a handle pinned to the errand\'s own workspace.',
+  ],
+  [
     'app/api/whatsapp/links/route.ts',
     'whatsapp_links is keyed by the phone number install-wide, so "already linked somewhere else" is invisible to a scoped read and would surface as a constraint error instead of an explanation. One read, for that message only; the write is scoped.',
   ],
+]);
+
+/** Files that mention the raw client only in order to police it. */
+const NAMES_IT_WITHOUT_CALLING_IT = new Set([
+  // This file, which lists every allowed path in prose.
+  'lib/tenancy-guard.test.ts',
+  // The errand equivalent: asserts that nothing under lib/errands, its routes
+  // or its screens reaches for the raw client, and names it to do so.
+  'lib/errands/tenancy.test.ts',
 ]);
 
 const WEB_ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -151,8 +164,10 @@ function filesUsingTheRawClient(): string[] {
   for (const root of SCANNED) {
     for (const file of sourceFiles(join(WEB_ROOT, root))) {
       const relative = file.slice(WEB_ROOT.length);
-      // This file names every allowed path in prose; it is not a caller.
-      if (relative === 'lib/tenancy-guard.test.ts') continue;
+      // Tests that ASSERT something about raw-client usage name the helper in
+      // prose without ever calling it. Skipped by path rather than by some
+      // cleverer heuristic, so the exemption stays as visible as the list.
+      if (NAMES_IT_WITHOUT_CALLING_IT.has(relative)) continue;
       if (readFileSync(file, 'utf8').includes('getSupabaseServiceClient')) hits.push(relative);
     }
   }
