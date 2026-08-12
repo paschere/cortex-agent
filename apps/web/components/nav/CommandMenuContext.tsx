@@ -1,7 +1,7 @@
 'use client';
 
 import type { Role } from '@cortex/core';
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import { type ReactNode, createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
 import { CommandPalette } from './CommandPalette';
 

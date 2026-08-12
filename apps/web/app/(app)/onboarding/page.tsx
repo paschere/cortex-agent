@@ -1,5 +1,6 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { IconChip, Panel, PanelHead } from '@/components/ui/panel';
+import { reviewGuidedSetup } from '@/lib/guided-setup/store';
 import {
   GOAL_FIRST_QUESTION,
   type OnboardingGoal,
@@ -10,7 +11,16 @@ import { chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { readOnboarding, readSeats, readWorkspacePlan } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { BookOpen, Check, HelpCircle, MessageSquare, Plug, Rocket, Users } from 'lucide-react';
+import {
+  BookOpen,
+  Check,
+  HelpCircle,
+  MessageSquare,
+  MessagesSquare,
+  Plug,
+  Rocket,
+  Users,
+} from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { DismissGuide } from './_components/DismissGuide';
@@ -123,9 +133,10 @@ export default async function OnboardingPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  const [state, { plan, contractedSeats }] = await Promise.all([
+  const [state, { plan, contractedSeats }, setup] = await Promise.all([
     readOnboarding(db),
     readWorkspacePlan(db),
+    reviewGuidedSetup(db).catch(() => null),
   ]);
   const seats = await readSeats(db, user.organization.id, plan, contractedSeats);
 
@@ -239,6 +250,93 @@ export default async function OnboardingPage() {
           );
         })}
       </ol>
+
+      {/*
+        La entrevista, ofrecida aquí y no metida en la lista de arriba.
+
+        Los cinco pasos responden "¿de dónde saca Cortex lo que sabe?" y su
+        progreso se deriva de los datos, sin casillas guardadas. La entrevista
+        responde la pregunta siguiente — "¿qué debería estar haciendo por mí?" —
+        y sólo tiene sentido preguntarla cuando ya hay algo adentro. Así que
+        aparece cuando la primera respuesta ya ocurrió, y después de eso deja de
+        ser una invitación y pasa a ser un resultado: cuántas de las cosas que
+        se configuraron hablando siguen ahí, y cuántas alguien usó.
+      */}
+      {setup && setup.created > 0 ? (
+        <Panel>
+          <PanelHead
+            title="Lo que configuraste hablando"
+            icon={<MessagesSquare className="h-4 w-4" />}
+            right={
+              <span className={chipClass(setup.used > 0 ? 'emerald' : 'neutral')}>
+                <span className="tabular">
+                  {setup.used} de {setup.created}
+                </span>
+                <span className="ml-1">en uso</span>
+              </span>
+            }
+          />
+          <div className="px-5 pb-5 pt-3">
+            <p className="max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+              De las <span className="tabular font-semibold text-ink">{setup.created}</span> cosas
+              que se crearon desde la entrevista,{' '}
+              <span className="tabular font-semibold text-ink">{setup.alive}</span> siguen ahí y{' '}
+              <span className="tabular font-semibold text-ink">{setup.used}</span> se han usado. La
+              medida de que esto sirvió no es cuántas se crearon: es cuántas siguen vivas dentro de
+              unas semanas.
+            </p>
+            <ul className="mt-3 space-y-1.5">
+              {setup.rows.slice(0, 5).map((row) => (
+                <li
+                  key={row.item.id}
+                  className="flex flex-wrap items-baseline justify-between gap-2 text-[12.5px]"
+                >
+                  <span className={clsx('truncate', row.alive ? 'text-ink' : 'text-ink-faint')}>
+                    {row.item.title}
+                  </span>
+                  <span className={clsx(row.used ? 'text-emerald' : 'text-ink-faint')}>
+                    {row.evidence}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/onboarding/entrevista"
+              className="mt-3.5 inline-block text-[12.5px] font-semibold text-primary hover:underline"
+            >
+              Contarle algo más
+            </Link>
+          </div>
+        </Panel>
+      ) : (
+        state.steps.find((s) => s.id === 'answer')?.done && (
+          <Panel className="overflow-hidden">
+            <div className="flex flex-wrap items-start justify-between gap-4 p-5">
+              <div className="min-w-0 max-w-xl">
+                <div className="flex items-center gap-2.5">
+                  <IconChip tone="primary">
+                    <MessagesSquare className="h-4 w-4" />
+                  </IconChip>
+                  <h2 className="text-[14px] font-semibold text-ink">
+                    Ahora dile qué debería estar haciendo por ti
+                  </h2>
+                </div>
+                <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+                  Cuéntale cómo trabajan — qué se les vence, qué revisan cada semana, qué
+                  procedimiento siguen — y te propone qué dejar configurado. Nada se crea sin que
+                  lo apruebes, y todo se puede deshacer.
+                </p>
+              </div>
+              <Link
+                href="/onboarding/entrevista"
+                className="inline-flex shrink-0 items-center rounded-pill bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
+              >
+                Empezar a contarle
+              </Link>
+            </div>
+          </Panel>
+        )
+      )}
 
       <Panel>
         <PanelHead title="Tu plan mientras tanto" icon={<Rocket className="h-4 w-4" />} />

@@ -1,9 +1,9 @@
 'use client';
 
+import { MODULE } from '@/lib/browser-shape';
 import type { Role } from '@cortex/core';
 import { Command } from 'cmdk';
 import { useRouter } from 'next/navigation';
-import { MODULE } from '@/lib/browser-shape';
 
 interface CommandPaletteProps {
   open: boolean;

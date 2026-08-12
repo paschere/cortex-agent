@@ -510,9 +510,7 @@ function NavLink({
           )}
         </span>
       )}
-      {collapsed && badge > 0 && (
-        <span className="sr-only">{badge} esperando tu decisión</span>
-      )}
+      {collapsed && badge > 0 && <span className="sr-only">{badge} esperando tu decisión</span>}
     </Link>
   );
 }
@@ -530,8 +528,22 @@ function NavLink({
  * not go anywhere on its own. That is also why it sits ABOVE the daily list and
  * not inside it — it is the way to the rest of the product, not part of the day.
  */
-function SearchTrigger({ collapsed }: { collapsed: boolean }) {
+function SearchTrigger({
+  collapsed,
+  onNavigate,
+}: {
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
   const { setOpen } = useCommandMenu();
+  // On mobile this button lives inside the drawer, and the palette opens on top
+  // of it. Without closing the drawer here it survives the navigation — the
+  // layout does not remount, so the next screen arrives with the menu still
+  // open over it. Same reason every link in this rail is wired to onNavigate.
+  const open = () => {
+    setOpen(true);
+    onNavigate?.();
+  };
   // Rendered as ⌘ and corrected after mount rather than guessed on the server:
   // the platform is not knowable while rendering, and a shortcut hint that names
   // the wrong key is worse than none. Post-mount, so no hydration mismatch.
@@ -545,7 +557,7 @@ function SearchTrigger({ collapsed }: { collapsed: boolean }) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={open}
         title="Buscar"
         aria-label="Buscar o ir a una pantalla"
         aria-keyshortcuts="Meta+K Control+K"
@@ -559,17 +571,16 @@ function SearchTrigger({ collapsed }: { collapsed: boolean }) {
   return (
     <button
       type="button"
-      onClick={() => setOpen(true)}
+      onClick={open}
       aria-label="Buscar o ir a una pantalla"
       aria-keyshortcuts="Meta+K Control+K"
       className="group flex items-center gap-2.5 rounded-pill border border-border bg-surface px-3 py-[7px] text-[12.5px] text-ink-faint transition-[background-color,border-color,color] duration-150 hover:border-border-strong hover:text-ink-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
     >
       <Search className="h-4 w-4 shrink-0 group-hover:text-primary" />
       <span>Buscar o ir a…</span>
-      <kbd
-        aria-hidden="true"
-        className="ml-auto shrink-0 rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-faint"
-      >
+      {/* See the Topbar twin: the aria-label already names the control, and
+          `aria-keyshortcuts` is the honest way to announce the shortcut. */}
+      <kbd className="ml-auto shrink-0 rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-faint">
         {modKey}K
       </kbd>
     </button>
@@ -771,8 +782,8 @@ function SidebarNav({
       aria-label="Main"
       className="scroll-slim flex h-full flex-col gap-1 overflow-y-auto px-3 pb-3"
     >
-      <div className={clsx('flex flex-col', collapsed ? 'gap-px' : 'mb-1.5')}>
-        <SearchTrigger collapsed={collapsed} />
+      <div className={clsx('flex flex-col', !collapsed && 'mb-1.5')}>
+        <SearchTrigger collapsed={collapsed} onNavigate={onNavigate} />
       </div>
 
       <div className="flex flex-col gap-px">

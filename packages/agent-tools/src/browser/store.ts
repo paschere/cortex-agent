@@ -90,7 +90,28 @@ export interface NewFlow {
   createdBy: string;
 }
 
+/**
+ * The address the person confirmed, put on the first step as well.
+ *
+ * A tab capture contains the page and nothing around it -- no URL bar -- so
+ * whatever the extractor wrote into `startUrl` is the one field on the review
+ * screen it could not have read, and the person corrects it there. The first
+ * step is almost always a `goto` to that same guess, and if only the top field
+ * is corrected the flow opens the address they typed and then immediately
+ * navigates to the one the model imagined.
+ *
+ * Done HERE, in the one function that ever writes a new flow's steps, rather
+ * than in the route that happens to call it: it is a property of what may be
+ * stored, and a rule enforced at a call site is a rule that eventually is not.
+ */
+function alignFirstGotoToStart(steps: Step[], startUrl: string): Step[] {
+  const first = steps[0];
+  if (!first || first.action !== 'goto') return steps;
+  return [{ ...first, url: startUrl }, ...steps.slice(1)];
+}
+
 export async function createFlow(db: SupabaseClient, input: NewFlow): Promise<Flow> {
+  const steps = alignFirstGotoToStart(input.steps, input.startUrl);
   const { data, error } = await db
     .from('browser_flows')
     .insert({
@@ -106,7 +127,7 @@ export async function createFlow(db: SupabaseClient, input: NewFlow): Promise<Fl
       source: input.source ?? 'recording',
       credential_id: input.credentialId ?? null,
       variables: input.variables,
-      steps: input.steps,
+      steps,
       version: 1,
       recording_frames: input.recordingFrames ?? 0,
       extraction_cost_usd: input.extractionCostUsd ?? 0,
@@ -120,7 +141,7 @@ export async function createFlow(db: SupabaseClient, input: NewFlow): Promise<Fl
   await db.from('browser_flow_versions').insert({
     flow_id: flow.id,
     version: 1,
-    steps: input.steps,
+    steps,
     variables: input.variables,
     reason: input.source === 'manual' ? 'edited' : 'recorded',
     note:

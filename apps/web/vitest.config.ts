@@ -10,7 +10,15 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   resolve: {
-    alias: { '@': fileURLToPath(new URL('.', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('.', import.meta.url)),
+      // `server-only` no es un paquete: es un marcador que Next resuelve durante
+      // el build para que un módulo de servidor no pueda acabar en un bundle de
+      // cliente. Vitest no lo conoce, así que apunta a un stub vacío — de otro
+      // modo, poner el guardarraíl en un archivo lo volvería intesteable, que es
+      // justo al revés de lo que se quiere.
+      'server-only': fileURLToPath(new URL('./test/server-only-stub.ts', import.meta.url)),
+    },
   },
   test: {
     environment: 'node',

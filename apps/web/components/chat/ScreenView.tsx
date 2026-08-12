@@ -64,7 +64,8 @@ export interface ScreenViewSession {
   live: boolean;
   glances: number;
   error: string | null;
-  start(): Promise<void>;
+  /** True once the tab is being shared. False means the panel must stay open. */
+  start(): Promise<boolean>;
   stop(): void;
   /**
    * One frame of the shared tab, taken NOW. Null when nothing is shared.
@@ -82,6 +83,14 @@ export function useScreenView(): ScreenViewSession {
   const [error, setError] = useState<string | null>(null);
   const [justLooked, setJustLooked] = useState(false);
   const flashTimer = useRef<number | null>(null);
+  /**
+   * Read after mount, never during render. `canRecordTab` asks the browser a
+   * question the server cannot answer, so calling it while rendering would
+   * make the server draw no control and the client draw one — a hydration
+   * mismatch, on the control whose whole job is to be noticed.
+   */
+  const [supported, setSupported] = useState(false);
+  useEffect(() => setSupported(canRecordTab()), []);
 
   const finish = useCallback(() => {
     handle.current?.stop();
@@ -102,18 +111,23 @@ export function useScreenView(): ScreenViewSession {
     [],
   );
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (): Promise<boolean> => {
     setError(null);
     try {
       handle.current = await startTabView({ onEnded: finish });
       setGlances(0);
       setLive(true);
+      return true;
     } catch (err) {
       if (err instanceof NotATabError) setError(err.message);
       // The person closed the picker. They already know; saying so is nagging.
       else if ((err as Error).name === 'NotAllowedError') setError(null);
       else setError((err as Error).message);
       setLive(false);
+      // The caller keeps its panel open on false. Sharing a whole screen by
+      // mistake is the one failure worth explaining, and a dialog that closed
+      // itself would take the explanation with it.
+      return false;
     }
   }, [finish]);
 
@@ -129,7 +143,7 @@ export function useScreenView(): ScreenViewSession {
   }, []);
 
   return {
-    supported: canRecordTab(),
+    supported,
     live,
     glances,
     error,
@@ -226,10 +240,7 @@ export function ScreenViewButton({
           <div className="rounded-card border border-border bg-surface p-5 shadow-card">
             {session.error && (
               <div className="mb-4 flex items-start gap-2 rounded-sm border border-rose/20 bg-rose-soft px-3.5 py-2.5">
-                <AlertTriangle
-                  className="mt-0.5 h-4 w-4 shrink-0 text-rose"
-                  aria-hidden="true"
-                />
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose" aria-hidden="true" />
                 <p className="text-[13px] leading-relaxed text-rose">{session.error}</p>
               </div>
             )}
@@ -251,7 +262,9 @@ export function ScreenViewButton({
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <Button
                 onClick={() => {
-                  void session.start().then(() => setOpen(false));
+                  void session.start().then((ok) => {
+                    if (ok) setOpen(false);
+                  });
                 }}
               >
                 <ScanEye className="h-4 w-4" aria-hidden="true" />
@@ -307,6 +320,7 @@ export function ScreenViewStrip({ session }: { session: ScreenViewSession }) {
   if (!session.live) return null;
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: <output> is the result of a calculation and is inline-level; this is a standing condition on a band that contains its own control, which is what role="status" describes.
     <div
       role="status"
       className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-card border border-primary/20 bg-primary-soft px-3 py-2"

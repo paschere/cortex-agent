@@ -54,10 +54,10 @@ export function Topbar({ email }: { email?: string }) {
       >
         <Search className="h-4 w-4 shrink-0" />
         <span className="truncate">Buscar o ir a…</span>
-        <kbd
-          aria-hidden="true"
-          className="ml-auto shrink-0 rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-faint ring-1 ring-inset ring-border"
-        >
+        {/* No aria-hidden: the button carries an explicit aria-label, so nothing
+            inside it is announced anyway, and `aria-keyshortcuts` is what tells
+            a screen reader about ⌘K properly. */}
+        <kbd className="ml-auto shrink-0 rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-faint ring-1 ring-inset ring-border">
           {modKey}K
         </kbd>
       </button>

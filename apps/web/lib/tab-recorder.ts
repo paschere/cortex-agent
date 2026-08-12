@@ -420,15 +420,33 @@ export function canRecordTab(): boolean {
  * and the picture — small, but exactly long enough for a page to redraw.
  *
  * ---------------------------------------------------------------------------
- * QUALITY IS FREE, RESOLUTION IS NOT
+ * QUALITY IS FREE, RESOLUTION IS NOT, AND HERE IS THE BILL
  * ---------------------------------------------------------------------------
- * An image costs the model `width × height / 750` tokens and nothing else: the
- * JPEG quality changes the bytes on the wire and not one token of the bill. The
- * recording path encodes at 0.6 because it sends twenty frames and cares about
- * upload size; one frame can afford 0.85, and the extra crispness is spent
- * where this feature lives or dies — 11px labels on a government portal. The
- * long edge stays at `MAX_EDGE`, which is the number that does cost money; see
- * the report in the pull request for what shrinking it would save and lose.
+ * An image costs the model `width × height / 750` input tokens and nothing
+ * else — not the bytes, not the JPEG quality, not what is on the screen. So the
+ * two knobs are not equivalent at all:
+ *
+ *   QUALITY is free. The recording path encodes at 0.6 because it sends twenty
+ *   frames and cares about upload size. One frame can afford 0.85, and the
+ *   crispness is spent exactly where this feature lives or dies: 11px labels on
+ *   a government portal. It costs upload bandwidth and not one cent of model.
+ *
+ *   RESOLUTION is the bill. A tab on an ordinary laptop arrives here as
+ *   1280×720 after `MAX_EDGE`, which is 1 229 tokens, or US$0,0037 at the
+ *   US$3/Mtok this repo prices Sonnet 5 at (browser/cost.ts). Measured against
+ *   this repo's own turn — the tool schemas really offered plus the agent
+ *   prompt, ≈12 000 input tokens, of which the ≈9 200-token head is cached —
+ *   a question with a picture costs about 18 % more than the same question
+ *   without one: roughly US$0,0237 against US$0,0200. Ten thousand screen
+ *   questions a month is US$37 in image tokens.
+ *
+ * Dropping the long edge to 1024 would save 443 tokens, US$0,0012 a question,
+ * US$12 per ten thousand — and cost 20 % of the linear resolution of the small
+ * print this exists to read. That is not a trade worth making: the failure it
+ * buys is a confident answer about a misread number, which is the one failure
+ * this product cannot afford. `MAX_EDGE` therefore stays where the recorder put
+ * it, and the number to watch instead is the prompt cache hit rate, which moves
+ * a turn's cost by several times what the picture does.
  */
 export interface ScreenGlance {
   base64: string;

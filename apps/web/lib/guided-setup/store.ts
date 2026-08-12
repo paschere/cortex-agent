@@ -105,12 +105,18 @@ export async function getSession(db: SupabaseClient, id: string): Promise<Sessio
   return data ? adaptSession(data as Row) : null;
 }
 
-/** La sesión abierta más reciente, para que recargar la página no la pierda. */
+/**
+ * La sesión más reciente, en el estado que esté.
+ *
+ * Incluye las ya aplicadas a propósito: el recibo — qué se creó y el botón de
+ * deshacerlo — tiene que sobrevivir a que alguien recargue la página o vuelva
+ * media hora después. Un "deshacer" que sólo existe mientras no se recargue no
+ * es un deshacer.
+ */
 export async function latestSession(db: SupabaseClient): Promise<Session | null> {
   const { data, error } = await db
     .from(SESSIONS)
     .select(SESSION_COLUMNS)
-    .in('status', ['interviewing', 'proposed'])
     .order('created_at', { ascending: false })
     .limit(1);
   if (error) throw error;
@@ -180,6 +186,10 @@ export async function savePlan(
           title: item.title,
           rationale: item.rationale,
           payload: item.payload,
+          // Explícito aunque la columna lo tenga por defecto: «propuesto» es lo
+          // único que esta función puede escribir, y decirlo aquí hace que se
+          // lea en el sitio donde importa.
+          status: 'proposed',
         })),
       )
       .select(ITEM_COLUMNS);
