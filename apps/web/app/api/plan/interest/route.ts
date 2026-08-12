@@ -44,7 +44,12 @@ export async function POST(req: NextRequest) {
     metadata: {
       planCode: wanted.code,
       planName: wanted.name,
-      priceCop: wanted.priceCop,
+      // Per person since migration 0086. The key changed name with the meaning:
+      // a note in an audit log saying `priceCop: 30000` next to a plan that used
+      // to cost 290.000 is exactly the kind of number somebody reads six months
+      // later and believes.
+      priceCopPerSeat: wanted.priceCopPerSeat,
+      billableSeatsMinimum: wanted.billableSeatsMinimum,
       askedBy: user.email,
     },
   });

@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { count } from '@/lib/plan-shape';
+import { cop, count } from '@/lib/plan-shape';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -17,14 +17,25 @@ import { useState, useTransition } from 'react';
  *
  * The seat check lives in the route, not here. A disabled button is a courtesy;
  * it is not a limit.
+ *
+ * `seatsMaximum` is null on every paid plan since migration 0086 — Cortex is
+ * priced per person, and capping how many people may join is declining money. So
+ * on a paid plan this says the other true thing instead: what the next person
+ * brings with them and what they add to the month. Somebody about to type a
+ * colleague's address is exactly the person who should be told the rate, and not
+ * being told it here is how a bill becomes a surprise.
  */
 export function InviteTeam({
   seatsUsed,
-  seatsLimit,
+  seatsMaximum,
+  perSeatAnswers,
+  priceCopPerSeat,
   canInvite,
 }: {
   seatsUsed: number;
-  seatsLimit: number | null;
+  seatsMaximum: number | null;
+  perSeatAnswers: number | null;
+  priceCopPerSeat: number;
   canInvite: boolean;
 }) {
   const router = useRouter();
@@ -35,7 +46,7 @@ export function InviteTeam({
   const [sent, setSent] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  const full = seatsLimit !== null && seatsUsed + sent.length >= seatsLimit;
+  const full = seatsMaximum !== null && seatsUsed + sent.length >= seatsMaximum;
 
   async function invite(e: React.FormEvent) {
     e.preventDefault();
@@ -102,14 +113,27 @@ export function InviteTeam({
       </form>
 
       <p className="mt-2.5 text-[12px] text-ink-faint">
-        {seatsLimit === null ? (
+        {seatsMaximum === null ? (
           <>
-            <span className="tabular">{count(seatsUsed)}</span> personas en el espacio.
+            <span className="tabular">{count(seatsUsed)}</span> personas en el espacio. Cada una
+            entra con su asistente
+            {perSeatAnswers !== null && (
+              <>
+                {' '}
+                y con <span className="tabular">{count(perSeatAnswers)}</span> respuestas al mes
+              </>
+            )}
+            {priceCopPerSeat > 0 && (
+              <>
+                , y suma <span className="tabular">{cop(priceCopPerSeat)}</span> al mes
+              </>
+            )}
+            .
           </>
         ) : (
           <>
             <span className="tabular">{count(seatsUsed)}</span> de{' '}
-            <span className="tabular">{count(seatsLimit)}</span> puestos de tu plan.
+            <span className="tabular">{count(seatsMaximum)}</span> personas de tu plan.
           </>
         )}
       </p>

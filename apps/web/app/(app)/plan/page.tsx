@@ -44,12 +44,24 @@ export const dynamic = 'force-dynamic';
  * It is deliberately NOT an internal invoicing screen. It shows one workspace
  * its own consumption, through the scoped handle, and there is no path from here
  * to anybody else's.
+ *
+ * SINCE MIGRATION 0086 THE PRICE IS A MULTIPLICATION, so the same promise has to
+ * cover it. Cortex is sold per person: the rate, the number of people and the
+ * product are all on the screen ("$30.000 × 15 personas = $450.000 al mes"), and
+ * so is the quota arithmetic under each meter ("150 por persona × 15 personas").
+ * A figure that arrives already multiplied is an assertion again, and this page
+ * does not make assertions.
+ *
+ * It also says, in one sentence, why the basis can be above today's headcount —
+ * the month's high-water mark, a contracted number, or the plan's minimum. Only
+ * the one that is actually true is shown: explaining a rule nobody has hit is
+ * how a screen that is supposed to make things checkable stops being read.
  */
 
 const METER_ORDER: MeterId[] = ['answers', 'documents'];
 
 function MeterBlock({ entitlement }: { entitlement: Entitlement }) {
-  const { meter, used, limit, state, grace, allowance } = entitlement;
+  const { meter, used, limit, state, grace, allowance, perSeat, seats } = entitlement;
   const label = METER_LABEL[meter];
   const tone = METER_STATE_TONE[state];
   const pct = percent(used, limit);
@@ -83,6 +95,17 @@ function MeterBlock({ entitlement }: { entitlement: Entitlement }) {
             style={{ width: `${Math.max(barFill(used, limit) * 100, used > 0 ? 4 : 0)}%` }}
           />
         </div>
+      )}
+
+      {/* Where the ceiling came from, stated as the multiplication it is. The
+          screen promises you can see where every peso comes from; the same has
+          to be true of every unit of quota, or the number above is an assertion
+          again. */}
+      {limit !== null && perSeat !== null && (
+        <p className="tabular mt-2 text-[12px] text-ink-faint">
+          {count(perSeat)} por persona × {count(seats)}{' '}
+          {seats === 1 ? 'persona' : 'personas'} = {count(limit)}
+        </p>
       )}
 
       <p className="mt-3 text-[12px] leading-relaxed text-ink-muted">{label.help}</p>
@@ -134,8 +157,19 @@ export default async function PlanPage({
   ]);
 
   const { plan, seats } = usage;
-  const unlimited = plan.limits.answers === null && plan.limits.documents === null;
+  const unlimited = plan.perSeat.answers === null && plan.perSeat.documents === null;
   const others = plans.filter((p) => p.selfServe && p.code !== plan.code);
+  // The three reasons the billing basis can be above today's headcount, said in
+  // the order somebody would ask about them. Only one is shown, and only when it
+  // is actually true — an explanation of a rule nobody has hit is noise.
+  const seatNote =
+    seats.peak > seats.members
+      ? `Este mes llegaron a ser ${count(seats.peak)} personas. El cupo del mes se calcula con ese número aunque hoy sean ${count(seats.members)}: nadie se queda sin servicio por una salida a mitad de mes.`
+      : seats.contracted !== null && seats.contracted > seats.members
+        ? `Tienen ${count(seats.contracted)} personas acordadas con nosotros, y el cupo y la cuenta se calculan con ese número.`
+        : plan.billableSeatsMinimum > seats.members
+          ? `El plan ${plan.name} empieza en ${count(plan.billableSeatsMinimum)} personas, así que la cuenta y el cupo se calculan con ${count(plan.billableSeatsMinimum)} aunque hoy sean ${count(seats.members)}.`
+          : null;
   const ledgerTotal = ledger.reduce((n, r) => n + r.quantity, 0);
   const meterTotal = usage.meters[openMeter].used;
 
@@ -156,8 +190,8 @@ export default async function PlanPage({
           title={`Plan ${plan.name}`}
           icon={<Receipt className="h-4 w-4" />}
           right={
-            plan.priceCop > 0 ? (
-              <span className="tabular text-ink">{cop(plan.priceCop)} / mes</span>
+            plan.priceCopPerSeat > 0 ? (
+              <span className="tabular text-ink">{cop(plan.priceCopPerSeat)} por persona / mes</span>
             ) : unlimited ? (
               'Acordado contigo'
             ) : (
@@ -168,26 +202,58 @@ export default async function PlanPage({
         <div className="px-5 pb-5 pt-3">
           <p className="text-[13px] text-ink-muted">{plan.tagline}</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <Field label="Respuestas al mes">
+            <Field label="Respuestas por persona">
               <span className="tabular">
-                {plan.limits.answers === null ? 'Sin límite' : count(plan.limits.answers)}
+                {plan.perSeat.answers === null ? 'Sin límite' : count(plan.perSeat.answers)}
               </span>
             </Field>
-            <Field label="Documentos">
+            <Field label="Documentos por persona">
               <span className="tabular">
-                {plan.limits.documents === null ? 'Sin límite' : count(plan.limits.documents)}
+                {plan.perSeat.documents === null ? 'Sin límite' : count(plan.perSeat.documents)}
               </span>
             </Field>
             <Field label="Personas">
               <span className="tabular">
-                {seats.limit === null ? 'Sin límite' : `${count(seats.used)} de ${count(seats.limit)}`}
+                {seats.maximum === null
+                  ? count(seats.members)
+                  : `${count(seats.used)} de ${count(seats.maximum)}`}
               </span>
             </Field>
           </div>
+
+          {/* THE ARITHMETIC, SPELLED OUT. The page's promise is that you can see
+              where every peso comes from, and on a per-person price that is a
+              multiplication rather than a lookup. Showing the rate, the count and
+              the product means the figure can be checked without asking us. */}
+          {plan.priceCopPerSeat > 0 && (
+            <div className="tabular mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] text-ink-muted">
+              <span>{cop(plan.priceCopPerSeat)}</span>
+              <span className="text-ink-faint">×</span>
+              <span>
+                {count(seats.billable)} {seats.billable === 1 ? 'persona' : 'personas'}
+              </span>
+              <span className="text-ink-faint">=</span>
+              <span className="font-semibold text-ink">{cop(seats.chargeCop)} al mes</span>
+            </div>
+          )}
+
+          {seatNote && (
+            <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">{seatNote}</p>
+          )}
+
+          {/* Said plainly, because the public page says it plainly too. */}
+          {plan.priceCopPerSeat > 0 && (
+            <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+              Todavía no cobramos dentro de Cortex: esta es la cuenta del mes tal como la
+              calculamos, no un cargo. Cuando entre alguien nuevo, esta cifra sube sola y aquí lo
+              ves.
+            </p>
+          )}
+
           {unlimited && (
             <p className="mt-4 rounded-sm border border-primary/15 bg-primary-soft px-3 py-2.5 text-[12px] leading-relaxed text-primary-ink">
-              Tu espacio no tiene topes. Seguimos midiendo el consumo para que puedas verlo, pero
-              nada aquí te limita.
+              Tu espacio no tiene topes ni tope de personas. Seguimos midiendo el consumo para que
+              puedas verlo, pero nada aquí te limita.
             </p>
           )}
         </div>
@@ -214,10 +280,11 @@ export default async function PlanPage({
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-3.5">
           <div className="flex items-center gap-2 text-[12.5px] text-ink-muted">
             <Users className="h-3.5 w-3.5 text-ink-faint" />
-            <span className="tabular text-ink">{count(seats.used)}</span> personas
+            <span className="tabular text-ink">{count(seats.members)}</span> personas
             {seats.pending > 0 && (
               <span className="text-ink-faint">
-                (<span className="tabular">{count(seats.pending)}</span> por aceptar la invitación)
+                (<span className="tabular">{count(seats.pending)}</span> por aceptar la invitación,
+                que todavía no suman cupo)
               </span>
             )}
           </div>
@@ -315,16 +382,33 @@ export default async function PlanPage({
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-[13px] font-semibold text-ink">{other.name}</span>
                     <span className="tabular text-[13px] text-ink">
-                      {other.priceCop > 0 ? `${cop(other.priceCop)}/mes` : 'Gratis'}
+                      {other.priceCopPerSeat > 0
+                        ? `${cop(other.priceCopPerSeat)} por persona`
+                        : 'Gratis'}
                     </span>
                   </div>
                   <p className="mt-1.5 text-[12px] text-ink-muted">{other.tagline}</p>
                   <div className="tabular mt-3 text-[12px] text-ink-faint">
-                    {other.limits.answers === null ? 'Sin límite' : count(other.limits.answers)}{' '}
-                    respuestas ·{' '}
-                    {other.limits.documents === null ? 'sin límite' : count(other.limits.documents)}{' '}
-                    documentos ·{' '}
-                    {other.seatsLimit === null ? 'sin límite' : count(other.seatsLimit)} personas
+                    Cada persona trae{' '}
+                    {other.perSeat.answers === null
+                      ? 'respuestas sin límite'
+                      : `${count(other.perSeat.answers)} respuestas`}{' '}
+                    ·{' '}
+                    {other.perSeat.documents === null
+                      ? 'documentos sin límite'
+                      : `${count(other.perSeat.documents)} documentos`}
+                  </div>
+                  {/* The minimum is a floor on the bill and is said as one. A
+                      workspace with fewer people is not being turned away; it is
+                      being told what the smallest invoice on this plan is. */}
+                  <div className="tabular mt-1 text-[12px] text-ink-faint">
+                    {other.seatsMaximum !== null
+                      ? `Hasta ${count(other.seatsMaximum)} personas`
+                      : other.billableSeatsMinimum > 1
+                        ? `Desde ${count(other.billableSeatsMinimum)} personas · ${cop(
+                            other.priceCopPerSeat * other.billableSeatsMinimum,
+                          )} al mes como mínimo`
+                        : 'Sin tope de personas'}
                   </div>
                   <PlanInterest planCode={other.code} planName={other.name} />
                 </div>

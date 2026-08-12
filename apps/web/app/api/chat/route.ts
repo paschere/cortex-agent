@@ -159,9 +159,14 @@ export async function POST(req: NextRequest) {
       {
         error:
           `Se acabaron las respuestas de tu plan ${plan.name} en este mes: ` +
-          `${answers.used} de ${answers.limit}, con el margen de cortesía ya incluido. ` +
+          `${answers.used} de ${answers.limit}` +
+          (answers.perSeat !== null
+            ? ` (${answers.perSeat} por persona × ${answers.seats} personas)`
+            : '') +
+          ', con el margen de cortesía ya incluido. ' +
           'Todo lo que ya está adentro se sigue guardando y se sigue consultando. ' +
-          'Para que Cortex vuelva a responder, amplía el plan en Plan y consumo.',
+          'Para que Cortex vuelva a responder, amplía el plan o suma a quien falte, ' +
+          'en Plan y consumo.',
         reason: 'plan_limit',
         meter: 'answers',
       },

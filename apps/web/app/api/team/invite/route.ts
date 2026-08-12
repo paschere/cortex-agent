@@ -20,11 +20,18 @@ export const runtime = 'nodejs';
  * token, the expiry and the email, none of which is reimplemented here.
  *
  * SEATS BLOCK RATHER THAN DEGRADE, and this is the clean case for it: refusing
- * a sixteenth invitation interrupts nothing. The fifteen people already inside
- * keep working, nobody is mid-anything, and there is no half-finished state to
+ * a fourth invitation interrupts nothing. The three people already inside keep
+ * working, nobody is mid-anything, and there is no half-finished state to
  * protect. Contrast the answers meter, which gets a courtesy margin precisely
  * because a person IS mid-something when it runs out. See LIMIT_POLICY in
  * packages/agent-tools/src/billing/plans.ts.
+ *
+ * SINCE MIGRATION 0086 THIS ONLY EVER REFUSES ON THE FREE PLAN. `seatsMaximum`
+ * is null on Equipo, Empresa and Enterprise, because Cortex is priced per person
+ * and a ceiling on a per-person price is a rule that declines money and caps the
+ * customer's quota at the same time. The plan minimums (5 and 25) are floors on
+ * the BILL and are not consulted here at all — a team of eight belongs on Equipo,
+ * and a team of three that wants it pays for five rather than being told to hire.
  */
 const Body = z.object({
   email: z.string().email('Ese correo no parece válido.'),
@@ -53,14 +60,14 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getOrgScopedClient(user.organization.id);
-  const { plan } = await readWorkspacePlan(db);
-  const seats = await readSeats(db, user.organization.id, plan.seatsLimit);
+  const { plan, contractedSeats } = await readWorkspacePlan(db);
+  const seats = await readSeats(db, user.organization.id, plan, contractedSeats);
 
   if (seats.full) {
     return NextResponse.json(
       {
         error:
-          `Tu plan ${plan.name} llega hasta ${seats.limit} personas y ya están ocupadas ` +
+          `Tu plan ${plan.name} llega hasta ${seats.maximum} personas y ya están ocupadas ` +
           `(${seats.members} adentro${seats.pending > 0 ? ` y ${seats.pending} por aceptar` : ''}). ` +
           'Amplía el plan en Plan y consumo, o cancela una invitación pendiente.',
         reason: 'plan_limit',

@@ -6,30 +6,40 @@ import {
   type MeterId,
   type Plan,
   type PlanRow,
+  type SeatBasis,
   type SubscriptionStatus,
+  UNMETERED_PLAN,
+  emptySeatBasis,
   entitlementFor,
+  monthlyChargeCop,
+  seatBasisFor,
   toPlan,
   usagePeriod,
 } from './plans';
 
 /**
- * Reading what a workspace has consumed, and deciding whether it may consume
- * more.
+ * Reading what a workspace has consumed, how many people it is billed for, and
+ * whether it may consume more.
  *
  * EVERY READ HERE GOES THROUGH THE SCOPED HANDLE. `usage_events`,
- * `usage_counters`, `organization_subscriptions` and `users` are all registered
- * as `tenant()`, so the workspace filter is applied by the client and cannot be
- * forgotten at a call site — which is the point, because this is the one surface
- * where a missing filter would not show somebody another company's rows, it
- * would silently put another company's consumption on their invoice. `plans` is
- * `shared()` and is the same four rows for everybody.
+ * `usage_counters`, `organization_subscriptions`, `organization_seat_periods`
+ * and `users` are all registered as `tenant()`, so the workspace filter is
+ * applied by the client and cannot be forgotten at a call site — which is the
+ * point, because this is the one surface where a missing filter would not show
+ * somebody another company's rows, it would silently put another company's
+ * consumption, or another company's headcount, on their invoice. `plans` is
+ * `shared()` and is the same rows for everybody.
  *
  * The ONE query in this file that names a workspace by hand is the pending-
  * invitation count, because `ba_invitation` is a `shared` table that carries its
  * own camel-cased `organizationId`. It is filtered explicitly and commented.
  */
 
-const SUBSCRIPTION_COLUMNS = 'plan_code, status, started_at, billing_customer_ref';
+const SUBSCRIPTION_COLUMNS =
+  'plan_code, status, started_at, billing_customer_ref, contracted_seats';
+
+const PLAN_COLUMNS =
+  'code, name, tagline, price_cop_per_seat, answers_per_seat, documents_per_seat, billable_seats_minimum, seats_maximum, grace_ratio, grace_minimum, self_serve, sort_order';
 
 /**
  * Run a read that must not take the caller down with it.
@@ -52,10 +62,10 @@ async function safeRead<T>(run: () => PromiseLike<T>, fallback: T): Promise<T> {
 /**
  * The plan catalogue, cached in process.
  *
- * Safe to share across tenants precisely because it is not tenant data: four
- * rows of product content that only a migration changes. Caching it takes the
- * gate on the chat route down to two parallel reads, which matters because the
- * gate runs before every single answer.
+ * Safe to share across tenants precisely because it is not tenant data: a
+ * handful of rows of product content that only a migration changes. Caching it
+ * keeps the gate on the chat route down to one round of parallel reads, which
+ * matters because the gate runs before every single answer.
  */
 const PLANS_TTL_MS = 5 * 60_000;
 let plansCache: { at: number; plans: Plan[] } | null = null;
@@ -65,28 +75,40 @@ export function resetPlansCache(): void {
   plansCache = null;
 }
 
-export async function listPlans(db: SupabaseClient): Promise<Plan[]> {
+/**
+ * The catalogue, or `null` when it could not be read at all.
+ *
+ * The distinction is the whole reason this is separate from `listPlans`. "This
+ * workspace is on a plan I cannot find" and "I cannot read the price list" look
+ * identical to a caller that only ever sees an array, and they must have
+ * opposite answers — see UNMETERED_PLAN. Only successful reads are cached, so a
+ * failure cannot be remembered for five minutes.
+ */
+async function readCatalogue(db: SupabaseClient): Promise<Plan[] | null> {
   if (plansCache && Date.now() - plansCache.at < PLANS_TTL_MS) return plansCache.plans;
   const { data, error } = await safeRead(
-    () =>
-      db
-        .from('plans')
-        .select(
-          'code, name, tagline, price_cop, answers_limit, documents_limit, seats_limit, grace_ratio, grace_minimum, self_serve, sort_order',
-        )
-        .order('sort_order', { ascending: true }),
-    { data: null, error: { message: 'plans unreadable' } } as { data: unknown[] | null; error: unknown },
+    () => db.from('plans').select(PLAN_COLUMNS).order('sort_order', { ascending: true }),
+    { data: null, error: { message: 'plans unreadable' } } as {
+      data: unknown[] | null;
+      error: unknown;
+    },
   );
-  if (error || !data || data.length === 0) return [FALLBACK_PLAN];
+  if (error || !data || data.length === 0) return null;
   const plans = (data as unknown as PlanRow[]).map(toPlan);
   plansCache = { at: Date.now(), plans };
   return plans;
+}
+
+export async function listPlans(db: SupabaseClient): Promise<Plan[]> {
+  return (await readCatalogue(db)) ?? [FALLBACK_PLAN];
 }
 
 export interface WorkspacePlan {
   plan: Plan;
   status: SubscriptionStatus;
   startedAt: string | null;
+  /** Seats agreed with the customer, if any. A floor on the bill, not a ceiling. */
+  contractedSeats: number | null;
   /** True when a payment gateway has ever been attached. Always false today. */
   billingAttached: boolean;
 }
@@ -94,14 +116,25 @@ export interface WorkspacePlan {
 /**
  * Which plan this workspace is on.
  *
- * A missing subscription row falls back to the free plan rather than to no
- * limits — see FALLBACK_PLAN for why the anomaly must not be the generous one.
- * A `plan_code` the catalogue does not know does the same, so deleting a plan
- * row can never accidentally uncap everybody who was on it.
+ * Three outcomes, and they are deliberately not the same:
+ *
+ *   catalogue unreadable   -> UNMETERED_PLAN. An install-wide failure must not
+ *                             quietly move every workspace onto the free plan's
+ *                             numbers — least of all the grandfathered one,
+ *                             whose whole entitlement is the catalogue saying
+ *                             its quotas are null. Fail open; see UNMETERED_PLAN.
+ *
+ *   no subscription row    -> FALLBACK_PLAN (free). An anomaly about ONE
+ *                             workspace, and an anomaly that grants unlimited
+ *                             service is one nobody reports.
+ *
+ *   unknown plan_code      -> FALLBACK_PLAN, same reasoning: deleting a plan row
+ *                             must never accidentally uncap everybody who was on
+ *                             it.
  */
 export async function readWorkspacePlan(db: SupabaseClient): Promise<WorkspacePlan> {
   const [plans, subscription] = await Promise.all([
-    listPlans(db),
+    readCatalogue(db),
     safeRead(
       () => db.from('organization_subscriptions').select(SUBSCRIPTION_COLUMNS).maybeSingle(),
       { data: null } as { data: unknown },
@@ -109,17 +142,30 @@ export async function readWorkspacePlan(db: SupabaseClient): Promise<WorkspacePl
   ]);
 
   const row = subscription.data as
-    | { plan_code?: string; status?: string; started_at?: string; billing_customer_ref?: string }
+    | {
+        plan_code?: string;
+        status?: string;
+        started_at?: string;
+        billing_customer_ref?: string;
+        contracted_seats?: number | null;
+      }
     | null
     | undefined;
 
-  const plan = plans.find((p) => p.code === row?.plan_code) ?? FALLBACK_PLAN;
   const status = (row?.status ?? 'active') as SubscriptionStatus;
+  const contracted =
+    typeof row?.contracted_seats === 'number' && row.contracted_seats > 0
+      ? row.contracted_seats
+      : null;
+
+  const plan =
+    plans === null ? UNMETERED_PLAN : (plans.find((p) => p.code === row?.plan_code) ?? FALLBACK_PLAN);
 
   return {
     plan,
     status: status === 'past_due' || status === 'canceled' ? status : 'active',
     startedAt: row?.started_at ?? null,
+    contractedSeats: contracted,
     billingAttached: Boolean(row?.billing_customer_ref),
   };
 }
@@ -152,35 +198,81 @@ export interface WorkspaceUsage extends WorkspacePlan {
   seats: SeatUsage;
 }
 
-export interface SeatUsage {
-  /** People with a directory row in this workspace. */
-  members: number;
-  /** Invitations sent and not yet accepted. They hold a seat. */
+export interface SeatUsage extends SeatBasis {
+  /** Invitations sent and not yet accepted. They hold a place, not a quota. */
   pending: number;
+  /** Occupied places: members plus pending invitations. Weighed against `maximum`. */
   used: number;
-  limit: number | null;
+  /** The hard ceiling on people. null = sin tope, which is every paid plan. */
+  maximum: number | null;
   /** True when one more person cannot be invited. */
   full: boolean;
+  /** What a month costs at this basis, in whole pesos. */
+  chargeCop: number;
 }
 
 /**
- * Seats, counted live rather than metered.
+ * The seat basis: the number the quota and the bill are both computed from.
  *
- * A seat is not consumed, it is occupied — so there is no ledger for it and no
- * period. Pending invitations count, because the alternative is a workspace that
- * invites twenty people onto a three-seat plan and discovers the problem when
- * they all arrive.
+ * Two reads, both through the scoped handle, and NEITHER of them counts pending
+ * invitations — an invitation nobody accepts must not buy a month of quota for a
+ * person who never arrived. `readSeats` adds them for the screens and for the
+ * seat ceiling, which is the question they are actually relevant to.
+ *
+ * `peak` is the high-water mark migration 0086 § 5 keeps by trigger. Reading it
+ * is what makes the ceiling monotonic within a period: somebody leaving on the
+ * 14th cannot pull it down under consumption that has already happened.
+ */
+export async function readSeatBasis(
+  db: SupabaseClient,
+  plan: Plan,
+  contractedSeats: number | null,
+  period: string,
+): Promise<SeatBasis> {
+  const noCount = { count: 0, error: null } as { count: number | null; error: unknown };
+  const [members, peak] = await Promise.all([
+    // `users` is the per-workspace directory (migration 0064 § 3) and is a
+    // tenant table, so the scoped handle filters it.
+    safeRead(() => db.from('users').select('id', { count: 'exact', head: true }), noCount),
+    safeRead(
+      () =>
+        db
+          .from('organization_seat_periods')
+          .select('peak_seats')
+          .eq('period', period)
+          .maybeSingle(),
+      { data: null } as { data: unknown },
+    ),
+  ]);
+
+  const peakSeats = (peak.data as { peak_seats?: number } | null | undefined)?.peak_seats ?? 0;
+
+  return seatBasisFor(plan, {
+    members: members.count ?? 0,
+    peak: peakSeats,
+    contracted: contractedSeats,
+  });
+}
+
+/**
+ * Seats, counted live rather than metered, plus everything the screens say about
+ * them.
+ *
+ * A seat is not consumed, it is occupied — so there is no ledger for it. Pending
+ * invitations count toward the CEILING, because the alternative is a workspace
+ * that invites twenty people onto a three-seat plan and discovers the problem
+ * when they all arrive. They do not count toward the quota or the bill.
  */
 export async function readSeats(
   db: SupabaseClient,
   organizationId: string,
-  limit: number | null,
+  plan: Plan,
+  contractedSeats: number | null,
+  at: Date = new Date(),
 ): Promise<SeatUsage> {
-  const empty = { count: 0, error: null } as { count: number | null; error: unknown };
-  const [members, invitations] = await Promise.all([
-    // `users` is the per-workspace directory (migration 0064 § 3) and is a
-    // tenant table, so the scoped handle filters it.
-    safeRead(() => db.from('users').select('id', { count: 'exact', head: true }), empty),
+  const period = usagePeriod(at);
+  const [basis, invitations] = await Promise.all([
+    readSeatBasis(db, plan, contractedSeats, period),
     // `ba_invitation` is `shared`: it carries better-auth's own camel-cased
     // organizationId and the scoped handle passes it through untouched, so this
     // is one of the few filters in the product written by hand. It is written
@@ -192,20 +284,21 @@ export async function readSeats(
           .select('id', { count: 'exact', head: true })
           .eq('organizationId', organizationId)
           .eq('status', 'pending'),
-      empty,
+      { count: 0, error: null } as { count: number | null; error: unknown },
     ),
   ]);
 
-  const memberCount = members.count ?? 0;
-  const pendingCount = invitations.error ? 0 : (invitations.count ?? 0);
-  const used = memberCount + pendingCount;
+  const pending = invitations.error ? 0 : (invitations.count ?? 0);
+  const used = basis.members + pending;
+  const maximum = plan.seatsMaximum;
 
   return {
-    members: memberCount,
-    pending: pendingCount,
+    ...basis,
+    pending,
     used,
-    limit,
-    full: limit !== null && used >= limit,
+    maximum,
+    full: maximum !== null && used >= maximum,
+    chargeCop: monthlyChargeCop(plan, basis),
   };
 }
 
@@ -219,12 +312,12 @@ export async function readWorkspaceUsage(
   const workspacePlan = await readWorkspacePlan(db);
   const [counters, seats] = await Promise.all([
     readCounters(db, period),
-    readSeats(db, organizationId, workspacePlan.plan.seatsLimit),
+    readSeats(db, organizationId, workspacePlan.plan, workspacePlan.contractedSeats, at),
   ]);
 
   const meters = {} as Record<MeterId, Entitlement>;
   for (const meter of METERS) {
-    meters[meter] = entitlementFor(workspacePlan.plan, meter, counters[meter]);
+    meters[meter] = entitlementFor(workspacePlan.plan, meter, counters[meter], seats);
   }
 
   return { ...workspacePlan, period, meters, seats };
@@ -233,16 +326,18 @@ export async function readWorkspaceUsage(
 /**
  * Where one meter stands. The gate.
  *
- * Two parallel reads and a cached catalogue lookup. It runs before every answer,
- * which is why it does not go through `readWorkspaceUsage` — the seat count is
- * two more queries and no turn has ever been refused because of it.
+ * It runs before every answer, so it does not go through `readWorkspaceUsage` —
+ * the pending-invitation count is one more query and no turn has ever been
+ * refused because of it. The seat basis, on the other hand, IS now part of the
+ * decision: since 0086 the ceiling is a rate times a headcount, and a gate that
+ * skipped the headcount would be reading one person's allowance as a company's.
  *
- * FAILS OPEN, ON PURPOSE. If the counter or the subscription cannot be read, the
- * caller gets an unlimited entitlement and the turn proceeds. A metering outage
- * must not become a product outage: the cost of being wrong here is a handful of
- * uncharged answers, and the ledger — which is written by a trigger and does not
- * depend on this code path at all — still recorded every one of them, so nothing
- * is lost, only briefly ungated.
+ * FAILS OPEN, ON PURPOSE. If the counter, the subscription or the seat basis
+ * cannot be read, the caller gets an unlimited entitlement and the turn
+ * proceeds. A metering outage must not become a product outage: the cost of
+ * being wrong here is a handful of uncharged answers, and the ledger — which is
+ * written by a trigger and does not depend on this code path at all — still
+ * recorded every one of them, so nothing is lost, only briefly ungated.
  */
 export async function checkMeter(
   db: SupabaseClient,
@@ -251,17 +346,14 @@ export async function checkMeter(
 ): Promise<Entitlement> {
   try {
     const period = usagePeriod(at);
-    const [workspacePlan, counters] = await Promise.all([
-      readWorkspacePlan(db),
+    const workspacePlan = await readWorkspacePlan(db);
+    const [counters, seats] = await Promise.all([
       readCounters(db, period),
+      readSeatBasis(db, workspacePlan.plan, workspacePlan.contractedSeats, period),
     ]);
-    return entitlementFor(workspacePlan.plan, meter, counters[meter]);
+    return entitlementFor(workspacePlan.plan, meter, counters[meter], seats);
   } catch {
-    return entitlementFor(
-      { ...FALLBACK_PLAN, limits: { answers: null, documents: null }, seatsLimit: null },
-      meter,
-      0,
-    );
+    return entitlementFor(UNMETERED_PLAN, meter, 0, emptySeatBasis(UNMETERED_PLAN));
   }
 }
 

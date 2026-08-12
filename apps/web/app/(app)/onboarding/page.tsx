@@ -123,8 +123,11 @@ export default async function OnboardingPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  const [state, { plan }] = await Promise.all([readOnboarding(db), readWorkspacePlan(db)]);
-  const seats = await readSeats(db, user.organization.id, plan.seatsLimit);
+  const [state, { plan, contractedSeats }] = await Promise.all([
+    readOnboarding(db),
+    readWorkspacePlan(db),
+  ]);
+  const seats = await readSeats(db, user.organization.id, plan, contractedSeats);
 
   const doneCount = state.steps.filter((s) => s.done).length;
   const firstName = (user.name ?? '').trim().split(' ')[0] || 'Hola';
@@ -213,7 +216,9 @@ export default async function OnboardingPage() {
                       <div className="mt-3.5">
                         <InviteTeam
                           seatsUsed={seats.used}
-                          seatsLimit={seats.limit}
+                          seatsMaximum={seats.maximum}
+                          perSeatAnswers={plan.perSeat.answers}
+                          priceCopPerSeat={plan.priceCopPerSeat}
                           canInvite={user.role === 'org_admin'}
                         />
                       </div>

@@ -27,6 +27,25 @@ const ANA = 'user-ana';
 const JEFE = 'user-jefe';
 const TODAY = '2026-08-04';
 
+/**
+ * A calendar day relative to the real clock, as `YYYY-MM-DD`.
+ *
+ * `createCommitment` derives the initial state by comparing the due date
+ * against today, so a hard-coded future date is a fixture with an expiry: it
+ * works until that day arrives and then the row is born `overdue` and the test
+ * fails for a reason that has nothing to do with the code. That already
+ * happened here — `2026-08-10` was comfortably ahead when it was written.
+ *
+ * Anything asserting on a state the clock decides has to move with the clock.
+ * `TODAY` above stays fixed on purpose: it is passed in explicitly, so it is a
+ * parameter rather than a reading of the world.
+ */
+function daysFromNow(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function world() {
   return createCommitmentsWorld(
     {
@@ -95,10 +114,13 @@ describe('a commitment without a verifiable source', () => {
 describe('a date extracted from a document', () => {
   it('is invisible to everything that watches, until a person confirms it', async () => {
     const w = world();
+    // Due comfortably ahead of the real clock, so the row is born in force and
+    // the closing assertion means something: the only way it could read
+    // 'overdue' is if the refresher had touched it.
     const row = await createCommitment(w.db, {
       title: 'Vigencia contrato Servientrega',
       kind: 'contract',
-      dueOn: '2026-08-10',
+      dueOn: daysFromNow(30),
       ownerUserId: ANA,
       source: {
         kind: 'document',
@@ -122,7 +144,10 @@ describe('a date extracted from a document', () => {
     // 'overdue' and be picked up by a query that filters on the cached column
     // without also filtering on review_state.
     const before = w.tables.commitments?.find((c) => c.id === row.id)?.state;
-    await refreshStates(w.db, '2026-09-01');
+    // Refreshed with a day well PAST the due date — so a row that was being
+    // watched would certainly flip to 'overdue' here. This one does not,
+    // because it is still waiting on a person.
+    await refreshStates(w.db, daysFromNow(60));
     const after = w.tables.commitments?.find((c) => c.id === row.id)?.state;
     expect(after).toBe(before);
     expect(after).not.toBe('overdue');

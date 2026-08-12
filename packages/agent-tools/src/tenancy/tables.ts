@@ -242,6 +242,16 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   usage_counters: tenant(),
   organization_onboarding: tenant(),
 
+  // --- Per-person pricing (migration 0086) ----------------------------------
+  // The most people a workspace held at once in a billing period. Tenant for the
+  // same reason as the counters above, and it is the sharper case of the two:
+  // since 0086 a workspace's ceiling is its per-person quota TIMES this number,
+  // so a lost filter here would not leak a row — it would compute one company's
+  // limit, and one company's invoice, from another company's headcount. Written
+  // only by triggers on public.users, so the workspace is copied from the
+  // directory row and never chosen.
+  organization_seat_periods: tenant(),
+
   // --- Answer-quality evaluation (migration 0082) ---------------------------
   // What the suite scored, run by run. Tenant on the run: the questions and the
   // corpus are the same everywhere (they live in git), but the configuration
