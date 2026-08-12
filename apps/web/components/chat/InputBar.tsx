@@ -1,10 +1,22 @@
 'use client';
 
+import type { ScopeSpace } from '@/app/(chat)/chat/actions';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { clsx } from 'clsx';
-import { ArrowUp, Bot, Building2, ChevronDown, FileText, Layers, Terminal } from 'lucide-react';
+import {
+  ArrowUp,
+  Bot,
+  Building2,
+  ChevronDown,
+  FileText,
+  Layers,
+  Paperclip,
+  Terminal,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachmentTray } from './AttachmentTray';
+import { ScopePicker, ScopeStrip } from './MemoryScope';
+import { VoiceDictation } from './VoiceDictation';
 
 interface AgentInfo {
   slug: string;
@@ -21,6 +33,9 @@ interface InputBarProps {
   onAgentChange: (slug: string) => void;
   draft?: string;
   onDraftConsumed?: () => void;
+  /** The spaces this conversation is narrowed to. Empty means everything visible. */
+  scope: ScopeSpace[];
+  onScopeChange: (next: ScopeSpace[]) => void;
 }
 
 const CHAR_COUNT_THRESHOLD = 3500;
@@ -41,6 +56,36 @@ const CHAR_COUNT_THRESHOLD = 3500;
  * quietly invalidate the latency and quality numbers the product is tuned
  * against. The agent pill stays because agents differ in what they are ALLOWED
  * to do, which is the person's business; the model is not.
+ *
+ * ===========================================================================
+ * WHAT ELSE IS IN HERE, AND THE FOUR THINGS THAT ARE NOT
+ * ===========================================================================
+ * Four controls, and the count is the design. A composer with a button for
+ * everything is a composer where the person stops seeing any of them, so a
+ * control gets in only if it lets somebody do something they otherwise could
+ * NOT do — never because it saves a step.
+ *
+ *   agent pill   Which agent answers. It changes what Cortex is ALLOWED to do,
+ *                which is the person's business. Already here.
+ *   📎 adjuntar  Dragging a file is not a gesture that exists on a phone. The
+ *                tray was reachable by drag alone, so on the surface where most
+ *                of these people are standing, attaching was impossible.
+ *   🎙 dictar    Hands full, phone in a pocket. See VoiceDictation.tsx.
+ *   🧠 memoria   Which part of the brain answers. See MemoryScope.tsx.
+ *
+ * REJECTED, with the reason each time:
+ *   MODEL SELECTOR   see above; the one idea from the reference thrown out.
+ *   BUTTONS FOR THE  `/vencimientos`, `/informe`, `/placa` are already one
+ *   DAILY ROUTINES   keystroke away in the `/` menu, and the empty screen
+ *                    offers them in full sentences. A row of shortcut buttons
+ *                    would be a third copy of the same six commands, competing
+ *                    with the four controls above for the glance.
+ *   TONE / LENGTH    A knob whose effect nobody can evaluate on their own
+ *                    answer, on a product whose whole claim is that it shows
+ *                    you where the answer came from.
+ *   PIN A TOOL       The ranker chooses tools per turn and that choice is
+ *                    measured; letting somebody pin one routes around the
+ *                    measurement. Already argued at /api/chat/mentions.
  *
  * ===========================================================================
  * BOTH MENUS EXPAND TO PLAIN TEXT
@@ -144,6 +189,8 @@ export function InputBar({
   onAgentChange,
   draft,
   onDraftConsumed,
+  scope,
+  onScopeChange,
 }: InputBarProps) {
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
@@ -151,13 +198,22 @@ export function InputBar({
   const [hits, setHits] = useState<MentionHit[]>([]);
   const [active, setActive] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // The tray's own file dialog, lent to the paperclip. Null until the tray
+  // exists, which is why the button appears with it and not before: there is no
+  // conversation to attach a file to yet.
+  const [openFilePicker, setOpenFilePicker] = useState<(() => void) | null>(null);
+  const registerFilePicker = useCallback(
+    (open: () => void) => setOpenFilePicker((prev) => (prev === open ? prev : open)),
+    [],
+  );
+  const textRef = useRef(text);
+  textRef.current = text;
 
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
   const pillDisabled = !!conversationId || agents.length <= 1;
 
   const mention = useMemo(() => mentionAtCaret(text, caret), [text, caret]);
-  const commandQuery =
-    text.startsWith('/') && !text.includes(' ') ? text.toLowerCase() : null;
+  const commandQuery = text.startsWith('/') && !text.includes(' ') ? text.toLowerCase() : null;
   const commands = useMemo(
     () => (commandQuery ? COMMANDS.filter((c) => c.name.startsWith(commandQuery)) : []),
     [commandQuery],
@@ -211,6 +267,17 @@ export function InputBar({
         setCaret(at);
         resize();
       });
+    },
+    [resize],
+  );
+
+  // Dictation's way in. Deliberately NOT `put`: that one moves the caret and
+  // takes focus, and doing either on every interim result would fight whoever
+  // is editing the sentence while they speak.
+  const setComposerText = useCallback(
+    (value: string) => {
+      setText(value);
+      requestAnimationFrame(resize);
     },
     [resize],
   );
@@ -325,11 +392,23 @@ export function InputBar({
             <AttachmentTray
               conversationId={conversationId}
               onAsk={(question) => put(question)}
+              onPickerReady={registerFilePicker}
             />
           </div>
         )}
 
         <div className="relative">
+          {/*
+            Above the box, not inside a menu, and on every turn it is in force.
+            The whole argument is in MemoryScope.tsx: a filter somebody forgot
+            turns a full brain into "no tengo nada sobre eso".
+          */}
+          <ScopeStrip
+            selected={scope}
+            onRemove={(id) => onScopeChange(scope.filter((s) => s.id !== id))}
+            onClear={() => onScopeChange([])}
+            disabled={disabled}
+          />
           {menuOpen && options.length > 0 && (
             /*
               A real listbox, not a styled div: arrow keys move `aria-activedescendant`
@@ -340,7 +419,12 @@ export function InputBar({
               id="composer-menu"
               // biome-ignore lint/a11y/useSemanticElements: the listbox pattern is correct here; focus stays in the textarea.
               role="listbox"
-              aria-label={mention ? 'Fuentes' : 'Comandos'}
+              // "Menciones", not "Fuentes": since the composer grew a memory
+              // filter, "fuente" means the space an answer was read from, and
+              // it is already what the citations under an answer are called.
+              // Two things by one name is how somebody looks for the filter in
+              // the `@` menu.
+              aria-label={mention ? 'Menciones' : 'Comandos'}
               className="scroll-slim absolute bottom-full z-40 mb-2 max-h-64 w-full overflow-y-auto rounded-card border border-border bg-surface p-1.5 shadow-pop"
             >
               {options.map((option, i) => (
@@ -396,53 +480,78 @@ export function InputBar({
             />
 
             <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-1">
-              {pillDisabled ? (
-                <span
-                  title="Empieza un chat nuevo para cambiar de agente"
-                  className="inline-flex items-center gap-1.5 rounded-pill bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink-faint"
-                >
-                  <Bot className="h-3.5 w-3.5" />
-                  {activeAgent?.name ?? 'Agente'}
-                </span>
-              ) : (
-                <DropdownMenu.Root>
-                  <DropdownMenu.Trigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
-                    >
-                      <Bot className="h-3.5 w-3.5 text-primary" />
-                      {activeAgent?.name ?? 'Agente'}
-                      <ChevronDown size={12} className="opacity-60" />
-                    </button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.Content
-                      side="top"
-                      align="start"
-                      sideOffset={8}
-                      className="z-50 min-w-[240px] rounded-card border border-border bg-surface p-1.5 shadow-pop"
-                    >
-                      {agents.map((a) => (
-                        <DropdownMenu.Item
-                          key={a.slug}
-                          onSelect={() => onAgentChange(a.slug)}
-                          className="flex cursor-pointer flex-col gap-0.5 rounded-sm px-2.5 py-2 text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
-                        >
-                          <span className="font-semibold text-ink">{a.name}</span>
-                          {a.description && (
-                            <span className="line-clamp-1 text-xs text-ink-faint">
-                              {a.description}
-                            </span>
-                          )}
-                        </DropdownMenu.Item>
-                      ))}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Root>
-              )}
+              <div className="flex min-w-0 items-center gap-1">
+                {pillDisabled ? (
+                  <span
+                    title="Empieza un chat nuevo para cambiar de agente"
+                    className="inline-flex items-center gap-1.5 rounded-pill bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink-faint"
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                    {activeAgent?.name ?? 'Agente'}
+                  </span>
+                ) : (
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
+                      >
+                        <Bot className="h-3.5 w-3.5 text-primary" />
+                        {activeAgent?.name ?? 'Agente'}
+                        <ChevronDown size={12} className="opacity-60" />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        side="top"
+                        align="start"
+                        sideOffset={8}
+                        className="z-50 min-w-[240px] rounded-card border border-border bg-surface p-1.5 shadow-pop"
+                      >
+                        {agents.map((a) => (
+                          <DropdownMenu.Item
+                            key={a.slug}
+                            onSelect={() => onAgentChange(a.slug)}
+                            className="flex cursor-pointer flex-col gap-0.5 rounded-sm px-2.5 py-2 text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
+                          >
+                            <span className="font-semibold text-ink">{a.name}</span>
+                            {a.description && (
+                              <span className="line-clamp-1 text-xs text-ink-faint">
+                                {a.description}
+                              </span>
+                            )}
+                          </DropdownMenu.Item>
+                        ))}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                )}
 
-              <div className="flex items-center gap-2">
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-border" aria-hidden />
+
+                {openFilePicker && (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => openFilePicker()}
+                    aria-label="Adjuntar un archivo"
+                    title="Adjuntar un archivo"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-40 motion-reduce:transition-none"
+                  >
+                    <Paperclip className="h-4 w-4" aria-hidden />
+                  </button>
+                )}
+
+                <VoiceDictation
+                  disabled={disabled}
+                  getBaseText={() => textRef.current}
+                  onText={setComposerText}
+                />
+
+                <ScopePicker selected={scope} onChange={onScopeChange} disabled={disabled} />
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
                 {text.length > CHAR_COUNT_THRESHOLD && (
                   <span className="tabular text-[10px] text-ink-faint">{text.length}</span>
                 )}

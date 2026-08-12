@@ -90,9 +90,20 @@ const STAGE: Record<Status, { text: string; dot: string; tone: string }> = {
 export function AttachmentTray({
   conversationId,
   onAsk,
+  onPickerReady,
 }: {
   conversationId: string;
   onAsk: (question: string) => void;
+  /**
+   * Hands the file dialog back to the composer so the paperclip can open it.
+   *
+   * The button does not get its own `<input type="file">`: a second one would
+   * need its own copy of the accepted types, the 10 MB ceiling and the
+   * rejection messages, and the day somebody edits one of the two the composer
+   * would start accepting a file the tray then refuses. One dropzone, two ways
+   * in — dragging and the button — and exactly one set of rules.
+   */
+  onPickerReady?: (open: () => void) => void;
 }) {
   const [pending, setPending] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,7 +113,7 @@ export function AttachmentTray({
   const [spaceId, setSpaceId] = useState<string>('');
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     accept: ACCEPT,
     maxSize: MAX_BYTES,
     multiple: false,
@@ -124,6 +135,15 @@ export function AttachmentTray({
       );
     },
   });
+
+  // Handed over once, wrapped, and never re-handed. `open` is a fresh closure on
+  // some renders, and passing it straight up would be a setState in an effect
+  // whose dependency changes on the render that setState caused.
+  const openRef = useRef(open);
+  openRef.current = open;
+  useEffect(() => {
+    onPickerReady?.(() => openRef.current());
+  }, [onPickerReady]);
 
   // Loaded only once a file is waiting: nobody needs the space list until there
   // is something to file, and it is one query we can simply not make.
@@ -297,7 +317,8 @@ export function AttachmentTray({
           })}
         >
           <input {...getInputProps()} />
-          {error ?? 'Suelta un archivo y decides si entra a la memoria (PDF, DOCX, TXT, MD — máx. 10 MB).'}
+          {error ??
+            'Suelta un archivo y decides si entra a la memoria (PDF, DOCX, TXT, MD — máx. 10 MB).'}
         </div>
       )}
     </div>
@@ -337,9 +358,7 @@ function AttachmentRow({
           {attachment.alreadyThere && attachment.status === 'ready'
             ? 'Ya estaba en la memoria'
             : stage.text}
-          {attachment.spaceName && (
-            <span className="text-ink-faint">· {attachment.spaceName}</span>
-          )}
+          {attachment.spaceName && <span className="text-ink-faint">· {attachment.spaceName}</span>}
         </span>
       )}
 

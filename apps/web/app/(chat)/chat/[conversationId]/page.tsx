@@ -2,6 +2,7 @@ import { ChatRoot } from '@/components/chat/ChatRoot';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { toToolInvocations } from '@/lib/tool-invocations';
+import { listVisibleSpaces, loadOverrides } from '@cortex/agent-tools';
 import { listAgents } from '@cortex/agents';
 import type { Message } from 'ai';
 
@@ -57,12 +58,35 @@ export default async function ResumeChatPage({
   const convAgents = conv.agents as { slug: string } | { slug: string }[] | null;
   const convAgentSlug = Array.isArray(convAgents) ? convAgents[0]?.slug : convAgents?.slug;
 
+  /**
+   * The memory filter this conversation was left on, resolved back into names.
+   *
+   * NAMES, NOT IDS, AND RESOLVED THROUGH `listVisibleSpaces`. The strip in the
+   * composer has to say "Aduanas" — an id would be worse than nothing, because
+   * the point of the strip is that somebody reads it and remembers. Resolving
+   * through the visibility rule also means a space that was deleted, or that
+   * stopped being visible to this person, simply drops off the strip instead of
+   * showing a name for something retrieval will no longer reach.
+   *
+   * Both queries only happen when there IS a filter, which is the rare case, so
+   * a normal chat loads exactly the queries it always did plus one.
+   */
+  const overrides = await loadOverrides(db, conversationId).catch(() => null);
+  const scopedIds = overrides?.spaceIds ?? null;
+  const initialScope =
+    scopedIds && scopedIds.length > 0
+      ? (await listVisibleSpaces(db, user.id).catch(() => []))
+          .filter((s) => scopedIds.includes(s.id))
+          .map((s) => ({ id: s.id, name: s.name, kind: s.kind }))
+      : [];
+
   return (
     <ChatRoot
       agents={agents}
       conversationId={conversationId}
       initialMessages={initialMessages}
       initialAgentSlug={convAgentSlug}
+      initialScope={initialScope}
     />
   );
 }

@@ -1,11 +1,12 @@
 'use client';
 
+import { type ScopeSpace, setChatScopeAction } from '@/app/(chat)/chat/actions';
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
 import { Brain, Menu } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useGlobalHotkeys } from '../../hooks/useGlobalHotkeys';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { CommandPalette } from './CommandPalette';
@@ -24,6 +25,12 @@ interface ChatRootProps {
   initialMessages?: Message[];
   /** Agent of a resumed conversation — keeps it pinned instead of defaulting to agents[0]. */
   initialAgentSlug?: string;
+  /**
+   * The spaces this conversation was already narrowed to, resolved to names by
+   * the page. Empty means "everything this person can see", which is the
+   * default and the state a brand-new chat always starts in.
+   */
+  initialScope?: ScopeSpace[];
 }
 
 export function ChatRoot({
@@ -31,6 +38,7 @@ export function ChatRoot({
   conversationId: initialConvId,
   initialMessages,
   initialAgentSlug,
+  initialScope,
 }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
@@ -38,6 +46,27 @@ export function ChatRoot({
   const [draft, setDraft] = useState('');
   const [blocked, setBlocked] = useState<{ message: string; isLimit: boolean } | null>(null);
   const { setOpen: setSidebarOpen } = useMobileSidebar();
+
+  /**
+   * WHICH MEMORY ANSWERS, AND WHY IT TRAVELS TWO WAYS.
+   *
+   * The durable copy is `turn_context_settings.space_ids` on the conversation —
+   * the column migration 0080 already made for this, and the same one the
+   * diagnostics panel at /conversations/[id] edits. But a brand-new chat has no
+   * conversation row yet, and the very first question is exactly the one
+   * somebody wants to aim ("contéstame sólo con lo de aduanas"). So:
+   *
+   *   every turn        the selection rides in the request body, and /api/chat
+   *                     uses it for THAT turn;
+   *   once there is a   `setChatScopeAction` writes it down, so a reload, the
+   *   conversation      diagnostics panel and the next turn all agree.
+   *
+   * The ref exists because `experimental_prepareRequestBody` below is handed to
+   * `useChat` and must read the CURRENT selection, not the one that was in force
+   * when the closure was made.
+   */
+  const [scope, setScope] = useState<ScopeSpace[]>(initialScope ?? []);
+  const scopeRef = useRef<ScopeSpace[]>(initialScope ?? []);
 
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
 
@@ -55,6 +84,11 @@ export function ChatRoot({
         .filter((m) => m.content.length > 0 || m.role !== 'assistant');
       const body: Record<string, unknown> = { agentSlug, messages: normalizedMessages };
       if (conversationId) body.conversationId = conversationId;
+      // Only sent when there is one. An absent field is byte-identical to the
+      // request this route has always received, so a chat with no filter is
+      // exactly the chat it was before this existed.
+      const scopeIds = scopeRef.current.map((s) => s.id);
+      if (scopeIds.length > 0) body.spaceIds = scopeIds;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return body as any;
     },
@@ -86,6 +120,16 @@ export function ChatRoot({
       const newConvId = response.headers.get('X-Conversation-Id');
       if (newConvId && newConvId !== conversationId) {
         setConversationId(newConvId);
+        // The conversation exists now, so a filter chosen before the first
+        // message finally has somewhere to live. Fire-and-forget: the turn it
+        // applied to is already being answered with it, and a write that fails
+        // costs a reload of the chip, never the answer.
+        if (scopeRef.current.length > 0) {
+          void setChatScopeAction(
+            newConvId,
+            scopeRef.current.map((s) => s.id),
+          );
+        }
         // Update the URL WITHOUT a Next.js navigation. router.replace() would
         // remount the [conversationId] route and reload initialMessages from the
         // DB mid-stream — wiping the messages until a manual reload. history API
@@ -109,6 +153,20 @@ export function ChatRoot({
     [],
   );
   useGlobalHotkeys(hotkeys);
+
+  const handleScopeChange = useCallback(
+    (next: ScopeSpace[]) => {
+      scopeRef.current = next;
+      setScope(next);
+      if (conversationId) {
+        void setChatScopeAction(
+          conversationId,
+          next.map((s) => s.id),
+        );
+      }
+    },
+    [conversationId],
+  );
 
   const handleRegenerate = useCallback(() => void reload(), [reload]);
   const handleAgentChange = useCallback(
@@ -192,6 +250,8 @@ export function ChatRoot({
         onAgentChange={handleAgentChange}
         draft={draft}
         onDraftConsumed={() => setDraft('')}
+        scope={scope}
+        onScopeChange={handleScopeChange}
       />
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

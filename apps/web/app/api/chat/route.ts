@@ -7,10 +7,10 @@ import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
 import {
   type AnyTool,
+  CUSTOM_TOOL_FAMILY,
   type EnabledExternalServer,
   type ExternalServerRow,
   type RetrievalObservation,
-  CUSTOM_TOOL_FAMILY,
   TurnClock,
   TurnContextRecorder,
   callExternalTool,
@@ -24,6 +24,7 @@ import {
   hasOverrides,
   isRefused,
   kbSearch,
+  listVisibleSpaces,
   loadOverrides,
   readWorkspacePlan,
   runTool,
@@ -110,6 +111,20 @@ const Body = z.object({
   agentSlug: z.string().default('cortex'),
   conversationId: z.string().uuid().optional(),
   messages: z.array(MessageSchema).min(1),
+  /**
+   * "Contéstame sólo con lo de aduanas."
+   *
+   * A NARROWING AND ONLY A NARROWING. It reaches Brain Knowledge through
+   * `ToolContext.kbSpaceIds`, which `kb_search_scoped` INTERSECTS with the
+   * spaces this person can already see — so a forged id here buys nothing, and
+   * an id for somebody else's personal space contributes exactly zero rows. The
+   * ids are re-checked against `listVisibleSpaces` below anyway, so that a
+   * stale one fails visibly instead of quietly narrowing retrieval to nothing.
+   *
+   * Absent means unchanged: a request without this field produces the same turn
+   * it produced before the field existed. See components/chat/MemoryScope.tsx.
+   */
+  spaceIds: z.array(z.string().uuid()).max(32).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -277,11 +292,82 @@ export async function POST(req: NextRequest) {
   // anyway, so the knobs cost the chat no wall-clock at all. `loadOverrides`
   // never throws — a diagnostics setting that fails to load costs the default
   // behaviour, never the answer.
-  const [{ count: chunkCount }, overrides] = await Promise.all([
+  const requestedSpaceIds =
+    parsed.data.spaceIds && parsed.data.spaceIds.length > 0 ? parsed.data.spaceIds : null;
+
+  const [{ count: chunkCount }, overrides, visibleSpaces] = await Promise.all([
     db.from('kb_documents').select('id', { count: 'exact', head: true }),
     loadOverrides(db, conversationId),
+    // Only when the person asked for a filter, and folded in here so it costs
+    // the turn no wall-clock: it hides entirely behind two queries the turn was
+    // already making. Needed for two things — checking the ids are real, and
+    // getting the NAMES, which is what the model is told below.
+    requestedSpaceIds ? listVisibleSpaces(db, user.id).catch(() => []) : Promise.resolve([]),
   ]);
-  recorder.adjusted(hasOverrides(overrides));
+
+  // ---------------------------------------------------------------------------
+  // WHICH SPACES THIS TURN MAY RETRIEVE FROM
+  //
+  // Two sources say so and they are the same storage: the composer's filter,
+  // which arrives on the request because a brand-new chat has no row to read
+  // from yet, and `turn_context_settings.space_ids`, which is where that filter
+  // is written down the moment a conversation exists (and what the diagnostics
+  // panel at /conversations/[id] edits). The request wins when it is present,
+  // because it is the more recent gesture by definition.
+  //
+  // THE ONE CASE WORTH ARGUING: every id sent is unknown — the space was
+  // deleted, or shared out from under this person. The choice is between
+  // retrieving NOTHING and dropping the filter. Nothing is the worse failure by
+  // a distance: the assistant would answer "no hay nada sobre eso" forever,
+  // truthfully, about a full brain, with no way for anybody to find out why. So
+  // an entirely stale filter is dropped, and the strip in the composer is
+  // rebuilt from the visible set on the next load, which is where it disappears
+  // from the screen too.
+  // ---------------------------------------------------------------------------
+  const allowedSpaces = requestedSpaceIds
+    ? visibleSpaces.filter((s) => requestedSpaceIds.includes(s.id))
+    : [];
+  const scopeSpaceIds =
+    allowedSpaces.length > 0 ? allowedSpaces.map((s) => s.id) : overrides.spaceIds;
+  const scopeNames = allowedSpaces.map((s) => s.name);
+
+  // "Was this turn answered under an adjustment?" — the flag the capture uses
+  // to mark a turn that did not behave like the default. A filter chosen in the
+  // composer counts even on the very first turn, before there is a row to store
+  // it in, or the one turn that is hardest to explain later would be the one
+  // that looks untouched.
+  recorder.adjusted(hasOverrides(overrides) || scopeNames.length > 0);
+
+  /**
+   * The filter, said out loud to the model.
+   *
+   * This is the part that stops the feature from being a trap. A person who
+   * narrowed to "Aduanas" on Monday and asks about payroll on Thursday must not
+   * read "la empresa no tiene nada sobre eso" — that sentence is false, they
+   * cannot tell it is false, and it is how somebody concludes the brain is
+   * empty and stops using it. Naming the spaces and demanding the distinction
+   * puts the true sentence in the only place they are certainly looking: the
+   * answer itself.
+   *
+   * It is a section of its own rather than part of the retrieved context so it
+   * is there even on turns where retrieval never ran — a short question is
+   * exactly as capable of coming back empty.
+   */
+  const scopeBlock =
+    scopeNames.length > 0
+      ? '<memory-scope>\n' +
+        `La persona limitó Brain Knowledge a: ${scopeNames.join(', ')}.\n` +
+        'No busques ni cites nada fuera de esos espacios. Si la respuesta no está ahí, ' +
+        'dilo exactamente así: que buscaste SÓLO en esos espacios y que puede quitar el ' +
+        'filtro para buscar en todo. Nunca digas que la empresa no tiene información ' +
+        'sobre el tema, porque no lo sabes: sólo miraste una parte.\n' +
+        '</memory-scope>'
+      : '';
+
+  // Spread conditionally because `undefined` means "no restriction" while `[]`
+  // would mean "no space at all" — see ToolContext.kbSpaceIds. With no filter
+  // this is `ctx` itself, so nothing about an ordinary turn changes.
+  const scopedCtx = scopeSpaceIds ? { ...ctx, kbSpaceIds: scopeSpaceIds } : ctx;
   const fragmentLimit = overrides.fragmentLimit ?? DEFAULT_FRAGMENTS;
   if ((chunkCount ?? 0) === 0) {
     recorder.retrievalSkipped('Todavía no hay nada indexado en Brain Knowledge.', fragmentLimit);
@@ -318,71 +404,75 @@ export async function POST(req: NextRequest) {
   // ---------------------------------------------------------------------------
   const closeRetrieval = clock.open('retrieval');
   const retrieving = (async (): Promise<string> => {
-  if ((chunkCount ?? 0) > 0 && fragmentLimit > 0 && shouldRunRag(ragQuery)) {
-    // The relevance cut used to live here, as `score >= 0.65` on the blended
-    // rank — a number that could not be interpreted and that, measured against
-    // a real corpus, never got there at all: semantic matching alone tops out
-    // around 0.49, so this block was discarding every correct result it was
-    // ever handed. kb.search now applies the cut on cosine similarity, where a
-    // threshold means something, and reports what it concluded in `coverage`.
-    // See packages/agent-tools/src/kb/relevance.ts for the measurement.
-    const ragOut = ragQuery
-      ? await runTool(
-          kbSearch,
-          { query: ragQuery, limit: fragmentLimit },
-          // A conversation-scoped narrowing, passed the same way the abort
-          // signal is below. It can only ever restrict: Postgres intersects it
-          // with what this person can already see, so an id for somebody else's
-          // space contributes nothing. Spread conditionally because `undefined`
-          // means "no restriction" while `[]` would mean "no space at all".
-          overrides.spaceIds ? { ...ctx, kbSpaceIds: overrides.spaceIds } : ctx,
-        ).catch(() => null)
-      : null;
+    if ((chunkCount ?? 0) > 0 && fragmentLimit > 0 && shouldRunRag(ragQuery)) {
+      // The relevance cut used to live here, as `score >= 0.65` on the blended
+      // rank — a number that could not be interpreted and that, measured against
+      // a real corpus, never got there at all: semantic matching alone tops out
+      // around 0.49, so this block was discarding every correct result it was
+      // ever handed. kb.search now applies the cut on cosine similarity, where a
+      // threshold means something, and reports what it concluded in `coverage`.
+      // See packages/agent-tools/src/kb/relevance.ts for the measurement.
+      const ragOut = ragQuery
+        ? await runTool(
+            kbSearch,
+            { query: ragQuery, limit: fragmentLimit },
+            // The same narrowed context the tools get, so the fragments pasted
+            // above the question and anything `kb.search` fetches mid-turn come
+            // from the same set of spaces. They used to differ: the filter
+            // reached the prepend and not the tool, so a model that decided to
+            // look something up quietly searched the whole brain and cited a
+            // space the person had excluded.
+            scopedCtx,
+          ).catch(() => null)
+        : null;
 
-    if (ragOut && ragOut.coverage === 'nothing') {
-      // The empty case is now stated instead of skipped. An absent <context>
-      // block is indistinguishable from "RAG did not run", so the model used to
-      // answer from nothing with no idea it was doing so; being told, in words,
-      // that the brain holds nothing on the subject is what lets it say so.
-      ragBlock = `<context>\n${ragOut.summary}\n</context>`;
-    } else if (ragOut && ragOut.hits.length > 0) {
-      ragBlock =
-        '<context>\n' +
-        `${ragOut.summary}\n\n` +
-        ragOut.hits
-          .map(
-            (h, i) =>
-              // A chunk of a recording is located by its offset, not by a chunk
-              // number, and its text already opens with the speaker — so this
-              // reads "[12:34] Ana: …" and can be quoted straight back. The age
-              // and the "coincidencia débil" marker travel with the citation
-              // because they change what it is worth: a rate from a year ago is
-              // a different claim from the same rate quoted last week.
-              `[^${i + 1}] ${h.documentTitle} ${h.spokenAt ? `at ${h.spokenAt}` : `chunk ${h.chunkIndex}`}` +
-              `${h.age ? ` · ${h.age}` : ''}${h.relevance === 'weak' ? ' · coincidencia débil' : ''}:\n` +
-              `${h.spokenAt ? `[${h.spokenAt}] ` : ''}${h.content}`,
-          )
-          .join('\n\n') +
-        (ragOut.conflicts && ragOut.conflicts.length > 0
-          ? `\n\n${ragOut.conflicts.map((c) => `⚠ CONFLICTO: ${c.note}`).join('\n')}`
-          : '') +
-        '\n</context>';
-    }
+      if (ragOut && ragOut.coverage === 'nothing') {
+        // The empty case is now stated instead of skipped. An absent <context>
+        // block is indistinguishable from "RAG did not run", so the model used to
+        // answer from nothing with no idea it was doing so; being told, in words,
+        // that the brain holds nothing on the subject is what lets it say so.
+        ragBlock = `<context>\n${ragOut.summary}\n</context>`;
+      } else if (ragOut && ragOut.hits.length > 0) {
+        ragBlock =
+          '<context>\n' +
+          `${ragOut.summary}\n\n` +
+          ragOut.hits
+            .map(
+              (h, i) =>
+                // A chunk of a recording is located by its offset, not by a chunk
+                // number, and its text already opens with the speaker — so this
+                // reads "[12:34] Ana: …" and can be quoted straight back. The age
+                // and the "coincidencia débil" marker travel with the citation
+                // because they change what it is worth: a rate from a year ago is
+                // a different claim from the same rate quoted last week.
+                `[^${i + 1}] ${h.documentTitle} ${h.spokenAt ? `at ${h.spokenAt}` : `chunk ${h.chunkIndex}`}` +
+                `${h.age ? ` · ${h.age}` : ''}${h.relevance === 'weak' ? ' · coincidencia débil' : ''}:\n` +
+                `${h.spokenAt ? `[${h.spokenAt}] ` : ''}${h.content}`,
+            )
+            .join('\n\n') +
+          (ragOut.conflicts && ragOut.conflicts.length > 0
+            ? `\n\n${ragOut.conflicts.map((c) => `⚠ CONFLICTO: ${c.note}`).join('\n')}`
+            : '') +
+          '\n</context>';
+      }
 
-    // Written down from the block that was just built, not from the scores.
-    // `ragOut.hits` IS what got pasted above the question — anything the floor
-    // dropped never appears in it — so this set is the ground truth for which
-    // fragments the model really saw, and `retrievalSeen` supplies the ones it
-    // did not. Neither is re-derived: see ToolContext.onRetrieval.
-    if (retrievalSeen) {
-      const prepended = new Set(
-        ragBlock && ragOut ? ragOut.hits.map((h) => fragmentKey(h.documentId, h.chunkIndex)) : [],
-      );
-      recorder.retrieved(retrievalSeen, prepended);
-    } else if (!ragOut) {
-      recorder.retrievalSkipped('La búsqueda en Brain Knowledge falló en este turno.', fragmentLimit);
+      // Written down from the block that was just built, not from the scores.
+      // `ragOut.hits` IS what got pasted above the question — anything the floor
+      // dropped never appears in it — so this set is the ground truth for which
+      // fragments the model really saw, and `retrievalSeen` supplies the ones it
+      // did not. Neither is re-derived: see ToolContext.onRetrieval.
+      if (retrievalSeen) {
+        const prepended = new Set(
+          ragBlock && ragOut ? ragOut.hits.map((h) => fragmentKey(h.documentId, h.chunkIndex)) : [],
+        );
+        recorder.retrieved(retrievalSeen, prepended);
+      } else if (!ragOut) {
+        recorder.retrievalSkipped(
+          'La búsqueda en Brain Knowledge falló en este turno.',
+          fragmentLimit,
+        );
+      }
     }
-  }
     return ragBlock;
   })().finally(closeRetrieval);
 
@@ -398,85 +488,85 @@ export async function POST(req: NextRequest) {
   // note above the two of them.
   const closeSelection = clock.open('selection');
   const selecting = (async () => {
-  // Team tool permissions are a deny-list layered on the agent's tools:
-  // anything blocked by ANY of the user's teams never reaches the model. Run
-  // alongside the external-MCP fetch — neither depends on the other, and both
-  // have to finish before anything can be ranked.
-  //
-  // Per-user MCP failures must never break the turn, so that fetch is
-  // best-effort.
-  const [deniedPatterns, externalServers, customRows] = await Promise.all([
-    deniedToolPatterns(db, user.id),
-    fetchEnabledExternalTools(db, user.id).catch(() => []),
-    fetchEnabledCustomTools(db).catch(() => []),
-  ]);
+    // Team tool permissions are a deny-list layered on the agent's tools:
+    // anything blocked by ANY of the user's teams never reaches the model. Run
+    // alongside the external-MCP fetch — neither depends on the other, and both
+    // have to finish before anything can be ranked.
+    //
+    // Per-user MCP failures must never break the turn, so that fetch is
+    // best-effort.
+    const [deniedPatterns, externalServers, customRows] = await Promise.all([
+      deniedToolPatterns(db, user.id),
+      fetchEnabledExternalTools(db, user.id).catch(() => []),
+      fetchEnabledCustomTools(db).catch(() => []),
+    ]);
 
-  const registryCandidates: Candidate[] = filterTools(agent.allowedTools)
-    .filter((t) => deniedPatterns.length === 0 || !isToolDenied(t.id, deniedPatterns))
-    .map((t) => ({
-      id: t.id,
-      family: t.id.split('.')[0] ?? t.id,
-      description: t.description,
-      kind: 'registry' as const,
-      ref: t,
-    }));
+    const registryCandidates: Candidate[] = filterTools(agent.allowedTools)
+      .filter((t) => deniedPatterns.length === 0 || !isToolDenied(t.id, deniedPatterns))
+      .map((t) => ({
+        id: t.id,
+        family: t.id.split('.')[0] ?? t.id,
+        description: t.description,
+        kind: 'registry' as const,
+        ref: t,
+      }));
 
-  // The workspace's own tools (migration 0067). They are `kind: 'registry'`
-  // candidates on purpose: a custom tool IS an ordinary ToolDef by the time it
-  // gets here, so it takes the same execute path below and therefore the same
-  // runTool guarantees — audit, confirmation, rate limit, risk classification.
-  // The only thing that differs is where the definition came from.
-  //
-  // They pass through the identical access gates: the agent's grant patterns
-  // (`toolIdAllowed`, the same matcher `filterTools` uses on the registry) and
-  // the team deny-list. A tool a company wrote for itself is not exempt from
-  // the permissions that company configured.
-  //
-  // One family for all of them, not one per tool. Ranking promotes whole
-  // families (see tool-selection/rank.ts), and one custom tool proving relevant
-  // pulling in the handful of others costs a few declarations — while a family
-  // per tool would compete for the six situational slots against gmail, kb and
-  // the rest, and start pushing real families out on vague requests.
-  const customCandidates: Candidate[] = customRows
-    .map((row) => customToolDef(row))
-    .filter(
-      (t) =>
-        toolIdAllowed(agent.allowedTools, t.id) &&
-        (deniedPatterns.length === 0 || !isToolDenied(t.id, deniedPatterns)),
-    )
-    .map((t) => ({
-      id: t.id,
-      family: CUSTOM_TOOL_FAMILY,
-      description: t.description,
-      kind: 'registry' as const,
-      ref: t as AnyTool,
-    }));
+    // The workspace's own tools (migration 0067). They are `kind: 'registry'`
+    // candidates on purpose: a custom tool IS an ordinary ToolDef by the time it
+    // gets here, so it takes the same execute path below and therefore the same
+    // runTool guarantees — audit, confirmation, rate limit, risk classification.
+    // The only thing that differs is where the definition came from.
+    //
+    // They pass through the identical access gates: the agent's grant patterns
+    // (`toolIdAllowed`, the same matcher `filterTools` uses on the registry) and
+    // the team deny-list. A tool a company wrote for itself is not exempt from
+    // the permissions that company configured.
+    //
+    // One family for all of them, not one per tool. Ranking promotes whole
+    // families (see tool-selection/rank.ts), and one custom tool proving relevant
+    // pulling in the handful of others costs a few declarations — while a family
+    // per tool would compete for the six situational slots against gmail, kb and
+    // the rest, and start pushing real families out on vague requests.
+    const customCandidates: Candidate[] = customRows
+      .map((row) => customToolDef(row))
+      .filter(
+        (t) =>
+          toolIdAllowed(agent.allowedTools, t.id) &&
+          (deniedPatterns.length === 0 || !isToolDenied(t.id, deniedPatterns)),
+      )
+      .map((t) => ({
+        id: t.id,
+        family: CUSTOM_TOOL_FAMILY,
+        description: t.description,
+        kind: 'registry' as const,
+        ref: t as AnyTool,
+      }));
 
-  const externalCandidates: Candidate[] = externalServers.flatMap(({ server, tools }) =>
-    tools.map((entry) => ({
-      // Namespaced by server so two servers exposing `search` stay distinct,
-      // and stable across turns so the stored vector keeps matching.
-      id: `mcp:${server.id}:${entry.tool_name}`,
-      // One connected server is one family: its tools were designed to be used
-      // together, exactly like `hubspot` was.
-      family: `mcp:${server.id}`,
-      description: entry.tool_description ?? '',
-      kind: 'external' as const,
-      ref: { server, entry },
-    })),
-  );
+    const externalCandidates: Candidate[] = externalServers.flatMap(({ server, tools }) =>
+      tools.map((entry) => ({
+        // Namespaced by server so two servers exposing `search` stay distinct,
+        // and stable across turns so the stored vector keeps matching.
+        id: `mcp:${server.id}:${entry.tool_name}`,
+        // One connected server is one family: its tools were designed to be used
+        // together, exactly like `hubspot` was.
+        family: `mcp:${server.id}`,
+        description: entry.tool_description ?? '',
+        kind: 'external' as const,
+        ref: { server, entry },
+      })),
+    );
 
-  // Semantic scoping. This replaced a hand-written regex per family, which was
-  // wrong the moment anyone shipped a family or connected an MCP server without
-  // editing this file — see packages/agent-tools/src/tool-selection. Everything
-  // it can fail on (Voyage, the vector table, an unindexed tool) degrades to
-  // sending MORE tools, never fewer.
-  const allCandidates = [...registryCandidates, ...customCandidates, ...externalCandidates];
-  const selection = await selectToolsForTurn({
-    db,
-    tools: allCandidates,
-    query: recentText,
-  });
+    // Semantic scoping. This replaced a hand-written regex per family, which was
+    // wrong the moment anyone shipped a family or connected an MCP server without
+    // editing this file — see packages/agent-tools/src/tool-selection. Everything
+    // it can fail on (Voyage, the vector table, an unindexed tool) degrades to
+    // sending MORE tools, never fewer.
+    const allCandidates = [...registryCandidates, ...customCandidates, ...externalCandidates];
+    const selection = await selectToolsForTurn({
+      db,
+      tools: allCandidates,
+      query: recentText,
+    });
     return { selection, allCandidates };
   })().finally(closeSelection);
 
@@ -565,7 +655,7 @@ export async function POST(req: NextRequest) {
           // it has no notion of a turn — so only the count and the sum are kept.
           const toolStarted = performance.now();
           try {
-            return await runTool(t, args, { ...ctx, signal: abortSignal });
+            return await runTool(t, args, { ...scopedCtx, signal: abortSignal });
           } catch (err) {
             if (err instanceof ConfirmationRequiredError) {
               // Return a sentinel value the client can detect to show a confirmation prompt
@@ -671,7 +761,7 @@ export async function POST(req: NextRequest) {
       // The attachment block is deliberately NOT folded into `ragBlock`: an
       // ephemeral file must not look like something that lives in the brain, or
       // the answer cites a document nobody can open. See lib/chat-attachments.ts.
-      sections: [ragBlock, attachmentBlock],
+      sections: [scopeBlock, ragBlock, attachmentBlock],
     }),
   );
 
@@ -690,11 +780,20 @@ export async function POST(req: NextRequest) {
   recorder.memory(memories.map((m) => ({ id: m.id, text: m.content })));
   recorder.part('instructions', agent.systemPrompt);
   recorder.part('memory', memoryBlock);
-  recorder.part('knowledge', ragBlock);
+  // The filter is weighed with the knowledge it filters, because that is the
+  // string that really went in and this measurement is of characters sent, not
+  // of features used.
+  recorder.part('knowledge', scopeBlock ? `${scopeBlock}\n${ragBlock}` : ragBlock);
   recorder.part('tools', selectedTools.map((t) => `${t.id}: ${t.description}`).join('\n'));
   // Split at the last message rather than by role, so the two parts are exactly
   // the array that was sent and cannot double-count a single character.
-  recorder.part('history', coreMessages.slice(0, -1).map((m) => String(m.content)).join('\n'));
+  recorder.part(
+    'history',
+    coreMessages
+      .slice(0, -1)
+      .map((m) => String(m.content))
+      .join('\n'),
+  );
   recorder.part('question', String(coreMessages[coreMessages.length - 1]?.content ?? ''));
 
   // Everything before this line is Cortex's own work, and it is the only part

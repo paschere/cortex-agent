@@ -3,7 +3,12 @@
 import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { listVisibleSpaces, saveChartAsReport } from '@cortex/agent-tools';
+import {
+  listVisibleSpaces,
+  loadOverrides,
+  saveChartAsReport,
+  saveOverrides,
+} from '@cortex/agent-tools';
 import { revalidatePath } from 'next/cache';
 
 /**
@@ -103,4 +108,118 @@ export async function listWritableSpacesAction(): Promise<SpaceChoice[]> {
   } catch {
     return [];
   }
+}
+
+// ===========================================================================
+// CHOOSING WHICH MEMORY ANSWERS
+// ===========================================================================
+//
+// WHY THIS IS NOT `listWritableSpacesAction`. That list answers "where may I
+// PUT this file", and it is right that a company-wide space appears in it
+// greyed out. This one answers "where should Cortex LOOK", and reading is the
+// other half of the rule: every space a person can retrieve from is a space
+// they may narrow to, admin or not. Two questions, two lists — merging them
+// would mean either offering a space nobody may write to as a destination, or
+// hiding a readable space from the filter because the person is not an admin.
+//
+// WHERE THE CHOICE IS STORED. In `turn_context_settings.space_ids`, the column
+// migration 0080 already created for exactly this, reached through
+// `loadOverrides` / `saveOverrides`. Nothing new was added: the composer's
+// filter and the "espacios" knob in the diagnostics panel at
+// /conversations/[id] are the SAME value, so the two surfaces can never
+// disagree about what a conversation is searching. The header of
+// packages/agent-tools/src/turn-context/settings.ts argues the scope
+// (conversation, not workspace, not forever) and that argument is unchanged.
+
+export interface ScopeSpace {
+  id: string;
+  name: string;
+  kind: 'global' | 'personal';
+}
+
+/** Every space this person may retrieve from — the only things they may filter to. */
+export async function listScopeSpacesAction(): Promise<ScopeSpace[]> {
+  try {
+    const user = await requireSession();
+    const db = getOrgScopedClient(user.organization.id);
+    const spaces = await listVisibleSpaces(db, user.id);
+    return spaces.map((s) => ({ id: s.id, name: s.name, kind: s.kind }));
+  } catch {
+    // An empty list closes the picker with "no hay espacios todavía", which is
+    // a truthful thing to show and never blocks the composer.
+    return [];
+  }
+}
+
+/**
+ * Narrow (or un-narrow) one conversation's retrieval.
+ *
+ * OWNERSHIP, NOT MEMBERSHIP. Only the person whose conversation it is may
+ * change it, and a conversation that is not theirs answers "no longer exists"
+ * rather than "forbidden" — the same rule and the same wording as
+ * `saveTurnContextAdjustments`, so a wrong id and somebody else's id stay
+ * indistinguishable.
+ *
+ * IT READS BEFORE IT WRITES. `saveOverrides` upserts the whole row, so writing
+ * the scope without loading the rest would silently reset the fragment limit
+ * and the muted tool families somebody set while debugging this same
+ * conversation. Only `space_ids` changes here.
+ *
+ * IT CANNOT WIDEN. Every id is checked against `listVisibleSpaces` and anything
+ * else is dropped before it is stored, so a forged id cannot be parked in the
+ * column; and even if one were, `kb_search_scoped` intersects with what the
+ * person can see. This check exists so a stale id fails at the moment somebody
+ * picks it instead of quietly narrowing retrieval to nothing three turns later.
+ */
+export async function setChatScopeAction(
+  conversationId: string,
+  spaceIds: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  let user: Awaited<ReturnType<typeof requireSession>>;
+  try {
+    user = await requireSession();
+  } catch {
+    return { ok: false, error: 'Vuelve a entrar para cambiar el filtro.' };
+  }
+
+  const db = getOrgScopedClient(user.organization.id);
+
+  const { data: conv } = await db
+    .from('conversations')
+    .select('id, user_id')
+    .eq('id', conversationId)
+    .maybeSingle();
+  if (!conv || (conv.user_id as string) !== user.id) {
+    return { ok: false, error: 'Esa conversación ya no existe.' };
+  }
+
+  let allowed: string[] = [];
+  if (spaceIds.length > 0) {
+    const visible = await listVisibleSpaces(db, user.id);
+    const visibleIds = new Set(visible.map((s) => s.id));
+    allowed = spaceIds.filter((id) => visibleIds.has(id));
+    if (allowed.length === 0) {
+      return { ok: false, error: 'Los espacios que elegiste ya no existen.' };
+    }
+  }
+
+  try {
+    const current = await loadOverrides(db, conversationId);
+    await saveOverrides(db, {
+      conversationId,
+      userId: user.id,
+      overrides: {
+        fragmentLimit: current.fragmentLimit,
+        // An empty selection is stored as null — "todo lo que ves" — and never
+        // as `[]`, which `kbSpaceIds` reads as "ningún espacio" and would
+        // switch the brain off for the conversation. See settings.ts.
+        spaceIds: allowed.length > 0 ? allowed : null,
+        mutedFamilies: current.mutedFamilies,
+      },
+    });
+  } catch {
+    return { ok: false, error: 'No se pudo guardar el filtro. Inténtalo otra vez.' };
+  }
+
+  return { ok: true };
 }
