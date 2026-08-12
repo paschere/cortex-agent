@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   AppWindow,
   Asterisk,
+  ChevronDown,
   Circle,
   Loader2,
   Pause,
@@ -28,7 +29,7 @@ import {
   VideoOff,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type CapturedFrame,
   NotATabError,
@@ -68,6 +69,33 @@ import {
  */
 
 const MAX_FRAMES = 20;
+
+/**
+ * How many trámites this person has taught, kept locally.
+ *
+ * It decides one thing only: whether the how-to opens by itself. Somebody on
+ * their first recording needs it in front of them; somebody on their fourth has
+ * read it three times and would be right to resent it. Local storage is the
+ * honest home for that — it is a reading preference, not a fact about the
+ * workspace, and it is not worth a column, a request or a migration.
+ */
+const TAUGHT_KEY = 'cortex.tramites.taught';
+
+function taughtCount(): number {
+  try {
+    return Number(window.localStorage.getItem(TAUGHT_KEY) ?? '0') || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function noteTaught(): void {
+  try {
+    window.localStorage.setItem(TAUGHT_KEY, String(taughtCount() + 1));
+  } catch {
+    /* private mode, or storage full. The how-to simply keeps opening. */
+  }
+}
 
 /** What the caller is told once a recording has become a trámite. */
 export interface SavedFlow {
@@ -188,6 +216,7 @@ export function TeachFlow({
     }
     setStage({ name: 'idle' });
     setHint('');
+    noteTaught();
     onSaved({
       name: stage.proposal.name,
       message: payload.message ?? 'Guardado.',
@@ -237,6 +266,7 @@ export function TeachFlow({
           </p>
 
           <CaptureContract />
+          <HowToRecord />
 
           <div className="mt-5 max-w-xl">
             <label className="field-label" htmlFor="teach-hint">
@@ -261,9 +291,6 @@ export function TeachFlow({
                 Ahora no
               </Button>
             )}
-            <p className="text-[12px] text-ink-faint">
-              Te muestro los pasos que entendí antes de guardar nada.
-            </p>
           </div>
         </div>
       )}
@@ -405,6 +432,123 @@ function CaptureContract() {
           <p className="mt-1 text-[11.5px] leading-snug text-ink-muted">{cell.body}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Cómo hacerlo para que la grabación sirva.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS EXISTS AT ALL
+ * ---------------------------------------------------------------------------
+ * The capture contract above answers "what are you taking from me". This
+ * answers the other half, and it is the half that decides whether anybody ever
+ * teaches a SECOND trámite: a first recording is ruined by things nobody would
+ * guess — half the errand, a detour to another tab to look up a number, hitting
+ * record before the portal is even open — and the person does not conclude "I
+ * did it wrong", they conclude "this does not work". A tutorial is cheaper than
+ * losing somebody on their first attempt.
+ *
+ * FOUR, NOT TEN. Each one is here because it is a way a recording actually
+ * fails, and each carries its reason: people follow an instruction they
+ * understand and skip one they were merely given.
+ *
+ * THE WARNING IS THE MOST VALUABLE PART. Some errands cannot be learned from
+ * pixels at all (docs/operations/browser.md § 6), and finding that out AFTER
+ * five minutes of recording is the worst experience this module can produce.
+ * The blockers that waste the whole attempt are separated from the one that has
+ * a workaround, because telling somebody to abandon a recording and telling
+ * them to click instead of hover are different instructions.
+ */
+function HowToRecord() {
+  const [open, setOpen] = useState(false);
+
+  // Read after mount: this component is server-rendered too, and reading local
+  // storage while rendering would mismatch the hydration.
+  useEffect(() => {
+    if (taughtCount() === 0) setOpen(true);
+  }, []);
+
+  const steps = [
+    {
+      title: 'Abre el portal y entra antes de darle a Enséñame',
+      why: 'Grabar el login no sirve de nada: la clave no se aprende, y arrancar buscando el sitio llena la grabación de pasos que no son el trámite.',
+    },
+    {
+      title: 'Hazlo entero, hasta la pantalla del resultado',
+      why: 'Media grabación es medio trámite. La pantalla final es la que me dice qué produce esto, así que no cierres antes de verla.',
+    },
+    {
+      title: 'Todo en la misma pestaña',
+      why: 'Sólo se comparte la que elegiste. Si te vas a otra a buscar un dato, ahí queda un hueco que no puedo llenar.',
+    },
+    {
+      title: 'Con datos de verdad y sin atajos',
+      why: 'La placa o el NIT que escribas son justo lo que después se vuelve el dato que cambia en cada ejecución. Y hazlo como lo haces siempre: si pegas la URL final o te saltas un paso «porque ya sé lo que hace», aprendo un camino que mañana no existe.',
+    },
+  ];
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+      >
+        <ChevronDown
+          className={clsx(
+            'h-3.5 w-3.5 transition-transform duration-150 motion-reduce:transition-none',
+            open ? 'rotate-0' : '-rotate-90',
+          )}
+          aria-hidden="true"
+        />
+        {open ? 'Ocultar cómo se hace' : 'Cómo se hace, en cuatro puntos'}
+      </button>
+
+      {open && (
+        <div className="mt-2 rounded-card border border-border bg-surface-2/60 p-4">
+          <ol className="space-y-2.5">
+            {steps.map((step) => (
+              <li key={step.title} className="flex gap-2.5">
+                <span
+                  className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+                  aria-hidden="true"
+                />
+                <p className="text-[12.5px] leading-snug text-ink-muted">
+                  <strong className="font-semibold text-ink">{step.title}.</strong> {step.why}
+                </p>
+              </li>
+            ))}
+          </ol>
+
+          <div className="mt-3.5 flex gap-2 border-t border-border pt-3">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" aria-hidden="true" />
+            <div>
+              <p className="text-[12.5px] leading-snug text-ink">
+                <strong className="font-semibold">
+                  Hay cosas que todavía no puedo aprender viendo.
+                </strong>{' '}
+                Si el trámite pide un código que llega al celular o al correo, un captcha, o subir
+                un archivo desde tu computador, no gastes la grabación: por ahora ese hay que
+                seguirlo haciendo a mano.
+              </p>
+              <p className="mt-1 text-[12px] leading-snug text-ink-muted">
+                Y si hay un menú que sólo se abre al pasar el ratón, hazle clic si el portal deja —
+                un menú que aparece solo no queda en ningún fotograma. Arrastrar y soltar tampoco
+                lo aprendo.
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-3 border-t border-border pt-3 text-[12px] leading-snug text-ink-faint">
+            Grabar no es el final: al terminar te muestro los pasos que entendí para que los
+            corrijas, y lo corro una vez contra el sitio real. Sólo si reproduce completo queda{' '}
+            <strong className="font-semibold text-ink">probado</strong>.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
