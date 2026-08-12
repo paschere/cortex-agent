@@ -3,6 +3,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Role } from '@cortex/core';
+import { MODULE } from '@/lib/browser-shape';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -136,10 +137,12 @@ const GROUPS: NavGroup[] = [
       // One name per thing.
       { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
       { href: '/tools', label: 'Herramientas', icon: Wrench },
-      // Trámites web (migration 0087). Under Automatización rather than
+      // Trámites (migration 0087). Under Automatización rather than
       // Conexiones because a learned errand is not a system Cortex is wired
       // into — it is work somebody used to do by hand and now does not.
-      { href: '/browser', label: 'Trámites web', icon: Globe },
+      // The label comes from lib/browser-shape so the screen, the menu and the
+      // tool catalogue cannot drift apart while the name is being settled.
+      { href: '/browser', label: MODULE.label, icon: Globe },
     ],
   },
   {

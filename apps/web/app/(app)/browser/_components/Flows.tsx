@@ -3,10 +3,11 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Panel } from '@/components/ui/panel';
+import { Provenance } from '@/components/ui/provenance';
 import {
   ACTION_LABEL,
-  EFFECT_LABEL,
   type FlowSummary,
+  MODULE,
   type ProposedStep,
   STATUS_LABEL,
   STATUS_TONE,
@@ -16,21 +17,39 @@ import {
 import { relativeTime } from '@/lib/relative-time';
 import { chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
-import { ChevronRight, KeyRound, Loader2, Play } from 'lucide-react';
+import { ChevronRight, KeyRound, Loader2, Play, Send, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { health, byUrgency, money, secs, stamp } from '../_lib/flow-view';
 
 /**
  * La biblioteca de trámites aprendidos.
  *
- * THE ONE THING THIS SCREEN MUST NEVER LET YOU MISREAD is whether a trámite has
- * ever actually worked. `Probado` and `Propuesto` are the loudest thing on each
- * row, in that vocabulary, with the date of the proof beside it -- because the
- * consequence of confusing them is somebody scheduling a guess to run at three
- * in the morning.
+ * ---------------------------------------------------------------------------
+ * WHAT A ROW HAS TO SAY BEFORE IT SAYS ANYTHING ELSE
+ * ---------------------------------------------------------------------------
+ * 1. Has anybody ever seen this work — probado or propuesto — and when.
+ * 2. Did the last run succeed. A trámite that broke and nobody noticed is the
+ *    expensive failure of this whole module, so the verdict of the last run is
+ *    on the row itself and stays there on a phone. It used to live in a right
+ *    rail hidden below the `sm` breakpoint, which is to say it was decoration.
  *
- * The second thing it shows without being asked is what the last run COST and
- * how long it took. That is the argument the whole module rests on, and a
- * number that only exists in a document is a number nobody believes.
+ * The proof is a `<Provenance>` stamp and nothing else is: the host it ran
+ * against and the moment it reproduced. A propuesto has no stamp because there
+ * is nothing to attest — an empty one would turn the device into decoration.
+ * So the presence of the stamp IS the distinction, twice stated with the chip.
+ *
+ * ---------------------------------------------------------------------------
+ * SILENCE IS THE DEFAULT; A MARK MEANS CONSEQUENCE
+ * ---------------------------------------------------------------------------
+ * A read-only trámite with no credential wears no badge at all. The two marks
+ * that exist — a company login, and writing on somebody else's site — appear
+ * only when true, so the eye lands on the rows that carry a risk instead of
+ * scanning four chips per row to find out none of them meant anything.
+ *
+ * They are also NOT chips. Emerald / amber / rose are spent on the state of the
+ * trámite; the old row painted «Radica o envía» amber beside an amber
+ * «Propuesto», which is the same colour meaning two unrelated things a
+ * centimetre apart.
  */
 
 interface Detail {
@@ -56,60 +75,63 @@ interface Detail {
     inputs: Record<string, string>;
   }[];
   trace: Record<string, unknown>[];
+  /** What deleting this trámite would take with it. See the DELETE route. */
+  removal: Removal;
 }
 
-export function Flows({ reloadKey }: { reloadKey: number }) {
-  const [flows, setFlows] = useState<FlowSummary[] | null>(null);
+export interface Removal {
+  allowed: boolean;
+  /** Why not, when `allowed` is false. Said in full, not as a permission code. */
+  reason: string | null;
+  /** Concrete things that disappear, phrased for a person. */
+  losing: string[];
+  /** Concrete things that survive it. */
+  keeping: string[];
+  /** The bound login, if any, and whether anything else still needs it. */
+  credential: { label: string; alsoUsedBy: string[] } | null;
+  /** Anything pointing at this trámite that would be left aiming at nothing. */
+  dependents: string[];
+}
+
+export function Flows({
+  flows,
+  total,
+  filtered,
+  onChanged,
+}: {
+  flows: FlowSummary[];
+  total: number;
+  filtered: boolean;
+  onChanged: () => void;
+}) {
   const [openId, setOpenId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    const response = await fetch('/api/browser/flows');
-    const payload = (await response.json()) as { flows?: FlowSummary[] };
-    setFlows(payload.flows ?? []);
-  }, []);
-
-  // `reloadKey` is not read in the body on purpose: it is the parent's signal
-  // that a trámite was just taught and verified, and the list has to re-fetch
-  // so the new row appears with its status already resolved.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadKey is the trigger, not an input
-  useEffect(() => {
-    void load();
-  }, [load, reloadKey]);
-
-  if (flows === null) {
-    return (
-      <Panel className="flex items-center gap-2 p-6">
-        <Loader2 className="h-4 w-4 animate-spin text-primary" />
-        <span className="text-[13px] text-ink-muted">Cargando…</span>
-      </Panel>
-    );
-  }
-
-  if (flows.length === 0) {
-    return (
-      <Panel className="p-8 text-center">
-        <h2 className="text-[15px] font-semibold text-ink">Todavía no hay trámites aprendidos</h2>
-        <p className="mx-auto mt-2 max-w-xl text-[13px] leading-relaxed text-ink-muted">
-          Un trámite es algo que hoy alguien hace a mano en un portal: sacar un certificado,
-          consultar un estado, radicar una solicitud. Se enseña una vez grabando la pestaña, y de
-          ahí en adelante Cortex lo repite en segundos.
-        </p>
-      </Panel>
-    );
-  }
+  const ordered = [...flows].sort(byUrgency);
 
   return (
-    <div className="space-y-2">
-      {flows.map((flow) => (
-        <Row
-          key={flow.id}
-          flow={flow}
-          open={openId === flow.id}
-          onToggle={() => setOpenId(openId === flow.id ? null : flow.id)}
-          onRan={load}
-        />
-      ))}
-    </div>
+    <Panel className="overflow-hidden">
+      {ordered.length === 0 ? (
+        <div className="px-5 py-14 text-center">
+          <p className="text-[14px] font-semibold text-ink">Ninguno en este grupo</p>
+          <p className="mx-auto mt-1 max-w-[420px] text-[13px] leading-snug text-ink-muted">
+            {filtered
+              ? `Tienes ${total} ${total === 1 ? MODULE.one : MODULE.many} en total. Quita el filtro para verlos.`
+              : 'Enseña el primero grabando la pestaña del portal.'}
+          </p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-border">
+          {ordered.map((flow) => (
+            <Row
+              key={flow.id}
+              flow={flow}
+              open={openId === flow.id}
+              onToggle={() => setOpenId(openId === flow.id ? null : flow.id)}
+              onChanged={onChanged}
+            />
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
 
@@ -117,70 +139,117 @@ function Row({
   flow,
   open,
   onToggle,
-  onRan,
+  onChanged,
 }: {
   flow: FlowSummary;
   open: boolean;
   onToggle: () => void;
-  onRan: () => void;
+  onChanged: () => void;
 }) {
-  const tone = STATUS_TONE[flow.status];
+  const state = health(flow);
 
   return (
-    <Panel className="overflow-hidden">
+    <li>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-surface-2"
+        className="flex w-full items-start gap-3 px-5 py-4 text-left transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         <ChevronRight
           className={clsx(
-            'h-4 w-4 shrink-0 text-ink-faint transition-transform duration-150',
+            'mt-0.5 h-4 w-4 shrink-0 text-ink-faint transition-transform duration-150 motion-reduce:transition-none',
             open && 'rotate-90',
           )}
           aria-hidden="true"
         />
+
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[14px] font-semibold text-ink">{flow.name}</span>
-            <span className={chipClass(tone)}>{STATUS_LABEL[flow.status]}</span>
-            <span className={chipClass(flow.effect === 'write' ? 'amber' : 'neutral')}>
-              {EFFECT_LABEL[flow.effect]}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className={chipClass(STATUS_TONE[flow.status])}>
+              {STATUS_LABEL[flow.status]}
             </span>
-            {flow.hasCredential && (
-              <span className={chipClass('neutral')}>
-                <KeyRound className="h-3 w-3" aria-hidden="true" />
-                con credencial
-              </span>
-            )}
+            <span className="min-w-0 truncate text-[14.5px] font-semibold text-ink">
+              {flow.name}
+            </span>
+            <span className="ml-auto shrink-0">
+              <LastRun flow={flow} />
+            </span>
           </div>
+
           <p className="mt-1 truncate text-[12.5px] text-ink-muted">
             <span className="font-mono text-[11.5px] text-ink-faint">{flow.site}</span>
             {flow.description && ` · ${flow.description}`}
           </p>
-        </div>
-        <div className="hidden shrink-0 text-right sm:block">
-          {flow.status === 'ready' && flow.verifiedAt ? (
-            <p className="text-[12px] text-ink-faint">Probado {relativeTime(flow.verifiedAt)}</p>
-          ) : (
-            <p className="text-[12px] text-ink-faint">Sin probar</p>
-          )}
-          {flow.lastRunSeconds !== null && (
-            <p className="tabular mt-0.5 text-[12px] text-ink-muted">
-              última: {flow.lastRunSeconds}s ·{' '}
-              {flow.lastRunCostUsd ? `US$${flow.lastRunCostUsd.toFixed(4)}` : 'sin costo'}
-            </p>
-          )}
+
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {/* The proof, or its absence. Never an empty stamp. */}
+            {flow.verifiedAt ? (
+              <Provenance
+                source={flow.site}
+                readAt={stamp(flow.verifiedAt)}
+                detail={
+                  state === 'trouble' ? 'reprodujo, y dejó de hacerlo' : 'reprodujo el trámite entero'
+                }
+                tone={state === 'trouble' ? 'seal' : 'stamp'}
+              />
+            ) : (
+              <span className="text-[11.5px] font-medium text-amber">
+                todavía nadie lo ha visto funcionar
+              </span>
+            )}
+
+            {flow.hasCredential && (
+              <span
+                className="inline-flex items-center gap-1 text-[11.5px] font-medium text-ink"
+                title="Al correr, entra con una clave guardada de la empresa. Quien lo corre nunca la ve."
+              >
+                <KeyRound className="h-3 w-3" aria-hidden="true" />
+                entra con la clave de la empresa
+              </span>
+            )}
+
+            {flow.effect === 'write' && (
+              <span
+                className="inline-flex items-center gap-1 text-[11.5px] font-medium text-ink"
+                title="Escribe en el sitio del tercero, así que desde el chat pide aprobación antes de correr."
+              >
+                <Send className="h-3 w-3" aria-hidden="true" />
+                radica o envía · pide aprobación
+              </span>
+            )}
+          </div>
         </div>
       </button>
 
-      {open && <Expanded flow={flow} onRan={onRan} />}
-    </Panel>
+      {open && <Expanded flow={flow} onChanged={onChanged} />}
+    </li>
   );
 }
 
-function Expanded({ flow, onRan }: { flow: FlowSummary; onRan: () => void }) {
+/** Cuándo corrió por última vez y si salió bien, en una línea. */
+function LastRun({ flow }: { flow: FlowSummary }) {
+  if (!flow.lastRunAt) {
+    return <span className="text-[12px] text-ink-faint">nunca se ha corrido</span>;
+  }
+  const failed = flow.lastRunStatus === 'failed';
+  return (
+    <span
+      className={clsx(
+        'text-[12px]',
+        failed ? 'font-semibold text-rose' : 'text-ink-muted',
+      )}
+    >
+      {failed ? 'falló ' : 'corrió bien '}
+      <span className="tabular">{relativeTime(flow.lastRunAt)}</span>
+      {!failed && flow.lastRunSeconds !== null && (
+        <span className="tabular text-ink-faint"> · {secs(flow.lastRunSeconds)}</span>
+      )}
+    </span>
+  );
+}
+
+function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => void }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [running, setRunning] = useState(false);
@@ -214,24 +283,24 @@ function Expanded({ flow, onRan }: { flow: FlowSummary; onRan: () => void }) {
       modelCalls: number;
     };
     setResult(
-      `${payload.message} (${payload.seconds}s, ${
+      `${payload.message} (${secs(payload.seconds)}, ${
         payload.modelCalls === 0
           ? 'sin llamadas al modelo'
-          : `${payload.modelCalls} llamada(s) al modelo, US$${payload.costUsd.toFixed(4)}`
+          : `${payload.modelCalls} llamada(s) al modelo, ${money(payload.costUsd)}`
       })`,
     );
     setRunning(false);
     void load();
-    onRan();
-  }, [flow.id, inputs, load, onRan]);
+    onChanged();
+  }, [flow.id, inputs, load, onChanged]);
 
   return (
-    <div className="divide-y divide-border border-t border-border">
+    <div className="divide-y divide-border border-t border-border bg-surface-2/40">
       {flow.status === 'draft' && (
-        <p className="bg-amber-soft/50 px-5 py-3 text-[12.5px] leading-relaxed text-ink-muted">
-          Este trámite salió de una grabación y todavía <strong>no ha reproducido</strong>. Se puede
-          correr a mano desde aquí, pero el agente no lo ve en el chat y no se puede programar hasta
-          que funcione una vez completo.
+        <p className="bg-amber-soft/60 px-5 py-3 text-[12.5px] leading-relaxed text-ink-muted">
+          Salió de una grabación y todavía <strong className="text-ink">no ha reproducido</strong>.
+          Se puede correr a mano desde aquí, pero el agente no lo ve en el chat y no se puede
+          programar hasta que funcione una vez completo.
           {flow.lastError && (
             <>
               {' '}
@@ -240,14 +309,14 @@ function Expanded({ flow, onRan }: { flow: FlowSummary; onRan: () => void }) {
           )}
         </p>
       )}
-      {flow.status === 'broken' && flow.lastError && (
-        <p className="bg-rose-soft/50 px-5 py-3 text-[12.5px] leading-relaxed text-rose">
+      {flow.status !== 'draft' && flow.lastError && flow.lastRunStatus === 'failed' && (
+        <p className="bg-rose-soft/60 px-5 py-3 text-[12.5px] leading-relaxed text-rose">
           {flow.lastError}
         </p>
       )}
 
       <div className="p-5">
-        <h3 className="field-label">Probar</h3>
+        <h3 className="field-label">Correrlo ahora</h3>
         <div className="mt-2 flex flex-wrap items-end gap-2">
           {flow.variables.map((variable) => (
             <div key={variable.name} className="min-w-[160px]">
@@ -264,7 +333,11 @@ function Expanded({ flow, onRan }: { flow: FlowSummary; onRan: () => void }) {
             </div>
           ))}
           <Button onClick={() => void run()} disabled={running}>
-            {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            {running ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Play className="h-4 w-4" aria-hidden="true" />
+            )}
             {running ? 'Corriendo…' : 'Correr'}
           </Button>
         </div>
@@ -274,7 +347,7 @@ function Expanded({ flow, onRan }: { flow: FlowSummary; onRan: () => void }) {
       {detail && (
         <>
           <div className="p-5">
-            <h3 className="field-label">Los pasos, versión {detail.flow.version}</h3>
+            <h3 className="field-label">Los pasos · versión {detail.flow.version}</h3>
             <ol className="mt-2 space-y-1.5">
               {detail.flow.steps.map((s, index) => (
                 <li key={`${s.label}-${index}`} className="flex flex-wrap items-baseline gap-2">
@@ -285,7 +358,10 @@ function Expanded({ flow, onRan }: { flow: FlowSummary; onRan: () => void }) {
                     <span className="text-ink-muted">{ACTION_LABEL[s.action]}</span> {s.label}
                   </span>
                   {s.value?.kind === 'secret' && (
-                    <span className={chipClass('amber')}>credencial</span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-ink">
+                      <KeyRound className="h-3 w-3" aria-hidden="true" />
+                      clave guardada
+                    </span>
                   )}
                   {s.value?.kind === 'template' && (
                     <code className="font-mono text-[11.5px] text-primary">{s.value.text}</code>
@@ -309,48 +385,49 @@ function Expanded({ flow, onRan }: { flow: FlowSummary; onRan: () => void }) {
             {detail.runs.length === 0 ? (
               <p className="mt-2 text-[13px] text-ink-muted">Todavía no se ha corrido.</p>
             ) : (
-              <div className="mt-2 overflow-x-auto">
-                <table className="w-full min-w-[560px] text-left text-[12.5px]">
-                  <thead>
-                    <tr className="text-ink-faint">
-                      <th className="pb-1.5 font-medium">Cuándo</th>
-                      <th className="pb-1.5 font-medium">Cómo</th>
-                      <th className="pb-1.5 font-medium">Resultado</th>
-                      <th className="pb-1.5 text-right font-medium">Tiempo</th>
-                      <th className="pb-1.5 text-right font-medium">Costo</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-ink">
-                    {detail.runs.map((run) => (
-                      <tr key={run.id} className="border-t border-border">
-                        <td className="py-1.5 text-ink-muted">{relativeTime(run.startedAt)}</td>
-                        <td className="py-1.5">{MODE_LABEL[run.mode] ?? run.mode}</td>
-                        <td className="py-1.5">
-                          {run.status === 'succeeded' ? (
-                            <span className="text-emerald">
-                              {run.updatedFlow ? 'reparado y guardado' : 'listo'}
-                            </span>
-                          ) : (
-                            <span className="text-ink-muted">
-                              {FAILURE_LABEL[run.failureKind ?? ''] ?? 'falló'}
-                            </span>
-                          )}
-                        </td>
-                        <td className="tabular py-1.5 text-right">
-                          {run.seconds !== null ? `${run.seconds}s` : '—'}
-                        </td>
-                        <td className="tabular py-1.5 text-right">
-                          {run.modelCalls === 0 ? (
-                            <span className="text-emerald">0</span>
-                          ) : (
-                            `US$${run.costUsd.toFixed(4)}`
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ul className="mt-2 divide-y divide-border">
+                {detail.runs.map((run) => (
+                  <li
+                    key={run.id}
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 text-[12.5px]"
+                  >
+                    <span className="tabular w-[76px] shrink-0 text-ink-faint">
+                      {relativeTime(run.startedAt)}
+                    </span>
+                    <span
+                      className={clsx(
+                        'min-w-0 flex-1 font-medium',
+                        run.status === 'succeeded' ? 'text-emerald' : 'text-rose',
+                      )}
+                    >
+                      {run.status === 'succeeded'
+                        ? run.updatedFlow
+                          ? 'se reparó solo y funcionó'
+                          : 'funcionó'
+                        : (FAILURE_LABEL[run.failureKind ?? ''] ?? 'falló')}
+                    </span>
+                    <span className="text-[11.5px] text-ink-faint">
+                      {MODE_LABEL[run.mode] ?? run.mode}
+                    </span>
+                    <span className="tabular shrink-0 text-[11.5px] text-ink-muted">
+                      {run.seconds !== null ? secs(run.seconds) : '—'}
+                    </span>
+                    <span
+                      className={clsx(
+                        'tabular w-[86px] shrink-0 text-right text-[11.5px]',
+                        run.modelCalls === 0 ? 'text-emerald' : 'text-ink-muted',
+                      )}
+                      title={
+                        run.modelCalls === 0
+                          ? 'Repetición pura: ningún modelo participó, así que no costó nada.'
+                          : `${run.modelCalls} llamada(s) al modelo`
+                      }
+                    >
+                      {run.modelCalls === 0 ? 'sin costo' : money(run.costUsd)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 
@@ -392,8 +469,163 @@ function Expanded({ flow, onRan }: { flow: FlowSummary; onRan: () => void }) {
               </ol>
             </div>
           )}
+
+          <Remove flow={flow} removal={detail.removal} onRemoved={onChanged} />
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Borrar un trámite.
+ *
+ * Two steps, and the second one is not "¿estás seguro?" — it is the list of
+ * what stops existing, built by the server from the actual rows, plus the list
+ * of what survives. A confirmation that does not name the loss is a speed bump,
+ * not a decision.
+ */
+function Remove({
+  flow,
+  removal,
+  onRemoved,
+}: {
+  flow: FlowSummary;
+  removal: Removal;
+  onRemoved: () => void;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [dropCredential, setDropCredential] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const shared = (removal.credential?.alsoUsedBy.length ?? 0) > 0;
+  const blocked = !removal.allowed || removal.dependents.length > 0;
+
+  const remove = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    const response = await fetch(`/api/browser/flows/${flow.id}`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ deleteCredential: dropCredential && !shared }),
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      setError(payload.error ?? 'No pude eliminarlo. Vuelve a intentarlo.');
+      setBusy(false);
+      return;
+    }
+    onRemoved();
+  }, [flow.id, dropCredential, shared, onRemoved]);
+
+  if (!asking) {
+    return (
+      <div className="flex flex-wrap items-center gap-3 p-5">
+        <button
+          type="button"
+          onClick={() => setAsking(true)}
+          disabled={!removal.allowed}
+          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold text-rose transition-colors duration-150 hover:bg-rose-soft disabled:cursor-not-allowed disabled:text-ink-faint disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 motion-reduce:transition-none"
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          Eliminar este {MODULE.one}
+        </button>
+        {!removal.allowed && removal.reason && (
+          <p className="text-[12px] leading-snug text-ink-muted">{removal.reason}</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-rose-soft/50 p-5">
+      <h3 className="text-[13.5px] font-semibold text-ink">
+        Eliminar «{flow.name}»
+      </h3>
+
+      {removal.dependents.length > 0 && (
+        <div className="mt-2.5 rounded-sm border border-amber/20 bg-amber-soft px-3 py-2">
+          <p className="text-[12.5px] font-semibold text-amber">
+            Hay algo que depende de este {MODULE.one}
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {removal.dependents.map((d) => (
+              <li key={d} className="text-[12.5px] leading-snug text-ink-muted">
+                · {d}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[12px] leading-snug text-ink-muted">
+            Quítalo de ahí primero; si no, quedaría apuntando al vacío.
+          </p>
+        </div>
+      )}
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="field-label">Se pierde</p>
+          <ul className="mt-1.5 space-y-1">
+            {removal.losing.map((item) => (
+              <li key={item} className="text-[12.5px] leading-snug text-ink">
+                · {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <p className="field-label">Se queda</p>
+          <ul className="mt-1.5 space-y-1">
+            {removal.keeping.map((item) => (
+              <li key={item} className="text-[12.5px] leading-snug text-ink-muted">
+                · {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {removal.credential && (
+        <div className="mt-3 rounded-sm border border-border bg-surface px-3 py-2.5">
+          {shared ? (
+            <p className="text-[12.5px] leading-snug text-ink-muted">
+              <KeyRound className="mr-1 inline h-3 w-3 align-[-1px]" aria-hidden="true" />
+              La clave <strong className="font-semibold text-ink">
+                «{removal.credential.label}»
+              </strong>{' '}
+              se queda, porque también la usa{' '}
+              {removal.credential.alsoUsedBy.join(', ')}.
+            </p>
+          ) : (
+            <label className="flex cursor-pointer items-start gap-2 text-[12.5px] leading-snug text-ink">
+              <input
+                type="checkbox"
+                checked={dropCredential}
+                onChange={(e) => setDropCredential(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[rgb(var(--rose))]"
+              />
+              <span>
+                Borrar también la clave{' '}
+                <strong className="font-semibold">«{removal.credential.label}»</strong>. No la usa
+                ningún otro {MODULE.one}, y dejarla guardada sería una contraseña de la empresa
+                cifrada que ya nadie va a gastar.
+              </span>
+            </label>
+          )}
+        </div>
+      )}
+
+      {error && <p className="mt-3 text-[12.5px] font-medium text-rose">{error}</p>}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button variant="danger" onClick={() => void remove()} disabled={busy || blocked}>
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+          Eliminar «{flow.name}»
+        </Button>
+        <Button variant="ghost" onClick={() => setAsking(false)} disabled={busy}>
+          Dejarlo como está
+        </Button>
+      </div>
     </div>
   );
 }

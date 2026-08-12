@@ -10,7 +10,13 @@ export type AuditDecision = 'allowed' | 'flagged' | 'blocked' | 'confirmed';
 export interface WriteAuditOpts {
   db: SupabaseClient;
   userId: UUID;
-  agentId: UUID;
+  /**
+   * The agent that made the call. Optional because not every auditable act is
+   * a model's: an administrator deleting something from a screen is a person
+   * acting directly, and inventing an agent id for that would put a lie in the
+   * one table that exists to be believed. The column has always been nullable.
+   */
+  agentId?: UUID;
   conversationId?: UUID;
   toolId: string;
   input: unknown;
@@ -46,7 +52,7 @@ export async function writeAuditEvent(opts: WriteAuditOpts) {
 async function insertAuditEvent(opts: WriteAuditOpts) {
   const { error } = await opts.db.from('audit_events').insert({
     user_id: opts.userId,
-    agent_id: opts.agentId,
+    agent_id: opts.agentId ?? null,
     conversation_id: opts.conversationId ?? null,
     tool_id: opts.toolId,
     input_hash: hashInput(opts.input),

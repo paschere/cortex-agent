@@ -28,7 +28,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   sales_draft_proposal: { label: 'Redactar propuesta', icon: 'FileText' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },
-  browser_list_flows: { label: 'Ver los trámites web aprendidos', icon: 'Globe' },
+  browser_list_flows: { label: 'Ver los trámites aprendidos', icon: 'Globe' },
   browser_run_flow: { label: 'Hacer el trámite en el portal', icon: 'Globe' },
   browser_submit_flow: { label: 'Radicar el trámite en el portal', icon: 'Send' },
   gdrive_search_files: { label: 'Buscar archivos en Drive', icon: 'FolderSearch' },

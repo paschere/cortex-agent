@@ -11,6 +11,11 @@
  * plain serialisable props.
  */
 
+// Safe by that rule: browser-shape.ts is hand-written constants with no imports
+// of its own, and it is where the trámites module's name lives so the screen,
+// the sidebar and this catalogue cannot drift apart.
+import { MODULE } from './browser-shape';
+
 export type FamilyTone = 'primary' | 'emerald' | 'amber' | 'sky' | 'rose';
 
 export interface FamilyMeta {
@@ -204,7 +209,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     icon: 'Globe',
   },
   browser: {
-    name: 'Trámites web',
+    name: MODULE.label,
     blurb:
       'Vueltas aprendidas en portales ajenos: entra, llena el formulario y trae el resultado. Los que radican algo piden aprobación.',
     tone: 'amber',

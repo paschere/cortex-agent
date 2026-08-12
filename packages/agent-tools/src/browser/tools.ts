@@ -53,7 +53,7 @@ const inputsField = z
 export const browserListFlows = registerTool({
   id: 'browser.list_flows',
   description:
-    'List the web procedures ("trámites") this workspace has taught Cortex to perform on third-party portals — what each one does, which site it runs on, what data it needs, and whether it consults or submits. Call this first when the user asks for something that would mean going to an external website. Only flows that have been proven to reproduce are listed.',
+    'List the trámites this workspace has taught Cortex to do on other people\'s portals — sacar un certificado, consultar un estado, descargar un paz y salvo, radicar una solicitud — with what each one does, which site it runs on (RUNT, SIMIT, DIAN, Cámara de Comercio, a customer\'s supplier portal), what data it needs, and whether it consults or submits. Call this FIRST whenever the request means going into an external website: «sácame el certificado de tradición», «consúltame eso en el portal», «descárgame el paz y salvo», «radica la solicitud». Only trámites proven to reproduce are listed.',
   inputSchema: z.object({}),
   outputSchema: z.object({
     flows: z.array(
@@ -107,7 +107,7 @@ const runOutput = z.object({
 export const browserRunFlow = registerTool({
   id: 'browser.run_flow',
   description:
-    'Run a learned web procedure that only CONSULTS or DOWNLOADS — a certificate, a status lookup, a statement. Executes the saved steps in a real browser with no model in the loop, so it takes seconds and costs nothing. Refuses any flow that submits something to the third party; use browser.submit_flow for those.',
+    'Do a learned trámite that only CONSULTS or DOWNLOADS from somebody else\'s portal — sacar un certificado, descargar un paz y salvo o un extracto, consultar un estado, un radicado o una placa. This is the tool for «sácame el certificado», «consulta eso en el portal», «bájame el documento de la página» once browser.list_flows shows a trámite that matches. Replays the saved steps in a real browser with no model in the loop, so it takes seconds and costs nothing. Refuses any trámite that submits something to the third party; use browser.submit_flow for those.',
   inputSchema: z.object({ flow: flowRef, inputs: inputsField }),
   outputSchema: runOutput,
   rateLimit: { perMinute: 10 },
@@ -162,7 +162,7 @@ export const browserRunFlow = registerTool({
 export const browserSubmitFlow = registerTool({
   id: 'browser.submit_flow',
   description:
-    "Run a learned web procedure that WRITES on a third-party site — files a return, submits a form, accepts or pays something. Acts with the company's identity on a system nobody here controls, so it always requires a human approval before it runs. For lookups and downloads use browser.run_flow instead.",
+    "Do a learned trámite that WRITES on somebody else's portal — radicar una solicitud, presentar o declarar algo ante la DIAN, enviar un formulario, aceptar o pagar. This is the tool for «radica el trámite», «presenta la solicitud en el portal», «manda el formulario». It acts with the company's identity on a system nobody here controls, so it always requires a human approval before it runs. For lookups and downloads use browser.run_flow instead.",
   inputSchema: z.object({ flow: flowRef, inputs: inputsField }),
   outputSchema: runOutput,
   // The gate. Read before the input is even looked at -- see the header note.

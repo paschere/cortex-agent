@@ -6,13 +6,28 @@ import { Panel } from '@/components/ui/panel';
 import {
   ACTION_LABEL,
   EFFECT_LABEL,
+  MODULE,
   type Proposal,
   TARGET_LABEL,
   TARGET_WHY,
+  alreadyConnected,
 } from '@/lib/browser-shape';
 import { chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
-import { AlertTriangle, Circle, Eye, Loader2, Pause, Play, Square, Video } from 'lucide-react';
+import {
+  AlertTriangle,
+  AppWindow,
+  Asterisk,
+  Circle,
+  Loader2,
+  Pause,
+  Play,
+  Plug,
+  Square,
+  Video,
+  VideoOff,
+} from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useRef, useState } from 'react';
 import {
   type CapturedFrame,
@@ -20,19 +35,47 @@ import {
   type RecorderHandle,
   canRecordTab,
   startTabRecording,
-} from '../_lib/recorder';
+} from '@/lib/tab-recorder';
 
 /**
  * Enseñar un trámite: grabar la pestaña, revisar lo que Cortex entendió,
  * guardarlo y dejar que se pruebe solo.
  *
- * The screen is three states and says which one it is in at all times, because
- * the person is being asked to share their screen and deserves to know exactly
- * what is being kept at every moment. The privacy copy is above the button, not
- * behind a link: after the recording has happened is too late to read it.
+ * ---------------------------------------------------------------------------
+ * WHY THIS LIVES OUTSIDE THE /browser ROUTE
+ * ---------------------------------------------------------------------------
+ * Because there are two places somebody realises they are doing an errand by
+ * hand: the trámites screen, and the middle of a conversation. Both open the
+ * same recorder — one component, one privacy contract, one review step. Two
+ * copies of a screen-share flow would drift within a month, and the half that
+ * drifts is always the one that explains what is being captured.
+ *
+ * ---------------------------------------------------------------------------
+ * THE STRANGE MOMENT
+ * ---------------------------------------------------------------------------
+ * Being asked to share your screen with a piece of software is not an ordinary
+ * interaction, and the honest answer to it is short and specific rather than
+ * reassuring. So the contract is three claims in three cells, read in about
+ * four seconds, ABOVE the button — after the browser's share prompt has
+ * appeared is too late to read anything — and it is repeated every time the
+ * panel opens rather than shown once and filed away.
+ *
+ * The claims are true and worth stating in this order: only the tab you pick;
+ * no video is kept, only the frames where the picture changed, and those are
+ * dropped as soon as the steps are extracted; typed passwords are never
+ * transcribed. The third one is the one with an escape hatch attached, so it
+ * names the control that provides it.
  */
 
 const MAX_FRAMES = 20;
+
+/** What the caller is told once a recording has become a trámite. */
+export interface SavedFlow {
+  name: string;
+  message: string;
+  /** True only when the proving replay finished the whole errand: PROBADO. */
+  verified: boolean;
+}
 
 type Stage =
   | { name: 'idle' }
@@ -41,7 +84,16 @@ type Stage =
   | { name: 'review'; proposal: Proposal; warnings: string[]; frames: number; costUsd: number }
   | { name: 'saving' };
 
-export function Teach({ onSaved }: { onSaved: (message: string) => void }) {
+export function TeachFlow({
+  first = false,
+  onSaved,
+  onCancel,
+}: {
+  /** True on a workspace with nothing learned yet: this panel is the screen. */
+  first?: boolean;
+  onSaved: (result: SavedFlow) => void;
+  onCancel?: () => void;
+}) {
   const [stage, setStage] = useState<Stage>({ name: 'idle' });
   const [hint, setHint] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +174,11 @@ export function Teach({ onSaved }: { onSaved: (message: string) => void }) {
         costUsd: stage.costUsd,
       }),
     });
-    const payload = (await response.json()) as { message?: string; error?: string };
+    const payload = (await response.json()) as {
+      message?: string;
+      verified?: boolean;
+      error?: string;
+    };
     if (!response.ok) {
       setError(payload.error ?? 'No pude guardarlo.');
       // Back to the review, with the edits intact — losing somebody's
@@ -132,15 +188,19 @@ export function Teach({ onSaved }: { onSaved: (message: string) => void }) {
     }
     setStage({ name: 'idle' });
     setHint('');
-    onSaved(payload.message ?? 'Guardado.');
+    onSaved({
+      name: stage.proposal.name,
+      message: payload.message ?? 'Guardado.',
+      verified: payload.verified ?? false,
+    });
   }, [stage, sample, onSaved]);
 
   if (!canRecordTab()) {
     return (
       <Panel className="p-5">
         <p className="text-[13px] leading-relaxed text-ink-muted">
-          Este navegador no permite compartir una pestaña, así que no se puede enseñar un trámite
-          desde aquí. Funciona en Chrome, Edge y Firefox de escritorio.
+          Este navegador no permite compartir una pestaña, así que no se puede enseñar un{' '}
+          {MODULE.one} desde aquí. Funciona en Chrome, Edge y Firefox de escritorio.
         </p>
       </Panel>
     );
@@ -150,40 +210,33 @@ export function Teach({ onSaved }: { onSaved: (message: string) => void }) {
     <Panel className="overflow-hidden">
       {error && (
         <div className="flex items-start gap-2 border-b border-rose/20 bg-rose-soft px-5 py-3">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose" />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose" aria-hidden="true" />
           <p className="text-[13px] leading-relaxed text-rose">{error}</p>
         </div>
       )}
 
       {stage.name === 'idle' && (
-        <div className="p-5">
-          <h2 className="text-[15px] font-semibold text-ink">Enséñame un trámite</h2>
-          <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
-            Comparte <strong className="font-semibold text-ink">la pestaña</strong> del portal, haz
-            el trámite como siempre, y al terminar leo la grabación y te propongo los pasos. De ahí
-            en adelante lo repito solo, en segundos y sin costo.
+        <div className="p-5 sm:p-6">
+          <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-ink">
+            {first ? `Enséñame el primer ${MODULE.one}` : `Enséñame un ${MODULE.one}`}
+          </h2>
+          <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-muted">
+            {first ? (
+              <>
+                Un {MODULE.one} es una vuelta que hoy alguien hace a mano en un portal: sacar un
+                certificado en la Cámara de Comercio, consultar una placa en el RUNT, radicar una
+                solicitud. Hazlo <strong className="font-semibold text-ink">una vez</strong>{' '}
+                compartiendo la pestaña y, de ahí en adelante, lo repito yo en segundos.
+              </>
+            ) : (
+              <>
+                Comparte <strong className="font-semibold text-ink">la pestaña</strong> del portal,
+                haz la vuelta como siempre, y al terminar leo la grabación y te propongo los pasos.
+              </>
+            )}
           </p>
 
-          {/* The privacy note is here, before the button, and not behind a
-              link. After the recording has happened is too late to read it. */}
-          <ul className="mt-4 space-y-1.5 text-[12.5px] leading-relaxed text-ink-muted">
-            <li className="flex gap-2">
-              <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
-              Sólo se graba la pestaña que elijas. Nada de lo que tengas en otras ventanas.
-            </li>
-            <li className="flex gap-2">
-              <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
-              No se guarda ningún video. Tomo unas pocas imágenes de los momentos en que la página
-              cambia, las leo una vez, y{' '}
-              <strong className="font-semibold text-ink">se borran</strong>: no quedan en la base de
-              datos ni en ningún archivo.
-            </li>
-            <li className="flex gap-2">
-              <Eye className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
-              Las contraseñas se ven como puntos y no las transcribo. Si vas a escribir algo que no
-              debería quedar, usa <strong className="font-semibold text-ink">Pausar</strong>.
-            </li>
-          </ul>
+          <CaptureContract />
 
           <div className="mt-5 max-w-xl">
             <label className="field-label" htmlFor="teach-hint">
@@ -198,36 +251,54 @@ export function Teach({ onSaved }: { onSaved: (message: string) => void }) {
             />
           </div>
 
-          <Button className="mt-4" onClick={() => void start()}>
-            <Video className="h-4 w-4" />
-            Enséñame
-          </Button>
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <Button onClick={() => void start()}>
+              <Video className="h-4 w-4" aria-hidden="true" />
+              Enséñame
+            </Button>
+            {onCancel && (
+              <Button variant="ghost" onClick={onCancel}>
+                Ahora no
+              </Button>
+            )}
+            <p className="text-[12px] text-ink-faint">
+              Te muestro los pasos que entendí antes de guardar nada.
+            </p>
+          </div>
         </div>
       )}
 
       {stage.name === 'recording' && (
-        <div className="p-5">
+        <div className="p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-3">
             <span className={chipClass(stage.paused ? 'neutral' : 'rose')}>
               <Circle
-                className={clsx('h-2 w-2 fill-current', !stage.paused && 'animate-pulse')}
+                className={clsx(
+                  'h-2 w-2 fill-current',
+                  !stage.paused && 'animate-pulse motion-reduce:animate-none',
+                )}
                 aria-hidden="true"
               />
               {stage.paused ? 'En pausa' : 'Grabando'}
             </span>
-            <span className="tabular text-[13px] text-ink-muted">
+            <span className="tabular text-[15px] font-semibold text-ink">
               {String(Math.floor(stage.seconds / 60)).padStart(2, '0')}:
               {String(stage.seconds % 60).padStart(2, '0')}
             </span>
-            <span className="tabular text-[12px] text-ink-faint">
-              {stage.frames} momento{stage.frames === 1 ? '' : 's'} capturado
-              {stage.frames === 1 ? '' : 's'}
+            <span className="text-[12px] text-ink-faint">
+              <span className="tabular">{stage.frames}</span> de{' '}
+              <span className="tabular">{MAX_FRAMES}</span> momentos capturados · sin video, y se
+              borran al terminar
             </span>
           </div>
 
-          <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
-            Haz el trámite en la otra pestaña. Vuelve aquí y pulsa Terminar cuando lo hayas
-            completado — incluida la pantalla con el resultado, que es la que me dice qué produce.
+          <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-ink-muted">
+            Haz la vuelta en la otra pestaña. Vuelve aquí y pulsa Terminar cuando la hayas
+            completado —{' '}
+            <strong className="font-semibold text-ink">
+              incluida la pantalla con el resultado
+            </strong>
+            , que es la que me dice qué produce.
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -238,7 +309,7 @@ export function Teach({ onSaved }: { onSaved: (message: string) => void }) {
                   recorder.current?.resume();
                 }}
               >
-                <Play className="h-4 w-4" />
+                <Play className="h-4 w-4" aria-hidden="true" />
                 Seguir grabando
               </Button>
             ) : (
@@ -248,7 +319,7 @@ export function Teach({ onSaved }: { onSaved: (message: string) => void }) {
                   recorder.current?.pause();
                 }}
               >
-                <Pause className="h-4 w-4" />
+                <Pause className="h-4 w-4" aria-hidden="true" />
                 Pausar
               </Button>
             )}
@@ -257,16 +328,19 @@ export function Teach({ onSaved }: { onSaved: (message: string) => void }) {
                 void recorder.current?.stop().then(finish);
               }}
             >
-              <Square className="h-4 w-4" />
+              <Square className="h-4 w-4" aria-hidden="true" />
               Terminar
             </Button>
+            <p className="self-center text-[12px] text-ink-faint">
+              Pausa si vas a escribir algo que no debería quedar.
+            </p>
           </div>
         </div>
       )}
 
       {(stage.name === 'reading' || stage.name === 'saving') && (
         <div className="flex items-center gap-3 p-6">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
           <p className="text-[13px] text-ink-muted">
             {stage.name === 'reading'
               ? 'Leyendo la grabación y armando los pasos…'
@@ -292,6 +366,49 @@ export function Teach({ onSaved }: { onSaved: (message: string) => void }) {
   );
 }
 
+/**
+ * Qué se captura y qué no, antes de pedir la pestaña.
+ *
+ * Three cells rather than three bullets: the same three facts as a list read as
+ * terms and conditions, and the one that people actually need — no video is
+ * kept — was buried in the middle of a four-line paragraph. Hairlines come from
+ * the gap showing the border colour through, so they stay correct when the grid
+ * reflows to one column on a phone.
+ */
+function CaptureContract() {
+  const cells = [
+    {
+      icon: AppWindow,
+      title: 'Sólo la pestaña que elijas',
+      body: 'Nada de tus otras ventanas, ni del escritorio, ni del correo que tengas abierto.',
+    },
+    {
+      icon: VideoOff,
+      title: 'No se guarda video',
+      body: 'Sólo quedan los fotogramas donde la imagen cambió, y se borran al extraer el trámite.',
+    },
+    {
+      icon: Asterisk,
+      title: 'Las claves no se transcriben',
+      body: 'Se ven como puntos y no las leo. Si vas a escribir algo que no debe quedar, pausa.',
+    },
+  ];
+
+  return (
+    <div className="mt-5 grid gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-3">
+      {cells.map((cell) => (
+        <div key={cell.title} className="bg-surface-2 p-3.5">
+          <div className="flex items-center gap-1.5">
+            <cell.icon className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
+            <p className="text-[12.5px] font-semibold text-ink">{cell.title}</p>
+          </div>
+          <p className="mt-1 text-[11.5px] leading-snug text-ink-muted">{cell.body}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Review({
   proposal,
   warnings,
@@ -313,6 +430,10 @@ function Review({
   onDiscard: () => void;
   onSave: () => void;
 }) {
+  // Recomputed as the URL is edited: correcting a mistyped host should change
+  // the advice, not leave a stale banner arguing about the old one.
+  const connected = alreadyConnected(proposal.startUrl);
+
   return (
     <div className="divide-y divide-border">
       <div className="p-5">
@@ -360,10 +481,33 @@ function Review({
           </div>
         </div>
 
+        {connected && (
+          <div className="mt-4 rounded-sm border border-primary/20 bg-primary-soft px-3.5 py-3">
+            <p className="flex items-center gap-1.5 text-[13px] font-semibold text-primary-ink">
+              <Plug className="h-3.5 w-3.5" aria-hidden="true" />
+              Esto ya lo puedo hacer sin navegador
+            </p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+              Grabaste algo en {connected.service}, y a {connected.service} ya me conecto por su
+              propia puerta: leo {connected.where} con un permiso que tú autorizas y que se renueva
+              solo. Aprender esto como {MODULE.one} sería más lento, se rompería cada vez que
+              cambien la página, y me obligaría a guardar una contraseña que hoy no hace falta
+              guardar.
+            </p>
+            <Link
+              href="/integrations"
+              className="mt-2.5 inline-flex items-center rounded-pill bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
+            >
+              Conectar {connected.service} en Integraciones
+            </Link>
+          </div>
+        )}
+
         {proposal.effect === 'write' && (
           <p className="mt-3 rounded-sm bg-amber-soft px-3 py-2 text-[12.5px] leading-relaxed text-amber">
-            Marqué este trámite como que <strong>escribe</strong> en el sitio del tercero. Cuando lo
-            pida el agente desde el chat, va a pedir aprobación de una persona antes de correr.
+            Marqué este {MODULE.one} como que <strong>escribe</strong> en el sitio del tercero.
+            Cuando lo pida el agente desde el chat, va a pedir aprobación de una persona antes de
+            correr.
           </p>
         )}
       </div>
@@ -373,14 +517,14 @@ function Review({
       <div className="p-5">
         <h3 className="text-[13.5px] font-semibold text-ink">Lo que cambia cada vez</h3>
         <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
-          Sin esto, el trámite sólo sabría repetir exactamente la misma consulta. Corrige lo que
-          haya quedado mal: un dato marcado como fijo que en realidad cambia es lo que obliga a
+          Sin esto, el {MODULE.one} sólo sabría repetir exactamente la misma consulta. Corrige lo
+          que haya quedado mal: un dato marcado como fijo que en realidad cambia es lo que obliga a
           volver a enseñarlo.
         </p>
         {proposal.variables.length === 0 ? (
           <p className="mt-3 rounded-sm bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
             No detecté ningún dato variable. Revisa los pasos de abajo: si alguno escribe algo que
-            va a cambiar, este trámite todavía no sirve para repetirse.
+            va a cambiar, este {MODULE.one} todavía no sirve para repetirse.
           </p>
         ) : (
           <ul className="mt-3 space-y-2">
@@ -465,11 +609,13 @@ function Review({
       )}
 
       <div className="flex flex-wrap items-center gap-2 p-5">
-        <Button onClick={onSave}>Guardar y probar</Button>
+        <Button variant={connected ? 'outline' : 'default'} onClick={onSave}>
+          {connected ? 'Guardarlo de todos modos' : 'Guardar y probar'}
+        </Button>
         <Button variant="ghost" onClick={onDiscard}>
           Descartar
         </Button>
-        <p className="text-[12px] text-ink-faint">
+        <p className="max-w-md text-[12px] leading-snug text-ink-faint">
           Al guardar lo corro una vez contra el sitio real. Si funciona completo queda{' '}
           <strong className="font-semibold text-ink">probado</strong>; si no, queda{' '}
           <strong className="font-semibold text-ink">propuesto</strong> y te digo en qué paso se

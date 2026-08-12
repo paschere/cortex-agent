@@ -1,10 +1,11 @@
 import { PageHeader } from '@/components/ui/page-header';
+import { MODULE } from '@/lib/browser-shape';
 import { requireSession } from '@/lib/session';
 import { Globe } from 'lucide-react';
 import { Surface } from './_components/Surface';
 
 /**
- * Trámites web — hacer vueltas en portales ajenos.
+ * Trámites — hacer vueltas en portales ajenos.
  *
  * WHAT THIS SCREEN IS FOR. Half of what an administrator in a Colombian
  * logistics company does all day is somebody else's website: the RUNT, the
@@ -30,9 +31,13 @@ export default async function BrowserFlowsPage() {
 
   return (
     <>
+      {/* The subtitle says what this SCREEN is for. How a trámite is taught is
+          explained where somebody is about to teach one, not three times over
+          — it used to appear here, in the teaching panel and in the empty
+          state, all within one viewport. */}
       <PageHeader
-        title="Trámites web"
-        subtitle="Vueltas en portales ajenos: sacar un certificado, consultar un estado, radicar una solicitud. Se enseñan una vez grabando la pestaña, y de ahí en adelante Cortex las repite en segundos, sin modelo y sin costo."
+        title={MODULE.label}
+        subtitle="Vueltas en portales ajenos que Cortex aprendió viéndote hacerlas una vez. Aquí ves cuáles están probadas, cuál dejó de funcionar y cuándo corrió cada una."
         icon={<Globe className="h-5 w-5" />}
       />
       <Surface />

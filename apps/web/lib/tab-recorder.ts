@@ -90,6 +90,21 @@ export async function startTabRecording(options: RecorderOptions): Promise<Recor
       // picker, and the check below is the enforcement.
       displaySurface: 'browser',
       frameRate: 8,
+      /**
+       * THE POINTER HAS TO BE IN THE PICTURE.
+       *
+       * Frames are kept where the page CHANGED, which means the model sees the
+       * effect of a click and never the click. Two fields that both go from
+       * empty to filled are indistinguishable afterwards; a pointer resting on
+       * one of them in the frame before is unambiguous. Same for a button among
+       * six on a toolbar.
+       *
+       * `cursor` is not in TypeScript's `MediaTrackConstraints` (it is a Screen
+       * Capture extension), which is why this object is cast below. Browsers
+       * that do not implement it ignore an unknown key rather than rejecting
+       * the call, so asking costs nothing where it is not supported.
+       */
+      cursor: 'always',
     },
     audio: false,
     // Nothing about a trámite is audible, and a microphone permission on a

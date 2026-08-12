@@ -17,6 +17,87 @@
  * duplication is checked rather than trusted.
  */
 
+/**
+ * WHAT THE MODULE IS CALLED, IN ONE PLACE.
+ *
+ * The name is not settled. `label` is what the screen, the sidebar entry and
+ * the tool catalogue all read, and `one` / `many` are the noun in running
+ * prose ("enséñame un trámite", "todavía no hay trámites"). Renaming the module
+ * is those three strings and nothing else — the route stays `/browser`, because
+ * a URL is code and code is in English.
+ *
+ * Only what a person reads goes through here. Identifiers, table names and the
+ * agent's own tool names are unaffected by a rename and must not be templated.
+ */
+export const MODULE = {
+  label: 'Trámites',
+  one: 'trámite',
+  many: 'trámites',
+} as const;
+
+/**
+ * THE BEST TRÁMITE IS THE ONE NOBODY HAS TO LEARN.
+ *
+ * Some destinations already have a real door. Cortex talks to Gmail, Outlook
+ * and HubSpot through their own APIs, with credentials each person authorises
+ * and that refresh themselves. Learning a browser trámite against those would
+ * be slower, far more brittle, and would make us store a password that today
+ * does not need storing — a strictly worse version of something that already
+ * works.
+ *
+ * So when a recording turns out to be aimed at one of them, the review step
+ * says so and points at Integraciones instead of saving it. The browser is for
+ * what has no other door: the state portals, the customers' own systems, the
+ * supplier software from 2009.
+ *
+ * Matched on the registrable suffix so `mail.google.com` and
+ * `accounts.google.com` both resolve, and `notgoogle.com.co` does not.
+ */
+const ALREADY_CONNECTED: { suffixes: string[]; service: string; where: string }[] = [
+  {
+    suffixes: ['google.com', 'gmail.com', 'googlemail.com', 'googleusercontent.com'],
+    service: 'Google',
+    where: 'tu correo, tu calendario y tu Drive',
+  },
+  {
+    suffixes: [
+      'microsoftonline.com',
+      'outlook.com',
+      'office.com',
+      'office365.com',
+      'live.com',
+      'sharepoint.com',
+      'microsoft.com',
+    ],
+    service: 'Microsoft',
+    where: 'tu correo y tu calendario de Outlook',
+  },
+  { suffixes: ['hubspot.com'], service: 'HubSpot', where: 'tus contactos y negocios' },
+];
+
+export interface AlreadyConnected {
+  service: string;
+  where: string;
+}
+
+/** The integration that makes learning this trámite unnecessary, if there is one. */
+export function alreadyConnected(startUrl: string): AlreadyConnected | null {
+  let host: string;
+  try {
+    host = new URL(startUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  for (const entry of ALREADY_CONNECTED) {
+    for (const suffix of entry.suffixes) {
+      if (host === suffix || host.endsWith(`.${suffix}`)) {
+        return { service: entry.service, where: entry.where };
+      }
+    }
+  }
+  return null;
+}
+
 /** What a flow does to the site it runs on. Decides whether it needs approval. */
 export const FLOW_EFFECTS = ['read', 'write'] as const;
 export type FlowEffect = (typeof FLOW_EFFECTS)[number];
