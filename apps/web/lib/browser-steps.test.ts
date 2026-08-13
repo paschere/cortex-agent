@@ -270,9 +270,23 @@ describe('null no es «no viene»', () => {
       notes: [],
     };
 
-    // Sin la limpieza, esto es un 400 que no nombra ningún campo.
-    expect(proposalSchema.safeParse(edited).success).toBe(false);
+    // ESTO ANTES ERA UN 400 QUE NO NOMBRABA NINGÚN CAMPO, y ya no lo es.
+    //
+    // Los campos opcionales de `stepSchema` usaban `.optional()`, que admite el
+    // campo AUSENTE y nunca un null explícito, así que un formulario que deja
+    // un campo vacío como null —que es lo que hace un input de React— era
+    // rechazado. `withoutNulls` nació para tapar eso desde este lado; el
+    // arreglo de raíz está ahora en el esquema, que acepta las dos formas y
+    // normaliza a `undefined`.
+    //
+    // La prueba se queda, invertida, porque es la que avisaría si alguien
+    // volviera a poner `.optional()` en `packages/agent-tools/src/browser/types.ts`.
+    const direct = proposalSchema.safeParse(edited);
+    expect(direct.success).toBe(true);
+    expect(direct.success && direct.data.steps[0]?.value).toBeUndefined();
+    expect(direct.success && direct.data.steps[1]?.targets[0]?.name).toBeUndefined();
 
+    // Y la limpieza sigue siendo inofensiva: pasarla no cambia el resultado.
     const cleaned = proposalSchema.safeParse(withoutNulls(edited));
     expect(cleaned.success).toBe(true);
     expect(cleaned.success && cleaned.data.steps[0]).not.toHaveProperty('value');
