@@ -1,11 +1,15 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { requireSession } from '@/lib/session';
+import { mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
+  COMMITMENT_COLUMNS,
   type CommitmentRow,
   adaptCommitment,
+  addDays,
   bogotaToday,
+  hydrate,
   listCommitments,
   listNoticesFor,
 } from '@cortex/agent-tools';
@@ -14,6 +18,7 @@ import { CalendarClock } from 'lucide-react';
 import { CommitmentBoard } from './_components/CommitmentBoard';
 import { longDate, shortDate, stamp } from './_components/format';
 import type { CommitmentView } from './_components/types';
+import { RECORD_WINDOW_DAYS, buildPeopleLoad } from './_lib/people';
 
 /**
  * Vencimientos.
@@ -37,6 +42,48 @@ export const dynamic = 'force-dynamic';
 /** How far ahead the "vigente" tail is worth listing. */
 const HORIZON_DAYS = 400;
 
+/** Techo del historial que se lee. Medio año de una empresa entera cabe de sobra. */
+const CLOSED_LIMIT = 500;
+
+/**
+ * Lo ya cumplido dentro de la ventana, para poder decir quién cumple.
+ *
+ * ===========================================================================
+ * POR QUÉ NO ES `listCommitments({ states: ['met'] })`
+ * ===========================================================================
+ * Porque esa función ordena por `due_on` ASCENDENTE y corta con un `limit`, así
+ * que en una empresa con historial devolvería los QUINIENTOS MÁS ANTIGUOS —
+ * exactamente lo contrario de una ventana de conducta reciente, y de la peor
+ * manera posible: no falla, contesta con datos de hace dos años. Lo que hace
+ * falta es ordenar por `met_at` descendente y filtrar por él, y `ListOptions`
+ * hoy no tiene ni lo uno ni lo otro. Queda anotado para el dueño de ese módulo.
+ *
+ * `state = 'met'` sí se puede filtrar en SQL, al revés que los tres estados
+ * abiertos: `met` y `dropped` son decisiones que alguien escribió en la fila, no
+ * un cache que caduque con el calendario — `deriveState` las devuelve tal cual.
+ *
+ * `hydrate` es la del paquete: resuelve el nombre del responsable contra
+ * `users`, que es justo lo que esta vista necesita y lo único que le falta a la
+ * fila cruda.
+ */
+async function listClosedSince(
+  db: ReturnType<typeof getOrgScopedClient>,
+  sinceIso: string,
+): Promise<CommitmentRow[]> {
+  const rows = mustReadList<CommitmentRow>(
+    await db
+      .from('commitments')
+      .select(COMMITMENT_COLUMNS)
+      .eq('review_state', 'confirmed')
+      .eq('state', 'met')
+      .gte('met_at', sinceIso)
+      .order('met_at', { ascending: false })
+      .limit(CLOSED_LIMIT),
+    'lo que ya se cumplió en los últimos meses',
+  );
+  return hydrate(db, rows);
+}
+
 export default async function CommitmentsPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
@@ -45,7 +92,7 @@ export default async function CommitmentsPage() {
     .toISOString()
     .slice(0, 10);
 
-  const [open, pendingRows, people] = await Promise.all([
+  const [open, pendingRows, closed, people] = await Promise.all([
     listCommitments(db, {
       states: ['overdue', 'due_soon', 'in_force'],
       reviewState: 'confirmed',
@@ -54,6 +101,10 @@ export default async function CommitmentsPage() {
       limit: 500,
     }),
     listCommitments(db, { reviewState: 'pending', today, limit: 100 }),
+    // Medianoche en Bogotá, no en UTC: la ventana del historial empieza el día
+    // que aquí empezó, y las cinco horas de diferencia serían un día entero de
+    // conducta que entra o sale según la hora a la que se abra la pantalla.
+    listClosedSince(db, `${addDays(today, -RECORD_WINDOW_DAYS)}T00:00:00-05:00`),
     db
       .from('users')
       .select('id, name, email')
@@ -128,10 +179,26 @@ export default async function CommitmentsPage() {
   const inForce = views.filter((v) => v.state === 'in_force');
   const pending = pendingRows.map(toView);
 
+  // Las mismas filas abiertas de arriba, agrupadas por responsable. Es
+  // deliberadamente la misma lista y no una consulta aparte: dos consultas se
+  // separan, y entonces una lente diría «3 vencidos» y la otra «4».
+  const load = buildPeopleLoad({ open, closed, today });
+
   // The money at risk this month: what a payment deadline actually costs if it
   // slips. Only counted for what is overdue or lapsing, because a payment due
-  // in November is not "en riesgo" in August.
-  const atRisk = [...overdue, ...dueSoon].reduce((sum, v) => sum + (v.amountCop ?? 0), 0);
+  // in November is not "en riesgo" in August. Las promesas internas se quedan
+  // fuera: no son plata, y una sola con un monto anotado a mano contaminaría la
+  // única cifra de esta fila que se compara mes contra mes.
+  const atRisk = [...overdue, ...dueSoon]
+    .filter((v) => v.kind !== 'internal')
+    .reduce((sum, v) => sum + (v.amountCop ?? 0), 0);
+
+  // DOS CIFRAS, NO UNA. Un SOAT vencido es un camión sin seguro en la vía; una
+  // promesa atrasada es una conversación que hay que tener. Sumarlas produce un
+  // número que no dice cuál de las dos cosas pasó, y ese número es el que
+  // alguien mira de reojo antes de decidir si abre la pantalla.
+  const latePapers = overdue.filter((v) => v.kind !== 'internal');
+  const latePromises = overdue.filter((v) => v.kind === 'internal');
 
   const stats: Array<{
     label: string;
@@ -140,10 +207,16 @@ export default async function CommitmentsPage() {
     tone?: 'emerald' | 'amber' | 'rose';
   }> = [
     {
-      label: 'Vencido',
-      value: String(overdue.length),
-      sub: overdue.length > 0 ? 'hay que resolverlo hoy' : 'nada pendiente',
-      tone: overdue.length > 0 ? 'rose' : undefined,
+      label: 'Papeles vencidos',
+      value: String(latePapers.length),
+      sub: latePapers.length > 0 ? 'hay que resolverlo hoy' : 'nada pendiente',
+      tone: latePapers.length > 0 ? 'rose' : undefined,
+    },
+    {
+      label: 'Promesas atrasadas',
+      value: String(latePromises.length),
+      sub: latePromises.length > 0 ? 'pasaron de fecha y siguen abiertas' : 'todas dentro de fecha',
+      tone: latePromises.length > 0 ? 'amber' : undefined,
     },
     {
       label: 'Por vencer',
@@ -174,11 +247,11 @@ export default async function CommitmentsPage() {
     <>
       <PageHeader
         title="Vencimientos"
-        subtitle="Lo que se le vence a la empresa y quién responde por cada cosa. Cortex lo revisa todos los días y avisa antes, no después. Cada fecha muestra de dónde salió."
+        subtitle="Lo que se le vence a la empresa y quién responde por cada cosa. Se lee por fecha, como una agenda, o por persona, que es como se pregunta en voz alta. Cortex lo revisa todos los días y avisa antes, no después."
         icon={<CalendarClock className="h-5 w-5" />}
       />
 
-      <Panel className="mb-5 grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-5">
+      <Panel className="mb-5 grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-6">
         {stats.map((s) => (
           <div key={s.label} className="bg-surface px-4 py-3">
             <div className="field-label truncate" title={s.label}>
@@ -224,6 +297,7 @@ export default async function CommitmentsPage() {
         inForce={inForce}
         pending={pending}
         people={people}
+        load={load}
       />
     </>
   );

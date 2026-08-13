@@ -2,7 +2,7 @@
 
 import { Panel } from '@/components/ui/panel';
 import { clsx } from 'clsx';
-import { CalendarCheck2, Inbox, TriangleAlert } from 'lucide-react';
+import { CalendarCheck2, CalendarDays, Inbox, TriangleAlert, Users } from 'lucide-react';
 import { useState, useTransition } from 'react';
 import {
   acknowledgeCommitment,
@@ -12,7 +12,8 @@ import {
 } from '../actions';
 import { CommitmentCard, ProposalCard } from './CommitmentCard';
 import { NewCommitmentButton } from './NewCommitment';
-import type { CommitmentView } from './types';
+import { PeopleBoard } from './PeopleBoard';
+import type { CommitmentView, PeopleLoad } from './types';
 
 /**
  * The screen, in the order an operations lead actually reads it.
@@ -27,9 +28,28 @@ import type { CommitmentView } from './types';
  * unconfirmed proposal is not less urgent than a confirmed one, it is a
  * different kind of task: one asks you to act, the other asks you to decide
  * whether the thing is even true.
+ *
+ * ===========================================================================
+ * UN MODO, NO UNA PESTAÑA
+ * ===========================================================================
+ * «Por fecha» y «por persona» son las MISMAS filas leídas de dos maneras, no
+ * dos pantallas. Con una pestaña habría que decidir otra vez qué se carga, qué
+ * pasa cuando está vacía y qué encabezado lleva — tres decisiones duplicadas
+ * que se van separando hasta que una pestaña dice «3 vencidos» y la otra «4».
+ * Con un modo hay una sola consulta, un solo `today` y un solo estado vacío, y
+ * cambiar de lente no cuesta un viaje al servidor.
+ *
+ * ARRANCA EN «POR FECHA» a propósito, aunque la vista nueva sea la de persona:
+ * lo más caro que sabe este producto es un SOAT vencido — el camión está en la
+ * vía sin seguro AHORA — y eso tiene que seguir siendo lo primero que se ve al
+ * abrir. Cuando hay promesas atrasadas, el propio modo por fecha lo dice y
+ * ofrece el cambio; una vista que hay que descubrir no la usa nadie.
  */
 
 type Filter = 'todos' | 'soat' | 'rtm' | 'contract' | 'policy' | 'customs' | 'payment';
+
+/** Cómo se está leyendo la lista: por cuándo vence, o por quién responde. */
+type Mode = 'fecha' | 'persona';
 
 const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: 'todos', label: 'Todos' },
@@ -47,17 +67,26 @@ export function CommitmentBoard({
   inForce,
   pending,
   people,
+  load,
 }: {
   overdue: CommitmentView[];
   dueSoon: CommitmentView[];
   inForce: CommitmentView[];
   pending: CommitmentView[];
   people: Array<{ id: string; name: string }>;
+  /** Las mismas filas abiertas, ya agrupadas por responsable en el servidor. */
+  load: PeopleLoad;
 }) {
+  const [mode, setMode] = useState<Mode>('fecha');
   const [filter, setFilter] = useState<Filter>('todos');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // El aviso que lleva a la otra lente. Se cuenta sobre el modelo que ya bajó
+  // resuelto — aquí no se deriva ningún estado.
+  const latePromisers = load.pending.filter((p) => !p.unassigned && p.promises.overdue > 0);
+  const latePromises = latePromisers.reduce((n, p) => n + p.promises.overdue, 0);
 
   const apply = (rows: CommitmentView[]) =>
     filter === 'todos' ? rows : rows.filter((r) => r.kind === filter);
@@ -88,28 +117,67 @@ export function CommitmentBoard({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setFilter(f.id)}
-            aria-pressed={filter === f.id}
-            className={clsx(
-              'rounded-pill px-3 py-1.5 text-[12.5px] font-semibold transition-all duration-150',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-              'motion-reduce:transform-none motion-reduce:transition-none',
-              filter === f.id
-                ? 'bg-primary text-white shadow-card'
-                : 'border border-border bg-surface text-ink-muted hover:-translate-y-px hover:text-ink',
-            )}
-          >
-            {f.label}
-          </button>
-        ))}
+        {/* Sin `role="group"`: cada botón ya dice qué es y si está puesto con
+            `aria-pressed`, y la agrupación no añade nada que se lea en voz alta. */}
+        <div className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface p-1 shadow-card">
+          <ModeButton
+            active={mode === 'fecha'}
+            onClick={() => setMode('fecha')}
+            icon={<CalendarDays className="h-3.5 w-3.5" aria-hidden />}
+            label="Por fecha"
+          />
+          <ModeButton
+            active={mode === 'persona'}
+            onClick={() => setMode('persona')}
+            icon={<Users className="h-3.5 w-3.5" aria-hidden />}
+            label="Por persona"
+          />
+        </div>
+
+        {mode === 'fecha' &&
+          FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              aria-pressed={filter === f.id}
+              className={clsx(
+                'rounded-pill px-3 py-1.5 text-[12.5px] font-semibold transition-all duration-150',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                'motion-reduce:transform-none motion-reduce:transition-none',
+                filter === f.id
+                  ? 'bg-primary text-white shadow-card'
+                  : 'border border-border bg-surface text-ink-muted hover:-translate-y-px hover:text-ink',
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
         <div className="ml-auto">
           <NewCommitmentButton people={people} />
         </div>
       </div>
+
+      {mode === 'fecha' && latePromises > 0 && (
+        <button
+          type="button"
+          onClick={() => setMode('persona')}
+          className="flex w-full items-center gap-2 rounded-card border border-border bg-surface-2 px-4 py-2.5 text-left text-[12.5px] text-ink-muted transition-colors duration-150 hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        >
+          <Users className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
+          <span>
+            <span className="font-semibold text-ink">
+              {latePromises === 1
+                ? '1 promesa pasada de fecha'
+                : `${latePromises} promesas pasadas de fecha`}
+            </span>{' '}
+            {latePromisers.length === 1
+              ? 'de una persona. Entre las fechas de la flota no se ven.'
+              : `repartidas entre ${latePromisers.length} personas. Entre las fechas de la flota no se ven.`}
+          </span>
+          <span className="ml-auto shrink-0 font-semibold text-primary">Verlo por persona →</span>
+        </button>
+      )}
 
       {pending.length > 0 && (
         <Panel className="border-amber/25 p-5">
@@ -137,37 +205,73 @@ export function CommitmentBoard({
         </Panel>
       )}
 
-      <Section
-        title="Vencido"
-        icon={<TriangleAlert className="h-4 w-4 text-rose" aria-hidden />}
-        count={shownOverdue.length}
-        empty="Nada vencido. Así se ve un mes bien llevado."
-        rows={shownOverdue}
-        busyId={busyId}
-        run={run}
-      />
+      {mode === 'persona' ? (
+        <PeopleBoard load={load} />
+      ) : (
+        <>
+          <Section
+            title="Vencido"
+            icon={<TriangleAlert className="h-4 w-4 text-rose" aria-hidden />}
+            count={shownOverdue.length}
+            empty="Nada vencido. Así se ve un mes bien llevado."
+            rows={shownOverdue}
+            busyId={busyId}
+            run={run}
+          />
 
-      <Section
-        title="Por vencer"
-        icon={<CalendarCheck2 className="h-4 w-4 text-amber" aria-hidden />}
-        count={shownSoon.length}
-        empty="Nada entra en ventana de aviso todavía."
-        rows={shownSoon}
-        busyId={busyId}
-        run={run}
-      />
+          <Section
+            title="Por vencer"
+            icon={<CalendarCheck2 className="h-4 w-4 text-amber" aria-hidden />}
+            count={shownSoon.length}
+            empty="Nada entra en ventana de aviso todavía."
+            rows={shownSoon}
+            busyId={busyId}
+            run={run}
+          />
 
-      <Section
-        title="Vigente"
-        icon={<CalendarCheck2 className="h-4 w-4 text-emerald" aria-hidden />}
-        count={shownForce.length}
-        empty="No hay más compromisos registrados."
-        rows={shownForce}
-        busyId={busyId}
-        run={run}
-        collapsedByDefault
-      />
+          <Section
+            title="Vigente"
+            icon={<CalendarCheck2 className="h-4 w-4 text-emerald" aria-hidden />}
+            count={shownForce.length}
+            empty="No hay más compromisos registrados."
+            rows={shownForce}
+            busyId={busyId}
+            run={run}
+            collapsedByDefault
+          />
+        </>
+      )}
     </div>
+  );
+}
+
+/** Una de las dos lentes. Segmentado, no pestaña: es la misma lista. */
+function ModeButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={clsx(
+        'inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-[12.5px] font-semibold transition-colors duration-150',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+        'motion-reduce:transition-none',
+        active ? 'bg-primary text-white' : 'text-ink-muted hover:text-ink',
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
