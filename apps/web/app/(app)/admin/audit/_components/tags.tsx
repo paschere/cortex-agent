@@ -30,6 +30,9 @@ export const DECISION_TAG: Record<string, string> = {
   confirmed: 'border-emerald/20 bg-emerald-soft text-emerald',
   flagged: 'border-amber/20 bg-amber-soft text-amber',
   blocked: 'border-rose/20 bg-rose-soft text-rose',
+  // Delegada no es verde. `confirmed` es verde porque una persona miró y dijo
+  // que sí; aquí nadie miró, y el color tiene que decirlo.
+  delegated: 'border-sky/20 bg-sky-soft text-sky',
 };
 
 export const SURFACE_TAG: Record<string, string> = {
@@ -64,6 +67,7 @@ export const DECISION_LABEL: Record<string, string> = {
   confirmed: 'confirmada',
   flagged: 'marcada',
   blocked: 'bloqueada',
+  delegated: 'sin preguntar',
 };
 
 const NEUTRAL = 'border-border bg-surface-2 text-ink-faint';

@@ -184,6 +184,23 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   audit_events: tenant(),
   security_events: tenant(),
   security_policies: tenant(),
+
+  // --- Mandatos (migración 0099) --------------------------------------------
+  // Lo que una empresa decidió que Cortex puede hacer sin preguntarle, y cada
+  // vez que lo hizo. Tenant en el sentido más fuerte que hay en el producto:
+  // una fila de `mandates` no es un dato, es un PERMISO — un filtro perdido aquí
+  // no enseñaría la fila de otra empresa, dejaría que la declaración de una
+  // empresa autorizara acciones dentro de otra. Es la única tabla del sistema
+  // cuya lectura puede convertir un `confirm` en un `allow`.
+  //
+  // `mandate_uses` es tenant y no `derived` sobre `mandates` aunque toda fila
+  // nombre una concesión: la pregunta que justifica la tabla —«¿qué hizo Cortex
+  // por su cuenta en esta empresa este mes?»— se hace por espacio de trabajo y
+  // sin nombrar un mandato, que es justo lo que una clasificación `derived`
+  // prohibiría. Y el presupuesto diario se cuenta sobre varias concesiones a la
+  // vez, no sobre una.
+  mandates: tenant(),
+  mandate_uses: tenant(),
   rate_limit_buckets: derived('users', 'user_id'),
 
   // --- Product surfaces -----------------------------------------------------

@@ -4,7 +4,7 @@ import {
   SecurityBlockedError,
   ValidationError,
 } from '@cortex/core';
-import { writeAuditEvent } from './audit.js';
+import { hashInput, writeAuditEvent } from './audit.js';
 import { consumeToken } from './rate-limit.js';
 import {
   evaluate as evaluateSecurity,
@@ -14,6 +14,8 @@ import {
   riskAuditFields,
   writeSecurityEvent,
 } from './security/enforce.js';
+import { recordMandateUse } from './security/mandate-store.js';
+import { explainDelegation, typedAmount } from './security/mandate.js';
 import { toolErrorMessage } from './tool-error.js';
 import type { AnyTool, ToolContext, ToolDef } from './types.js';
 
@@ -114,6 +116,14 @@ export async function runTool<I, O>(
     evaluation,
   };
 
+  // ---------------------------------------------------------------------------
+  // NADA PASA POR AQUÍ. Ni `opts.confirmed`, ni una rutina desatendida, ni un
+  // mandato: esta rama se evalúa ANTES que ninguna de las tres y no consulta a
+  // ninguna. `applyMandate()` (migración 0099) devuelve `block` cuando le entra
+  // `block`, sin condiciones, así que la delegación no puede llegar hasta aquí
+  // — y si algún día alguien le añade una excepción a aquella función, esta
+  // rama sigue sin preguntarle nada a nadie. Esa redundancia es intencionada.
+  // ---------------------------------------------------------------------------
   if (evaluation.decision === 'block') {
     await Promise.all([
       writeSecurityEvent({ ...securityEventBase, decision: 'blocked' }),
@@ -164,18 +174,69 @@ export async function runTool<I, O>(
   if (isIncident(evaluation)) {
     await writeSecurityEvent({
       ...securityEventBase,
-      decision: opts.confirmed && evaluation.decision === 'confirm' ? 'confirmed' : 'flagged',
+      decision: evaluation.mandate
+        ? 'delegated'
+        : opts.confirmed && evaluation.decision === 'confirm'
+          ? 'confirmed'
+          : 'flagged',
     });
   }
 
   // Decision recorded on every row written from here on: a gated call that the
-  // user approved is 'confirmed', everything else keeps its natural decision.
+  // user approved is 'confirmed', everything else keeps its natural decision
+  // ('delegated' incluido, que lo pone riskAuditFields al ver la concesión).
   const riskFinal = riskAuditFields(
     evaluation,
     opts.confirmed && evaluation.decision === 'confirm' ? 'confirmed' : undefined,
   );
 
-  if (tool.requiresConfirmation && !opts.confirmed) {
+  // ---------------------------------------------------------------------------
+  // EL USO SE ANOTA ANTES DE EJECUTAR.
+  //
+  // Y si no se puede anotar, no hay delegación. Sin rastro no hay autonomía: una
+  // acción que Cortex hizo por su cuenta y de la que no queda constancia es
+  // indistinguible de un fallo de la capa, y el presupuesto del día se habría
+  // gastado sin constar. Cae a pedir confirmación, que es lo que pasaba antes de
+  // que existieran los mandatos.
+  // ---------------------------------------------------------------------------
+  if (evaluation.mandate) {
+    const money = typedAmount(parsed.data, tool.declaredAmount);
+    const recorded = await recordMandateUse({
+      db: ctx.db,
+      mandateId: evaluation.mandate.id,
+      toolId: tool.id,
+      userId: ctx.userId,
+      agentId: ctx.agentId,
+      surface: evaluation.surface,
+      riskLevel: evaluation.classification.riskLevel,
+      amount: money?.amount ?? null,
+      currency: money?.currency ?? null,
+      inputDigest: hashInput(parsed.data),
+    });
+    if (!recorded) {
+      await writeAuditEvent({
+        db: ctx.db,
+        userId: ctx.userId,
+        agentId: ctx.agentId,
+        conversationId: ctx.conversationId,
+        toolId: tool.id,
+        input,
+        status: 'confirmation_required',
+        latencyMs: Math.round(performance.now() - t0),
+        metadata: { reason: 'mandate_use_unrecorded', mandateId: evaluation.mandate.id },
+        ...risk,
+      });
+      throw new ConfirmationRequiredError(tool.id, parsed.data);
+    }
+  }
+
+  // La SEGUNDA puerta, y es independiente de la de seguridad: `gmail.send_draft`
+  // lleva `requiresConfirmation: true` puesto por la propia herramienta, y sin
+  // esta línea un mandato de «puedes mandar correos a clientes» no haría
+  // absolutamente nada — el correo seguiría parándose aquí después de que el
+  // veredicto resuelto dijera que siga. Por eso lee `evaluation.mandate` y no
+  // vuelve a decidir nada por su cuenta: las dos puertas, un solo veredicto.
+  if (tool.requiresConfirmation && !opts.confirmed && !evaluation.mandate) {
     await writeAuditEvent({
       db: ctx.db,
       userId: ctx.userId,
@@ -293,7 +354,13 @@ export async function runTool<I, O>(
     Object.defineProperty(outParsed.data, '_security', {
       value: {
         riskLevel: evaluation.classification.riskLevel,
-        notice: explainFlag(evaluation.classification),
+        // Una delegación SILENCIOSA es lo peor de las dos cosas: la persona no
+        // eligió, y encima no se entera. Si un mandato levantó la pregunta, el
+        // resultado lo dice — qué se hizo sin preguntar y por decisión de quién.
+        notice: evaluation.mandate
+          ? explainDelegation(evaluation.classification, evaluation.mandate)
+          : explainFlag(evaluation.classification),
+        ...(evaluation.mandate ? { delegatedBy: evaluation.mandate.label } : {}),
         signals: evaluation.classification.signals,
         // Instruction to the model, not text to echo verbatim.
         relayToUser: true,

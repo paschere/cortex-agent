@@ -11,7 +11,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export const AUDIT_STATUSES = ['ok', 'error', 'confirmation_required', 'rate_limited'] as const;
 export const AUDIT_SURFACES = ['web', 'mcp', 'schedule'] as const;
 export const AUDIT_RISK_LEVELS = ['low', 'medium', 'high', 'critical'] as const;
-export const AUDIT_DECISIONS = ['allowed', 'flagged', 'blocked', 'confirmed'] as const;
+// 'delegated' llega con la migración 0099: la llamada iba a preguntar y no
+// preguntó, porque un mandato la cubría. Es un valor propio y no un 'allowed'
+// con adorno — «¿qué hizo Cortex por su cuenta este mes?» tiene que poder
+// contestarse con un filtro.
+export const AUDIT_DECISIONS = ['allowed', 'flagged', 'blocked', 'confirmed', 'delegated'] as const;
 export const AUDIT_RANGES = ['24h', '7d', '30d', 'all'] as const;
 
 export type AuditRange = (typeof AUDIT_RANGES)[number];
@@ -74,7 +78,9 @@ export function parseAuditFilters(sp: RawParams): AuditFilters {
   const user = first(sp, 'user');
   return {
     status: oneOf(first(sp, 'status'), AUDIT_STATUSES, 'all'),
-    tool: first(sp, 'tool').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 64),
+    tool: first(sp, 'tool')
+      .replace(/[^a-zA-Z0-9_.-]/g, '')
+      .slice(0, 64),
     user: UUID_RE.test(user) ? user : '',
     surface: oneOf(first(sp, 'surface'), AUDIT_SURFACES, 'all'),
     risk: oneOf(first(sp, 'risk'), AUDIT_RISK_LEVELS, 'all'),
@@ -91,7 +97,10 @@ export function auditRangeSince(range: AuditRange): string | null {
 }
 
 /** URLSearchParams holding only the non-default filters (stable ordering). */
-export function auditSearchParams(f: AuditFilters, patch: Partial<AuditFilters> = {}): URLSearchParams {
+export function auditSearchParams(
+  f: AuditFilters,
+  patch: Partial<AuditFilters> = {},
+): URLSearchParams {
   const merged = { ...f, ...patch };
   const params = new URLSearchParams();
   if (merged.status !== 'all') params.set('status', merged.status);
@@ -170,7 +179,11 @@ export function normaliseAuditRow(raw: Record<string, unknown>): AuditEventRow {
 
 /** risk_signals is jsonb — accept an array, a JSON string, or nothing. */
 export function riskSignals(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map((s) => String(s)).filter(Boolean).slice(0, 24);
+  if (Array.isArray(value))
+    return value
+      .map((s) => String(s))
+      .filter(Boolean)
+      .slice(0, 24);
   if (typeof value === 'string' && value.trim().startsWith('[')) {
     try {
       const parsed: unknown = JSON.parse(value);
@@ -222,9 +235,7 @@ export async function fetchAuditEvents(
 ): Promise<AuditPage> {
   const offset = opts.offset ?? 0;
   const run = async (select: string, withCount: boolean) => {
-    const base = sb
-      .from('audit_events')
-      .select(select, withCount ? { count: 'exact' } : undefined);
+    const base = sb.from('audit_events').select(select, withCount ? { count: 'exact' } : undefined);
     const filtered = applyAuditFilters(base, filters);
     return filtered
       .order('created_at', { ascending: false })

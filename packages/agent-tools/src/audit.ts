@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
+import { type UUID, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { logger, type UUID } from '@cortex/core';
 
 export type AuditStatus = 'ok' | 'error' | 'rate_limited' | 'confirmation_required';
 
-/** See migration 0042 — why a call was allowed, gated, flagged or refused. */
-export type AuditDecision = 'allowed' | 'flagged' | 'blocked' | 'confirmed';
+/**
+ * See migration 0042 — why a call was allowed, gated, flagged or refused —
+ * and 0099 for `delegated`: iba a preguntar y no preguntó, porque un mandato
+ * concedido por un administrador lo cubría.
+ */
+export type AuditDecision = 'allowed' | 'flagged' | 'blocked' | 'confirmed' | 'delegated';
 
 export interface WriteAuditOpts {
   db: SupabaseClient;
@@ -33,10 +37,19 @@ export interface WriteAuditOpts {
   /** short human sentence for the audit UI */
   riskReason?: string;
   riskSignals?: string[];
+  /**
+   * La concesión que autorizó la llamada sin preguntar (migración 0099). Va
+   * junto al `risk_level` real y NO en su lugar: la fila tiene que decir a la
+   * vez qué era la llamada y por qué no se preguntó.
+   */
+  mandateId?: string;
 }
 
 export function hashInput(input: unknown): string {
-  return createHash('sha256').update(JSON.stringify(input ?? null)).digest('hex').slice(0, 32);
+  return createHash('sha256')
+    .update(JSON.stringify(input ?? null))
+    .digest('hex')
+    .slice(0, 32);
 }
 
 export async function writeAuditEvent(opts: WriteAuditOpts) {
@@ -64,6 +77,7 @@ async function insertAuditEvent(opts: WriteAuditOpts) {
     decision: opts.decision ?? null,
     risk_reason: opts.riskReason ?? null,
     risk_signals: opts.riskSignals ?? [],
+    mandate_id: opts.mandateId ?? null,
   });
   if (error) {
     // Never throw — audit failures must not break the user's call

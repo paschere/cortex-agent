@@ -1,6 +1,7 @@
 import type { IntegrationProvider, Logger, UUID } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { z } from 'zod';
+import type { DeclaredAmount } from './security/mandate.js';
 
 export interface IntegrationsClient {
   getAccessToken(provider: IntegrationProvider): Promise<{ token: string; scopes: string[] }>;
@@ -131,6 +132,22 @@ export interface ToolDef<I, O> {
   inputSchema: z.ZodType<I>;
   outputSchema: z.ZodType<O>;
   requiresConfirmation?: boolean;
+  /**
+   * Dónde están el importe y su moneda dentro de `inputSchema`, cuando esta
+   * herramienta mueve dinero (migración 0099).
+   *
+   * Es lo único que hace que un techo monetario de un mandato («puedes aprobar
+   * hasta $500.000») pueda aplicarse a esta herramienta. Sin esta declaración un
+   * mandato CON techo no la delega nunca y la llamada se para a preguntar, que
+   * es la dirección segura: la alternativa sería buscar la cifra en el cuerpo
+   * del texto, y equivocarse ahí autoriza.
+   *
+   * Ambas claves son de primer nivel en el esquema de entrada, `amountKey` tiene
+   * que llegar como `number` (nunca como cadena con separadores) y `currencyKey`
+   * como código ISO de tres letras. Si algo de eso no se cumple en la llamada
+   * concreta, no hay delegación.
+   */
+  declaredAmount?: DeclaredAmount;
   requiredScopes?: { provider: IntegrationProvider; scopes: string[] }[];
   rateLimit?: { perMinute: number };
   handler: (input: I, ctx: ToolContext) => Promise<O>;

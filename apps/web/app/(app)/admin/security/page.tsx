@@ -1,8 +1,15 @@
-import Link from 'next/link';
+import { SURFACE_LABEL, fetchUserNames, riskSignals } from '@/app/api/admin/_lib/audit-filters';
+import { PageHeader } from '@/components/ui/page-header';
+import { Panel } from '@/components/ui/panel';
+import { relativeTime } from '@/lib/relative-time';
+import { requireSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
+import { toolLabel } from '@/lib/tool-labels';
 import { clsx } from 'clsx';
 import {
   Ban,
   Flag,
+  KeyRound,
   Lock,
   Radar,
   ShieldAlert,
@@ -10,21 +17,9 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
-import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
-import { relativeTime } from '@/lib/relative-time';
-import { toolLabel } from '@/lib/tool-labels';
-import { fetchUserNames, riskSignals, SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
-import {
-  DecisionTag,
-  LegendDot,
-  RiskTag,
-  SignalChip,
-  SurfaceTag,
-} from '../audit/_components/tags';
+import Link from 'next/link';
 import { absoluteTime } from '../audit/_components/format';
+import { DecisionTag, LegendDot, RiskTag, SignalChip, SurfaceTag } from '../audit/_components/tags';
 
 export const dynamic = 'force-dynamic';
 
@@ -122,6 +117,10 @@ export default async function SecurityPage() {
   const recent7 = events.filter((e) => e.created_at >= since7);
   const blocked7 = recent7.filter((e) => e.decision === 'blocked').length;
   const flagged7 = recent7.filter((e) => e.decision === 'flagged').length;
+  // Lo que Cortex hizo por su cuenta amparado por un mandato (migración 0099).
+  // Es el número que un administrador debería mirar primero: es el único que
+  // cuenta acciones que nadie aprobó una por una.
+  const delegated7 = recent7.filter((e) => e.decision === 'delegated').length;
   const users7 = new Set(recent7.map((e) => e.user_id).filter(Boolean)).size;
 
   // Signal counts over the whole window.
@@ -129,7 +128,9 @@ export default async function SecurityPage() {
   for (const e of events) {
     for (const s of riskSignals(e.signals)) signalCounts[s] = (signalCounts[s] ?? 0) + 1;
   }
-  const topSignals = Object.entries(signalCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const topSignals = Object.entries(signalCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
   const maxSignal = topSignals[0]?.[1] ?? 1;
 
   // Tool breakdown over the whole window.
@@ -141,7 +142,9 @@ export default async function SecurityPage() {
     if (e.decision === 'blocked') t.blocked += 1;
     if (SEVERITY.indexOf(e.risk_level) > SEVERITY.indexOf(t.worst)) t.worst = e.risk_level;
   }
-  const topTools = Object.entries(byTool).sort((a, b) => b[1].total - a[1].total).slice(0, 8);
+  const topTools = Object.entries(byTool)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 8);
   const maxTool = topTools[0]?.[1].total ?? 1;
 
   // Timeline: flagged vs blocked per day.
@@ -161,10 +164,7 @@ export default async function SecurityPage() {
   const timelineTotal = timeline.reduce((n, d) => n + d.flagged + d.blocked, 0);
 
   const recent = events.slice(0, 25);
-  const userNames = await fetchUserNames(
-    sb,
-    recent.map((e) => e.user_id ?? '').filter(Boolean),
-  );
+  const userNames = await fetchUserNames(sb, recent.map((e) => e.user_id ?? '').filter(Boolean));
 
   const tiles = [
     {
@@ -185,8 +185,19 @@ export default async function SecurityPage() {
       icon: ShieldAlert,
       tone: riskyAudit7d > 0 ? 'text-amber' : 'text-emerald',
     },
+    {
+      label: 'Sin preguntar · 7d',
+      value: String(delegated7),
+      icon: KeyRound,
+      tone: delegated7 > 0 ? 'text-sky' : 'text-ink',
+    },
     { label: 'Personas involucradas', value: String(users7), icon: Users, tone: 'text-ink' },
-    { label: 'Señal más frecuente', value: topSignals[0]?.[0] ?? '—', icon: Radar, tone: 'text-ink' },
+    {
+      label: 'Señal más frecuente',
+      value: topSignals[0]?.[0] ?? '—',
+      icon: Radar,
+      tone: 'text-ink',
+    },
   ];
 
   return (
@@ -196,13 +207,22 @@ export default async function SecurityPage() {
         subtitle="Qué se le impidió hacer al agente, qué se vio riesgoso y con qué reglas se decidió"
         icon={<ShieldCheck className="h-5 w-5" />}
         actions={
-          <Link
-            href="/admin/audit?risk=high"
-            className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
-          >
-            <ShieldAlert className="h-4 w-4" />
-            Ver los eventos riesgosos
-          </Link>
+          <>
+            <Link
+              href="/admin/mandates"
+              className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+            >
+              <KeyRound className="h-4 w-4" />
+              Mandatos
+            </Link>
+            <Link
+              href="/admin/audit?risk=high"
+              className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+            >
+              <ShieldAlert className="h-4 w-4" />
+              Ver los eventos riesgosos
+            </Link>
+          </>
         }
       />
 
@@ -210,7 +230,7 @@ export default async function SecurityPage() {
         {/* Hairlines come from the gap showing the border colour through, so the
             rules stay correct at every breakpoint the grid reflows to. */}
         <Panel className="overflow-hidden bg-border">
-          <div className="grid grid-cols-2 gap-px lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-px md:grid-cols-3 lg:grid-cols-6">
             {tiles.map((t) => (
               <div key={t.label} className="bg-surface p-4">
                 <div className="flex items-center gap-1.5">
@@ -484,8 +504,7 @@ export default async function SecurityPage() {
             .filter(([key]) => key !== 'unknown')
             .map(([, label]) => label)
             .join(' · ')}
-          . Las
-          llamadas marcadas y bloqueadas también se ven en la{' '}
+          . Las llamadas marcadas y bloqueadas también se ven en la{' '}
           <Link
             href="/admin/audit?decision=blocked"
             className="font-semibold text-primary hover:underline"
