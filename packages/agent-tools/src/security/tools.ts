@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { applyMandate } from './mandate';
+import { loadMandates } from './mandate-store';
 import {
   type Decision,
   type RiskLevel,
@@ -80,7 +82,34 @@ export const securityReviewAction = registerTool({
       input: payload,
       surface,
     });
-    const decision = decide(classification, policy);
+    const doctrine = decide(classification, policy);
+
+    /**
+     * A DRY RUN THAT IGNORES MANDATES IS A DRY RUN THAT LIES.
+     *
+     * This tool exists so somebody can ask "what would happen if…" and get the
+     * real answer. Once a workspace can delegate — «puedes mandar correos a
+     * clientes sin preguntarme» — an explanation built from `decide()` alone
+     * says «te pediría confirmar» about something that would sail straight
+     * through, which is worse than not having the tool: it teaches people that
+     * the explanation and the behaviour are two different things.
+     *
+     * So the same three steps the enforcement path takes, in the same order.
+     * The read fails closed exactly as it does there — no mandates read means
+     * no mandates, and the answer falls back to the doctrine, which is the
+     * conservative direction for an explanation as well as for an action.
+     */
+    const mandates = await loadMandates(ctx.db, { toolId: input.toolId }).catch(() => []);
+    const outcome = applyMandate({
+      classification,
+      decision: doctrine,
+      tool: { id: input.toolId },
+      input: payload,
+      surface,
+      mandates,
+    });
+    const decision = outcome.decision;
+    const delegated = outcome.mandate !== null && doctrine !== decision;
 
     // Anything above low risk is recorded even when it sails through — that is
     // the whole posture: visible, not stopped.
@@ -109,6 +138,12 @@ export const securityReviewAction = registerTool({
       classification.reason,
       '',
       explanation,
+      ...(delegated
+        ? [
+            '',
+            `**Delegado:** un mandato vigente cubre esta acción, así que correría sin preguntar (${outcome.mandate?.id ?? 'sin id'}). Sin él, ${DECISION_TEXT[doctrine].toLowerCase()}`,
+          ]
+        : []),
     ].join('\n');
 
     return {

@@ -85,6 +85,12 @@ const SECTIONS: Section[] = [
         keywords: 'empresas cuentas clients companias contrapartes',
       },
       {
+        href: '/payments',
+        label: 'Cartera',
+        note: 'Quién debe, desde cuándo, y qué pagos están en disputa',
+        keywords: 'pagos cartera cobros abonos recaudo facturas payments dso mora vencida siigo',
+      },
+      {
         href: '/kb',
         label: 'Brain Knowledge',
         note: 'Lo que Cortex memorizó, fragmento por fragmento',
@@ -261,6 +267,12 @@ const SECTIONS: Section[] = [
         label: 'Seguridad',
         note: 'Qué se le impidió hacer al agente, y con qué regla',
         keywords: 'security seguridad bloqueos politicas riesgo',
+      },
+      {
+        href: '/admin/mandates',
+        label: 'Sin preguntar',
+        note: 'Qué puede hacer Cortex por su cuenta, y hasta cuándo',
+        keywords: 'mandatos mandates autonomia delegar permisos confianza sin preguntar firma',
       },
     ],
   },

@@ -7,6 +7,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
+  BadgeCheck,
   BarChart3,
   BookOpen,
   Briefcase,
@@ -34,6 +35,7 @@ import {
   Sprout,
   Users,
   UsersRound,
+  Wallet,
   Workflow,
   X,
 } from 'lucide-react';
@@ -105,6 +107,10 @@ const SECTIONS: NavSection[] = [
       // about a customer starts here and is followed into the mail, the meeting
       // or the deadline.
       { href: '/clients', label: 'Clientes', icon: Building2 },
+      // Cartera. En la sección diaria y no en Seguimiento porque no es un
+      // informe que se consulta al cerrar el mes: es la pregunta que alguien se
+      // hace el martes por la mañana, «¿quién nos debe y desde cuándo».
+      { href: '/payments', label: 'Cartera', icon: Wallet },
       { href: '/kb', label: 'Brain Knowledge', icon: BookOpen },
     ],
   },
@@ -155,6 +161,10 @@ const SECTIONS: NavSection[] = [
       { href: '/admin/usage', label: 'Uso', icon: BarChart3 },
       { href: '/admin/audit', label: 'Auditoría', icon: ScrollText },
       { href: '/admin/security', label: 'Seguridad', icon: ShieldCheck },
+      // Lo que Cortex puede hacer sin preguntar. Vive junto a Seguridad porque
+      // es la misma conversación vista desde el otro lado: una dice qué se le
+      // impidió, la otra qué se le permitió de antemano.
+      { href: '/admin/mandates', label: 'Sin preguntar', icon: BadgeCheck },
     ],
   },
 ];

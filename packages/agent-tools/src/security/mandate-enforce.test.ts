@@ -5,6 +5,7 @@ import { runTool } from '../registry';
 import type { ToolContext, ToolDef } from '../types';
 import { resetFrequencyCache } from './frequency';
 import { resetPolicyCache } from './store';
+import { securityReviewAction } from './tools';
 
 /**
  * El mandato ATRAVESANDO runTool, que es donde se decide de verdad.
@@ -315,5 +316,69 @@ describe('el mandato atravesando runTool', () => {
     await expect(
       runTool(payTool, { amount: 100, currency: 'USD' }, wrongCurrency),
     ).rejects.toBeInstanceOf(ConfirmationRequiredError);
+  });
+});
+
+/**
+ * EL ENSAYO Y LA APLICACIÓN NO PUEDEN CONTAR HISTORIAS DISTINTAS.
+ *
+ * `security.review_action` existe para que alguien pregunte «¿qué pasaría
+ * si…?» y reciba la respuesta de verdad. Nació antes que los mandatos y
+ * explicaba lo que haría `decide()` a solas, así que en un espacio con
+ * «puedes mandar correos a clientes» decía «te pediría confirmar» de algo que
+ * pasaría de largo.
+ *
+ * Eso es peor que no tener la herramienta: enseña que la explicación y el
+ * comportamiento son dos cosas distintas, y a partir de ahí nadie vuelve a
+ * creerle a ninguna de las dos.
+ */
+describe('el ensayo dice lo mismo que la aplicación', () => {
+  it('anuncia que un correo a cliente saldría sin preguntar cuando hay mandato', async () => {
+    const ctx = makeCtx({ mandates: [mandateRow({ covered_tool_ids: ['gmail.send_draft'] })] });
+    const review = (await securityReviewAction.handler(
+      { toolId: 'gmail.send_draft', input: CLIENT_MAIL, surface: 'web' },
+      ctx,
+    )) as { decision: string; markdown: string };
+
+    expect(review.decision).toBe('allow');
+    expect(review.markdown).toContain('Delegado');
+  });
+
+  it('sin mandato sigue anunciando la confirmación', async () => {
+    const ctx = makeCtx();
+    const review = (await securityReviewAction.handler(
+      { toolId: 'gmail.send_draft', input: CLIENT_MAIL, surface: 'web' },
+      ctx,
+    )) as { decision: string; markdown: string };
+
+    expect(review.decision).toBe('confirm');
+    expect(review.markdown).not.toContain('Delegado');
+  });
+
+  it('no promete que pasaría algo que el mandato no puede delegar', async () => {
+    // Sueldos SALIENDO de la empresa es `critical`, y ningún mandato la toca —
+    // ni el más amplio posible. El ensayo tiene que decir lo mismo que diría
+    // runTool: refusada. (Una LECTURA de nómina no sirve para este caso: el
+    // radio de una lectura no es un envío por mucho que el cuerpo lleve un
+    // destinatario, y ahí la respuesta correcta es que sí correría.)
+    const ctx = makeCtx({
+      mandates: [
+        mandateRow({ tool_patterns: ['gmail.*'], covered_tool_ids: ['gmail.send_draft'] }),
+      ],
+    });
+    const review = (await securityReviewAction.handler(
+      {
+        toolId: 'gmail.send_draft',
+        input: {
+          to: 'cfo@cliente.example',
+          body: 'Adjunto la nómina de agosto: Ana Gómez, salario mensual $12.400.000.',
+        },
+        surface: 'web',
+      },
+      ctx,
+    )) as { decision: string; markdown: string };
+
+    expect(review.decision).toBe('block');
+    expect(review.markdown).not.toContain('Delegado');
   });
 });
