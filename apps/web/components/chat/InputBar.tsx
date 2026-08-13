@@ -1,23 +1,53 @@
 'use client';
 
 import type { ScopeSpace } from '@/app/(chat)/chat/actions';
+import { TeachFlowDialog } from '@/components/browser/TeachFlowDialog';
+import {
+  MENTION_MIN_CHARS,
+  type PaletteGroup,
+  type PaletteItem,
+  type PaletteResponse,
+  STATIC_COMMAND_GROUP,
+  filterPalette,
+  flattenPalette,
+  mentionAtCaret,
+  paletteSize,
+  slashQuery,
+} from '@/lib/chat-palette-shape';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import {
+  AlarmClock,
   ArrowUp,
+  BarChart3,
+  BookOpen,
   Bot,
+  Boxes,
   Building2,
+  CalendarDays,
+  Car,
   ChevronDown,
   FileText,
+  GitBranch,
+  Globe,
+  Handshake,
   Layers,
+  Mail,
   Paperclip,
+  Server,
+  ShieldCheck,
+  Telescope,
   Terminal,
+  User,
+  Wallet,
+  Workflow,
+  Wrench,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachmentTray } from './AttachmentTray';
 import { ScopePicker, ScopeStrip } from './MemoryScope';
-import { type ScreenViewSession, ScreenViewButton, ScreenViewStrip } from './ScreenView';
-import { TeachFlowDialog } from '@/components/browser/TeachFlowDialog';
+import { ScreenViewButton, type ScreenViewSession, ScreenViewStrip } from './ScreenView';
 import { VoiceDictation } from './VoiceDictation';
 
 interface AgentInfo {
@@ -99,7 +129,10 @@ const CHAR_COUNT_THRESHOLD = 3500;
  *                    you where the answer came from.
  *   PIN A TOOL       The ranker chooses tools per turn and that choice is
  *                    measured; letting somebody pin one routes around the
- *                    measurement. Already argued at /api/chat/mentions.
+ *                    measurement. Already argued at /api/chat/mentions — and
+ *                    still true now that the `/` menu lists the catalogue: what
+ *                    it inserts is the SENTENCE somebody would have typed to
+ *                    ask for that tool, never the tool itself.
  *
  * ===========================================================================
  * BOTH MENUS EXPAND TO PLAIN TEXT
@@ -112,82 +145,69 @@ const CHAR_COUNT_THRESHOLD = 3500;
  * knows the shortcuts, and nothing extra to reason about when a turn goes
  * wrong. A command is a phrase somebody would have had to type; a mention is a
  * name they would have had to spell.
+ *
+ * ===========================================================================
+ * DE DÓNDE SALEN LAS FILAS, Y CUÁNTO CUESTAN
+ * ===========================================================================
+ * Los dos menús se pagan al revés a propósito, y la razón es lo acotada que
+ * está cada lista:
+ *
+ *   `/`  UNA petición al abrirse (`/api/chat/commands`), con `staleTime` de
+ *        cinco minutos, y a partir de ahí se filtra en memoria. Rutinas,
+ *        flujos, trámites, encargos y el catálogo de herramientas caben en unos
+ *        kilobytes y casi no cambian dentro de una conversación; volver a
+ *        buscarlos en el servidor a cada tecla serían siete consultas a
+ *        Supabase por letra y un menú que parpadea.
+ *   `@`  búsqueda en el servidor con debounce y dos letras mínimo, porque
+ *        clientes, personas, documentos y placas son miles de filas y crecen.
+ *        Traerlos enteros al navegador sería descargar el CRM para dibujar
+ *        cinco filas.
+ *
+ * La regla, dicha una vez: lo acotado se trae y se filtra aquí; lo ilimitado se
+ * busca allá. Ninguna de las dos mitades adivina — cada una hace lo que su
+ * tamaño permite.
  */
 
-interface Command {
-  name: string;
-  hint: string;
-  /** What lands in the composer. A trailing space means "keep typing here". */
-  expands: string;
+/**
+ * Los nueve comandos fijos, las secciones que llegan del servidor y el filtrado
+ * viven en lib/chat-palette-shape.ts, porque el filtrado es lógica pura con
+ * casos de borde (tildes, tope de la vista de reposo, una sección que falló) y
+ * la lógica pura se prueba en Node y no a mano en un menú.
+ */
+
+const PALETTE_ICONS: Record<string, typeof Terminal> = {
+  AlarmClock,
+  BarChart3,
+  BookOpen,
+  Boxes,
+  Building2,
+  CalendarDays,
+  Car,
+  FileText,
+  GitBranch,
+  Globe,
+  Handshake,
+  Layers,
+  Mail,
+  Server,
+  ShieldCheck,
+  Telescope,
+  Terminal,
+  User,
+  Wallet,
+  Workflow,
+  Wrench,
+};
+
+function paletteIcon(name: string): typeof Terminal {
+  return PALETTE_ICONS[name] ?? Wrench;
 }
 
-const COMMANDS: Command[] = [
-  {
-    name: '/vencimientos',
-    hint: 'Qué se vence y cuándo',
-    expands: '¿Qué documentos y compromisos se vencen en los próximos 30 días?',
-  },
-  {
-    name: '/placa',
-    hint: 'Consultar RUNT y SIMIT',
-    expands: 'Consulta la placa ',
-  },
-  {
-    name: '/informe',
-    hint: 'Generar y guardar un informe',
-    expands: 'Hazme el informe de vencimientos de este mes.',
-  },
-  {
-    name: '/grafica',
-    hint: 'Dibujar lo que se acaba de calcular',
-    expands: 'Gráfica ',
-  },
-  {
-    name: '/buscar',
-    hint: 'Buscar en Brain Knowledge',
-    expands: 'Busca en Brain Knowledge lo que tengamos sobre ',
-  },
-  {
-    name: '/rutina',
-    hint: 'Programar algo que se repita',
-    expands: 'Todos los lunes a las 8 de la mañana, ',
-  },
-  // Encargos and trámites, the two ways of handing over work that outlives the
-  // turn. Commands rather than buttons for exactly the reason argued above: a
-  // written command costs no room in the composer, and neither of these adds a
-  // capability the sentence alone would not have — `/encargo` expands to
-  // "Investígame " and a typed "investígame " reaches the same tool by the same
-  // route. What they buy is DISCOVERABILITY: nobody guesses that a chat can be
-  // handed a forty-minute job, and the `/` menu is where people look.
-  {
-    name: '/encargo',
-    hint: 'Que investigue algo por su cuenta',
-    expands: 'Investígame ',
-  },
-  {
-    name: '/tramite',
-    hint: 'Correr un trámite web ya aprendido',
-    expands: 'Corre el trámite ',
-  },
-  {
-    name: '/briefing',
-    hint: 'Estado del negocio desde HubSpot',
-    expands: '/briefing ',
-  },
-];
+/** Cinco minutos: lo que tarda en aparecer una rutina creada en otra pestaña. */
+const PALETTE_STALE_MS = 5 * 60 * 1000;
 
-interface MentionHit {
-  kind: 'client' | 'document' | 'space';
-  id: string;
-  label: string;
-  detail: string | null;
-}
-
-const MENTION_ICON = {
-  client: Building2,
-  document: FileText,
-  space: Layers,
-} as const;
+/** Lo que se espera entre dos teclas antes de ir a buscar menciones. */
+const MENTION_DEBOUNCE_MS = 140;
 
 const BRIEFING_COMMAND = '/briefing';
 
@@ -197,18 +217,6 @@ function expandBriefingCommand(value: string): string | null {
   const company = trimmed.slice(BRIEFING_COMMAND.length).trim();
   if (!company) return null;
   return `Fetch a deal health briefing for ${company}: search HubSpot for the company, get the most recent deal, list BANT signals present/missing, and summarize last 3 activities.`;
-}
-
-/** The `@word` being typed at the caret, if any. */
-function mentionAtCaret(text: string, caret: number): { query: string; start: number } | null {
-  const before = text.slice(0, caret);
-  const at = before.lastIndexOf('@');
-  if (at === -1) return null;
-  // Must start a word: `correo@empresa.com` is an address, not a mention.
-  if (at > 0 && !/\s/.test(before[at - 1] ?? '')) return null;
-  const query = before.slice(at + 1);
-  if (/\s/.test(query)) return null;
-  return { query, start: at };
 }
 
 export function InputBar({
@@ -227,8 +235,15 @@ export function InputBar({
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const [caret, setCaret] = useState(0);
-  const [hits, setHits] = useState<MentionHit[]>([]);
   const [active, setActive] = useState(0);
+  /**
+   * Qué disparador se cerró con Escape. Es una llave («@12», «/») y no un
+   * booleano a propósito: cerrar el menú no puede borrar lo tecleado, y sin
+   * recordar CUÁL se cerró la siguiente búsqueda con debounce lo volvía a abrir
+   * medio segundo después — así que no había forma de escribir «@» y un nombre
+   * a mano.
+   */
+  const [dismissed, setDismissed] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // The tray's own file dialog, lent to the paperclip. Null until the tray
   // exists, which is why the button appears with it and not before: there is no
@@ -245,40 +260,105 @@ export function InputBar({
   const pillDisabled = !!conversationId || agents.length <= 1;
 
   const mention = useMemo(() => mentionAtCaret(text, caret), [text, caret]);
-  const commandQuery = text.startsWith('/') && !text.includes(' ') ? text.toLowerCase() : null;
-  const commands = useMemo(
-    () => (commandQuery ? COMMANDS.filter((c) => c.name.startsWith(commandQuery)) : []),
-    [commandQuery],
-  );
+  const slash = useMemo(() => (mention ? null : slashQuery(text)), [mention, text]);
+  // El `@` gana cuando los dos podrían aplicar: se está tecleando un nombre
+  // dentro de algo que empezó con barra, y lo que importa es el nombre.
+  const trigger = mention ? `@${mention.start}` : slash !== null ? '/' : null;
 
-  const menuOpen = (mention !== null && hits.length > 0) || commands.length > 0;
-  const options: Array<{ key: string; run: () => void; node: React.ReactNode }> = [];
-
-  // Look up mentions as the person types, and never block the composer on it.
+  // Un disparador que desaparece limpia el pestillo: la próxima `@` abre menú.
   useEffect(() => {
-    if (!mention || mention.query.length < 2) {
-      setHits([]);
+    if (!trigger) setDismissed(null);
+  }, [trigger]);
+
+  /**
+   * El catálogo del `/`, UNA vez por conversación. `enabled` lo ata a que el
+   * menú esté abierto, así que un chat en el que nadie teclea una barra no
+   * cuesta ni una consulta.
+   */
+  const commands = useQuery<PaletteResponse>({
+    queryKey: ['chat-palette', agentSlug],
+    queryFn: async () => {
+      const res = await fetch(`/api/chat/commands?agent=${encodeURIComponent(agentSlug)}`);
+      if (!res.ok) throw new Error('commands');
+      return (await res.json()) as PaletteResponse;
+    },
+    enabled: slash !== null,
+    staleTime: PALETTE_STALE_MS,
+  });
+
+  // El término del `@`, retrasado. Se separa de `mention` para que la clave de
+  // la consulta cambie una vez por pausa y no una vez por tecla.
+  const [mentionTerm, setMentionTerm] = useState('');
+  useEffect(() => {
+    const typed = mention?.query ?? '';
+    if (typed.length < MENTION_MIN_CHARS) {
+      setMentionTerm('');
       return;
     }
-    let alive = true;
-    const timer = setTimeout(() => {
-      fetch(`/api/chat/mentions?q=${encodeURIComponent(mention.query)}`)
-        .then((r) => (r.ok ? r.json() : { hits: [] }))
-        .then((data: { hits?: MentionHit[] }) => {
-          if (alive) {
-            setHits(data.hits ?? []);
-            setActive(0);
-          }
-        })
-        .catch(() => {
-          if (alive) setHits([]);
-        });
-    }, 140);
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-    };
+    const timer = setTimeout(() => setMentionTerm(typed), MENTION_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [mention]);
+
+  const mentions = useQuery<PaletteResponse>({
+    queryKey: ['chat-mentions', mentionTerm],
+    queryFn: async () => {
+      const res = await fetch(`/api/chat/mentions?q=${encodeURIComponent(mentionTerm)}`);
+      if (!res.ok) throw new Error('mentions');
+      return (await res.json()) as PaletteResponse;
+    },
+    enabled: mentionTerm.length >= MENTION_MIN_CHARS,
+    staleTime: 30_000,
+    // Las filas de la letra anterior se quedan mientras llegan las de esta. Un
+    // menú que se vacía y se vuelve a llenar en cada tecla es un menú donde la
+    // fila que ibas a elegir se mueve debajo del cursor.
+    placeholderData: (previous) => previous,
+  });
+
+  /**
+   * Un fallo de red no puede parecerse a «no hay nada». Es la misma regla que
+   * cumplen las dos rutas por dentro con los errores de Supabase, sostenida
+   * hasta el final del cable.
+   */
+  const groups = useMemo<PaletteGroup[]>(() => {
+    if (mention) {
+      if (mention.query.length < MENTION_MIN_CHARS) return [];
+      if (mentions.isError) {
+        return [
+          {
+            id: 'menciones',
+            heading: 'Menciones',
+            icon: 'Building2',
+            items: [],
+            error: 'No pude buscar. Revisa la conexión.',
+          },
+        ];
+      }
+      return mentions.data?.groups ?? [];
+    }
+    if (slash === null) return [];
+    const fromServer = commands.isError
+      ? [
+          {
+            id: 'catalogo',
+            heading: 'Catálogo',
+            icon: 'Wrench',
+            items: [],
+            error: 'No pude cargar rutinas, flujos ni herramientas.',
+          },
+        ]
+      : (commands.data?.groups ?? []);
+    return filterPalette([STATIC_COMMAND_GROUP, ...fromServer], slash);
+  }, [mention, slash, mentions.data, mentions.isError, commands.data, commands.isError]);
+
+  const rows = useMemo(() => flattenPalette(groups), [groups]);
+  const menuOpen =
+    trigger !== null &&
+    dismissed !== trigger &&
+    (paletteSize(groups) > 0 || groups.some((group) => group.error));
+  // El resaltado vuelve arriba cuando cambia LO QUE SE VE. Clamping en vez de
+  // resetear en cada render: una lista que se acorta no puede dejar el índice
+  // apuntando al vacío, y Enter sobre el vacío no hace nada visible.
+  const activeRow = rows.length === 0 ? 0 : Math.min(active, rows.length - 1);
 
   const resize = useCallback(() => {
     const ta = textareaRef.current;
@@ -323,51 +403,27 @@ export function InputBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft]);
 
-  function applyMention(hit: MentionHit) {
-    if (!mention) return;
-    const before = text.slice(0, mention.start);
-    const after = text.slice(caret);
-    // The NAME, not the id: the next turn is a sentence a person could have
-    // typed, and nothing downstream has to know a menu was involved.
-    const inserted = `${hit.label} `;
-    put(`${before}${inserted}${after}`, before.length + inserted.length);
-    setHits([]);
-  }
+  // Otra consulta, otras filas: el resaltado vuelve a la primera. Las tres
+  // dependencias son señales de «cambió lo que se ve», no valores que el efecto
+  // lea — por eso el analizador las cree de más y por eso están.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: el reseteo se dispara por el cambio de consulta, no por el uso de un valor.
+  useEffect(() => setActive(0), [trigger, slash, mentionTerm]);
 
-  function applyCommand(command: Command) {
-    put(command.expands);
-  }
-
-  for (const command of commands) {
-    options.push({
-      key: command.name,
-      run: () => applyCommand(command),
-      node: (
-        <>
-          <Terminal className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-          <span className="font-mono text-[12.5px] font-semibold text-ink">{command.name}</span>
-          <span className="truncate text-[12px] text-ink-faint">{command.hint}</span>
-        </>
-      ),
-    });
-  }
-  if (mention) {
-    for (const hit of hits) {
-      const Icon = MENTION_ICON[hit.kind];
-      options.push({
-        key: `${hit.kind}:${hit.id}`,
-        run: () => applyMention(hit),
-        node: (
-          <>
-            <Icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-            <span className="truncate text-[12.5px] font-medium text-ink">{hit.label}</span>
-            {hit.detail && (
-              <span className="truncate text-[12px] text-ink-faint">{hit.detail}</span>
-            )}
-          </>
-        ),
-      });
+  /**
+   * Lo elegido aterriza como TEXTO. Una mención reemplaza el `@palabra` que se
+   * estaba tecleando; un comando reemplaza la línea entera. En ninguno de los
+   * dos casos queda colgado un identificador: el siguiente turno es una frase
+   * que una persona pudo haber escrito, y nada río abajo tiene que enterarse de
+   * que hubo un menú de por medio.
+   */
+  function applyItem(item: PaletteItem) {
+    if (mention) {
+      const before = text.slice(0, mention.start);
+      const after = text.slice(caret);
+      put(`${before}${item.expands}${after}`, before.length + item.expands.length);
+      return;
     }
+    put(item.expands);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -377,31 +433,34 @@ export function InputBar({
     if (!trimmed || disabled) return;
     onSend(trimmed);
     setText('');
-    setHits([]);
+    setDismissed(null);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (menuOpen && options.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActive((i) => (i + 1) % options.length);
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActive((i) => (i - 1 + options.length) % options.length);
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        options[active]?.run();
-        return;
-      }
+    if (menuOpen) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        setHits([]);
+        setDismissed(trigger);
         return;
+      }
+      if (rows.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setActive((i) => (Math.min(i, rows.length - 1) + 1) % rows.length);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setActive((i) => (Math.min(i, rows.length - 1) - 1 + rows.length) % rows.length);
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          const row = rows[activeRow];
+          if (row) applyItem(row.item);
+          return;
+        }
       }
     }
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -449,11 +508,15 @@ export function InputBar({
             and never a dot — see ScreenView.tsx.
           */}
           {screen && <ScreenViewStrip session={screen} />}
-          {menuOpen && options.length > 0 && (
+          {menuOpen && (
             /*
               A real listbox, not a styled div: arrow keys move `aria-activedescendant`
               and the textarea keeps focus, so somebody driving this from the
               keyboard never loses their place in what they were writing.
+
+              Los encabezados van como `role="presentation"`: son rótulos de
+              sección, no opciones, y un lector de pantalla que los cuente como
+              filas anuncia «14 opciones» donde hay nueve.
             */
             <ul
               id="composer-menu"
@@ -465,29 +528,76 @@ export function InputBar({
               // Two things by one name is how somebody looks for the filter in
               // the `@` menu.
               aria-label={mention ? 'Menciones' : 'Comandos'}
-              className="scroll-slim absolute bottom-full z-40 mb-2 max-h-64 w-full overflow-y-auto rounded-card border border-border bg-surface p-1.5 shadow-pop"
+              className="scroll-slim absolute bottom-full z-40 mb-2 max-h-80 w-full overflow-y-auto rounded-card border border-border bg-surface p-1.5 shadow-pop"
             >
-              {options.map((option, i) => (
-                // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard handling lives on the textarea, which keeps focus.
-                <li
-                  key={option.key}
-                  id={`composer-option-${i}`}
-                  role="option"
-                  aria-selected={i === active}
-                  onMouseEnter={() => setActive(i)}
-                  onMouseDown={(e) => {
-                    // Before blur, so the caret position is still valid.
-                    e.preventDefault();
-                    option.run();
-                  }}
-                  className={clsx(
-                    'flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-1.5',
-                    i === active && 'bg-primary-soft',
-                  )}
-                >
-                  {option.node}
-                </li>
-              ))}
+              {groups.map((group) => {
+                const Icon = paletteIcon(group.icon);
+                return (
+                  <li key={group.id} role="presentation">
+                    <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wide text-ink-faint">
+                      <Icon className="h-3 w-3 shrink-0" aria-hidden />
+                      {group.heading}
+                    </div>
+                    {group.error && (
+                      // Nunca una lista vacía en lugar de un fallo: la sección
+                      // dice qué no se pudo leer y sigue en su sitio.
+                      <p className="px-2.5 pb-1.5 text-[12px] leading-snug text-ink-muted">
+                        {group.error}
+                      </p>
+                    )}
+                    <ul role="presentation">
+                      {group.items.map((item) => {
+                        const index = rows.findIndex(
+                          (row) => row.groupId === group.id && row.item.id === item.id,
+                        );
+                        const selected = index === activeRow;
+                        return (
+                          // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard handling lives on the textarea, which keeps focus.
+                          <li
+                            key={item.id}
+                            id={`composer-option-${index}`}
+                            role="option"
+                            aria-selected={selected}
+                            onMouseEnter={() => setActive(index)}
+                            onMouseDown={(e) => {
+                              // Before blur, so the caret position is still valid.
+                              e.preventDefault();
+                              applyItem(item);
+                            }}
+                            className={clsx(
+                              'flex cursor-pointer items-baseline gap-2 rounded-sm px-2.5 py-1.5',
+                              selected && 'bg-primary-soft',
+                            )}
+                          >
+                            {/* Las dos truncan y las dos llevan `min-w-0`: sin
+                                él un flex-item no baja de su ancho de contenido
+                                y una frase larga empuja la pista fuera de la
+                                caja en vez de cortarse. */}
+                            <span
+                              className={clsx(
+                                'min-w-0 truncate text-[12.5px] text-ink',
+                                item.mono ? 'font-mono font-semibold' : 'font-medium',
+                              )}
+                            >
+                              {item.label}
+                            </span>
+                            {item.hint && (
+                              <span className="min-w-0 shrink truncate text-[12px] text-ink-faint">
+                                {item.hint}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {group.more !== undefined && (
+                      <p className="px-2.5 pb-1 text-[11px] text-ink-faint">
+                        y {group.more} más — sigue escribiendo
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
@@ -514,7 +624,9 @@ export function InputBar({
               role="combobox"
               aria-expanded={menuOpen}
               aria-controls={menuOpen ? 'composer-menu' : undefined}
-              aria-activedescendant={menuOpen ? `composer-option-${active}` : undefined}
+              aria-activedescendant={
+                menuOpen && rows.length > 0 ? `composer-option-${activeRow}` : undefined
+              }
               aria-autocomplete="list"
               className="scroll-slim block max-h-[200px] min-h-[24px] w-full resize-none bg-transparent px-4 pt-3.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
             />
