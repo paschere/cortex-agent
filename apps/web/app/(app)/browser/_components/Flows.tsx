@@ -1,11 +1,13 @@
 'use client';
 
+import { AccountForm } from '@/components/browser/AccountForm';
 import { type ChallengeHandoff, ChallengeHelper } from '@/components/browser/ChallengeHelper';
 import { DeliveryFields } from '@/components/browser/DeliveryFields';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Panel } from '@/components/ui/panel';
 import { Provenance } from '@/components/ui/provenance';
+import { describeAccountNeed } from '@/lib/browser-login';
 import {
   ACTION_LABEL,
   DELIVER_TO_LABEL,
@@ -214,6 +216,19 @@ function Row({
               </span>
             )}
 
+            {/* La falta de una cuenta no es un detalle del trámite: es la
+                razón por la que va a preguntar en vez de correr. Se dice en la
+                fila, ámbar, junto a lo demás que exige una decisión. */}
+            {flow.needsCredential && (
+              <span
+                className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-amber"
+                title="El portal pide iniciar sesión y este trámite no tiene una cuenta vinculada. Ábrelo para ponérsela."
+              >
+                <KeyRound className="h-3 w-3" aria-hidden="true" />
+                le falta la cuenta del portal
+              </span>
+            )}
+
             {flow.delivery.deliverTo !== 'none' && (
               <span
                 className="inline-flex items-center gap-1 text-[11.5px] font-medium text-ink"
@@ -278,6 +293,14 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
    * session that no longer exists is worse than no offer.
    */
   const [handoff, setHandoff] = useState<ChallengeHandoff | null>(null);
+  /**
+   * Acabamos de vincularle la cuenta aquí mismo.
+   *
+   * Sin esto el bloque desaparece en cuanto la lista se recarga —porque
+   * `needsCredential` ya es falso— y la persona que acaba de teclear una
+   * contraseña ve la caja esfumarse sin que nada le diga que salió bien.
+   */
+  const [justLinked, setJustLinked] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/browser/flows/${flow.id}`);
@@ -343,6 +366,31 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
         <p className="bg-rose-soft/60 px-5 py-3 text-[12.5px] leading-relaxed text-rose">
           {flow.lastError}
         </p>
+      )}
+
+      {/* Lo primero, encima de «correrlo ahora», porque correrlo ahora no va a
+          funcionar: el motor se niega antes de abrir un navegador cuando el
+          trámite necesita una sesión y no tiene con qué crearla. Abrir la
+          tarjeta de un trámite al que le falta la cuenta es, casi siempre,
+          exactamente el momento en que alguien sabe con cuál entró. */}
+      {(flow.needsCredential || justLinked) && detail && (
+        <div className="p-5">
+          <AccountForm
+            need={describeAccountNeed({
+              steps: detail.flow.steps,
+              startUrl: flow.startUrl,
+              verificationSaidLogin: true,
+            })}
+            startUrl={flow.startUrl}
+            flowName={flow.name}
+            flowId={flow.id}
+            onLinked={() => {
+              setJustLinked(true);
+              void load();
+              onChanged();
+            }}
+          />
+        </div>
       )}
 
       <div className="p-5">

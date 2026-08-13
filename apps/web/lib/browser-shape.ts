@@ -297,6 +297,12 @@ export interface FlowSummary {
   version: number;
   verifiedAt: string | null;
   hasCredential: boolean;
+  /**
+   * El sitio pide una sesión que este trámite no sabe crear y no tiene cuenta
+   * vinculada: va a preguntar en vez de correr. Lo calcula el GET de
+   * `api/browser/flows` como `loginRequired && !credentialId`.
+   */
+  needsCredential: boolean;
   variables: { name: string; label: string; example: string; required: boolean }[];
   stepCount: number;
   /** Qué produce y dónde llega. See migration 0093. */

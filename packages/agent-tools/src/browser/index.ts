@@ -26,7 +26,11 @@ export {
 } from './client';
 // Renamed on the way out: `Classification` is already the security layer's
 // word for a different thing (security/policy.ts), and the barrel is flat.
-export { classifyFailure, type Classification as FailureClassification } from './classify';
+export {
+  classifyFailure,
+  hasLoginSteps,
+  type Classification as FailureClassification,
+} from './classify';
 export { addSpend, costOf, INPUT_USD_PER_MTOK, OUTPUT_USD_PER_MTOK } from './cost';
 export {
   createCredential,

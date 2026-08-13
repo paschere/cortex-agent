@@ -4,6 +4,7 @@ import { CaptureContract } from '@/components/privacy/CaptureContract';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Panel } from '@/components/ui/panel';
+import { type AccountNeed, describeAccountNeed } from '@/lib/browser-login';
 import {
   DEFAULT_DELIVERY,
   EFFECT_LABEL,
@@ -36,6 +37,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AccountForm } from './AccountForm';
 import { DeliveryFields } from './DeliveryFields';
 import { StepEditor } from './StepEditor';
 
@@ -111,7 +113,18 @@ type Stage =
   | { name: 'recording'; seconds: number; frames: number; paused: boolean }
   | { name: 'reading' }
   | { name: 'review'; proposal: Proposal; warnings: string[]; frames: number; costUsd: number }
-  | { name: 'saving' };
+  | { name: 'saving' }
+  /**
+   * Guardado, y el portal pidió entrar.
+   *
+   * Existe como paso propio porque la verificación es la que descubre la
+   * puerta: la corrida de prueba terminó en una pantalla de acceso y el motor
+   * lo clasificó como `needs-login`. La persona que enseñó el trámite todavía
+   * está aquí y todavía se acuerda de con qué cuenta entró; diez minutos
+   * después, o en la corrida de las 3am, esa misma pregunta es un ticket de
+   * soporte. Ver `needsCredential` en `api/browser/flows/route.ts`.
+   */
+  | { name: 'account'; flowId: string; need: AccountNeed; startUrl: string; saved: SavedFlow };
 
 export function TeachFlow({
   first = false,
@@ -128,6 +141,14 @@ export function TeachFlow({
   const [error, setError] = useState<string | null>(null);
   const [sample, setSample] = useState<Record<string, string>>({});
   const [delivery, setDelivery] = useState<FlowDelivery>(DEFAULT_DELIVERY);
+  /**
+   * La cuenta que se guardó en la revisión, si se guardó una.
+   *
+   * Va en el cuerpo del POST para que la corrida de prueba —la que decide si
+   * esto queda PROBADO o PROPUESTO— se haga con la credencial ya puesta.
+   * Guardarla después sería probar el trámite sin lo único que le faltaba.
+   */
+  const [credentialId, setCredentialId] = useState<string | null>(null);
   const recorder = useRef<RecorderHandle | null>(null);
 
   const finish = useCallback(
@@ -208,11 +229,14 @@ export function TeachFlow({
         frames: stage.frames,
         costUsd: stage.costUsd,
         delivery,
+        credentialId,
       }),
     });
     const payload = (await response.json()) as {
+      id?: string;
       message?: string;
       verified?: boolean;
+      needsCredential?: boolean;
       error?: string;
     };
     if (!response.ok) {
@@ -222,16 +246,47 @@ export function TeachFlow({
       setStage(stage);
       return;
     }
-    setStage({ name: 'idle' });
     setHint('');
     setDelivery(DEFAULT_DELIVERY);
     noteTaught();
-    onSaved({
+    const saved: SavedFlow = {
       name: stage.proposal.name,
       message: payload.message ?? 'Guardado.',
       verified: payload.verified ?? false,
-    });
-  }, [stage, sample, delivery, onSaved]);
+    };
+
+    // El portal pidió entrar durante la prueba y nadie le ha dado una cuenta.
+    // Se pregunta aquí, sin salir de la pantalla, en vez de dejarlo para el
+    // día en que el trámite corra solo.
+    if (payload.needsCredential && payload.id && !credentialId) {
+      setStage({
+        name: 'account',
+        flowId: payload.id,
+        startUrl: stage.proposal.startUrl,
+        need: describeAccountNeed({
+          steps: stage.proposal.steps,
+          startUrl: stage.proposal.startUrl,
+          verificationSaidLogin: true,
+        }),
+        saved,
+      });
+      return;
+    }
+
+    setStage({ name: 'idle' });
+    setCredentialId(null);
+    onSaved(saved);
+  }, [stage, sample, delivery, credentialId, onSaved]);
+
+  /** Cerrar el paso de la cuenta, se haya guardado una o no. */
+  const finishAccount = useCallback(
+    (saved: SavedFlow) => {
+      setStage({ name: 'idle' });
+      setCredentialId(null);
+      onSaved(saved);
+    },
+    [onSaved],
+  );
 
   if (!canRecordTab()) {
     return (
@@ -398,7 +453,35 @@ export function TeachFlow({
           onChange={(proposal) => setStage({ ...stage, proposal })}
           onDiscard={() => setStage({ name: 'idle' })}
           onSave={() => void save()}
+          onCredential={setCredentialId}
         />
+      )}
+
+      {stage.name === 'account' && (
+        <div className="p-5 sm:p-6">
+          <h2 className="text-[15px] font-semibold text-ink">
+            Guardado. Falta una cosa: la cuenta
+          </h2>
+          <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
+            {stage.saved.message}
+          </p>
+          <div className="mt-4">
+            <AccountForm
+              need={stage.need}
+              startUrl={stage.startUrl}
+              flowName={stage.saved.name}
+              flowId={stage.flowId}
+              onLinked={() =>
+                finishAccount({
+                  ...stage.saved,
+                  message: `${stage.saved.message} Le vinculé la cuenta: la próxima corrida ya entra sola.`,
+                })
+              }
+              onSkip={() => finishAccount(stage.saved)}
+              skipLabel="Dejarlo así por ahora"
+            />
+          </div>
+        </div>
       )}
     </Panel>
   );
@@ -533,6 +616,7 @@ function Review({
   onChange,
   onDiscard,
   onSave,
+  onCredential,
 }: {
   proposal: Proposal;
   warnings: string[];
@@ -545,10 +629,17 @@ function Review({
   onChange: (next: Proposal) => void;
   onDiscard: () => void;
   onSave: () => void;
+  onCredential: (id: string | null) => void;
 }) {
   // Recomputed as the URL is edited: correcting a mistyped host should change
   // the advice, not leave a stale banner arguing about the old one.
   const connected = alreadyConnected(proposal.startUrl);
+
+  // Lo mismo, y por lo mismo: corregir la dirección puede cambiar el veredicto
+  // sobre la cuenta, y un aviso que discute con la URL vieja es peor que no
+  // tenerlo. Se pregunta ANTES de guardar para que la corrida de prueba se
+  // haga ya con la credencial puesta.
+  const need = describeAccountNeed({ steps: proposal.steps, startUrl: proposal.startUrl });
 
   // The same function the POST route runs on what arrives. Checked here so the
   // refusal happens next to the control that caused it, and there so that it
@@ -632,6 +723,24 @@ function Review({
           </p>
         )}
       </div>
+
+      {/* La cuenta, si hace falta, preguntada aquí y no dentro de seis semanas.
+          Va arriba del todo porque es una precondición: sin ella el trámite no
+          es que salga mal, es que no arranca. Y va antes de guardar para que la
+          corrida de prueba —la que decide PROBADO o PROPUESTO— ya la lleve. */}
+      {need.needed && (
+        <div className="p-5">
+          <AccountForm
+            need={need}
+            startUrl={proposal.startUrl}
+            flowName={proposal.name}
+            onLinked={onCredential}
+          />
+          {/* Sin botón de «ahora no»: aquí saltárselo es simplemente no
+              llenarlo y darle a Guardar abajo. Un botón de descarte al lado de
+              un formulario que ya se puede ignorar es una decisión inventada. */}
+        </div>
+      )}
 
       {/* The variables are the reason a recording becomes a procedure, so they
           get their own block at the top rather than living inside the steps. */}

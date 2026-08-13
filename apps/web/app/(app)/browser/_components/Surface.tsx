@@ -1,13 +1,13 @@
 'use client';
 
+import { type SavedFlow, TeachFlow } from '@/components/browser/TeachFlow';
 import { Button } from '@/components/ui/button';
 import { Panel } from '@/components/ui/panel';
-import { MODULE, type FlowSummary } from '@/lib/browser-shape';
+import { type FlowSummary, MODULE } from '@/lib/browser-shape';
 import { clsx } from 'clsx';
 import { AlertTriangle, CheckCircle2, Loader2, Video, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type Health, health } from '../_lib/flow-view';
-import { TeachFlow, type SavedFlow } from '@/components/browser/TeachFlow';
 import { Flows } from './Flows';
 
 /**
@@ -38,20 +38,24 @@ import { Flows } from './Flows';
  * panel repeating the sentence the panel below it already says.
  */
 
-type Filter = 'todos' | 'probados' | 'propuestos' | 'problema';
+type Filter = 'todos' | 'probados' | 'propuestos' | 'problema' | 'sin-cuenta';
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'todos', label: 'Todos' },
   { id: 'problema', label: 'Con problema' },
   { id: 'probados', label: 'Probados' },
   { id: 'propuestos', label: 'Propuestos' },
+  // Un grupo aparte porque su arreglo es distinto de todos los demás: no hay
+  // nada que corregir en los pasos, falta un dato que sólo tiene una persona.
+  { id: 'sin-cuenta', label: 'Sin cuenta' },
 ];
 
-const MATCHES: Record<Filter, (h: Health) => boolean> = {
+const MATCHES: Record<Filter, (flow: FlowSummary, h: Health) => boolean> = {
   todos: () => true,
-  problema: (h) => h === 'trouble',
-  probados: (h) => h === 'proven',
-  propuestos: (h) => h === 'proposed',
+  problema: (_flow, h) => h === 'trouble',
+  probados: (_flow, h) => h === 'proven',
+  propuestos: (_flow, h) => h === 'proposed',
+  'sin-cuenta': (flow) => flow.needsCredential,
 };
 
 interface Notice {
@@ -91,11 +95,12 @@ export function Surface() {
       proposed,
       trouble,
       credential: all.filter((f) => f.hasCredential).length,
+      needsCredential: all.filter((f) => f.needsCredential).length,
     };
   }, [flows]);
 
   const visible = useMemo(
-    () => (flows ?? []).filter((flow) => MATCHES[filter](health(flow))),
+    () => (flows ?? []).filter((flow) => MATCHES[filter](flow, health(flow))),
     [flows, filter],
   );
 
@@ -152,14 +157,20 @@ export function Surface() {
           tone={counts.proposed > 0 ? 'amber' : 'ink'}
           sub={counts.proposed > 0 ? 'nadie los ha visto funcionar' : 'todos reprodujeron'}
         />
+        {/* El cuarto contador solía ser inerte: decía cuántos guardan una clave,
+            que no es una pregunta que nadie tenga. La que sí se tiene es la
+            contraria — a cuántos les falta —, porque ésos no fallan, se
+            detienen a preguntar, y la respuesta la tiene una persona. */}
         <Stat
-          label="Con credencial"
-          value={counts.credential}
-          tone="ink"
+          label={counts.needsCredential > 0 ? 'Sin cuenta' : 'Con credencial'}
+          value={counts.needsCredential > 0 ? counts.needsCredential : counts.credential}
+          tone={counts.needsCredential > 0 ? 'amber' : 'ink'}
           sub={
-            counts.credential > 0
-              ? 'entran con una clave de la empresa'
-              : 'ninguno guarda una clave'
+            counts.needsCredential > 0
+              ? 'el portal les pide entrar y no tienen con qué'
+              : counts.credential > 0
+                ? 'entran con una clave de la empresa'
+                : 'ninguno guarda una clave'
           }
         />
       </Panel>

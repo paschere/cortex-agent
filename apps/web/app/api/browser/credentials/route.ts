@@ -26,8 +26,16 @@ export const dynamic = 'force-dynamic';
 export async function GET(): Promise<NextResponse> {
   const session = await requireSession();
   const db = getOrgScopedClient(session.organization.id);
-  // Names, hosts and dates. Never a value.
-  return NextResponse.json({ credentials: await listCredentials(db) });
+  return NextResponse.json({
+    // Names, hosts and dates. Never a value.
+    credentials: await listCredentials(db),
+    // Whether the POST below would accept anything from this person, answered
+    // BEFORE they are shown a password field rather than after they have typed
+    // one. A form that collects a company password and then says "you are not
+    // allowed" has already made somebody type a secret for nothing, and the
+    // next thing they do is send it to an admin over WhatsApp.
+    canSave: session.role === 'org_admin',
+  });
 }
 
 interface Body {
