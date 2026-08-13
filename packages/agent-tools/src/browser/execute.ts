@@ -27,7 +27,7 @@ import {
   startRun,
   writeVersion,
 } from './store';
-import type { Flow, ModelSpend, Step, StepOutcome } from './types';
+import type { BrowserHandoff, Flow, ModelSpend, Step, StepOutcome } from './types';
 import { EMPTY_SPEND } from './types';
 
 /**
@@ -113,6 +113,12 @@ export interface RunOutcome {
    * with the flow, nothing was retried, and the answer is a person's to give.
    */
   pendingQuestion?: 'credential';
+  /**
+   * The portal stopped to ask whether we are a person, and the tab is still
+   * open waiting for one. Only ever set alongside `failureKind: 'needs-human'`,
+   * and only for a few minutes — see `BrowserHandoff`.
+   */
+  handoff?: BrowserHandoff;
 }
 
 /**
@@ -522,6 +528,10 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
       output: result.output,
       durationMs: result.durationMs,
       spend: EMPTY_SPEND,
+      // Carried out only when the browser really did keep the tab. The service
+      // declines to hold one when it has no room, and then this is a plain
+      // failure with a sentence rather than an offer that cannot be honoured.
+      ...(verdict.kind === 'needs-human' && result.handoff ? { handoff: result.handoff } : {}),
     };
   }
 

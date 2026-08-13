@@ -225,6 +225,24 @@ export interface ReplayResponse {
     evidence: FailureEvidence;
     snapshot: PageSnapshot;
   };
+  /**
+   * The browser is still open, on a bot check, waiting for a person.
+   *
+   * NOT PERSISTED ANYWHERE, deliberately. The tab behind it is swept after a
+   * few minutes of nobody coming, so a row in the database would outlive the
+   * thing it points at — and a button offering to unlock a session that no
+   * longer exists is worse than no button. It is handed to whoever asked for
+   * the run and used, or lost, right there.
+   */
+  handoff?: BrowserHandoff;
+}
+
+export interface BrowserHandoff {
+  sessionId: string;
+  reason: 'bot-check';
+  /** The step to carry on from, so nothing already done is repeated. */
+  fromIndex: number;
+  expiresAt: string;
 }
 
 /**
