@@ -8,6 +8,7 @@ import {
 } from '@/lib/conversation-surface';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
+import { mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { MessagesSquare } from 'lucide-react';
 import Link from 'next/link';
@@ -60,7 +61,7 @@ export default async function ConversationsPage({
   // type so a title search for "50%" is not read as a pattern.
   if (q) query = query.ilike('title', `%${q.replace(/[%_\\]/g, '\\$&')}%`);
 
-  const { data } = await query;
+  const data = mustReadList(await query, 'las conversaciones de este espacio');
 
   // Google Chat and routines share their stored `surface` with another origin,
   // so the last narrowing has to happen here on the derived value.

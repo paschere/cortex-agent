@@ -20,7 +20,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <div className="flex h-screen overflow-hidden bg-canvas">
           <Sidebar role={user.role} counts={counts} />
           <div className="flex min-w-0 flex-1 flex-col">
-            <Topbar email={user.email} waiting={counts.approvals} />
+            <Topbar email={user.email} />
             <main className="scroll-slim flex-1 overflow-y-auto">
               <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
             </main>

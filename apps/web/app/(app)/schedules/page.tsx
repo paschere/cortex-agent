@@ -1,6 +1,7 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { requireSession } from '@/lib/session';
+import { mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { clsx } from 'clsx';
 import { AlarmClock } from 'lucide-react';
@@ -17,18 +18,21 @@ export default async function SchedulesPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  const { data: rows } = await db
-    .from('scheduled_jobs')
-    .select(
-      'id, user_id, name, kind, tool_id, instruction, schedule_kind, cron, timezone, run_at, status, next_run_at, last_run_at, allow_unattended_writes, notify_email, conversation_id, recipients, is_global, scheduled_job_runs(id, status, started_at, finished_at, output, error)',
-    )
-    // Own routines + every global (team-wide) routine.
-    .or(`user_id.eq.${user.id},is_global.eq.true`)
-    .order('created_at', { ascending: false })
-    .order('started_at', { referencedTable: 'scheduled_job_runs', ascending: false })
-    .limit(10, { foreignTable: 'scheduled_job_runs' });
+  const rows = mustReadList<Record<string, unknown>>(
+    await db
+      .from('scheduled_jobs')
+      .select(
+        'id, user_id, name, kind, tool_id, instruction, schedule_kind, cron, timezone, run_at, status, next_run_at, last_run_at, allow_unattended_writes, notify_email, conversation_id, recipients, is_global, scheduled_job_runs(id, status, started_at, finished_at, output, error)',
+      )
+      // Own routines + every global (team-wide) routine.
+      .or(`user_id.eq.${user.id},is_global.eq.true`)
+      .order('created_at', { ascending: false })
+      .order('started_at', { referencedTable: 'scheduled_job_runs', ascending: false })
+      .limit(10, { foreignTable: 'scheduled_job_runs' }),
+    'las rutinas',
+  );
 
-  const jobs: ScheduledJob[] = (rows ?? []).map((r) => ({
+  const jobs: ScheduledJob[] = rows.map((r) => ({
     id: r.id as string,
     name: r.name as string,
     kind: r.kind as ScheduledJob['kind'],
@@ -124,7 +128,11 @@ export default async function SchedulesPage() {
             <div
               className={clsx(
                 'stat-num mt-1 truncate text-[20px] leading-none',
-                s.tone === 'emerald' ? 'text-emerald' : s.tone === 'rose' ? 'text-rose' : 'text-ink',
+                s.tone === 'emerald'
+                  ? 'text-emerald'
+                  : s.tone === 'rose'
+                    ? 'text-rose'
+                    : 'text-ink',
               )}
               title={s.value}
             >

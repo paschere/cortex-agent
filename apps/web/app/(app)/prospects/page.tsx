@@ -1,5 +1,6 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { requireSession } from '@/lib/session';
+import { mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { Radar } from 'lucide-react';
 import { ProspectBoard } from './_components/ProspectBoard';
@@ -45,13 +46,16 @@ export default async function ProspectsPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  const { data } = await db
-    .from('growth_signals')
-    .select(
-      'id, company, role_title, url, source, summary, region, status, contact_name, contact_title, contact_path, contact_confidence, created_at, reviewed_at, reviewed_by',
-    )
-    .order('created_at', { ascending: false })
-    .limit(MAX_ROWS);
+  const data = mustReadList(
+    await db
+      .from('growth_signals')
+      .select(
+        'id, company, role_title, url, source, summary, region, status, contact_name, contact_title, contact_path, contact_confidence, created_at, reviewed_at, reviewed_by',
+      )
+      .order('created_at', { ascending: false })
+      .limit(MAX_ROWS),
+    'los prospectos',
+  );
 
   const rows = (data ?? []) as unknown as SignalRow[];
 

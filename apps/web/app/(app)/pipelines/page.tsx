@@ -1,10 +1,11 @@
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
-import Link from 'next/link';
-import { Workflow, Play, Hash, Clock, UserCheck, Plus, Archive, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { requireSession } from '@/lib/session';
+import { mustReadList } from '@/lib/supabase/read';
+import { getOrgScopedClient } from '@/lib/supabase/service';
+import { Archive, ChevronRight, Clock, Hash, Play, Plus, UserCheck, Workflow } from 'lucide-react';
+import Link from 'next/link';
 import { PipelineCardMenu } from './_components/PipelineCardMenu';
 
 interface ParamDef {
@@ -36,12 +37,15 @@ export const dynamic = 'force-dynamic';
 export default async function PipelinesPage() {
   const user = await requireSession();
   const sb = getOrgScopedClient(user.organization.id);
-  const { data } = await sb
-    .from('pipelines')
-    .select('id, slug, name, description, emoji, params, steps, times_run, last_run_at, archived')
-    .order('times_run', { ascending: false });
+  const data = mustReadList(
+    await sb
+      .from('pipelines')
+      .select('id, slug, name, description, emoji, params, steps, times_run, last_run_at, archived')
+      .order('times_run', { ascending: false }),
+    'los flujos de este espacio',
+  );
 
-  const all = (data ?? []) as unknown as PipelineRow[];
+  const all = data as unknown as PipelineRow[];
   const pipelines = all.filter((p) => !p.archived);
   const archived = all.filter((p) => p.archived);
 
@@ -135,7 +139,9 @@ function PipelineCard({ p }: { p: PipelineRow }) {
           </div>
 
           {p.description && (
-            <p className="line-clamp-2 text-[12.5px] leading-snug text-ink-muted">{p.description}</p>
+            <p className="line-clamp-2 text-[12.5px] leading-snug text-ink-muted">
+              {p.description}
+            </p>
           )}
 
           {/* Step track: one mark per step, amber = a person has to decide. */}
