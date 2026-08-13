@@ -6,6 +6,7 @@ import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { readWaitingIndex } from '@/lib/waiting';
 import { readOnboarding } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
@@ -22,6 +23,23 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { WaitingIndex } from './_components/WaitingIndex';
+
+/**
+ * INICIO ES «LO QUE TE ESPERA», NO UN TABLERO.
+ *
+ * Aquí aterriza todo el mundo: `/` redirige a esta ruta. Hasta ahora contaba
+ * aprobaciones y prospectos y dejaba fuera tres colas enteras — vencimientos,
+ * correos redactados y encargos atascados — que los crons nocturnos llenan
+ * solos y que nadie ve hasta que abre la pantalla donde cayeron. Un borrador
+ * puede llevar nueve días ahí sin que nada lo diga.
+ *
+ * Lo primero de la página es una FRASE, no una cuadrícula: «Tres cosas te
+ * esperan y una lleva nueve días». Se escribe con reglas en `waiting-shape.ts`
+ * y se prueba caso por caso; ningún modelo interviene, porque esta pantalla se
+ * dibuja en cada carga y una frase generada sería cara, lenta y distinta cada
+ * vez para los mismos datos.
+ */
 
 export const dynamic = 'force-dynamic';
 
@@ -65,54 +83,49 @@ export default async function DashboardPage() {
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
-  const nowIso = new Date().toISOString();
 
-  const [toolCallsRes, signalsRes, approvalsRes, routinesRes, runsRes, convsRes] =
-    await Promise.all([
-      sb
-        .from('audit_events')
-        .select('id', { count: 'exact', head: true })
-        // Both are bookkeeping rows, not tool calls: counting them would make
-        // approving something look like running two things.
-        .not('tool_id', 'in', '("__agent_turn","__approval_decision")')
-        .gte('created_at', todayStart.toISOString()),
-      sb.from('growth_signals').select('id', { count: 'exact', head: true }).eq('status', 'new'),
-      sb
-        .from('mcp_pending_actions')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .is('decision', null)
-        .gt('expires_at', nowIso),
-      sb
-        .from('scheduled_jobs')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('status', 'active'),
-      sb
-        .from('scheduled_job_runs')
-        .select('id, status, started_at, output, error, scheduled_jobs!inner(name, user_id)')
-        .eq('scheduled_jobs.user_id', user.id)
-        .order('started_at', { ascending: false })
-        .limit(6),
-      sb
-        .from('conversations')
-        .select('id, title, updated_at, agents(name)')
-        .eq('user_id', user.id)
-        .neq('surface', 'mcp')
-        .order('updated_at', { ascending: false })
-        .limit(5),
-    ]);
+  const [waiting, toolCallsRes, signalsRes, routinesRes, runsRes, convsRes] = await Promise.all([
+    // El índice de las cuatro colas. Los conteos salen de `countNavSignals`,
+    // el mismo que dibuja los badges del menú, así que la barra lateral y
+    // esta pantalla no pueden discrepar sobre cuánto trabajo hay parado.
+    readWaitingIndex(user.organization.id, user.id),
+    sb
+      .from('audit_events')
+      .select('id', { count: 'exact', head: true })
+      // Both are bookkeeping rows, not tool calls: counting them would make
+      // approving something look like running two things.
+      .not('tool_id', 'in', '("__agent_turn","__approval_decision")')
+      .gte('created_at', todayStart.toISOString()),
+    sb.from('growth_signals').select('id', { count: 'exact', head: true }).eq('status', 'new'),
+    sb
+      .from('scheduled_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('status', 'active'),
+    sb
+      .from('scheduled_job_runs')
+      .select('id, status, started_at, output, error, scheduled_jobs!inner(name, user_id)')
+      .eq('scheduled_jobs.user_id', user.id)
+      .order('started_at', { ascending: false })
+      .limit(6),
+    sb
+      .from('conversations')
+      .select('id, title, updated_at, agents(name)')
+      .eq('user_id', user.id)
+      .neq('surface', 'mcp')
+      .order('updated_at', { ascending: false })
+      .limit(5),
+  ]);
 
   const toolCallsToday = toolCallsRes.count ?? 0;
   const newSignals = signalsRes.count ?? 0;
-  const pendingApprovals = approvalsRes.count ?? 0;
+  const pendingApprovals = waiting.counts.approvals;
   const activeRoutines = routinesRes.count ?? 0;
 
   const runs = (runsRes.data ?? []) as unknown as RunRow[];
   const conversations = (convsRes.data ?? []) as unknown as ConversationRow[];
 
   const firstName = (user.name?.trim() || user.email.split('@')[0] || 'hola').split(/\s+/)[0];
-  const needsYou = pendingApprovals + newSignals;
 
   const mcpUrl = await getMcpUrl();
   const isAdmin = user.role === 'org_admin';
@@ -127,8 +140,18 @@ export default async function DashboardPage() {
             <h1 className="mt-1 text-[22px] font-extrabold tracking-tight text-ink">
               Hola, {firstName}
             </h1>
-            <p className="mt-0.5 text-[13px] text-ink-muted">
-              Esto es lo que se movió mientras no estabas.
+            {/* LA FRASE. Va aquí, pegada al saludo y antes que cualquier
+                número, porque es lo único de la pantalla que se lee sin
+                buscarlo. La escribe `summarizeWaiting` a partir de los conteos
+                y de dos hechos —qué se venció y qué lleva más esperando—; ni
+                una palabra sale de un modelo. */}
+            <p
+              className={clsx(
+                'mt-1 text-[14px] font-semibold leading-snug',
+                waiting.total > 0 ? 'text-ink' : 'text-ink-muted',
+              )}
+            >
+              {waiting.sentence}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
@@ -148,31 +171,27 @@ export default async function DashboardPage() {
         </div>
       </Panel>
 
-      {/* Needs you */}
-      {needsYou > 0 && (
+      {/* El índice de las cuatro colas. NO es una tabla fusionada: cada una
+          conserva su nombre, su verbo y su enlace — ver la cabecera de
+          lib/waiting.ts y el comentario de nav/Sidebar.tsx, donde ese argumento
+          ya está ganado. */}
+      <WaitingIndex index={waiting} />
+
+      {/* Los prospectos no son una de las cuatro colas —nadie prometió nada, no
+          hay nada parado a medias— pero son lo otro que llega solo y espera una
+          mirada, y no tienen conteo en ninguna parte. Una franja, sólo cuando
+          hay. */}
+      {newSignals > 0 && (
         <Link
           href="/approvals"
           className="group mb-4 flex items-center gap-3 rounded-card border border-amber/50 bg-amber-soft px-4 py-3 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-amber motion-reduce:transform-none motion-reduce:transition-none"
         >
           <BadgeCheck className="h-4 w-4 shrink-0 text-amber" />
           <div className="min-w-0 flex-1 text-[13px]">
-            <span className="font-semibold text-ink">Cortex te está esperando</span>
+            <span className="font-semibold text-ink">Prospectos nuevos</span>
             <span className="text-ink-muted">
               {' '}
-              —{' '}
-              {pendingApprovals > 0 && (
-                <>
-                  <span className="tabular">{pendingApprovals}</span>
-                  {pendingApprovals === 1 ? ' acción por aprobar' : ' acciones por aprobar'}
-                </>
-              )}
-              {pendingApprovals > 0 && newSignals > 0 && ' · '}
-              {newSignals > 0 && (
-                <>
-                  <span className="tabular">{newSignals}</span>
-                  {newSignals === 1 ? ' prospecto por revisar' : ' prospectos por revisar'}
-                </>
-              )}
+              — <span className="tabular">{newSignals}</span> por revisar
             </span>
           </div>
           <ArrowRight className="h-4 w-4 shrink-0 text-amber transition-transform group-hover:translate-x-0.5" />
@@ -424,8 +443,7 @@ function Empty({
 
 /** ok / error / running, in the shared status shape. */
 function RunStatusChip({ status }: { status: string }) {
-  const tone: StatusTone =
-    status === 'ok' ? 'emerald' : status === 'error' ? 'rose' : 'primary';
+  const tone: StatusTone = status === 'ok' ? 'emerald' : status === 'error' ? 'rose' : 'primary';
   const label = status === 'ok' ? 'exitosa' : status === 'error' ? 'falló' : 'corriendo';
   return <span className={chipClass(tone)}>{label}</span>;
 }

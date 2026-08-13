@@ -3,6 +3,7 @@
 import { type ScopeSpace, setChatScopeAction } from '@/app/(chat)/chat/actions';
 import { type ScreenFrame, rememberFrame } from '@/lib/screen-marks';
 import type { ScreenGlance } from '@/lib/tab-recorder';
+import type { WaitingNoticeData } from '@/lib/waiting-shape';
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
@@ -14,6 +15,7 @@ import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
 import { useScreenView } from './ScreenView';
 import { ThreadHistory } from './ThreadHistory';
+import { WaitingNotice } from './WaitingNotice';
 
 interface AgentInfo {
   slug: string;
@@ -45,6 +47,16 @@ interface ChatRootProps {
    * from `messages.screen_glance_at` — the image itself was never stored.
    */
   initialGlances?: Record<string, string>;
+  /**
+   * Lo que está esperando a esta persona en las cuatro colas, contado por la
+   * página que nos monta.
+   *
+   * Sólo lo pasa `/chat` —una conversación nueva—, nunca `/chat/[id]`: quien
+   * vuelve a un hilo viene a seguir leyéndolo, y anunciarle ahí trabajo
+   * pendiente sería interrumpir lo que abrió a propósito. Ausente es el caso
+   * normal, y ausente no dibuja nada.
+   */
+  waiting?: WaitingNoticeData;
 }
 
 export function ChatRoot({
@@ -55,6 +67,7 @@ export function ChatRoot({
   initialScope,
   initialFollowups,
   initialGlances,
+  waiting,
 }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
@@ -351,6 +364,11 @@ export function ChatRoot({
             navigation in two. See ThreadHistory. */}
         <ThreadHistory />
       </header>
+
+      {/* Se cae solo en cuanto hay un mensaje: a partir del primer turno la
+          conversación es lo único que importa en esta columna. Va aquí y no
+          dentro de la pantalla vacía para no acoplarse a ella. */}
+      {waiting && messages.length === 0 && <WaitingNotice waiting={waiting} />}
 
       <MessageList
         messages={messages}
