@@ -1,5 +1,6 @@
 import 'server-only';
 import { inngest } from '@/lib/inngest';
+import { noteErrandAsked, noteErrandFinished } from '@/lib/notifications/producers';
 import { EVENT_RUN_STARTED } from '@/lib/orchestrator/contract';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { assertProposalOnly, errandToolAllowlist } from '@cortex/agent-tools';
@@ -80,6 +81,13 @@ const errandDb = (db: SupabaseClient): ErrandDb => db as unknown as ErrandDb;
  *
  * The store write happens first and its result is not conditional on the
  * notification — the question must survive a chat that cannot be posted to.
+ *
+ * DOS CANALES, Y AQUÍ SÍ SE DUPLICA A PROPÓSITO. El mensaje en la conversación
+ * es el bueno cuando la persona está ahí; el aviso de la campana es el que
+ * sobrevive al scroll de la siguiente conversación y al día siguiente. Un
+ * encargo bloqueado cuesta lo mismo que uno trabajando y no entrega nada
+ * mientras espera, así que ésta es la clase de noticia en la que fallar por
+ * exceso es claramente lo barato. Ver lib/notifications/producers.ts.
  */
 async function askAndTell(
   db: SupabaseClient,
@@ -87,6 +95,8 @@ async function askAndTell(
   input: {
     errandId: string;
     organizationId: string;
+    /** El dueño del encargo. Null si la cuenta que lo pidió ya no está. */
+    userId: string | null;
     conversationId: string | null;
     request: string;
     leg: number;
@@ -109,7 +119,7 @@ async function askAndTell(
   // worker that lost the one-open-question index would otherwise post a
   // duplicate into the thread for a question that is not the open one.
   if (!asked) return;
-  await askInConversation(db, {
+  const inChat = await askInConversation(db, {
     conversationId: input.conversationId,
     errandId: input.errandId,
     request: input.request,
@@ -117,19 +127,30 @@ async function askAndTell(
     why: input.why,
     options: input.options,
   });
+  await noteErrandAsked(db, {
+    userId: input.userId,
+    errandId: input.errandId,
+    request: input.request,
+    question: input.question,
+    deliveredInChat: inChat,
+  });
 }
 
 /** Close the errand AND report back, same argument as `askAndTell`. */
 async function closeAndTell(
   db: SupabaseClient,
   edb: ErrandDb,
-  input: Parameters<typeof closeErrand>[1] & { conversationId: string | null; request: string },
+  input: Parameters<typeof closeErrand>[1] & {
+    conversationId: string | null;
+    request: string;
+    userId: string | null;
+  },
 ): Promise<void> {
   const closed = await closeErrand(edb, input);
   // Somebody else already ended it — a person cancelling owns that ending and
   // has just been told about it by the screen they clicked on.
   if (!closed) return;
-  await deliverInConversation(db, {
+  const inChat = await deliverInConversation(db, {
     conversationId: input.conversationId,
     errandId: input.errandId,
     request: input.request,
@@ -137,6 +158,16 @@ async function closeAndTell(
     deliverable: input.deliverable ?? null,
     closingNote: input.closingNote,
     sourceCount: input.sources?.length ?? 0,
+  });
+  // Un final bueno que ya llegó al chat no se repite; uno malo sí, porque es el
+  // que tiene un plazo detrás. `cancelled` no avisa nunca — lo hizo una persona
+  // en una pantalla hace un segundo.
+  await noteErrandFinished(db, {
+    userId: input.userId,
+    errandId: input.errandId,
+    request: input.request,
+    state: input.state,
+    deliveredInChat: inChat,
   });
 }
 
@@ -172,6 +203,7 @@ export async function advanceErrand(input: {
           deliverable: loaded.row.view.deliverable ?? loaded.row.view.findings,
           conversationId: loaded.row.view.conversationId,
           request: loaded.row.view.request,
+          userId: loaded.row.userId,
         });
         return { did: 'stop', again: false, detail: transition.reason };
       }
@@ -212,6 +244,7 @@ async function runTriage(
     await askAndTell(db, edb, {
       errandId: view.id,
       organizationId,
+      userId: loaded.row.userId,
       conversationId: view.conversationId,
       request: view.request,
       leg: 0,
@@ -248,6 +281,9 @@ async function launchLeg(
       state: 'failed',
       conversationId: view.conversationId,
       request: view.request,
+      // Null por definición en esta rama: no hay a quién avisar, que es
+      // justamente el problema del que habla el cierre.
+      userId: null,
       closingNote:
         'Este encargo quedó sin dueño —la cuenta que lo pidió ya no está en el espacio de ' +
         'trabajo—, y un encargo corre con los permisos de quien lo pidió. Vuelve a encargarlo ' +
@@ -494,6 +530,7 @@ async function assess(
       await askAndTell(db, edb, {
         errandId: view.id,
         organizationId,
+        userId: loaded.row.userId,
         conversationId: view.conversationId,
         request: view.request,
         leg: seq,
@@ -529,6 +566,7 @@ async function assess(
         closingNote: resolution.closingNote,
         conversationId: view.conversationId,
         request: view.request,
+        userId: loaded.row.userId,
       });
       return { did: 'assess_leg', again: false, detail: 'ceiling' };
 
@@ -539,6 +577,7 @@ async function assess(
         state: 'delivered',
         conversationId: view.conversationId,
         request: view.request,
+        userId: loaded.row.userId,
         deliverable: resolution.deliverable,
         sources: await sourcesFor(db, leg.runId, resolution.sources),
         closingNote: monitorChanged

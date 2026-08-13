@@ -1,7 +1,4 @@
 import 'server-only';
-import { sendEmail } from '@/lib/email';
-import { renderFlowResultEmail } from '@/lib/email-templates';
-import { sendChatDm } from '@/lib/google-chat';
 import {
   DEFAULT_DELIVERY,
   DELIVER_TO,
@@ -12,6 +9,10 @@ import {
   OUTPUT_KINDS,
   type OutputKind,
 } from '@/lib/browser-shape';
+import { sendEmail } from '@/lib/email';
+import { renderFlowResultEmail } from '@/lib/email-templates';
+import { sendChatDm } from '@/lib/google-chat';
+import { noteFlowRun } from '@/lib/notifications/producers';
 import { logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -63,6 +64,21 @@ export interface FlowRunOutcome {
   /** Whatever the errand extracted or downloaded. Shape is the engine's. */
   output?: Record<string, unknown> | null;
   durationMs?: number | null;
+  /**
+   * Lo que el motor ya devuelve y que aquí SÓLO se lee para el aviso. Nada de
+   * esto cambia la entrega: un trámite que se paró a pedir la clave no manda
+   * correo (no hay resultado que mandar), pero sí tiene que dejar un renglón en
+   * la campana, porque hay una pestaña abierta esperando a una persona.
+   */
+  failureKind?: 'transient' | 'legitimate' | 'site-changed' | 'needs-login' | 'needs-human' | null;
+  pendingQuestion?: 'credential' | null;
+  /** La corrida, para que el aviso apunte a un hecho y no a un trámite. */
+  runId?: string | null;
+  /**
+   * La corrida de verificación que sigue a enseñar una grabación. No deja
+   * aviso: la persona acaba de subir el vídeo y está mirando la pantalla.
+   */
+  verifying?: boolean;
 }
 
 export interface DeliverTarget {
@@ -89,7 +105,9 @@ export interface DeliverResult {
  */
 export function outputToMarkdown(output: Record<string, unknown> | null | undefined): string {
   if (!output) return '';
-  const entries = Object.entries(output).filter(([, v]) => v !== null && v !== undefined && v !== '');
+  const entries = Object.entries(output).filter(
+    ([, v]) => v !== null && v !== undefined && v !== '',
+  );
   if (entries.length === 0) return '';
   return entries
     .map(([key, value]) => {
@@ -109,6 +127,37 @@ export async function deliverFlowResult(opts: {
   flow: { id: string; name: string; site: string; delivery: FlowDelivery };
   outcome: FlowRunOutcome;
   /** The conversation the run came from, when it came from one. */
+  conversationId?: string | null;
+}): Promise<DeliverResult> {
+  const result = await deliverToChannel(opts);
+
+  // ── EL AVISO VA DESPUÉS, Y SIEMPRE ────────────────────────────────────────
+  // Aquí y no en cada sitio que corre un trámite: éste es el único punto por el
+  // que pasa todo resultado de trámite, así que el aviso no depende de que
+  // nadie se acuerde. Va DESPUÉS de la entrega a propósito, porque la regla que
+  // decide si merece un renglón necesita saber si el hecho ya viajó por un
+  // canal que la persona mira — ver lib/notifications/producers.ts.
+  await noteFlowRun(opts.db, {
+    userId: opts.requestedBy.id,
+    flow: { id: opts.flow.id, name: opts.flow.name, site: opts.flow.site },
+    runId: opts.outcome.runId ?? null,
+    ok: opts.outcome.ok,
+    message: opts.outcome.message,
+    failureKind: opts.outcome.failureKind ?? null,
+    pendingQuestion: opts.outcome.pendingQuestion ?? null,
+    deliveredElsewhere: result.delivered,
+    verifying: opts.outcome.verifying ?? false,
+  });
+
+  return result;
+}
+
+async function deliverToChannel(opts: {
+  db: SupabaseClient;
+  organizationId: string;
+  requestedBy: DeliverTarget;
+  flow: { id: string; name: string; site: string; delivery: FlowDelivery };
+  outcome: FlowRunOutcome;
   conversationId?: string | null;
 }): Promise<DeliverResult> {
   const { delivery } = opts.flow;
@@ -145,9 +194,7 @@ async function deliverToConversation(
   const what = flow.delivery.outputLabel.trim() || flow.name;
   const detail = outputToMarkdown(outcome.output);
   const content = outcome.ok
-    ? [`**${what}** · listo`, '', outcome.message, detail ? `\n${detail}` : '']
-        .join('\n')
-        .trim()
+    ? [`**${what}** · listo`, '', outcome.message, detail ? `\n${detail}` : ''].join('\n').trim()
     : `**${what}** · no salió\n\n${outcome.message}`;
 
   const { error } = await db.from('messages').insert({

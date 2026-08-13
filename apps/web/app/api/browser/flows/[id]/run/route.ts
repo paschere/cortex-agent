@@ -73,6 +73,13 @@ export async function POST(
       message: outcome.message,
       output: outcome.output as Record<string, unknown> | null,
       durationMs: outcome.durationMs,
+      // Los tres que sólo lee el aviso. Un trámite que se paró a pedir la
+      // clave, o al que el portal le puso un captcha, no manda correo (no hay
+      // resultado que mandar) pero sí deja un renglón en la campana: la
+      // pestaña sigue abierta esperando a una persona y se cierra sola.
+      failureKind: outcome.failureKind ?? null,
+      pendingQuestion: outcome.pendingQuestion ?? null,
+      runId: outcome.runId,
     },
   });
 

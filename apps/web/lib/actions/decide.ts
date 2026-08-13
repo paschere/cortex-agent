@@ -1,10 +1,11 @@
 import 'server-only';
 import { claimApproval } from '@/lib/approvals/claim';
 import { runApprovedAction } from '@/lib/approvals/decide';
+import { noteActionSent } from '@/lib/notifications/producers';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
-  type ActionRow,
   ActionIntegrityError,
+  type ActionRow,
   assertExecutable,
   getAction,
   recordExecution,
@@ -166,6 +167,14 @@ export async function runApprovedActionRow(
       status: 'failed',
       error: run.message,
     }).catch(() => undefined);
+    await noteActionSent(db, {
+      userId: action.user_id,
+      actionId: action.id,
+      to: action.recipient,
+      subject: action.subject,
+      ok: false,
+      error: run.message,
+    });
     return { ok: false, reason: 'failed', message: run.message };
   }
 
@@ -179,6 +188,20 @@ export async function runApprovedActionRow(
     status: 'ok',
     result: run.result,
     threadId,
+  });
+
+  // 5. AVISAR. Después de registrar, nunca antes: el renglón fechado de la
+  //    campana habla de algo que ya está anotado en la fila. Se avisa también
+  //    del envío que salió bien —a diferencia de las rutinas o los trámites—
+  //    porque el hecho es que algo SALIÓ DE LA EMPRESA con la firma de alguien,
+  //    y una acción se puede aprobar desde Google Chat o desde Claude por MCP,
+  //    sin ninguna pantalla de por medio que lo cuente.
+  await noteActionSent(db, {
+    userId: action.user_id,
+    actionId: action.id,
+    to: action.recipient,
+    subject: action.subject,
+    ok: true,
   });
 
   return { ok: true, result: run.result, threadId };

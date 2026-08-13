@@ -143,6 +143,10 @@ const NAMES_IT_WITHOUT_CALLING_IT = new Set([
   // The errand equivalent: asserts that nothing under lib/errands, its routes
   // or its screens reaches for the raw client, and names it to do so.
   'lib/errands/tenancy.test.ts',
+  // The same, for avisos: asserts that the notifications module has exactly one
+  // writer and never reaches for the raw client. It names the helper to look
+  // for it in the source it scans.
+  'lib/notifications/tenancy.test.ts',
 ]);
 
 const WEB_ROOT = fileURLToPath(new URL('../', import.meta.url));

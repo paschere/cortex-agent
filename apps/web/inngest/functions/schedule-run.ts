@@ -3,6 +3,7 @@ import { sendEmail } from '@/lib/email';
 import { renderRoutineResultEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
+import { noteRoutineRun } from '@/lib/notifications/producers';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { chatModel } from '@cortex/agent-tools';
 import {
@@ -360,7 +361,7 @@ export const scheduleRun = inngest.createFunction(
     // Google Chat DM — in ADDITION to the email, for people who opted in.
     // Wrapped whole so neither the preference lookup nor a Chat outage can
     // fail the run: the routine already did its work.
-    await step.run('deliver-chat-dm', async () => {
+    const chat = await step.run('deliver-chat-dm', async () => {
       try {
         const userIds = await chatDmUserIds(job);
         if (userIds.length === 0) return { sent: 0 };
@@ -422,6 +423,30 @@ export const scheduleRun = inngest.createFunction(
           .eq('id', job.id)
           .eq('status', 'active');
       }
+    });
+
+    // ── EL AVISO ──────────────────────────────────────────────────────────
+    // Después de finalizar, y en su propio paso: si escribir el recado falla,
+    // Inngest no reintenta la ejecución de la rutina, que ya ocurrió.
+    //
+    // `deliveredElsewhere` es lo que decide si una rutina que SALIÓ BIEN merece
+    // un renglón. Una rutina con correo o con conversación ya llega a un sitio
+    // que la persona mira, y repetirla en la campana la llenaría justo con lo
+    // único que nunca hace falta leer. Una rutina sin ningún canal es lo
+    // contrario: hoy corre y termina en silencio absoluto. El fallo se avisa
+    // siempre, tenga el canal que tenga. Ver lib/notifications/producers.ts.
+    await step.run('notify', async () => {
+      const delivered =
+        job.notify_conversation || (job.notify_email && emailTo.length > 0) || chat.sent > 0;
+      await noteRoutineRun(getOrgScopedClient(organizationId), {
+        userId: job.user_id,
+        job: { id: job.id, name: job.name },
+        runId,
+        ok: result.ok,
+        error: result.error ?? null,
+        deliveredElsewhere: delivered,
+      });
+      return { notified: true };
     });
 
     return { ok: result.ok, runId };

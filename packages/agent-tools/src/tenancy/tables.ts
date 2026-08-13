@@ -134,6 +134,18 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   guided_setup_sessions: tenant(),
   guided_setup_items: tenant(),
 
+  // --- Avisos (migration 0096) ----------------------------------------------
+  // Hechos puntuales con hora dirigidos a una persona: un trámite que terminó,
+  // una rutina que no pudo correr, un encargo que preguntó algo. Tenant y no
+  // `derived` sobre `users` aunque toda fila nombre a una persona: la pregunta
+  // que justifica la tabla — «¿qué ha pasado en este espacio de trabajo?» — se
+  // hace por espacio, y el contador de la campana se lee por (espacio, persona)
+  // sin nombrar una fila padre, que es justo lo que una clasificación `derived`
+  // prohibiría. El aviso además cita el contenido de lo que ocurrió (el nombre
+  // del trámite, el asunto del correo que salió), así que la fila es la cosa a
+  // proteger y debe llevar el espacio encima.
+  notifications: tenant(),
+
   // --- Integrations and tokens ----------------------------------------------
   integrations: tenant(),
   user_mcp_servers: tenant(),
