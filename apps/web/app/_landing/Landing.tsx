@@ -81,7 +81,10 @@ function Hero() {
       <div className="lp-hero__grid">
         <div>
           <p className="lp-marker lp-arrive">Un asistente por persona</p>
-          <h1 className="lp-display lp-hero__display lp-arrive mt-4" style={{ animationDelay: '0.05s' }}>
+          <h1
+            className="lp-display lp-hero__display lp-arrive mt-4"
+            style={{ animationDelay: '0.05s' }}
+          >
             Un asistente para cada persona de tu empresa, que <em>ya se sabe la empresa</em>.
           </h1>
           <p className="lp-lead lp-hero__lead lp-arrive" style={{ animationDelay: '0.1s' }}>
@@ -90,17 +93,17 @@ function Hero() {
             Preguntas en español y contesta diciendo de dónde lo sacó: el documento, el día y, si
             salió de una grabación, el minuto.
           </p>
+          {/* Las dos únicas puertas que hay. «Ver los planes» apuntaba a
+              #planes, que ya no se dibuja: un ancla a una sección ausente deja
+              a alguien mirando el final de la página sin saber qué pasó. */}
           <div className="lp-hero__cta lp-arrive" style={{ animationDelay: '0.15s' }}>
             <Link href="/signup" className="lp-btn lp-btn--primary">
-              Crear cuenta gratis
+              Crear cuenta
             </Link>
-            <Link href="#planes" className="lp-btn lp-btn--ghost">
-              Ver los planes
+            <Link href="/login" className="lp-btn lp-btn--ghost">
+              Iniciar sesión
             </Link>
           </div>
-          <p className="lp-fine lp-hero__note lp-arrive" style={{ animationDelay: '0.2s' }}>
-            Gratis hasta 3 personas, sin tarjeta.
-          </p>
         </div>
 
         <div className="lp-arrive" style={{ animationDelay: '0.12s' }}>
@@ -210,8 +213,8 @@ function HowItWorks() {
           <p className="lp-marker">Cómo funciona</p>
           <h2 className="lp-h2">Se alimenta solo. Nadie tiene que subir nada.</h2>
           <p className="lp-lead">
-            La memoria de tu empresa ya existe: está repartida entre el correo, Drive, las
-            reuniones y los chats. Cortex se conecta a donde ya está y la sigue leyendo.
+            La memoria de tu empresa ya existe: está repartida entre el correo, Drive, las reuniones
+            y los chats. Cortex se conecta a donde ya está y la sigue leyendo.
           </p>
         </div>
 
@@ -324,8 +327,7 @@ function Trust() {
               <div>
                 <p className="lp-propose__date lp-data">Vencimiento propuesto: 31 dic 2025</p>
                 <p className="lp-fine mt-1.5">
-                  Leído de{' '}
-                  <span className="lp-data">«Contrato de prestación · cláusula 3»</span>:
+                  Leído de <span className="lp-data">«Contrato de prestación · cláusula 3»</span>:
                   «vigencia de doce (12) meses contados desde el 1 de enero de 2025.»
                 </p>
               </div>
@@ -588,15 +590,12 @@ function Close() {
         </p>
         <div className="lp-close__cta">
           <Link href="/signup" className="lp-btn lp-btn--primary">
-            Crear cuenta gratis
+            Crear cuenta
           </Link>
           <Link href="/login" className="lp-btn lp-btn--ghost">
             Ya tengo cuenta
           </Link>
         </div>
-        <p className="lp-fine mt-4">
-          Hasta 3 personas, con 50 respuestas y 15 documentos cada una al mes. Sin tarjeta.
-        </p>
       </div>
     </section>
   );
@@ -627,7 +626,22 @@ export function Landing() {
         <HowItWorks />
         <Trust />
         <Control />
-        <Pricing />
+        {/*
+          LOS PRECIOS ESTÁN EN PAUSA, NO BORRADOS.
+
+          La sección `Pricing` sigue entera unas líneas más abajo — las tarifas,
+          los cupos y la letra pequeña sobre que todavía no se cobra dentro del
+          producto. Sólo se dejó de mostrar, y volver a ponerla es descomentar
+          esta línea.
+
+          Se quitó porque anunciar una tarifa obliga a sostenerla, y hoy no hay
+          pasarela de pago dentro de Cortex: lo que hay es una conversación. Una
+          página que promete «$30.000 por persona» y una puerta que sólo sabe
+          crear una cuenta gratis son dos cosas que no encajan, y la que sobra
+          es la promesa. Mientras tanto la página pide lo único que sí puede
+          cumplir: entrar o abrir una cuenta.
+        */}
+        {/* <Pricing /> */}
         <Close />
       </main>
       <Footer />
