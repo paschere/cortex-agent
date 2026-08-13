@@ -33,11 +33,28 @@ export const TARGET_KINDS = [
 ] as const;
 export type TargetKind = (typeof TARGET_KINDS)[number];
 
+/**
+ * ABSENT AND NULL BOTH MEAN ABSENT, IN EVERY OPTIONAL FIELD OF A STEP.
+ *
+ * A step is written by a model, edited in a browser and posted back as JSON,
+ * and those three producers disagree about how to say "nothing". `JSON.stringify`
+ * OMITS an `undefined` property and SERIALISES a `null` one, so a form that
+ * keeps a cleared field as `null` — which is what a React input does — sends a
+ * shape that plain `.optional()` rejects with a 400.
+ *
+ * That exact mismatch has now cost this repo two bugs, one of which made the
+ * setup interview fail on the first sentence of every conversation. So the
+ * optional fields of a step accept either and normalise to `undefined`, which
+ * keeps the inferred type the one the rest of the module already reads.
+ */
+const nullish = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.nullish().transform((v: z.infer<T> | null | undefined) => v ?? undefined);
+
 export const targetSchema = z.object({
   kind: z.enum(TARGET_KINDS),
   value: z.string().min(1).max(400),
   /** Accessible name. Only meaningful when `kind` is `role`. */
-  name: z.string().max(200).optional(),
+  name: nullish(z.string().max(200)),
 });
 export type Target = z.infer<typeof targetSchema>;
 
@@ -79,9 +96,9 @@ export const stepSchema = z.object({
   action: z.enum(STEP_ACTIONS),
   label: z.string().min(1).max(200),
   targets: z.array(targetSchema).max(8).default([]),
-  value: stepValueSchema.optional(),
-  url: z.string().max(2000).optional(),
-  expect: z.string().max(300).optional(),
+  value: nullish(stepValueSchema),
+  url: nullish(z.string().max(2000)),
+  expect: nullish(z.string().max(300)),
   /**
    * Page-level texts present while this step was learned -- a heading, the
    * portal's own name. Not used to find anything. Used to answer "is this even
@@ -89,8 +106,8 @@ export const stepSchema = z.object({
    * separates a redesign from a refusal.
    */
   landmarks: z.array(z.string().max(200)).max(8).default([]),
-  optional: z.boolean().optional(),
-  extractAs: z.string().max(80).optional(),
+  optional: nullish(z.boolean()),
+  extractAs: nullish(z.string().max(80)),
 });
 export type Step = z.infer<typeof stepSchema>;
 

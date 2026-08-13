@@ -12,7 +12,7 @@ import { classifyFailure, hasLoginSteps } from '../classify';
 import { runFlow } from '../execute';
 import { REDACTED, enforceSecrets, redactValue, safeInputs } from '../redact';
 import { mergeTargets, refineFromDom } from '../refine';
-import { STEP_ACTIONS, TARGET_KINDS } from '../types';
+import { STEP_ACTIONS, TARGET_KINDS, stepSchema } from '../types';
 import {
   ORG,
   OTHER_ORG,
@@ -1011,6 +1011,42 @@ describe('the approval boundary', () => {
     });
     expect(run.blastRadius).toBe('internal_write');
     expect(decide(run)).toBe('allow');
+  });
+});
+
+describe('a step posted back from a browser', () => {
+  // `JSON.stringify` omits an undefined property and serialises a null one, so
+  // a form that keeps a cleared field as null — which is what a React input
+  // does — sends nulls. Plain `.optional()` rejects those with a 400. That
+  // mismatch has cost this repo two bugs already, one of which made the setup
+  // interview fail on the first sentence of every single conversation.
+  it('accepts null for every optional field, and reads it as absent', () => {
+    const parsed = stepSchema.parse({
+      action: 'fill',
+      label: 'Número de placa',
+      targets: [{ kind: 'role', value: 'textbox', name: null }],
+      value: null,
+      url: null,
+      expect: null,
+      optional: null,
+      extractAs: null,
+      landmarks: [],
+    });
+
+    // Normalised to undefined rather than kept as null, so the rest of the
+    // module keeps reading the shape it already reads.
+    expect(parsed.value).toBeUndefined();
+    expect(parsed.url).toBeUndefined();
+    expect(parsed.expect).toBeUndefined();
+    expect(parsed.optional).toBeUndefined();
+    expect(parsed.extractAs).toBeUndefined();
+    expect(parsed.targets[0]?.name).toBeUndefined();
+  });
+
+  it('still accepts the fields being missing altogether', () => {
+    const parsed = stepSchema.parse({ action: 'click', label: 'Consultar', targets: [] });
+    expect(parsed.value).toBeUndefined();
+    expect(parsed.optional).toBeUndefined();
   });
 });
 
