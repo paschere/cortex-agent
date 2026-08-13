@@ -1,7 +1,7 @@
 import { CommandMenuProvider } from '@/components/nav/CommandMenuContext';
 import { MobileSidebarProvider } from '@/components/nav/MobileSidebarContext';
 import { Sidebar } from '@/components/nav/Sidebar';
-import { countPendingApprovals } from '@/lib/nav-signals';
+import { countNavSignals } from '@/lib/nav-signals';
 import { requireSession } from '@/lib/session';
 import { REPORT_CSS } from '@cortex/agent-tools';
 import type { ReactNode } from 'react';
@@ -23,14 +23,14 @@ import type { ReactNode } from 'react';
  */
 export default async function ChatLayout({ children }: { children: ReactNode }) {
   const user = await requireSession();
-  const pendingApprovals = await countPendingApprovals(user.organization.id, user.id);
+  const counts = await countNavSignals(user.organization.id, user.id);
   return (
     <MobileSidebarProvider>
       {/* biome-ignore lint/security/noDangerouslySetInnerHtml: our own stylesheet, scoped to .rp-doc; see REPORT_CSS. */}
       <style dangerouslySetInnerHTML={{ __html: REPORT_CSS }} />
       <CommandMenuProvider role={user.role}>
         <div className="flex flex-row h-screen overflow-hidden">
-          <Sidebar role={user.role} pendingApprovals={pendingApprovals} />
+          <Sidebar role={user.role} counts={counts} />
           <div className="flex-1 min-w-0 flex flex-col overflow-hidden">{children}</div>
         </div>
       </CommandMenuProvider>

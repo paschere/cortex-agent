@@ -1,17 +1,18 @@
 'use client';
 
 import { type ScopeSpace, setChatScopeAction } from '@/app/(chat)/chat/actions';
+import type { ScreenGlance } from '@/lib/tab-recorder';
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
 import { Brain, Menu } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useRef, useState } from 'react';
-import type { ScreenGlance } from '@/lib/tab-recorder';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
 import { useScreenView } from './ScreenView';
+import { ThreadHistory } from './ThreadHistory';
 
 interface AgentInfo {
   slug: string;
@@ -256,6 +257,10 @@ export function ChatRoot({
             </div>
           </div>
         </div>
+
+        {/* Recent threads moved here out of the sidebar, where they split the
+            navigation in two. See ThreadHistory. */}
+        <ThreadHistory />
       </header>
 
       <MessageList
