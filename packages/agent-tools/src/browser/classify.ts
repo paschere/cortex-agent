@@ -157,6 +157,67 @@ function containsAny(haystack: string, needles: string[]): string | null {
   return null;
 }
 
+/**
+ * Said by a page that is checking whether a human is driving.
+ *
+ * NOT a bare "captcha": "captcha incorrecto" means somebody typed one wrong,
+ * which is an ordinary refusal and belongs to rule 4. Every entry here is a
+ * phrase that only appears when the challenge is being POSED.
+ *
+ * Accent-free, because they are compared against normalised text.
+ */
+const CHALLENGE_PHRASES = [
+  // Google's /sorry page, verbatim in both languages
+  'trafico inusual',
+  'unusual traffic',
+  'en lugar de un robot',
+  'rather than a robot',
+  'sistemas han detectado trafico',
+  // reCAPTCHA / hCaptcha, as they present themselves
+  'no soy un robot',
+  'not a robot',
+  'verificar que eres humano',
+  'verifica que eres humano',
+  'confirma que eres humano',
+  'verify you are human',
+  'verifying you are human',
+  'are you a human',
+  // Cloudflare and friends
+  'checking your browser',
+  'comprobando tu navegador',
+  'ddos protection by',
+  'needs to review the security of your connection',
+  'revisar la seguridad de tu conexion',
+  // generic, but only in the posing form
+  'complete the security check',
+  'completa la verificacion de seguridad',
+  'prueba de que no eres un robot',
+];
+
+/**
+ * Paths that ARE the challenge, whatever the page says.
+ *
+ * Kept beside the phrases because a challenge served in an iframe, in a
+ * language we do not list, or as an image with no text at all would otherwise
+ * read as "the page went blank" — and that is the reading that costs a repair.
+ */
+const CHALLENGE_PATHS = ['/sorry/', '/cdn-cgi/challenge', '__cf_chl', '/challenge-platform'];
+
+/** Which signal fired, or null. The name goes in the rule, so it is debuggable. */
+function challengeSignal(evidence: FailureEvidence, normalisedText: string): string | null {
+  if ((evidence.challengeFrames ?? 0) > 0) return 'widget';
+  const url = normalize(evidence.url ?? '');
+  if (CHALLENGE_PATHS.some((p) => url.includes(p))) return 'url';
+  const phrase = containsAny(normalisedText, CHALLENGE_PHRASES);
+  if (phrase) return 'text';
+  // The title is checked separately and last: Google's /sorry page puts the
+  // ORIGINAL search URL in its <title>, so the title alone is weak evidence —
+  // but a page titled "Just a moment…" with nothing else to go on is not.
+  const title = normalize(evidence.pageTitle ?? '');
+  if (title === 'just a moment...' || title === 'un momento...') return 'title';
+  return null;
+}
+
 export interface Classification {
   kind: FailureKind;
   /** One sentence, in Spanish, for the screen and for the run row. */
@@ -277,6 +338,38 @@ export function classifyFailure(input: {
       kind: 'transient',
       rule: 'site-says-later',
       reason: 'El portal dice que está fuera de servicio o pide reintentar más tarde.',
+    };
+  }
+
+  // 3b. THE PORTAL STOPPED TO ASK WHETHER WE ARE A PERSON.
+  //
+  //     This rule exists because of what happened without it, which is the most
+  //     expensive shape of bug this module can have. Google answers an
+  //     automated browser with /sorry/index -- a verification page carrying
+  //     none of the flow's elements. Every stored candidate then reports zero
+  //     matches, which is EXACTLY the signature rule 10 reads as "the site was
+  //     redesigned". So a flow that was never broken got filed as
+  //     `site-changed`, which is the one verdict that lets a model rewrite it:
+  //     Cortex paid for a repair against a captcha page, the repair could not
+  //     help, and the next run did it again. Forever.
+  //
+  //     Reproduced before writing this: chromium at google.com, fill the search
+  //     box, press Enter, and the page becomes /sorry/index with
+  //     `combobox[Buscar]` at zero matches and two captcha nodes.
+  //
+  //     It sits above rule 4 so a challenge is not mistaken for a refusal, and
+  //     below rule 3 so a site that says "vuelva más tarde" is still believed.
+  //     The phrases are deliberately narrow -- no bare "captcha", because
+  //     "captcha incorrecto" means somebody typed one wrong, which IS an
+  //     ordinary refusal and belongs to rule 4.
+  const challenge = challengeSignal(evidence, text);
+  if (challenge) {
+    return {
+      kind: 'needs-human',
+      rule: `bot-check:${challenge}`,
+      reason:
+        'El portal se detuvo a comprobar que no somos un robot. El trámite está bien y no toqué nada: ' +
+        'hace falta que una persona resuelva la verificación.',
     };
   }
 

@@ -53,7 +53,7 @@ const inputsField = z
 export const browserListFlows = registerTool({
   id: 'browser.list_flows',
   description:
-    'List the trámites this workspace has taught Cortex to do on other people\'s portals — sacar un certificado, consultar un estado, descargar un paz y salvo, radicar una solicitud — with what each one does, which site it runs on (RUNT, SIMIT, DIAN, Cámara de Comercio, a customer\'s supplier portal), what data it needs, and whether it consults or submits. Call this FIRST whenever the request means going into an external website: «sácame el certificado de tradición», «consúltame eso en el portal», «descárgame el paz y salvo», «radica la solicitud». Only trámites proven to reproduce are listed.',
+    "List the trámites this workspace has taught Cortex to do on other people's portals — sacar un certificado, consultar un estado, descargar un paz y salvo, radicar una solicitud — with what each one does, which site it runs on (RUNT, SIMIT, DIAN, Cámara de Comercio, a customer's supplier portal), what data it needs, and whether it consults or submits. Call this FIRST whenever the request means going into an external website: «sácame el certificado de tradición», «consúltame eso en el portal», «descárgame el paz y salvo», «radica la solicitud». Only trámites proven to reproduce are listed.",
   inputSchema: z.object({}),
   outputSchema: z.object({
     flows: z.array(
@@ -107,7 +107,7 @@ const runOutput = z.object({
 export const browserRunFlow = registerTool({
   id: 'browser.run_flow',
   description:
-    'Do a learned trámite that only CONSULTS or DOWNLOADS from somebody else\'s portal — sacar un certificado, descargar un paz y salvo o un extracto, consultar un estado, un radicado o una placa. This is the tool for «sácame el certificado», «consulta eso en el portal», «bájame el documento de la página» once browser.list_flows shows a trámite that matches. Replays the saved steps in a real browser with no model in the loop, so it takes seconds and costs nothing. Refuses any trámite that submits something to the third party; use browser.submit_flow for those.',
+    "Do a learned trámite that only CONSULTS or DOWNLOADS from somebody else's portal — sacar un certificado, descargar un paz y salvo o un extracto, consultar un estado, un radicado o una placa. This is the tool for «sácame el certificado», «consulta eso en el portal», «bájame el documento de la página» once browser.list_flows shows a trámite that matches. Replays the saved steps in a real browser with no model in the loop, so it takes seconds and costs nothing. Refuses any trámite that submits something to the third party; use browser.submit_flow for those.",
   inputSchema: z.object({ flow: flowRef, inputs: inputsField }),
   outputSchema: runOutput,
   rateLimit: { perMinute: 10 },
@@ -214,7 +214,9 @@ export const browserSubmitFlow = registerTool({
  * person is not "here is a blob" but "the certificate is in, ask me about it".
  */
 function documentGuidance(output: Record<string, unknown>): string {
-  const download = output.download as { filename?: string; documentId?: string; refused?: string } | undefined;
+  const download = output.download as
+    | { filename?: string; documentId?: string; refused?: string }
+    | undefined;
   if (download?.refused) {
     return `Dile a la persona qué se obtuvo, y que el archivo no se pudo traer: ${download.refused}. El trámite en sí sí funcionó.`;
   }
@@ -233,6 +235,9 @@ function failureGuidance(kind: string | undefined): string {
   }
   if (kind === 'transient') {
     return 'Fue un problema del sitio, no del trámite. Se puede reintentar en unos minutos.';
+  }
+  if (kind === 'needs-human') {
+    return 'El portal se detuvo a comprobar que no es un robot. El trámite está bien; dile a la persona que ese sitio pide una verificación y que hace falta que alguien la resuelva. No lo reintentes solo: va a volver a pasar.';
   }
   if (kind === 'site-changed') {
     return 'El portal cambió. Si Cortex no logró repararlo solo, alguien tiene que volver a enseñar ese trámite desde Trámites web.';

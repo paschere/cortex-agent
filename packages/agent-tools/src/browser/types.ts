@@ -200,6 +200,16 @@ export interface FailureEvidence {
   bodyTextSample: string;
   candidates: { kind: TargetKind; value: string; matches: number }[];
   visibleButBlocked: boolean;
+  /**
+   * How many bot-check widgets were on the page (reCAPTCHA, hCaptcha,
+   * Turnstile). See the note on the browser service's copy of this interface.
+   *
+   * Optional because a browser service deployed before this field existed does
+   * not send it, and a missing signal must read as "we do not know" rather than
+   * as "there was no challenge" — the second would be this file asserting a
+   * fact it never received.
+   */
+  challengeFrames?: number;
 }
 
 export interface ReplayResponse {
@@ -225,7 +235,21 @@ export interface ReplayResponse {
  * left over from a recording made by somebody who was already signed in. It
  * never marks a flow broken and never reaches a model. See migration 0091.
  */
-export type FailureKind = 'transient' | 'legitimate' | 'site-changed' | 'needs-login';
+export type FailureKind =
+  | 'transient'
+  | 'legitimate'
+  | 'site-changed'
+  | 'needs-login'
+  /**
+   * The portal stopped to ask whether we are a person.
+   *
+   * Its own kind rather than a flavour of `legitimate`, because the answer is
+   * different in the one way that matters: a legitimate refusal is over and a
+   * challenge is a door somebody can still open. It must never be
+   * `site-changed` — that is the only verdict that lets a model rewrite a flow,
+   * and rewriting a working flow against a captcha page is how it dies.
+   */
+  | 'needs-human';
 
 export interface ModelSpend {
   calls: number;

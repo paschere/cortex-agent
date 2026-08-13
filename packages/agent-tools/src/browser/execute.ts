@@ -6,9 +6,9 @@ import { classifyFailure, hasLoginSteps } from './classify';
 import type { BrowserTransport } from './client';
 import { unlockForRun } from './credentials';
 import {
-  currentDocumentSink,
   type DocumentSink,
   type DownloadedFile,
+  currentDocumentSink,
   separateDownload,
 } from './download';
 import { safeInputs } from './redact';
@@ -105,7 +105,7 @@ export interface RunOutcome {
   steps: StepOutcome[];
   durationMs: number;
   spend: ModelSpend;
-  failureKind?: 'transient' | 'legitimate' | 'site-changed' | 'needs-login';
+  failureKind?: 'transient' | 'legitimate' | 'site-changed' | 'needs-login' | 'needs-human';
   repaired?: boolean;
   newVersion?: number;
   /**
@@ -155,6 +155,34 @@ async function fileDownload(
  */
 function loginFacts(flow: Flow): { hasCredential: boolean; hasLoginSteps: boolean } {
   return { hasCredential: Boolean(flow.credentialId), hasLoginSteps: hasLoginSteps(flow.steps) };
+}
+
+/**
+ * WHICH STEP ACTUALLY FAILED, WHICH IS NOT ALWAYS `steps[index]`.
+ *
+ * The index comes from the browser service, counted against the list it was
+ * SENT. By the time it is read here it is being applied to `flow.steps`, and
+ * those two lists are not guaranteed to be the same one: a repair rewrites the
+ * step list and bumps the version, and `promoteDrift` reorders a step's
+ * targets. Off by one entry and every sentence downstream names the wrong step
+ * — the failure reason shown on the flow, the run row, and what Cortex tells
+ * the person in the chat. That was on screen: a run whose second step timed out
+ * reported the FIRST step as the one that had moved.
+ *
+ * The label the replay reported is the fact, because it was read off the step
+ * as it ran. So the label always wins, and the index is only trusted for the
+ * technical fields — landmarks and value — when it agrees with it.
+ */
+function failedStep(steps: Step[], index: number, label: string): Step {
+  const atIndex = steps[index];
+  if (atIndex && atIndex.label === label) return atIndex;
+
+  // The lists disagree. A single step carrying that label is the honest
+  // recovery; several, or none, and only the label can be trusted.
+  const byLabel = steps.filter((s) => s.label === label);
+  if (byLabel.length === 1 && byLabel[0]) return byLabel[0];
+
+  return { action: 'click', label, targets: [], landmarks: [] };
 }
 
 /**
@@ -432,12 +460,12 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
     };
   }
 
-  const step = flow.steps[failure.index];
+  const step = failedStep(flow.steps, failure.index, failure.label);
   const facts = loginFacts(flow);
   const verdict = classifyFailure({
     evidence: failure.evidence,
     snapshot: failure.snapshot,
-    step: step ?? { action: 'click', label: failure.label, targets: [], landmarks: [] },
+    step,
     flow: facts,
   });
 
@@ -478,8 +506,12 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
     };
   }
 
-  // A transient or legitimate failure ends here, and ends WITHOUT touching the
-  // flow. This early return is the guard the whole module depends on.
+  // Anything that is not `site-changed` ends here, and ends WITHOUT touching
+  // the flow. This early return is the guard the whole module depends on, and
+  // it is what stops a bot check from buying a repair: a challenge page looks
+  // exactly like a redesign from the outside — every selector at zero matches —
+  // so the only thing standing between it and a paid rewrite of a working flow
+  // is that classify.ts named it `needs-human` one rule earlier.
   if (verdict.kind !== 'site-changed') {
     return {
       ok: false,

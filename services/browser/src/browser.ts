@@ -74,7 +74,19 @@ export class BrowserWorker {
         // and Chromium's renderer wants more, which shows up as tabs dying at
         // random on pages with a few images. Writing to /tmp instead is the
         // documented fix and costs nothing here.
-        args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'],
+        //
+        // --disable-blink-features=AutomationControlled: without it Chromium
+        // sets `navigator.webdriver = true`, which is the single cheapest
+        // signal a bot check reads. This is not evasion of anything protective
+        // -- the errands this service runs are somebody doing their own
+        // paperwork on their own accounts -- it is declining to volunteer a
+        // flag that has no meaning to the portal and costs the run everything.
+        args: [
+          '--disable-dev-shm-usage',
+          '--no-sandbox',
+          '--disable-gpu',
+          '--disable-blink-features=AutomationControlled',
+        ],
       })
       .then((browser) => {
         this.browser = browser;
@@ -93,11 +105,40 @@ export class BrowserWorker {
     return this.launching;
   }
 
+  /**
+   * What this browser says it is.
+   *
+   * Playwright's default announces `HeadlessChrome/<version>`, and a portal
+   * that reads it knows within one request that nobody is watching the screen.
+   * Google answers that with /sorry/index -- a verification page with none of
+   * the flow's elements on it, which the classifier could only read as "every
+   * selector stopped matching", i.e. the site was redesigned. So one string in
+   * a header was costing a paid repair per run, forever, on a flow that was
+   * never broken.
+   *
+   * Derived from the real Chromium version rather than pinned to a literal, so
+   * it cannot drift into claiming a browser older than the one running.
+   */
+  private userAgentFor(browser: Browser): string | undefined {
+    if (this.config.userAgent) return this.config.userAgent;
+    const version = browser.version();
+    if (!version) return undefined;
+    return (
+      `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ` +
+      `Chrome/${version} Safari/537.36`
+    );
+  }
+
   private async newContext(): Promise<BrowserContext> {
     const browser = await this.ensureBrowser();
+    const userAgent = this.userAgentFor(browser);
     const context = await browser.newContext({
       viewport: { width: this.config.viewportWidth, height: this.config.viewportHeight },
-      ...(this.config.userAgent ? { userAgent: this.config.userAgent } : {}),
+      ...(userAgent ? { userAgent } : {}),
+      // Sent for the same reason the locale is set: a browser claiming Chrome
+      // on a Bogotá clock that asks for pages in no particular language is a
+      // combination no real visitor produces.
+      extraHTTPHeaders: { 'Accept-Language': 'es-CO,es;q=0.9,en;q=0.8' },
       acceptDownloads: true,
       // Government portals in Colombia routinely serve an expired or
       // misconfigured certificate chain. Refusing them would mean the module

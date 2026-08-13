@@ -132,6 +132,24 @@ async function performStep(
 
   const found = await resolveTarget(page, step.targets, stepDeadline);
   if (!isResolved(found)) {
+    // A KEYSTROKE DOES NOT NEED AN ELEMENT.
+    //
+    // Every other action here acts ON something and is meaningless without it;
+    // `press` acts on whatever has focus, and after a `fill` that is already
+    // the field the person was typing in. Requiring a locator turned "press
+    // Enter" into "find the search box AGAIN, then press Enter" — a second
+    // resolution of an element the previous step just used, which fails the
+    // moment the page rearranges itself around what was typed. Autocomplete
+    // dropdowns do exactly that, on every search box ever built.
+    //
+    // So a press with nothing to point at falls back to the keyboard rather
+    // than failing the run. If the keystroke truly went nowhere, the next step
+    // fails on an element that is not there — which is better evidence anyway.
+    if (step.action === 'press') {
+      await page.keyboard.press(text || 'Enter');
+      await settle(page, step, stepDeadline);
+      return { matchedTarget: 'teclado', matchedRank: null, preview };
+    }
     throw new StepNotFound(step, found.candidates);
   }
   const { locator, rank, target } = found;
@@ -314,6 +332,37 @@ async function readDownload(download: Download): Promise<Record<string, unknown>
   };
 }
 
+/**
+ * Widgets that exist only to ask whether we are a person.
+ *
+ * Counted by frame source rather than by anything visual, because that is the
+ * part these three products cannot vary: reCAPTCHA, hCaptcha and Turnstile all
+ * mount an iframe from their own domain, whatever the host page calls it or
+ * however it is skinned. A `#captcha` div would also catch a portal's own
+ * home-made image-and-textbox challenge, which is deliberately NOT what this
+ * counts -- those are ordinary form fields a recorded flow can and should fill.
+ *
+ * Never throws. A page that will not answer a query about its frames is a page
+ * we are already failing on, and losing the whole evidence bundle over a count
+ * would be trading the diagnosis for one of its lines.
+ */
+async function countChallengeFrames(page: Page): Promise<number> {
+  try {
+    return await page
+      .locator(
+        [
+          'iframe[src*="recaptcha"]',
+          'iframe[src*="hcaptcha"]',
+          'iframe[src*="challenges.cloudflare.com"]',
+          'iframe[title*="captcha" i]',
+        ].join(', '),
+      )
+      .count();
+  } catch {
+    return 0;
+  }
+}
+
 class StepNotFound extends Error {
   constructor(
     readonly step: Step,
@@ -477,6 +526,7 @@ async function fail(
   const snapshot = await snapshotPage(page);
   const present = await countLandmarks(page, step.landmarks);
   const sample = await bodyText(page);
+  const challengeFrames = await countChallengeFrames(page);
 
   const evidence: FailureEvidence = {
     url: page.url(),
@@ -492,6 +542,7 @@ async function fail(
     // Present but unusable: the element exists on the page and the failure was
     // about acting on it, not finding it.
     visibleButBlocked: candidates.some((c) => c.matches > 0),
+    challengeFrames,
   };
 
   return {

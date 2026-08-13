@@ -129,6 +129,17 @@ export interface FailureEvidence {
   candidates: { kind: TargetKind; value: string; matches: number }[];
   /** True when the element is there but cannot be acted on. */
   visibleButBlocked: boolean;
+  /**
+   * Widgets whose only purpose is to ask whether we are a person: reCAPTCHA,
+   * hCaptcha, Cloudflare Turnstile.
+   *
+   * A COUNT, NOT A VERDICT -- the same rule the rest of this interface follows.
+   * Whether a challenge means "retry later", "this site refuses robots" or "ask
+   * somebody to solve it" is decided in classify.ts, which can be tested
+   * without a browser. All this says is how many of those frames were on the
+   * page when the step gave up.
+   */
+  challengeFrames: number;
 }
 
 export interface SnapshotEntry {

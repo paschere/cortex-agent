@@ -437,6 +437,117 @@ describe('when the errand simply fails', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 3b. A bot check is not a redesign.
+//
+// This block exists because of a real, reproduced, recurring bill. Google
+// answers an automated browser with /sorry/index; that page carries none of the
+// flow's elements, so every stored candidate reports zero matches — the exact
+// signature of `element-moved`. The flow was filed as `site-changed`, which is
+// the only verdict that lets a model rewrite a flow, so Cortex paid for a
+// repair against a captcha page, every run, forever.
+// ---------------------------------------------------------------------------
+
+describe('a portal asking whether we are a robot', () => {
+  /** What the real /sorry/index page says, verbatim. */
+  const GOOGLE_SORRY =
+    'Acerca de esta página Nuestros sistemas han detectado tráfico inusual procedente de tu red ' +
+    'de ordenadores. En esta página se comprueba si eres tú quien envía las solicitudes en lugar ' +
+    'de un robot.';
+
+  /** Everything a bot check looks like from the outside: nothing matches. */
+  const nothingMatched = { candidates: [{ kind: 'role' as const, value: 'combobox', matches: 0 }] };
+
+  it('is never site-changed, so no model is ever let near the flow', () => {
+    const verdict = classifyFailure({
+      evidence: evidence({
+        ...nothingMatched,
+        url: 'https://www.google.com/sorry/index?continue=https://www.google.com/search',
+        bodyTextSample: GOOGLE_SORRY,
+      }),
+      snapshot: emptySnapshot(),
+      step: step({ label: 'Presionar Enter para buscar' }),
+    });
+    expect(verdict.kind).toBe('needs-human');
+    expect(verdict.kind).not.toBe('site-changed');
+  });
+
+  it('is recognised by the widget, by the address and by the words, separately', () => {
+    // The widget alone — a page in a language we do not list, or an image with
+    // no text at all.
+    expect(
+      classifyFailure({
+        evidence: evidence({ ...nothingMatched, challengeFrames: 1, bodyTextSample: '' }),
+        snapshot: emptySnapshot(),
+        step: step({ label: 'Consultar' }),
+      }).rule,
+    ).toBe('bot-check:widget');
+
+    // The address alone — Cloudflare's interstitial.
+    expect(
+      classifyFailure({
+        evidence: evidence({
+          ...nothingMatched,
+          url: 'https://portal.test/cdn-cgi/challenge-platform/h/b/orchestrate',
+          bodyTextSample: '',
+        }),
+        snapshot: emptySnapshot(),
+        step: step({ label: 'Consultar' }),
+      }).rule,
+    ).toBe('bot-check:url');
+
+    // The words alone.
+    expect(
+      classifyFailure({
+        evidence: evidence({ ...nothingMatched, bodyTextSample: GOOGLE_SORRY }),
+        snapshot: emptySnapshot(),
+        step: step({ label: 'Consultar' }),
+      }).rule,
+    ).toBe('bot-check:text');
+  });
+
+  it('does not steal the case where somebody typed a captcha wrong', () => {
+    // "captcha incorrecto" is an ordinary refusal: the flow is fine, the answer
+    // was no, and nothing needs a person to come and unlock anything. This is
+    // why the phrase list never contains a bare "captcha".
+    const verdict = classifyFailure({
+      evidence: evidence({ alertText: 'El captcha incorrecto, intente de nuevo' }),
+      snapshot: emptySnapshot(),
+      step: step({ label: 'Consultar' }),
+    });
+    expect(verdict.kind).toBe('legitimate');
+    expect(verdict.rule).toBe('refusal-text');
+  });
+
+  it('still believes a site that says it is down', () => {
+    // Rule 3 stays above this one: "en mantenimiento" is transient and retrying
+    // is right, even on a page that also happens to carry a challenge widget.
+    expect(
+      classifyFailure({
+        evidence: evidence({
+          ...nothingMatched,
+          challengeFrames: 1,
+          bodyTextSample: 'El portal está en mantenimiento.',
+        }),
+        snapshot: emptySnapshot(),
+        step: step({ label: 'Consultar' }),
+      }).kind,
+    ).toBe('transient');
+  });
+
+  it('an ordinary missing element is still site-changed', () => {
+    // The guard in the other direction: this rule must not swallow the case
+    // repair exists for.
+    expect(
+      classifyFailure({
+        evidence: evidence(nothingMatched),
+        snapshot: emptySnapshot(),
+        step: step({ label: 'Consultar' }),
+      }),
+    ).toMatchObject({ kind: 'site-changed', rule: 'element-moved' });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 4. A credential never appears anywhere it should not.
 // ---------------------------------------------------------------------------
 

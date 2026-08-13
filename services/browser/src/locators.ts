@@ -72,6 +72,7 @@ export async function resolveTarget(
   deadline: number,
 ): Promise<Resolved | ResolveFailure> {
   const counts = new Map<string, number>();
+  let sweeps = 0;
 
   // Polled rather than awaited on one locator: `waitFor` would spend the whole
   // budget on candidate 0 and never reach the one that still works.
@@ -91,6 +92,21 @@ export async function resolveTarget(
       }
     }
     if (Date.now() >= deadline) break;
+
+    // STOP WAITING FOR A PAGE THAT IS ASKING WHETHER WE ARE A ROBOT.
+    //
+    // Waiting is right when the element is late; it is pure waste when the
+    // portal has replaced the page with a verification screen, because nothing
+    // we are looking for is ever going to appear. Measured on the real case:
+    // twenty seconds of polling per step against google.com/sorry, and the
+    // verdict at the end was the same one available in the first second.
+    //
+    // Checked every eighth sweep (~2s) rather than every sweep: it is a DOM
+    // query in the hot loop of every step in the product, and a challenge that
+    // is two seconds old is still a challenge.
+    sweeps += 1;
+    if (sweeps % 8 === 0 && (await looksLikeAChallenge(page))) break;
+
     await page.waitForTimeout(250).catch(() => undefined);
   }
 
@@ -105,6 +121,30 @@ export async function resolveTarget(
 
 export function isResolved(value: Resolved | ResolveFailure): value is Resolved {
   return 'locator' in value;
+}
+
+/**
+ * A cheap "is this a bot check" for the resolution loop.
+ *
+ * Deliberately weaker than the classifier: this only decides whether to STOP
+ * WAITING, and being wrong costs a step that would have failed anyway a few
+ * seconds earlier. The verdict — and therefore whether a model is allowed near
+ * the flow — is still made in classify.ts from the full evidence bundle.
+ */
+async function looksLikeAChallenge(page: Page): Promise<boolean> {
+  try {
+    if (/\/sorry\/|\/cdn-cgi\/challenge|__cf_chl|\/challenge-platform/.test(page.url())) {
+      return true;
+    }
+    const frames = await page
+      .locator(
+        'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"]',
+      )
+      .count();
+    return frames > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** How a target reads in the audit trail. Short, and never a value. */
