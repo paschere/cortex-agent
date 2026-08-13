@@ -2,6 +2,7 @@
 
 import { MODULE } from '@/lib/browser-shape';
 import type { NavCounts } from '@/lib/nav-signals';
+import { orderByUsage, readUsage, recordVisit } from '@/lib/nav-usage';
 import type { Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
@@ -81,9 +82,21 @@ interface NavSection {
 // section is the only one that has to be defended: an entry belongs there only
 // if somebody opens it without being sent by something else.
 //
-// EVERY LABEL IS THE WORD ITS OWN SCREEN USES. Untranslated on purpose: Chat and
-// WhatsApp read the same in Spanish, Brain Knowledge is the product's name for
-// the thing, and Conectar Claude names an external product.
+// EVERY DESTINATION LABEL IS THE WORD ITS OWN SCREEN USES. Untranslated on
+// purpose: Chat and WhatsApp read the same in Spanish, Brain Knowledge is the
+// product's name for the thing, and Conectar Claude names an external product.
+//
+// THE SECTION HEADINGS ARE THE EXCEPTION, AND THEY SPEAK IN THE FIRST PERSON.
+// This product is sold as a manager for a company, not as a box of tools, and
+// the rail is the first place that claim is either made or quietly dropped.
+// «Automático», «Seguimiento», «Conexiones» are categories of software;
+// «Lo que hago solo», «Cómo vamos», «De dónde saco todo» are the things a
+// manager would say about their own week.
+//
+// The headings can carry that voice precisely BECAUSE they name no screen —
+// they group. A destination has to keep saying what its own page says, or the
+// rail starts sending people to a word they will not find when they arrive,
+// which is the failure this file already fixed once.
 const SECTIONS: NavSection[] = [
   {
     id: 'daily',
@@ -120,7 +133,7 @@ const SECTIONS: NavSection[] = [
     // escalation from "a flow you wrote down" to "an errand that asks you
     // questions" was an argument the old notes made, and the notes are gone.
     id: 'automation',
-    label: 'Automático',
+    label: 'Lo que hago solo',
     items: [
       { href: '/errands', label: 'Encargos', icon: Briefcase, signal: 'errands' },
       // The label comes from lib/browser-shape so the screen, the palette and
@@ -135,7 +148,7 @@ const SECTIONS: NavSection[] = [
   {
     // Read, do not act. Everything here answers a question about a period.
     id: 'review',
-    label: 'Seguimiento',
+    label: 'Cómo vamos',
     items: [
       { href: '/reports', label: 'Informes', icon: FileBarChart },
       { href: '/prospects', label: 'Prospectos', icon: Radar },
@@ -144,7 +157,7 @@ const SECTIONS: NavSection[] = [
   },
   {
     id: 'connections',
-    label: 'Conexiones',
+    label: 'De dónde saco todo',
     items: [
       { href: '/integrations', label: 'Integraciones', icon: Plug },
       { href: '/integrations/whatsapp', label: 'WhatsApp', icon: MessageCircle },
@@ -153,7 +166,7 @@ const SECTIONS: NavSection[] = [
   },
   {
     id: 'admin',
-    label: 'Administración',
+    label: 'La empresa',
     adminOnly: true,
     items: [
       { href: '/admin/users', label: 'Personas', icon: Users },
@@ -390,31 +403,57 @@ function SidebarNav({
   const pathname = usePathname();
   const sections = SECTIONS.filter((s) => !s.adminOnly || role === 'org_admin');
 
+  /**
+   * Read once after mount, never during render.
+   *
+   * `localStorage` does not exist on the server, so reading it while rendering
+   * would either throw or make the first client paint disagree with the HTML
+   * that came down. Both show up as a rail that jumps. So the first paint is
+   * always the designed order, and the personalised one arrives a tick later —
+   * which is also the honest order of events: nothing is known about this
+   * person until their browser says so.
+   */
+  const [usage, setUsage] = useState<Record<string, number>>({});
+  useEffect(() => setUsage(readUsage()), [pathname]);
+
+  const visit = (href: string) => {
+    recordVisit(href);
+    onNavigate?.();
+  };
+
   return (
     <nav aria-label="Main" className="scroll-slim h-full overflow-y-auto px-3 pb-3">
       <SearchRow collapsed={collapsed} onNavigate={onNavigate} />
 
-      {sections.map((section, i) => (
-        <div key={section.id}>
-          {/* Collapsed, a 72px rail has no room for a heading, so the sections
-              are separated by the hairline that would have sat under one. */}
-          {collapsed
-            ? i > 0 && <div className="mx-2 my-2 border-t border-border" />
-            : section.label && <SectionLabel>{section.label}</SectionLabel>}
-          <div className={clsx('flex flex-col', collapsed ? 'gap-0.5' : 'gap-px')}>
-            {section.items.map((item) => (
-              <NavRow
-                key={item.href}
-                item={item}
-                collapsed={collapsed}
-                pathname={pathname}
-                counts={counts}
-                onNavigate={onNavigate}
-              />
-            ))}
+      {sections.map((section, i) => {
+        // The daily block keeps its authored order, always. It is the part
+        // people learn with their hands — Inicio, Chat, Aprobaciones, in that
+        // order, every morning — and moving a target somebody is already
+        // reaching for is exactly how an adaptive menu becomes a menu you have
+        // to read again.
+        const items = section.label ? orderByUsage(section.items, usage) : section.items;
+        return (
+          <div key={section.id}>
+            {/* Collapsed, a 72px rail has no room for a heading, so the sections
+                are separated by the hairline that would have sat under one. */}
+            {collapsed
+              ? i > 0 && <div className="mx-2 my-2 border-t border-border" />
+              : section.label && <SectionLabel>{section.label}</SectionLabel>}
+            <div className={clsx('flex flex-col', collapsed ? 'gap-0.5' : 'gap-px')}>
+              {items.map((item) => (
+                <NavRow
+                  key={item.href}
+                  item={item}
+                  collapsed={collapsed}
+                  pathname={pathname}
+                  counts={counts}
+                  onNavigate={() => visit(item.href)}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </nav>
   );
 }
