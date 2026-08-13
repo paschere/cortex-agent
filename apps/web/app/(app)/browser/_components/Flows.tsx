@@ -1,10 +1,11 @@
 'use client';
 
+import { type ChallengeHandoff, ChallengeHelper } from '@/components/browser/ChallengeHelper';
+import { DeliveryFields } from '@/components/browser/DeliveryFields';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Panel } from '@/components/ui/panel';
 import { Provenance } from '@/components/ui/provenance';
-import { DeliveryFields } from '@/components/browser/DeliveryFields';
 import {
   ACTION_LABEL,
   DELIVER_TO_LABEL,
@@ -22,7 +23,7 @@ import { chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { Bell, ChevronRight, KeyRound, Loader2, Play, Send, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { health, byUrgency, money, secs, stamp } from '../_lib/flow-view';
+import { byUrgency, health, money, secs, stamp } from '../_lib/flow-view';
 
 /**
  * La biblioteca de trámites aprendidos.
@@ -170,9 +171,7 @@ function Row({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className={chipClass(STATUS_TONE[flow.status])}>
-              {STATUS_LABEL[flow.status]}
-            </span>
+            <span className={chipClass(STATUS_TONE[flow.status])}>{STATUS_LABEL[flow.status]}</span>
             <span className="min-w-0 truncate text-[14.5px] font-semibold text-ink">
               {flow.name}
             </span>
@@ -193,7 +192,9 @@ function Row({
                 source={flow.site}
                 readAt={stamp(flow.verifiedAt)}
                 detail={
-                  state === 'trouble' ? 'reprodujo, y dejó de hacerlo' : 'reprodujo el trámite entero'
+                  state === 'trouble'
+                    ? 'reprodujo, y dejó de hacerlo'
+                    : 'reprodujo el trámite entero'
                 }
                 tone={state === 'trouble' ? 'seal' : 'stamp'}
               />
@@ -253,12 +254,7 @@ function LastRun({ flow }: { flow: FlowSummary }) {
   }
   const failed = flow.lastRunStatus === 'failed';
   return (
-    <span
-      className={clsx(
-        'text-[12px]',
-        failed ? 'font-semibold text-rose' : 'text-ink-muted',
-      )}
-    >
+    <span className={clsx('text-[12px]', failed ? 'font-semibold text-rose' : 'text-ink-muted')}>
       {failed ? 'falló ' : 'corrió bien '}
       <span className="tabular">{relativeTime(flow.lastRunAt)}</span>
       {!failed && flow.lastRunSeconds !== null && (
@@ -273,6 +269,15 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  /**
+   * The tab is still open on a bot check, waiting for a person.
+   *
+   * Kept in component state and nowhere else, on purpose: the session behind it
+   * lives about five minutes and then the browser service sweeps the tab. A
+   * stored one would outlive the thing it points at, and an offer to unlock a
+   * session that no longer exists is worse than no offer.
+   */
+  const [handoff, setHandoff] = useState<ChallengeHandoff | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/browser/flows/${flow.id}`);
@@ -289,6 +294,7 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
   const run = useCallback(async () => {
     setRunning(true);
     setResult(null);
+    setHandoff(null);
     const response = await fetch(`/api/browser/flows/${flow.id}/run`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -300,6 +306,7 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
       seconds: number;
       costUsd: number;
       modelCalls: number;
+      handoff: ChallengeHandoff | null;
     };
     setResult(
       `${payload.message} (${secs(payload.seconds)}, ${
@@ -308,6 +315,10 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
           : `${payload.modelCalls} llamada(s) al modelo, ${money(payload.costUsd)}`
       })`,
     );
+    // Only when the browser really did keep the tab: the service declines to
+    // hold one when it is out of room, and then this is an ordinary failure
+    // with a sentence rather than an offer that cannot be honoured.
+    if (payload.handoff) setHandoff(payload.handoff);
     setRunning(false);
     void load();
     onChanged();
@@ -361,6 +372,23 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
           </Button>
         </div>
         {result && <p className="mt-3 text-[13px] leading-relaxed text-ink">{result}</p>}
+
+        {/* The portal asked whether we are a robot and the tab is still open.
+            Right here, under the button that started the run, because that is
+            where the person is looking and the offer expires in minutes. */}
+        {handoff && (
+          <div className="mt-4">
+            <ChallengeHelper
+              handoff={handoff}
+              onFinished={({ message }) => {
+                setHandoff(null);
+                setResult(message);
+                void load();
+                onChanged();
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {detail && (
@@ -607,9 +635,7 @@ function Remove({
 
   return (
     <div className="bg-rose-soft/50 p-5">
-      <h3 className="text-[13.5px] font-semibold text-ink">
-        Eliminar «{flow.name}»
-      </h3>
+      <h3 className="text-[13.5px] font-semibold text-ink">Eliminar «{flow.name}»</h3>
 
       {removal.dependents.length > 0 && (
         <div className="mt-2.5 rounded-sm border border-amber/20 bg-amber-soft px-3 py-2">
@@ -657,11 +683,9 @@ function Remove({
           {shared ? (
             <p className="text-[12.5px] leading-snug text-ink-muted">
               <KeyRound className="mr-1 inline h-3 w-3 align-[-1px]" aria-hidden="true" />
-              La clave <strong className="font-semibold text-ink">
-                «{removal.credential.label}»
-              </strong>{' '}
-              se queda, porque también la usa{' '}
-              {removal.credential.alsoUsedBy.join(', ')}.
+              La clave{' '}
+              <strong className="font-semibold text-ink">«{removal.credential.label}»</strong> se
+              queda, porque también la usa {removal.credential.alsoUsedBy.join(', ')}.
             </p>
           ) : (
             <label className="flex cursor-pointer items-start gap-2 text-[12.5px] leading-snug text-ink">
@@ -708,4 +732,9 @@ const FAILURE_LABEL: Record<string, string> = {
   transient: 'problema del sitio',
   legitimate: 'el portal lo rechazó',
   'site-changed': 'el portal cambió',
+  'needs-login': 'falta la cuenta',
+  // Reads as a state, not a defeat, because it is one: nothing is wrong with
+  // the trámite. Before this existed, a portal asking «¿eres un robot?» was
+  // filed as «el portal cambió» and bought a paid repair on every run.
+  'needs-human': 'pide verificación',
 };

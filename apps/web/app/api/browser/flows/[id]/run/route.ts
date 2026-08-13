@@ -89,6 +89,11 @@ export async function POST(
     // Not a failure: the run stopped and asked for something. The screen can
     // read this to offer binding a credential instead of reporting a defeat.
     pendingQuestion: outcome.pendingQuestion ?? null,
+    // The portal stopped to ask whether we are a robot and the browser is
+    // STILL OPEN on that page, for a few minutes, waiting for a person. Passed
+    // straight through and never stored: the tab it points at is swept long
+    // before any row about it would stop being true. See BrowserHandoff.
+    handoff: outcome.handoff ?? null,
     repaired: outcome.repaired ?? false,
     version: outcome.newVersion ?? flow.version,
     // So the screen can say "y te lo mandé al correo" instead of leaving the
