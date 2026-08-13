@@ -288,7 +288,7 @@ export function ScreenViewButton({
  */
 function HowItWorks() {
   const points = [
-    'Miro un cuadro de la pestaña cada vez que envías una pregunta, y sólo entonces. Entre pregunta y pregunta no estoy mirando nada.',
+    'Miro un cuadro de la pestaña cada vez que envías una pregunta, y sólo entonces. Entre pregunta y pregunta no estoy mirando nada: mirar todo el rato costaría plata en cada cuadro y sería estar leyendo tu pantalla sin que me lo pidas.',
     'Uso ese cuadro para responderte y se borra. No queda guardado en ninguna parte: en la conversación queda anotado que miré y a qué hora, para que mañana se entienda de qué estabas hablando.',
     'Cortas cuando quieras, desde la franja que queda arriba del cuadro de texto o desde el aviso del propio navegador.',
   ];
@@ -380,8 +380,19 @@ export function GlanceNote({ at }: { at: string }) {
     <p className="mt-1 flex items-center justify-end gap-1.5 text-[11px] text-ink-faint">
       <ScanEye className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span>
-        Miré tu pestaña compartida{label ? <span className="tabular"> a las {label}</span> : null}.
-        La imagen no se guardó.
+        Miré tu pestaña compartida
+        {label ? (
+          // The server renders this in the server's timezone and the browser
+          // re-renders it in the person's, which is a hydration mismatch on a
+          // string that is CORRECT both times. Suppressed rather than deferred
+          // to an effect: the time is the point of the line, and a line that
+          // appears a frame late reads as a glitch.
+          <span className="tabular" suppressHydrationWarning>
+            {' '}
+            a las {label}
+          </span>
+        ) : null}
+        . La imagen no se guardó.
       </span>
     </p>
   );

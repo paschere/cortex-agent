@@ -269,7 +269,136 @@ export interface OutOfScope {
 
 export type NormalizeResult =
   | { ok: true; item: ProposedItem }
-  | { ok: false; reason: string; kind: string; title: string };
+  | {
+      ok: false;
+      reason: string;
+      kind: string;
+      title: string;
+      /**
+       * A dónde va lo rechazado cuando la persona merece una respuesta y no
+       * silencio. `handoff` cuando el producto sí lo hace por otro camino;
+       * `'scope'` cuando no lo hace y hay que decirlo; `null` cuando lo que
+       * falló fue la forma del dato y no la promesa (una fecha que no era una
+       * fecha) — eso no se le cuenta a nadie, se pregunta otra vez.
+       */
+      route: HandoffKind | 'scope' | null;
+    };
+
+// ---------------------------------------------------------------------------
+// Lo que una rutina creada aquí NO puede prometer
+// ---------------------------------------------------------------------------
+
+/**
+ * EL FILTRO QUE NO DEPENDE DEL MODELO.
+ *
+ * Un tipo válido con campos válidos todavía puede ser una mentira. «Todos los
+ * lunes a las 7 avísale por WhatsApp al cliente que su contenedor llegó» es una
+ * rutina perfectamente formada: nombre, cron, instrucción. Se crearía sin
+ * problema, y no haría nada de lo que dice.
+ *
+ * Y la razón no es una opinión sobre el modelo: es una propiedad de lo que
+ * `createRoutineItem` escribe. Una rutina nacida de una entrevista se crea con
+ * `allow_unattended_writes: false` — a propósito, porque no es una decisión que
+ * se tome por alguien en su primer día a partir de una frase hablada. Una
+ * rutina así INFORMA; no manda, no paga, no firma, no radica. Cualquier
+ * instrucción que le pida actuar hacia afuera describe algo que la fila creada
+ * no puede hacer.
+ *
+ * Lo mismo con los portales. Una rutina no sabe navegar la DIAN: eso son
+ * trámites, y se aprenden grabando el portal una vez. Pedirlo aquí no está mal
+ * — está en el sitio equivocado, y la respuesta correcta es llevar a la persona
+ * a donde sí se hace.
+ *
+ * Aplica SÓLO a rutinas, y la excepción es deliberada. Un flujo es un
+ * procedimiento escrito que siguen PERSONAS; que uno de sus pasos diga «el
+ * auxiliar manda el correo al cliente» es exactamente lo que un flujo debe
+ * decir, y no promete nada de parte de Cortex.
+ *
+ * Falla hacia menos: ante la duda rechaza, y rechazar produce una frase honesta
+ * en pantalla en vez de una rutina muda.
+ */
+
+/** Sin tildes y en minúscula, para que una sola regla cubra las dos escrituras. */
+function fold(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+/**
+ * «Sin pagar», «facturas por pagar»: eso describe un ESTADO, no le pide a nadie
+ * que pague. Se quitan antes de buscar verbos, porque «dime qué facturas siguen
+ * sin pagar» es exactamente lo que una rutina sí sabe hacer y sería absurdo
+ * rechazarlo por contener la palabra.
+ */
+const STATE_PHRASE =
+  /\b(sin|por)\s+(pagar|facturar|firmar|radicar|enviar|mandar|responder|contestar|llamar|publicar|transferir|cobrar)\b/g;
+
+/**
+ * Actuar hacia afuera. Las formas con pronombre en primera persona —«envíame»,
+ * «mándame»— no están y no pueden estar: `\benvia\b` no casa dentro de
+ * «enviame», que es justamente lo que una rutina sí hace (avisarte a ti).
+ */
+const OUTWARD =
+  /\b(envia|enviar|envie|envien|manda|mandar|mande|manden|responde|responder|responda|contesta|contestar|conteste|pagar|pague|paguen|transferir|transfiera|facturar|facture|firmar|firme|radicar|radique|llamar|llame|publicar|publique|cobrar|cobre)\b/;
+
+/**
+ * Y las mismas hacia una tercera persona: «avísale», «llámalo», «págale». El
+ * pronombre pegado es lo que las separa de «avísame», y es toda la diferencia
+ * entre informar y actuar.
+ */
+const OUTWARD_CLITIC =
+  /\b(avisa|escribe|contacta|llama|paga|pague|responde|contesta|manda|envia|factura|cobra|firma|radica)(le|les|lo|la|los|las|selo|sela)\b/;
+
+/** Sitios donde hay que entrar con usuario y contraseña: eso son trámites. */
+const PORTAL =
+  /\b(dian|runt|simit|vuce|muisca|siat|sicex|supersociedades|camara de comercio|portal|plataforma|pagina web|sitio web|banco|bancolombia|davivienda|naviera|aerolinea)\b/;
+
+/** Saber dónde va algo ahora mismo. Cortex no lee sensores. */
+const LIVE = /\b(gps|tiempo real|rastreo|rastrear|en vivo|geocerca|telemetria)\b/;
+
+export interface CapabilityRefusal {
+  reason: string;
+  route: HandoffKind | 'scope';
+}
+
+/**
+ * ¿Esta rutina promete algo que la fila creada no puede cumplir? Pura, sin
+ * modelo, sin red — y por eso comprobable con un test normal.
+ */
+export function capabilityRefusal(
+  kind: SetupKind,
+  payload: SetupPayload,
+): CapabilityRefusal | null {
+  if (kind !== 'routine') return null;
+  const text = fold(`${(payload as RoutinePayload).instruction ?? ''}`).replace(
+    STATE_PHRASE,
+    ' ',
+  );
+
+  if (PORTAL.test(text)) {
+    return {
+      reason:
+        'Una rutina no sabe entrar a un portal con usuario y contraseña. Eso son trámites y se enseñan grabándolos una vez.',
+      route: 'tramite',
+    };
+  }
+  if (OUTWARD.test(text) || OUTWARD_CLITIC.test(text)) {
+    return {
+      reason:
+        'Una rutina creada aquí no manda, no paga ni firma nada por su cuenta: nace sin ese permiso, sólo te informa a ti. Si de verdad la quieres así, hay que dársela a mano.',
+      route: 'scope',
+    };
+  }
+  if (LIVE.test(text)) {
+    return {
+      reason: 'Cortex no lee posiciones ni sensores en vivo, así que no puede vigilar eso.',
+      route: 'scope',
+    };
+  }
+  return null;
+}
 
 /** Máximo por sesión. Más que esto no es una puesta en marcha, es un vertedero. */
 export const MAX_ITEMS = 8;
@@ -305,7 +434,7 @@ export function normalizeProposal(raw: unknown, today: string): NormalizeResult 
     .safeParse(raw);
 
   if (!outer.success) {
-    return { ok: false, reason: 'La propuesta llegó incompleta.', kind: '?', title: '?' };
+    return { ok: false, reason: 'La propuesta llegó incompleta.', kind: '?', title: '?', route: null };
   }
   const { kind, title, rationale } = outer.data;
 
@@ -315,6 +444,10 @@ export function normalizeProposal(raw: unknown, today: string): NormalizeResult 
       reason: `«${kind}» no es algo que este producto sepa crear.`,
       kind,
       title,
+      // Un tipo inventado sí se le cuenta a la persona: pidió algo real.
+      route: (HANDOFF_KINDS as readonly string[]).includes(kind)
+        ? (kind as HandoffKind)
+        : 'scope',
     };
   }
   const setupKind = kind as SetupKind;
@@ -328,6 +461,7 @@ export function normalizeProposal(raw: unknown, today: string): NormalizeResult 
       reason: `Faltan datos para crearlo: ${where}.`,
       kind,
       title,
+      route: null,
     };
   }
 
@@ -335,7 +469,7 @@ export function normalizeProposal(raw: unknown, today: string): NormalizeResult 
     const payload = parsed.data as CommitmentPayload;
     const delta = daysFromToday(payload.dueOn, today);
     if (delta === null) {
-      return { ok: false, reason: 'Esa fecha no es una fecha.', kind, title };
+      return { ok: false, reason: 'Esa fecha no es una fecha.', kind, title, route: null };
     }
     if (delta < -PAST_DAYS || delta > FUTURE_DAYS) {
       return {
@@ -343,8 +477,17 @@ export function normalizeProposal(raw: unknown, today: string): NormalizeResult 
         reason: 'Esa fecha está demasiado lejos para vigilarla; hay que confirmarla primero.',
         kind,
         title,
+        route: null,
       };
     }
+  }
+
+  // La última puerta, y la que no depende de que el modelo se porte bien: una
+  // propuesta con la forma correcta que promete algo que la fila creada no
+  // puede cumplir.
+  const refusal = capabilityRefusal(setupKind, parsed.data as SetupPayload);
+  if (refusal) {
+    return { ok: false, reason: refusal.reason, kind, title, route: refusal.route };
   }
 
   return {

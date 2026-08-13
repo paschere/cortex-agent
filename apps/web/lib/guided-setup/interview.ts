@@ -297,6 +297,14 @@ export async function propose(
 
   const items: ProposedItem[] = [];
   const rejected: Proposal['rejected'] = [];
+  const handoffs: Handoff[] = object.handoffs.map((h) => ({
+    kind: h.kind,
+    want: h.want.trim().slice(0, 240),
+  }));
+  const outOfScope: OutOfScope[] = object.outOfScope.map((o) => ({
+    want: o.want.trim().slice(0, 300),
+    note: o.note.trim().slice(0, 300),
+  }));
 
   for (const raw of object.items) {
     if (raw.kind === 'space' && !ctx.canCreateGlobalSpace) {
@@ -316,20 +324,42 @@ export async function propose(
       },
       ctx.today,
     );
-    if (result.ok) items.push(result.item);
-    else rejected.push({ kind: result.kind, title: result.title, reason: result.reason });
+    if (result.ok) {
+      items.push(result.item);
+      continue;
+    }
+    rejected.push({ kind: result.kind, title: result.title, reason: result.reason });
+
+    // Un rechazo con destino NO se traga: la persona pidió algo real y merece
+    // saber qué pasó con eso. Si el modelo lo empaquetó como una rutina que
+    // manda correos, el código lo desarma y lo pone donde de verdad va — que es
+    // la diferencia entre «no salió» y «no te lo puedo hacer, y te digo dónde
+    // sí». Los rechazos de FORMA (`route: null`) sí se callan: «faltó la fecha»
+    // no es una limitación del producto, es una pregunta pendiente.
+    if (result.route === 'scope') {
+      outOfScope.push({ want: result.title, note: result.reason });
+    } else if (result.route) {
+      handoffs.push({ kind: result.route, want: result.title });
+    }
   }
 
   return {
     summary: object.summary.trim().slice(0, 600),
     items: items.slice(0, MAX_ITEMS),
-    handoffs: object.handoffs.map((h) => ({ kind: h.kind, want: h.want.trim().slice(0, 240) })),
-    outOfScope: object.outOfScope.map((o) => ({
-      want: o.want.trim().slice(0, 300),
-      note: o.note.trim().slice(0, 300),
-    })),
+    handoffs: dedupe(handoffs, (h) => `${h.kind}|${h.want}`).slice(0, 6),
+    outOfScope: dedupe(outOfScope, (o) => o.want).slice(0, 6),
     rejected,
   };
+}
+
+function dedupe<T>(list: T[], key: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return list.filter((item) => {
+    const k = key(item).toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 /** Recoge del ítem plano sólo lo que su tipo usa. Lo demás se cae. */

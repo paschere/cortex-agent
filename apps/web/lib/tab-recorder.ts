@@ -420,11 +420,16 @@ export function canRecordTab(): boolean {
  * and the picture — small, but exactly long enough for a page to redraw.
  *
  * ---------------------------------------------------------------------------
- * QUALITY IS FREE, RESOLUTION IS NOT, AND HERE IS THE BILL
+ * QUALITY IS FREE, RESOLUTION IS NOT, AND HERE IS THE (ESTIMATED) BILL
  * ---------------------------------------------------------------------------
- * An image costs the model `width × height / 750` input tokens and nothing
- * else — not the bytes, not the JPEG quality, not what is on the screen. So the
- * two knobs are not equivalent at all:
+ * ESTIMATED, NOT MEASURED. Every figure below is arithmetic on Anthropic's
+ * published image formula and on this repo's own prices and prompt sizes; not
+ * one of them came from a live call, because none was made. See the note on
+ * `glanceTokens` in lib/screen-glance.ts for what would confirm them.
+ *
+ * An image costs `width × height / 750` input tokens and nothing else — not the
+ * bytes, not the JPEG quality, not what is on the screen. So the two knobs are
+ * not equivalent at all:
  *
  *   QUALITY is free. The recording path encodes at 0.6 because it sends twenty
  *   frames and cares about upload size. One frame can afford 0.85, and the
@@ -432,21 +437,27 @@ export function canRecordTab(): boolean {
  *   a government portal. It costs upload bandwidth and not one cent of model.
  *
  *   RESOLUTION is the bill. A tab on an ordinary laptop arrives here as
- *   1280×720 after `MAX_EDGE`, which is 1 229 tokens, or US$0,0037 at the
- *   US$3/Mtok this repo prices Sonnet 5 at (browser/cost.ts). Measured against
- *   this repo's own turn — the tool schemas really offered plus the agent
- *   prompt, ≈12 000 input tokens, of which the ≈9 200-token head is cached —
- *   a question with a picture costs about 18 % more than the same question
- *   without one: roughly US$0,0237 against US$0,0200. Ten thousand screen
- *   questions a month is US$37 in image tokens.
+ *   1280×720 after `MAX_EDGE`: 1 229 tokens, US$0,0037 at the US$3/Mtok this
+ *   repo prices Sonnet 5 at (browser/cost.ts). Set against a turn measured from
+ *   this repo — the tool schemas really offered plus the agent prompt, ≈12 000
+ *   input tokens, of which the ≈9 200-token head is cached — a question with a
+ *   picture costs roughly 18 % more than the same question without one:
+ *   ≈US$0,0237 against ≈US$0,0200. Ten thousand screen questions in a month is
+ *   about US$37 of image.
+ *
+ * WHICH IS WHY NOTHING IS SAMPLED. The same arithmetic run against the obvious
+ * design is the argument for this one: streaming even one frame a second would
+ * be 1 229 tokens EVERY SECOND — on the order of US$13 an hour per person, for
+ * frames nobody asked a question about. One frame per question is not the
+ * elegant choice, it is the only affordable one, and it happens to also be the
+ * only one that can honestly say Cortex is not watching.
  *
  * Dropping the long edge to 1024 would save 443 tokens, US$0,0012 a question,
  * US$12 per ten thousand — and cost 20 % of the linear resolution of the small
- * print this exists to read. That is not a trade worth making: the failure it
- * buys is a confident answer about a misread number, which is the one failure
- * this product cannot afford. `MAX_EDGE` therefore stays where the recorder put
- * it, and the number to watch instead is the prompt cache hit rate, which moves
- * a turn's cost by several times what the picture does.
+ * print this exists to read. Not a trade worth making: what it buys is a
+ * confident answer about a misread number. `MAX_EDGE` therefore stays where the
+ * recorder put it, and the figure to watch instead is the prompt cache hit
+ * rate, which moves a turn's cost by several times what the picture does.
  */
 export interface ScreenGlance {
   base64: string;

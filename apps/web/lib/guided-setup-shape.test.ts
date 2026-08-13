@@ -149,6 +149,113 @@ describe('lo que sí sabe crear', () => {
   });
 });
 
+/**
+ * El bloque que importa si el modelo se porta mal, que es el supuesto con el
+ * que hay que diseñar. Ninguna de estas decisiones es suya: son código.
+ */
+describe('una rutina no puede prometer lo que la fila creada no hace', () => {
+  function routine(instruction: string) {
+    return normalizeProposal(
+      {
+        kind: 'routine',
+        title: 'Aviso al cliente',
+        rationale: '',
+        payload: { name: 'Aviso al cliente', cron: '0 7 * * 1', instruction },
+      },
+      TODAY,
+    );
+  }
+
+  it('rechaza una rutina que dice que va a mandar algo', () => {
+    // Se crea con allow_unattended_writes = false. Diría que manda y no manda.
+    const result = routine('Envía un correo al cliente contándole cómo va su carga.');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.route).toBe('scope');
+      expect(result.reason).toContain('no manda');
+    }
+  });
+
+  it('rechaza también las formas con pronombre hacia afuera', () => {
+    expect(routine('Avísale al cliente por WhatsApp cuando llegue el contenedor.').ok).toBe(false);
+    expect(routine('Llámalo si no ha contestado en dos días.').ok).toBe(false);
+    expect(routine('Págale al proveedor lo que quede pendiente.').ok).toBe(false);
+  });
+
+  it('pero sí acepta que te informe a ti, que es lo único que sabe hacer', () => {
+    expect(routine('Envíame un resumen de los despachos que quedaron abiertos.').ok).toBe(true);
+    expect(routine('Mándame el listado de lo que se vence esta semana.').ok).toBe(true);
+    expect(routine('Dime qué facturas siguen sin pagar y de quién son.').ok).toBe(true);
+  });
+
+  it('manda a trámites lo que exige entrar a un portal', () => {
+    const result = routine('Todos los lunes entra al RUNT y revisa los comparendos de la flota.');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.route).toBe('tramite');
+  });
+
+  it('no promete leer posiciones en vivo', () => {
+    const result = routine('Revisa el GPS de los camiones y dime dónde están en tiempo real.');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.route).toBe('scope');
+  });
+
+  it('no le aplica la regla a un flujo: sus pasos los hacen personas', () => {
+    const result = normalizeProposal(
+      {
+        kind: 'flow',
+        title: 'Llegada de contenedor',
+        rationale: '',
+        payload: {
+          name: 'Llegada de contenedor',
+          steps: [
+            { title: 'Revisar', detail: 'Revisar la documentación del contenedor.', checkpoint: false },
+            { title: 'Avisar', detail: 'El auxiliar envía el correo al cliente.', checkpoint: true },
+          ],
+        },
+      },
+      TODAY,
+    );
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe('lo rechazado va al cajón correcto', () => {
+  it('un tipo que es un trámite se reconoce como trámite, no como "error"', () => {
+    const result = normalizeProposal(
+      { kind: 'tramite', title: 'Sacar el RUT', rationale: '', payload: {} },
+      TODAY,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.route).toBe('tramite');
+  });
+
+  it('un tipo que no existe se cuenta como fuera de alcance', () => {
+    const result = normalizeProposal(
+      { kind: 'erp_sync', title: 'Sincronizar con el ERP', rationale: '', payload: {} },
+      TODAY,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.route).toBe('scope');
+  });
+
+  it('un dato que faltó no se le presenta a nadie como una limitación', () => {
+    // «Faltó la fecha» es una pregunta pendiente, no algo que el producto no
+    // sepa hacer. Se calla y se vuelve a preguntar.
+    const result = normalizeProposal(
+      {
+        kind: 'commitment',
+        title: 'El SOAT',
+        rationale: '',
+        payload: { title: 'El SOAT', kind: 'soat' },
+      },
+      TODAY,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.route).toBeNull();
+  });
+});
+
 describe('cuántas preguntas y cuándo callarse', () => {
   it('no propone nada si lo único que se dijo fueron cuatro palabras', () => {
     // El piso. Ni el modelo ni el botón se lo saltan: proponer sobre 20

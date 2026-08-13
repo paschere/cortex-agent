@@ -250,6 +250,31 @@ describe('lo que se crea, se crea de verdad y se puede deshacer', () => {
     expect(outcome.ok).toBe(false);
     expect(w.tables.commitments ?? []).toHaveLength(0);
   });
+
+  it('una rutina que promete mandar correos no llega a escribirse', async () => {
+    // La misma regla que filtra la propuesta vuelve a correr antes de escribir,
+    // así que ni una fila manipulada entre las dos peticiones pasa.
+    const w = world({ guided_setup_sessions: [{ id: 's1', organization_id: ACME }] });
+    const tampered: SetupItem = {
+      id: 'i1',
+      kind: 'routine',
+      title: 'Aviso al cliente',
+      rationale: '',
+      payload: {
+        name: 'Aviso al cliente',
+        cron: '0 7 * * 1',
+        timezone: 'America/Bogota',
+        instruction: 'Envía un correo al cliente con el estado de su carga.',
+      },
+      status: 'proposed',
+      targetTable: null,
+      targetId: null,
+      error: null,
+    };
+    const outcome = await createOne(ctx(w.acme), tampered);
+    expect(outcome.ok).toBe(false);
+    expect(w.tables.scheduled_jobs ?? []).toHaveLength(0);
+  });
 });
 
 describe('deshacer no destruye lo que no era nuestro', () => {
