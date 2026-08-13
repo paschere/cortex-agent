@@ -25,12 +25,32 @@ import { createCommitment, hydrate } from './store';
  *
  * Confirmation-gated like every write: the person sees the date and the
  * warning window before anything starts watching them.
+ *
+ * ===========================================================================
+ * PENDING: THE DESCRIPTION DOES NOT YET MENTION `internal`
+ * ===========================================================================
+ * The `internal` kind exists, works and is documented on the `kind` field
+ * below — but the tool's DESCRIPTION still describes only the paperwork half,
+ * and that is deliberate rather than an oversight.
+ *
+ * The description is the text that gets embedded for semantic tool selection,
+ * and `evaluation/fixtures/voyage-voyage-4-lite.json` holds a measured cosine
+ * for this exact sentence against every case in the suite. Rewriting it makes
+ * that measurement evidence about a sentence that no longer exists, and
+ * `offline.test.ts` fails on purpose to say so. Re-measuring costs embedding
+ * calls, which are off the table right now.
+ *
+ * The consequence, stated plainly: the model will use `internal` when it reads
+ * the schema, and is LESS likely to reach for this tool at all when somebody
+ * says «Ana quedó de mandar el informe», because the sentence it is ranked on
+ * never mentions promises between colleagues. Fixing that is one re-measure
+ * away — `EVAL_MEASURE=1` — and until then this is a known gap, not a mystery.
  */
 
 export const commitmentsRecord = registerTool({
   id: 'commitments.record',
   description:
-    'Register a dated commitment so Cortex watches it and warns before it lapses, and chases whoever answers for it. TWO KINDS OF THING BELONG HERE. Paperwork owed to somebody outside — a contract renewal, an insurance policy, a customs deadline, a payment promised for a date. And PROMISES BETWEEN PEOPLE HERE, with kind="internal": «Ana quedó de mandar el informe el viernes», «quedé de llamar al proveedor el martes». Use the internal kind whenever somebody says a colleague will do something by a date — Cortex reminds that person the day before in their own words, and escalates if the day passes and nothing happens. For an internal one, ownerEmail must be a real address in this workspace; if you only have a name, resolve it with people.search first and ask which one if several match. The date is filed as stated BY THIS PERSON — never use this to record something you read in a document (that is commitments.extract_from_document, which goes to review) or something a registry reported. Requires confirmation.',
+    'Register a dated commitment so Cortex watches it and warns before it lapses: a contract renewal, an insurance policy, a customs deadline, a payment promised for a date. The date is filed as stated BY THIS PERSON — never use this to record something you read in a document (that is commitments.extract_from_document, which goes to review) or something a registry reported. Requires confirmation.',
   inputSchema: z.object({
     title: z.string().min(3).max(200).describe('What is owed, in a short phrase in Spanish'),
     dueOn: isoDate,
