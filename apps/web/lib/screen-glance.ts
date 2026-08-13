@@ -1,5 +1,6 @@
 import type { CoreMessage } from 'ai';
 import { z } from 'zod';
+import { MAX_MARKS, type ScreenMark, normalizeMarks } from './screen-marks';
 
 /**
  * One frame of the tab somebody is sharing, on its way into a turn.
@@ -107,6 +108,12 @@ export function glanceTokens(width: number, height: number): number {
  *   not transcribed. Password fields render as dots, but a revealed field, a
  *   password manager, an API key on a config screen or a one-time code do not —
  *   so the promise is enforced here as well as trusted to the browser.
+ *
+ * A fifth instruction was added with pointing: WHERE, NOT ONLY WHAT. It is
+ * short because the tool's own description carries the format; what it has to
+ * do here is make the model reach for the tool at all on the question this
+ * feature was built for — «¿dónde le doy?» — instead of writing "arriba a la
+ * derecha", which is the answer somebody already could not follow, in prose.
  */
 export function screenBlock(takenAt: string): string {
   return [
@@ -130,8 +137,158 @@ export function screenBlock(takenAt: string): string {
     '',
     'Si en la imagen se alcanza a ver una contraseña, una clave, un token o un código de',
     'verificación, no lo transcribas ni completo ni en parte, y avísale que quedó a la vista.',
+    '',
+    'Si la pregunta es DÓNDE — dónde le da, dónde está ese campo, cuál de todos es — no lo',
+    'describas con palabras como «arriba a la derecha»: usa screen_point_at para recuadrar el sitio',
+    'sobre la misma imagen, y explica igual en la frase qué es lo que recuadraste. El recuadro se',
+    'dibuja dentro del chat, sobre el cuadro que te llegó, no encima de su pantalla real.',
     '</pantalla>',
   ].join('\n');
+}
+
+// ===========================================================================
+// SEÑALAR: where the model says the thing is
+// ===========================================================================
+/**
+ * A TOOL, NOT A BLOCK OF STRUCTURED OUTPUT — and the four reasons in order.
+ *
+ * The alternative was real: ask for `<marcas>[{...}]</marcas>` inside the
+ * answer and parse it out of the text on the client. It was rejected on all
+ * four of the following, and the first two on their own would have been enough.
+ *
+ *   1. THE ANSWER IS STREAMED, SO A BLOCK IS PARSED HALF-WRITTEN. Text arrives
+ *      a token at a time and is drawn as it arrives (see ChatMarkdown). A JSON
+ *      block inside it is on screen as `[{"x1": 0.` for a second or two, every
+ *      time, and every partial parse either flickers a rectangle into the wrong
+ *      place or shows the person raw JSON in the middle of a sentence. There is
+ *      no ordering trick that fixes this: the block has to be complete to mean
+ *      anything, and the text has to be visible before it is complete.
+ *
+ *   2. THE TRANSPORT ALREADY EXISTS AND ALREADY SURVIVES A RELOAD. Tool calls
+ *      come down the same data stream as the answer, arrive on the client
+ *      already parsed as `toolInvocations`, get written to `messages
+ *      .tool_results` by the route's onFinish, and are rebuilt from that row by
+ *      `toToolInvocations` when a conversation is reopened. MessageBubble
+ *      already sorts invocations into cards and steps. So the marks reach the
+ *      screen, and reach it again next week, through machinery that is already
+ *      built, already tested and already understood — while a text block would
+ *      need a parser, a persistence path and a re-parse on load, three new
+ *      places for the same value to go wrong.
+ *
+ *   3. THE SHAPE IS ENFORCED BY THE PROVIDER, NOT BY A REGEX. `x1` arrives as a
+ *      number because the schema says it is one. A block in prose arrives as
+ *      whatever the model felt like, including 0,42 with a comma, "42%" and a
+ *      trailing comma before the closing bracket.
+ *
+ *   4. IT CAN BE WITHHELD. This tool is declared ONLY on turns that carry a
+ *      frame (see the chat route). A tool that is not offered cannot be called;
+ *      an output-format instruction that is not present can still be imitated
+ *      from three turns ago, and a mark drawn over a picture nobody sent is the
+ *      most confusing failure this feature has available to it.
+ *
+ * IT IS ALSO DELIBERATELY NOT A REGISTRY TOOL. Everything in packages/agent-
+ * tools goes through `runTool` for audit, rate limiting, confirmation and risk,
+ * and gets a semantic vector so the ranker can offer it. This one touches
+ * nothing, reads nothing and returns its own input made safe — there is no
+ * action to audit — and a vector would let the ranker offer it on turns with no
+ * picture, which is exactly what point 4 exists to prevent.
+ */
+export const POINT_AT_TOOL_ID = 'screen.point_at';
+
+/** The AI SDK name. Same substitution the route makes for registry ids. */
+export const POINT_AT_TOOL_NAME = 'screen_point_at';
+
+export const POINT_AT_DESCRIPTION =
+  'Draw a numbered box on the frame of the screen you were just given, to point at something on it. ' +
+  'Use it whenever the question is WHERE — where do I click, which field is it, which of these is the one — ' +
+  'and keep explaining in words as well: the box is drawn beside your answer, it does not replace it. ' +
+  'COORDINATES ARE FRACTIONS OF THE FRAME, from 0 to 1: x1/x2 are fractions of its width measured from the ' +
+  'left edge, y1/y2 fractions of its height measured from the top. The top-left corner is (0, 0) and the ' +
+  'bottom-right is (1, 1); the centre of the frame is (0.5, 0.5). NEVER give pixels — the frame was resized ' +
+  'before it reached you and is drawn again at a different width, so a pixel points somewhere else. ' +
+  `Keep the box tight around the thing itself. At most ${MAX_MARKS} boxes, in the order the person should ` +
+  'follow them. Each label is one short phrase IN SPANISH naming what is inside the box («el botón Radicar»), ' +
+  'because it is also what a screen reader announces to somebody who cannot see the picture.';
+
+/**
+ * The tool's parameters — and why the ranges are NOT declared here.
+ *
+ * zod could say `.min(0).max(1)` on every coordinate, and it deliberately does
+ * not. A schema violation makes the call fail before `execute` ever runs, so a
+ * model that answered 1.03 because it rounded at the edge of the screen would
+ * lose the whole mark, and the person would get "no pude señalarlo" for an
+ * answer that was essentially right. Ranges are handled one layer down by
+ * `normalizeMarks`, which can tell the difference between a rounding error (
+ * clamp it) and a rectangle that is nowhere near the picture (drop it) — and
+ * which runs again in the browser on the way to the screen.
+ */
+export const PointAtSchema = z.object({
+  marks: z
+    .array(
+      z.object({
+        x1: z.number().describe('Left edge, fraction of the frame width (0–1).'),
+        y1: z.number().describe('Top edge, fraction of the frame height (0–1).'),
+        x2: z.number().describe('Right edge, fraction of the frame width (0–1).'),
+        y2: z.number().describe('Bottom edge, fraction of the frame height (0–1).'),
+        label: z.string().describe('One short phrase in Spanish naming what is inside the box.'),
+      }),
+    )
+    .min(1)
+    .max(8)
+    .describe('The boxes to draw, in the order the person should follow them.'),
+});
+
+export interface PointAtResult {
+  marks: ScreenMark[];
+  /** How many the model asked for that could not be drawn. Zero, normally. */
+  ignored: number;
+  /** Said to the MODEL, in its own turn, so it can correct itself. */
+  note?: string;
+}
+
+/**
+ * What the tool gives back: the marks that can actually be drawn, and — when
+ * some could not — a sentence telling the model so.
+ *
+ * The note is the part worth arguing for. A tool that silently discarded a bad
+ * rectangle would leave the model believing it had pointed at something, and it
+ * would then write «como ves en el recuadro» over a picture with no recuadro on
+ * it. Told plainly that the coordinates were out of range, it has eleven more
+ * steps available (maxSteps in the route) to try again with fractions, or to
+ * answer in words — either of which is an answer the person can use.
+ *
+ * `.max(8)` above and `MAX_MARKS` here are different numbers on purpose: asking
+ * for nine is a schema error the model must fix, while asking for five is a
+ * judgement call, and the fifth box is simply not drawn.
+ */
+export function pointAtResult(input: { marks: unknown }): PointAtResult {
+  const asked = Array.isArray(input.marks) ? input.marks.length : 0;
+  const marks = normalizeMarks(input.marks);
+  const ignored = Math.max(0, asked - marks.length);
+
+  if (marks.length === 0) {
+    return {
+      marks: [],
+      ignored,
+      note:
+        'No pude dibujar ninguna marca: las coordenadas quedaron fuera del cuadro. ' +
+        'Van de 0 a 1 como fracción del ancho y del alto de la imagen que te pasé, nunca en píxeles ' +
+        '(esquina superior izquierda 0,0; inferior derecha 1,1). Vuelve a intentarlo así, o si no ' +
+        'estás seguro de dónde está, dilo con palabras y no señales nada.',
+    };
+  }
+
+  if (ignored > 0) {
+    return {
+      marks,
+      ignored,
+      note:
+        `Dibujé ${marks.length} de las ${asked} marcas que pediste. El resto quedaba fuera del cuadro ` +
+        'o venía sin texto. Cuenta sólo las que se dibujaron cuando te refieras a ellas.',
+    };
+  }
+
+  return { marks, ignored: 0 };
 }
 
 /**

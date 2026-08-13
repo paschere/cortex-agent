@@ -1,5 +1,6 @@
 'use client';
 
+import type { ScreenFrame } from '@/lib/screen-marks';
 import { toolDisplayName } from '@/lib/tool-labels';
 import type { Message } from 'ai';
 import { useEffect, useRef, useState } from 'react';
@@ -28,6 +29,29 @@ function hasReasoning(message: Message | undefined): boolean {
   return (message.parts ?? []).some((p) => p.type === 'reasoning' && p.reasoning.trim().length > 0);
 }
 
+/**
+ * The frame the question at or before `index` was asked with, if this tab still
+ * holds it.
+ *
+ * Only answers are ever handed one, and only ever the frame of the question
+ * they were the answer to — so an answer that pointed at something draws on the
+ * picture the model was actually looking at, and never on a newer one taken for
+ * a different question. Returns undefined for everything else, which is the
+ * ordinary case and the case after a reload.
+ */
+function nearestQuestionFrame(
+  messages: Message[],
+  index: number,
+  frames: Record<string, ScreenFrame>,
+): ScreenFrame | undefined {
+  if (messages[index]?.role !== 'assistant') return undefined;
+  for (let i = index - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.role === 'user') return frames[m.id];
+  }
+  return undefined;
+}
+
 interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
@@ -50,6 +74,14 @@ interface MessageListProps {
    * because a record somebody cannot see is not a record.
    */
   glances?: Record<string, string>;
+  /**
+   * The frames themselves, by the id of the QUESTION they were taken for, and
+   * only for this tab's own session — nothing here ever came from the database.
+   * An answer that pointed at something needs the picture its question carried,
+   * which is why the lookup below walks backwards from the answer rather than
+   * reading its own id. See ChatRoot and lib/screen-marks.ts.
+   */
+  frames?: Record<string, ScreenFrame>;
 }
 
 export function MessageList({
@@ -62,6 +94,7 @@ export function MessageList({
   onSuggestion,
   storedFollowups,
   glances,
+  frames,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<TurnMetrics | null>(null);
@@ -122,6 +155,12 @@ export function MessageList({
         <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
           {messages.map((m, i) => {
             const isLast = i === messages.length - 1;
+            // The picture belongs to the question; the marks belong to the
+            // answer. Walking back to the nearest question is what joins them,
+            // and it is done here rather than by keying frames on the answer's
+            // id because that id does not exist yet when the frame is taken —
+            // it comes back from the server after the turn.
+            const askedWith = frames ? nearestQuestionFrame(messages, i, frames) : undefined;
             return (
               <MessageBubble
                 key={m.id}
@@ -134,6 +173,7 @@ export function MessageList({
                 onCompose={onSuggestion}
                 storedFollowups={storedFollowups?.[m.id]}
                 glanceAt={glances?.[m.id]}
+                screenFrame={askedWith}
               />
             );
           })}

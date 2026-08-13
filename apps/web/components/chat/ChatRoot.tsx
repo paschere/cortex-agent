@@ -1,6 +1,7 @@
 'use client';
 
 import { type ScopeSpace, setChatScopeAction } from '@/app/(chat)/chat/actions';
+import { type ScreenFrame, rememberFrame } from '@/lib/screen-marks';
 import type { ScreenGlance } from '@/lib/tab-recorder';
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
@@ -101,6 +102,24 @@ export function ChatRoot({
   const pendingGlance = useRef<ScreenGlance | null>(null);
   /** Which of THIS session's questions carried a picture, by message id. */
   const [glances, setGlances] = useState<Record<string, string>>({});
+  /**
+   * THE ONLY PLACE A FRAME CAN BE ANNOTATED FROM.
+   *
+   * Answering «¿dónde le doy?» with a box means having the picture to draw the
+   * box on, and the picture is not stored: migration 0092 keeps a timestamp and
+   * a token count and no bytes at all, which is the promise the capture
+   * contract makes and is not a promise worth breaking for a rectangle. So the
+   * frame is held here, in this tab's memory, from the moment it is taken until
+   * the tab is closed or three newer ones have pushed it out (`rememberFrame`).
+   *
+   * WHICH MEANS A RELOAD LOSES IT, ON PURPOSE. The marks survive — they are a
+   * tool result on the assistant's message row and come back with the
+   * transcript — so a reopened conversation shows the numbered sentences with a
+   * line saying the picture is gone, rather than boxes over an empty space. The
+   * asymmetry is the storage decision made visible, and ScreenMarks.tsx says so
+   * in words on the one screen where somebody would otherwise think it broke.
+   */
+  const [frames, setFrames] = useState<Record<string, ScreenFrame>>({});
 
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
 
@@ -194,6 +213,16 @@ export function ChatRoot({
       if (glance) {
         pendingGlance.current = glance;
         setGlances((prev) => ({ ...prev, [id]: glance.takenAt }));
+        // The same bytes that are about to be posted, kept here as a data: URL
+        // so the answer can be drawn on top of them. Nothing re-downloads and
+        // nothing re-encodes: this is the string the request is built from.
+        setFrames((prev) =>
+          rememberFrame(prev, id, {
+            src: `data:${glance.mimeType};base64,${glance.base64}`,
+            width: glance.width,
+            height: glance.height,
+          }),
+        );
       }
       void append({ id, role: 'user', content: text });
     },
@@ -273,6 +302,7 @@ export function ChatRoot({
         onSuggestion={setDraft}
         storedFollowups={initialFollowups}
         glances={initialGlances ? { ...initialGlances, ...glances } : glances}
+        frames={frames}
       />
 
       {blocked && (

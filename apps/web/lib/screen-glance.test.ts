@@ -1,6 +1,14 @@
 import type { CoreMessage } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { ScreenGlanceSchema, attachScreenFrame, glanceTokens, screenBlock } from './screen-glance';
+import {
+  POINT_AT_DESCRIPTION,
+  PointAtSchema,
+  ScreenGlanceSchema,
+  attachScreenFrame,
+  glanceTokens,
+  pointAtResult,
+  screenBlock,
+} from './screen-glance';
 
 /**
  * Everything a screen question can get wrong before it reaches the model.
@@ -92,6 +100,65 @@ describe('screenBlock', () => {
 
   it('forbids transcribing a credential that is visible on screen', () => {
     expect(block).toContain('no lo transcribas');
+  });
+
+  it('sends the model to the tool when the question is WHERE', () => {
+    // Without this the answer is "arriba a la derecha", which is the sentence
+    // somebody already could not follow — said again, in prose.
+    expect(block).toContain('screen_point_at');
+  });
+});
+
+describe('screen.point_at', () => {
+  const MARK = { x1: 0.1, y1: 0.2, x2: 0.4, y2: 0.35, label: 'El botón «Radicar»' };
+
+  it('tells the model the coordinates are fractions and never pixels', () => {
+    // The one instruction the whole feature rests on: the frame is resized on
+    // the way out and drawn again at the width of the chat column, so a pixel
+    // points somewhere else on both.
+    expect(POINT_AT_DESCRIPTION).toContain('FRACTIONS OF THE FRAME');
+    expect(POINT_AT_DESCRIPTION).toContain('NEVER give pixels');
+  });
+
+  it('accepts coordinates outside 0–1 rather than failing the call', () => {
+    // Deliberate: a range violation in the schema kills the call before
+    // `pointAtResult` runs, so a model that rounded 1,02 at the edge of the
+    // screen would lose the mark instead of having it clamped.
+    expect(PointAtSchema.safeParse({ marks: [{ ...MARK, x2: 1.02 }] }).success).toBe(true);
+  });
+
+  it('refuses a call with no marks at all', () => {
+    expect(PointAtSchema.safeParse({ marks: [] }).success).toBe(false);
+  });
+
+  it('hands back the rectangles that can be drawn', () => {
+    expect(pointAtResult({ marks: [MARK] })).toEqual({ marks: [MARK], ignored: 0 });
+  });
+
+  it('tells the model when nothing could be drawn, instead of failing quietly', () => {
+    // A silent discard leaves the model believing it pointed at something, and
+    // it then writes «como ves en el recuadro» over a picture with no recuadro.
+    const out = pointAtResult({ marks: [{ ...MARK, x1: 812, x2: 902 }] });
+    expect(out.marks).toEqual([]);
+    expect(out.ignored).toBe(1);
+    expect(out.note).toContain('fuera del cuadro');
+  });
+
+  it('says how many of the ones asked for survived', () => {
+    const out = pointAtResult({ marks: [{ ...MARK, y1: 9, y2: 11 }, MARK] });
+    expect(out.marks).toEqual([MARK]);
+    expect(out.ignored).toBe(1);
+    expect(out.note).toContain('1 de las 2');
+  });
+
+  it('survives a call whose arguments are not the shape it expected', () => {
+    // `execute` receives whatever came back from the provider. It cannot throw:
+    // a tool that throws here would take the whole answer down with it.
+    expect(pointAtResult({ marks: 'el de arriba' })).toEqual({
+      marks: [],
+      ignored: 0,
+      note: expect.stringContaining('0 a 1'),
+    });
   });
 });
 

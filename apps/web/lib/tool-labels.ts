@@ -25,6 +25,11 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   gsheets_read_range: { label: 'Leer hoja de cálculo', icon: 'Table' },
   gsheets_append_row: { label: 'Agregar fila a la hoja', icon: 'TableProperties' },
   kb_search: { label: 'Buscar en Brain Knowledge', icon: 'BookOpen' },
+  // Only ever offered on a turn that carried a frame of a shared tab, so this
+  // label can name the person's own screen without qualifying it. It shows up
+  // in the busy line while the box is being worked out; the result is a picture
+  // rather than a step row, so it never becomes a task row. See ScreenMarks.tsx.
+  screen_point_at: { label: 'Señalar en tu pantalla', icon: 'Crosshair' },
   sales_draft_proposal: { label: 'Redactar propuesta', icon: 'FileText' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },

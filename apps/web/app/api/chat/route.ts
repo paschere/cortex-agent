@@ -1,9 +1,14 @@
 import { buildToolContext } from '@/lib/agent';
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import {
+  POINT_AT_DESCRIPTION,
+  POINT_AT_TOOL_ID,
+  POINT_AT_TOOL_NAME,
+  PointAtSchema,
   ScreenGlanceSchema,
   attachScreenFrame,
   glanceTokens,
+  pointAtResult,
   screenBlock,
 } from '@/lib/screen-glance';
 import { requireSession } from '@/lib/session';
@@ -640,7 +645,13 @@ export async function POST(req: NextRequest) {
   recorder.toolOffer({
     reason: selection.reason,
     candidates: allCandidates.length,
-    offered: selectedTools.map((t) => t.id),
+    // The pointing tool is appended rather than ranked: it is declared below on
+    // turns that carry a frame and on no others, so it never went through the
+    // selection this record is otherwise about. It is in the list all the same,
+    // because this column is what somebody reads to find out what the model was
+    // holding when it answered, and a tool missing from it is a tool nobody can
+    // account for later.
+    offered: [...selectedTools.map((t) => t.id), ...(glance ? [POINT_AT_TOOL_ID] : [])],
     families: familiesFrom({
       scores: selection.familyScores,
       alwaysFamilies: selection.alwaysFamilies,
@@ -750,6 +761,37 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  /**
+   * SEÑALAR. Offered only when there is something to point at.
+   *
+   * The `if` is the design, not a guard. Every other tool in this map earned its
+   * place through the ranker; this one is declared on exactly the turns that
+   * carry a frame and withheld on every other, which is a decision the ranker
+   * could not make — it ranks by what the question is ABOUT, and whether a
+   * picture came is a property of the request. A model that cannot see a screen
+   * cannot be tempted to draw a box on one.
+   *
+   * `execute` calls nothing and reaches nothing: it hands back the model's own
+   * rectangles with the impossible ones removed, so the tool result that lands
+   * on the client is already safe to paint. See lib/screen-glance.ts for why
+   * this is a tool at all rather than a block of structured output, and
+   * lib/screen-marks.ts for what "impossible" means here.
+   *
+   * It does NOT go through `runTool`, and it is the only entry in this map that
+   * does not: there is no side effect to audit, no rate limit that means
+   * anything on a pure function, and nothing to confirm. It also does not touch
+   * `clock.toolFinished` — the arithmetic runs in microseconds, and counting it
+   * as a tool call would put a zero into the median that measures how long real
+   * tools take.
+   */
+  if (glance) {
+    aiTools[POINT_AT_TOOL_NAME] = tool({
+      description: POINT_AT_DESCRIPTION,
+      parameters: PointAtSchema,
+      execute: async (args) => pointAtResult(args),
+    });
+  }
+
   let coreMessages: CoreMessage[] = messages.map((m) => ({
     role: m.role as 'user' | 'assistant' | 'system',
     content: m.content,
@@ -804,7 +846,16 @@ export async function POST(req: NextRequest) {
   // string that really went in and this measurement is of characters sent, not
   // of features used.
   recorder.part('knowledge', scopeBlock ? `${scopeBlock}\n${ragBlock}` : ragBlock);
-  recorder.part('tools', selectedTools.map((t) => `${t.id}: ${t.description}`).join('\n'));
+  recorder.part(
+    'tools',
+    [
+      ...selectedTools.map((t) => `${t.id}: ${t.description}`),
+      // Declared just above and not part of the ranking, so it has to be added
+      // by hand or the weight of a screen turn is understated by the length of
+      // its description. This measurement is of characters really sent.
+      ...(glance ? [`${POINT_AT_TOOL_ID}: ${POINT_AT_DESCRIPTION}`] : []),
+    ].join('\n'),
+  );
   // Split at the last message rather than by role, so the two parts are exactly
   // the array that was sent and cannot double-count a single character.
   recorder.part(

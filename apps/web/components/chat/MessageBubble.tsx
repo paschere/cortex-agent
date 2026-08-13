@@ -2,6 +2,7 @@
 
 import { ProposedActionCard } from '@/components/actions/ProposedActionCard';
 import type { ActionView } from '@/lib/actions-shape';
+import { type ScreenFrame, normalizeMarks } from '@/lib/screen-marks';
 import type { Message, ToolInvocation } from 'ai';
 import { Brain, Check, Copy, RotateCw } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -11,6 +12,7 @@ import { ConfirmationPrompt } from './ConfirmationPrompt';
 import { FollowUps } from './FollowUps';
 import { ProposalCard, type ProposalResult } from './ProposalCard';
 import { ReasoningTrail } from './ReasoningTrail';
+import { ScreenMarks } from './ScreenMarks';
 import { GlanceNote } from './ScreenView';
 import { SelectionActions } from './SelectionActions';
 import { TaskRows, type TurnMetrics } from './TaskRows';
@@ -37,6 +39,13 @@ interface MessageBubbleProps {
    * that were asked with a tab shared. See ScreenView.tsx.
    */
   glanceAt?: string;
+  /**
+   * The frame this answer was given, so a mark can be drawn on it — only on
+   * ASSISTANT messages, and only while this tab has been open since the
+   * question was asked. Undefined after a reload, which the card says out loud
+   * rather than drawing boxes over nothing. See lib/screen-marks.ts.
+   */
+  screenFrame?: ScreenFrame | null;
 }
 
 type ConfirmationSentinel = {
@@ -96,6 +105,17 @@ function isChartTool(toolName: string): boolean {
 }
 
 /**
+ * The turn that pointed at something on the person's screen.
+ *
+ * Both spellings, like every other check in this file: the AI SDK names a tool
+ * with underscores while the id it was declared under keeps its dot, and an
+ * archived transcript can hold either.
+ */
+function isPointTool(toolName: string): boolean {
+  return toolName === 'screen_point_at' || toolName === 'screen.point_at';
+}
+
+/**
  * The tool returns an id, not a picture — the SVG would otherwise be replayed
  * into the model's context on every later turn of the conversation. `ChartCard`
  * fetches the drawing by that id.
@@ -146,6 +166,7 @@ export function MessageBubble({
   onCompose,
   storedFollowups,
   glanceAt,
+  screenFrame,
 }: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
   // Scopes the selection menu to THIS answer: a selection that starts in one
@@ -232,6 +253,24 @@ export function MessageBubble({
                   isProposalResult(result)
                 ) {
                   cards.push(<ProposalCard key={inv.toolCallId} result={result} />);
+                  continue;
+                }
+                if (isPointTool(inv.toolName)) {
+                  // Never a step row, in either direction. With marks it is a
+                  // picture — the turn's output, like a chart. Without them the
+                  // model was told why (see pointAtResult) and said it in the
+                  // answer, and a row reading "Señalar en tu pantalla" under a
+                  // sentence that already explains it is noise about a
+                  // rectangle that does not exist.
+                  //
+                  // Re-validated here rather than trusted: this value crossed a
+                  // stream and, on a reopened conversation, a database row.
+                  const marks = normalizeMarks((result as { marks?: unknown } | undefined)?.marks);
+                  if (marks.length > 0) {
+                    cards.push(
+                      <ScreenMarks key={inv.toolCallId} marks={marks} frame={screenFrame} />,
+                    );
+                  }
                   continue;
                 }
                 if (isChartTool(inv.toolName)) {
