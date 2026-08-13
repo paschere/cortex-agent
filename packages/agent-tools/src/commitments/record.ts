@@ -30,14 +30,16 @@ import { createCommitment, hydrate } from './store';
 export const commitmentsRecord = registerTool({
   id: 'commitments.record',
   description:
-    'Register a dated commitment so Cortex watches it and warns before it lapses: a contract renewal, an insurance policy, a customs deadline, a payment promised for a date. The date is filed as stated BY THIS PERSON — never use this to record something you read in a document (that is commitments.extract_from_document, which goes to review) or something a registry reported. Requires confirmation.',
+    'Register a dated commitment so Cortex watches it and warns before it lapses, and chases whoever answers for it. TWO KINDS OF THING BELONG HERE. Paperwork owed to somebody outside — a contract renewal, an insurance policy, a customs deadline, a payment promised for a date. And PROMISES BETWEEN PEOPLE HERE, with kind="internal": «Ana quedó de mandar el informe el viernes», «quedé de llamar al proveedor el martes». Use the internal kind whenever somebody says a colleague will do something by a date — Cortex reminds that person the day before in their own words, and escalates if the day passes and nothing happens. For an internal one, ownerEmail must be a real address in this workspace; if you only have a name, resolve it with people.search first and ask which one if several match. The date is filed as stated BY THIS PERSON — never use this to record something you read in a document (that is commitments.extract_from_document, which goes to review) or something a registry reported. Requires confirmation.',
   inputSchema: z.object({
     title: z.string().min(3).max(200).describe('What is owed, in a short phrase in Spanish'),
     dueOn: isoDate,
     kind: z
       .enum(COMMITMENT_KINDS)
       .default('other')
-      .describe('Drives how far ahead the first warning goes out'),
+      .describe(
+        'Drives how far ahead the first warning goes out. Use "internal" for a promise between two people at this company — it warns one day ahead and is worded as a reminder of what they said, not as an expiring document.',
+      ),
     detail: z.string().max(2000).optional().describe('Anything the person adds about it'),
     counterparty: z
       .string()
@@ -91,6 +93,30 @@ export const commitmentsRecord = registerTool({
       ? await resolveUser(ctx.db, input.escalateToEmail)
       : null;
 
+    /**
+     * AN INTERNAL COMMITMENT WITHOUT A REAL OWNER IS A COMMITMENT THAT CHASES
+     * NOBODY, AND IT FAILS SILENTLY.
+     *
+     * For a SOAT, an unresolvable owner is survivable: it falls back to whoever
+     * registered it, and the deadline still gets watched by somebody. An
+     * internal promise is the opposite — «Ana quedó de mandar el informe» filed
+     * against the person who typed it is not a promise, it is a note to self,
+     * and `planOwnerReminders` would go on reminding the wrong person forever.
+     *
+     * Worse, the silent version of this is invisible from outside: the row is
+     * created, the tool reports success, and the only symptom is that Ana never
+     * hears about it. So an address that does not resolve to somebody in this
+     * workspace is refused here, by name, with what to do about it.
+     */
+    if (kind === 'internal' && input.ownerEmail && !ownerUserId) {
+      throw new Error(
+        `«${input.ownerEmail}» no es de nadie en este espacio de trabajo, así que un compromiso ` +
+          'interno a su nombre no le llegaría a esa persona. Búscala con people.search para ' +
+          'confirmar la dirección, o pregúntale al usuario de quién se trata. Si es alguien de ' +
+          'fuera de la empresa, no es un compromiso interno.',
+      );
+    }
+
     const row = await createCommitment(ctx.db, {
       title: input.title,
       detail: input.detail ?? null,
@@ -114,9 +140,17 @@ export const commitmentsRecord = registerTool({
 
     return {
       commitment,
-      guidance: `Queda registrado: ${commitment.title}, vence ${commitment.dueOn} (${whenPhrase(commitment.daysLeft)}). El primer aviso sale ${notice} días antes${
-        input.ownerEmail ? ` y va para ${input.ownerEmail}` : ''
-      }. La fuente de esta fecha queda como "registrada por ti", que es lo que es.`,
+      guidance:
+        kind === 'internal'
+          ? // Said differently because it IS different: this one is going to go
+            // and remind a colleague, by email, with the asker's name on it as
+            // the source. Whoever asks for it should know that before it happens.
+            `Queda anotado: ${commitment.title}, para el ${commitment.dueOn} (${whenPhrase(commitment.daysLeft)}). ` +
+            `${input.ownerEmail ? `Le recuerdo a ${input.ownerEmail}` : 'Te lo recuerdo'} el día antes, ` +
+            'y si llega la fecha y no pasa nada, subo el aviso. Queda registrado que lo anotaste tú.'
+          : `Queda registrado: ${commitment.title}, vence ${commitment.dueOn} (${whenPhrase(commitment.daysLeft)}). El primer aviso sale ${notice} días antes${
+              input.ownerEmail ? ` y va para ${input.ownerEmail}` : ''
+            }. La fuente de esta fecha queda como "registrada por ti", que es lo que es.`,
     };
   },
 });
