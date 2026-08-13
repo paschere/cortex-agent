@@ -1,4 +1,4 @@
-import { AppWindow, Asterisk, VideoOff } from 'lucide-react';
+import { AppWindow, Asterisk, BellOff, Eye, VideoOff } from 'lucide-react';
 
 /**
  * Qué se captura y qué no, antes de pedir la pestaña.
@@ -26,7 +26,25 @@ import { AppWindow, Asterisk, VideoOff } from 'lucide-react';
  * once and filed away is a contract nobody has read.
  */
 
-export type CaptureKind = 'teach' | 'watch';
+/**
+ * ---------------------------------------------------------------------------
+ * Y UNA TERCERA, QUE ES UNA PROMESA MÁS GRANDE
+ * ---------------------------------------------------------------------------
+ * `alert` es la vigilancia continua: Cortex mira solo, sin que nadie pregunte, y
+ * avisa si ve algo. Comparte permiso con `watch` y no comparte promesa, así que
+ * NO reutiliza sus tres celdas. La diferencia es la única que le importa a
+ * alguien decidiendo: en `watch` la persona sabe exactamente cuándo la miraron,
+ * porque fue cuando ella preguntó. Aquí no. Repetir «miro un cuadro cuando
+ * preguntas» en esta pantalla sería el peor tipo de mentira: la que es verdad en
+ * otra parte.
+ *
+ * Por eso las tres celdas cambian de contenido y una cambia de tema. La segunda
+ * ya no habla de que no se guarda nada —eso también es cierto y sigue dicho— si
+ * no de CADA CUÁNTO mira, que es lo que la persona se está preguntando. Y la
+ * tercera deja de hablar sólo de claves para hablar de cómo se apaga, porque en
+ * una función que mira sola, la salida es parte del trato.
+ */
+export type CaptureKind = 'teach' | 'watch' | 'alert';
 
 const CELLS: Record<CaptureKind, { icon: typeof AppWindow; title: string; body: string }[]> = {
   teach: [
@@ -61,6 +79,23 @@ const CELLS: Record<CaptureKind, { icon: typeof AppWindow; title: string; body: 
       icon: Asterisk,
       title: 'Las claves no se transcriben',
       body: 'Se ven como puntos y no las leo. Y entre pregunta y pregunta no miro nada: si vas a hacer algo que no debo ver, hazlo y ya.',
+    },
+  ],
+  alert: [
+    {
+      icon: AppWindow,
+      title: 'Sólo la pestaña que elijas',
+      body: 'Nada de tus otras ventanas, ni del escritorio, ni del correo que tengas abierto.',
+    },
+    {
+      icon: Eye,
+      title: 'Miro cuando la pantalla cambia',
+      body: 'No cada segundo: comparo la imagen aquí en tu navegador y sólo miro de verdad cuando cambió algo. Verás cuántas veces llevo y cuánto va costando.',
+    },
+    {
+      icon: BellOff,
+      title: 'Hablo poco y paras de un clic',
+      body: 'Sólo abro la boca por un error, un vencimiento o un campo mal puesto; si no hay nada, no digo nada. La franja de arriba queda encendida mientras miro, con el botón para apagarme.',
     },
   ],
 };

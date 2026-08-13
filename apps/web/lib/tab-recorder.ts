@@ -57,6 +57,8 @@
  * `enforceSecrets` in agent-tools for what happens if one gets through anyway.
  */
 
+import { WATCH_THUMB_H, WATCH_THUMB_W } from './screen-watch';
+
 export interface CapturedFrame {
   base64: string;
   mimeType: string;
@@ -250,7 +252,12 @@ export async function startTabRecording(options: RecorderOptions): Promise<Recor
     heldAtMs = Date.now() - startedAt;
   }
 
-  function push(canvas: HTMLCanvasElement, atMs: number, change: number, phase?: 'antes' | 'despues') {
+  function push(
+    canvas: HTMLCanvasElement,
+    atMs: number,
+    change: number,
+    phase?: 'antes' | 'despues',
+  ) {
     // JPEG at 0.6: a portal is text on white, which compresses well, and the
     // model is reading words rather than admiring the rendering.
     const url = canvas.toDataURL('image/jpeg', 0.6);
@@ -388,21 +395,29 @@ export function canRecordTab(): boolean {
  * A shared tab that Cortex can look at, and only when it is spoken to.
  *
  * ---------------------------------------------------------------------------
- * NOTHING IS SAMPLED. THAT IS THE WHOLE DESIGN.
+ * NOTHING LEAVES THIS PAGE THAT NOBODY ASKED FOR. THAT IS THE WHOLE DESIGN.
  * ---------------------------------------------------------------------------
- * There is no interval here, no `previous` buffer and no frame list. The stream
- * stays open so the person does not have to re-authorise the tab for every
- * question, and the tab is drawn into a canvas exactly once per `grab()` —
- * which the composer calls at the instant a question is sent, and at no other
- * instant.
+ * There is no interval here, no frame list and no upload of anything this file
+ * decided by itself. The stream stays open so the person does not have to
+ * re-authorise the tab for every question, and a BILLABLE frame is produced
+ * exactly once per `grab()` — which the composer calls at the instant a question
+ * is sent, and at no other instant.
  *
  * Streaming frames continuously would be the obvious build and it is the wrong
  * one twice over. It bills for every frame whether or not anybody asked
  * anything, and it means a piece of software is reading somebody's screen for
  * as long as the session is open, which is not what was agreed to and cannot be
- * made true again by a retention policy. A session that samples nothing has
- * nothing to leak and nothing to bill: the cost of an idle share is zero, and
+ * made true again by a retention policy. The cost of an idle share is zero, and
  * that number is what makes "leave it on all afternoon" an honest suggestion.
+ *
+ * ONE THING IS SAMPLED, AND IT NEVER LEAVES THE BROWSER. `thumbnail()` exists
+ * for the continuous mode — "mira y avísame" — which calls it every two seconds
+ * to work out whether the picture changed at all. That is 1 296 pixels compared
+ * against 1 296 pixels inside this tab: no network, no model, no cost. It is
+ * precisely what makes continuous watching affordable, because the expensive
+ * `grab()` still only runs on the handful of moments where something actually
+ * happened. The sentence above survives intact: the cost of a share where
+ * nothing changes is still zero, whichever mode it is in.
  *
  * ---------------------------------------------------------------------------
  * WHY THE FRAME IS TAKEN AT SEND AND NOT WHEN THE COMPOSER IS FOCUSED
@@ -472,6 +487,33 @@ export interface ScreenGlance {
 export interface TabViewHandle {
   /** One frame of the shared tab, right now. Null once the share has ended. */
   grab(): ScreenGlance | null;
+  /**
+   * The shared tab reduced to a 48×27 thumbnail, as raw RGBA. Null once the
+   * share has ended.
+   *
+   * ---------------------------------------------------------------------------
+   * THE CHEAP HALF OF WATCHING, AND WHY IT IS A SEPARATE METHOD
+   * ---------------------------------------------------------------------------
+   * `grab()` produces something that costs money to look at: a full-size JPEG
+   * that becomes `width × height / 750` input tokens the moment it is sent.
+   * This produces something that costs a few microseconds of CPU and nothing
+   * else, and it is what the continuous mode calls every two seconds. Comparing
+   * two of these is how Cortex decides the screen changed WITHOUT a model — see
+   * `frameChange` in lib/screen-watch.ts, where the arithmetic and the threshold
+   * live and are tested.
+   *
+   * The two are deliberately not fused into one "grab if changed" method. The
+   * decision has three more inputs than the picture — how long since the last
+   * look, whether a turn is in flight, how much of the session's budget is left
+   * — and every one of them is a rule about money that should be readable and
+   * testable in Node, not buried in a canvas call.
+   *
+   * `willReadFrequently` matters here and nowhere else in this file: this is the
+   * one canvas that is read back on a two-second interval for as long as somebody
+   * leaves the feature on, and without the hint a browser keeps it on the GPU
+   * and pays a stall to fetch it every time.
+   */
+  thumbnail(): Uint8ClampedArray | null;
   stop(): void;
   /** How many times this session has been looked at. Shown on screen. */
   readonly glances: number;
@@ -490,6 +532,14 @@ export async function startTabView(options: { onEnded(): void }): Promise<TabVie
   const video = await playIntoVideo(stream);
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
+
+  // The thumbnail the change check runs on. Allocated once, at a fixed size,
+  // and reused for the whole session: the continuous mode draws into it every
+  // two seconds and a per-tick allocation would be garbage by the minute.
+  const thumb = document.createElement('canvas');
+  thumb.width = WATCH_THUMB_W;
+  thumb.height = WATCH_THUMB_H;
+  const thumbCtx = thumb.getContext('2d', { willReadFrequently: true });
 
   let stopped = false;
   let glances = 0;
@@ -523,16 +573,29 @@ export async function startTabView(options: { onEnded(): void }): Promise<TabVie
         takenAt: new Date().toISOString(),
       };
     },
+    thumbnail() {
+      if (stopped || !thumbCtx) return null;
+      // `videoWidth` directly, and not `frameSizeOf`, which substitutes 1280×720
+      // when the track has not produced a frame yet. Drawing from a video with
+      // no picture is a silent no-op, so the guard has to be the raw dimension:
+      // otherwise the first real frame would read as a change against whatever
+      // the canvas happened to contain.
+      if (video.videoWidth === 0 || video.videoHeight === 0) return null;
+      thumbCtx.drawImage(video, 0, 0, WATCH_THUMB_W, WATCH_THUMB_H);
+      return thumbCtx.getImageData(0, 0, WATCH_THUMB_W, WATCH_THUMB_H).data;
+    },
     stop() {
       if (stopped) return;
       stopped = true;
       for (const t of stream.getTracks()) t.stop();
       video.srcObject = null;
-      // The canvas still holds the last frame drawn into it. Painting over it
-      // costs nothing and means the only copy of somebody's screen left in this
-      // page's memory is a black rectangle.
+      // The canvases still hold the last frame drawn into them. Painting over
+      // them costs nothing and means the only copy of somebody's screen left in
+      // this page's memory is a black rectangle.
       canvas.width = 0;
       canvas.height = 0;
+      thumb.width = 0;
+      thumb.height = 0;
     },
     get glances() {
       return glances;

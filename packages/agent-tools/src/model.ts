@@ -267,6 +267,53 @@ export function suggestionModel() {
 }
 
 /**
+ * MIRAR UNA PANTALLA SIN QUE NADIE HAYA PREGUNTADO NADA.
+ *
+ * El único llamador es `/api/chat/watch`: la vigilancia de una pestaña
+ * compartida, que mira un fotograma cuando la pantalla cambió de verdad y casi
+ * siempre responde «NADA». Ver apps/web/lib/screen-watch.ts.
+ *
+ * POR QUÉ EL BARATO, Y POR QUÉ AQUÍ SÍ PASA LA PRUEBA. La regla de
+ * `UTILITY_MODEL` sigue en pie: un clasificador peor produce un agente que dice
+ * que no puede hacer algo que sí puede, y eso es caro de notar. Esta llamada no
+ * es esa. Es la MISMA prueba que pasa `SUGGESTION_MODEL` — nada río abajo la
+ * lee, no entra al expediente de nada, y nadie la está esperando —, con dos
+ * agravantes que empujan en la misma dirección:
+ *
+ *   EL VOLUMEN ES DE OTRO ORDEN. Una pregunta con foto ocurre cuando alguien
+ *   escribe; una mirada ocurre cuando la pantalla cambia. Un tope de 60 miradas
+ *   por sesión sobre Sonnet 5 son ~US$0,22 de imagen por sesión; sobre Haiku 4.5
+ *   son ~US$0,07. Multiplicado por cada persona que deje esto encendido una
+ *   tarde, la diferencia deja de ser una discusión de centavos.
+ *
+ *   EL TRABAJO ES DE LEER, NO DE RAZONAR. La pregunta es «¿hay en esta imagen un
+ *   error, un vencimiento o un campo mal puesto?». Es reconocimiento de texto
+ *   con criterio, no una cadena de herramientas, y es exactamente donde un
+ *   modelo pequeño con visión rinde. Cuando se equivoca, se equivoca hacia el
+ *   silencio: el filtro de `parseWatchVerdict` descarta todo lo que no venga en
+ *   el formato exacto, así que una respuesta confusa no produce un aviso, y un
+ *   aviso que no aparece no le cuesta nada a nadie.
+ *
+ * QUÉ CUESTA. US$1 por millón de tokens de entrada. Un fotograma de 1280×720
+ * son 1 229 tokens y el prompt ronda los 400: ~0,0016 USD por mirada, y ~0,10
+ * USD si una sesión gasta las 60 miradas del tope. Ese tope es el techo duro y
+ * está en el cliente, apagándose solo — ver `WATCH_MAX_LOOKS`.
+ */
+export const WATCH_MODEL = 'claude-haiku-4-5';
+
+/**
+ * El modelo que mira una pantalla compartida y casi siempre calla.
+ *
+ * Mismo proveedor que `suggestionModel()` y por las mismas dos razones: Haiku
+ * 4.5 no es de la familia 5, así que no se le manda `thinking` ni `effort`, y su
+ * prompt es demasiado corto para que un punto de caché sea otra cosa que una
+ * escritura de 1,25× que nadie vuelve a leer.
+ */
+export function watchModel() {
+  return cheapProvider(WATCH_MODEL);
+}
+
+/**
  * Agent rows written before the migration to Claude still carry Gemini model
  * ids. Map them instead of failing the request — an agent that predates the
  * switch should keep answering, not 404 against a provider we no longer use.

@@ -8,7 +8,7 @@ import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
 import { Brain, Menu } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
@@ -98,7 +98,37 @@ export function ChatRoot({
    * retype. A silent second capture is precisely the thing this feature must
    * never do.
    */
-  const screen = useScreenView();
+  /**
+   * Y LA VIGILANCIA: dónde aterriza un aviso, y dónde no aterriza el silencio.
+   *
+   * Cuando la pestaña está bajo vigilancia (una decisión aparte, ver
+   * ScreenView.tsx) y Cortex ve algo que vale la pena, la frase entra en la
+   * conversación como un mensaje suyo. Va al chat y no a una franja aparte por
+   * una razón: un aviso al que no se le puede responder «¿por qué?» es una
+   * notificación, y lo que vale de esto es poder seguir preguntando ahí mismo,
+   * con el aviso ya en el hilo como contexto del siguiente turno.
+   *
+   * LO QUE NO OCURRE ES LA MITAD IMPORTANTE. `onNotice` no se llama cuando no
+   * hay nada que decir, y no hay nada que decir casi siempre. No entra un
+   * mensaje vacío, ni una fila gris diciendo que se miró y no había nada: una
+   * mirada silenciosa no deja ni un píxel en la pantalla.
+   *
+   * NO SE GUARDA. El mensaje vive en esta sesión y no se escribe en `messages`:
+   * nadie lo pidió, y `/api/chat/watch` no toca la base a propósito. Recargar la
+   * conversación lo pierde, lo cual es exactamente lo que promete el contrato de
+   * captura. Si mañana hubiera que conservarlo, lo que habría que cambiar
+   * primero es la promesa.
+   *
+   * Los dos refs son el patrón de siempre: el hook se monta antes que `useChat`
+   * y su bucle de muestreo tiene que leer lo ÚLTIMO —si hay un turno en vuelo,
+   * cómo añadir un mensaje— y no lo que existía cuando se montó.
+   */
+  const busyRef = useRef(false);
+  const addNotice = useRef<(text: string) => void>(() => {});
+  const screen = useScreenView({
+    isBusy: () => busyRef.current,
+    onNotice: (text) => addNotice.current(text),
+  });
   const pendingGlance = useRef<ScreenGlance | null>(null);
   /** Which of THIS session's questions carried a picture, by message id. */
   const [glances, setGlances] = useState<Record<string, string>>({});
@@ -197,6 +227,36 @@ export function ChatRoot({
     },
     sendExtraMessageFields: false,
   });
+
+  /**
+   * Los dos cabos de la vigilancia, atados al `useChat` que ya existe.
+   *
+   * Van en un efecto y no en el cuerpo del render porque escribir un ref durante
+   * el render es escribir mientras React todavía puede descartar el resultado.
+   * El desfase de un render no importa aquí: el muestreo corre cada dos
+   * segundos y el efecto se ejecuta en el mismo tick que la pintura.
+   */
+  useEffect(() => {
+    busyRef.current = isLoading;
+    addNotice.current = (text: string) => {
+      // Un turno en vuelo ya bloquea la mirada río arriba (`isBusy`), así que
+      // esto es el cinturón sobre el tirante: entre que salió la petición y
+      // volvió el aviso, la persona pudo haber preguntado algo. Un aviso encima
+      // de una respuesta a medio escribir interrumpe justo lo que está leyendo,
+      // y se descarta en vez de encolarse: para cuando esa respuesta termine, el
+      // aviso hablaría de una pantalla de hace medio minuto.
+      if (isLoading) return;
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: text,
+          createdAt: new Date(),
+        },
+      ]);
+    };
+  }, [isLoading, setMessages]);
 
   const handleSend = useCallback(
     (text: string) => {
