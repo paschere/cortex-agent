@@ -22,7 +22,7 @@ export default async function ResumeChatPage({
   }));
 
   // Load messages from DB — only user/assistant roles for useChat
-  const { data: msgs } = await db
+  const { data: msgs, error: msgsError } = await db
     .from('messages')
     // `followups` rides along with the transcript rather than in a query of its
     // own. That is the whole reason they live on the message row (migration
@@ -34,6 +34,27 @@ export default async function ResumeChatPage({
     .select('id, role, content, tool_calls, tool_results, followups, screen_glance_at, created_at')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
+
+  // A transcript that CANNOT be read must never render as a transcript that is
+  // EMPTY. They look identical on screen and mean opposite things, and the
+  // difference is what somebody needs in order to report the problem.
+  //
+  // This is not hypothetical: the select above names `followups` and
+  // `screen_glance_at`, added by migrations 0090 and 0092. A deploy that ships
+  // the code before the migration lands — exactly what happened — makes
+  // PostgREST reject the whole query for one unknown column, and every
+  // conversation in the product silently reads as brand new. Nothing in the
+  // build, the tests or the types can catch it, because the column is real in
+  // the repo and missing only in the database that is running.
+  //
+  // Throwing hands it to the error boundary, which says something is wrong
+  // instead of quietly implying the messages were never there.
+  if (msgsError) {
+    throw new Error(
+      `No se pudo leer la conversación ${conversationId}: ${msgsError.message}. ` +
+        'Suele ser una migración sin aplicar en esta base de datos.',
+    );
+  }
 
   // Verify conversation ownership (and recover its agent so a resumed chat
   // stays on the same agent instead of defaulting to the first in the list).
