@@ -49,7 +49,13 @@ export const maxDuration = 120;
  */
 
 const Body = z.object({
-  sessionId: z.string().uuid().optional(),
+  // `nullish`, no `optional`. El cliente arranca con `sessionId` en null —
+  // todavía no hay sesión— y lo manda tal cual, porque `JSON.stringify` sí
+  // serializa un null. `optional()` admite el campo AUSENTE, nunca un null
+  // explícito, así que la primera frase de toda entrevista se rechazaba con un
+  // 400 antes de llegar al modelo: la pantalla decía «no entendí lo que llegó»
+  // y nadie podía pasar del primer mensaje.
+  sessionId: z.string().uuid().nullish(),
   message: z.string().trim().min(1).max(4000),
   /** «Ya, muéstrame lo que tienes». Salta las preguntas que queden. */
   finish: z.boolean().optional(),

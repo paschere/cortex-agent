@@ -19,9 +19,9 @@ export default async function SettingsPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  // Preferences, the Chat link and the memory counts are independent reads;
-  // none blocks the others.
-  const [{ data }, link, memories] = await Promise.all([
+  // Preferences, the Chat link, the memory counts and the setup interview are
+  // independent reads; none blocks the others.
+  const [{ data }, link, memories, setup] = await Promise.all([
     db.from('user_preferences').select(PREFERENCE_COLUMNS).eq('user_id', user.id).maybeSingle(),
     // The DM thread is discovered, not created: this row only exists once the
     // person has messaged the Cortex app in Google Chat. Reading it here is what
@@ -38,6 +38,17 @@ export default async function SettingsPage() {
     // Never throws the page: a memory read that fails should cost the link's
     // counts, not the settings form.
     listMemories(db, user.id).catch(() => []),
+    // How many things the setup interview has actually created. Same posture as
+    // the memory read: a failure here costs this row its number, never the page.
+    db
+      .from('guided_setup_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'created')
+      .then((r) => r.count ?? 0)
+      .then(
+        (n) => n,
+        () => null,
+      ),
   ]);
 
   const activeMemories = memories.filter((m) => m.status === 'active').length;
@@ -103,6 +114,44 @@ export default async function SettingsPage() {
                     <span className="tabular text-ink">{pendingMemories}</span>{' '}
                     {pendingMemories === 1 ? 'espera' : 'esperan'} a que las guardes o las
                     descartes.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 shrink-0 text-ink-faint" />
+        </Link>
+      </Panel>
+
+      {/* The setup interview lives here, next to the memory list, for the reason
+          that row states: this is where people look for "what this product holds
+          and does on my behalf".
+          It is reachable from /onboarding too, but only once a source is
+          connected and a first question has been asked — sensible for a first
+          run, and useless as the permanent address. Telling Cortex how the
+          company works is not a first-week task: it is something somebody
+          remembers on a Tuesday in March, and then they go looking in Settings. */}
+      <Panel className="mt-5">
+        <Link
+          href="/onboarding/entrevista"
+          className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-surface-2"
+        >
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">
+              <MessagesSquare className="h-4 w-4" />
+            </span>
+            <div>
+              <div className="text-[13px] font-semibold text-ink">
+                Cuéntale cómo trabaja tu empresa
+              </div>
+              <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+                {setup === null || setup === 0 ? (
+                  'Le explicas tus procesos, te hace unas preguntas, y te propone qué vigilar y qué hacer solo. Nada se crea sin que lo apruebes.'
+                ) : (
+                  <>
+                    Ya dejó <span className="tabular text-ink">{setup}</span>{' '}
+                    {setup === 1 ? 'cosa andando' : 'cosas andando'}. Cuéntale algo más y te
+                    propone lo siguiente.
                   </>
                 )}
               </p>
