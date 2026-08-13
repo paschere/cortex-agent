@@ -360,7 +360,24 @@ export async function runTool<I, O>(
         notice: evaluation.mandate
           ? explainDelegation(evaluation.classification, evaluation.mandate)
           : explainFlag(evaluation.classification),
-        ...(evaluation.mandate ? { delegatedBy: evaluation.mandate.label } : {}),
+        ...(evaluation.mandate
+          ? {
+              delegatedBy: evaluation.mandate.label,
+              // EL IDENTIFICADOR, NO SOLO EL NOMBRE.
+              //
+              // La pantalla que ofrece «revocar el permiso» tiene que saber
+              // CUÁL revocar. Con solo la etiqueta hay que casarla contra la
+              // lista de concesiones por nombre, y dos mandatos pueden llamarse
+              // igual — momento en el que la elección correcta es no ofrecer el
+              // botón, porque revocar el equivocado quita una autonomía que
+              // nadie quiso quitar y deja puesta la que sí molestaba.
+              //
+              // Es un id, no un secreto: nombra una fila de esta misma empresa
+              // que la persona puede abrir, y sin él el botón honesto es no
+              // tener botón.
+              mandateId: evaluation.mandate.id,
+            }
+          : {}),
         signals: evaluation.classification.signals,
         // Instruction to the model, not text to echo verbatim.
         relayToUser: true,

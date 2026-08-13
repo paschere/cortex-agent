@@ -457,3 +457,78 @@ describe('fleet paperwork', () => {
     expect(w.tables.commitments).toHaveLength(0);
   });
 });
+
+/**
+ * PREGUNTAR POR EL PASADO, QUE ES DONDE ESTA FUNCIÓN PODÍA MENTIR.
+ *
+ * Todo lo demás en `listCommitments` va sobre lo que VIENE: ordena por `due_on`
+ * ascendente y corta con `limit`, que es lo correcto cuando alguien pide los
+ * próximos cien vencimientos. Apuntado al pasado se convierte en una trampa —
+ * `states: ['met']` devuelve los quinientos cumplidos MÁS ANTIGUOS y los
+ * presenta como recientes. No falla: contesta con seguridad usando filas de
+ * hace dos años, que es la peor forma de que una consulta se equivoque.
+ */
+describe('el historial reciente', () => {
+  it('devuelve lo último cerrado, no lo más viejo', async () => {
+    const w = world();
+
+    const made = [];
+    for (const [title, dueOn, metAt] of [
+      ['Lo más viejo', '2024-01-10', '2024-01-09T15:00:00Z'],
+      ['De hace un mes', '2026-07-10', '2026-07-09T15:00:00Z'],
+      ['De ayer', '2026-08-12', '2026-08-12T15:00:00Z'],
+    ] as const) {
+      const row = await createCommitment(w.db, {
+        title,
+        kind: 'internal',
+        dueOn,
+        ownerUserId: ANA,
+        source: { kind: 'manual', userId: ANA },
+        createdBy: ANA,
+      });
+      const stored = w.tables.commitments?.find((c) => c.id === row.id);
+      if (stored) {
+        stored.state = 'met';
+        stored.met_at = metAt;
+      }
+      made.push(row);
+    }
+
+    // Sin `metAfter` el orden es por vencimiento: lo de 2024 primero. Esa es
+    // exactamente la respuesta que parecía correcta y no lo era.
+    const byDueDate = await listCommitments(w.db, { states: ['met'], today: TODAY });
+    expect(byDueDate[0]?.title).toBe('Lo más viejo');
+
+    // Pidiendo historial, el orden sigue a la pregunta.
+    const recent = await listCommitments(w.db, {
+      states: ['met'],
+      metAfter: '2026-06-01T00:00:00Z',
+      today: TODAY,
+    });
+    expect(recent.map((r) => r.title)).toEqual(['De ayer', 'De hace un mes']);
+  });
+
+  it('deja fuera lo cerrado antes de la ventana', async () => {
+    const w = world();
+    const row = await createCommitment(w.db, {
+      title: 'Cerrado hace mucho',
+      kind: 'internal',
+      dueOn: '2024-01-10',
+      ownerUserId: ANA,
+      source: { kind: 'manual', userId: ANA },
+      createdBy: ANA,
+    });
+    const stored = w.tables.commitments?.find((c) => c.id === row.id);
+    if (stored) {
+      stored.state = 'met';
+      stored.met_at = '2024-01-09T15:00:00Z';
+    }
+
+    const recent = await listCommitments(w.db, {
+      states: ['met'],
+      metAfter: '2026-06-01T00:00:00Z',
+      today: TODAY,
+    });
+    expect(recent).toHaveLength(0);
+  });
+});

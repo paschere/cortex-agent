@@ -57,6 +57,27 @@ export interface ListOptions {
   vehicleId?: string;
   limit?: number;
   today?: string;
+  /**
+   * ASKING FOR HISTORY, WHICH THIS FUNCTION COULD NOT DO WITHOUT LYING.
+   *
+   * Everything else here is about what is COMING: the query orders by `due_on`
+   * ascending and cuts with `limit`, which is right when the caller wants the
+   * next hundred deadlines. Point that at the past and it becomes a trap —
+   * `states: ['met']` returns the five hundred OLDEST fulfilled commitments and
+   * calls them recent. It does not fail; it answers confidently with rows from
+   * two years ago, which is the worst way for a query to be wrong.
+   *
+   * So a caller asking "what got closed lately" says so, and gets an ordering
+   * that matches the question: newest first, by the day it was actually closed.
+   *
+   * `metAfter` is an ISO instant, not a calendar day, because `met_at` is a
+   * timestamp — the moment somebody ticked it off. Turning it into a Bogotá day
+   * is the CALLER's job, and the screen that reports "8 of 9 on time" does
+   * exactly that: a promise closed at 20:00 in Bogotá is closed that day, not
+   * the next one, and comparing an instant to a date without that step marks
+   * every evening delivery late, silently, for ever.
+   */
+  metAfter?: string;
 }
 
 /**
@@ -136,8 +157,14 @@ export async function listCommitments(
   if (opts.ownerUserId) q = q.eq('owner_user_id', opts.ownerUserId);
   if (opts.vehicleId) q = q.eq('vehicle_id', opts.vehicleId);
   if (opts.dueBefore) q = q.lte('due_on', opts.dueBefore);
+  if (opts.metAfter) q = q.gte('met_at', opts.metAfter);
 
-  const { data, error } = await q.order('due_on', { ascending: true }).limit(opts.limit ?? 500);
+  // The ordering follows the QUESTION, not the table. Asking about the past
+  // and getting `due_on ASC` is how a caller receives the five hundred oldest
+  // rows and reads them as recent — see the note on `metAfter`.
+  const { data, error } = opts.metAfter
+    ? await q.order('met_at', { ascending: false }).limit(opts.limit ?? 500)
+    : await q.order('due_on', { ascending: true }).limit(opts.limit ?? 500);
   if (error) throw error;
 
   let rows = (data ?? []) as CommitmentRow[];
