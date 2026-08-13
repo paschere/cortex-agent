@@ -40,7 +40,7 @@ describe('findReply', () => {
     expect(verdict.replied).toBe(false);
   });
 
-  it('does not count the client\'s ORIGINAL email as a reply to our answer', () => {
+  it("does not count the client's ORIGINAL email as a reply to our answer", () => {
     // Without the clock, every reply_to_client action closes on the message it
     // was written to answer.
     const verdict = findReply(
@@ -179,6 +179,56 @@ describe('the drafted text', () => {
     expect(draft.subject).toContain('WNK123');
     expect(draft.body).toContain('vence en 9 días');
     expect(draft.body).toContain('RUNT');
+  });
+
+  /**
+   * A promise between two colleagues is not a lapsing document, and the wording
+   * is the whole difference. Without its own branch this reads as «Compromiso
+   * interno — Informe de agosto por vencer», which is a filing cabinet talking
+   * about a piece of paper to somebody who simply said she would do something.
+   */
+  it('reminds a colleague of her own promise in her own words', () => {
+    const draft = draftOwnerReminder(
+      commitment({
+        kind: 'internal',
+        title: 'Mandar el informe de agosto',
+        counterparty: null,
+        amount_cop: null,
+        due_on: '2026-08-07',
+        notice_days: 1,
+      }),
+      '2026-08-06',
+      'Ana',
+    );
+
+    expect(draft.body).toContain('Hola Ana,');
+    expect(draft.body).toContain('Quedaste de mandar el informe de agosto');
+    expect(draft.body).toContain('vence en 1 día');
+
+    // Nothing from the paperwork vocabulary leaks in.
+    expect(draft.subject).not.toMatch(/vencer|vencido/i);
+    expect(draft.body).not.toMatch(/placa|SOAT|Compromiso interno/);
+
+    // And the way out is named in the same message.
+    expect(draft.body).toContain('márcalo como cumplido');
+  });
+
+  it('says it plainly when the promise already slipped', () => {
+    const draft = draftOwnerReminder(
+      commitment({
+        kind: 'internal',
+        title: 'Mandar el informe de agosto',
+        counterparty: null,
+        amount_cop: null,
+        due_on: '2026-08-01',
+      }),
+      '2026-08-06',
+      null,
+    );
+    expect(draft.subject).toBe('Quedó pendiente — Mandar el informe de agosto');
+    expect(draft.body).toContain('Hola,');
+    expect(draft.body).toContain('está vencido hace 5 días');
+    expect(draft.rationale).toContain('5 días sin cerrarse');
   });
 
   it('omits the amount rather than inventing one', () => {

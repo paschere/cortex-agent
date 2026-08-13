@@ -25,6 +25,7 @@ export const COMMITMENT_KINDS = [
   'warranty',
   'customs',
   'payment',
+  'internal',
   'other',
 ] as const;
 
@@ -39,6 +40,11 @@ export const DEFAULT_NOTICE_DAYS: Record<CommitmentKind, number> = {
   warranty: 15,
   customs: 7,
   payment: 3,
+  // Uno, y es el más bajo de la lista a propósito: una promesa para el viernes
+  // avisada con quince días llega antes de que el trabajo pudiera haber
+  // empezado, y un aviso que llega demasiado pronto es como se aprende a
+  // dejar de leerlos.
+  internal: 1,
   other: 15,
 };
 
@@ -50,5 +56,6 @@ export const KIND_LABEL: Record<CommitmentKind, string> = {
   warranty: 'Garantía',
   customs: 'Plazo de aduana',
   payment: 'Pago',
+  internal: 'Compromiso interno',
   other: 'Otro',
 };

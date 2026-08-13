@@ -9,6 +9,18 @@ import {
 } from '../commitments/shape';
 
 /**
+ * «Mandar el informe» rather than «Mandar el informe», mid-sentence.
+ *
+ * Titles are written as headings — capitalised — and this one gets embedded in
+ * «Quedaste de …». Only the first letter is touched, so «Informe SOAT de
+ * agosto» keeps its acronym.
+ */
+function lowerFirst(text: string): string {
+  const t = text.trim();
+  return t ? t[0]?.toLowerCase() + t.slice(1) : t;
+}
+
+/**
  * The house wording, as pure functions of a commitment row.
  *
  * WHY TEMPLATES AND NOT THE MODEL. Every figure in a cobro is a claim about
@@ -102,9 +114,7 @@ export function draftCollectionNotice(
     : `Nos permitimos recordarle que el pago de ${row.title} tenía como fecha límite el ${longDate(row.due_on)}.`;
 
   const lateness =
-    late > 0
-      ? ` A la fecha lleva ${plural(late, 'día')} de mora.`
-      : ' La fecha ya se cumplió.';
+    late > 0 ? ` A la fecha lleva ${plural(late, 'día')} de mora.` : ' La fecha ya se cumplió.';
 
   const body = [
     'Buen día,',
@@ -180,7 +190,52 @@ export function draftOwnerReminder(
     };
   }
 
-  const what = row.vehicle_plate ? `${label} de la placa ${row.vehicle_plate}` : `${label} — ${row.title}`;
+  /**
+   * A PROMISE BETWEEN TWO PEOPLE HERE READS NOTHING LIKE A LAPSING SOAT.
+   *
+   * Without this branch the generic wording below would reach Ana as
+   * «Compromiso interno — Informe de agosto por vencer», which is the voice of
+   * a filing cabinet talking about a piece of paper. She did not acquire an
+   * obligation; she said she would do something. So: her own words back
+   * («quedaste de…»), no vehicle, no expiry vocabulary, and the way out named
+   * in the same sentence.
+   *
+   * The provenance line matters more here than anywhere else in this file. A
+   * reminder about a SOAT is impersonal; a reminder about a promise is somebody
+   * saying "you said you would". `describeSource` on a `manual` row names who
+   * wrote it down and when, so the message can be answered — «yo no dije eso»
+   * has somewhere to go.
+   */
+  if (row.kind === 'internal') {
+    const subject =
+      left < 0
+        ? `Quedó pendiente — ${row.title}`
+        : left === 0
+          ? `Es para hoy — ${row.title}`
+          : `Recordatorio — ${row.title}`;
+    const body = [
+      greeting,
+      '',
+      `Quedaste de ${lowerFirst(row.title)}, con fecha ${longDate(row.due_on)} — ${when}.`,
+      ...(row.detail?.trim() ? ['', row.detail.trim()] : []),
+      '',
+      provenance,
+      '',
+      'Si ya está, márcalo como cumplido en Vencimientos y dejo de insistir. Si cambió la fecha o ya no aplica, dímelo y lo ajusto.',
+    ].join('\n');
+    return {
+      subject,
+      body,
+      rationale:
+        left < 0
+          ? `${row.title} lleva ${plural(-left, 'día')} sin cerrarse.`
+          : `${row.title} ${when}.`,
+    };
+  }
+
+  const what = row.vehicle_plate
+    ? `${label} de la placa ${row.vehicle_plate}`
+    : `${label} — ${row.title}`;
   const subject =
     left < 0
       ? `${label} vencido — ${row.vehicle_plate ?? row.title}`

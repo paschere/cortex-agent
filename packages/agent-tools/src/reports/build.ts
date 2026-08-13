@@ -13,9 +13,9 @@ import {
 import {
   type ChartBody,
   type Figure,
+  type GeneratedReportKind,
   REPORT_DOCUMENT_VERSION,
   REPORT_KIND_LABEL,
-  type GeneratedReportKind,
   type ReportDocument,
   type ReportSection,
   type ReportSource,
@@ -175,7 +175,9 @@ const STATE_TONE: Record<string, Tone> = {
  * The unconfirmed ones are counted separately, named in their own metric, and
  * called out in the notes — visible, and outside every other number.
  */
-async function buildExpiries(input: Required<Omit<BuildInput, 'params'>> & { params: ReportParams }): Promise<ReportDocument> {
+async function buildExpiries(
+  input: Required<Omit<BuildInput, 'params'>> & { params: ReportParams },
+): Promise<ReportDocument> {
   const { db, today, now, params } = input;
   const horizonDays = clampInt(params.horizonDays, 1, 365, 60);
   const horizonEnd = addDays(today, horizonDays);
@@ -186,14 +188,25 @@ async function buildExpiries(input: Required<Omit<BuildInput, 'params'>> & { par
   const yearEnd = addDays(today, 365);
   const readAt = now.toISOString();
 
+  // INTERNAL PROMISES ARE NOT DEADLINES, and this report counts deadlines.
+  // «Ana quedó de mandar el informe el viernes» is a commitment and belongs in
+  // the weekly report by name, but counting it here would inflate the figure
+  // somebody reads as "papers about to expire" — a number whose whole value is
+  // that it compares month to month.
   const [rows, pending] = await Promise.all([
     listCommitments(db, {
       reviewState: 'confirmed',
       dueBefore: yearEnd,
       today,
       limit: ROW_CAP,
+      excludeKinds: ['internal'],
     }),
-    listCommitments(db, { reviewState: 'pending', today, limit: 200 }),
+    listCommitments(db, {
+      reviewState: 'pending',
+      today,
+      limit: 200,
+      excludeKinds: ['internal'],
+    }),
   ]);
 
   const SRC = 'commitments';
@@ -297,7 +310,13 @@ async function buildExpiries(input: Required<Omit<BuildInput, 'params'>> & { par
   };
 
   // --- Timeline -----------------------------------------------------------
-  const timelineFrom = overdue.length > 0 ? minDate(overdue.map((r) => r.due_on), today) : today;
+  const timelineFrom =
+    overdue.length > 0
+      ? minDate(
+          overdue.map((r) => r.due_on),
+          today,
+        )
+      : today;
   const timelineItems = inWindow.slice(0, 60).map((r) => ({
     label: r.title,
     date: r.due_on,
@@ -459,7 +478,8 @@ async function buildExpiries(input: Required<Omit<BuildInput, 'params'>> & { par
         }),
         sourceId: SRC,
         method: `${windowMethod} La última columna es la procedencia guardada en la propia fila: quién la registró, qué sistema la reportó, o de qué documento se citó.`,
-        caption: 'Cada fila trae la procedencia de su fecha; ninguna cifra de este informe existe sin ella.',
+        caption:
+          'Cada fila trae la procedencia de su fecha; ninguna cifra de este informe existe sin ella.',
       },
     },
   ];
@@ -499,8 +519,10 @@ function expiriesLede(
     return `Nada vencido y nada dentro de su ventana de aviso en los próximos ${horizonDays} días. Lo que aparece más abajo es la carga que viene después, para que no llegue de sorpresa.`;
   }
   const parts: string[] = [];
-  if (overdue > 0) parts.push(`${count(overdue)} ${overdue === 1 ? 'ya se venció' : 'ya se vencieron'}`);
-  if (dueSoon > 0) parts.push(`${count(dueSoon)} ${dueSoon === 1 ? 'entra' : 'entran'} en su ventana de aviso`);
+  if (overdue > 0)
+    parts.push(`${count(overdue)} ${overdue === 1 ? 'ya se venció' : 'ya se vencieron'}`);
+  if (dueSoon > 0)
+    parts.push(`${count(dueSoon)} ${dueSoon === 1 ? 'entra' : 'entran'} en su ventana de aviso`);
   const money = atRisk > 0 ? ` Hay ${cop(atRisk)} comprometidos en esas fechas.` : '';
   return `${parts.join(' y ')} en los próximos ${horizonDays} días.${money} Cada fecha de abajo trae la fuente de la que salió.`;
 }
@@ -560,7 +582,9 @@ interface FineRow {
  * moments as a caveat, and a plate nobody has ever consulted is counted in its
  * own bucket ("sin consultar") instead of quietly passing as compliant.
  */
-async function buildFleet(input: Required<Omit<BuildInput, 'params'>> & { params: ReportParams }): Promise<ReportDocument> {
+async function buildFleet(
+  input: Required<Omit<BuildInput, 'params'>> & { params: ReportParams },
+): Promise<ReportDocument> {
   const { db, today, now, params } = input;
   const horizonDays = clampInt(params.horizonDays, 1, 365, 90);
   const horizonEnd = addDays(today, horizonDays);
@@ -885,10 +909,19 @@ async function buildFleet(input: Required<Omit<BuildInput, 'params'>> & { params
           return [
             cell(v.plate),
             cell([v.brand, v.line, v.model_year].filter(Boolean).join(' ') || (v.label ?? '—')),
-            cell(v.soat_expires_at ? shortDate(v.soat_expires_at.slice(0, 10)) : 'sin dato', soat.tone),
-            cell(v.rtm_expires_at ? shortDate(v.rtm_expires_at.slice(0, 10)) : 'sin dato', rtm.tone),
+            cell(
+              v.soat_expires_at ? shortDate(v.soat_expires_at.slice(0, 10)) : 'sin dato',
+              soat.tone,
+            ),
+            cell(
+              v.rtm_expires_at ? shortDate(v.rtm_expires_at.slice(0, 10)) : 'sin dato',
+              rtm.tone,
+            ),
             cell(pending > 0 ? cop(pending) : '—', pending > 0 ? 'rose' : null),
-            cell(v.last_runt_sync ? v.last_runt_sync.slice(0, 10) : 'nunca', v.last_runt_sync ? null : 'amber'),
+            cell(
+              v.last_runt_sync ? v.last_runt_sync.slice(0, 10) : 'nunca',
+              v.last_runt_sync ? null : 'amber',
+            ),
           ];
         }),
         sourceId: SRC_V,
@@ -972,11 +1005,14 @@ async function buildClientActivity(
   const windowStart = `${window[0]}-01`;
 
   const [allRows, docs] = await Promise.all([
+    // Same exclusion as the expiries report: this one is about what a CLIENT
+    // has going on, and a promise between two colleagues here is not that.
     listCommitments(db, {
       reviewState: 'confirmed',
       dueBefore: addDays(today, 365),
       today,
       limit: ROW_CAP,
+      excludeKinds: ['internal'],
     }),
     db
       .from('kb_documents')
@@ -1248,16 +1284,18 @@ async function buildClientActivity(
           { label: 'Comprometido', align: 'right', mono: true },
           { label: 'Próximo vencimiento', align: 'left', mono: true },
         ],
-        rows: buckets.slice(0, 60).map((b) => [
-          cell(b.name),
-          cell(count(b.total)),
-          cell(count(b.overdue), b.overdue > 0 ? 'rose' : null),
-          cell(b.amount > 0 ? cop(b.amount) : '—'),
-          cell(
-            b.next ? `${shortDate(b.next)} · ${whenPhrase(daysUntilDue(b.next, today))}` : '—',
-            b.next && daysUntilDue(b.next, today) < 0 ? 'rose' : null,
-          ),
-        ]),
+        rows: buckets
+          .slice(0, 60)
+          .map((b) => [
+            cell(b.name),
+            cell(count(b.total)),
+            cell(count(b.overdue), b.overdue > 0 ? 'rose' : null),
+            cell(b.amount > 0 ? cop(b.amount) : '—'),
+            cell(
+              b.next ? `${shortDate(b.next)} · ${whenPhrase(daysUntilDue(b.next, today))}` : '—',
+              b.next && daysUntilDue(b.next, today) < 0 ? 'rose' : null,
+            ),
+          ]),
         sourceId: SRC,
         method:
           'Una fila por valor distinto de counterparty. Abiertos, vencidos y comprometido son conteos y sumas sobre los compromisos de esa contraparte; el próximo vencimiento es el menor due_on abierto.',
@@ -1305,7 +1343,10 @@ function clampInt(value: number | undefined, min: number, max: number, fallback:
  * come through here so a report generated from the chat and one generated from
  * the button are the same document.
  */
-export async function buildReport(kind: GeneratedReportKind, input: BuildInput): Promise<ReportDocument> {
+export async function buildReport(
+  kind: GeneratedReportKind,
+  input: BuildInput,
+): Promise<ReportDocument> {
   const resolved = {
     db: input.db,
     today: input.today ?? bogotaToday(input.now),

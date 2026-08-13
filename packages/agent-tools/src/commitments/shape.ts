@@ -94,6 +94,24 @@ export const isoDate = z
 // What kind of thing this is
 // ---------------------------------------------------------------------------
 
+/**
+ * ONE OF THESE IS NOT LIKE THE OTHERS, AND THAT IS THE POINT.
+ *
+ * The first seven are pieces of paper with an expiry date, owed to somebody
+ * outside the company: an insurer, the DIAN, a customer. `internal` is a person
+ * here promising something to another person here — «Ana quedó de mandar el
+ * informe el viernes».
+ *
+ * IT LIVES IN THIS LIST RATHER THAN IN A TABLE OF ITS OWN, and that was the
+ * decision worth arguing. A separate table would mean a second copy of seven
+ * mechanisms: derived state, the notice ledger with its unique index, the
+ * escalation, the calendar sync, the 06:00 watcher, the action sweep and the
+ * reports. The honest objection — a SOAT is a legal obligation and a promise
+ * between colleagues is a social one — is real, and all of it lives in three
+ * places that are ALREADY per-kind: how much warning it deserves, how long
+ * before it goes over somebody's head, and how the reminder is worded. That is
+ * a row's worth of difference, not a table's.
+ */
 export const COMMITMENT_KINDS = [
   'soat',
   'rtm',
@@ -102,9 +120,20 @@ export const COMMITMENT_KINDS = [
   'warranty',
   'customs',
   'payment',
+  'internal',
   'other',
 ] as const;
 export type CommitmentKind = (typeof COMMITMENT_KINDS)[number];
+
+/**
+ * Promises between people here, as opposed to paperwork owed to somebody out
+ * there. Exported because several readers need to tell them apart — the
+ * expiries report must not count them as deadlines, and the reminder is worded
+ * differently.
+ */
+export function isInternalKind(kind: CommitmentKind): boolean {
+  return kind === 'internal';
+}
 
 /**
  * How much warning each kind deserves, in days.
@@ -125,6 +154,12 @@ export const DEFAULT_NOTICE_DAYS: Record<CommitmentKind, number> = {
   warranty: 15,
   customs: 7,
   payment: 3,
+  // ONE DAY, and it is the smallest number here on purpose. A promise for
+  // Friday warned about fifteen days ahead is a warning that arrives before the
+  // work could reasonably have started, and a warning that arrives too early is
+  // how somebody learns to stop reading them. The colleague who said «el
+  // viernes» wants to hear about it on Thursday.
+  internal: 1,
   other: 15,
 };
 
@@ -137,6 +172,7 @@ export const KIND_LABEL: Record<CommitmentKind, string> = {
   warranty: 'Garantía',
   customs: 'Plazo de aduana',
   payment: 'Pago',
+  internal: 'Compromiso interno',
   other: 'Otro',
 };
 

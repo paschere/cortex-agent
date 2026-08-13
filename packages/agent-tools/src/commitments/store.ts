@@ -43,6 +43,14 @@ export interface ListOptions {
   /** 'confirmed' for the watched set, 'pending' for the review inbox. */
   reviewState?: 'pending' | 'confirmed' | 'rejected';
   kind?: CommitmentKind;
+  /**
+   * Kinds to leave out. Exists for one caller and one reason: the expiries
+   * report counts deadlines owed to third parties, and an internal promise
+   * between two colleagues is not one. Without this, «Ana quedó de mandar el
+   * informe» would inflate the number somebody reads as "papers about to
+   * expire" — a figure that has to stay comparable month to month.
+   */
+  excludeKinds?: CommitmentKind[];
   ownerUserId?: string;
   /** Everything falling due on or before this date. */
   dueBefore?: string;
@@ -122,6 +130,9 @@ export async function listCommitments(
   q = q.eq('review_state', opts.reviewState ?? 'confirmed');
 
   if (opts.kind) q = q.eq('kind', opts.kind);
+  if (opts.excludeKinds?.length) {
+    q = q.not('kind', 'in', `(${opts.excludeKinds.join(',')})`);
+  }
   if (opts.ownerUserId) q = q.eq('owner_user_id', opts.ownerUserId);
   if (opts.vehicleId) q = q.eq('vehicle_id', opts.vehicleId);
   if (opts.dueBefore) q = q.lte('due_on', opts.dueBefore);

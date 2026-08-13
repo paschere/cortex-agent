@@ -148,6 +148,7 @@ export const COMMITMENT_KINDS = [
   'warranty',
   'customs',
   'payment',
+  'internal',
   'other',
 ] as const;
 
@@ -372,10 +373,7 @@ export function capabilityRefusal(
   payload: SetupPayload,
 ): CapabilityRefusal | null {
   if (kind !== 'routine') return null;
-  const text = fold(`${(payload as RoutinePayload).instruction ?? ''}`).replace(
-    STATE_PHRASE,
-    ' ',
-  );
+  const text = fold(`${(payload as RoutinePayload).instruction ?? ''}`).replace(STATE_PHRASE, ' ');
 
   if (PORTAL.test(text)) {
     return {
@@ -434,7 +432,13 @@ export function normalizeProposal(raw: unknown, today: string): NormalizeResult 
     .safeParse(raw);
 
   if (!outer.success) {
-    return { ok: false, reason: 'La propuesta llegó incompleta.', kind: '?', title: '?', route: null };
+    return {
+      ok: false,
+      reason: 'La propuesta llegó incompleta.',
+      kind: '?',
+      title: '?',
+      route: null,
+    };
   }
   const { kind, title, rationale } = outer.data;
 
@@ -445,9 +449,7 @@ export function normalizeProposal(raw: unknown, today: string): NormalizeResult 
       kind,
       title,
       // Un tipo inventado sí se le cuenta a la persona: pidió algo real.
-      route: (HANDOFF_KINDS as readonly string[]).includes(kind)
-        ? (kind as HandoffKind)
-        : 'scope',
+      route: (HANDOFF_KINDS as readonly string[]).includes(kind) ? (kind as HandoffKind) : 'scope',
     };
   }
   const setupKind = kind as SetupKind;

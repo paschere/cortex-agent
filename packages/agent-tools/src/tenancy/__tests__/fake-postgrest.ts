@@ -21,7 +21,18 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 type Row = Record<string, unknown>;
 export type Tables = Record<string, Row[]>;
 
-type Op = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'is' | 'not-is' | 'contains';
+type Op =
+  | 'eq'
+  | 'neq'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'in'
+  | 'not-in'
+  | 'is'
+  | 'not-is'
+  | 'contains';
 
 interface Filter {
   column: string;
@@ -50,6 +61,11 @@ function matches(row: Row, f: Filter): boolean {
       return f.value === null ? actual == null : actual === f.value;
     case 'not-is':
       return f.value === null ? actual != null : actual !== f.value;
+    case 'not-in':
+      // A null column is NOT excluded, matching SQL: `null not in (...)` is
+      // null, which PostgREST drops — so a row with no value survives the
+      // filter, exactly as it does against the real database.
+      return actual == null || !(f.value as unknown[]).includes(actual);
     case 'contains':
       return (f.value as unknown[]).every((v) => (actual as unknown[] | null)?.includes(v));
     default:
@@ -206,9 +222,24 @@ class Query implements PromiseLike<Result<unknown>> {
     return this;
   }
   not(column: string, op: string, value: unknown) {
-    if (op !== 'is') throw new Error(`fake-postgrest: unsupported not.${op}`);
-    this.filters.push({ column, op: 'not-is', value });
-    return this;
+    if (op === 'is') {
+      this.filters.push({ column, op: 'not-is', value });
+      return this;
+    }
+    if (op === 'in') {
+      // PostgREST takes this as the literal string `(a,b,c)`, so the fake has
+      // to unwrap it the same way the wire does — otherwise a query that works
+      // against the real database fails here for a reason that has nothing to
+      // do with what is being tested.
+      const raw = String(value).replace(/^\(|\)$/g, '');
+      const values = raw
+        .split(',')
+        .map((v) => v.trim().replace(/^"|"$/g, ''))
+        .filter((v) => v.length > 0);
+      this.filters.push({ column, op: 'not-in', value: values });
+      return this;
+    }
+    throw new Error(`fake-postgrest: unsupported not.${op}`);
   }
   or(expr: string) {
     this.predicates.push(parseOr(expr));
