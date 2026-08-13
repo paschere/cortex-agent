@@ -34,8 +34,17 @@
  *   insurance_policy     The póliza behind the operation; already a first-class
  *                        `kind` in the commitments module (0069), so the two
  *                        surfaces line up.
+ *   payment_receipt      Added for the payments module (0098), and added HERE
+ *                        rather than in a migration, which is the promise this
+ *                        file made. A comprobante de pago is what turns "we
+ *                        invoiced $84.500.000" into "and $52.300.000 of it came
+ *                        in": it carries an amount, a currency, a payer and the
+ *                        invoice it settles. It inherits the mandatory quote,
+ *                        verify.ts and the review queue for free, and once a
+ *                        person confirms it, payments/receipt.ts turns it into a
+ *                        document-sourced payment report.
  *
- * The seventh outcome is NO TYPE AT ALL, and it is a legitimate answer rather
+ * The eighth outcome is NO TYPE AT ALL, and it is a legitimate answer rather
  * than a fallback. See classification in extract.ts.
  */
 
@@ -509,6 +518,88 @@ export const DOCUMENT_TYPES: readonly DocumentTypeSpec[] = [
         label: 'Prima',
         kind: 'amount',
         hint: 'La prima que se paga por la póliza, si aparece.',
+      },
+    ],
+  },
+  {
+    // El tipo que el módulo de pagos necesitaba, y que no costó ninguna
+    // migración: un objeto más en esta lista, exactamente como la 0076 dijo que
+    // debía ser. Hereda la cita obligatoria, la verificación de verify.ts y la
+    // cola de revisión sin escribir una línea de ninguna de las tres.
+    //
+    // `paid_on` va al slot `issued_on` y no a uno nuevo: la fecha que lleva un
+    // comprobante ES la fecha del hecho que documenta, igual que la de una
+    // factura. Inventar un octavo slot canónico para decir lo mismo sería la
+    // migración que este diseño existe para no hacer.
+    id: 'payment_receipt',
+    label: 'Comprobante de pago',
+    blurb: 'Recibo de caja, comprobante de egreso o soporte de una transferencia.',
+    cues: [
+      'comprobante de pago',
+      'comprobante de egreso',
+      'comprobante de ingreso',
+      'recibo de caja',
+      'recibo de pago',
+      'soporte de pago',
+      'comprobante de transferencia',
+      'comprobante de consignación',
+      'comprobante de consignacion',
+      'transferencia exitosa',
+      'pse',
+    ],
+    fields: [
+      {
+        key: 'receipt_number',
+        label: 'Número del comprobante',
+        kind: 'text',
+        canonical: 'doc_number',
+        hint: 'El consecutivo del recibo o del comprobante, tal como está impreso.',
+      },
+      {
+        key: 'payer_name',
+        label: 'Quien pagó',
+        kind: 'text',
+        canonical: 'counterparty_name',
+        hint: 'La razón social o el nombre de quien hizo el pago.',
+      },
+      {
+        key: 'payer_nit',
+        label: 'NIT de quien pagó',
+        kind: 'nit',
+        canonical: 'counterparty_nit',
+        hint: 'El NIT de quien pagó, con o sin dígito de verificación.',
+      },
+      {
+        key: 'paid_on',
+        label: 'Fecha del pago',
+        kind: 'date',
+        canonical: 'issued_on',
+        hint: 'El día en que se pagó, sólo si está escrito como fecha. No es la fecha de la factura.',
+      },
+      {
+        key: 'amount_paid',
+        label: 'Valor pagado',
+        kind: 'amount',
+        canonical: 'total_amount',
+        hint: 'El importe abonado, con la moneda si el comprobante la dice.',
+      },
+      {
+        key: 'invoice_number',
+        label: 'Factura que paga',
+        kind: 'text',
+        hint: 'El número de la factura que este comprobante cancela, si lo nombra.',
+      },
+      {
+        key: 'payment_method',
+        label: 'Medio de pago',
+        kind: 'text',
+        hint: 'Transferencia, consignación, efectivo, cheque, PSE, si aparece.',
+      },
+      {
+        key: 'bank_reference',
+        label: 'Referencia de la transacción',
+        kind: 'text',
+        hint: 'El número que le dio el banco o la pasarela al movimiento, si aparece.',
       },
     ],
   },

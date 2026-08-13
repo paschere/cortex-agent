@@ -188,6 +188,8 @@ export const documentsConfirm = registerTool({
     stillPending: z.number(),
     reviewState: z.string(),
     clientMatch: z.string(),
+    /** Qué pasó con el pago, si el documento era un comprobante. */
+    paymentNote: z.string().nullable(),
     guidance: z.string(),
   }),
   requiresConfirmation: true,
@@ -215,12 +217,18 @@ export const documentsConfirm = registerTool({
       stillPending,
       reviewState: result.extraction.review_state,
       clientMatch,
+      paymentNote: result.paymentNote,
       guidance: [
         `Confirmado bajo tu nombre: ${result.confirmed} campo(s)${result.corrected > 0 ? `, ${result.corrected} corregido(s)` : ''}${result.rejected > 0 ? `, ${result.rejected} descartado(s)` : ''}.`,
         stillPending > 0
           ? `Quedan ${stillPending} campos sin revisar, así que el documento sigue pendiente y no entra en las cifras.`
           : `El documento ya cuenta: entra en los totales y en las consultas por cliente y por fecha. ${clientMatch}.`,
-      ].join(' '),
+        // Un comprobante confirmado además registra el pago. Decirlo importa:
+        // es la diferencia entre "confirmé un papel" y "la cartera cambió".
+        result.paymentNote ?? '',
+      ]
+        .filter(Boolean)
+        .join(' '),
     };
   },
 });

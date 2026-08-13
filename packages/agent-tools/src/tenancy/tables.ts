@@ -307,6 +307,23 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   document_fields: tenant(),
   document_field_corrections: tenant(),
 
+  // --- Pagos (migration 0098) -----------------------------------------------
+  // Lo que dice cada fuente sobre un pago, y lo que creemos a partir de todas
+  // ellas. Tenant en el sentido más fuerte que hay en este producto: un filtro
+  // perdido aquí no enseñaría una fila ajena, movería el dinero de una empresa
+  // a la cartera de otra — una fuga con forma de número, que nadie audita
+  // porque ya parece plausible.
+  //
+  // `payment_reports` es tenant y no `derived` sobre `payments` aunque casi
+  // toda fila acabe apuntando a una: `payment_id` es NULABLE a propósito (un
+  // reporte a la espera es el estado normal de una importación recién traída),
+  // y una tabla derivada cuya clave padre puede ser nula no tiene inquilino
+  // ninguno. Además la pregunta que justifica la tabla — «¿qué llegó de Siigo
+  // este mes y qué no emparejó?» — se hace por espacio de trabajo sin nombrar
+  // un pago, que es justo lo que una clasificación `derived` prohibiría.
+  payments: tenant(),
+  payment_reports: tenant(),
+
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first
   // ten minutes. `usage_events` and `usage_counters` are tenant in the strongest

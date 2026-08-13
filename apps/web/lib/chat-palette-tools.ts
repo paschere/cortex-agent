@@ -169,6 +169,12 @@ export const TOOL_PHRASE: Record<string, string> = {
   'outlook.search': 'Busca en Outlook ',
   'outlook.send_draft': 'Envía el borrador de Outlook ',
 
+  'payments.disputes': '¿Qué pagos están en disputa entre dos fuentes?',
+  'payments.list': 'Muéstrame los pagos de ',
+  'payments.receivables': '¿Cuánto nos deben?',
+  'payments.record': 'Anota un pago de ',
+  'payments.resolve_dispute': 'Resuelve la disputa del pago ',
+
   'payroll.client_report': 'Dame el costo del equipo puesto en el cliente ',
   'payroll.cost_projection': 'Proyéctame lo que va a costar el equipo en ',
   'payroll.employee_profile': 'Dame el perfil de ',

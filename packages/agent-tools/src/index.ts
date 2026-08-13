@@ -65,6 +65,11 @@ export * from './clients';
 // matched against the client list, and after ./kb because the text it reads and
 // the visibility rule it obeys both live there.
 export * from './documents';
+// Lo que de verdad entró, dicho por varias fuentes que no siempre coinciden
+// (migración 0098). Va después de ./documents porque la cartera se calcula
+// restando pagos a facturas confirmadas, y porque un comprobante de pago es un
+// tipo de documento más — el puente lo llama documents/store al confirmar.
+export * from './payments';
 // The tissue between an answer and something done about it: a drafted action
 // waiting on a human. Placed after ./commitments and ./gmail because it reads
 // commitment rows to draft from them and binds gmail.send_message to run.

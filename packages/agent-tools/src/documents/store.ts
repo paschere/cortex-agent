@@ -3,6 +3,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { bogotaToday } from '../commitments/shape';
 import { nitDv, normalizeNit } from '../clients/shape';
 import { findClientByNit } from '../clients/store';
+// El puente hacia pagos (migración 0098). Va en este sentido a propósito:
+// `payments/receipt.ts` no importa nada de este módulo — recibe datos planos —,
+// así que no hay ciclo entre dos módulos que se escriben el uno al otro.
+import { recordReceiptPayment } from '../payments/receipt';
 import type { ExtractionReading } from './extract';
 import { type Currency, documentType, fieldLabel, money, typeLabel } from './types';
 import { type CanonicalValues, EMPTY_CANONICAL, canonicalFrom, nitDigits } from './verify';
@@ -388,6 +392,11 @@ export interface ConfirmResult {
   confirmed: number;
   corrected: number;
   rejected: number;
+  /**
+   * Qué pasó con el pago, cuando el documento era un comprobante. Null para
+   * todo lo demás. Ver `payments/receipt.ts`.
+   */
+  paymentNote: string | null;
 }
 
 /**
@@ -477,7 +486,45 @@ export async function confirmExtraction(
   }
 
   const updated = await settleExtraction(db, extraction, fields, input.userId, now);
-  return { extraction: updated, confirmed, corrected, rejected };
+
+  // UN COMPROBANTE DE PAGO CONFIRMADO ES UN PAGO REPORTADO (migración 0098).
+  //
+  // Va aquí, dentro de la única puerta que existe hacia `confirmed`, y no en el
+  // tool ni en la acción de la pantalla, precisamente por la lección de la
+  // 0064: una tabla escrita desde dos sitios acaba teniendo uno que se olvidó,
+  // y nadie se entera porque la lectura sigue funcionando. `recordReceiptPayment`
+  // no lanza nunca — devuelve la frase — así que esta línea no puede deshacer
+  // una revisión que una persona ya hizo.
+  const payment = await recordReceiptPayment(db, {
+    extraction: {
+      id: updated.id,
+      documentId: updated.document_id,
+      docType: updated.doc_type,
+      reviewState: updated.review_state,
+      clientId: updated.client_id,
+      clientNit: updated.client_nit,
+      clientMatchState: updated.client_match_state,
+      totalAmount: num(updated.total_amount),
+      currency: updated.currency,
+      issuedOn: updated.issued_on,
+    },
+    fields: fields.map((f) => {
+      const value = standingValue(f);
+      return {
+        fieldKey: f.field_key,
+        reviewState: f.review_state,
+        text: value.text,
+        number: value.number,
+        date: value.date,
+        currency: value.currency,
+        quote: f.quote,
+        chunkId: f.chunk_id,
+      };
+    }),
+    userId: input.userId,
+  });
+
+  return { extraction: updated, confirmed, corrected, rejected, paymentNote: payment.reason };
 }
 
 /**
