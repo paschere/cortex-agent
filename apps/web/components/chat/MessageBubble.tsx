@@ -2,6 +2,11 @@
 
 import { ProposedActionCard } from '@/components/actions/ProposedActionCard';
 import type { ActionView } from '@/lib/actions-shape';
+import {
+  type ExercisedMandate,
+  type NoticePlanEntry,
+  matchExercised,
+} from '@/lib/mandates/delegation';
 import { type ScreenFrame, normalizeMarks } from '@/lib/screen-marks';
 import type { Message, ToolInvocation } from 'ai';
 import { Brain, Check, Copy, RotateCw } from 'lucide-react';
@@ -9,6 +14,7 @@ import { useRef, useState } from 'react';
 import { ChartCard } from './ChartCard';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
+import { DelegatedNotice } from './DelegatedNotice';
 import { FollowUps } from './FollowUps';
 import { ProposalCard, type ProposalResult } from './ProposalCard';
 import { ReasoningTrail } from './ReasoningTrail';
@@ -46,6 +52,18 @@ interface MessageBubbleProps {
    * rather than drawing boxes over nothing. See lib/screen-marks.ts.
    */
   screenFrame?: ScreenFrame | null;
+  /**
+   * Lo que Cortex hizo SIN PREGUNTAR en este mensaje, ya agrupado por mandato y
+   * con la forma que le toca (entero la primera vez de cada mandato en la
+   * conversación, una línea las siguientes). Lo calcula MessageList, que es
+   * quien ve la conversación entera; un mensaje a solas no puede saber si su
+   * mandato ya se anunció tres respuestas más arriba.
+   */
+  delegations?: NoticePlanEntry[];
+  /** Las concesiones de esta conversación, leídas de la base. */
+  exercisedMandates?: ExercisedMandate[];
+  canRevokeMandates?: boolean;
+  onMandateRevoked?: () => void;
 }
 
 type ConfirmationSentinel = {
@@ -167,6 +185,10 @@ export function MessageBubble({
   storedFollowups,
   glanceAt,
   screenFrame,
+  delegations,
+  exercisedMandates,
+  canRevokeMandates,
+  onMandateRevoked,
 }: MessageBubbleProps) {
   const { role, content, toolInvocations } = message;
   // Scopes the selection menu to THIS answer: a selection that starts in one
@@ -302,6 +324,25 @@ export function MessageBubble({
             })()}
           </>
         )}
+
+        {/*
+          Lo que se hizo sin preguntar, dicho aquí y no en administración.
+
+          Va DESPUÉS de los pasos y de las tarjetas, y antes de la petición de
+          confirmación: primero lo que Cortex hizo, luego con qué permiso lo
+          hizo, y al final lo que todavía necesita que alguien decida. Ese orden
+          es el de la responsabilidad, y es el único que deja la pregunta
+          pendiente pegada al composer, que es donde se contesta.
+        */}
+        {delegations?.map((entry) => (
+          <DelegatedNotice
+            key={`${message.id}:${entry.label}`}
+            entry={entry}
+            exercised={matchExercised(entry, exercisedMandates ?? [])}
+            canRevoke={canRevokeMandates === true}
+            onRevoked={onMandateRevoked}
+          />
+        ))}
 
         {confirmationData && conversationId && (
           <div className="mt-2">

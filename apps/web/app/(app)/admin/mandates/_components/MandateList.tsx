@@ -1,6 +1,7 @@
 'use client';
 
 import { Panel } from '@/components/ui/panel';
+import type { MandateUsage } from '@/lib/mandates/delegation';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { CalendarClock, KeyRound, Loader2, ShieldOff, User } from 'lucide-react';
@@ -14,6 +15,21 @@ import { useState } from 'react';
  * tabla es un permiso, y un permiso que se lee en abreviaturas es un permiso que
  * nadie revisa. Cada tarjeta dice, en una frase, qué se autorizó y hasta cuándo,
  * y la lista de herramientas está desplegable pero completa — sin «y 14 más».
+ *
+ * ===========================================================================
+ * LO QUE HA HECHO, Y CUÁNDO FUE LA ÚLTIMA VEZ
+ * ===========================================================================
+ * Una concesión sin uso es la que más urge revisar y la que menos se nota, así
+ * que el silencio se dice en voz alta: un mandato en vigor que nadie ha ejercido
+ * lleva su propia etiqueta, y la frase de al lado distingue «nunca desde que se
+ * concedió» de «no en la ventana que se pudo mirar». Un permiso que lleva dos
+ * meses sin usarse es un permiso que sobra, y esta pantalla es el único sitio
+ * donde alguien va a darse cuenta.
+ *
+ * El detalle de uso se agrupa POR HERRAMIENTA, con contador y última fecha, y no
+ * es un registro de eventos: ese ya existe y es la auditoría. Cuarenta envíos de
+ * correo son una línea que dice cuarenta, porque la pregunta que se contesta
+ * aquí es «¿esto sigue teniendo sentido?» y no «¿qué pasó a las 14:32?».
  */
 
 export interface MandateView {
@@ -35,7 +51,10 @@ export interface MandateView {
   expiresAt: string;
   revokedAt: string | null;
   createdAt: string;
-  usesWindow: number;
+  /** Lo ejercido dentro de la ventana, agrupado por herramienta. */
+  usage: MandateUsage;
+  /** «La última vez fue hace 3 días» / «No lo ha ejercido…», ya compuesta. */
+  lastUseNote: string;
 }
 
 const STATE: Record<MandateView['state'], { label: string; tone: StatusTone }> = {
@@ -63,13 +82,17 @@ export function MandateList({
   mandates,
   usesWindowDays,
   activeCount,
+  usesTruncated,
 }: {
   mandates: MandateView[];
   usesWindowDays: number;
   activeCount: number;
+  /** La consulta de usos llegó al tope: los contadores son un mínimo. */
+  usesTruncated?: boolean;
 }) {
   const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [expandedUses, setExpandedUses] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,6 +155,10 @@ export function MandateList({
         {mandates.map((m) => {
           const st = STATE[m.state];
           const isOpen = expanded === m.id;
+          const usesOpen = expandedUses === m.id;
+          // Un permiso en vigor que nadie ejerce. No es un error, y por eso el
+          // tono es neutro: es una pregunta abierta que solo se puede ver aquí.
+          const idle = m.state === 'active' && m.usage.calls === 0;
           return (
             <li key={m.id} className="border-t border-border first:border-t-0">
               <div className="px-4 py-3">
@@ -143,6 +170,7 @@ export function MandateList({
                       {m.appliesUnattended && (
                         <span className={chipClass('neutral')}>también en rutinas</span>
                       )}
+                      {idle && <span className={chipClass('neutral')}>sin ejercer</span>}
                     </div>
 
                     {/* La frase completa. Es lo que alguien tiene que poder leer
@@ -209,12 +237,53 @@ export function MandateList({
                         {formatDate(m.createdAt)}
                       </span>
                       <span className="tabular">Patrones: {m.patterns.join(' · ') || '—'}</span>
-                      <span>
-                        {m.usesWindow === 0
-                          ? `Sin usarse en ${usesWindowDays} días`
-                          : `Usado ${m.usesWindow} ${m.usesWindow === 1 ? 'vez' : 'veces'} en ${usesWindowDays} días`}
-                      </span>
                     </div>
+
+                    {/* Lo que ha hecho, que es la mitad de por qué esta pantalla
+                        existe: un permiso solo se puede revisar sabiendo si se
+                        usa y para qué. */}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-muted">
+                      <span className={idle ? 'font-semibold text-ink' : undefined}>
+                        {m.lastUseNote}
+                      </span>
+                      {m.usage.calls > 0 && (
+                        <>
+                          <span aria-hidden>·</span>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedUses(usesOpen ? null : m.id)}
+                            aria-expanded={usesOpen}
+                            className="font-semibold text-primary hover:underline"
+                          >
+                            Actuó solo {usesTruncated ? 'al menos ' : ''}
+                            {m.usage.calls} {m.usage.calls === 1 ? 'vez' : 'veces'} en{' '}
+                            {usesWindowDays} días
+                          </button>
+                        </>
+                      )}
+                      {m.usage.money.map((mm) => (
+                        <span key={mm.currency} className="tabular">
+                          · movió {formatMoney(mm.total, mm.currency)}
+                        </span>
+                      ))}
+                    </div>
+
+                    {usesOpen && (
+                      <ul className="mt-2 max-w-3xl divide-y divide-border rounded-sm border border-border bg-surface-2 text-[11.5px]">
+                        {m.usage.byTool.map((t) => (
+                          <li
+                            key={t.toolId}
+                            className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-2.5 py-1.5"
+                          >
+                            <span className="text-ink">{t.label}</span>
+                            <span className="tabular text-ink-faint">
+                              {t.calls} {t.calls === 1 ? 'vez' : 'veces'} · última el{' '}
+                              {formatDate(t.lastAt)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
 
                   {m.state !== 'revoked' && (

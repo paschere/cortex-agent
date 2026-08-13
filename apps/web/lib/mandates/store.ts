@@ -223,6 +223,28 @@ export async function listMandates(db: SupabaseClient): Promise<MandateRow[]> {
   );
 }
 
+/**
+ * Las concesiones que nombra un conjunto de filas de auditoría.
+ *
+ * Existe para el aviso del chat: una conversación cita como mucho un puñado de
+ * mandatos, y traerse la tabla entera para enseñar dos nombres sería pagar por
+ * todo el historial de permisos de la empresa en cada turno. Devuelve también
+ * las revocadas y las caducadas a propósito — un aviso de hace veinte minutos
+ * bajo un mandato ya revocado tiene que poder decir que ya no autoriza nada, y
+ * eso solo se puede decir si la fila viaja.
+ */
+export async function listMandatesByIds(
+  db: SupabaseClient,
+  ids: readonly string[],
+): Promise<MandateRow[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return [];
+  return mustReadList<MandateRow>(
+    await db.from(MANDATES_TABLE).select(COLUMNS).in('id', unique),
+    'los mandatos que autorizaron esta conversación',
+  );
+}
+
 export interface UseRow {
   mandate_id: string;
   tool_id: string;
@@ -232,6 +254,16 @@ export interface UseRow {
   used_at: string;
 }
 
+/**
+ * Cuántas filas de uso se traen como mucho.
+ *
+ * Exportado porque quien lo llame TIENE que poder saber si se truncó: la
+ * pantalla del mandato cuenta usos, y un contador que dice «40» cuando fueron
+ * 1.400 miente justo en el sitio donde alguien decide si un permiso sobra. Ver
+ * `truncated` en la pantalla.
+ */
+export const USES_QUERY_LIMIT = 1000;
+
 export async function listRecentUses(db: SupabaseClient, sinceIso: string): Promise<UseRow[]> {
   return mustReadList<UseRow>(
     await db
@@ -239,7 +271,7 @@ export async function listRecentUses(db: SupabaseClient, sinceIso: string): Prom
       .select('mandate_id, tool_id, risk_level, amount, currency, used_at')
       .gte('used_at', sinceIso)
       .order('used_at', { ascending: false })
-      .limit(500),
+      .limit(USES_QUERY_LIMIT),
     'el uso reciente de los mandatos',
   );
 }

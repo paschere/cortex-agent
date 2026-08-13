@@ -1,9 +1,11 @@
 import { fetchUserNames } from '@/app/api/admin/_lib/audit-filters';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { EMPTY_USAGE, lastUseSentence, summarizeUses } from '@/lib/mandates/delegation';
 import {
   DEFAULT_MANDATE_DAYS,
   type MandateRow,
+  USES_QUERY_LIMIT,
   daysLeft,
   listMandates,
   listRecentUses,
@@ -20,7 +22,17 @@ import { MandateList } from './_components/MandateList';
 
 export const dynamic = 'force-dynamic';
 
-const USES_WINDOW_DAYS = 30;
+/**
+ * Cuánto hacia atrás se mira el uso.
+ *
+ * Es exactamente lo que dura un mandato por defecto, y esa coincidencia es el
+ * punto: con esta ventana, la vida entera de una concesión recién concedida cabe
+ * dentro, así que la pantalla puede decir «no lo ha ejercido NI UNA VEZ desde
+ * que se concedió» —que es una afirmación fuerte y sirve para decidir— en lugar
+ * de «no lo ha ejercido en los últimos 30 días», que no distingue un permiso
+ * muerto de uno que se usó el mes pasado. Ver `lastUseSentence`.
+ */
+const USES_WINDOW_DAYS = DEFAULT_MANDATE_DAYS;
 
 /**
  * Mandatos: lo que esta empresa decidió que Cortex puede hacer sin preguntar.
@@ -48,8 +60,16 @@ export default async function MandatesPage() {
     mandates.flatMap((m) => [m.granted_by, m.revoked_by ?? '']),
   );
 
-  const usesByMandate: Record<string, number> = {};
-  for (const u of uses) usesByMandate[u.mandate_id] = (usesByMandate[u.mandate_id] ?? 0) + 1;
+  // Agrupado por herramienta, no una fila por uso: cuarenta envíos de correo son
+  // una línea con un contador. El registro crudo ya existe y es la auditoría; lo
+  // que esta pantalla tiene que contestar es qué se ha hecho bajo esta concesión
+  // y cuándo fue la última vez. Ver la regla 3 en lib/mandates/delegation.ts.
+  const usage = summarizeUses(uses);
+
+  // Si la consulta llegó al tope, los contadores son un MÍNIMO y la pantalla lo
+  // dice. Un «40» donde hubo 1.400 miente justo donde alguien decide si un
+  // permiso sobra.
+  const usesTruncated = uses.length >= USES_QUERY_LIMIT;
 
   // El catálogo delegable de HOY, agrupado por familia. Lo que no aparece aquí
   // no se puede conceder desde ninguna parte de esta pantalla.
@@ -90,7 +110,17 @@ export default async function MandatesPage() {
     expiresAt: m.expires_at,
     revokedAt: m.revoked_at,
     createdAt: m.created_at,
-    usesWindow: usesByMandate[m.id] ?? 0,
+    usage: usage[m.id] ?? EMPTY_USAGE,
+    // La frase se compone aquí, en el servidor, y no en el componente: es
+    // relativa a «ahora», y calcularla dos veces —una al renderizar en el
+    // servidor y otra al hidratar— es cómo un «hace 3 días» se convierte en un
+    // error de hidratación en el cambio de día.
+    lastUseNote: lastUseSentence({
+      lastUsedAt: usage[m.id]?.lastUsedAt ?? null,
+      createdAt: m.created_at,
+      windowDays: USES_WINDOW_DAYS,
+      now,
+    }),
   }));
 
   const active = view.filter((m) => m.state === 'active').length;
@@ -146,7 +176,12 @@ export default async function MandatesPage() {
 
         <GrantForm catalogue={catalogue} defaultDays={DEFAULT_MANDATE_DAYS} />
 
-        <MandateList mandates={view} usesWindowDays={USES_WINDOW_DAYS} activeCount={active} />
+        <MandateList
+          mandates={view}
+          usesWindowDays={USES_WINDOW_DAYS}
+          activeCount={active}
+          usesTruncated={usesTruncated}
+        />
       </div>
     </>
   );

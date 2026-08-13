@@ -1,9 +1,10 @@
 'use client';
 
+import { type ExercisedMandate, planNotices } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
 import { toolDisplayName } from '@/lib/tool-labels';
 import type { Message } from 'ai';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from './EmptyState';
 import { MessageBubble } from './MessageBubble';
 import type { TurnMetrics } from './TaskRows';
@@ -98,6 +99,72 @@ export function MessageList({
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<TurnMetrics | null>(null);
+  const [exercised, setExercised] = useState<ExercisedMandate[]>([]);
+  const [canRevoke, setCanRevoke] = useState(false);
+
+  /**
+   * Lo que se hizo SIN PREGUNTAR, por mensaje.
+   *
+   * Se calcula sobre la conversación entera y no mensaje a mensaje porque la
+   * regla que evita el ruido es de conversación: la primera vez que un mandato
+   * actúa se enseña entero y las siguientes en una línea, y eso solo se puede
+   * decidir viendo lo que ya se anunció más arriba. Ver la cabecera de
+   * `lib/mandates/delegation.ts`.
+   *
+   * La señal sale del `_security` que viene pegado al resultado de cada llamada,
+   * así que existe también en una conversación reabierta: los resultados se
+   * guardan enteros en `messages.tool_results`.
+   */
+  const noticePlan = useMemo(
+    () => planNotices(messages.map((m) => ({ id: m.id, invocations: m.toolInvocations ?? [] }))),
+    [messages],
+  );
+
+  // Una firma estable de lo delegado. El array `messages` cambia de identidad en
+  // cada token que llega, y depender de él haría una consulta por token.
+  const delegationKey = useMemo(
+    () =>
+      Object.values(noticePlan)
+        .flat()
+        .map((d) => d.label)
+        .sort()
+        .join('|'),
+    [noticePlan],
+  );
+
+  /**
+   * Quién autorizó cada uno de esos mandatos, y cuándo.
+   *
+   * Se vuelve a pedir después de revocar y no se guarda nada entre medias, por
+   * el mismo motivo por el que `loadMandates` no memoiza: una revocación muerde
+   * en la llamada siguiente, y un aviso que siguiera diciendo «en vigor» un
+   * minuto después de apagarlo desharía esa promesa justo donde se está usando.
+   */
+  const loadExercised = useCallback(async () => {
+    if (!conversationId) return;
+    try {
+      const res = await fetch(
+        `/api/mandates/exercised?conversationId=${encodeURIComponent(conversationId)}`,
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        canRevoke?: boolean;
+        delegations?: ExercisedMandate[];
+      };
+      setExercised(data.delegations ?? []);
+      setCanRevoke(data.canRevoke === true);
+    } catch {
+      // Sin la fila, el aviso sale sin fecha y sin botón. Nunca con una fecha
+      // inventada: ver `authorizationPhrase`.
+    }
+  }, [conversationId]);
+
+  // Solo cuando hay algo delegado que explicar: una conversación normal, que es
+  // la inmensa mayoría, no paga ninguna consulta.
+  useEffect(() => {
+    if (!delegationKey) return;
+    void loadExercised();
+  }, [delegationKey, loadExercised]);
 
   /**
    * The real timings, fetched once the turn is over.
@@ -174,6 +241,10 @@ export function MessageList({
                 storedFollowups={storedFollowups?.[m.id]}
                 glanceAt={glances?.[m.id]}
                 screenFrame={askedWith}
+                delegations={noticePlan[m.id]}
+                exercisedMandates={exercised}
+                canRevokeMandates={canRevoke}
+                onMandateRevoked={() => void loadExercised()}
               />
             );
           })}
