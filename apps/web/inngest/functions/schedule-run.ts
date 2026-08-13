@@ -5,7 +5,13 @@ import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { chatModel } from '@cortex/agent-tools';
-import { filterTools, getTool, runTool } from '@cortex/agent-tools';
+import {
+  filterTools,
+  getTool,
+  runTool,
+  toolErrorDetail,
+  toolErrorMessage,
+} from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { type CoreTool, generateText, tool } from 'ai';
 
@@ -119,11 +125,12 @@ async function executeToolJob(job: JobRow): Promise<ExecResult> {
     });
     return { ok: true, output: truncate(JSON.stringify(result, null, 2)) };
   } catch (err) {
-    return {
-      ok: false,
-      output: '',
-      error: (err as Error).message.slice(0, 2000),
-    };
+    logger.error('scheduled tool job failed', {
+      jobId: job.id,
+      tool: job.tool_id,
+      ...toolErrorDetail(err),
+    });
+    return { ok: false, output: '', error: toolErrorMessage(err) };
   }
 }
 
@@ -172,10 +179,15 @@ async function executeAgentJob(job: JobRow): Promise<ExecResult> {
               { confirmed: job.allow_unattended_writes },
             );
           } catch (err) {
+            logger.error('scheduled tool failed', {
+              jobId: job.id,
+              tool: t.id,
+              ...toolErrorDetail(err),
+            });
             return {
               __error: true,
               tool: t.id,
-              message: (err as Error).message.slice(0, 600),
+              message: toolErrorMessage(err),
             } as unknown as never;
           }
         },
@@ -204,11 +216,8 @@ UNATTENDED SCHEDULED RUN. You are executing the scheduled job "${job.name}" with
     if (!text) return { ok: false, output: '', error: 'Agent produced no final text' };
     return { ok: true, output: truncate(text) };
   } catch (err) {
-    return {
-      ok: false,
-      output: '',
-      error: (err as Error).message.slice(0, 2000),
-    };
+    logger.error('scheduled agent job failed', { jobId: job.id, ...toolErrorDetail(err) });
+    return { ok: false, output: '', error: toolErrorMessage(err) };
   }
 }
 

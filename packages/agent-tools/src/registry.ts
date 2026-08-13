@@ -14,6 +14,7 @@ import {
   riskAuditFields,
   writeSecurityEvent,
 } from './security/enforce.js';
+import { toolErrorMessage } from './tool-error.js';
 import type { AnyTool, ToolContext, ToolDef } from './types.js';
 
 const REGISTRY = new Map<string, AnyTool>();
@@ -244,7 +245,10 @@ export async function runTool<I, O>(
       input,
       status: 'error',
       latencyMs: Math.round(performance.now() - t0),
-      metadata: { error: (err as Error).message },
+      // Not `(err as Error).message`: supabase-js hands back a plain object, so
+      // the cast was a lie and the audit row recorded `undefined` for exactly
+      // the failures worth auditing.
+      metadata: { error: toolErrorMessage(err) },
       ...riskFinal,
     });
     throw err;

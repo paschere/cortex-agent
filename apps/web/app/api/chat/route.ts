@@ -35,6 +35,8 @@ import {
   readWorkspacePlan,
   runTool,
   selectToolsForTurn,
+  toolErrorDetail,
+  toolErrorMessage,
   toolIdAllowed,
 } from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
@@ -86,27 +88,6 @@ type Candidate =
         entry: EnabledExternalServer['tools'][number];
       };
     };
-
-/**
- * Distill a tool error into a concise, human-readable message the model can
- * relay to the user. Unwraps Google/HubSpot-style JSON error envelopes and caps
- * length so a giant 403 payload doesn't flood the context.
- */
-function toToolErrorMessage(err: unknown): string {
-  let msg = err instanceof Error ? err.message : String(err);
-  // Many Google APIs throw with the raw JSON body as the message.
-  const brace = msg.indexOf('{');
-  if (brace !== -1) {
-    try {
-      const parsed = JSON.parse(msg.slice(brace));
-      const inner = parsed?.error?.message ?? parsed?.message;
-      if (typeof inner === 'string' && inner.length > 0) msg = inner;
-    } catch {
-      // not JSON — keep the original string
-    }
-  }
-  return msg.length > 600 ? `${msg.slice(0, 600)}…` : msg;
-}
 
 const MessageSchema = z.object({
   role: z.enum(['user', 'assistant', 'system']),
@@ -697,10 +678,15 @@ export async function POST(req: NextRequest) {
             // Never throw: a failed tool must not kill the turn. Return a
             // structured error so (a) the model can read it, explain it, and
             // keep going, and (b) the UI renders it as a failed tool card.
+            //
+            // The envelope is capped for the model; the whole failure — SQL
+            // state, hint, stack — goes to the log, because the envelope is the
+            // only trace a tool failure leaves and it is not enough to debug on.
+            logger.error('tool failed', { tool: t.id, ...toolErrorDetail(err) });
             return {
               __error: true,
               tool: t.id,
-              message: toToolErrorMessage(err),
+              message: toolErrorMessage(err),
             } as unknown as never;
           } finally {
             // In `finally` so a tool that failed still counts. A turn that spent
@@ -747,10 +733,15 @@ export async function POST(req: NextRequest) {
             },
           );
         } catch (err) {
+          logger.error('external tool failed', {
+            server: server.name,
+            tool: entry.tool_name,
+            ...toolErrorDetail(err),
+          });
           return {
             __error: true,
             tool: `${server.name}/${entry.tool_name}`,
-            message: toToolErrorMessage(err),
+            message: toolErrorMessage(err),
           } as unknown as never;
         } finally {
           clock.toolFinished(performance.now() - toolStarted);

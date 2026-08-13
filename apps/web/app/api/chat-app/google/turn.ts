@@ -16,6 +16,8 @@ import {
   maxLevel,
   runTool,
   selectToolsForTurn,
+  toolErrorDetail,
+  toolErrorMessage,
 } from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
@@ -172,24 +174,6 @@ function humanizeToolId(toolId: string): string {
     .join(' ');
   const familyTitle = family ? `${family[0]?.toUpperCase() ?? ''}${family.slice(1)}` : family;
   return action ? `${familyTitle} · ${action}` : familyTitle;
-}
-
-function toToolErrorMessage(err: unknown): string {
-  let msg = err instanceof Error ? err.message : String(err);
-  const brace = msg.indexOf('{');
-  if (brace !== -1) {
-    try {
-      const parsed = JSON.parse(msg.slice(brace)) as {
-        error?: { message?: string };
-        message?: string;
-      };
-      const inner = parsed?.error?.message ?? parsed?.message;
-      if (typeof inner === 'string' && inner.length > 0) msg = inner;
-    } catch {
-      // not JSON — keep the original string
-    }
-  }
-  return msg.length > 600 ? `${msg.slice(0, 600)}…` : msg;
 }
 
 const ACKNOWLEDGMENT_RE =
@@ -508,10 +492,11 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
                   'NOT executed. This action needs the person to approve it first, and the approval request has already been sent to them privately. Do not retry it. Say in one short sentence what you were about to do and that it is waiting for their approval.',
               } as unknown as never;
             }
+            logger.error('tool failed', { tool: t.id, ...toolErrorDetail(err) });
             return {
               __error: true,
               tool: t.id,
-              message: toToolErrorMessage(err),
+              message: toolErrorMessage(err),
             } as unknown as never;
           }
         },

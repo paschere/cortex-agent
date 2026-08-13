@@ -3,7 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
-import { type AnyTool, chatModel, filterTools, runTool } from '@cortex/agent-tools';
+import {
+  type AnyTool,
+  chatModel,
+  filterTools,
+  runTool,
+  toolErrorDetail,
+  toolErrorMessage,
+} from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -575,9 +582,17 @@ async function executeTask(args: {
             return result;
           } catch (err) {
             const confirmation = err instanceof ConfirmationRequiredError;
+            if (!confirmation) {
+              logger.error('sub-agent tool failed', {
+                runId,
+                taskId: task.id,
+                tool: t.id,
+                ...toolErrorDetail(err),
+              });
+            }
             const message = confirmation
               ? 'This tool needs a human to approve it, and this run is unattended. Report that it was skipped and continue.'
-              : (err as Error).message.slice(0, 600);
+              : toolErrorMessage(err);
             await emit(db, runId, task.id, 'tool_result', {
               taskId: task.id,
               callId,

@@ -9,6 +9,10 @@
 // re-exports evaluated above the inlined `const REGISTRY`.
 export * from './registry';
 export * from './types';
+// How a thrown anything becomes a sentence. A leaf module (it imports nothing,
+// not even from this package), exported early because every surface that runs a
+// tool builds its failure envelope with it.
+export * from './tool-error';
 // The workspace boundary. Exported early and from a leaf module (it imports
 // nothing from this package) so anything below can reach it without a cycle.
 export * from './tenancy';

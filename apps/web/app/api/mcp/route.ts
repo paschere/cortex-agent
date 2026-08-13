@@ -13,8 +13,10 @@ import {
   getTool,
   listVisibleSpaces,
   runTool,
+  toolErrorDetail,
+  toolErrorMessage,
 } from '@cortex/agent-tools';
-import { ConfirmationRequiredError } from '@cortex/core';
+import { ConfirmationRequiredError, logger } from '@cortex/core';
 /**
  * Remote MCP endpoint — Streamable HTTP transport (MCP 2025-03-26).
  *
@@ -955,9 +957,9 @@ async function dispatch(
           throw err;
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        logger.error('mcp tool failed', { tool: mcpName, ...toolErrorDetail(err) });
         return rpcOk(id, {
-          content: [{ type: 'text', text: message.slice(0, 4000) }],
+          content: [{ type: 'text', text: toolErrorMessage(err) }],
           isError: true,
         });
       }
