@@ -37,7 +37,7 @@ const ICON: Record<WaitingQueue, React.ComponentType<{ className?: string }>> = 
 
 export function WaitingIndex({ index }: { index: WaitingIndexData }) {
   return (
-    <Panel className="animate-rise mb-4 overflow-hidden">
+    <Panel className="animate-rise flex h-full flex-col overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div className="field-label">Lo que te espera</div>
         <div className="tabular text-[11px] text-ink-faint">
@@ -45,7 +45,12 @@ export function WaitingIndex({ index }: { index: WaitingIndexData }) {
         </div>
       </div>
       <div className="rule-double" />
-      <div className="grid grid-cols-1 gap-px bg-border lg:grid-cols-2">
+      {/* Dos columnas de colas mientras el índice ocupa el ancho de la pantalla,
+          y UNA cuando a partir de `lg` se pone al lado de «Lo que hice». Las
+          cuatro colas apiladas son cuatro renglones, que es más o menos lo que
+          mide la jornada de al lado: las dos mitades del producto quedan a la
+          misma altura, que es justo lo que este cambio quiere decir. */}
+      <div className="grid flex-1 grid-cols-1 gap-px bg-border sm:grid-cols-2 lg:grid-cols-1">
         {index.queues.map((queue) => (
           <QueueBlock key={queue.queue} queue={queue} />
         ))}

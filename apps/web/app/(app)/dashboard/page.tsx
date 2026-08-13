@@ -1,6 +1,7 @@
 import { CopyButton } from '@/components/connect/ConnectCortex';
 import { Panel } from '@/components/ui/panel';
 import { Field } from '@/components/ui/provenance';
+import { readJournal } from '@/lib/journal';
 import { getMcpUrl } from '@/lib/mcp-url';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
@@ -23,6 +24,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { DayJournal } from './_components/DayJournal';
 import { WaitingIndex } from './_components/WaitingIndex';
 
 /**
@@ -84,38 +86,43 @@ export default async function DashboardPage() {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const [waiting, toolCallsRes, signalsRes, routinesRes, runsRes, convsRes] = await Promise.all([
-    // El índice de las cuatro colas. Los conteos salen de `countNavSignals`,
-    // el mismo que dibuja los badges del menú, así que la barra lateral y
-    // esta pantalla no pueden discrepar sobre cuánto trabajo hay parado.
-    readWaitingIndex(user.organization.id, user.id),
-    sb
-      .from('audit_events')
-      .select('id', { count: 'exact', head: true })
-      // Both are bookkeeping rows, not tool calls: counting them would make
-      // approving something look like running two things.
-      .not('tool_id', 'in', '("__agent_turn","__approval_decision")')
-      .gte('created_at', todayStart.toISOString()),
-    sb.from('growth_signals').select('id', { count: 'exact', head: true }).eq('status', 'new'),
-    sb
-      .from('scheduled_jobs')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('status', 'active'),
-    sb
-      .from('scheduled_job_runs')
-      .select('id, status, started_at, output, error, scheduled_jobs!inner(name, user_id)')
-      .eq('scheduled_jobs.user_id', user.id)
-      .order('started_at', { ascending: false })
-      .limit(6),
-    sb
-      .from('conversations')
-      .select('id, title, updated_at, agents(name)')
-      .eq('user_id', user.id)
-      .neq('surface', 'mcp')
-      .order('updated_at', { ascending: false })
-      .limit(5),
-  ]);
+  const [waiting, journal, toolCallsRes, signalsRes, routinesRes, runsRes, convsRes] =
+    await Promise.all([
+      // El índice de las cuatro colas. Los conteos salen de `countNavSignals`,
+      // el mismo que dibuja los badges del menú, así que la barra lateral y
+      // esta pantalla no pueden discrepar sobre cuánto trabajo hay parado.
+      readWaitingIndex(user.organization.id, user.id),
+      // La otra mitad: lo que Cortex hizo anoche y hoy. Cada clase de actividad
+      // se recoge sola dentro de `readJournal`, así que esta promesa no puede
+      // rechazar por una tabla caída — devuelve la jornada con el hueco dicho.
+      readJournal(user.organization.id, user.id, { isAdmin: user.role === 'org_admin' }),
+      sb
+        .from('audit_events')
+        .select('id', { count: 'exact', head: true })
+        // Both are bookkeeping rows, not tool calls: counting them would make
+        // approving something look like running two things.
+        .not('tool_id', 'in', '("__agent_turn","__approval_decision")')
+        .gte('created_at', todayStart.toISOString()),
+      sb.from('growth_signals').select('id', { count: 'exact', head: true }).eq('status', 'new'),
+      sb
+        .from('scheduled_jobs')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'active'),
+      sb
+        .from('scheduled_job_runs')
+        .select('id, status, started_at, output, error, scheduled_jobs!inner(name, user_id)')
+        .eq('scheduled_jobs.user_id', user.id)
+        .order('started_at', { ascending: false })
+        .limit(6),
+      sb
+        .from('conversations')
+        .select('id, title, updated_at, agents(name)')
+        .eq('user_id', user.id)
+        .neq('surface', 'mcp')
+        .order('updated_at', { ascending: false })
+        .limit(5),
+    ]);
 
   const toolCallsToday = toolCallsRes.count ?? 0;
   const newSignals = signalsRes.count ?? 0;
@@ -171,11 +178,19 @@ export default async function DashboardPage() {
         </div>
       </Panel>
 
-      {/* El índice de las cuatro colas. NO es una tabla fusionada: cada una
-          conserva su nombre, su verbo y su enlace — ver la cabecera de
-          lib/waiting.ts y el comentario de nav/Sidebar.tsx, donde ese argumento
-          ya está ganado. */}
-      <WaitingIndex index={waiting} />
+      {/* LAS DOS MITADES, UNA AL LADO DE OTRA.
+          A la izquierda, lo que espera a esta persona: el índice de las cuatro
+          colas, que NO es una tabla fusionada — cada una conserva su nombre, su
+          verbo y su enlace (ver la cabecera de lib/waiting.ts).
+          A la derecha, lo que hizo Cortex. Durante meses sólo existió la
+          izquierda, y esa asimetría era todo el problema: una pantalla que sólo
+          sabe enumerar deuda de quien mira se lee como alguien que reparte
+          tareas, no como alguien que las hace. Las dos columnas cuestan lecturas
+          independientes y ninguna puede tumbar a la otra. */}
+      <div className="mb-4 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+        <WaitingIndex index={waiting} />
+        <DayJournal journal={journal} />
+      </div>
 
       {/* Los prospectos no son una de las cuatro colas —nadie prometió nada, no
           hay nada parado a medias— pero son lo otro que llega solo y espera una
