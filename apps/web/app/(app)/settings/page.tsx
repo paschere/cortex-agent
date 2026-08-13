@@ -5,7 +5,7 @@ import { isChatOutboundConfigured } from '@/lib/google-chat';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { PREFERENCE_COLUMNS, listMemories, rowToPreferences } from '@cortex/agent-tools';
-import { Brain, ChevronRight, Settings as SettingsIcon } from 'lucide-react';
+import { Brain, ChevronRight, MessagesSquare, Settings as SettingsIcon } from 'lucide-react';
 import Link from 'next/link';
 import { SettingsForm } from './SettingsForm';
 
