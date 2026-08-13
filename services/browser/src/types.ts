@@ -180,4 +180,25 @@ export interface ReplayResponse {
     /** The live page, so a model can find the element that moved. */
     snapshot: PageSnapshot;
   };
+  /**
+   * THE BROWSER IS STILL OPEN AND WAITING FOR A PERSON.
+   *
+   * Present only when the run stopped at a bot check. Normally a replay owns
+   * its context and destroys it on the way out — that is what makes this
+   * service stateless and cheap. A challenge is the one failure where throwing
+   * the tab away is the wrong move: whatever the portal wants (a checkbox, a
+   * set of traffic lights) has to happen IN THIS TAB, in this session, with
+   * these cookies. Reopening later means arriving at the same challenge again.
+   *
+   * So the context survives, keyed by `sessionId`, and is swept like any other
+   * idle session if nobody comes. `fromIndex` is the step to resume at, so the
+   * work already done is not repeated.
+   */
+  handoff?: {
+    sessionId: string;
+    reason: 'bot-check';
+    fromIndex: number;
+    /** When the sweeper will take the tab away, so the screen can say so. */
+    expiresAt: string;
+  };
 }

@@ -131,7 +131,7 @@ export function isResolved(value: Resolved | ResolveFailure): value is Resolved 
  * seconds earlier. The verdict — and therefore whether a model is allowed near
  * the flow — is still made in classify.ts from the full evidence bundle.
  */
-async function looksLikeAChallenge(page: Page): Promise<boolean> {
+export async function looksLikeAChallenge(page: Page): Promise<boolean> {
   try {
     if (/\/sorry\/|\/cdn-cgi\/challenge|__cf_chl|\/challenge-platform/.test(page.url())) {
       return true;

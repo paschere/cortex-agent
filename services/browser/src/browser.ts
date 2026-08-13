@@ -1,6 +1,12 @@
 import { type Browser, type BrowserContext, type Page, chromium } from 'playwright';
 import type { Config } from './config';
-import { buildLocator, describeTarget, isResolved, resolveTarget } from './locators';
+import {
+  buildLocator,
+  describeTarget,
+  isResolved,
+  looksLikeAChallenge,
+  resolveTarget,
+} from './locators';
 import { logger } from './logger';
 import { replay } from './replay';
 import { LOCATOR_INSTALL_SCRIPT, snapshotPage } from './snapshot';
@@ -156,7 +162,11 @@ export class BrowserWorker {
     return context;
   }
 
-  /** Run a learned flow. One context, created and destroyed here. */
+  /**
+   * Run a learned flow. One context, created and destroyed here — except when
+   * the portal stopped to ask whether we are a person, in which case the tab is
+   * handed to a human instead of thrown away. See `ReplayResponse.handoff`.
+   */
   async runReplay(request: ReplayRequest): Promise<ReplayResponse> {
     if (this.inFlight >= this.config.maxConcurrent) {
       throw new BusyError();
@@ -164,12 +174,40 @@ export class BrowserWorker {
     this.inFlight += 1;
     this.runsTotal += 1;
     let context: BrowserContext | null = null;
+    let handedOff = false;
     try {
       context = await this.newContext();
       const page = await context.newPage();
       await page.goto(request.startUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
       const result = await replay(page, request, this.config);
       if (!result.ok) this.runsFailed += 1;
+
+      if (!result.ok && result.failure && (await looksLikeAChallenge(page))) {
+        // Room is checked here rather than earlier because a handoff converts a
+        // finishing run into a lasting session, and the cap is on tabs alive at
+        // once. No room means the run simply fails as it used to — worse, but
+        // honest, and better than evicting somebody else's half-solved captcha.
+        if (this.sessions.size < this.config.maxConcurrent) {
+          const sessionId = this.newSessionId();
+          this.sessions.set(sessionId, { context, page, touchedAt: Date.now(), request });
+          handedOff = true;
+          logger.info(
+            { runId: request.runId, sessionId, stepIndex: result.failure.index },
+            'bot check: holding the tab open for a person',
+          );
+          return {
+            ...result,
+            handoff: {
+              sessionId,
+              reason: 'bot-check',
+              fromIndex: result.failure.index,
+              expiresAt: new Date(Date.now() + this.config.sessionIdleMs).toISOString(),
+            },
+          };
+        }
+        logger.warn({ runId: request.runId }, 'bot check, but no room to hold the tab open');
+      }
+
       return result;
     } catch (err) {
       this.runsFailed += 1;
@@ -177,7 +215,112 @@ export class BrowserWorker {
       throw err;
     } finally {
       this.inFlight -= 1;
-      await context?.close().catch(() => undefined);
+      if (!handedOff) await context?.close().catch(() => undefined);
+    }
+  }
+
+  private newSessionId(): string {
+    return `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  // -------------------------------------------------------------------------
+  // Driving a handed-over tab
+  //
+  // Three calls, and deliberately no more: look, act, carry on. This is not a
+  // remote desktop and must not grow into one — it exists so somebody can tick
+  // "no soy un robot" and hand the errand back.
+  //
+  // Input is by COORDINATES rather than by selector, which is the opposite of
+  // everything else in this service. That is the point: a captcha widget lives
+  // in a cross-origin iframe with no accessible name and no stable structure,
+  // so there is nothing to address it by. A person looking at a picture and
+  // clicking on it is the only thing that works, and it is also all the
+  // authority this endpoint needs to grant.
+  // -------------------------------------------------------------------------
+
+  /** A picture of the tab, and where it is. */
+  async viewSession(
+    sessionId: string,
+  ): Promise<{ png: string; url: string; title: string; width: number; height: number }> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new UnknownSession();
+    session.touchedAt = Date.now();
+    const shot = await session.page.screenshot({ type: 'png' });
+    return {
+      png: shot.toString('base64'),
+      url: session.page.url(),
+      title: await session.page.title().catch(() => ''),
+      width: this.config.viewportWidth,
+      height: this.config.viewportHeight,
+    };
+  }
+
+  /** One human gesture, delivered to the tab. */
+  async sendInput(
+    sessionId: string,
+    input: { kind: 'click' | 'type' | 'key' | 'scroll'; x?: number; y?: number; text?: string },
+  ): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new UnknownSession();
+    session.touchedAt = Date.now();
+    const { page } = session;
+    switch (input.kind) {
+      case 'click':
+        await page.mouse.click(input.x ?? 0, input.y ?? 0);
+        break;
+      case 'type':
+        // `type` rather than `fill`: there is no element in hand, and a captcha
+        // that watches for keystrokes should see keystrokes.
+        await page.keyboard.type(input.text ?? '', { delay: 25 });
+        break;
+      case 'key':
+        await page.keyboard.press(input.text || 'Enter');
+        break;
+      case 'scroll':
+        await page.mouse.wheel(0, input.y ?? 0);
+        break;
+      default:
+        throw new Error(`unknown input ${String(input.kind)}`);
+    }
+    await page.waitForLoadState('networkidle', { timeout: 3_000 }).catch(() => undefined);
+  }
+
+  /**
+   * Carry on from where the challenge interrupted, in the same tab.
+   *
+   * The steps already done are NOT repeated: `fromIndex` slices them off. That
+   * is only safe because it is the same session — the same cookies, the same
+   * page, the same half-filled form — which is the entire reason the tab was
+   * kept instead of reopened.
+   */
+  async continueSession(sessionId: string, fromIndex: number): Promise<ReplayResponse> {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new UnknownSession();
+    session.touchedAt = Date.now();
+    const original = session.request;
+    if (!original) throw new Error('that session was not holding an errand');
+
+    // A `goto` at the head of the remaining steps would throw away the page the
+    // person just unlocked and walk straight back into the challenge.
+    const remaining = original.steps
+      .slice(fromIndex)
+      .filter((s, i) => !(i === 0 && s.action === 'goto'));
+
+    this.sessions.delete(sessionId);
+    try {
+      const result = await replay(session.page, { ...original, steps: remaining }, this.config);
+      if (!result.ok) this.runsFailed += 1;
+      // Indices came out counted against the sliced list; the caller knows the
+      // whole errand, so they are put back on its scale before leaving here.
+      return {
+        ...result,
+        steps: result.steps.map((s) => ({ ...s, index: s.index + fromIndex })),
+        ...(result.failure
+          ? { failure: { ...result.failure, index: result.failure.index + fromIndex } }
+          : {}),
+      };
+    } finally {
+      await session.context.close().catch(() => undefined);
     }
   }
 
@@ -199,7 +342,7 @@ export class BrowserWorker {
     const context = await this.newContext();
     const page = await context.newPage();
     await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    const sessionId = `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const sessionId = this.newSessionId();
     this.sessions.set(sessionId, { context, page, touchedAt: Date.now() });
     return { sessionId, snapshot: await snapshotPage(page) };
   }
@@ -292,6 +435,12 @@ interface InteractiveSession {
   context: BrowserContext;
   page: Page;
   touchedAt: number;
+  /**
+   * The errand this tab was in the middle of, kept only for a handoff so it can
+   * be resumed. Absent for the reasoning and refinement sessions, which are
+   * driven a step at a time by their caller and have no list to carry on with.
+   */
+  request?: ReplayRequest;
 }
 
 export class BusyError extends Error {

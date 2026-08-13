@@ -173,6 +173,51 @@ async function handle(
       return;
     }
 
+    // -----------------------------------------------------------------------
+    // Driving a tab that was handed over at a bot check. See `runReplay`.
+    // -----------------------------------------------------------------------
+
+    const viewMatch = /^\/session\/([A-Za-z0-9_]+)\/view$/.exec(path);
+    if (req.method === 'GET' && viewMatch?.[1]) {
+      json(res, 200, await worker.viewSession(viewMatch[1]));
+      return;
+    }
+
+    const inputMatch = /^\/session\/([A-Za-z0-9_]+)\/input$/.exec(path);
+    if (req.method === 'POST' && inputMatch?.[1]) {
+      const body = (await readBody(req)) as {
+        kind?: 'click' | 'type' | 'key' | 'scroll';
+        x?: number;
+        y?: number;
+        text?: string;
+      };
+      if (!body?.kind) {
+        json(res, 400, { error: 'kind is required' });
+        return;
+      }
+      // Coordinates are clamped to the viewport rather than trusted. They
+      // arrive from a picture in a browser, and a click at (0, 900000) is a
+      // rounding bug on the way here, not an instruction.
+      const clamp = (v: number | undefined, max: number) =>
+        Math.max(0, Math.min(Math.round(v ?? 0), max));
+      await worker.sendInput(inputMatch[1], {
+        kind: body.kind,
+        x: clamp(body.x, config.viewportWidth),
+        y: body.kind === 'scroll' ? Math.round(body.y ?? 0) : clamp(body.y, config.viewportHeight),
+        text: (body.text ?? '').slice(0, 200),
+      });
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    const continueMatch = /^\/session\/([A-Za-z0-9_]+)\/continue$/.exec(path);
+    if (req.method === 'POST' && continueMatch?.[1]) {
+      const body = (await readBody(req)) as { fromIndex?: number };
+      const from = Number.isInteger(body?.fromIndex) ? Number(body?.fromIndex) : 0;
+      json(res, 200, await worker.continueSession(continueMatch[1], Math.max(0, from)));
+      return;
+    }
+
     const sessionMatch = /^\/session\/([A-Za-z0-9_]+)$/.exec(path);
     if (sessionMatch?.[1]) {
       if (req.method === 'GET') {
