@@ -1,5 +1,6 @@
 import { readDeliveries, writeDelivery } from '@/lib/browser-delivery';
 import { DEFAULT_DELIVERY, type FlowDelivery } from '@/lib/browser-shape';
+import { checkProposal, withoutNulls } from '@/lib/browser-steps';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
@@ -117,10 +118,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const db = getOrgScopedClient(session.organization.id);
 
   const body = (await req.json().catch(() => ({}))) as Body;
-  const parsed = proposalSchema.safeParse(body.proposal);
+  // A step whose value was cleared on the review screen can arrive as `null`,
+  // and `stepSchema` declares those fields `.optional()`, which rejects null.
+  // See `withoutNulls`: the difference between omitted and null has already
+  // cost this repo a screen once.
+  const parsed = proposalSchema.safeParse(withoutNulls(body.proposal));
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Esa propuesta no tiene una forma válida. Revisa los pasos y vuelve a guardar.' },
+      { status: 400 },
+    );
+  }
+
+  // What the review screen let somebody do, checked again on this side. The
+  // screen greys out the arrow that would move a step above the `goto` and
+  // refuses to save a step left without a name; neither of those is a
+  // guarantee, because the request is a request and anybody can send one.
+  const problems = checkProposal(parsed.data);
+  if (problems.length > 0) {
+    return NextResponse.json(
+      { error: problems.map((p) => p.message).join(' '), problems },
       { status: 400 },
     );
   }

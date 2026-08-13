@@ -1,23 +1,28 @@
 'use client';
 
+import { CaptureContract } from '@/components/privacy/CaptureContract';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Panel } from '@/components/ui/panel';
 import {
-  ACTION_LABEL,
+  DEFAULT_DELIVERY,
   EFFECT_LABEL,
+  type FlowDelivery,
   MODULE,
   type Proposal,
-  TARGET_LABEL,
-  TARGET_WHY,
   alreadyConnected,
-  DEFAULT_DELIVERY,
-  type FlowDelivery,
   proposeOutput,
 } from '@/lib/browser-shape';
+import { checkSteps } from '@/lib/browser-steps';
 import { chipClass } from '@/lib/status-chip';
+import {
+  type CapturedFrame,
+  NotATabError,
+  type RecorderHandle,
+  canRecordTab,
+  startTabRecording,
+} from '@/lib/tab-recorder';
 import { clsx } from 'clsx';
-import { CaptureContract } from '@/components/privacy/CaptureContract';
 import {
   AlertTriangle,
   ChevronDown,
@@ -32,13 +37,7 @@ import {
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DeliveryFields } from './DeliveryFields';
-import {
-  type CapturedFrame,
-  NotATabError,
-  type RecorderHandle,
-  canRecordTab,
-  startTabRecording,
-} from '@/lib/tab-recorder';
+import { StepEditor } from './StepEditor';
 
 /**
  * Enseñar un trámite: grabar la pestaña, revisar lo que Cortex entendió,
@@ -505,8 +504,8 @@ function HowToRecord() {
               </p>
               <p className="mt-1 text-[12px] leading-snug text-ink-muted">
                 Y si hay un menú que sólo se abre al pasar el ratón, hazle clic si el portal deja —
-                un menú que aparece solo no queda en ningún fotograma. Arrastrar y soltar tampoco
-                lo aprendo.
+                un menú que aparece solo no queda en ningún fotograma. Arrastrar y soltar tampoco lo
+                aprendo.
               </p>
             </div>
           </div>
@@ -550,6 +549,11 @@ function Review({
   // Recomputed as the URL is edited: correcting a mistyped host should change
   // the advice, not leave a stale banner arguing about the old one.
   const connected = alreadyConnected(proposal.startUrl);
+
+  // The same function the POST route runs on what arrives. Checked here so the
+  // refusal happens next to the control that caused it, and there so that it
+  // happens at all — a rule enforced only in a browser is not a rule.
+  const problems = checkSteps(proposal.steps, proposal.variables);
 
   return (
     <div className="divide-y divide-border">
@@ -634,14 +638,15 @@ function Review({
       <div className="p-5">
         <h3 className="text-[13.5px] font-semibold text-ink">Lo que cambia cada vez</h3>
         <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
-          Sin esto, el {MODULE.one} sólo sabría repetir exactamente la misma consulta. Corrige lo
-          que haya quedado mal: un dato marcado como fijo que en realidad cambia es lo que obliga a
-          volver a enseñarlo.
+          Sin esto, el {MODULE.one} sólo sabría repetir exactamente la misma consulta. Aquí pones el
+          valor con el que lo pruebo ahora; para marcar un dato nuevo, o para volver fijo uno que no
+          cambiaba, es en los pasos de abajo.
         </p>
         {proposal.variables.length === 0 ? (
           <p className="mt-3 rounded-sm bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
             No detecté ningún dato variable. Revisa los pasos de abajo: si alguno escribe algo que
-            va a cambiar, este {MODULE.one} todavía no sirve para repetirse.
+            va a cambiar, márcalo ahí — mientras tanto este {MODULE.one} sólo sirve para el caso
+            exacto que grabaste.
           </p>
         ) : (
           <ul className="mt-3 space-y-2">
@@ -667,60 +672,34 @@ function Review({
       <div className="p-5">
         <h3 className="text-[13.5px] font-semibold text-ink">Qué produce y dónde te llega</h3>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
-          Lo pregunto ahora, mientras te acuerdas de a qué fuiste. Un {MODULE.one} que corre solo
-          de madrugada y deja el resultado en una pantalla que nadie abre no le sirve a nadie.
+          Lo pregunto ahora, mientras te acuerdas de a qué fuiste. Un {MODULE.one} que corre solo de
+          madrugada y deja el resultado en una pantalla que nadie abre no le sirve a nadie.
         </p>
         <div className="mt-3.5">
           <DeliveryFields value={delivery} onChange={onDelivery} />
         </div>
       </div>
 
+      {/* Corregir es la mitad del trabajo: un modelo que lee imágenes acierta
+          casi siempre y «casi» es un paso de más, un nombre escrito por una
+          máquina y una placa que quedó fija. Se arregla aquí o se vuelve a
+          grabar. */}
       <div className="p-5">
         <h3 className="text-[13.5px] font-semibold text-ink">Los pasos</h3>
-        <ol className="mt-3 space-y-2">
-          {proposal.steps.map((s, index) => (
-            <li
-              key={`${s.label}-${index}`}
-              className="rounded-sm border border-border bg-surface-2/50 px-3 py-2.5"
-            >
-              <div className="flex flex-wrap items-baseline gap-2">
-                <span className="tabular text-[11px] font-semibold text-ink-faint">
-                  {String(index + 1).padStart(2, '0')}
-                </span>
-                <span className="text-[13px] text-ink">
-                  <span className="text-ink-muted">{ACTION_LABEL[s.action]}</span> {s.label}
-                </span>
-                {s.value?.kind === 'secret' && (
-                  <span className={chipClass('amber')}>credencial</span>
-                )}
-                {s.value?.kind === 'template' && (
-                  <code className="font-mono text-[11.5px] text-primary">{s.value.text}</code>
-                )}
-                {s.value?.kind === 'literal' && (
-                  <span className="font-mono text-[11.5px] text-ink-faint">«{s.value.text}»</span>
-                )}
-              </div>
-              {s.targets.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {s.targets.map((t, i) => (
-                    <span
-                      key={`${t.kind}-${t.value}-${i}`}
-                      title={TARGET_WHY[t.kind]}
-                      className={clsx(
-                        'rounded-pill border px-2 py-[2px] font-mono text-[10.5px]',
-                        i === 0
-                          ? 'border-primary/20 bg-primary-soft text-primary-ink'
-                          : 'border-border bg-surface text-ink-faint',
-                      )}
-                    >
-                      {TARGET_LABEL[t.kind]}: {t.name ?? t.value}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </li>
-          ))}
-        </ol>
+        <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+          Quita lo que sobre, ponlos en orden, y dile a cada uno cómo se llama de verdad: ese nombre
+          es lo que vas a leer el día que el {MODULE.one} falle. Lo que no puedas arreglar aquí se
+          arregla volviendo a grabar.
+        </p>
+        <div className="mt-3">
+          <StepEditor
+            value={{ steps: proposal.steps, variables: proposal.variables, sample }}
+            onChange={(next) => {
+              onChange({ ...proposal, steps: next.steps, variables: next.variables });
+              onSample(next.sample);
+            }}
+          />
+        </div>
       </div>
 
       {warnings.length > 0 && (
@@ -737,17 +716,31 @@ function Review({
       )}
 
       <div className="flex flex-wrap items-center gap-2 p-5">
-        <Button variant={connected ? 'outline' : 'default'} onClick={onSave}>
+        <Button
+          variant={connected ? 'outline' : 'default'}
+          onClick={onSave}
+          disabled={problems.length > 0}
+        >
           {connected ? 'Guardarlo de todos modos' : 'Guardar y probar'}
         </Button>
         <Button variant="ghost" onClick={onDiscard}>
           Descartar
         </Button>
         <p className="max-w-md text-[12px] leading-snug text-ink-faint">
-          Al guardar lo corro una vez contra el sitio real. Si funciona completo queda{' '}
-          <strong className="font-semibold text-ink">probado</strong>; si no, queda{' '}
-          <strong className="font-semibold text-ink">propuesto</strong> y te digo en qué paso se
-          quedó.
+          {problems.length > 0 ? (
+            <>
+              Arregla lo que quedó en rojo arriba —{' '}
+              <span className="tabular">{problems.length}</span>{' '}
+              {problems.length === 1 ? 'cosa' : 'cosas'} — y ya lo puedes guardar.
+            </>
+          ) : (
+            <>
+              Al guardar lo corro una vez contra el sitio real. Si funciona completo queda{' '}
+              <strong className="font-semibold text-ink">probado</strong>; si no, queda{' '}
+              <strong className="font-semibold text-ink">propuesto</strong> y te digo en qué paso se
+              quedó.
+            </>
+          )}
         </p>
       </div>
     </div>
