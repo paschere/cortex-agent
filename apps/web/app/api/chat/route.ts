@@ -16,6 +16,7 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
+import { buildTurnMessages } from '@/lib/turn-messages';
 import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
 import {
   type AnyTool,
@@ -810,25 +811,16 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  let coreMessages: CoreMessage[] = messages.map((m) => ({
-    role: m.role as 'user' | 'assistant' | 'system',
-    content: m.content,
-  }));
-
   // Read far above, alongside retrieval and the tool ranking. Merged here, where
   // it always was — the merge is pure array work and belongs next to what uses
-  // it, not next to the query that fetched the rows.
-  if (dbMessages && dbMessages.length > 0) {
-    const dbSet = new Set(dbMessages.map((m) => `${m.role}::${m.content}`));
-    const clientOnly = coreMessages.filter((m) => !dbSet.has(`${m.role}::${String(m.content)}`));
-    coreMessages = [
-      ...dbMessages.reverse().map((m) => ({
-        role: m.role as 'user' | 'assistant' | 'system',
-        content: m.content as string,
-      })),
-      ...clientOnly,
-    ];
-  }
+  // it, not next to the query that fetched the rows. Vive en `lib/turn-messages.ts`
+  // para que se pueda probar: el fallo que arregla («the conversation must end
+  // with a user message», en producción, al escribir) no lo habría cazado nada
+  // desde dentro de esta ruta.
+  let coreMessages: CoreMessage[] = buildTurnMessages(
+    messages.map((m) => ({ role: m.role, content: m.content })),
+    (dbMessages ?? null) as { role: string; content: string }[] | null,
+  );
 
   // Shared with Google Chat and MCP so a person's standing instructions cannot
   // apply on one surface and silently not on another. See lib/system-prompt.ts.
