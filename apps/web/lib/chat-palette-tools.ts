@@ -49,6 +49,12 @@ export const TOOL_PHRASE: Record<string, string> = {
   'actions.list': 'Muéstrame las acciones que esperan mi aprobación',
   'actions.propose': 'Déjame redactado un mensaje para ',
 
+  // La otra cola, y las dos frases tienen que distinguirse leídas seguidas en
+  // el mismo menú: arriba son borradores que Cortex escribió y nadie ha
+  // mandado; esto son llamadas que se pararon a medio ejecutar en otra
+  // conversación —Claude, Google Chat, WhatsApp— y siguen paradas.
+  'approvals.list': '¿Qué espera mi aprobación?',
+
   'browser.list_flows': `Muéstrame los ${MODULE.many} que ya aprendiste`,
   'browser.run_flow': `Corre el ${MODULE.one} `,
   'browser.submit_flow': `Radica el ${MODULE.one} `,

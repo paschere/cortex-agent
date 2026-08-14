@@ -215,6 +215,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'amber',
     icon: 'Globe',
   },
+  approvals: {
+    name: 'Lo que espera tu permiso',
+    blurb:
+      'Consulta de solo lectura de las llamadas que Cortex paró a medio ejecutar y siguen esperando un sí — vengan de tu conversación en Claude, de Google Chat o de WhatsApp. No hay ninguna herramienta con la que aprobarlas: eso se hace con el botón de la tarjeta, y sólo lo puede pulsar una persona.',
+    tone: 'amber',
+    icon: 'ShieldAlert',
+  },
   security: {
     name: 'Seguridad',
     blurb: 'Consulta de solo lectura sobre las decisiones de la barrera y sus eventos recientes.',
@@ -409,6 +416,10 @@ const FAMILY_GROUP: Record<string, string> = {
   web: 'external',
   browser: 'external',
   security: 'control',
+  // Con seguridad y no con «Escribir y responder», donde está `actions`: lo que
+  // hay aquí no es algo que Cortex redactó, es algo que la barrera detuvo. Se
+  // lee en el mismo sitio donde se revisa por qué se detiene lo que se detiene.
+  approvals: 'control',
 };
 
 export function groupOfFamily(family: string): string {

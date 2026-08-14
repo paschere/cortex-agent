@@ -81,6 +81,12 @@ export * from './goals';
 // waiting on a human. Placed after ./commitments and ./gmail because it reads
 // commitment rows to draft from them and binds gmail.send_message to run.
 export * from './actions';
+// La otra cola, la que ya existía y nadie podía mirar desde el chat: llamadas
+// que se pararon a pedir permiso y siguen ahí. Va después de ./actions porque
+// se lee igual que aquélla y porque conviene leer juntas las dos cabeceras —
+// una explica por qué proponer no se confirma, la otra por qué listar no puede
+// decidir. Sólo lee; no registra ninguna escritura.
+export * from './approvals';
 // Informes: text and charts, read on screen, saved as a snapshot, shareable
 // (migration 0079). Placed after ./commitments and ./vehicles because it reads
 // both to build its reports; it registers no source of truth of its own.

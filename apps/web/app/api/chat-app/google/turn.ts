@@ -236,6 +236,8 @@ async function stageConfirmation(opts: {
   toolId: string;
   input: unknown;
   expiresAt: Date;
+  /** Google Chat y WhatsApp comparten este motor; la fila tiene que decir cuál fue. */
+  stagedVia: 'google_chat' | 'whatsapp';
 }): Promise<string | null> {
   try {
     const db = getOrgScopedClient(opts.organizationId);
@@ -247,6 +249,10 @@ async function stageConfirmation(opts: {
         tool_id: opts.toolId,
         input: opts.input,
         expires_at: opts.expiresAt.toISOString(),
+        // Migración 0102. Quien pregunte «¿qué espera mi aprobación?» desde el
+        // chat web no tiene otra forma de saber de cuál de sus conversaciones
+        // salió esto, y «de alguna» no sirve para reconocerlo.
+        staged_via: opts.stagedVia,
       })
       .select('id')
       .single();
@@ -472,6 +478,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
                 toolId: err.toolId,
                 input: err.input,
                 expiresAt,
+                stagedVia: req.surfaceKey === 'whatsapp' ? 'whatsapp' : 'google_chat',
               });
               confirmations.push({ id, toolId: err.toolId, input: err.input });
               // Carries the id, so the DM arrives as a card with Approve /

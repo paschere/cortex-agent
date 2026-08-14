@@ -180,6 +180,79 @@ describe('claimApproval — single use', () => {
   });
 });
 
+/**
+ * LA TARJETA DEL CHAT ES UNA CUARTA SUPERFICIE, Y NO TRAE UNA CUARTA REGLA.
+ *
+ * Preguntar «¿qué espera mi aprobación?» dentro del chat dibuja la MISMA
+ * tarjeta que `/approvals`, con el mismo botón, que hace el mismo
+ * `POST /api/approvals/[id]`. Eso significa que la cola puede estar en pantalla
+ * en dos sitios a la vez —el hilo y la pestaña de aprobaciones— y que la
+ * respuesta de un turno sigue ahí, con su botón intacto, mucho después de que
+ * alguien la haya aprobado desde otro lado. Pulsar dos veces no es un caso
+ * raro: es lo normal.
+ *
+ * Lo que sigue es esa historia contada entera, contando ejecuciones en vez de
+ * mirando el valor de retorno: la segunda pulsación NO HACE NADA. No porque la
+ * tarjeta se deshabilite —una tarjeta puede estar en otra pestaña, o en un hilo
+ * que nadie ha recargado— sino porque el UPDATE condicional casa cero filas.
+ */
+describe('la tarjeta del chat, pulsada dos veces', () => {
+  /** Lo que hace la ruta: reclamar y, sólo si la reclamó, ejecutar. */
+  async function pressApprove(store: ApprovalStore, ran: string[], now = new Date()) {
+    const outcome = await claimApproval(store, {
+      id: APPROVAL,
+      userId: OWNER,
+      decision: 'approved',
+      via: 'web',
+      now,
+    });
+    if (outcome.status === 'claimed') ran.push(outcome.action.toolId);
+    return outcome;
+  }
+
+  it('ejecuta una sola vez, aunque la tarjeta siga en pantalla en el hilo', async () => {
+    const { store } = fakeStore();
+    const ran: string[] = [];
+
+    const first = await pressApprove(store, ran);
+    const second = await pressApprove(store, ran);
+
+    expect(first.status).toBe('claimed');
+    // La segunda no es un error genérico: sabe decir qué pasó, que es lo que
+    // deja poner «esto ya lo aprobaste» en vez de «algo salió mal».
+    expect(second).toMatchObject({ status: 'already_decided', decision: 'approved' });
+    expect(ran).toEqual(['gmail.send_draft']);
+  });
+
+  it('tampoco ejecuta dos veces con las dos pestañas pulsando a la vez', async () => {
+    const { store } = fakeStore();
+    const ran: string[] = [];
+    const now = new Date();
+
+    await Promise.all([pressApprove(store, ran, now), pressApprove(store, ran, now)]);
+
+    expect(ran).toHaveLength(1);
+  });
+
+  it('y una tarjeta vieja en el hilo no puede resucitar algo ya rechazado', async () => {
+    const { store, rows } = fakeStore();
+    const ran: string[] = [];
+
+    await claimApproval(store, {
+      id: APPROVAL,
+      userId: OWNER,
+      decision: 'declined',
+      via: 'web',
+      now: new Date(),
+    });
+    const late = await pressApprove(store, ran);
+
+    expect(late).toMatchObject({ status: 'already_decided', decision: 'declined' });
+    expect(ran).toEqual([]);
+    expect(rows.get(APPROVAL)?.decision).toBe('declined');
+  });
+});
+
 describe('claimApproval — the person who clicks must own it', () => {
   it('refuses a stranger and leaves the approval decidable by its owner', async () => {
     const { store, rows } = fakeStore();

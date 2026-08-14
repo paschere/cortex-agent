@@ -19,6 +19,10 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   gmail_send_message: { label: 'Enviar este correo tal cual', icon: 'Send' },
   actions_propose: { label: 'Dejar la acción lista para aprobar', icon: 'Send' },
   actions_list: { label: 'Ver lo que espera tu aprobación', icon: 'ListChecks' },
+  // La OTRA cola, y las dos frases tienen que poder distinguirse leídas a
+  // solas: `actions_list` son borradores que Cortex escribió, esto son llamadas
+  // que se pararon a medio ejecutar y siguen paradas.
+  approvals_list: { label: 'Ver lo que espera tu permiso para ejecutarse', icon: 'ShieldAlert' },
   gmail_list_threads: { label: 'Listar conversaciones de correo', icon: 'Inbox' },
   gcal_list_events: { label: 'Ver eventos del calendario', icon: 'Calendar' },
   gcal_create_event: { label: 'Crear evento en el calendario', icon: 'CalendarPlus' },

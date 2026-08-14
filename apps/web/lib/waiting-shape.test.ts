@@ -5,6 +5,7 @@ import {
   dayPhrase,
   noticeFromCounts,
   summarizeWaiting,
+  waitingQuestion,
   waitingTotal,
 } from './waiting-shape';
 
@@ -218,5 +219,28 @@ describe('el aviso del chat', () => {
     const notice = noticeFromCounts(NONE);
     expect(notice.total).toBe(0);
     expect(notice.queues).toEqual([]);
+  });
+});
+
+describe('lo que se pregunta al tocar el aviso', () => {
+  /**
+   * El aviso dejó de enlazar a /dashboard y ahora ejecuta el turno. La pregunta
+   * no puede ser una constante: «¿qué espera mi aprobación?» con lo único
+   * pendiente siendo un encargo atascado se contesta «nada», que es verdad y no
+   * sirve de nada.
+   */
+  it('pregunta por la cola concreta cuando sólo hay una', () => {
+    expect(waitingQuestion(noticeFromCounts(counts({ approvals: 2 })).queues)).toBe(
+      '¿Qué espera mi aprobación?',
+    );
+    expect(waitingQuestion(noticeFromCounts(counts({ errands: 1 })).queues)).toBe(
+      '¿Cómo van mis encargos?',
+    );
+  });
+
+  it('se abre en cuanto hay dos, en vez de elegir una y esconder la otra', () => {
+    expect(waitingQuestion(noticeFromCounts(counts({ approvals: 1, commitments: 3 })).queues)).toBe(
+      '¿Qué está esperando algo de mí?',
+    );
   });
 });

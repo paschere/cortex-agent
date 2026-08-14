@@ -106,6 +106,12 @@ export const RICH: Record<string, ResultView> = {
   sales_draft_proposal: dynamic(() =>
     import('../ProposalCard').then((m) => m.ProposalCard as unknown as ResultView),
   ),
+  // La cola sobre la que se actúa, que es la razón por la que este orden no es
+  // de gusto: hasta ahora preguntar «¿qué espera mi aprobación?» en el chat
+  // devolvía una fila gris y mandaba a la persona a otra pantalla.
+  approvals_list: dynamic(() =>
+    import('./ApprovalsQueue').then((m) => m.ApprovalsQueue as unknown as ResultView),
+  ),
 };
 
 // ---------------------------------------------------------------------------

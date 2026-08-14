@@ -91,6 +91,37 @@ export const QUEUE_EMPTY: Record<WaitingQueue, string> = {
   errands: 'Ningún encargo atascado.',
 };
 
+/**
+ * LO QUE SE PREGUNTA AL TOCAR EL AVISO — PORQUE YA SE ESTÁ EN EL SITIO DONDE
+ * SE PREGUNTA.
+ *
+ * El aviso del chat enlazaba a `/dashboard`: te decía que hay tres cosas
+ * esperando y te sacaba del chat a mirarlas. Eso es exactamente al revés en la
+ * única pantalla del producto que sabe contestar — la persona ya está delante
+ * del sitio donde se pregunta, así que el aviso ejecuta el turno en vez de
+ * navegar.
+ *
+ * LA PREGUNTA SE AJUSTA A LO QUE HAY. Con una sola cola llena se pregunta por
+ * esa cola, con su vocabulario: preguntar «¿qué espera mi aprobación?» cuando
+ * lo único pendiente es un encargo atascado devuelve «nada», que es verdad y es
+ * inútil. Con varias, la pregunta se abre y deja que Cortex mire las que sean.
+ */
+export const QUEUE_QUESTION: Record<WaitingQueue, string> = {
+  approvals: '¿Qué espera mi aprobación?',
+  commitments: '¿Qué vencimientos tengo encima?',
+  actions: '¿Qué correos tienes redactados y sin mandar?',
+  errands: '¿Cómo van mis encargos?',
+};
+
+export const ANY_QUEUE_QUESTION = '¿Qué está esperando algo de mí?';
+
+/** La pregunta que corresponde a este aviso. Pura, como la frase. */
+export function waitingQuestion(queues: ReadonlyArray<{ queue: WaitingQueue }>): string {
+  const first = queues[0];
+  if (queues.length === 1 && first) return QUEUE_QUESTION[first.queue];
+  return ANY_QUEUE_QUESTION;
+}
+
 /** Lo que el chat necesita saber: la frase, el total y a dónde ir. */
 export interface WaitingNoticeData {
   total: number;

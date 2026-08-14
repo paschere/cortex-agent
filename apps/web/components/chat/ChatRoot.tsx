@@ -368,7 +368,9 @@ export function ChatRoot({
       {/* Se cae solo en cuanto hay un mensaje: a partir del primer turno la
           conversación es lo único que importa en esta columna. Va aquí y no
           dentro de la pantalla vacía para no acoplarse a ella. */}
-      {waiting && messages.length === 0 && <WaitingNotice waiting={waiting} />}
+      {waiting && messages.length === 0 && (
+        <WaitingNotice waiting={waiting} onAsk={handleSend} />
+      )}
 
       <MessageList
         messages={messages}

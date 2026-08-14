@@ -6,7 +6,10 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
-import { PendingActionCard } from './_components/PendingActionCard';
+// La tarjeta se fue a `components/approvals/` cuando el chat empezó a montarla
+// también: es la misma decisión en dos sitios y no puede haber dos copias de
+// ella. Ver la cabecera del componente.
+import { PendingActionCard } from '@/components/approvals/PendingActionCard';
 import { SignalCard } from './_components/SignalCard';
 
 interface PendingActionRow {

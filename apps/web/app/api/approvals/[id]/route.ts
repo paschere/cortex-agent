@@ -1,5 +1,6 @@
 import { decideApproval, runApprovedAction } from '@/lib/approvals/decide';
 import { requireSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -20,6 +21,67 @@ const Body = z.object({
 });
 
 const Id = z.string().uuid();
+
+/**
+ * LO QUE SE VA A ENVIAR — PARA LA PERSONA, Y SÓLO CUANDO LO PIDE.
+ *
+ * ===========================================================================
+ * POR QUÉ EL PAYLOAD TIENE QUE VIAJAR POR AQUÍ Y NO CON LA LISTA
+ * ===========================================================================
+ * `approvals.list` (packages/agent-tools/src/approvals) contesta «¿qué espera
+ * mi aprobación?» dentro del chat, y NO devuelve el `input` de cada llamada:
+ * su esquema de salida no tiene dónde meterlo. La cola puede contener la
+ * exportación de una nómina, y meter eso en el contexto del modelo cada vez que
+ * alguien hace una pregunta inocente es justo lo que la matriz de riesgo existe
+ * para evitar.
+ *
+ * Pero la persona que decide SÍ tiene que poder verlo entero — aprobar un
+ * titular no es aprobar nada. Así que el payload sale por una segunda puerta,
+ * ésta: con sesión, una fila a la vez, y sólo cuando alguien despliega «ver lo
+ * que se va a enviar». Resultado: la persona ve el payload; el modelo nunca.
+ *
+ * ===========================================================================
+ * MISMA RESPUESTA PARA «NO EXISTE» Y «NO ES TUYA»
+ * ===========================================================================
+ * Igual que el POST de abajo, y por la misma razón: quien pregunta por una
+ * aprobación ajena no aprende nada de ella, ni siquiera que existe. El filtro
+ * por `user_id` va en la consulta, no en un `if` posterior.
+ */
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await requireSession();
+
+  const { id: rawId } = await params;
+  const idParsed = Id.safeParse(rawId);
+  if (!idParsed.success) {
+    return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
+  }
+
+  const { data, error } = await getOrgScopedClient(user.organization.id)
+    .from('mcp_pending_actions')
+    .select('id, tool_id, input, created_at, expires_at, decision')
+    .eq('id', idParsed.data)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (error) {
+    return NextResponse.json(
+      { error: 'No se pudo leer lo que se va a enviar. Vuelve a intentarlo.' },
+      { status: 500 },
+    );
+  }
+  if (!data) {
+    return NextResponse.json({ error: 'Pending action not found' }, { status: 403 });
+  }
+
+  return NextResponse.json({
+    id: data.id as string,
+    toolId: data.tool_id as string,
+    input: data.input,
+    createdAt: data.created_at as string,
+    expiresAt: data.expires_at as string,
+    decision: (data.decision as 'approved' | 'declined' | null) ?? null,
+  });
+}
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireSession();

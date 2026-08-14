@@ -650,6 +650,10 @@ async function confirmationRequiredResult(
       tool_id: err.toolId,
       input: err.input,
       expires_at: expiresAt.toISOString(),
+      // Dónde se paró (migración 0102). Sin esto, «tienes dos cosas esperando»
+      // no puede añadir «y una la dejaste pendiente anoche desde Claude», que
+      // es la mitad de la frase que hace que alguien sepa de qué se le habla.
+      staged_via: 'mcp',
     })
     .select('id')
     .single();

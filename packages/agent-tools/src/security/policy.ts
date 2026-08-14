@@ -147,6 +147,28 @@ const FAMILY_SENSITIVITY: Record<string, Sensitivity> = {
   web: 'public',
 };
 
+/**
+ * NO HAY ENTRADA `approvals`, Y ES DELIBERADO — PERO NO ES LA DEFENSA.
+ *
+ * La familia `approvals` (migración 0102) registra una sola herramienta,
+ * `approvals.list`, que sólo lee. Cae en el default `client` con blast radius
+ * `read`, o sea `low` → `allow`, que es exactamente lo que merece.
+ *
+ * Lo que importa dejar escrito es lo OTRO: si algún día alguien añadiera un
+ * `approvals.decide`, esta tabla no lo pararía. Caería en el mismo default
+ * `client`, el verbo `decide` ni siquiera está en WRITE_VERBS —así que se
+ * leería como un READ— y la matriz devolvería `low`/`allow`. Se clasificaría
+ * como una consulta interna cualquiera cuando lo que estaría haciendo es
+ * levantar TODAS las demás puertas de esta misma tabla de golpe: aprobar es
+ * ejecutar lo que ya se había parado.
+ *
+ * Añadir aquí la familia con una sensibilidad alta tampoco lo arreglaría —
+ * ninguna casilla de esta matriz describe «esto ejecuta una llamada que ya se
+ * había gateado», y una casilla que se inventara para ello mentiría sobre todo
+ * lo demás que la familia haga. La defensa real es que la herramienta no
+ * existe: el permiso se da con un botón, desde un componente de cliente que el
+ * modelo no puede invocar. Está argumentado entero en `../approvals/tools.ts`.
+ */
 const DEFAULT_FAMILY_SENSITIVITY: Sensitivity = 'client';
 
 /** Families whose reads count toward the trailing-hour sensitive-read budget. */
