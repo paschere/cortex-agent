@@ -152,6 +152,12 @@ const SECTIONS: Section[] = [
     heading: 'Seguimiento',
     entries: [
       {
+        href: '/goals',
+        label: 'Metas',
+        note: 'Lo que debería estar pasando, y si está pasando',
+        keywords: 'metas goals objetivos kpi umbral cartera dso cumplimiento indicadores',
+      },
+      {
         href: '/reports',
         label: 'Informes',
         note: 'Guardados por mes, congelados tal como se calcularon',

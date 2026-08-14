@@ -34,6 +34,7 @@ import {
   Settings,
   ShieldCheck,
   Sprout,
+  Target,
   Users,
   UsersRound,
   Wallet,
@@ -150,6 +151,10 @@ const SECTIONS: NavSection[] = [
     id: 'review',
     label: 'Cómo vamos',
     items: [
+      // Primera de la sección porque es la única que responde «¿vamos bien?»
+      // con un sí o un no. Las otras tres cuentan lo que pasó y dejan la
+      // conclusión a quien lee.
+      { href: '/goals', label: 'Metas', icon: Target },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
       { href: '/prospects', label: 'Prospectos', icon: Radar },
       { href: '/learning', label: 'Aprendizaje', icon: Sprout },
