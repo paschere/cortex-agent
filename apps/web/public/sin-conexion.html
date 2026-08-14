@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es-CO">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sin conexión · Cortex</title>
+    <!--
+      SIN TIPOGRAFÍAS, SIN HOJAS DE ESTILO, SIN NADA QUE PEDIR.
+
+      Ésta es la única página del producto que tiene que dibujarse cuando no hay
+      red, así que no puede depender de un archivo que habría que descargar. Los
+      colores están escritos a mano por el mismo motivo, y son los del sistema:
+      `--canvas`, `--ink`, `--ink-muted` y el índigo de marca.
+    -->
+    <style>
+      :root { color-scheme: light; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 1.5rem;
+        background: #f7f7fb;
+        color: #16161d;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        text-align: center;
+      }
+      .mark {
+        width: 3.5rem;
+        height: 3.5rem;
+        display: grid;
+        place-items: center;
+        margin: 0 auto 1.25rem;
+        border-radius: 14px;
+        background: linear-gradient(150deg, rgb(107 98 255), rgb(58 48 168));
+      }
+      h1 { margin: 0 0 0.5rem; font-size: 19px; line-height: 1.35; font-weight: 700; }
+      p { margin: 0; max-width: 26rem; font-size: 13px; line-height: 1.6; color: #5b5b6b; }
+      button {
+        margin-top: 1.5rem;
+        border: 0;
+        border-radius: 999px;
+        padding: 0.6rem 1.1rem;
+        background: #5850ec;
+        color: #fff;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:focus-visible { outline: 3px solid rgb(88 80 236 / 0.35); outline-offset: 2px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="mark" aria-hidden="true">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+          <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+        </svg>
+      </span>
+      <h1>Sin conexión</h1>
+      <!--
+        Lo que dice y lo que NO dice. No hay nada guardado que enseñar, y decirlo
+        es mejor que mostrar cifras de ayer sin fecha: en este producto un número
+        sin saber de cuándo es vale menos que ningún número.
+      -->
+      <p>
+        Cortex lee tus datos en el momento en que preguntas, así que sin
+        conexión no tiene nada que contarte. No te guardo cifras de antes: un
+        número sin saber de cuándo es vale menos que ninguno.
+      </p>
+      <button type="button" onclick="location.reload()">Volver a intentar</button>
+    </main>
+  </body>
+</html>
