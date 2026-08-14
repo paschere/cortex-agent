@@ -13,6 +13,7 @@ import { clsx } from 'clsx';
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useMemo, useState, useTransition } from 'react';
 import { removeFact, saveFact } from '../actions';
+import { ProposalPanel } from './ProposalPanel';
 import type { ActionResult, FactView, SectionView } from './types';
 
 /**
@@ -64,11 +65,14 @@ export function CompanyBoard({
   sections,
   canEdit,
   block,
+  seedName,
 }: {
   facts: FactView[];
   sections: SectionView[];
   canEdit: boolean;
   block: string;
+  /** El nombre del espacio de trabajo. Semilla del buscador, no una respuesta. */
+  seedName: string;
 }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [result, setResult] = useState<ActionResult | null>(null);
@@ -116,6 +120,19 @@ export function CompanyBoard({
   return (
     <div className="space-y-4">
       <BudgetMeter used={used} count={facts.length} block={block} />
+
+      {/* SÓLO PARA QUIEN PUEDE ACEPTAR. A cualquier otro le devolvería una
+          lista con la que no puede hacer nada, y el servidor rechaza la acción
+          igual — ver `proposeFacts`. */}
+      {canEdit && (
+        <ProposalPanel
+          facts={facts}
+          sections={sections}
+          seedName={seedName}
+          onFillManually={(section, label) => setDraft({ id: null, section, label, value: '' })}
+          onResult={setResult}
+        />
+      )}
 
       {/* `<output>` y no un `<p role="status">`: trae el rol puesto y es el
           elemento que existe para el resultado de una acción. Un lector de

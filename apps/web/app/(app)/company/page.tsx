@@ -98,6 +98,11 @@ export default async function CompanyPage() {
         sections={sections}
         canEdit={user.role === 'org_admin'}
         block={block}
+        // EL NOMBRE DEL ESPACIO DE TRABAJO, COMO SEMILLA Y NADA MÁS. Es lo que
+        // alguien tecleó al registrarse, así que no se propone como razón
+        // social —eso sería devolverle su propia respuesta con un sello— pero
+        // sí ahorra teclearlo otra vez en el buscador, y ahí es editable.
+        seedName={user.organization.name}
       />
     </div>
   );
