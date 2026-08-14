@@ -124,6 +124,10 @@ export const TOOL_PHRASE: Record<string, string> = {
   // Metas. La de fijar deja el número por escribir a propósito: el objetivo lo
   // dice la empresa, y una frase que ya lo trajera puesto sería Cortex fijando
   // una meta que nadie declaró.
+  // La frase es la pregunta de auditoría, no «muéstrame la ficha»: quien la
+  // escribe está comprobando de dónde salen las respuestas que recibe, y la
+  // herramienta contesta con lo que sabe Y con lo que le falta.
+  'company.facts': '¿Qué sabes de nuestra empresa?',
   'goals.list': '¿Cómo vamos con las metas?',
   'goals.measure': '¿Cómo va la meta en lo que va del período?',
   'goals.offer_metrics': '¿Qué puedes medir de esta empresa?',

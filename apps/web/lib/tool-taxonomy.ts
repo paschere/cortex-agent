@@ -106,6 +106,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'primary',
     icon: 'Target',
   },
+  company: {
+    name: 'Datos de la empresa',
+    blurb:
+      'La ficha que la empresa escribe sobre sí misma —identidad, cómo cobra, quién decide, y lo que Cortex no debe hacer por su cuenta— y los huecos que quedan por llenar. Cortex la lee y la enseña; escribirla es de la pantalla, porque su última sección es el límite que lo gobierna.',
+    tone: 'primary',
+    icon: 'Building2',
+  },
   actions: {
     name: 'Acciones propuestas',
     blurb:

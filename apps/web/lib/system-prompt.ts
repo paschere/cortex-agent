@@ -3,7 +3,9 @@ import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   type MemoryAudience,
   type MemoryContextEntry,
+  loadCompanyFactsContext,
   loadMemoryContext,
+  renderCompanyFactsBlock,
   renderMemoryBlock,
   touchMemories,
 } from '@cortex/agent-tools';
@@ -30,11 +32,43 @@ import {
  * and no DM to withhold it into), so routines run without memories until one
  * exists. That is a deliberate omission, not an oversight.
  *
- * Memories are injected WHOLE, never retrieved. See migration 0051 for why:
+ * ...AND THE ONE BLOCK THAT DOES GO THERE, WHICH IS THE INTERESTING DIFFERENCE.
+ * The company facts (migration 0104) ARE injected into unattended routines —
+ * `schedule-run.ts` calls `buildCompanyFactsBlock` directly, because it does not
+ * come through here. Every clause of the paragraph above fails to apply to them:
+ * they belong to nobody, so there is no person whose note leaks; they are the
+ * same for every reader in the workspace, so a colleague receiving them receives
+ * what he could already read on `/company`; and the whole point of the guard —
+ * "no human in the loop to notice" — is inverted, because a routine that drafts
+ * a collection email at 6am with NO company facts is the case that goes wrong.
+ * It is the turn with nobody watching that most needs to know the payment term
+ * is 30 days and that "Lo que no" says never to threaten legal action.
+ *
+ * Read that pair together and it says the rule this file actually follows: what
+ * gets withheld from an unattended run is what one PERSON told Cortex in
+ * confidence, not what the COMPANY wrote down about itself.
+ *
+ * Both blocks are injected WHOLE, never retrieved. See migration 0051 for why:
  * retrieval fires on similarity, so a standing instruction would load exactly
  * when the question resembles it and silently fail to load the rest of the
- * time — which is when it still applies.
+ * time — which is when it still applies. Migration 0104 inherits that argument
+ * word for word for a permanent company fact: "redáctale el correo al cliente"
+ * does not mention the payment term, and that is precisely the turn the payment
+ * term governs.
  */
+
+/**
+ * The company block, on its own, for the one surface that does not come through
+ * `buildSystemPrompt` — the unattended routine runner. See the header for why
+ * that surface gets this block and not the memories.
+ *
+ * Never throws, for the same reason `loadMemoryContext` never throws: a lookup
+ * that fails is a turn with less context, never a turn that dies.
+ */
+export async function buildCompanyFactsBlock(organizationId: string): Promise<string> {
+  const facts = await loadCompanyFactsContext(getOrgScopedClient(organizationId));
+  return renderCompanyFactsBlock(facts);
+}
 
 export interface SystemPromptResult {
   /** The composed system prompt, ready to hand to the model. */
@@ -53,6 +87,16 @@ export interface SystemPromptResult {
    * person has no memories.
    */
   memoryBlock: string;
+  /**
+   * The rendered company block, exactly as it was concatenated into `system`.
+   *
+   * Returned for the same reason as `memoryBlock`: the chat route weighs the
+   * turn from the strings that really went in (`recorder.part`), and a block
+   * that is not returned is a block whose length the cost screen would silently
+   * fold into somebody else's bar. Empty when the workspace has written no
+   * facts.
+   */
+  companyBlock: string;
 }
 
 export interface SystemPromptOptions {
@@ -76,7 +120,14 @@ export async function buildSystemPrompt(opts: SystemPromptOptions): Promise<Syst
 
   // A memory lookup that fails is a turn with less context, never a turn that
   // dies — loadMemoryContext already swallows its own errors and returns [].
-  const memories = await loadMemoryContext(db, opts.userId);
+  // The company facts obey the same contract and are fetched alongside rather
+  // than after: they are two independent reads, and making the prompt wait for
+  // one and then the other would add a round trip to every turn of every
+  // surface for no reason.
+  const [memories, facts] = await Promise.all([
+    loadMemoryContext(db, opts.userId),
+    loadCompanyFactsContext(db),
+  ]);
 
   if (memories.length > 0) {
     // Fire-and-forget: this only feeds eviction ordering ("least recently
@@ -89,10 +140,20 @@ export async function buildSystemPrompt(opts: SystemPromptOptions): Promise<Syst
   }
 
   const block = renderMemoryBlock(memories, opts.audience ?? 'private');
+  const companyBlock = renderCompanyFactsBlock(facts);
 
-  const system = [opts.basePrompt, block, ...(opts.sections ?? [])]
+  // ORDER MATTERS AND THIS ONE IS ARGUED. The company goes BEFORE the person:
+  // the workspace's own rules are the frame, and what one person prefers is a
+  // refinement inside it. Read the other way round — personal notes first — the
+  // last thing before the surface sections would be one person's preferences,
+  // which is not the thing that should be closest to the question on a surface
+  // where several people share the same answer.
+  //
+  // Both blocks are empty strings when there is nothing to say, and the filter
+  // below drops them. A workspace that has written no facts pays nothing.
+  const system = [opts.basePrompt, companyBlock, block, ...(opts.sections ?? [])]
     .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
     .join('\n\n');
 
-  return { system, memories, memoryBlock: block };
+  return { system, memories, memoryBlock: block, companyBlock };
 }

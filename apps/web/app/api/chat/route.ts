@@ -814,7 +814,7 @@ export async function POST(req: NextRequest) {
 
   // Shared with Google Chat and MCP so a person's standing instructions cannot
   // apply on one surface and silently not on another. See lib/system-prompt.ts.
-  const { system, memories, memoryBlock } = await clock.span(
+  const { system, memories, memoryBlock, companyBlock } = await clock.span(
     'prompt',
     buildSystemPrompt({
       organizationId: user.organization.id,
@@ -842,6 +842,12 @@ export async function POST(req: NextRequest) {
   recorder.memory(memories.map((m) => ({ id: m.id, text: m.content })));
   recorder.part('instructions', agent.systemPrompt);
   recorder.part('memory', memoryBlock);
+  // Su propia etiqueta y no sumado a 'memory': lo escribe un admin una vez y lo
+  // paga todo el mundo en cada turno, así que si un día pesa demasiado la
+  // pantalla tiene que poder señalar la ficha de la empresa y no las memorias de
+  // quien está mirando —que no puede podar lo que no es suyo—. Sin esta línea la
+  // barra mentiría por exactamente la longitud del bloque.
+  recorder.part('company', companyBlock);
   // The filter is weighed with the knowledge it filters, because that is the
   // string that really went in and this measurement is of characters sent, not
   // of features used.

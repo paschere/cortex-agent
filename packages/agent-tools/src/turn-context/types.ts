@@ -22,6 +22,17 @@ export type ContextPartKey =
   | 'instructions'
   /** Standing memories, injected whole (never retrieved — see migration 0051). */
   | 'memory'
+  /**
+   * The company's own facts, injected whole (migration 0104).
+   *
+   * Its own bar rather than folded into 'memory'. They are the same shape of
+   * text and a very different thing to look at: 'memory' is one person's notes
+   * and shrinks when they prune them, this one is written once by an admin and
+   * is then paid by EVERY person on EVERY turn. Merged, a workspace whose facts
+   * had quietly grown to a page would read as "your memories got heavy", and
+   * the person reading the bar has no memories to prune.
+   */
+  | 'company'
   /** The Brain Knowledge fragments prepended for this turn. */
   | 'knowledge'
   /** Prior turns of this conversation replayed back to the model. */

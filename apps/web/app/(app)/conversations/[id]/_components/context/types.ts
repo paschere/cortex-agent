@@ -16,6 +16,8 @@
 export type PartKey =
   | 'instructions'
   | 'memory'
+  /** La ficha de la empresa, inyectada entera (migración 0104). */
+  | 'company'
   | 'knowledge'
   | 'history'
   | 'tools'
@@ -169,6 +171,7 @@ export interface SpaceOption {
 export const PART_LABEL: Record<PartKey, string> = {
   instructions: 'Sus instrucciones',
   memory: 'Lo que recuerda de ti',
+  company: 'La ficha de la empresa',
   knowledge: 'Fragmentos del cerebro',
   history: 'La conversación previa',
   tools: 'Las herramientas ofrecidas',
@@ -182,6 +185,8 @@ export const PART_LABEL: Record<PartKey, string> = {
 export const PART_NOTE: Record<PartKey, string> = {
   instructions: 'El texto fijo que define cómo se comporta este agente.',
   memory: 'Tus instrucciones permanentes. Van completas en cada turno, no se buscan.',
+  company:
+    'Lo que la empresa tiene escrito sobre sí misma. Va completo en cada turno, para todo el mundo. Se edita en «Datos de la empresa».',
   knowledge: 'Los pedazos de documentos que se le pegaron encima de tu pregunta.',
   history: 'Los mensajes anteriores de esta conversación que se le volvieron a mandar.',
   tools: 'El nombre y la descripción de cada herramienta que se le ofreció.',
@@ -192,6 +197,7 @@ export const PART_NOTE: Record<PartKey, string> = {
 export const PART_FILL: Record<PartKey, string> = {
   instructions: 'bg-ink-faint',
   memory: 'bg-sky',
+  company: 'bg-primary/60',
   knowledge: 'bg-primary',
   history: 'bg-ink-muted',
   tools: 'bg-amber',

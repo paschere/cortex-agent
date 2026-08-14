@@ -341,6 +341,16 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   goal_readings: tenant(),
   goal_notices: tenant(),
 
+  // --- La ficha de la empresa (migración 0104) -------------------------------
+  // Los hechos que la empresa escribe sobre sí misma. Tenant, y de la clase que
+  // más incomoda: estas filas no se enseñan en una tabla, SE INYECTAN ENTERAS EN
+  // EL PROMPT de cada turno de cada superficie. Un filtro que faltara aquí no
+  // dejaría a nadie leer la ficha de otra empresa — le pondría el NIT, el plazo
+  // de pago y los límites de otra empresa EN LA BOCA A CORTEX, que los diría con
+  // toda la seguridad del mundo porque para él son lo que es cierto. Una fuga
+  // que no se ve en ninguna pantalla y que sale por la voz del producto.
+  company_facts: tenant(),
+
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first
   // ten minutes. `usage_events` and `usage_counters` are tenant in the strongest

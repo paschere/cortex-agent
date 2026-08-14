@@ -5,6 +5,7 @@ import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
 import { noteRoutineRun } from '@/lib/notifications/producers';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { buildCompanyFactsBlock } from '@/lib/system-prompt';
 import { chatModel } from '@cortex/agent-tools';
 import {
   filterTools,
@@ -196,7 +197,29 @@ async function executeAgentJob(job: JobRow): Promise<ExecResult> {
     ]),
   );
 
-  const system = `${agent.system_prompt as string}
+  /**
+   * LA FICHA DE LA EMPRESA SÍ ENTRA AQUÍ, Y LAS MEMORIAS PERSONALES NO.
+   *
+   * `lib/system-prompt.ts` deja esta superficie fuera a propósito: una rutina
+   * corre sin nadie delante y su salida va a una lista de destinatarios que
+   * puede incluir a otras personas, así que una nota privada podría acabar en el
+   * correo de un compañero sin nadie en el bucle que lo note. Ese archivo es EL
+   * único sitio donde se arma un prompt, y esta función no pasa por él —por eso
+   * esta línea es explícita y no gratis.
+   *
+   * Ninguna cláusula de ese argumento aplica a la ficha de la empresa: no es de
+   * nadie, es la misma para todo el mundo en el espacio, y quien reciba el
+   * correo podría leerla en `/company` de todos modos. Y el motivo de fondo se
+   * da la vuelta: «no hay nadie mirando» es exactamente por lo que hace falta.
+   * Una rutina que a las 6am redacta un cobro sin saber que se cobra a 30 días,
+   * ni que «Lo que no» prohíbe mencionar acciones legales, es el caso que sale
+   * mal — y sale mal en un correo que ya se envió.
+   *
+   * Nunca lanza: una rutina no se cae porque la ficha no se pudo leer.
+   */
+  const companyBlock = await buildCompanyFactsBlock(job.organization_id);
+
+  const system = `${agent.system_prompt as string}${companyBlock ? `\n\n${companyBlock}` : ''}
 
 ---
 UNATTENDED SCHEDULED RUN. You are executing the scheduled job "${job.name}" with no human present:

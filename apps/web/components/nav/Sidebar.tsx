@@ -20,6 +20,7 @@ import {
   FileBarChart,
   Globe,
   Hammer,
+  IdCard,
   Inbox,
   LayoutDashboard,
   MessageCircle,
@@ -55,6 +56,18 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   /** Draws a live count on the right. Every queue that has one is wired. */
   signal?: keyof NavCounts;
+  /**
+   * Hidden from everybody but an org admin.
+   *
+   * It used to live only on the section, and «La empresa» carried it for all
+   * six of its rows. That was true right up until a row appeared that everybody
+   * should be able to OPEN and only an admin should be able to CHANGE — the
+   * company facts, which are the reason Cortex answers the way it does. Moving
+   * the flag down a level says the same thing about the six old rows and lets
+   * the seventh say something different, instead of forcing it out of the
+   * section it belongs in.
+   */
+  adminOnly?: boolean;
 }
 
 interface NavSection {
@@ -174,17 +187,30 @@ const SECTIONS: NavSection[] = [
   {
     id: 'admin',
     label: 'La empresa',
-    adminOnly: true,
+    // La bandera baja a las filas. Ver `NavItem.adminOnly`: seis de estas siete
+    // siguen siendo sólo de admin, y la séptima no.
     items: [
-      { href: '/admin/users', label: 'Personas', icon: Users },
-      { href: '/admin/teams', label: 'Equipos', icon: UsersRound },
-      { href: '/admin/usage', label: 'Uso', icon: BarChart3 },
-      { href: '/admin/audit', label: 'Auditoría', icon: ScrollText },
-      { href: '/admin/security', label: 'Seguridad', icon: ShieldCheck },
+      // LA ÚNICA FILA DE ESTA SECCIÓN QUE VE TODO EL MUNDO, Y ESTÁ ARGUMENTADO.
+      //
+      // Lo que hay detrás no es una pantalla de administración: es lo que Cortex
+      // cree sobre la empresa, y va entero en cada respuesta que le da a
+      // cualquiera. Esconderlo de quien no es admin esconde la EXPLICACIÓN de
+      // las respuestas que esa persona recibe todo el día — y deja como única
+      // salida preguntárselo al propio Cortex, que es justo el testigo cuya
+      // versión se querría contrastar.
+      //
+      // Escribir sí es de admin, y eso se hace cumplir en el servidor (la página
+      // y sus acciones comprueban el rol), no escondiendo el enlace.
+      { href: '/company', label: 'Datos de la empresa', icon: IdCard },
+      { href: '/admin/users', label: 'Personas', icon: Users, adminOnly: true },
+      { href: '/admin/teams', label: 'Equipos', icon: UsersRound, adminOnly: true },
+      { href: '/admin/usage', label: 'Uso', icon: BarChart3, adminOnly: true },
+      { href: '/admin/audit', label: 'Auditoría', icon: ScrollText, adminOnly: true },
+      { href: '/admin/security', label: 'Seguridad', icon: ShieldCheck, adminOnly: true },
       // Lo que Cortex puede hacer sin preguntar. Vive junto a Seguridad porque
       // es la misma conversación vista desde el otro lado: una dice qué se le
       // impidió, la otra qué se le permitió de antemano.
-      { href: '/admin/mandates', label: 'Sin preguntar', icon: BadgeCheck },
+      { href: '/admin/mandates', label: 'Sin preguntar', icon: BadgeCheck, adminOnly: true },
     ],
   },
 ];
@@ -449,7 +475,14 @@ function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const sections = SECTIONS.filter((s) => !s.adminOnly || role === 'org_admin');
+  // Se filtra por sección Y por fila, y las dos hacen falta. La sección sigue
+  // pudiendo esconderse entera; la fila permite que una sección de admin tenga
+  // una entrada que no lo es. Una sección que se queda sin filas no deja su
+  // encabezado colgando: un título con nada debajo se lee como algo roto.
+  const admin = role === 'org_admin';
+  const sections = SECTIONS.filter((s) => !s.adminOnly || admin)
+    .map((s) => ({ ...s, items: s.items.filter((i) => !i.adminOnly || admin) }))
+    .filter((s) => s.items.length > 0);
 
   /**
    * Read once after mount, never during render.

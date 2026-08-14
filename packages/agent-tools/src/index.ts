@@ -77,6 +77,12 @@ export * from './payments';
 // import directo del módulo hoja, así que la posición de esta línea no decide
 // nada, pero leerla en orden sí cuenta la historia.
 export * from './goals';
+// La ficha de la empresa (migración 0104): hechos estructurados que van ENTEROS
+// en el prompt de cada turno de cada superficie, nunca recuperados por parecido.
+// No depende de ningún otro módulo —su shape no importa nada— así que la
+// posición de esta línea no decide nada; va junto a ./goals porque son los dos
+// sitios donde una persona declara algo que después juzga o gobierna a Cortex.
+export * from './company';
 // The tissue between an answer and something done about it: a drafted action
 // waiting on a human. Placed after ./commitments and ./gmail because it reads
 // commitment rows to draft from them and binds gmail.send_message to run.
