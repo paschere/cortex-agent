@@ -7,12 +7,13 @@ import {
 } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
 import type { Message, ToolInvocation } from 'ai';
-import { Brain, Check, Copy, RotateCw } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Brain } from 'lucide-react';
+import { useRef } from 'react';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
 import { DelegatedNotice } from './DelegatedNotice';
 import { FollowUps } from './FollowUps';
+import { MessageActions } from './MessageActions';
 import { ReasoningTrail } from './ReasoningTrail';
 import { GlanceNote } from './ScreenView';
 import { SelectionActions } from './SelectionActions';
@@ -30,6 +31,15 @@ interface MessageBubbleProps {
   metrics?: TurnMetrics | null;
   /** Puts text in the composer — used by follow-ups and by the selection menu. */
   onCompose?: (text: string) => void;
+  /**
+   * La pregunta que provocó esta respuesta, si la hay.
+   *
+   * Sólo se usa para titular el informe cuando alguien conserva la respuesta:
+   * «¿Cuánto nos deben?» es el título que alguien va a reconocer en /reports
+   * dentro de dos meses, y la primera línea de la respuesta no lo es. La busca
+   * `MessageList`, que es quien ve el hilo entero.
+   */
+  question?: string;
   /**
    * The follow-ups saved with this answer, when the transcript came from the
    * database. Undefined on a live turn, which is the only case that asks the
@@ -91,24 +101,6 @@ function reasoningOf(message: Message): string {
   return fromParts.trim() || (message.reasoning ?? '');
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        navigator.clipboard.writeText(text);
-        setDone(true);
-        setTimeout(() => setDone(false), 1400);
-      }}
-      className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
-      aria-label="Copiar mensaje"
-    >
-      {done ? <Check className="h-3.5 w-3.5 text-emerald" /> : <Copy className="h-3.5 w-3.5" />}
-    </button>
-  );
-}
-
 export function MessageBubble({
   message,
   conversationId,
@@ -117,6 +109,7 @@ export function MessageBubble({
   isStreaming,
   metrics,
   onCompose,
+  question,
   storedFollowups,
   glanceAt,
   screenFrame,
@@ -305,22 +298,20 @@ export function MessageBubble({
           />
         )}
 
+        {/*
+          Copiar, rehacer y conservar. `onRegenerate` sólo llega en la última
+          respuesta, así que es también la señal de cuál está viva y cuál se
+          esconde hasta que se la busca — ver MessageActions.
+        */}
         {!isStreaming && content && (
-          // focus-within keeps these reachable by keyboard: hover-only controls
-          // are invisible to anyone tabbing through the transcript.
-          <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-            <CopyButton text={content} />
-            {onRegenerate && (
-              <button
-                type="button"
-                onClick={onRegenerate}
-                className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
-                aria-label="Volver a generar la respuesta"
-              >
-                <RotateCw className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+          <MessageActions
+            text={content}
+            messageId={message.id}
+            pinned={!!onRegenerate}
+            {...(question ? { question } : {})}
+            {...(conversationId ? { conversationId } : {})}
+            {...(onRegenerate ? { onRegenerate } : {})}
+          />
         )}
 
         {/* Only under the newest answer: a transcript with a strip of

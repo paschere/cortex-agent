@@ -95,8 +95,8 @@ export const GENERATED_REPORT_KINDS = ['expiries', 'fleet', 'client_activity'] a
 export type GeneratedReportKind = (typeof GENERATED_REPORT_KINDS)[number];
 
 /**
- * Every kind a stored report may have. Wider than the list above by exactly two,
- * and neither of them is a recipe:
+ * Every kind a stored report may have. Wider than the list above by exactly
+ * three, and none of them is a recipe:
  *
  *   chart    arrives from the chat. It was drawn from numbers a tool had
  *            already returned, so there is no query to re-run.
@@ -107,8 +107,12 @@ export type GeneratedReportKind = (typeof GENERATED_REPORT_KINDS)[number];
  *            exist per workspace and week. Offering it in the picker would
  *            offer a button that either loses to that index or wins it and
  *            leaves Monday's email unsent.
+ *   answer   una respuesta del chat que alguien decidió conservar. Como el
+ *            gráfico, no tiene consulta que repetir: lo que se guarda es lo
+ *            que Cortex dijo ese día, con la conversación como fuente. Ver
+ *            `saveAnswerAsReportAction` en la web.
  */
-export const REPORT_KINDS = [...GENERATED_REPORT_KINDS, 'chart', 'weekly'] as const;
+export const REPORT_KINDS = [...GENERATED_REPORT_KINDS, 'chart', 'weekly', 'answer'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 /** Spanish names, because this is what the report calls itself on screen. */
@@ -118,6 +122,7 @@ export const REPORT_KIND_LABEL: Record<ReportKind, string> = {
   client_activity: 'Actividad por cliente',
   chart: 'Gráfico del chat',
   weekly: 'Parte semanal',
+  answer: 'Respuesta guardada',
 };
 
 export const REPORT_KIND_BLURB: Record<ReportKind, string> = {
@@ -131,6 +136,8 @@ export const REPORT_KIND_BLURB: Record<ReportKind, string> = {
     'Un gráfico que salió de una conversación y alguien decidió conservar. Se guarda igual que los demás: la fotografía, con la fuente y el método de cada cifra.',
   weekly:
     'Lo que pasó la semana pasada y lo que viene la que entra: qué se venció, qué se cumplió, quién debe qué, qué propuso Cortex y en qué quedó, y a qué nadie contestó. Sale solo cada lunes temprano y no se puede pedir: es el parte de una semana concreta, no una consulta.',
+  answer:
+    'Una respuesta que salió de una conversación y alguien decidió conservar, con la pregunta que la provocó y la conversación de la que salió. Es la fotografía de lo que Cortex dijo ese día: no se vuelve a calcular, y por eso sigue diciendo lo mismo en noviembre.',
 };
 
 /**

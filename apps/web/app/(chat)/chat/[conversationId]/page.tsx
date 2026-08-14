@@ -2,6 +2,7 @@ import { ChatRoot } from '@/components/chat/ChatRoot';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { toToolInvocations } from '@/lib/tool-invocations';
+import { readWaitingNotice } from '@/lib/waiting';
 import { listVisibleSpaces, loadOverrides } from '@cortex/agent-tools';
 import { listAgents } from '@cortex/agents';
 import type { Message } from 'ai';
@@ -131,6 +132,16 @@ export default async function ResumeChatPage({
    * Both queries only happen when there IS a filter, which is the rare case, so
    * a normal chat loads exactly the queries it always did plus one.
    */
+  /**
+   * La línea de la cabecera, también en un hilo reabierto.
+   *
+   * Son los mismos conteos que el layout ya hace para los badges del rail
+   * (`countNavSignals`), no una lectura de las cuatro listas — ver
+   * `readWaitingNotice`. Un hilo de hace tres semanas se abre igual de rápido
+   * que antes y encima dice qué está parado hoy.
+   */
+  const waiting = await readWaitingNotice(user.organization.id, user.id);
+
   const overrides = await loadOverrides(db, conversationId).catch(() => null);
   const scopedIds = overrides?.spaceIds ?? null;
   const initialScope =
@@ -147,6 +158,7 @@ export default async function ResumeChatPage({
       initialMessages={initialMessages}
       initialAgentSlug={convAgentSlug}
       initialScope={initialScope}
+      waiting={waiting}
       {...(storedFollowups ? { initialFollowups: storedFollowups } : {})}
       {...(Object.keys(initialGlances).length > 0 ? { initialGlances } : {})}
     />

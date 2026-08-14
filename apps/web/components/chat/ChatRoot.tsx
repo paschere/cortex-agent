@@ -51,10 +51,15 @@ interface ChatRootProps {
    * Lo que está esperando a esta persona en las cuatro colas, contado por la
    * página que nos monta.
    *
-   * Sólo lo pasa `/chat` —una conversación nueva—, nunca `/chat/[id]`: quien
-   * vuelve a un hilo viene a seguir leyéndolo, y anunciarle ahí trabajo
-   * pendiente sería interrumpir lo que abrió a propósito. Ausente es el caso
-   * normal, y ausente no dibuja nada.
+   * Lo pasan LAS DOS páginas del chat. Antes sólo `/chat`, con el argumento de
+   * que quien vuelve a un hilo viene a seguir leyéndolo — pero eso valía cuando
+   * el aviso era una tarjeta sobre la conversación. Una línea de cabecera del
+   * tamaño de una nota al pie no interrumpe nada, y esconderla en la mitad de
+   * las pantallas de chat significaba que el trabajo que Cortex deja hecho de
+   * noche sólo se anunciaba en los diez segundos que dura un chat en blanco.
+   *
+   * No cuesta ninguna consulta nueva: son los conteos que el layout ya calcula
+   * para los badges del rail. Ausente no dibuja nada.
    */
   waiting?: WaitingNoticeData;
 }
@@ -370,15 +375,22 @@ export function ChatRoot({
           </div>
         </div>
 
-        {/* Recent threads moved here out of the sidebar, where they split the
-            navigation in two. See ThreadHistory. */}
-        <ThreadHistory />
-      </header>
+        {/*
+          La derecha de la cabecera: lo que te espera, los hilos recientes y los
+          dos botones de siempre.
 
-      {/* Se cae solo en cuanto hay un mensaje: a partir del primer turno la
-          conversación es lo único que importa en esta columna. Va aquí y no
-          dentro de la pantalla vacía para no acoplarse a ella. */}
-      {waiting && messages.length === 0 && <WaitingNotice waiting={waiting} onAsk={handleSend} />}
+          El aviso va PRIMERO y pegado al nombre del agente porque es lo único
+          de aquí que interrumpe —en voz baja, un punto y una frase—, mientras
+          que los hilos son un destino al que se va cuando uno ya decidió
+          cambiar de tema. Y va en la cabecera y no sobre la conversación porque
+          tiene que seguir existiendo en el turno treinta, que es cuando ya
+          nadie se acuerda de que hay cuatro colas. Ver WaitingNotice.
+        */}
+        <div className="ml-auto flex min-w-0 shrink items-center gap-1">
+          {waiting && <WaitingNotice waiting={waiting} onAsk={handleSend} />}
+          <ThreadHistory />
+        </div>
+      </header>
 
       <MessageList
         messages={messages}

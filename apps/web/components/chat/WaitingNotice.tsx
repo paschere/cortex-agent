@@ -1,31 +1,44 @@
 'use client';
 
+import { usePanel } from '@/components/panel/PanelHost';
+import { panelForWaiting } from '@/lib/waiting-panel';
 import { type WaitingNoticeData, waitingQuestion } from '@/lib/waiting-shape';
-import { CornerDownLeft } from 'lucide-react';
+import { clsx } from 'clsx';
 
 /**
- * QUE EL CHAT TAMBIÉN HABLE PRIMERO — EN VOZ BAJA.
+ * LO QUE TE ESPERA, SIEMPRE VISIBLE Y EN VOZ BAJA.
  *
- * Alguien que abre una conversación nueva viene a preguntar algo, y esa
- * intención manda. Así que esto no interrumpe: es una línea sobre las
- * sugerencias, del tamaño de una nota al pie, y desaparece en cuanto se escribe
- * el primer mensaje (quien la monta la condiciona a que el hilo esté vacío).
- * Con las cuatro colas vacías no dibuja ni un píxel.
+ * ===========================================================================
+ * POR QUÉ SE MUDÓ A LA CABECERA
+ * ===========================================================================
+ * Esto era una tarjeta sobre la pantalla vacía: se caía en cuanto había un
+ * primer mensaje y no existía en una conversación reabierta. O sea que lo que
+ * Cortex dejó hecho de noche sólo se anunciaba en los diez segundos que dura un
+ * chat en blanco, que es casi lo mismo que no anunciarlo. Ahora es una línea
+ * permanente en la cabecera del chat, del tamaño de una nota al pie, en la
+ * pantalla donde esta gente pasa el día.
  *
- * NO ES UN COMPONENTE DE LA PANTALLA VACÍA. `EmptyState.tsx` es la invitación a
- * preguntar y tiene su propio dueño; esto vive aparte y se monta un nivel más
- * arriba, en `ChatRoot`, para que ninguna de las dos cosas dependa de la otra.
+ * Permanente no es insistente: un punto, una frase y nada más. Con las cuatro
+ * colas vacías no dibuja ni un píxel.
  *
- * LA FRASE VIENE HECHA DEL SERVIDOR y sólo con los conteos: abrir un chat nuevo
- * no puede costar cuatro lecturas de listas. Ver `readWaitingNotice`.
+ * ===========================================================================
+ * ABRE EL PANEL DE AL LADO; NO NAVEGA Y NO PREGUNTA (SALVO QUE NO QUEDE OTRA)
+ * ===========================================================================
+ * Antes enlazaba a `/dashboard` —te decía que hay tres cosas esperando y te
+ * sacaba del chat a verlas—, y después preguntaba. Preguntar era mejor que
+ * navegar y sigue siendo el respaldo, pero cuesta un turno entero para leer una
+ * lista que el panel ya sabe pintar: `PANELS` corre la misma herramienta y la
+ * dibuja con el mismo componente, al lado, sin desmontar la conversación ni
+ * gastar una llamada al modelo.
  *
- * ── Y PREGUNTA, NO NAVEGA ─────────────────────────────────────────────────
- * Esto era un enlace a `/dashboard`: te decía que hay tres cosas esperando y te
- * mandaba fuera del chat a verlas. Ahora ejecuta el turno — la pregunta que
- * corresponde a las colas que tienen algo (`waitingQuestion`) — y la respuesta
- * llega con las tarjetas sobre las que se actúa, aquí mismo. Sacar a alguien de
- * la única pantalla que sabe contestar es la clase de atajo que hace que la
- * gente deje de usar el chat: preguntó, y le dieron un mapa.
+ * Cuál panel lo decide `panelForWaiting`, y devuelve `null` cuando lo único que
+ * espera son correos redactados, que es la cola que a propósito no tiene panel.
+ * En ese caso —y en cualquier sitio donde no haya un `PanelProvider` encima— se
+ * cae al comportamiento anterior: preguntárselo a Cortex aquí mismo. Ninguna de
+ * las dos ramas te saca de la conversación.
+ *
+ * LA FRASE VIENE HECHA DEL SERVIDOR y sólo con los conteos: abrir un chat no
+ * puede costar cuatro lecturas de listas. Ver `readWaitingNotice`.
  */
 export function WaitingNotice({
   waiting,
@@ -34,28 +47,33 @@ export function WaitingNotice({
   waiting: WaitingNoticeData;
   onAsk: (text: string) => void;
 }) {
+  const { open, available } = usePanel();
+
   if (waiting.total <= 0) return null;
 
+  const panel = available ? panelForWaiting(waiting.queues) : null;
   const question = waitingQuestion(waiting.queues);
+  const detail = waiting.queues.map((q) => `${q.label} ${q.count}`).join(' · ');
 
   return (
-    <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pt-3">
-      <button
-        type="button"
-        onClick={() => onAsk(question)}
-        title={question}
-        className="group flex w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-card border border-border bg-surface px-3 py-2 text-left text-xs shadow-card transition-colors duration-150 hover:border-border-strong hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
-      >
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber" />
-        <span className="font-semibold text-ink">{waiting.sentence}</span>
-        <span className="tabular min-w-0 truncate text-ink-faint">
-          {waiting.queues.map((q) => `${q.label} ${q.count}`).join(' · ')}
-        </span>
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1 font-semibold text-primary">
-          Preguntárselo
-          <CornerDownLeft className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-        </span>
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={() => (panel ? open(panel) : onAsk(question))}
+      title={`${waiting.sentence} ${detail}`}
+      aria-label={`${waiting.sentence} ${panel ? 'Abrir el panel' : 'Preguntárselo a Cortex'}`}
+      className={clsx(
+        'group flex min-w-0 shrink items-center gap-2 rounded-pill px-2.5 py-1.5',
+        'text-xs text-ink-muted transition-colors duration-150',
+        'hover:bg-amber-soft hover:text-ink focus-visible:outline-none focus-visible:ring-2',
+        'focus-visible:ring-primary/40 motion-reduce:transition-none',
+      )}
+    >
+      {/* El punto es todo el énfasis que se permite una línea permanente. */}
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber" aria-hidden />
+      {/* Estrecho, la cabecera ya lleva el agente, los hilos y dos botones: se
+          queda el número, que es la mitad que hace levantar la vista. */}
+      <span className="tabular font-semibold text-ink sm:hidden">{waiting.total}</span>
+      <span className="hidden min-w-0 truncate font-medium sm:inline">{waiting.sentence}</span>
+    </button>
   );
 }

@@ -9,24 +9,49 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
 /**
- * RECENT THREADS, IN THE CHAT'S OWN HEADER.
+ * CAMBIAR DE TEMA SIN PERDER EL HILO.
  *
- * These used to live in the sidebar, injected between Chat and Aprobaciones,
- * where they split the navigation into two halves that had to be scanned
- * separately — the rail asked you to read past four conversation titles to get
- * from "Chat" to "Aprobaciones". Threads are not destinations; they are the
- * contents of one destination, and they belong where that destination is.
+ * Estos hilos vivían en la barra lateral, inyectados entre Chat y Aprobaciones,
+ * donde partían la navegación en dos mitades que había que leer por separado.
+ * Un hilo no es un destino: es el contenido de un destino, y pertenece a la
+ * cabecera de ese destino. Eso ya estaba resuelto.
  *
- * DELETING IS NOT HERE, ON PURPOSE. The sidebar list carried a hover-revealed
- * bin because it was the only list of conversations anybody ever saw. It is not
- * any more: /conversations is the archive, it already has
- * DeleteConversationButton, and it shows the threads this list cannot — the ones
- * that arrived from Google Chat, from Claude and from routines. So this menu
- * does one thing, which is jump between recent threads, and points at the
- * archive for everything else.
+ * ===========================================================================
+ * LO QUE CAMBIA: TRES HILOS A LA VISTA, SIN ABRIR NADA
+ * ===========================================================================
+ * Estaban todos detrás del icono de historial, o sea a un clic y a una lectura
+ * de ocho títulos. Ahora los tres últimos se dibujan en la cabecera y el resto
+ * sigue en el menú. Las otras dos formas se descartaron, y no por gusto:
  *
- * The query only runs once the menu is opened. A chat page should not pay for a
- * list nobody asked to see.
+ *   PESTAÑAS. Una pestaña promete que la cosa está ABIERTA y que se puede
+ *     cerrar, y que el juego es acotado. Aquí ninguna de las tres es verdad:
+ *     una conversación no se abre ni se cierra, hay decenas y crecen solas —
+ *     cada mensaje de una rutina o de Google Chat crea una—, y borrar tiene su
+ *     sitio, que es el archivo. Una tira de pestañas de treinta elementos es
+ *     una barra de desplazamiento disfrazada.
+ *
+ *   UNA FILA CON TODOS, DESPLAZABLE. Es un menú que además hay que arrastrar:
+ *     lo que no cabe está igual de escondido que en el desplegable, pero encima
+ *     ocupa la cabecera entera y compite con el aviso de lo que te espera.
+ *
+ * TRES, PORQUE ES LO QUE CABE SIN QUE EL TÍTULO DEJE DE LEERSE. Un título de
+ * conversación mide sesenta caracteres; recortado a diez es un jeroglífico, y
+ * cuatro chips de diez caracteres son peor que ninguno. Tres a `10rem` se leen,
+ * y cubren el comportamiento real: la gente rebota entre el hilo de ahora y el
+ * de hace un rato, no entre treinta. Para los demás está el menú, que sigue
+ * ahí entero y con la puerta al archivo.
+ *
+ * Y SE ESCONDEN EN PANTALLA ESTRECHA (`lg`), donde la cabecera ya lleva el
+ * agente y el aviso. Nada se vuelve inalcanzable: el desplegable se dibuja en
+ * todos los anchos y contiene exactamente lo mismo.
+ *
+ * BORRAR NO ESTÁ AQUÍ, a propósito. /conversations es el archivo, ya tiene su
+ * botón, y enseña los hilos que esta lista no puede — los que llegaron de
+ * Google Chat, de Claude y de las rutinas.
+ *
+ * LA CONSULTA. Ahora corre al montar, porque los chips existen sin que nadie
+ * abra nada; es una lista de ocho títulos con `staleTime` de un minuto,
+ * compartida con el desplegable, así que abrirlo no vuelve a pedir nada.
  */
 
 interface Conversation {
@@ -44,6 +69,9 @@ async function fetchConversations(): Promise<Conversation[]> {
 const itemClass =
   'flex cursor-pointer items-center rounded-sm px-2.5 py-[7px] text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-surface-2 motion-reduce:transition-none';
 
+/** Cuántos se dibujan sin abrir el menú. Ver la cabecera: tres, y por qué. */
+const PINNED = 3;
+
 export function ThreadHistory() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -51,18 +79,42 @@ export function ThreadHistory() {
     queryKey: ['conversations'],
     queryFn: fetchConversations,
     staleTime: 60_000,
-    enabled: open,
   });
 
   const recent = conversations.slice(0, 8);
+  const pinned = conversations.slice(0, PINNED);
 
   return (
-    <div className="ml-auto flex shrink-0 items-center gap-1">
+    <div className="flex min-w-0 shrink items-center gap-1">
+      <div className="hidden min-w-0 items-center gap-1 lg:flex">
+        {pinned.map((c) => {
+          const href = `/chat/${c.id}`;
+          const active = pathname === href;
+          const title = c.title?.trim() || 'Sin título';
+          return (
+            <Link
+              key={c.id}
+              href={href}
+              title={title}
+              aria-current={active ? 'page' : undefined}
+              className={clsx(
+                'max-w-[10rem] truncate rounded-pill px-2.5 py-1 text-xs transition-colors duration-150 motion-reduce:transition-none',
+                active
+                  ? 'bg-primary-soft font-semibold text-primary-ink'
+                  : 'text-ink-faint hover:bg-surface-2 hover:text-ink',
+              )}
+            >
+              {title}
+            </Link>
+          );
+        })}
+      </div>
+
       <Link
         href="/chat"
         title="Nuevo chat"
         aria-label="Nuevo chat"
-        className="rounded-full p-2 text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="shrink-0 rounded-full p-2 text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         <SquarePen strokeWidth={1.75} className="h-[18px] w-[18px]" />
       </Link>
@@ -71,7 +123,7 @@ export function ThreadHistory() {
         <DropdownMenu.Trigger
           title="Historial"
           aria-label="Ver conversaciones recientes"
-          className="rounded-full p-2 text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 data-[state=open]:bg-surface-2 data-[state=open]:text-ink motion-reduce:transition-none"
+          className="shrink-0 rounded-full p-2 text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 data-[state=open]:bg-surface-2 data-[state=open]:text-ink motion-reduce:transition-none"
         >
           <History strokeWidth={1.75} className="h-[18px] w-[18px]" />
         </DropdownMenu.Trigger>

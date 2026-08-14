@@ -53,6 +53,22 @@ function nearestQuestionFrame(
   return undefined;
 }
 
+/**
+ * La pregunta que provocó la respuesta de `index`, si la hay.
+ *
+ * El mismo paseo hacia atrás que `nearestQuestionFrame`, y por la misma razón:
+ * una respuesta no sabe de qué era respuesta. Sirve para titular el informe
+ * cuando alguien conserva la respuesta — ver `MessageActions`.
+ */
+function nearestQuestion(messages: Message[], index: number): string | undefined {
+  if (messages[index]?.role !== 'assistant') return undefined;
+  for (let i = index - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m?.role === 'user') return typeof m.content === 'string' ? m.content : undefined;
+  }
+  return undefined;
+}
+
 interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
@@ -238,6 +254,7 @@ export function MessageList({
                 isStreaming={isLast && isLoading && m.role === 'assistant'}
                 metrics={isLast ? metrics : null}
                 onCompose={onSuggestion}
+                question={nearestQuestion(messages, i)}
                 storedFollowups={storedFollowups?.[m.id]}
                 glanceAt={glances?.[m.id]}
                 screenFrame={askedWith}

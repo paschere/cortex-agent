@@ -14,6 +14,13 @@ import {
   paletteSize,
   slashQuery,
 } from '@/lib/chat-palette-shape';
+import {
+  matchShortcut,
+  pickShortcuts,
+  readUses,
+  recordUse,
+  shortcutCandidates,
+} from '@/lib/chat-shortcuts';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
@@ -48,6 +55,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachmentTray } from './AttachmentTray';
 import { ScopePicker, ScopeStrip } from './MemoryScope';
+import { QuickChips } from './QuickChips';
 import { ScreenViewButton, type ScreenViewSession, ScreenViewStrip } from './ScreenView';
 import { VoiceDictation } from './VoiceDictation';
 
@@ -125,6 +133,17 @@ const CHAR_COUNT_THRESHOLD = 3500;
  *                    offers them in full sentences. A row of shortcut buttons
  *                    would be a third copy of the same six commands, competing
  *                    with the four controls above for the glance.
+ *
+ *                    SIGUE RECHAZADO, y la fila que hay ahora ENCIMA de la caja
+ *                    no lo contradice: no es una lista escrita a mano. La
+ *                    escribe el uso de quien la está mirando (ver
+ *                    `lib/chat-shortcuts.ts`), sólo admite frases que se pueden
+ *                    mandar enteras, y sale del mismo catálogo ya filtrado por
+ *                    lo que este espacio puede ejecutar. Al mes son las cinco
+ *                    preguntas de esa persona, que es justo lo que ninguna de
+ *                    las otras dos copias sabe. Y se esconde en cuanto alguien
+ *                    escribe, así que nunca compite con los controles de abajo
+ *                    por la mirada de quien ya está redactando.
  *   TONE / LENGTH    A knob whose effect nobody can evaluate on their own
  *                    answer, on a product whose whole claim is that it shows
  *                    you where the answer came from.
@@ -273,9 +292,14 @@ export function InputBar({
   }, [trigger]);
 
   /**
-   * El catálogo del `/`, UNA vez por conversación. `enabled` lo ata a que el
-   * menú esté abierto, así que un chat en el que nadie teclea una barra no
-   * cuesta ni una consulta.
+   * El catálogo del `/`, UNA vez por conversación.
+   *
+   * Antes esperaba a que alguien tecleara una barra. Ahora se pide al montar,
+   * porque los chips de arriba salen de esta misma respuesta y no de una
+   * segunda: es la petición que el `/` iba a hacer de todos modos, adelantada un
+   * turno, con la misma clave de caché y los mismos cinco minutos — así que
+   * abrir el menú después sigue sin costar nada. Un chat en el que nadie teclea
+   * una barra pasa a costar una consulta, y a cambio la fila de accesos existe.
    */
   const commands = useQuery<PaletteResponse>({
     queryKey: ['chat-palette', agentSlug],
@@ -284,7 +308,6 @@ export function InputBar({
       if (!res.ok) throw new Error('commands');
       return (await res.json()) as PaletteResponse;
     },
-    enabled: slash !== null,
     staleTime: PALETTE_STALE_MS,
   });
 
@@ -362,6 +385,31 @@ export function InputBar({
   // apuntando al vacío, y Enter sobre el vacío no hace nada visible.
   const activeRow = rows.length === 0 ? 0 : Math.min(active, rows.length - 1);
 
+  /**
+   * LOS ACCESOS RÁPIDOS, de la misma respuesta que alimenta el menú del `/`.
+   *
+   * Los candidatos se derivan de los grupos tal cual llegan —ya filtrados por
+   * `usableToolIds` en el servidor—, así que aquí no hay ninguna decisión sobre
+   * qué puede o no puede ejecutar este espacio de trabajo. Ver
+   * `lib/chat-shortcuts.ts` para el ranking y para por qué no comparte almacén
+   * con el del rail.
+   */
+  const candidates = useMemo(
+    () => shortcutCandidates([STATIC_COMMAND_GROUP, ...(commands.data?.groups ?? [])]),
+    [commands.data],
+  );
+
+  /**
+   * El uso se lee DESPUÉS de montar, nunca durante el render: `localStorage` no
+   * existe en el servidor, y leerlo mientras se renderiza haría que el HTML que
+   * baja y la primera pintura no coincidieran. El coste es que la fila aparece
+   * con los por defecto un tick antes de ordenarse, y sólo la primera vez.
+   */
+  const [uses, setUses] = useState<Record<string, number>>({});
+  useEffect(() => setUses(readUses()), []);
+
+  const shortcuts = useMemo(() => pickShortcuts(candidates, uses), [candidates, uses]);
+
   const resize = useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -428,12 +476,30 @@ export function InputBar({
     put(item.expands);
   }
 
+  /**
+   * EL ÚNICO SITIO POR EL QUE SALE UN TURNO DESDE AQUÍ, y por eso es donde se
+   * aprende. Cuenta la frase mandada venga de donde venga —un chip, el menú del
+   * `/`, una tarjeta de la pantalla vacía, un seguimiento o el teclado—, que es
+   * lo que impide que la fila se refuerce sólo a sí misma. Ver `matchShortcut`.
+   */
+  const send = useCallback(
+    (trimmed: string) => {
+      const learned = matchShortcut(trimmed, candidates);
+      if (learned) {
+        recordUse(learned);
+        setUses(readUses());
+      }
+      onSend(trimmed);
+    },
+    [candidates, onSend],
+  );
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const expanded = expandBriefingCommand(text);
     const trimmed = (expanded ?? text).trim();
     if (!trimmed || disabled) return;
-    onSend(trimmed);
+    send(trimmed);
     setText('');
     setDismissed(null);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
@@ -602,6 +668,15 @@ export function InputBar({
               })}
             </ul>
           )}
+
+          {/*
+            La fila de accesos, y las dos condiciones para que se vea. Vacío el
+            compositor: es la fila para EMPEZAR, y sobre un borrador a medias
+            sería una distracción justo encima de donde se está mirando. Y con
+            el menú cerrado por consecuencia — el menú del `/` se abre en este
+            mismo hueco, y sólo se abre cuando hay texto.
+          */}
+          {!text.trim() && <QuickChips shortcuts={shortcuts} onPick={send} disabled={disabled} />}
 
           <form
             onSubmit={handleSubmit}

@@ -2,12 +2,17 @@
 
 import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
+import { mustRead } from '@/lib/supabase/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
+  REPORTS_TABLE,
+  REPORT_DOCUMENT_VERSION,
+  type ReportDocument,
   listVisibleSpaces,
   loadOverrides,
   saveChartAsReport,
   saveOverrides,
+  saveReport,
 } from '@cortex/agent-tools';
 import { revalidatePath } from 'next/cache';
 
@@ -60,6 +65,179 @@ export async function saveChartAsReportAction(chartId: string): Promise<ChartSav
       url: `/reports/${result.reportId}`,
       alreadySaved: result.alreadySaved,
     };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '';
+    return {
+      ok: false,
+      error: message && message.length < 240 ? message : 'No se pudo guardar el informe.',
+    };
+  }
+}
+
+// ===========================================================================
+// CONSERVAR UNA RESPUESTA
+// ===========================================================================
+//
+// La tercera acción de la fila que hay bajo cada respuesta, y la única que deja
+// algo detrás. Copiar es del portapapeles y rehacer es del turno; ésta escribe
+// una fila que se puede abrir, citar y compartir en noviembre.
+//
+// FOTOGRAFÍA, NO MARCADOR. Es la misma regla que `saveChartAsReportAction`
+// defiende para los gráficos y que `store.ts` argumenta entero: lo que se
+// guarda es lo que Cortex DIJO en ese momento, con la pregunta que lo provocó y
+// la conversación como dirección. No hay consulta que repetir, y por eso no
+// puede haber un botón «generar» para esto (ver la migración 0103). Un informe
+// que se recalcula al abrirlo es un informe sobre hoy con el título de ayer, y
+// nadie puede notarlo porque los dos se ven correctos.
+//
+// SIN CIFRAS SUELTAS. El documento es prosa: la respuesta va tal cual, en
+// párrafos, y la única fuente es la conversación. Nada aquí inventa un `Figure`
+// a partir del texto — un número marcado como figura promete un método y un
+// origen comprobables, y lo que hay es una frase que los tiene arriba, en las
+// llamadas a herramientas de ese turno. Por eso la fuente apunta a la
+// conversación: ahí están.
+
+export interface AnswerSaveResult {
+  ok: boolean;
+  error?: string;
+  url?: string;
+  /** Ya estaba guardada: se devuelve la misma, no una copia. */
+  alreadySaved?: boolean;
+}
+
+/** Cuántos renglones de la respuesta caben en un informe. */
+const MAX_LINES = 120;
+const MAX_LINE = 1200;
+
+/**
+ * La respuesta partida en párrafos.
+ *
+ * Renglón a renglón y no por líneas en blanco, porque media respuesta de este
+ * producto son listas: unir «- SOAT vence el 14» con «- Tecnomecánica vence el
+ * 2» en un solo párrafo las pega en una línea ilegible al renderizar. Los `#`
+ * de un encabezado se caen porque el informe tiene su propia tipografía y un
+ * almohadilla suelta en medio del texto sólo se lee como basura.
+ *
+ * Lo que se pierde y hay que decir en voz alta: una tabla de markdown se guarda
+ * como los renglones que la escriben, no como una tabla del informe. Es texto
+ * fiel y formato pobre, que es el lado correcto en el que fallar cuando lo que
+ * se promete es «lo que se dijo, tal cual».
+ */
+function answerParagraphs(answer: string): string[] {
+  return answer
+    .split('\n')
+    .map((line) => line.replace(/^#{1,6}\s+/, '').trim())
+    .filter((line) => line.length > 0)
+    .slice(0, MAX_LINES)
+    .map((line) => (line.length > MAX_LINE ? `${line.slice(0, MAX_LINE - 1)}…` : line));
+}
+
+function clip(value: string, max: number): string {
+  const clean = value.replace(/\s+/g, ' ').trim();
+  return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
+}
+
+export async function saveAnswerAsReportAction(input: {
+  conversationId?: string;
+  /** El id del mensaje, que es lo que impide guardar dos veces lo mismo. */
+  messageId: string;
+  /** La pregunta que la provocó, si el hilo la tenía delante. */
+  question?: string;
+  answer: string;
+}): Promise<AnswerSaveResult> {
+  try {
+    const user = await requireSession();
+    const paragraphs = answerParagraphs(input.answer);
+    if (paragraphs.length === 0) {
+      return { ok: false, error: 'Esta respuesta no tiene texto que guardar.' };
+    }
+
+    const db = getOrgScopedClient(user.organization.id);
+
+    // Pulsar dos veces no puede crear dos informes idénticos. Se busca por el
+    // id del mensaje y no por el hash del documento: la fecha de guardado entra
+    // en el documento, así que dos guardados del mismo texto tienen hashes
+    // distintos y el trinquete no mordería nunca.
+    //
+    // Cubre el caso real —el doble clic y el «¿lo guardé o no?» de un minuto
+    // después— y no cubre uno: la respuesta que se está escribiendo trae el id
+    // que le puso el SDK, y al recargar la conversación pasa a tener el de su
+    // fila. Guardarla antes y después de recargar deja dos informes. Se puede
+    // vivir con eso; lo que no se puede es guardar dos veces con un clic.
+    if (input.conversationId) {
+      const rows = mustRead(
+        await db
+          .from(REPORTS_TABLE)
+          .select('id')
+          .eq('kind', 'answer')
+          .eq('conversation_id', input.conversationId)
+          .contains('params', { messageId: input.messageId })
+          .limit(1),
+        'los informes de esta conversación',
+      ) as Array<{ id: string }>;
+      const already = rows[0];
+      if (already) return { ok: true, url: `/reports/${already.id}`, alreadySaved: true };
+    }
+
+    const now = new Date();
+    const said = now.toLocaleDateString('es-CO', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'America/Bogota',
+    });
+    const question = input.question ? clip(input.question, 200) : null;
+    const title = question ?? clip(paragraphs[0] ?? 'Respuesta de Cortex', 120);
+
+    const document: ReportDocument = {
+      version: REPORT_DOCUMENT_VERSION,
+      kind: 'answer',
+      title,
+      subtitle: question ? 'Respuesta de Cortex, tal como se dijo' : null,
+      periodLabel: `Conversación del ${said}`,
+      generatedAt: now.toISOString(),
+      timezone: 'America/Bogota',
+      sources: [
+        {
+          id: 'conversacion',
+          system: 'Cortex · conversación',
+          detail: input.conversationId
+            ? `La respuesta guardada de la conversación #${input.conversationId.slice(0, 8)}, con las llamadas a herramientas de ese turno todavía adjuntas.`
+            : 'Una respuesta del chat, guardada antes de que la conversación tuviera dirección.',
+          readAt: now.toISOString(),
+          rowCount: 1,
+          caveat:
+            'Es lo que Cortex contestó en ese momento. No se vuelve a calcular, así que las cifras son las de ese día y no las de hoy.',
+        },
+      ],
+      sections: [
+        ...(question
+          ? [{ type: 'prose' as const, heading: 'La pregunta', paragraphs: [question] }]
+          : []),
+        { type: 'prose' as const, heading: 'La respuesta', paragraphs },
+      ],
+      notes:
+        paragraphs.length >= MAX_LINES
+          ? ['La respuesta era más larga y se guardaron los primeros renglones.']
+          : [],
+    };
+
+    const ctx = buildToolContext({
+      organizationId: user.organization.id,
+      userId: user.id,
+      agentId: user.id,
+      surface: 'web',
+      ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    });
+
+    const row = await saveReport(ctx, {
+      kind: 'answer',
+      document,
+      params: { messageId: input.messageId },
+      conversationId: input.conversationId ?? null,
+    });
+    revalidatePath('/reports');
+    return { ok: true, url: `/reports/${row.id}` };
   } catch (err) {
     const message = err instanceof Error ? err.message : '';
     return {

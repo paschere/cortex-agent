@@ -42,6 +42,10 @@ const KIND_TONE: Record<ReportKind, string> = {
   // llega solo, no porque hable de otra cosa. Sky, que en el sistema de diseño
   // es «informativo», y no uno de los tres colores de estado.
   weekly: 'bg-sky-soft text-sky',
+  // Una respuesta conservada tampoco es un tema — puede ser sobre cualquier
+  // cosa —, así que comparte el neutro del gráfico: las dos son procedencias,
+  // no asuntos.
+  answer: 'bg-surface-2 text-ink-muted',
 };
 
 export default async function ReportsPage() {
