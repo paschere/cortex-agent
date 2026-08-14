@@ -207,13 +207,13 @@ export function GuidedSetup(props: Props) {
       {opening ? (
         <Panel className="overflow-hidden">
           <div className="hero-mesh px-6 py-8 sm:px-8 sm:py-10">
-            <p className="text-[11px] font-semibold uppercase tracking-field text-white/60">
+            <p className="text-micro font-semibold uppercase tracking-field text-white/60">
               Puesta en marcha
             </p>
-            <h2 className="mt-2 max-w-2xl text-[26px] font-semibold leading-tight text-white sm:text-[30px]">
+            <h2 className="mt-2 max-w-2xl text-xl font-semibold leading-tight text-white sm:text-display">
               {props.firstName}, cuéntame cómo trabajan.
             </h2>
-            <p className="mt-3 max-w-xl text-[13.5px] leading-relaxed text-white/80">
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/80">
               Qué hace la empresa, qué se les vence, qué revisan cada semana, qué se les enreda.
               Como se lo contarías a alguien que entra mañana. Con eso te propongo qué dejar
               configurado, y tú decides qué se crea.
@@ -250,7 +250,7 @@ export function GuidedSetup(props: Props) {
                 ? 'Somos una empresa de… y lo que más nos cuesta es…'
                 : 'Responde con lo que sepas. Si no sabes, dilo y seguimos.'
             }
-            className="w-full resize-none bg-transparent px-4 pt-4 text-[14px] leading-relaxed text-ink outline-none placeholder:text-ink-faint disabled:opacity-60"
+            className="w-full resize-none bg-transparent px-4 pt-4 text-base leading-relaxed text-ink outline-none placeholder:text-ink-faint disabled:opacity-60"
           />
           <div className="flex flex-wrap items-center justify-between gap-3 px-3 pb-3 pt-1">
             <div className="flex items-center gap-2">
@@ -259,12 +259,12 @@ export function GuidedSetup(props: Props) {
                 getBaseText={() => textRef.current}
                 onText={setText}
               />
-              <span className="text-[11.5px] text-ink-faint">o dicta, si es más fácil</span>
+              <span className="text-micro text-ink-faint">o dicta, si es más fácil</span>
             </div>
             <button
               type="submit"
               disabled={busy || text.trim().length === 0}
-              className="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
+              className="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
             >
               {busy ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -277,7 +277,7 @@ export function GuidedSetup(props: Props) {
         </div>
       </form>
 
-      {error && <p className="text-[12.5px] text-rose">{error}</p>}
+      {error && <p className="text-xs text-rose">{error}</p>}
 
       {/*
         El contador está a la vista a propósito. Lo que mata estas herramientas
@@ -287,7 +287,7 @@ export function GuidedSetup(props: Props) {
       */}
       {asked > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-[12px] text-ink-faint">
+          <span className="text-xs text-ink-faint">
             <span className="tabular">
               {asked} de máximo {MAX_QUESTIONS}
             </span>{' '}
@@ -297,7 +297,7 @@ export function GuidedSetup(props: Props) {
             type="button"
             onClick={() => void send('Ya con esto, muéstrame lo que tienes.', true)}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-primary hover:underline disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline disabled:opacity-40"
           >
             Ya, muéstrame lo que tienes
             <ArrowRight className="h-3.5 w-3.5" />
@@ -327,7 +327,7 @@ function Transcript({ turns }: { turns: Turn[] }) {
             </div>
             <p
               className={clsx(
-                'text-[13.5px] leading-relaxed',
+                'text-sm leading-relaxed',
                 turn.role === 'person'
                   ? 'text-ink'
                   : 'border-l-2 border-primary/25 pl-3.5 font-medium text-ink sm:border-l-0 sm:pl-0',
@@ -403,23 +403,23 @@ function Plan({
       {summary && (
         <Panel className="border-primary/20 bg-primary-soft/40 p-5">
           <p className="field-label">Lo que entendí</p>
-          <p className="mt-2 text-[14px] leading-relaxed text-primary-ink">{summary}</p>
+          <p className="mt-2 text-base leading-relaxed text-primary-ink">{summary}</p>
         </Panel>
       )}
 
       {nothing ? (
         <Panel className="p-6">
-          <h2 className="text-[15px] font-semibold text-ink">
+          <h2 className="text-base font-semibold text-ink">
             No tengo nada que proponerte todavía.
           </h2>
-          <p className="mt-2 max-w-xl text-[13px] leading-relaxed text-ink-muted">
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-muted">
             Prefiero decirte esto a inventarme tres configuraciones para que la pantalla no se
             vea vacía. Cuéntame algo más concreto — una fecha que se les vence, algo que revisan
             cada semana, un procedimiento que siguen — y vuelvo a intentarlo.
           </p>
           <Link
             href="/onboarding/entrevista?nueva=1"
-            className="mt-4 inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop"
+            className="mt-4 inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop"
           >
             Seguir contándole
           </Link>
@@ -427,10 +427,10 @@ function Plan({
       ) : (
         <section>
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-[15px] font-semibold text-ink">
+            <h2 className="text-base font-semibold text-ink">
               Esto es lo que dejaría configurado
             </h2>
-            <p className="text-[12px] text-ink-faint">
+            <p className="text-xs text-ink-faint">
               Nada de esto existe todavía. Desmarca lo que no quieras.
             </p>
           </div>
@@ -453,12 +453,12 @@ function Plan({
       {!nothing && (
         <Panel className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-ink">
+            <p className="text-sm font-semibold text-ink">
               {chosen.size === 0
                 ? 'No hay nada marcado.'
                 : `Se van a crear ${chosen.size} ${chosen.size === 1 ? 'cosa' : 'cosas'}.`}
             </p>
-            <p className="mt-0.5 text-[11.5px] text-ink-faint">
+            <p className="mt-0.5 text-micro text-ink-faint">
               Todo lo que se cree se puede deshacer enseguida.
             </p>
           </div>
@@ -467,7 +467,7 @@ function Plan({
               type="button"
               onClick={() => void discard()}
               disabled={busy}
-              className="text-[12.5px] font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
+              className="text-xs font-semibold text-ink-muted hover:text-ink disabled:opacity-40"
             >
               Descartar todo
             </button>
@@ -475,7 +475,7 @@ function Plan({
               type="button"
               onClick={() => void create()}
               disabled={busy || chosen.size === 0}
-              className="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
+              className="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
             >
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               Crear {chosen.size > 0 ? chosen.size : ''}
@@ -484,7 +484,7 @@ function Plan({
         </Panel>
       )}
 
-      {error && <p className="text-[12.5px] text-rose">{error}</p>}
+      {error && <p className="text-xs text-rose">{error}</p>}
     </div>
   );
 }
@@ -524,12 +524,12 @@ function ProposedRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <span className="text-ink-muted">{ICON[item.kind]}</span>
-            <span className="text-[13.5px] font-semibold text-ink">{item.title}</span>
+            <span className="text-sm font-semibold text-ink">{item.title}</span>
             <span className={chipClass('primary')}>{copy.where}</span>
           </div>
 
           {item.rationale && (
-            <p className="mt-2 border-l-2 border-border-strong pl-3 text-[12.5px] italic leading-relaxed text-ink-muted">
+            <p className="mt-2 border-l-2 border-border-strong pl-3 text-xs italic leading-relaxed text-ink-muted">
               {item.rationale}
             </p>
           )}
@@ -539,13 +539,13 @@ function ProposedRow({
               {fields.map((f) => (
                 <div key={f.label} className="grid gap-0.5 sm:grid-cols-[120px_1fr] sm:gap-3">
                   <dt className="field-label sm:pt-px">{f.label}</dt>
-                  <dd className="tabular text-[12.5px] leading-relaxed text-ink">{f.value}</dd>
+                  <dd className="tabular text-xs leading-relaxed text-ink">{f.value}</dd>
                 </div>
               ))}
             </dl>
           )}
 
-          <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink-faint">{copy.blurb}</p>
+          <p className="mt-2.5 text-micro leading-relaxed text-ink-faint">{copy.blurb}</p>
         </div>
       </label>
     </li>
@@ -563,7 +563,7 @@ function Limits({ handoffs, outOfScope }: { handoffs: Handoff[]; outOfScope: Out
     <div className="space-y-5">
       {handoffs.length > 0 && (
         <section>
-          <h2 className="mb-2.5 text-[15px] font-semibold text-ink">
+          <h2 className="mb-2.5 text-base font-semibold text-ink">
             Esto sí lo hace, pero no se configura hablando
           </h2>
           <ul className="space-y-2.5">
@@ -573,17 +573,17 @@ function Limits({ handoffs, outOfScope }: { handoffs: Handoff[]; outOfScope: Out
                 <li key={`${h.kind}-${i}`}>
                   <Panel className="flex flex-wrap items-start justify-between gap-3 p-4">
                     <div className="min-w-0 max-w-xl">
-                      <p className="text-[13.5px] font-semibold text-ink">{copy.title}</p>
+                      <p className="text-sm font-semibold text-ink">{copy.title}</p>
                       {h.want && (
-                        <p className="mt-1 text-[12.5px] italic text-ink-muted">«{h.want}»</p>
+                        <p className="mt-1 text-xs italic text-ink-muted">«{h.want}»</p>
                       )}
-                      <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+                      <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
                         {copy.why}
                       </p>
                     </div>
                     <Link
                       href={copy.href}
-                      className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border-strong px-3.5 py-2 text-[12.5px] font-semibold text-ink transition-colors hover:bg-surface-2"
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border-strong px-3.5 py-2 text-xs font-semibold text-ink transition-colors hover:bg-surface-2"
                     >
                       {copy.cta}
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -598,19 +598,19 @@ function Limits({ handoffs, outOfScope }: { handoffs: Handoff[]; outOfScope: Out
 
       {outOfScope.length > 0 && (
         <section>
-          <h2 className="mb-2.5 flex items-center gap-2 text-[15px] font-semibold text-ink">
+          <h2 className="mb-2.5 flex items-center gap-2 text-base font-semibold text-ink">
             <Ban className="h-4 w-4 text-ink-faint" />
             Esto todavía no lo puedo hacer solo
           </h2>
           <Panel className="divide-y divide-border">
             {outOfScope.map((o, i) => (
               <div key={`${o.want}-${i}`} className="p-4">
-                <p className="text-[13px] font-medium text-ink">«{o.want}»</p>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">{o.note}</p>
+                <p className="text-sm font-medium text-ink">«{o.want}»</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-muted">{o.note}</p>
               </div>
             ))}
           </Panel>
-          <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">
+          <p className="mt-2 text-micro leading-relaxed text-ink-faint">
             Lo dejo anotado tal como lo dijiste. Prefiero decírtelo hoy a montarte algo que
             parezca que lo resuelve.
           </p>
@@ -665,12 +665,12 @@ function Receipt({
   return (
     <div className="space-y-5">
       <Panel className="border-emerald/25 bg-emerald-soft/40 p-5">
-        <p className="text-[14px] font-semibold text-ink">
+        <p className="text-base font-semibold text-ink">
           {live.length === 0
             ? 'No quedó nada creado.'
             : `Listo. ${live.length} ${live.length === 1 ? 'cosa quedó' : 'cosas quedaron'} en su sitio.`}
         </p>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
           Cada una vive en su módulo de siempre: ábrela, cámbiala o bórrala desde ahí como
           cualquier otra. Si algo no era, deshazlo aquí mismo.
         </p>
@@ -689,11 +689,11 @@ function Receipt({
                       <span className="text-emerald">
                         <Check className="h-4 w-4" />
                       </span>
-                      <span className="text-[13.5px] font-semibold text-ink">{item.title}</span>
+                      <span className="text-sm font-semibold text-ink">{item.title}</span>
                       <Provenance source={copy.where} detail={copy.noun} />
                     </div>
                     {item.status === 'merged' && (
-                      <p className="mt-1.5 text-[12px] leading-relaxed text-ink-muted">
+                      <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
                         {undo.note}
                       </p>
                     )}
@@ -701,7 +701,7 @@ function Receipt({
                   <div className="flex shrink-0 items-center gap-3">
                     <Link
                       href={copy.href}
-                      className="text-[12.5px] font-semibold text-primary hover:underline"
+                      className="text-xs font-semibold text-primary hover:underline"
                     >
                       Abrir {copy.where}
                     </Link>
@@ -710,7 +710,7 @@ function Receipt({
                         type="button"
                         onClick={() => void one(item.id)}
                         disabled={busy !== null}
-                        className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 disabled:opacity-40"
+                        className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 disabled:opacity-40"
                       >
                         {busy === item.id ? (
                           <Loader2 className="h-3 w-3 animate-spin" />
@@ -730,12 +730,12 @@ function Receipt({
 
       {failed.length > 0 && (
         <section>
-          <h2 className="mb-2.5 text-[15px] font-semibold text-ink">Esto no se pudo crear</h2>
+          <h2 className="mb-2.5 text-base font-semibold text-ink">Esto no se pudo crear</h2>
           <Panel className="divide-y divide-border">
             {failed.map((item) => (
               <div key={item.id} className="p-4">
-                <p className="text-[13px] font-medium text-ink">{item.title}</p>
-                <p className="mt-1 text-[12.5px] text-rose">{item.error}</p>
+                <p className="text-sm font-medium text-ink">{item.title}</p>
+                <p className="mt-1 text-xs text-rose">{item.error}</p>
               </div>
             ))}
           </Panel>
@@ -743,7 +743,7 @@ function Receipt({
       )}
 
       {undone.length > 0 && (
-        <p className="text-[12px] text-ink-faint">
+        <p className="text-xs text-ink-faint">
           <span className="tabular">{undone.length}</span>{' '}
           {undone.length === 1 ? 'cosa deshecha' : 'cosas deshechas'}. Ya no están en ningún lado.
         </p>
@@ -751,12 +751,12 @@ function Receipt({
 
       <Limits handoffs={handoffs} outOfScope={outOfScope} />
 
-      {error && <p className="text-[12.5px] text-rose">{error}</p>}
+      {error && <p className="text-xs text-rose">{error}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
         <Link
           href="/onboarding/entrevista?nueva=1"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-primary hover:underline"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
         >
           <RotateCcw className="h-3.5 w-3.5" />
           Contarle otra cosa
@@ -766,7 +766,7 @@ function Receipt({
             type="button"
             onClick={() => void all()}
             disabled={busy !== null}
-            className="text-[12.5px] font-semibold text-ink-muted hover:text-rose disabled:opacity-40"
+            className="text-xs font-semibold text-ink-muted hover:text-rose disabled:opacity-40"
           >
             {busy === 'all' ? 'Deshaciendo…' : 'Deshacer todo lo que se creó'}
           </button>

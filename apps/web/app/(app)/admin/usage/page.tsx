@@ -278,7 +278,7 @@ export default async function UsagePage({
                   <span className="field-label">{s.label}</span>
                 </div>
                 <div
-                  className={`stat-num mt-1.5 truncate text-[24px] leading-none ${s.tone}`}
+                  className={`stat-num mt-1.5 truncate text-xl leading-none ${s.tone}`}
                   title={s.value}
                 >
                   {s.value}
@@ -316,7 +316,7 @@ export default async function UsagePage({
               );
             })}
           </div>
-          <div className="tabular mt-1.5 flex justify-between text-[10px] text-ink-faint">
+          <div className="tabular mt-1.5 flex justify-between text-micro text-ink-faint">
             <span>{daySeries[0]?.day}</span>
             <span>{daySeries[daySeries.length - 1]?.day}</span>
           </div>
@@ -327,7 +327,7 @@ export default async function UsagePage({
           <Panel className="p-4">
             <div className="field-label mb-3">Desde dónde corrió</div>
             <StackedBar segments={surfaceSegments} total={rows.length} />
-            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+            <p className="mt-3 text-micro leading-relaxed text-ink-faint">
               {rows.length === 0
                 ? 'No hay llamadas en esta ventana.'
                 : bySurface.unknown === rows.length
@@ -339,7 +339,7 @@ export default async function UsagePage({
           <Panel className="p-4">
             <div className="field-label mb-3">Reparto de riesgo</div>
             <StackedBar segments={riskSegments} total={riskClassified} />
-            <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+            <p className="mt-3 text-micro leading-relaxed text-ink-faint">
               {riskClassified === 0
                 ? 'Todavía no se ha clasificado el riesgo de nada en esta ventana.'
                 : `${riskClassified.toLocaleString('es-CO')} de ${rows.length.toLocaleString('es-CO')} llamadas traen nivel de riesgo.`}
@@ -365,14 +365,14 @@ export default async function UsagePage({
               { label: 'Promedio por día', value: formatTokens(tokensPerDay) },
             ].map((s) => (
               <div key={s.label} className="rounded-sm border border-border bg-surface-2 p-3">
-                <div className="stat-num text-[20px] leading-tight text-ink">{s.value}</div>
+                <div className="stat-num text-lg leading-tight text-ink">{s.value}</div>
                 <div className="field-label mt-1">{s.label}</div>
               </div>
             ))}
           </div>
 
           {totalTokens === 0 ? (
-            <div className="flex h-20 items-center justify-center rounded-sm border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
+            <div className="flex h-20 items-center justify-center rounded-sm border border-border bg-surface-2 px-4 text-center text-xs text-ink-muted">
               Ningún turno de chat registró consumo de tokens en esta ventana.
             </div>
           ) : (
@@ -402,7 +402,7 @@ export default async function UsagePage({
                   );
                 })}
               </div>
-              <div className="tabular mt-1.5 flex justify-between text-[10px] text-ink-faint">
+              <div className="tabular mt-1.5 flex justify-between text-micro text-ink-faint">
                 <span>{tokenSeries[0]?.day}</span>
                 <span>
                   {turns.toLocaleString('es-CO')} turno{turns === 1 ? '' : 's'}
@@ -418,7 +418,7 @@ export default async function UsagePage({
           <Panel className="p-4">
             <div className="field-label mb-3">Herramientas más usadas</div>
             {toolEntries.length === 0 ? (
-              <p className="text-[12.5px] text-ink-muted">No hay actividad en esta ventana.</p>
+              <p className="text-xs text-ink-muted">No hay actividad en esta ventana.</p>
             ) : (
               <ul className="space-y-2">
                 {toolEntries.map(([tool, t]) => {
@@ -427,7 +427,7 @@ export default async function UsagePage({
                     : 0;
                   return (
                     <li key={tool}>
-                      <div className="mb-0.5 flex items-center justify-between text-[11.5px]">
+                      <div className="mb-0.5 flex items-center justify-between text-micro">
                         <span className="tabular truncate font-semibold text-ink">{tool}</span>
                         <span className="tabular shrink-0 text-ink-faint">
                           {t.count}× · {avg}ms
@@ -453,12 +453,12 @@ export default async function UsagePage({
           <Panel className="p-4">
             <div className="field-label mb-3">Por persona</div>
             {userEntries.length === 0 ? (
-              <p className="text-[12.5px] text-ink-muted">No hay actividad en esta ventana.</p>
+              <p className="text-xs text-ink-muted">No hay actividad en esta ventana.</p>
             ) : (
               <ul className="space-y-2">
                 {userEntries.map(([userId, count]) => (
                   <li key={userId}>
-                    <div className="mb-0.5 flex items-center justify-between text-[11.5px]">
+                    <div className="mb-0.5 flex items-center justify-between text-micro">
                       <span className="truncate font-semibold text-ink">
                         {userMap[userId] ?? userId.slice(0, 8)}
                       </span>
@@ -479,7 +479,7 @@ export default async function UsagePage({
           </Panel>
         </div>
 
-        <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-ink-faint">
+        <p className="flex items-start gap-1.5 text-micro leading-relaxed text-ink-faint">
           <Cpu className="mt-px h-3.5 w-3.5 shrink-0" />
           El conteo de tokens sale de los turnos de chat registrados en la auditoría. Las
           superficies que solo ejecutan herramientas no reportan consumo.

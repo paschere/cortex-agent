@@ -103,7 +103,7 @@ export function IndexList({
             onChange={(e) => setFilter(e.target.value)}
             placeholder={placeholder}
             aria-label={placeholder}
-            className="h-8 w-full rounded-pill border border-border bg-surface-2 pl-8 pr-3 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface"
+            className="h-8 w-full rounded-pill border border-border bg-surface-2 pl-8 pr-3 text-xs text-ink placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface"
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -121,7 +121,7 @@ export function IndexList({
             }}
           />
         </div>
-        <p className="mt-1.5 text-[10.5px] text-ink-faint">
+        <p className="mt-1.5 text-micro text-ink-faint">
           {matched.length === items.length
             ? `${num(items.length)} en total · flechas para moverte, Enter para entrar`
             : `${num(matched.length)} de ${num(items.length)}`}
@@ -129,7 +129,7 @@ export function IndexList({
       </div>
 
       {shown.length === 0 ? (
-        <p className="px-4 py-5 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="px-4 py-5 text-xs leading-relaxed text-ink-muted">
           {filter ? `Nada que se llame «${filter}».` : emptyText}
         </p>
       ) : (
@@ -167,11 +167,11 @@ export function IndexList({
                     />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12.5px] font-semibold text-ink">
+                    <span className="block truncate text-xs font-semibold text-ink">
                       {item.label}
                     </span>
                     {item.sub && (
-                      <span className="block truncate text-[10.5px] text-ink-faint">
+                      <span className="block truncate text-micro text-ink-faint">
                         {item.sub}
                       </span>
                     )}
@@ -179,7 +179,7 @@ export function IndexList({
                   {item.badge && (
                     <span
                       className={clsx(
-                        'shrink-0 rounded-pill px-1.5 py-0.5 text-[10px] font-bold',
+                        'shrink-0 rounded-pill px-1.5 py-0.5 text-micro font-bold',
                         BADGE[item.badge.tone],
                       )}
                     >
@@ -187,17 +187,17 @@ export function IndexList({
                     </span>
                   )}
                   <span className="shrink-0 text-right">
-                    <span className="stat-num block text-[12.5px] text-ink">
+                    <span className="stat-num block text-xs text-ink">
                       {num(item.weight)}
                     </span>
-                    <span className="block text-[9.5px] text-ink-faint">{unit}</span>
+                    <span className="block text-micro text-ink-faint">{unit}</span>
                   </span>
                 </button>
               </li>
             );
           })}
           {hidden > 0 && (
-            <li className="px-4 py-2.5 text-[11px] text-ink-faint">
+            <li className="px-4 py-2.5 text-micro text-ink-faint">
               Y <span className="tabular">{num(hidden)}</span> más. Escribe arriba para encontrar
               uno.
             </li>

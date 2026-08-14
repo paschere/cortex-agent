@@ -51,19 +51,19 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
       <div className="flex items-start gap-3">
         <Radar className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13.5px] font-bold text-ink">{company}</div>
-          <div className="truncate text-[12.5px] text-ink-muted">{roleTitle}</div>
+          <div className="truncate text-sm font-bold text-ink">{company}</div>
+          <div className="truncate text-xs text-ink-muted">{roleTitle}</div>
         </div>
         <span className={chipClass('neutral')}>{source}</span>
       </div>
 
-      {excerpt && <p className="text-[12px] leading-snug text-ink-muted">{excerpt}</p>}
+      {excerpt && <p className="text-xs leading-snug text-ink-muted">{excerpt}</p>}
 
       <a
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary hover:text-primary-strong"
+        className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-strong"
       >
         <ExternalLink className="h-3.5 w-3.5" />
         Ver la vacante
@@ -80,7 +80,7 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
           type="button"
           onClick={() => act('qualified')}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-pill bg-emerald px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+          className="inline-flex items-center gap-1.5 rounded-pill bg-emerald px-3.5 py-1.5 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
         >
           {status === 'qualifying' ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -93,7 +93,7 @@ export function SignalCard({ id, company, roleTitle, url, source, summary }: Sig
           type="button"
           onClick={() => act('rejected')}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-60"
         >
           {status === 'rejecting' ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />

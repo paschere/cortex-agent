@@ -41,9 +41,9 @@ export function TurnContextPanel({ turn }: { turn: TurnView }) {
         className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left"
       >
         <Layers className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
-        <span className="text-[12px] font-semibold text-ink">Lo que recibió</span>
+        <span className="text-xs font-semibold text-ink">Lo que recibió</span>
 
-        <span className="tabular ml-auto flex shrink-0 items-center gap-2.5 text-[10.5px] text-ink-faint">
+        <span className="tabular ml-auto flex shrink-0 items-center gap-2.5 text-micro text-ink-faint">
           {retrieval.ran && (
             <span title="Fragmentos del cerebro que le llegaron, de los que volvieron">
               {retrieval.prependedCount}/{retrieval.fragments.length} fragmentos
@@ -84,7 +84,7 @@ export function TurnContextPanel({ turn }: { turn: TurnView }) {
       {open && (
         <div className="space-y-4 border-t border-border px-3.5 py-3.5">
           {turn.redacted && (
-            <p className="rounded-card border border-border bg-surface px-3 py-2 text-[11.5px] leading-relaxed text-ink-muted">
+            <p className="rounded-card border border-border bg-surface px-3 py-2 text-micro leading-relaxed text-ink-muted">
               <FileClock className="mr-1 inline h-3 w-3 text-ink-faint" />
               Este turno ya pasó de los catorce días, así que se borró el texto citado. Los
               puntajes, los veredictos y el peso siguen aquí — lo que no está es el contenido.
@@ -114,38 +114,38 @@ export function TurnContextPanel({ turn }: { turn: TurnView }) {
 function Standing({ turn }: { turn: TurnView }) {
   return (
     <section>
-      <h4 className="text-[12px] font-bold text-ink">Lo que va siempre</h4>
+      <h4 className="text-xs font-bold text-ink">Lo que va siempre</h4>
 
       <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <Brain className="h-3 w-3 text-ink-faint" />
-        <span className="text-[11.5px] font-semibold text-ink-muted">Sus instrucciones</span>
-        <span className="tabular text-[10.5px] text-ink-faint">
+        <span className="text-micro font-semibold text-ink-muted">Sus instrucciones</span>
+        <span className="tabular text-micro text-ink-faint">
           {turn.instructions.chars.toLocaleString(LOCALE)} caracteres
         </span>
         {turn.instructions.unchanged === true && (
-          <span className="text-[10.5px] text-ink-faint">· siguen siendo las mismas de hoy</span>
+          <span className="text-micro text-ink-faint">· siguen siendo las mismas de hoy</span>
         )}
         {turn.instructions.unchanged === false && (
-          <span className="text-[10.5px] font-semibold text-amber">
+          <span className="text-micro font-semibold text-amber">
             · han cambiado desde este turno
           </span>
         )}
       </div>
 
       {turn.memories.length === 0 ? (
-        <p className="mt-2 text-[11.5px] text-ink-faint">
+        <p className="mt-2 text-micro text-ink-faint">
           No tenía nada tuyo recordado en este turno.
         </p>
       ) : (
         <>
-          <p className="mt-2 text-[11px] font-semibold text-ink-muted">
+          <p className="mt-2 text-micro font-semibold text-ink-muted">
             Lo que recuerda de ti ({turn.memories.length})
           </p>
           <ul className="mt-1 space-y-1">
             {turn.memories.map((memory) => (
               <li
                 key={memory.id}
-                className="border-l-2 border-sky/30 pl-2.5 text-[11.5px] leading-relaxed text-ink-muted"
+                className="border-l-2 border-sky/30 pl-2.5 text-micro leading-relaxed text-ink-muted"
               >
                 {memory.text ?? (
                   <span className="italic text-ink-faint">

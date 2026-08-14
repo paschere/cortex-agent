@@ -99,11 +99,11 @@ export function CommissionForm({ kinds }: { kinds: ErrandKindOption[] }) {
               )}
             >
               <div
-                className={clsx('text-[13px] font-bold', active ? 'text-primary-ink' : 'text-ink')}
+                className={clsx('text-sm font-bold', active ? 'text-primary-ink' : 'text-ink')}
               >
                 {option.label}
               </div>
-              <div className="mt-1 text-[11.5px] leading-snug text-ink-muted">{option.blurb}</div>
+              <div className="mt-1 text-micro leading-snug text-ink-muted">{option.blurb}</div>
             </button>
           );
         })}
@@ -125,7 +125,7 @@ export function CommissionForm({ kinds }: { kinds: ErrandKindOption[] }) {
         maxLength={4000}
         disabled={busy}
         placeholder={spec?.example}
-        className="scroll-slim w-full resize-y rounded-card border border-border bg-canvas px-3.5 py-3 text-[14px] leading-relaxed text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
+        className="scroll-slim w-full resize-y rounded-card border border-border bg-canvas px-3.5 py-3 text-base leading-relaxed text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
       />
 
       {isMonitor && (
@@ -140,7 +140,7 @@ export function CommissionForm({ kinds }: { kinds: ErrandKindOption[] }) {
                 onClick={() => setCadence(option.minutes)}
                 aria-pressed={cadence === option.minutes}
                 className={clsx(
-                  'rounded-pill border px-3 py-1 text-[12px] font-semibold transition-all duration-150',
+                  'rounded-pill border px-3 py-1 text-xs font-semibold transition-all duration-150',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
                   'disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none',
                   cadence === option.minutes
@@ -160,13 +160,13 @@ export function CommissionForm({ kinds }: { kinds: ErrandKindOption[] }) {
           type="button"
           disabled={busy}
           onClick={() => spec && setRequest(spec.example)}
-          className="tabular rounded-pill border border-border bg-surface-2 px-2.5 py-0.5 text-[11px] font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:text-ink disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none"
+          className="tabular rounded-pill border border-border bg-surface-2 px-2.5 py-0.5 text-micro font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:text-ink disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none"
         >
           Usar el ejemplo
         </button>
 
         <div className="flex items-center gap-2.5">
-          <span className="tabular hidden text-[11px] text-ink-faint sm:inline">
+          <span className="tabular hidden text-micro text-ink-faint sm:inline">
             {request.trim().length}/4000
           </span>
           <button
@@ -174,7 +174,7 @@ export function CommissionForm({ kinds }: { kinds: ErrandKindOption[] }) {
             onClick={() => void commission()}
             disabled={busy || tooShort}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-pill px-4 py-2 text-[13px] font-semibold shadow-pop transition-all duration-150',
+              'inline-flex items-center gap-1.5 rounded-pill px-4 py-2 text-sm font-semibold shadow-pop transition-all duration-150',
               'bg-primary text-white hover:-translate-y-px hover:bg-primary-strong',
               'disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
               'motion-reduce:transform-none motion-reduce:transition-none',
@@ -194,13 +194,13 @@ export function CommissionForm({ kinds }: { kinds: ErrandKindOption[] }) {
         </div>
       </div>
 
-      <p className="mt-3 flex items-start gap-2 rounded-card border border-border bg-surface-2 px-3 py-2 text-[12px] leading-relaxed text-ink-muted">
+      <p className="mt-3 flex items-start gap-2 rounded-card border border-border bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-muted">
         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
         <span>{ERRAND_BOUNDARY_NOTICE}</span>
       </p>
 
       {error && (
-        <p className="mt-3 flex items-start gap-2 rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+        <p className="mt-3 flex items-start gap-2 rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-xs text-rose">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{error} No se encargó nada.</span>
         </p>

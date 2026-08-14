@@ -235,7 +235,7 @@ export default async function AgentDetailPage({
     <>
       <Link
         href="/agents"
-        className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-muted hover:text-ink"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink"
       >
         <ArrowLeft className="h-4 w-4" /> Todos los agentes
       </Link>
@@ -247,7 +247,7 @@ export default async function AgentDetailPage({
         actions={
           <Link
             href="/chat"
-            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
           >
             <MessageSquare className="h-4 w-4" /> Abrir el chat
           </Link>
@@ -262,7 +262,7 @@ export default async function AgentDetailPage({
           </span>
           <div className="min-w-0">
             <Eyebrow>Modelo</Eyebrow>
-            <div className="tabular mt-0.5 truncate text-[13px] font-semibold text-ink">
+            <div className="tabular mt-0.5 truncate text-sm font-semibold text-ink">
               {agent.default_model}
             </div>
           </div>
@@ -273,7 +273,7 @@ export default async function AgentDetailPage({
           </span>
           <div className="min-w-0">
             <Eyebrow>Slug</Eyebrow>
-            <div className="tabular mt-0.5 truncate text-[13px] font-semibold text-ink">
+            <div className="tabular mt-0.5 truncate text-sm font-semibold text-ink">
               {agent.slug}
             </div>
           </div>
@@ -284,7 +284,7 @@ export default async function AgentDetailPage({
           </span>
           <div className="min-w-0">
             <Eyebrow>Estado</Eyebrow>
-            <div className="mt-0.5 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+            <div className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold text-ink">
               {/* A status dot keeps its circle — it is a light, not a chip. */}
               <span className="h-1.5 w-1.5 rounded-full bg-emerald" /> En línea
             </div>
@@ -307,7 +307,7 @@ export default async function AgentDetailPage({
                   disabled={!isAdmin}
                   className="peer sr-only"
                 />
-                <span className="inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-4 py-2 font-mono text-[13px] text-ink-muted transition-all duration-150 peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:font-semibold peer-checked:text-primary-ink">
+                <span className="inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-4 py-2 font-mono text-sm text-ink-muted transition-all duration-150 peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:font-semibold peer-checked:text-primary-ink">
                   <Cpu className="h-3.5 w-3.5" />
                   {m}
                 </span>
@@ -320,7 +320,7 @@ export default async function AgentDetailPage({
         <Panel className="p-5">
           <div className="flex items-center justify-between">
             <Eyebrow>Capacidades</Eyebrow>
-            <span className="tabular rounded-pill border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11px] font-semibold text-primary-ink">
+            <span className="tabular rounded-pill border border-primary/30 bg-primary-soft px-2.5 py-1 text-micro font-semibold text-primary-ink">
               {agent.allowed_tool_ids.length} / {TOTAL_TOOLS} habilitadas
             </span>
           </div>
@@ -334,8 +334,8 @@ export default async function AgentDetailPage({
                     <span className="grid h-6 w-6 place-items-center rounded-card bg-surface-2 text-ink-muted">
                       <Icon className="h-3.5 w-3.5" />
                     </span>
-                    <span className="text-[13px] font-semibold text-ink">{group.label}</span>
-                    <span className="tabular text-[11px] text-ink-faint">
+                    <span className="text-sm font-semibold text-ink">{group.label}</span>
+                    <span className="tabular text-micro text-ink-faint">
                       {on}/{group.tools.length}
                     </span>
                   </div>
@@ -354,13 +354,13 @@ export default async function AgentDetailPage({
                           disabled={!isAdmin}
                           className="peer sr-only"
                         />
-                        <span className="flex items-center justify-between gap-2 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink-muted transition-all duration-150 hover:border-border-strong peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:text-ink peer-disabled:opacity-60">
+                        <span className="flex items-center justify-between gap-2 rounded-card border border-border bg-surface px-3 py-2 text-sm text-ink-muted transition-all duration-150 hover:border-border-strong peer-checked:border-primary peer-checked:bg-primary-soft peer-checked:text-ink peer-disabled:opacity-60">
                           <span className="flex items-center gap-2">
                             <span className="h-3.5 w-3.5 shrink-0 rounded-sm border border-border-strong bg-surface peer-checked:border-primary peer-checked:bg-primary" />
                             <span className="font-medium">{shortName(t.id)}</span>
                           </span>
                           {t.write && (
-                            <span className="rounded-pill border border-amber/40 bg-amber-soft px-1.5 py-0.5 text-[9.5px] font-semibold text-amber">
+                            <span className="rounded-pill border border-amber/40 bg-amber-soft px-1.5 py-0.5 text-micro font-semibold text-amber">
                               Escribe
                             </span>
                           )}
@@ -378,7 +378,7 @@ export default async function AgentDetailPage({
         <Panel className="p-5">
           <div className="flex items-center justify-between">
             <Eyebrow>Instrucciones del sistema</Eyebrow>
-            <span className="text-[11px] text-ink-faint">
+            <span className="text-micro text-ink-faint">
               <span className="tabular">{promptWords}</span> palabras
             </span>
           </div>
@@ -388,10 +388,10 @@ export default async function AgentDetailPage({
               defaultValue={agent.system_prompt}
               rows={16}
               spellCheck={false}
-              className="scroll-slim mt-3 w-full resize-y rounded-card border border-border bg-surface-2 p-3.5 font-mono text-[12.5px] leading-relaxed text-ink focus:border-primary focus:bg-surface"
+              className="scroll-slim mt-3 w-full resize-y rounded-card border border-border bg-surface-2 p-3.5 font-mono text-xs leading-relaxed text-ink focus:border-primary focus:bg-surface"
             />
           ) : (
-            <pre className="scroll-slim mt-3 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-card border border-border bg-surface-2 p-3.5 font-mono text-[12.5px] leading-relaxed text-ink-muted">
+            <pre className="scroll-slim mt-3 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-card border border-border bg-surface-2 p-3.5 font-mono text-xs leading-relaxed text-ink-muted">
               {agent.system_prompt}
             </pre>
           )}
@@ -401,7 +401,7 @@ export default async function AgentDetailPage({
         {isAdmin && (
           <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface/90 backdrop-blur-md md:left-64">
             <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 md:px-8">
-              <span className="text-[13px] text-ink-faint">
+              <span className="text-sm text-ink-faint">
                 Los cambios aplican a todas las conversaciones con este agente.
               </span>
               <Button type="submit" className="px-6">

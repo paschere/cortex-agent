@@ -62,11 +62,11 @@ export function ContextTiming({ latency }: { latency: LatencyView }) {
 
   return (
     <section>
-      <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+      <h4 className="mb-2 text-micro font-semibold uppercase tracking-wide text-ink-faint">
         Cuánto tardó
       </h4>
 
-      <dl className="tabular mb-3 grid grid-cols-3 gap-2 text-[11.5px]">
+      <dl className="tabular mb-3 grid grid-cols-3 gap-2 text-micro">
         <div>
           <dt className="text-ink-faint">Primera letra</dt>
           <dd className="font-semibold text-ink">
@@ -90,7 +90,7 @@ export function ContextTiming({ latency }: { latency: LatencyView }) {
       <ul className="space-y-1">
         {stages.map((s, i) => (
           <li key={`${s.stage}-${s.at}-${i}`} className="flex items-center gap-2">
-            <span className="w-[168px] shrink-0 truncate text-[11px] text-ink-muted">
+            <span className="w-[168px] shrink-0 truncate text-micro text-ink-muted">
               {STAGE_NAMES[s.stage] ?? s.stage}
             </span>
             {/* The track is the whole turn; the bar sits where the stage really
@@ -109,14 +109,14 @@ export function ContextTiming({ latency }: { latency: LatencyView }) {
                 }}
               />
             </span>
-            <span className="tabular w-[62px] shrink-0 text-right text-[11px] text-ink-faint">
+            <span className="tabular w-[62px] shrink-0 text-right text-micro text-ink-faint">
               {ms(s.ms)}
             </span>
           </li>
         ))}
       </ul>
 
-      <p className="mt-2.5 text-[11px] leading-relaxed text-ink-muted">
+      <p className="mt-2.5 text-micro leading-relaxed text-ink-muted">
         <span className="tabular font-semibold text-ink">{ms(latency.preludeMs)}</span> de esto es
         trabajo de Cortex antes de mandarle nada al modelo; el resto lo puso el modelo.{' '}
         {latency.steps > 1 ? (

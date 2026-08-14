@@ -73,7 +73,7 @@ function CancelButton({
       type="button"
       onClick={() => void cancel()}
       disabled={busy}
-      className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-rose shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-rose-soft disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+      className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-rose shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-rose-soft disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
     >
       {busy ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -235,7 +235,7 @@ export function Console({
       <div className="mb-4 flex items-center justify-between gap-3">
         <Link
           href="/orchestrator"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint transition-colors hover:text-ink"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Orquestador
         </Link>
@@ -248,7 +248,7 @@ export function Console({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1 basis-[20rem]">
             <div className="field-label">Objetivo</div>
-            <h1 className="mt-1 text-[19px] font-extrabold leading-snug tracking-tight text-ink">
+            <h1 className="mt-1 text-lg font-extrabold leading-snug tracking-tight text-ink">
               {run.objective}
             </h1>
           </div>
@@ -259,7 +259,7 @@ export function Console({
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink motion-reduce:transform-none motion-reduce:transition-none"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink motion-reduce:transform-none motion-reduce:transition-none"
               >
                 <RefreshCw className="h-3.5 w-3.5" /> Actualizar
               </button>
@@ -286,7 +286,7 @@ export function Console({
             <span className="field-label">
               {done} de {tasks.length} listos
             </span>
-            <span className="tabular text-[11px] text-ink-muted">{progress}%</span>
+            <span className="tabular text-micro text-ink-muted">{progress}%</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
             <div
@@ -305,7 +305,7 @@ export function Console({
        */}
       {quiet && (
         <Panel className="mb-5 border-amber/40 bg-amber-soft px-4 py-3">
-          <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-amber">
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-amber">
             <RadioTower className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="min-w-0">
               Esta ejecución lleva {formatDuration(quietMs)} sin dar señales. Puede que un subagente
@@ -324,7 +324,7 @@ export function Console({
        */}
       {settling && (
         <Panel className="mb-5 border-border-strong bg-surface-2 px-4 py-3">
-          <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-ink-muted">
             <CircleStop className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint" />
             <span className="min-w-0">
               Pedimos detenerla. No se lanza ningún subagente nuevo, pero los que estaban a mitad de
@@ -337,7 +337,7 @@ export function Console({
 
       {state.error && (
         <Panel className="mb-5 border-rose/40 bg-rose-soft px-4 py-3">
-          <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-rose">
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-rose">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="min-w-0 break-words">
               {state.error} Los subagentes de abajo muestran hasta dónde alcanzó a llegar.
@@ -349,8 +349,8 @@ export function Console({
       {planning && tasks.length === 0 && (
         <Panel className="mb-5 px-6 py-12 text-center">
           <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-primary motion-reduce:animate-none" />
-          <h2 className="text-[14px] font-bold text-ink">Armando el plan</h2>
-          <p className="mx-auto mt-1 max-w-sm text-[12.5px] leading-relaxed text-ink-muted">
+          <h2 className="text-base font-bold text-ink">Armando el plan</h2>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-ink-muted">
             Cortex está decidiendo qué especialistas necesita y cuáles pueden trabajar al tiempo. El
             manifiesto de abajo se llena apenas lo decida.
           </p>
@@ -359,8 +359,8 @@ export function Console({
 
       {!planning && tasks.length === 0 && (
         <Panel className="mb-5 px-6 py-12 text-center">
-          <h2 className="text-[14px] font-bold text-ink">No corrió ningún subagente</h2>
-          <p className="mx-auto mt-1 max-w-sm text-[12.5px] leading-relaxed text-ink-muted">
+          <h2 className="text-base font-bold text-ink">No corrió ningún subagente</h2>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-ink-muted">
             Esta ejecución terminó antes de arrancar la primera tarea, así que no hay nada que
             revisar. Vuelve a ejecutar el objetivo, o reescríbelo si quedó ambiguo.
           </p>
@@ -379,11 +379,11 @@ export function Console({
           <section key={wave} className="mb-5">
             <div className="mb-2 flex items-center gap-2">
               <div className="field-label text-ink-muted">Ola {wave}</div>
-              <div className="tabular text-[11px] text-ink-faint">
+              <div className="tabular text-micro text-ink-faint">
                 {parallel ? `${waveTasks.length} en paralelo` : 'un solo agente'}
               </div>
               {runningHere > 0 && (
-                <span className="tabular ml-auto inline-flex items-center gap-1 text-[11px] font-semibold text-primary">
+                <span className="tabular ml-auto inline-flex items-center gap-1 text-micro font-semibold text-primary">
                   <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
                   {runningHere} trabajando
                 </span>
@@ -418,12 +418,12 @@ export function Console({
           {run.summary ? (
             <RunMarkdown>{run.summary}</RunMarkdown>
           ) : active ? (
-            <p className="flex items-center gap-2 text-[12.5px] text-ink-faint">
+            <p className="flex items-center gap-2 text-xs text-ink-faint">
               <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
               Cortex lo escribe cuando todos los subagentes terminen.
             </p>
           ) : (
-            <p className="text-[12.5px] text-ink-muted">
+            <p className="text-xs text-ink-muted">
               {run.status === 'cancelled'
                 ? 'La detuviste antes de que se escribiera el informe. Cada subagente de arriba conservó lo que alcanzó a encontrar.'
                 : 'Esta ejecución no produjo informe. Los subagentes de arriba muestran hasta dónde llegó.'}
@@ -440,7 +440,7 @@ function Meter({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-surface px-3 py-2">
       <div className="field-label">{label}</div>
-      <div className="stat-num mt-0.5 truncate text-[16px] leading-none text-ink">{value}</div>
+      <div className="stat-num mt-0.5 truncate text-base leading-none text-ink">{value}</div>
     </div>
   );
 }

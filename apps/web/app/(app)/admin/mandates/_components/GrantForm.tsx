@@ -155,8 +155,8 @@ export function GrantForm({
     return (
       <Panel className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div>
-          <div className="text-[13px] font-bold text-ink">Conceder un mandato nuevo</div>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+          <div className="text-sm font-bold text-ink">Conceder un mandato nuevo</div>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
             Elige qué herramientas quedan autorizadas, hasta qué nivel de riesgo y por cuánto
             tiempo. Cortex dejará de preguntarte antes de usarlas.
           </p>
@@ -185,7 +185,7 @@ export function GrantForm({
               placeholder="Correos a clientes"
               maxLength={80}
             />
-            <span className="mt-1 block text-[11px] text-ink-faint">
+            <span className="mt-1 block text-micro text-ink-faint">
               Este nombre es el que Cortex cita cuando actúa sin preguntar.
             </span>
           </label>
@@ -193,14 +193,14 @@ export function GrantForm({
           <label className="block">
             <span className="field-label">Para qué se concede</span>
             <textarea
-              className="mt-1 w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+              className="mt-1 w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
               rows={2}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               maxLength={500}
               placeholder="El equipo comercial responde a clientes todo el día y confirmar cada correo cuesta más de lo que protege."
             />
-            <span className="mt-1 block text-[11px] text-ink-faint">
+            <span className="mt-1 block text-micro text-ink-faint">
               Es lo único que dentro de seis meses servirá para decidir si se renueva.
             </span>
           </label>
@@ -220,8 +220,8 @@ export function GrantForm({
                       : 'border-border bg-surface-2 hover:border-border-strong',
                   )}
                 >
-                  <span className="text-[12.5px] font-bold text-ink">{RISK_COPY[level].title}</span>
-                  <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-muted">
+                  <span className="text-xs font-bold text-ink">{RISK_COPY[level].title}</span>
+                  <span className="mt-0.5 block text-micro leading-relaxed text-ink-muted">
                     {RISK_COPY[level].blurb}
                   </span>
                 </button>
@@ -253,7 +253,7 @@ export function GrantForm({
               />
             </label>
           </div>
-          <p className="text-[11px] leading-relaxed text-ink-faint">
+          <p className="text-micro leading-relaxed text-ink-faint">
             Un techo de dinero solo muerde en herramientas que declaran el importe y su moneda en su
             propia entrada. Hoy casi ninguna lo hace: en las demás, poner un techo hace que el
             mandato no se aplique y la acción vuelva a pedirte confirmación. No se busca la cifra
@@ -291,7 +291,7 @@ export function GrantForm({
               checked={appliesUnattended}
               onChange={(e) => setAppliesUnattended(e.target.checked)}
             />
-            <span className="text-[12px] leading-relaxed text-ink-muted">
+            <span className="text-xs leading-relaxed text-ink-muted">
               <span className="font-bold text-ink">Vale también en rutinas automáticas</span>,
               cuando no hay nadie delante. Aun marcándolo, nada que salga de la empresa se ejecuta
               sin persona: eso se bloquea siempre, a cualquier hora.
@@ -314,13 +314,13 @@ export function GrantForm({
                         checked={patterns.includes(all)}
                         onChange={() => toggle(all)}
                       />
-                      <span className="flex-1 truncate text-[12.5px] font-semibold text-ink">
+                      <span className="flex-1 truncate text-xs font-semibold text-ink">
                         {fam.label}
                       </span>
                       <button
                         type="button"
                         onClick={() => setExpanded(isOpen ? null : fam.family)}
-                        className="inline-flex items-center gap-1 text-[11px] text-ink-faint hover:text-ink"
+                        className="inline-flex items-center gap-1 text-micro text-ink-faint hover:text-ink"
                       >
                         {fam.tools.length}
                         {isOpen ? (
@@ -343,7 +343,7 @@ export function GrantForm({
                               disabled={patterns.includes(all)}
                               onChange={() => toggle(t.id)}
                             />
-                            <span className="truncate text-[12px] text-ink-muted">{t.label}</span>
+                            <span className="truncate text-xs text-ink-muted">{t.label}</span>
                           </label>
                         ))}
                       </div>
@@ -362,18 +362,18 @@ export function GrantForm({
               </span>
             </div>
             {covered.length === 0 ? (
-              <p className="mt-2 text-[11.5px] leading-relaxed text-ink-muted">
+              <p className="mt-2 text-micro leading-relaxed text-ink-muted">
                 Todavía no has elegido nada. Un mandato que no cubre ninguna herramienta no se
                 guarda.
               </p>
             ) : (
-              <ul className="tabular mt-2 max-h-[160px] space-y-0.5 overflow-y-auto text-[11px] text-ink-muted">
+              <ul className="tabular mt-2 max-h-[160px] space-y-0.5 overflow-y-auto text-micro text-ink-muted">
                 {covered.map((id) => (
                   <li key={id}>{id}</li>
                 ))}
               </ul>
             )}
-            <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+            <p className="mt-2 text-micro leading-relaxed text-ink-faint">
               Esta lista se congela al conceder. Una herramienta instalada después no entra, aunque
               el patrón la nombrara.
             </p>
@@ -382,14 +382,14 @@ export function GrantForm({
       </div>
 
       {error && (
-        <div className="mt-3 flex items-start gap-2 rounded-sm border border-rose/20 bg-rose-soft p-3 text-[12px] leading-relaxed text-rose">
+        <div className="mt-3 flex items-start gap-2 rounded-sm border border-rose/20 bg-rose-soft p-3 text-xs leading-relaxed text-rose">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-        <p className="max-w-xl text-[12px] leading-relaxed text-ink-muted">
+        <p className="max-w-xl text-xs leading-relaxed text-ink-muted">
           {covered.length > 0 ? (
             <>
               A partir de ahora Cortex usará esas{' '}

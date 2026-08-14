@@ -74,7 +74,7 @@ export interface PipelineBuilderProps {
 
 const SECTION = 'field-label';
 const FIELD =
-  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10';
+  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10';
 
 /** Small pill switch, matching the tools catalog toggle. */
 function Switch({
@@ -333,7 +333,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
       <div className="mb-4">
         <Link
           href={mode === 'edit' ? `/pipelines/${slug}` : '/pipelines'}
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint hover:text-ink"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> {mode === 'edit' ? 'Volver al flujo' : 'Flujos'}
         </Link>
@@ -343,10 +343,10 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
         <div>
           <div className="field-label">Flujo</div>
           <div>
-            <h1 className="text-[22px] font-extrabold tracking-tight text-ink">
+            <h1 className="text-xl font-extrabold tracking-tight text-ink">
               {mode === 'create' ? 'Nuevo flujo' : 'Editar el flujo'}
             </h1>
-            <p className="tabular mt-0.5 text-[12px] text-ink-muted">
+            <p className="tabular mt-0.5 text-xs text-ink-muted">
               {cleanSteps.length} {cleanSteps.length === 1 ? 'paso' : 'pasos'}
               {checkpointCount > 0
                 ? ` · ${checkpointCount} ${checkpointCount === 1 ? 'punto de control' : 'puntos de control'}`
@@ -360,7 +360,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
         <div className="flex items-center gap-2">
           <Link
             href={mode === 'edit' ? `/pipelines/${slug}` : '/pipelines'}
-            className="rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink motion-reduce:transform-none motion-reduce:transition-none"
+            className="rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-xs font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink motion-reduce:transform-none motion-reduce:transition-none"
           >
             Cancelar
           </Link>
@@ -368,7 +368,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             type="button"
             onClick={save}
             disabled={errors.length > 0 || saving}
-            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             {mode === 'create' ? 'Crear el flujo' : 'Guardar los cambios'}
@@ -377,7 +377,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
       </div>
 
       {serverError && (
-        <Panel className="mb-4 border-rose/40 bg-rose-soft p-3 text-[12.5px] font-semibold text-rose">
+        <Panel className="mb-4 border-rose/40 bg-rose-soft p-3 text-xs font-semibold text-rose">
           {serverError}
         </Panel>
       )}
@@ -390,17 +390,17 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             <div className={clsx(SECTION, 'mb-3')}>Qué es este flujo</div>
             <div className="flex gap-3">
               <label className="block w-[70px] shrink-0">
-                <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">Emoji</span>
+                <span className="mb-1 block text-micro font-semibold text-ink-muted">Emoji</span>
                 <input
                   value={emoji}
                   onChange={(e) => setEmoji(e.target.value.slice(0, 2))}
                   maxLength={2}
                   aria-label="Emoji del flujo"
-                  className={clsx(FIELD, 'text-center text-[20px]')}
+                  className={clsx(FIELD, 'text-center text-lg')}
                 />
               </label>
               <label className="block min-w-0 flex-1">
-                <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">
+                <span className="mb-1 block text-micro font-semibold text-ink-muted">
                   Nombre
                 </span>
                 <input
@@ -417,7 +417,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             </div>
 
             <label className="mt-3 block">
-              <span className="mb-1 flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-muted">
+              <span className="mb-1 flex items-center gap-1.5 text-micro font-semibold text-ink-muted">
                 Identificador
                 {mode === 'edit' && <Lock className="h-3 w-3 text-ink-faint" />}
               </span>
@@ -430,9 +430,9 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                 disabled={mode === 'edit'}
                 maxLength={49}
                 placeholder="reporte-semanal-cliente"
-                className={clsx(FIELD, 'font-mono text-[12px] disabled:opacity-60')}
+                className={clsx(FIELD, 'font-mono text-xs disabled:opacity-60')}
               />
-              <span className="mt-1 block text-[11px] text-ink-faint">
+              <span className="mt-1 block text-micro text-ink-faint">
                 {mode === 'edit'
                   ? 'El identificador es fijo: el historial y las rutinas programadas llaman a este flujo por ahí.'
                   : 'Así lo van a nombrar las personas y las rutinas. Sale del nombre, pero lo puedes cambiar.'}
@@ -440,7 +440,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             </label>
 
             <label className="mt-3 block">
-              <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">
+              <span className="mb-1 block text-micro font-semibold text-ink-muted">
                 Descripción
               </span>
               <input
@@ -453,7 +453,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             </label>
 
             <label className="mt-3 block">
-              <span className="mb-1 block text-[11.5px] font-semibold text-ink-muted">
+              <span className="mb-1 block text-micro font-semibold text-ink-muted">
                 Introducción{' '}
                 <span className="font-normal text-ink-faint">
                   — el contexto que va antes del paso 1
@@ -467,7 +467,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                 placeholder="Vas a preparar el reporte semanal de {{cliente}}. Que sean números, no adjetivos."
                 className={clsx(FIELD, 'resize-y leading-relaxed')}
               />
-              <span className="tabular mt-1 block text-right text-[11px] text-ink-faint">
+              <span className="tabular mt-1 block text-right text-micro text-ink-faint">
                 {intro.length}/1000
               </span>
             </label>
@@ -477,7 +477,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
           <Panel className="p-5">
             <div className="mb-4 flex items-center justify-between">
               <div className={SECTION}>Los pasos</div>
-              <span className="tabular text-[11px] text-ink-faint">
+              <span className="tabular text-micro text-ink-faint">
                 {cleanSteps.length}/{MAX_STEPS} pasos
               </span>
             </div>
@@ -495,7 +495,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                         <UserCheck className="h-4 w-4 text-amber" />
                       </span>
                     ) : (
-                      <span className="stat-num z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card bg-primary text-[13px] text-white transition-transform duration-150 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none">
+                      <span className="stat-num z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card bg-primary text-sm text-white transition-transform duration-150 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none">
                         {String(i + 1).padStart(2, '0')}
                       </span>
                     )}
@@ -574,10 +574,10 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                           label={`El paso ${i + 1} es un punto de control`}
                           onClick={() => patchStep(i, { checkpoint: !s.checkpoint })}
                         />
-                        <span className="text-[12px] font-semibold text-ink-muted">
+                        <span className="text-xs font-semibold text-ink-muted">
                           Aquí decido yo
                         </span>
-                        <span className="text-[11px] text-ink-faint">
+                        <span className="text-micro text-ink-faint">
                           — parada obligatoria: Cortex muestra lo que encontró y espera
                         </span>
                       </div>
@@ -591,7 +591,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
               type="button"
               onClick={addStep}
               disabled={steps.length >= MAX_STEPS}
-              className="ml-[52px] inline-flex items-center gap-1.5 rounded-pill border border-dashed border-border-strong px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+              className="ml-[52px] inline-flex items-center gap-1.5 rounded-pill border border-dashed border-border-strong px-3 py-1.5 text-xs font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             >
               <Plus className="h-3.5 w-3.5" /> Agregar un paso
             </button>
@@ -601,18 +601,18 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
           <Panel className="p-5">
             <div className="mb-3 flex items-center justify-between">
               <div className={SECTION}>Parámetros</div>
-              <span className="tabular text-[11px] text-ink-faint">
+              <span className="tabular text-micro text-ink-faint">
                 {params.length}/{MAX_PARAMS}
               </span>
             </div>
-            <p className="mb-3 text-[12px] text-ink-muted">
+            <p className="mb-3 text-xs text-ink-muted">
               Lo que el flujo necesita que le den al ejecutarlo. Menciónalo en la introducción o en
               cualquier paso con{' '}
-              <code className="font-mono text-[11.5px] text-primary">{'{{nombre}}'}</code>.
+              <code className="font-mono text-micro text-primary">{'{{nombre}}'}</code>.
             </p>
 
             {params.length === 0 && (
-              <p className="mb-3 rounded-card border border-border bg-surface-2 px-3 py-2.5 text-[12px] text-ink-muted">
+              <p className="mb-3 rounded-card border border-border bg-surface-2 px-3 py-2.5 text-xs text-ink-muted">
                 Todavía no hay parámetros: este flujo corre igual siempre. Agrega uno para que pida
                 un dato cada vez que se ejecute.
               </p>
@@ -633,7 +633,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                       )
                     }
                     placeholder="cliente"
-                    className={clsx(FIELD, 'w-[130px] shrink-0 font-mono text-[12px]')}
+                    className={clsx(FIELD, 'w-[130px] shrink-0 font-mono text-xs')}
                   />
                   <input
                     value={p.description}
@@ -656,7 +656,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                         )
                       }
                     />
-                    <span className="text-[11.5px] font-semibold text-ink-muted">Obligatorio</span>
+                    <span className="text-micro font-semibold text-ink-muted">Obligatorio</span>
                   </div>
                   <IconBtn
                     label="Quitar el parámetro"
@@ -672,7 +672,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
               type="button"
               onClick={() => addParam()}
               disabled={params.length >= MAX_PARAMS}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-pill border border-dashed border-border-strong px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-pill border border-dashed border-border-strong px-3 py-1.5 text-xs font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             >
               <Plus className="h-3.5 w-3.5" /> Agregar un parámetro
             </button>
@@ -685,7 +685,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             <div className={clsx(SECTION, 'mb-2.5')}>Revisión</div>
 
             {errors.length === 0 && warnings.length === 0 && (
-              <p className="flex items-start gap-2 text-[12px] font-semibold text-emerald">
+              <p className="flex items-start gap-2 text-xs font-semibold text-emerald">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 Todo está en orden: ya lo puedes guardar.
               </p>
@@ -694,7 +694,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             {errors.length > 0 && (
               <ul className="space-y-1.5">
                 {errors.map((e) => (
-                  <li key={e} className="flex items-start gap-2 text-[11.5px] leading-snug text-rose">
+                  <li key={e} className="flex items-start gap-2 text-micro leading-snug text-rose">
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>{e}</span>
                   </li>
@@ -705,7 +705,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
             {warnings.length > 0 && (
               <ul className={clsx('space-y-1.5', errors.length > 0 && 'mt-2.5 border-t border-border pt-2.5')}>
                 {warnings.map((w) => (
-                  <li key={w} className="flex items-start gap-2 text-[11.5px] leading-snug text-amber">
+                  <li key={w} className="flex items-start gap-2 text-micro leading-snug text-amber">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>{w}</span>
                   </li>
@@ -721,7 +721,7 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
                     type="button"
                     onClick={() => addParam(u)}
                     className={clsx(
-                      'inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-primary hover:bg-primary hover:text-white',
+                      'inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-micro font-semibold text-primary hover:bg-primary hover:text-white',
                       CHIP_INTERACTIVE,
                     )}
                   >
@@ -739,10 +739,10 @@ export function PipelineBuilder({ mode, tools, nextRunNumber, initial }: Pipelin
               <Terminal className="h-3.5 w-3.5 text-primary" />
               <span className={SECTION}>Lo que va a leer Cortex</span>
             </div>
-            <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-[11px] leading-relaxed text-ink">
+            <pre className="max-h-[520px] overflow-auto whitespace-pre-wrap break-words px-4 py-3 font-mono text-micro leading-relaxed text-ink">
               {preview}
             </pre>
-            <p className="border-t border-border bg-surface-2 px-4 py-2 text-[10.5px] leading-snug text-ink-faint">
+            <p className="border-t border-border bg-surface-2 px-4 py-2 text-micro leading-snug text-ink-faint">
               Es exactamente lo que <span className="font-mono">pipeline.run</span> le entrega al
               modelo. Los parámetros sin llenar se quedan como{' '}
               <span className="font-mono">{'{{nombre}}'}</span> hasta que alguien lo ejecute.

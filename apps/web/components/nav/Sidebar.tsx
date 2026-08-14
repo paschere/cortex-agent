@@ -308,7 +308,7 @@ function NavRow({
       aria-expanded={panel ? showing : undefined}
       title={collapsed ? item.label : undefined}
       className={clsx(
-        'group relative flex h-[30px] items-center rounded-sm text-[13px] transition-colors duration-150',
+        'group relative flex h-[30px] items-center rounded-sm text-sm transition-colors duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         'motion-reduce:transition-none',
         collapsed ? 'justify-center' : 'gap-2.5 px-2.5',
@@ -326,7 +326,7 @@ function NavRow({
           <span
             aria-hidden="true"
             className={clsx(
-              'absolute -right-1.5 -top-1.5 min-w-[15px] rounded-full px-1 text-center text-[9.5px] font-bold leading-[15px] tabular-nums',
+              'absolute -right-1.5 -top-1.5 min-w-[15px] rounded-full px-1 text-center text-micro font-bold leading-[15px] tabular-nums',
               active ? 'bg-primary text-white' : 'bg-ink-muted text-white',
             )}
           >
@@ -345,7 +345,7 @@ function NavRow({
               <span
                 aria-hidden="true"
                 className={clsx(
-                  'shrink-0 text-[11.5px] tabular-nums',
+                  'shrink-0 text-micro tabular-nums',
                   active ? 'text-primary-ink' : 'text-ink-muted',
                 )}
               >
@@ -394,7 +394,7 @@ function SearchRow({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?:
       aria-label="Buscar o ir a una pantalla"
       aria-keyshortcuts="Meta+K Control+K"
       className={clsx(
-        'group flex h-[30px] w-full items-center rounded-sm text-[13px] font-medium text-ink-muted transition-colors duration-150',
+        'group flex h-[30px] w-full items-center rounded-sm text-sm font-medium text-ink-muted transition-colors duration-150',
         'hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         'motion-reduce:transition-none',
         collapsed ? 'justify-center' : 'gap-2.5 px-2.5',
@@ -407,7 +407,7 @@ function SearchRow({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?:
           {/* No aria-hidden needed: the button carries an explicit aria-label so
               nothing inside is announced, and aria-keyshortcuts is the honest
               way to tell a screen reader about ⌘K. */}
-          <span className="shrink-0 font-mono text-[10.5px] text-ink-faint">{modKey}K</span>
+          <span className="shrink-0 font-mono text-micro text-ink-faint">{modKey}K</span>
         </>
       )}
     </button>
@@ -417,7 +417,7 @@ function SearchRow({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?:
 /** The name of a block of destinations. Never a button — nothing folds. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-2.5 pb-1 pt-[18px] text-[10.5px] font-semibold uppercase tracking-field text-ink-faint">
+    <div className="px-2.5 pb-1 pt-[18px] text-micro font-semibold uppercase tracking-field text-ink-faint">
       {children}
     </div>
   );
@@ -432,7 +432,7 @@ function Brand({ collapsed }: { collapsed: boolean }) {
       {/* One line. The maker's line moved to the foot of the rail: it is a
           signature, and a signature does not belong at the top of a column
           whose first job is to get somebody to their work. */}
-      {!collapsed && <span className="text-[14px] font-semibold text-ink">Cortex</span>}
+      {!collapsed && <span className="text-base font-semibold text-ink">Cortex</span>}
     </div>
   );
 }
@@ -559,7 +559,7 @@ function SidebarFooter({
         ))}
       </div>
       {!collapsed && (
-        <div className="px-2.5 pt-2 text-[10.5px] text-ink-faint">
+        <div className="px-2.5 pt-2 text-micro text-ink-faint">
           Cortex <span className="text-border-strong">·</span> by Vertix
         </div>
       )}

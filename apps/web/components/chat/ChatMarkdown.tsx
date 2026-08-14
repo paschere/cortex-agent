@@ -29,7 +29,7 @@ export function ChatMarkdown({
         'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
         'prose-code:rounded-sm prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-medium prose-code:text-primary-ink prose-code:before:content-[""] prose-code:after:content-[""]',
         'prose-pre:rounded-card prose-pre:border prose-pre:border-border prose-pre:shadow-card',
-        'prose-table:text-[13px] prose-th:text-ink prose-td:text-ink-muted',
+        'prose-table:text-sm prose-th:text-ink prose-td:text-ink-muted',
         isStreaming && 'after:ml-0.5 after:animate-pulse after:text-primary after:content-["▋"]',
         className,
       )}

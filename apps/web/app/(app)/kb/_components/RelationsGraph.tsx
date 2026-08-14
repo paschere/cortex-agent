@@ -178,7 +178,7 @@ export function RelationsPanel({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center gap-1 rounded-card px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
+              className="inline-flex items-center gap-1 rounded-card px-1.5 py-0.5 text-micro font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
             >
               <X className="h-3.5 w-3.5" />
               Cerrar
@@ -188,17 +188,17 @@ export function RelationsPanel({
           ) : null
         }
       />
-      <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
+      <p className="px-5 pt-1 text-xs text-ink-muted">
         Lo que ya está indexado y de qué se parece a qué.
       </p>
 
       <div className="mt-3 border-t border-border">
         {isLoading ? (
-          <p className="px-5 py-8 text-center text-[12.5px] text-ink-faint">
+          <p className="px-5 py-8 text-center text-xs text-ink-faint">
             Leyendo las relaciones…
           </p>
         ) : isError || !data ? (
-          <p className="px-5 py-8 text-center text-[12.5px] text-rose">
+          <p className="px-5 py-8 text-center text-xs text-rose">
             No se pudieron leer las relaciones. Vuelve a intentar.
           </p>
         ) : (
@@ -490,7 +490,7 @@ function GraphBody({
 
   if (nodes.length === 0) {
     return (
-      <p className="px-5 py-8 text-[12.5px] leading-relaxed text-ink-muted">
+      <p className="px-5 py-8 text-xs leading-relaxed text-ink-muted">
         Todavía no hay nada indexado aquí.{' '}
         {data.indexing > 0
           ? `${plural(data.indexing, 'documento está', 'documentos están')} en proceso: sus vectores aún no existen.`
@@ -501,7 +501,7 @@ function GraphBody({
 
   if (nodes.length === 1) {
     return (
-      <p className="px-5 py-8 text-[12.5px] leading-relaxed text-ink-muted">
+      <p className="px-5 py-8 text-xs leading-relaxed text-ink-muted">
         Con un solo documento no hay relaciones que mostrar. Añade otro del mismo tema y la línea
         aparece sola.
       </p>
@@ -677,7 +677,7 @@ function GraphBody({
                 setChosen(id);
                 if (id) centreNode(id);
               }}
-              className="h-8 max-w-full rounded-card border border-border bg-surface px-2.5 text-[12px] font-medium text-ink focus:border-border-strong"
+              className="h-8 max-w-full rounded-card border border-border bg-surface px-2.5 text-xs font-medium text-ink focus:border-border-strong"
             >
               <option value="">Elige uno…</option>
               {layout.ordered.map((n) => (
@@ -688,7 +688,7 @@ function GraphBody({
             </select>
           </label>
 
-          <p className="mt-2 text-center text-[11px] leading-snug text-ink-faint">
+          <p className="mt-2 text-center text-micro leading-snug text-ink-faint">
             Toca un documento y se encienden solo sus relaciones; tócalo otra vez para abrirlo. Con
             el ratón basta con pasar por encima y hacer clic para abrir. Para acercar: pellizca, usa
             los botones, o Ctrl y la rueda. Arrastra para mover.
@@ -706,7 +706,7 @@ function GraphBody({
               </span>
             ))}
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10.5px] text-ink-faint">
+          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-micro text-ink-faint">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-px w-6 bg-primary" aria-hidden />
               línea llena: hablan de lo mismo
@@ -756,7 +756,7 @@ function GraphBody({
           ) : (
             <div className="px-5 py-5">
               <div className="field-label">Cómo leerlo</div>
-              <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
                 {noEdges
                   ? 'Nada se parece lo suficiente todavía. Cuando entren dos documentos del mismo tema, aparece la línea.'
                   : 'Señala un documento y te muestro con qué se relaciona y por qué.'}
@@ -831,9 +831,9 @@ function Line({ label, value, hint }: { label: string; value: string; hint: stri
     <div className="flex items-baseline justify-between gap-3 py-2.5">
       <div className="min-w-0">
         <dt className="field-label">{label}</dt>
-        <dd className="mt-0.5 text-[11px] text-ink-faint">{hint}</dd>
+        <dd className="mt-0.5 text-micro text-ink-faint">{hint}</dd>
       </div>
-      <span className="stat-num shrink-0 text-[17px] text-ink">{value}</span>
+      <span className="stat-num shrink-0 text-lg text-ink">{value}</span>
     </div>
   );
 }
@@ -873,8 +873,8 @@ function NodeDetail({
     <div className="px-5 py-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[13px] font-bold text-ink">{node.title}</div>
-          <div className="mt-0.5 text-[11.5px] text-ink-faint">
+          <div className="text-sm font-bold text-ink">{node.title}</div>
+          <div className="mt-0.5 text-micro text-ink-faint">
             {SOURCE_ONE[node.source]} · <span className="tabular">{num(node.chunks)}</span>{' '}
             {node.chunks === 1 ? 'fragmento' : 'fragmentos'}
             {node.durationSeconds ? ` · ${clock(node.durationSeconds)}` : ''}
@@ -884,7 +884,7 @@ function NodeDetail({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded-card px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
+          className="shrink-0 rounded-card px-1.5 py-0.5 text-micro font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
         >
           Quitar
         </button>
@@ -894,7 +894,7 @@ function NodeDetail({
         <button
           type="button"
           onClick={onOpen}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-card border border-border px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-card border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
         >
           Abrir el documento
         </button>
@@ -903,7 +903,7 @@ function NodeDetail({
       <div className="mt-4">
         <div className="field-label">Habla de lo mismo que</div>
         {alike.length === 0 ? (
-          <p className="mt-1.5 text-[12px] text-ink-muted">
+          <p className="mt-1.5 text-xs text-ink-muted">
             Nada más se le parece por encima del umbral.
           </p>
         ) : (
@@ -918,16 +918,16 @@ function NodeDetail({
                   className="flex w-full items-center justify-between gap-3 py-1.5 text-left transition-colors hover:bg-surface-2"
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-[12px] font-medium text-ink">
+                    <span className="block truncate text-xs font-medium text-ink">
                       {other.title}
                       {found?.has(other.id) ? ' ·' : ''}
                     </span>
-                    <span className="block text-[10.5px] text-ink-faint">
+                    <span className="block text-micro text-ink-faint">
                       {SOURCE_ONE[other.source]}
                       {found?.has(other.id) ? ' · coincide con tu búsqueda' : ''}
                     </span>
                   </span>
-                  <span className="stat-num shrink-0 text-[12.5px] text-primary">
+                  <span className="stat-num shrink-0 text-xs text-primary">
                     {Math.round(score * 100)}%
                   </span>
                 </button>
@@ -948,10 +948,10 @@ function NodeDetail({
                   onClick={() => onPick(other.id)}
                   className="block w-full py-1.5 text-left transition-colors hover:bg-surface-2"
                 >
-                  <span className="block truncate text-[12px] font-medium text-ink">
+                  <span className="block truncate text-xs font-medium text-ink">
                     {other.title}
                   </span>
-                  <span className="block text-[10.5px] text-ink-faint">{names.join(', ')}</span>
+                  <span className="block text-micro text-ink-faint">{names.join(', ')}</span>
                 </button>
               </li>
             ))}
@@ -960,7 +960,7 @@ function NodeDetail({
       )}
 
       {node.speakers.length > 0 && (
-        <p className="mt-3 text-[11px] text-ink-faint">
+        <p className="mt-3 text-micro text-ink-faint">
           Voces en esta: {node.speakers.join(', ')}.
         </p>
       )}

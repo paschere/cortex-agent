@@ -134,7 +134,7 @@ export default async function MandatesPage() {
         actions={
           <Link
             href="/admin/audit?decision=delegated"
-            className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-sm font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
           >
             <ShieldCheck className="h-4 w-4" />
             Ver lo que hizo sin preguntar
@@ -145,7 +145,7 @@ export default async function MandatesPage() {
       <div className="space-y-4">
         <Panel className="p-4">
           <div className="field-label mb-2">Qué es esto, sin rodeos</div>
-          <div className="grid gap-3 text-[12.5px] leading-relaxed text-ink-muted md:grid-cols-2">
+          <div className="grid gap-3 text-xs leading-relaxed text-ink-muted md:grid-cols-2">
             <p>
               Normalmente Cortex se detiene y te pregunta antes de hacer algo que sale de la empresa
               o que toca datos delicados. Un mandato apaga esa pregunta para un conjunto concreto de

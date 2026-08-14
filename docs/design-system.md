@@ -52,6 +52,31 @@ worth keeping — it is legibility, not styling.
 should recede, not announce itself. Not small caps, and never used as a
 decorative eyebrow.
 
+### The scale
+
+Seven steps, each carrying its own line-height. **Use the token, never
+`text-[Npx]`.**
+
+| Token | Size | For |
+|---|---|---|
+| `text-micro` | 11px | Labels, timestamps, evidence. Uppercase ones pair with `tracking-field`. |
+| `text-xs` | 12.5px | The workhorse: secondary text, table cells, most chrome. |
+| `text-sm` | 13px | Body text, and anything somebody reads a paragraph of. |
+| `text-base` | 15px | Emphasis inside a card; the name of the thing you are looking at. |
+| `text-lg` | 19px | Section heading. |
+| `text-xl` | 22px | Page heading. |
+| `text-display` | 32px | One per screen at most, and most screens have none. |
+
+This block did not exist until `tailwind.config.ts` grew a `fontSize` key, and
+that single omission is the whole reason the app had **23 arbitrary sizes across
+1.849 uses** of `text-[Npx]` while having *not one* raw hex colour. It was never
+a discipline problem: colours had tokens and type had nothing to reach for, so
+every component invented its own — and the three commonest were 12.5px, 12px and
+13px, a difference nobody can see that still had to be decided hundreds of times.
+
+The tokens take Tailwind's own names on purpose. A house scale hiding behind
+`text-body-sm` while `text-sm` still resolves to something else is two scales.
+
 ---
 
 ## The signature: the provenance chip

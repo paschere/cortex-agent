@@ -534,14 +534,14 @@ export function InputBar({
                 const Icon = paletteIcon(group.icon);
                 return (
                   <li key={group.id} role="presentation">
-                    <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wide text-ink-faint">
+                    <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-micro font-semibold uppercase tracking-wide text-ink-faint">
                       <Icon className="h-3 w-3 shrink-0" aria-hidden />
                       {group.heading}
                     </div>
                     {group.error && (
                       // Nunca una lista vacía en lugar de un fallo: la sección
                       // dice qué no se pudo leer y sigue en su sitio.
-                      <p className="px-2.5 pb-1.5 text-[12px] leading-snug text-ink-muted">
+                      <p className="px-2.5 pb-1.5 text-xs leading-snug text-ink-muted">
                         {group.error}
                       </p>
                     )}
@@ -575,14 +575,14 @@ export function InputBar({
                                 caja en vez de cortarse. */}
                             <span
                               className={clsx(
-                                'min-w-0 truncate text-[12.5px] text-ink',
+                                'min-w-0 truncate text-xs text-ink',
                                 item.mono ? 'font-mono font-semibold' : 'font-medium',
                               )}
                             >
                               {item.label}
                             </span>
                             {item.hint && (
-                              <span className="min-w-0 shrink truncate text-[12px] text-ink-faint">
+                              <span className="min-w-0 shrink truncate text-xs text-ink-faint">
                                 {item.hint}
                               </span>
                             )}
@@ -591,7 +591,7 @@ export function InputBar({
                       })}
                     </ul>
                     {group.more !== undefined && (
-                      <p className="px-2.5 pb-1 text-[11px] text-ink-faint">
+                      <p className="px-2.5 pb-1 text-micro text-ink-faint">
                         y {group.more} más — sigue escribiendo
                       </p>
                     )}
@@ -719,7 +719,7 @@ export function InputBar({
 
               <div className="flex shrink-0 items-center gap-2">
                 {text.length > CHAR_COUNT_THRESHOLD && (
-                  <span className="tabular text-[10px] text-ink-faint">{text.length}</span>
+                  <span className="tabular text-micro text-ink-faint">{text.length}</span>
                 )}
                 <button
                   type="submit"
@@ -734,7 +734,7 @@ export function InputBar({
           </form>
         </div>
 
-        <p className="mt-1.5 text-center text-[11px] text-ink-faint">
+        <p className="mt-1.5 text-center text-micro text-ink-faint">
           Cada respuesta trae su fuente: revísala antes de actuar.
         </p>
       </div>

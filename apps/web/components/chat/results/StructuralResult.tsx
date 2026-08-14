@@ -24,18 +24,18 @@ export function StructuralResult({ result }: { result: unknown }) {
 
 function Rendered({ view }: { view: NonNullable<Structural> }) {
   if (view.kind === 'note') {
-    return <p className="text-[12.5px] leading-relaxed text-ink-muted">{view.text}</p>;
+    return <p className="text-xs leading-relaxed text-ink-muted">{view.text}</p>;
   }
 
   if (view.kind === 'fields') {
     return (
       <div className="space-y-2">
-        {view.note && <p className="text-[12.5px] leading-relaxed text-ink-muted">{view.note}</p>}
+        {view.note && <p className="text-xs leading-relaxed text-ink-muted">{view.note}</p>}
         <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-[auto_1fr]">
           {view.entries.map(([key, value]) => (
             <div key={key} className="contents">
-              <dt className="text-[11px] uppercase tracking-field text-ink-faint">{label(key)}</dt>
-              <dd className="text-[12.5px] text-ink">{cell(value)}</dd>
+              <dt className="text-micro uppercase tracking-field text-ink-faint">{label(key)}</dt>
+              <dd className="text-xs text-ink">{cell(value)}</dd>
             </div>
           ))}
         </dl>
@@ -45,17 +45,17 @@ function Rendered({ view }: { view: NonNullable<Structural> }) {
 
   return (
     <div className="space-y-2">
-      {view.note && <p className="text-[12.5px] leading-relaxed text-ink-muted">{view.note}</p>}
+      {view.note && <p className="text-xs leading-relaxed text-ink-muted">{view.note}</p>}
       {/* Su propio scroll horizontal: una tabla ancha dentro de una burbuja de
           chat no puede empujar la conversación entera de lado. */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[320px] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[320px] border-collapse text-xs">
           <thead>
             <tr className="border-b border-border">
               {view.columns.map((c) => (
                 <th
                   key={c}
-                  className="whitespace-nowrap px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-field text-ink-faint"
+                  className="whitespace-nowrap px-2 py-1.5 text-left text-micro font-semibold uppercase tracking-field text-ink-faint"
                 >
                   {label(c)}
                 </th>
@@ -89,7 +89,7 @@ function Rendered({ view }: { view: NonNullable<Structural> }) {
       {view.rows.length === 50 && (
         // Nunca cortar en silencio. Ver cincuenta filas y creer que son todas
         // es peor que ver cincuenta y saber que hay más.
-        <p className="text-[11px] text-ink-faint">
+        <p className="text-micro text-ink-faint">
           Se muestran las primeras 50. Pídeme el resto si lo necesitas.
         </p>
       )}
@@ -113,7 +113,7 @@ function cell(value: unknown) {
 
 function RawJson({ value }: { value: unknown }) {
   return (
-    <pre className="scroll-slim overflow-x-auto rounded-sm bg-surface-2 p-2 font-mono text-[11px] leading-relaxed text-ink-muted">
+    <pre className="scroll-slim overflow-x-auto rounded-sm bg-surface-2 p-2 font-mono text-micro leading-relaxed text-ink-muted">
       {JSON.stringify(value, null, 2)}
     </pre>
   );

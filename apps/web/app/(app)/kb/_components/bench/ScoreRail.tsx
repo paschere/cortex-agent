@@ -133,15 +133,15 @@ export function ScoreRail({
           // Null is not zero. A cosine of zero is a measured certain miss; a
           // missing cosine means the semantic search never ran for this row,
           // and drawing it at the far left would be inventing a measurement.
-          <span className="text-[10.5px] text-ink-faint">solo por palabras</span>
+          <span className="text-micro text-ink-faint">solo por palabras</span>
         ) : (
-          <span className="tabular text-[11px] text-ink">
+          <span className="tabular text-micro text-ink">
             {cosine?.toFixed(3).replace('.', ',')}
           </span>
         )}
         {keyword > 0 && (
           <span
-            className="tabular text-[10px] text-ink-faint"
+            className="tabular text-micro text-ink-faint"
             title="Coincidencia literal de palabras"
           >
             +{keyword.toFixed(2).replace('.', ',')} palabras
@@ -154,7 +154,7 @@ export function ScoreRail({
           {marks.map((cut) => (
             <span
               key={cut.at}
-              className="absolute -translate-x-1/2 whitespace-nowrap text-[9.5px] text-ink-faint"
+              className="absolute -translate-x-1/2 whitespace-nowrap text-micro text-ink-faint"
               style={{ left: `${(cut.at / cuts.railCeiling) * 100}%` }}
             >
               {cut.label}
@@ -185,7 +185,7 @@ export function RailLegend({ cuts = DEFAULT_CUTS }: { cuts?: RailCuts }) {
             />
           ))}
         </div>
-        <div className="relative mt-1 h-[26px] text-[10px] leading-tight text-ink-faint">
+        <div className="relative mt-1 h-[26px] text-micro leading-tight text-ink-faint">
           <span className="absolute left-0">0</span>
           {marks.map((cut) => (
             <span

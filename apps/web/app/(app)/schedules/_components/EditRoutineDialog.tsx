@@ -196,7 +196,7 @@ export function EditRoutineDialog({
               </span>
               <div>
                 <Dialog.Title className="text-sm font-bold text-ink">Editar la rutina</Dialog.Title>
-                <Dialog.Description className="text-[11.5px] text-ink-faint">
+                <Dialog.Description className="text-micro text-ink-faint">
                   El nombre, la hora y a quién le llega. La instrucción se cambia desde el chat.
                 </Dialog.Description>
               </div>
@@ -216,7 +216,7 @@ export function EditRoutineDialog({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={120}
-                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                 placeholder="Reporte de clientes del viernes"
               />
             </Field>
@@ -232,7 +232,7 @@ export function EditRoutineDialog({
                       else setDraft(parseCron(rawCron) ?? draft);
                       setAdvanced(!advanced);
                     }}
-                    className="rounded-pill px-2 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className="rounded-pill px-2 py-0.5 text-micro font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     {advanced ? 'Usar el selector' : 'Avanzado'}
                   </button>
@@ -244,7 +244,7 @@ export function EditRoutineDialog({
                     onChange={(e) => setRawCron(e.target.value)}
                     spellCheck={false}
                     placeholder="0 9 * * 1-5"
-                    className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                    className="w-full rounded-sm border border-border bg-surface px-3 py-2 font-mono text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                   />
                 ) : (
                   <div className="space-y-2">
@@ -255,7 +255,7 @@ export function EditRoutineDialog({
                           type="button"
                           onClick={() => setDraft({ ...draft, frequency: f })}
                           className={clsx(
-                            'rounded-pill px-2 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                            'rounded-pill px-2 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                             draft.frequency === f
                               ? 'bg-primary-soft text-primary-ink'
                               : 'text-ink-muted hover:text-ink',
@@ -272,7 +272,7 @@ export function EditRoutineDialog({
                           type="time"
                           value={draft.time}
                           onChange={(e) => setDraft({ ...draft, time: e.target.value })}
-                          className="tabular rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                          className="tabular rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                         />
                       </label>
                       {draft.frequency === 'weekly' && (
@@ -281,7 +281,7 @@ export function EditRoutineDialog({
                           <select
                             value={draft.weekday}
                             onChange={(e) => setDraft({ ...draft, weekday: e.target.value })}
-                            className="rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                            className="rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                           >
                             {DOW.map((d, i) => (
                               <option key={d} value={String(i)}>
@@ -297,7 +297,7 @@ export function EditRoutineDialog({
                           <select
                             value={draft.monthDay}
                             onChange={(e) => setDraft({ ...draft, monthDay: e.target.value })}
-                            className="tabular rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                            className="tabular rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                           >
                             {Array.from({ length: 28 }, (_, i) => String(i + 1)).map((d) => (
                               <option key={d} value={d}>
@@ -311,13 +311,13 @@ export function EditRoutineDialog({
                   </div>
                 )}
 
-                <p className="tabular mt-2 inline-flex items-center gap-1.5 text-[11.5px] text-ink-faint">
+                <p className="tabular mt-2 inline-flex items-center gap-1.5 text-micro text-ink-faint">
                   <AlarmClock className="h-3.5 w-3.5 text-primary" />
                   {humanizeCron(composedCron || null, timezone)} · {timezone}
                 </p>
               </div>
             ) : (
-              <div className="rounded-card border border-border bg-surface-2 px-3 py-2.5 text-[12px] text-ink-muted">
+              <div className="rounded-card border border-border bg-surface-2 px-3 py-2.5 text-xs text-ink-muted">
                 Esta rutina corre una sola vez, así que no se le puede cambiar la hora aquí. Pídele
                 a Cortex en el chat una nueva a la hora que quieras.
               </div>
@@ -328,7 +328,7 @@ export function EditRoutineDialog({
                 id="routine-timezone"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
               >
                 {tzOptions.map((tz) => (
                   <option key={tz} value={tz}>
@@ -345,7 +345,7 @@ export function EditRoutineDialog({
                 onClick={() => setNotifyEmail(!notifyEmail)}
                 className="flex w-full items-center justify-between gap-3 rounded-card border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                <span className="flex items-center gap-2 text-sm font-semibold text-ink">
                   <Mail className="h-4 w-4 text-ink-faint" /> Enviar el resultado por correo
                 </span>
                 <span
@@ -372,7 +372,7 @@ export function EditRoutineDialog({
                     {recipients.map((r) => (
                       <span
                         key={r}
-                        className="inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft py-0.5 pl-2 pr-1 font-mono text-[11px] font-semibold text-primary"
+                        className="inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft py-0.5 pl-2 pr-1 font-mono text-micro font-semibold text-primary"
                       >
                         {r}
                         <button
@@ -400,12 +400,12 @@ export function EditRoutineDialog({
                     onBlur={() => recipientDraft.trim() && addRecipient()}
                     type="email"
                     placeholder="companero@empresa.com"
-                    className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                    className="min-w-0 flex-1 rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                   />
                   <button
                     type="button"
                     onClick={() => addRecipient()}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-border-strong bg-surface px-2.5 text-[12px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-border-strong bg-surface px-2.5 text-xs font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
                   >
                     <Plus className="h-3.5 w-3.5" /> Agregar
                   </button>
@@ -414,21 +414,21 @@ export function EditRoutineDialog({
             </div>
 
             {error && (
-              <div className="rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+              <div className="rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-xs text-rose">
                 {error}
               </div>
             )}
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-            <Dialog.Close className="rounded-pill px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <Dialog.Close className="rounded-pill px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               Cancelar
             </Dialog.Close>
             <button
               type="button"
               onClick={save}
               disabled={saving}
-              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {saving ? 'Guardando…' : 'Guardar cambios'}

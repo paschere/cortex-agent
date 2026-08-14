@@ -124,7 +124,7 @@ export function RoutineCard({
 
         <div className="min-w-0 flex-1 basis-[15rem]">
           <h3 className="flex flex-wrap items-center gap-2">
-            <span className="text-[13.5px] font-bold text-ink transition-colors group-hover:text-primary">
+            <span className="text-sm font-bold text-ink transition-colors group-hover:text-primary">
               {job.name}
             </span>
             <span className={chipClass(STATUS_TONE[job.status])}>{JOB_STATUS_LABEL[job.status]}</span>
@@ -151,7 +151,7 @@ export function RoutineCard({
             )}
             {job.notifyEmail && (
               <span
-                className="inline-flex items-center gap-1 text-[10.5px] text-ink-faint"
+                className="inline-flex items-center gap-1 text-micro text-ink-faint"
                 title="Envía el resultado por correo"
               >
                 <Mail className="h-3 w-3" />
@@ -159,7 +159,7 @@ export function RoutineCard({
             )}
           </h3>
 
-          <div className="tabular mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint">
+          <div className="tabular mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-faint">
             <span className="inline-flex items-center gap-1 font-semibold text-ink-muted">
               <AlarmClock className="h-3.5 w-3.5 text-primary" />
               {job.scheduleKind === 'once'
@@ -194,7 +194,7 @@ export function RoutineCard({
                         )}
                       />
                       {/* Below the dot on purpose: the card clips overflow. */}
-                      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-[10.5px] font-semibold text-surface shadow-pop group-hover/dot:block group-focus-within/dot:block">
+                      <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-micro font-semibold text-surface shadow-pop group-hover/dot:block group-focus-within/dot:block">
                         {label}
                       </span>
                     </span>
@@ -206,7 +206,7 @@ export function RoutineCard({
 
           {job.recipients.length > 0 && (
             <div
-              className="mt-1 flex items-center gap-1 truncate text-[11.5px] text-ink-faint"
+              className="mt-1 flex items-center gap-1 truncate text-micro text-ink-faint"
               title={job.recipients.join(', ')}
             >
               <Mail className="h-3 w-3 shrink-0" />
@@ -239,7 +239,7 @@ export function RoutineCard({
                 >
                   <span
                     className={clsx(
-                      'line-clamp-2 text-[12px] leading-relaxed',
+                      'line-clamp-2 text-xs leading-relaxed',
                       lastRun.error ? 'text-rose' : 'text-ink-muted',
                     )}
                   >
@@ -249,7 +249,7 @@ export function RoutineCard({
               )}
             </div>
           ) : (
-            <p className="mt-2 text-[11.5px] text-ink-muted">
+            <p className="mt-2 text-micro text-ink-muted">
               No se ha ejecutado nunca. Dale <span className="font-semibold text-ink">Ejecutar
               ahora</span> para ver qué produce sin esperar a la hora programada.
             </p>
@@ -261,7 +261,7 @@ export function RoutineCard({
             type="button"
             disabled={running || job.status !== 'active'}
             onClick={onRunNow}
-            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-2.5 py-1.5 text-[11.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-2.5 py-1.5 text-micro font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             title={
               job.status === 'active'
                 ? 'Ejecutar esta rutina ahora'
@@ -358,7 +358,7 @@ export function RoutineCard({
               </h3>
               <p
                 className={clsx(
-                  'whitespace-pre-wrap rounded-card border border-border bg-surface px-3 py-2 text-[12.5px] leading-relaxed text-ink-muted',
+                  'whitespace-pre-wrap rounded-card border border-border bg-surface px-3 py-2 text-xs leading-relaxed text-ink-muted',
                   job.kind === 'tool' && 'font-mono',
                 )}
               >
@@ -369,7 +369,7 @@ export function RoutineCard({
           <div>
             <h3 className="field-label mb-1.5">Ejecuciones recientes</h3>
             {job.runs.length === 0 ? (
-              <p className="text-[12.5px] text-ink-muted">
+              <p className="text-xs text-ink-muted">
                 Todavía no hay ninguna ejecución. Dale{' '}
                 <span className="font-semibold text-ink">Ejecutar ahora</span> y el resultado
                 aparece aquí.
@@ -385,13 +385,13 @@ export function RoutineCard({
                         type="button"
                         onClick={() => onOpenRun(run)}
                         className={clsx(
-                          'block w-full rounded-card border bg-surface px-3 py-2 text-left text-[12px] transition-colors hover:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                          'block w-full rounded-card border bg-surface px-3 py-2 text-left text-xs transition-colors hover:border-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                           highlightRunId === run.id
                             ? 'border-primary ring-2 ring-primary-soft'
                             : 'border-border',
                         )}
                       >
-                        <span className="tabular flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className="tabular flex flex-wrap items-center gap-2 text-micro">
                           <span className={chipClass(RUN_TONE[run.status])}>
                             {RUN_LABEL[run.status]}
                           </span>
@@ -406,7 +406,7 @@ export function RoutineCard({
                         {(run.error ?? run.output) && (
                           <span
                             className={clsx(
-                              'mt-1.5 line-clamp-3 block whitespace-pre-wrap text-[11.5px] leading-relaxed',
+                              'mt-1.5 line-clamp-3 block whitespace-pre-wrap text-micro leading-relaxed',
                               run.error ? 'text-rose' : 'text-ink-muted',
                             )}
                           >

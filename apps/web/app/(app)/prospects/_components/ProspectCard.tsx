@@ -91,14 +91,14 @@ export function ProspectCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-[14.5px] font-bold text-ink">{prospect.company}</span>
+            <span className="text-base font-bold text-ink">{prospect.company}</span>
             <span className={chipClass(meta.tone)}>{meta.label}</span>
           </div>
-          <div className="mt-0.5 text-[13px] text-ink-muted">
+          <div className="mt-0.5 text-sm text-ink-muted">
             busca <span className="font-semibold text-ink">{prospect.roleTitle}</span>
           </div>
 
-          <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint">
+          <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-faint">
             <a
               href={prospect.url}
               target="_blank"
@@ -128,7 +128,7 @@ export function ProspectCard({
 
       {/* Answers "did it disappear?" in the place the question gets asked. */}
       {filedAway && (
-        <p className="mt-3 rounded-sm border border-border bg-surface-2 px-3 py-2 text-[11.5px] text-ink-muted">
+        <p className="mt-3 rounded-sm border border-border bg-surface-2 px-3 py-2 text-micro text-ink-muted">
           Quedó archivado en <b className="text-ink">{meta.label}</b>. Sigue aquí, y lo vas a
           encontrar en esa pestaña la próxima vez.
         </p>
@@ -141,7 +141,7 @@ export function ProspectCard({
             <Quote className="h-3 w-3" />
             Por qué parece un buen prospecto
           </div>
-          <p className="text-[12.5px] leading-relaxed text-ink-muted">{prospect.summary}</p>
+          <p className="text-xs leading-relaxed text-ink-muted">{prospect.summary}</p>
         </div>
       )}
 
@@ -149,7 +149,7 @@ export function ProspectCard({
       <Contact prospect={prospect} />
 
       {error && (
-        <p className="mt-3 rounded-sm border border-rose/40 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+        <p className="mt-3 rounded-sm border border-rose/40 bg-rose-soft px-3 py-2 text-xs text-rose">
           {error} El prospecto volvió a su estado anterior.
         </p>
       )}
@@ -166,7 +166,7 @@ export function ProspectCard({
               disabled={disabled}
               onClick={() => onMove(action.next)}
               className={clsx(
-                'inline-flex items-center gap-1.5 rounded-pill px-3.5 py-1.5 text-[12.5px] font-semibold transition-all duration-150',
+                'inline-flex items-center gap-1.5 rounded-pill px-3.5 py-1.5 text-xs font-semibold transition-all duration-150',
                 'hover:-translate-y-px disabled:opacity-60 disabled:hover:translate-y-0',
                 'motion-reduce:transform-none motion-reduce:transition-none',
                 action.primary
@@ -196,7 +196,7 @@ function Contact({ prospect }: { prospect: Prospect }) {
 
   if (!contactName && !contactPath) {
     return (
-      <p className="mt-3 flex items-center gap-1.5 text-[12px] text-ink-muted">
+      <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-muted">
         <UserSearch className="h-3.5 w-3.5" />
         Sin contacto todavía. Pídele a Cortex en el chat que averigüe quién contrata este perfil.
       </p>
@@ -211,8 +211,8 @@ function Contact({ prospect }: { prospect: Prospect }) {
     <div className="mt-3 rounded-sm border border-border px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <UserRound className="h-3.5 w-3.5 text-ink-faint" />
-        <span className="text-[12.5px] font-semibold text-ink">{contactName ?? 'Contacto'}</span>
-        {contactTitle && <span className="text-[12px] text-ink-muted">· {contactTitle}</span>}
+        <span className="text-xs font-semibold text-ink">{contactName ?? 'Contacto'}</span>
+        {contactTitle && <span className="text-xs text-ink-muted">· {contactTitle}</span>}
         <span
           className={clsx(
             'ml-auto',
@@ -232,18 +232,18 @@ function Contact({ prospect }: { prospect: Prospect }) {
         (verified && isEmail ? (
           <a
             href={`mailto:${contactPath}`}
-            className="mt-1.5 inline-block text-[12.5px] font-medium text-primary hover:text-primary-strong"
+            className="mt-1.5 inline-block text-xs font-medium text-primary hover:text-primary-strong"
           >
             {contactPath}
           </a>
         ) : (
-          <div className="mt-1.5 select-all font-mono text-[12px] text-ink-muted">
+          <div className="mt-1.5 select-all font-mono text-xs text-ink-muted">
             {contactPath}
           </div>
         ))}
 
       {guessed && (
-        <p className="mt-1.5 text-[11.5px] leading-relaxed text-amber">
+        <p className="mt-1.5 text-micro leading-relaxed text-amber">
           Se dedujo del patrón de correos de la empresa: nadie la ha confirmado. Verifícala antes de
           escribirle.
         </p>

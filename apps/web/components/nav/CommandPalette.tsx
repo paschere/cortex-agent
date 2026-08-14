@@ -305,10 +305,10 @@ export function CommandPalette({ open, onClose, role }: CommandPaletteProps) {
       onSelect={() => go(e.href)}
       className="cursor-pointer rounded-sm px-3 py-2 transition-colors duration-150 aria-selected:bg-primary-soft aria-selected:text-primary-ink hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
     >
-      <div className="text-[13px] font-medium text-ink">{e.label}</div>
+      <div className="text-sm font-medium text-ink">{e.label}</div>
       {/* The same sentence the rail shows for this destination. Two names and
           two descriptions for one screen is what this change is undoing. */}
-      <div className="mt-0.5 text-[11.5px] leading-snug text-ink-faint">{e.note}</div>
+      <div className="mt-0.5 text-micro leading-snug text-ink-faint">{e.note}</div>
     </Command.Item>
   );
 
@@ -334,17 +334,17 @@ export function CommandPalette({ open, onClose, role }: CommandPaletteProps) {
           <Command.Input
             aria-label="Buscar un comando"
             placeholder="Escribe a dónde quieres ir…"
-            className="w-full border-b border-border bg-transparent px-4 py-3 text-[13px] text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint focus:bg-primary-soft/40 motion-reduce:transition-none"
+            className="w-full border-b border-border bg-transparent px-4 py-3 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint focus:bg-primary-soft/40 motion-reduce:transition-none"
           />
           <Command.List className="max-h-[22rem] overflow-y-auto p-2">
-            <Command.Empty className="py-4 text-center text-[13px] text-ink-faint">
+            <Command.Empty className="py-4 text-center text-sm text-ink-faint">
               Sin resultados.
             </Command.Empty>
             {sections.map((section) => (
               <Command.Group
                 key={section.heading}
                 heading={section.heading}
-                className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-ink-faint"
+                className="[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-micro [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-ink-faint"
               >
                 {section.entries.map(item)}
               </Command.Group>

@@ -86,7 +86,7 @@ export default async function CommitmentDetailPage({
         actions={
           <Link
             href="/commitments"
-            className="rounded-pill px-3 py-2 text-[13px] font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="rounded-pill px-3 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             Volver
           </Link>
@@ -116,7 +116,7 @@ export default async function CommitmentDetailPage({
                 >
                   {longDate(c.dueOn)}
                 </span>
-                <div className="mt-0.5 text-[11.5px] font-normal text-ink-faint">
+                <div className="mt-0.5 text-micro font-normal text-ink-faint">
                   {whenPhrase(c.daysLeft)}
                 </div>
               </Field>
@@ -128,7 +128,7 @@ export default async function CommitmentDetailPage({
             </div>
 
             {c.detail && (
-              <p className="mt-4 border-t border-border pt-4 text-[13px] leading-relaxed text-ink-muted">
+              <p className="mt-4 border-t border-border pt-4 text-sm leading-relaxed text-ink-muted">
                 {c.detail}
               </p>
             )}
@@ -145,13 +145,13 @@ export default async function CommitmentDetailPage({
                 tone={c.state === 'overdue' ? 'seal' : 'stamp'}
               />
             </div>
-            <p className="mt-3 text-[13px] leading-relaxed text-ink-muted">
+            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
               {sourceExplanation(c.source.kind, c.source.label, c.source.confirmed)}
             </p>
             {c.source.quote && (
               <blockquote className="mt-3 rounded-sm border-l-2 border-primary/30 bg-primary-soft/40 px-3 py-2.5">
                 <div className="field-label">Frase citada del documento</div>
-                <p className="mt-1 font-mono text-[12.5px] leading-relaxed text-ink">
+                <p className="mt-1 font-mono text-xs leading-relaxed text-ink">
                   «{c.source.quote}»
                 </p>
               </blockquote>
@@ -159,13 +159,13 @@ export default async function CommitmentDetailPage({
             {c.source.documentId && (
               <Link
                 href={`/kb?document=${c.source.documentId}`}
-                className="mt-3 inline-block text-[12.5px] font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                className="mt-3 inline-block text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
               >
                 Abrir el documento en Brain Knowledge
               </Link>
             )}
             {row.confirmed_by && (
-              <p className="mt-3 text-[11.5px] text-ink-faint">
+              <p className="mt-3 text-micro text-ink-faint">
                 Confirmado el {stamp(row.confirmed_at)} — la persona que confirmó queda registrada
                 con la fecha.
               </p>
@@ -175,12 +175,12 @@ export default async function CommitmentDetailPage({
           {/* What Cortex has already said. */}
           <Panel className="p-5">
             <h2 className="text-sm font-semibold text-ink">Avisos de este vencimiento</h2>
-            <p className="mt-1 text-[12.5px] text-ink-muted">
+            <p className="mt-1 text-xs text-ink-muted">
               Cada aviso sale una sola vez. Si un envío falla, se reintenta al día siguiente sin
               repetir el mensaje.
             </p>
             {thisOccurrence.length === 0 ? (
-              <p className="mt-3 text-[13px] text-ink-muted">
+              <p className="mt-3 text-sm text-ink-muted">
                 Todavía no ha salido ningún aviso para esta fecha.
               </p>
             ) : (
@@ -188,18 +188,18 @@ export default async function CommitmentDetailPage({
                 {thisOccurrence.map((n) => (
                   <li key={n.id} className="flex items-center justify-between gap-3 py-2.5">
                     <div className="min-w-0">
-                      <div className="text-[13px] font-medium text-ink">
+                      <div className="text-sm font-medium text-ink">
                         {NOTICE_LABEL[n.notice_kind] ?? n.notice_kind}
                       </div>
-                      <div className="truncate text-[11.5px] text-ink-faint">
+                      <div className="truncate text-micro text-ink-faint">
                         {n.recipient_email ?? 'sin destinatario'}
                         {n.delivery_note ? ` · ${n.delivery_note}` : ''}
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <div className="tabular text-[12.5px] text-ink">{shortDate(n.sent_on)}</div>
+                      <div className="tabular text-xs text-ink">{shortDate(n.sent_on)}</div>
                       <div
-                        className={clsx('text-[11px]', n.delivered ? 'text-emerald' : 'text-amber')}
+                        className={clsx('text-micro', n.delivered ? 'text-emerald' : 'text-amber')}
                       >
                         {n.delivered ? 'entregado' : 'no salió'}
                         {n.acknowledged_at ? ' · visto' : ''}
@@ -217,7 +217,7 @@ export default async function CommitmentDetailPage({
                 <CalendarRange className="h-4 w-4 text-ink-faint" aria-hidden />
                 <h2 className="text-sm font-semibold text-ink">Historia</h2>
               </div>
-              <p className="mt-1 text-[12.5px] text-ink-muted">
+              <p className="mt-1 text-xs text-ink-muted">
                 Las veces anteriores de este mismo compromiso. Cumplir uno nunca borra el anterior.
               </p>
               <ul className="mt-3 divide-y divide-border">
@@ -225,12 +225,12 @@ export default async function CommitmentDetailPage({
                   <li key={h.id} className="flex items-center justify-between gap-3 py-2.5">
                     <Link
                       href={`/commitments/${h.id}`}
-                      className="truncate text-[13px] text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      className="truncate text-sm text-ink hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       {STATE_LABEL[h.state] ?? h.state}
                       {h.met_note ? ` — ${h.met_note}` : ''}
                     </Link>
-                    <span className="tabular shrink-0 text-[12.5px] text-ink-faint">
+                    <span className="tabular shrink-0 text-xs text-ink-faint">
                       {shortDate(h.due_on)}
                     </span>
                   </li>
@@ -252,14 +252,14 @@ export default async function CommitmentDetailPage({
           <Panel className="p-5">
             <h2 className="text-sm font-semibold text-ink">Calendario</h2>
             {row.calendar_event_id ? (
-              <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="mt-2 text-xs leading-relaxed text-ink-muted">
                 Hay un evento en el calendario de {c.owner ?? 'quien responde'} para el{' '}
                 <span className="tabular">{shortDate(row.calendar_synced_due_on ?? c.dueOn)}</span>.
                 Si cambias la fecha aquí, el evento se mueve solo; si lo marcas cumplido, el evento
                 desaparece.
               </p>
             ) : (
-              <p className="mt-2 flex items-start gap-2 text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="mt-2 flex items-start gap-2 text-xs leading-relaxed text-ink-muted">
                 <CalendarOff className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />
                 <span>
                   {row.calendar_error
@@ -268,7 +268,7 @@ export default async function CommitmentDetailPage({
                 </span>
               </p>
             )}
-            <p className="mt-3 text-[11.5px] leading-snug text-ink-faint">
+            <p className="mt-3 text-micro leading-snug text-ink-faint">
               La sincronización va en un solo sentido, de Cortex al calendario. Mover el evento en
               Google no cambia la fecha aquí: esta fecha tiene una fuente y arrastrar un evento no
               es una fuente.
@@ -277,7 +277,7 @@ export default async function CommitmentDetailPage({
 
           <Panel className="p-5">
             <h2 className="text-sm font-semibold text-ink">Ficha</h2>
-            <dl className="mt-3 space-y-2.5 text-[12.5px]">
+            <dl className="mt-3 space-y-2.5 text-xs">
               <Row label="Tipo" value={KIND_LABEL[c.kind]} />
               <Row label="Registrado" value={stamp(row.created_at) ?? '—'} />
               {row.met_at && <Row label="Cumplido" value={stamp(row.met_at) ?? '—'} />}

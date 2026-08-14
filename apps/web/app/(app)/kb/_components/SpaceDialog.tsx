@@ -63,7 +63,7 @@ export function SpaceDialog({
                 <Dialog.Title className="text-sm font-bold text-ink">
                   {isGlobal ? 'Nuevo espacio común' : 'Nuevo espacio propio'}
                 </Dialog.Title>
-                <Dialog.Description className="text-[11.5px] text-ink-faint">
+                <Dialog.Description className="text-micro text-ink-faint">
                   {isGlobal ? 'Lo va a leer toda la empresa' : `Solo ${viewerName} lo va a leer`}
                 </Dialog.Description>
               </div>
@@ -78,7 +78,7 @@ export function SpaceDialog({
 
           <div className="scroll-slim min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
             {isGlobal && (
-              <p className="rounded-card border border-amber/30 bg-amber-soft px-3 py-2.5 text-[12px] leading-relaxed text-ink">
+              <p className="rounded-card border border-amber/30 bg-amber-soft px-3 py-2.5 text-xs leading-relaxed text-ink">
                 Lo que dejes aquí se vuelve la respuesta oficial: cuando alguien le pregunte a
                 Cortex del tema, va a citar esto. Los borradores, déjalos en un espacio propio hasta
                 que sean ciertos.
@@ -86,7 +86,7 @@ export function SpaceDialog({
             )}
 
             <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
+              <span className="text-micro font-semibold uppercase tracking-[0.12em] text-ink-faint">
                 Nombre
               </span>
               <input
@@ -94,12 +94,12 @@ export function SpaceDialog({
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submit()}
                 placeholder={isGlobal ? 'Tarifas y fletes' : 'Mis notas de clientes'}
-                className="mt-1.5 w-full rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink transition placeholder:text-ink-faint focus:border-primary"
+                className="mt-1.5 w-full rounded-card border border-border bg-surface px-3 py-2 text-sm text-ink transition placeholder:text-ink-faint focus:border-primary"
               />
             </label>
 
             <label className="block">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-faint">
+              <span className="text-micro font-semibold uppercase tracking-[0.12em] text-ink-faint">
                 Qué va aquí
               </span>
               <textarea
@@ -107,12 +107,12 @@ export function SpaceDialog({
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 placeholder="Una línea para que el siguiente sepa qué guardar aquí."
-                className="mt-1.5 w-full resize-none rounded-card border border-border bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink transition placeholder:text-ink-faint focus:border-primary"
+                className="mt-1.5 w-full resize-none rounded-card border border-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink transition placeholder:text-ink-faint focus:border-primary"
               />
             </label>
 
             {error && (
-              <p className="rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+              <p className="rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
                 {error}
               </p>
             )}
@@ -122,7 +122,7 @@ export function SpaceDialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-card px-3.5 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              className="rounded-card px-3.5 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
             >
               Cancelar
             </button>
@@ -130,7 +130,7 @@ export function SpaceDialog({
               type="button"
               onClick={submit}
               disabled={saving || !name.trim()}
-              className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-1.5 text-xs font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {isGlobal ? 'Publicar para todos' : 'Crear el espacio'}

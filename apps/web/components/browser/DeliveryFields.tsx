@@ -60,7 +60,7 @@ export function DeliveryFields({
             />
           ))}
         </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-ink-faint">
+        <p className="mt-1.5 text-micro leading-snug text-ink-faint">
           {OUTPUT_KIND_HINT[value.outputKind]}
         </p>
 
@@ -81,7 +81,7 @@ export function DeliveryFields({
               }
               onChange={(e) => onChange({ ...value, outputLabel: e.target.value })}
             />
-            <p className="mt-1 text-[11.5px] leading-snug text-ink-faint">
+            <p className="mt-1 text-micro leading-snug text-ink-faint">
               Es lo que va en el asunto del correo. «Certificado de tradición · listo» se lee de un
               vistazo en el celular; el nombre del {MODULE.one} y una duración, no.
             </p>
@@ -102,7 +102,7 @@ export function DeliveryFields({
             />
           ))}
         </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-ink-faint">
+        <p className="mt-1.5 text-micro leading-snug text-ink-faint">
           {DELIVER_TO_HINT[value.deliverTo]}
         </p>
       </fieldset>
@@ -120,7 +120,7 @@ export function DeliveryFields({
               />
             ))}
           </div>
-          <p className="mt-1.5 text-[11.5px] leading-snug text-ink-faint">
+          <p className="mt-1.5 text-micro leading-snug text-ink-faint">
             {value.deliverWhen === 'always'
               ? 'Si falla, te aviso igual y por el mismo lado: enterarte de que el documento no salió es más urgente que recibirlo cuando sale.'
               : 'Te escribo sólo si no salió. Para algo que corre todos los días y casi siempre funciona.'}
@@ -128,7 +128,7 @@ export function DeliveryFields({
         </fieldset>
       )}
 
-      <p className="border-t border-border pt-3 text-[11.5px] leading-snug text-ink-faint">
+      <p className="border-t border-border pt-3 text-micro leading-snug text-ink-faint">
         Esto siempre le llega a quien pidió el {MODULE.one}, nunca a un tercero — por eso no hay
         casilla de destinatario. Para mandarle algo a un cliente están las herramientas de correo,
         que piden aprobación de una persona antes de salir.
@@ -157,7 +157,7 @@ function Choice({
       aria-checked={active}
       onClick={onSelect}
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-[12px] font-medium transition-colors duration-150',
+        'inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-xs font-medium transition-colors duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
         active
           ? 'bg-ink text-white'

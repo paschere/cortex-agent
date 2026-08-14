@@ -74,20 +74,20 @@ export function UploadDropzone({ spaceId, spaceName }: { spaceId: string; spaceN
             <UploadCloud className="h-4 w-4" />
           )}
         </span>
-        <p className="text-[13px] font-semibold text-ink">
+        <p className="text-sm font-semibold text-ink">
           {busy
             ? 'Entrando…'
             : isDragActive
               ? `Suéltalo en ${spaceName}`
               : 'Suelta un archivo o toca para elegirlo'}
         </p>
-        <p className="mx-auto mt-1 max-w-md text-[11.5px] leading-relaxed text-ink-faint">
+        <p className="mx-auto mt-1 max-w-md text-micro leading-relaxed text-ink-faint">
           PDF, Word, texto o Markdown hasta 10 MB. También audio (MP3, M4A, WAV, WebM) hasta 200 MB:
           lo transcribe y lo cita con el hablante y el minuto.
         </p>
       </div>
       {error && (
-        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
           {error}
         </p>
       )}

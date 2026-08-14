@@ -40,8 +40,8 @@ export function ContextFragments({ turn }: { turn: TurnView }) {
   if (!retrieval.ran) {
     return (
       <section>
-        <h4 className="text-[12px] font-bold text-ink">Fragmentos del cerebro</h4>
-        <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">
+        <h4 className="text-xs font-bold text-ink">Fragmentos del cerebro</h4>
+        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
           En este turno no se buscó nada en Brain Knowledge.{' '}
           {retrieval.skipped && <span className="text-ink-faint">{retrieval.skipped}</span>}
         </p>
@@ -55,13 +55,13 @@ export function ContextFragments({ turn }: { turn: TurnView }) {
   return (
     <section>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h4 className="text-[12px] font-bold text-ink">Fragmentos del cerebro</h4>
-        <span className="tabular ml-auto text-[11px] text-ink-faint">
+        <h4 className="text-xs font-bold text-ink">Fragmentos del cerebro</h4>
+        <span className="tabular ml-auto text-micro text-ink-faint">
           {prepended.length} de {retrieval.fragments.length} le llegaron
         </span>
       </div>
 
-      <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">
         <span className="font-semibold text-ink">{COVERAGE_LABEL[retrieval.coverage]}.</span>{' '}
         Buscó «{retrieval.query}».
       </p>
@@ -70,25 +70,25 @@ export function ContextFragments({ turn }: { turn: TurnView }) {
           was handed about its own results, and a second wording of it would
           eventually disagree with the first. */}
       {retrieval.summary && (
-        <p className="mt-1.5 border-l-2 border-ink-faint/25 pl-2.5 text-[11.5px] italic leading-relaxed text-ink-muted">
+        <p className="mt-1.5 border-l-2 border-ink-faint/25 pl-2.5 text-micro italic leading-relaxed text-ink-muted">
           {retrieval.summary}
         </p>
       )}
 
       {!retrieval.cuts.measured && retrieval.cuts.modelId && (
-        <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[11.5px] leading-relaxed text-ink">
+        <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-micro leading-relaxed text-ink">
           Los cortes de este turno no estaban medidos para «{retrieval.cuts.modelId}». Eran un
           margen provisional y amplio, así que lee estos veredictos con pinzas.
         </p>
       )}
 
       {retrieval.fragments.length === 0 ? (
-        <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">
+        <p className="mt-2 text-xs leading-relaxed text-ink-muted">
           No volvió ni un fragmento. Cortex contestó sin nada del cerebro encima.
         </p>
       ) : (
         <>
-          <div className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-ink-muted">
+          <div className="mt-3 flex items-center gap-1.5 text-micro font-semibold text-ink-muted">
             <Scale className="h-3.5 w-3.5 text-ink-faint" />
             Qué tan cerca estaba cada fragmento de la pregunta
           </div>
@@ -111,7 +111,7 @@ export function ContextFragments({ turn }: { turn: TurnView }) {
                   never shown to it — which is usually the answer. */}
               <div className="my-3 flex items-center gap-2">
                 <span className="h-px flex-1 bg-border-strong" />
-                <span className="whitespace-nowrap text-[10.5px] font-semibold text-ink-faint">
+                <span className="whitespace-nowrap text-micro font-semibold text-ink-faint">
                   de aquí para abajo no le llegó
                 </span>
                 <span className="h-px flex-1 bg-border-strong" />
@@ -146,7 +146,7 @@ function Row({
     <div className={clsx('flex items-start gap-3 py-2.5', faded && 'bg-surface-2/50')}>
       <span
         className={clsx(
-          'stat-num mt-0.5 w-5 shrink-0 text-right text-[11.5px]',
+          'stat-num mt-0.5 w-5 shrink-0 text-right text-micro',
           faded ? 'text-ink-faint' : 'text-primary',
         )}
       >
@@ -155,13 +155,13 @@ function Row({
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="truncate text-[12px] font-semibold text-ink">
+          <span className="truncate text-xs font-semibold text-ink">
             {fragment.documentTitle}
           </span>
-          <span className="tabular shrink-0 text-[10.5px] text-ink-faint">
+          <span className="tabular shrink-0 text-micro text-ink-faint">
             frag. {fragment.chunkIndex + 1}
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1 text-[10.5px] text-ink-faint">
+          <span className="inline-flex shrink-0 items-center gap-1 text-micro text-ink-faint">
             {fragment.spaceKind === 'personal' && <Lock className="h-2.5 w-2.5" />}
             {fragment.spaceName}
           </span>
@@ -171,32 +171,32 @@ function Row({
           // The numbers survive, the quotation does not. See read.ts: being able
           // to open somebody's transcript is not the same as being handed the
           // contents of their private notes.
-          <p className="mt-1 inline-flex items-center gap-1.5 text-[11.5px] italic text-ink-faint">
+          <p className="mt-1 inline-flex items-center gap-1.5 text-micro italic text-ink-faint">
             <EyeOff className="h-3 w-3" />
             No puedes ver este espacio, así que el texto no se muestra.
           </p>
         ) : fragment.excerpt ? (
           <p
             className={clsx(
-              'mt-1 whitespace-pre-wrap border-l-2 pl-2.5 text-[12.5px] leading-[1.65]',
+              'mt-1 whitespace-pre-wrap border-l-2 pl-2.5 text-xs leading-[1.65]',
               faded ? 'border-border text-ink-faint' : 'border-primary/25 text-ink',
             )}
           >
             {fragment.excerpt}
           </p>
         ) : (
-          <p className="mt-1 text-[11.5px] italic text-ink-faint">
+          <p className="mt-1 text-micro italic text-ink-faint">
             El texto de este turno ya se borró por antigüedad. Los puntajes se quedan.
           </p>
         )}
 
         {faded && fragment.verdict === 'dropped' && (
-          <p className="mt-1 text-[10.5px] font-semibold text-ink-faint">
+          <p className="mt-1 text-micro font-semibold text-ink-faint">
             quedó por debajo del mínimo — no se le pudo citar
           </p>
         )}
         {faded && fragment.verdict !== 'dropped' && (
-          <p className="mt-1 text-[10.5px] font-semibold text-ink-faint">
+          <p className="mt-1 text-micro font-semibold text-ink-faint">
             pasó el mínimo pero no cupo en el cupo de fragmentos
           </p>
         )}

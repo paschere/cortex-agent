@@ -52,14 +52,14 @@ export function ReasoningTrail({ text, live }: { text: string; live?: boolean })
       >
         <span
           className={clsx(
-            'shrink-0 text-[11px] font-semibold',
+            'shrink-0 text-micro font-semibold',
             live ? 'text-primary' : 'text-ink-faint',
           )}
         >
           {live ? 'Razonando…' : 'Razonamiento'}
         </span>
         {live && !open && (
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-faint">
+          <span className="min-w-0 flex-1 truncate font-mono text-micro text-ink-faint">
             {tail}
           </span>
         )}
@@ -74,7 +74,7 @@ export function ReasoningTrail({ text, live }: { text: string; live?: boolean })
       {open && (
         <div
           ref={bodyRef}
-          className="scroll-slim mt-1.5 max-h-60 overflow-y-auto whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-ink-muted"
+          className="scroll-slim mt-1.5 max-h-60 overflow-y-auto whitespace-pre-wrap font-mono text-micro leading-relaxed text-ink-muted"
         >
           {trimmed}
         </div>

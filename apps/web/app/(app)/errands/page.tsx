@@ -73,7 +73,7 @@ export default async function ErrandsPage() {
                   )}
                   {s.label}
                 </div>
-                <div className="stat-num mt-1 truncate text-[20px] leading-none text-ink">
+                <div className="stat-num mt-1 truncate text-lg leading-none text-ink">
                   {s.value}
                 </div>
               </div>
@@ -85,8 +85,8 @@ export default async function ErrandsPage() {
       {errands.length === 0 ? (
         <Panel className="px-6 py-12 text-center">
           <Briefcase className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <h2 className="text-[15px] font-bold text-ink">Todavía no le has encargado nada</h2>
-          <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-muted">
+          <h2 className="text-base font-bold text-ink">Todavía no le has encargado nada</h2>
+          <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-ink-muted">
             Escoge un tipo arriba y descríbelo como se lo dirías a alguien del equipo. Cortex arma
             el plan, lo trabaja por su cuenta y te avisa cuando tenga algo — o cuando necesite que
             le aclares una cosa.
@@ -96,7 +96,7 @@ export default async function ErrandsPage() {
         <Panel className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="field-label">Encargos</div>
-            <div className="tabular text-[11px] text-ink-faint">
+            <div className="tabular text-micro text-ink-faint">
               {errands.length} {errands.length === 1 ? 'encargo' : 'encargos'}
             </div>
           </div>
@@ -111,10 +111,10 @@ export default async function ErrandsPage() {
                     className="flex flex-col gap-2 px-4 py-3.5 transition-colors hover:bg-surface-2 focus:outline-none focus-visible:bg-surface-2 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/40 sm:flex-row sm:items-center sm:gap-4"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="line-clamp-2 text-[13.5px] font-semibold leading-snug text-ink">
+                      <div className="line-clamp-2 text-sm font-semibold leading-snug text-ink">
                         {errand.request}
                       </div>
-                      <div className="tabular mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-faint">
+                      <div className="tabular mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-faint">
                         <span>{ERRAND_KIND_SPECS[errand.kind].label}</span>
                         <span>{relativeWhen(errand.createdAt)}</span>
                         {errand.legsUsed > 0 && (

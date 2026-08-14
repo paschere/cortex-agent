@@ -85,9 +85,9 @@ export default async function ActionsPage() {
       />
 
       {nothing ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-muted">
+        <Panel className="p-10 text-center text-sm text-ink-muted">
           <Sparkles className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <p className="mb-1 text-[15px] font-bold text-ink">No hay nada por aprobar</p>
+          <p className="mb-1 text-base font-bold text-ink">No hay nada por aprobar</p>
           <p className="mx-auto max-w-md leading-relaxed">
             Cuando encuentre una cartera vencida, un vencimiento sin dueño o un correo de un cliente
             sin responder, Cortex deja aquí el mensaje ya redactado. Pídeselo en el chat —
@@ -126,10 +126,10 @@ export default async function ActionsPage() {
                 {awaiting.map((r) => (
                   <Panel key={r.id} className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-semibold text-ink">{r.subject}</span>
-                      <span className="tabular text-[12px] text-ink-muted">{r.recipient}</span>
+                      <span className="text-sm font-semibold text-ink">{r.subject}</span>
+                      <span className="tabular text-xs text-ink-muted">{r.recipient}</span>
                     </div>
-                    <p className="tabular mt-1 text-[11.5px] text-ink-faint">
+                    <p className="tabular mt-1 text-micro text-ink-faint">
                       Enviada {r.executed_at ? relativeTime(r.executed_at) : ''}
                     </p>
                   </Panel>

@@ -33,7 +33,7 @@ export function GrowthPanel({ stats, focus }: { stats: BrainStats; focus?: Intak
         title="Lo que ha aprendido"
         right={focus ? `solo ${LOBE_NAME[focus].toLowerCase()}` : 'últimas 12 semanas'}
       />
-      <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
+      <p className="px-5 pt-1 text-xs text-ink-muted">
         {anything
           ? `${num(quarter)} documentos entraron en este trimestre.`
           : focus
@@ -66,7 +66,7 @@ export function GrowthPanel({ stats, focus }: { stats: BrainStats; focus?: Intak
         {/* Ruled baseline, then the ends of the axis labelled directly — a
             legend would only repeat what two dates already say. */}
         <div className="mt-1 border-t border-border-strong pt-1.5">
-          <div className="flex items-center justify-between text-[10.5px] text-ink-faint">
+          <div className="flex items-center justify-between text-micro text-ink-faint">
             <span className="tabular">{first ? weekLabel(first.start) : ''}</span>
             <span>
               máximo <span className="stat-num text-ink-muted">{num(peak)}</span> por semana

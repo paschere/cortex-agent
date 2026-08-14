@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 
 const FIELD =
-  'rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-50';
+  'rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-50';
 
 const ROLE_LABEL: Record<string, string> = {
   org_admin: 'Admin de la organización',
@@ -130,8 +130,8 @@ export default async function TeamsPage() {
         {teams.length === 0 ? (
           <Panel className="p-10 text-center">
             <UsersRound className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
-            <p className="text-[13px] font-semibold text-ink">Todavía no hay equipos</p>
-            <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
+            <p className="text-sm font-semibold text-ink">Todavía no hay equipos</p>
+            <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
               Crea el primero arriba. Sin equipos, todo el mundo llega a todas las herramientas que
               permita su agente.
             </p>
@@ -148,8 +148,8 @@ export default async function TeamsPage() {
             return (
               <Panel key={team.id} className="overflow-hidden">
                 <div className="flex flex-wrap items-center gap-2 bg-surface-2 px-4 py-3">
-                  <span className="text-[13.5px] font-semibold text-ink">{team.name}</span>
-                  <span className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2.5 py-0.5 text-[10.5px] font-semibold text-ink-muted">
+                  <span className="text-sm font-semibold text-ink">{team.name}</span>
+                  <span className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2.5 py-0.5 text-micro font-semibold text-ink-muted">
                     <Users2 className="h-3 w-3" />
                     <span className="tabular">{teamMembers.length}</span>{' '}
                     {teamMembers.length === 1 ? 'persona' : 'personas'}
@@ -158,8 +158,8 @@ export default async function TeamsPage() {
                     href={`/tools?team=${team.id}`}
                     className={
                       restrictions > 0
-                        ? 'inline-flex items-center gap-1 rounded-pill border border-rose/40 bg-rose-soft px-2.5 py-0.5 text-[10.5px] font-semibold text-rose transition-all duration-150 hover:-translate-y-px hover:opacity-90 motion-reduce:transform-none motion-reduce:transition-none'
-                        : 'inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2.5 py-0.5 text-[10.5px] font-semibold text-ink-faint transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transform-none motion-reduce:transition-none'
+                        ? 'inline-flex items-center gap-1 rounded-pill border border-rose/40 bg-rose-soft px-2.5 py-0.5 text-micro font-semibold text-rose transition-all duration-150 hover:-translate-y-px hover:opacity-90 motion-reduce:transform-none motion-reduce:transition-none'
+                        : 'inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2.5 py-0.5 text-micro font-semibold text-ink-faint transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transform-none motion-reduce:transition-none'
                     }
                   >
                     <ShieldBan className="h-3 w-3" />
@@ -171,7 +171,7 @@ export default async function TeamsPage() {
                 <div className="px-4 py-3">
                   <div className="field-label">Integrantes</div>
                   {teamMembers.length === 0 ? (
-                    <p className="mt-2 text-[12.5px] text-ink-muted">
+                    <p className="mt-2 text-xs text-ink-muted">
                       Este equipo está vacío. Agrega a alguien abajo.
                     </p>
                   ) : (
@@ -182,16 +182,16 @@ export default async function TeamsPage() {
                           className="-mx-2 flex items-center gap-3 rounded-sm px-2 py-2 transition-colors duration-150 hover:bg-surface-2"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-[13px] font-semibold text-ink">
+                            <div className="truncate text-sm font-semibold text-ink">
                               {u.name || u.email}
                             </div>
                             {u.name && (
-                              <div className="tabular truncate text-[11.5px] text-ink-faint">
+                              <div className="tabular truncate text-micro text-ink-faint">
                                 {u.email}
                               </div>
                             )}
                           </div>
-                          <span className="shrink-0 rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">
+                          <span className="shrink-0 rounded-pill border border-border bg-surface px-2 py-0.5 text-micro font-semibold text-ink-muted">
                             {ROLE_LABEL[u.role] ?? u.role}
                           </span>
                           <form action={removeTeamMember} className="shrink-0">

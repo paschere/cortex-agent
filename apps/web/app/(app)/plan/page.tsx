@@ -69,7 +69,7 @@ function MeterBlock({ entitlement }: { entitlement: Entitlement }) {
   return (
     <div className="p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <div className="text-[13px] font-semibold text-ink">
+        <div className="text-sm font-semibold text-ink">
           {label.many.charAt(0).toUpperCase() + label.many.slice(1)}
         </div>
         <span className={chipClass(limit === null ? 'neutral' : tone)}>
@@ -78,11 +78,11 @@ function MeterBlock({ entitlement }: { entitlement: Entitlement }) {
       </div>
 
       <div className="mt-2 flex items-baseline gap-1.5">
-        <span className="stat-num text-[30px] leading-none text-ink">{count(used)}</span>
+        <span className="stat-num text-display leading-none text-ink">{count(used)}</span>
         {limit !== null && (
-          <span className="tabular text-[13px] text-ink-faint">de {count(limit)}</span>
+          <span className="tabular text-sm text-ink-faint">de {count(limit)}</span>
         )}
-        {pct && <span className="tabular ml-1 text-[12px] text-ink-faint">· {pct}</span>}
+        {pct && <span className="tabular ml-1 text-xs text-ink-faint">· {pct}</span>}
       </div>
 
       {limit !== null && (
@@ -102,18 +102,18 @@ function MeterBlock({ entitlement }: { entitlement: Entitlement }) {
           to be true of every unit of quota, or the number above is an assertion
           again. */}
       {limit !== null && perSeat !== null && (
-        <p className="tabular mt-2 text-[12px] text-ink-faint">
+        <p className="tabular mt-2 text-xs text-ink-faint">
           {count(perSeat)} por persona × {count(seats)}{' '}
           {seats === 1 ? 'persona' : 'personas'} = {count(limit)}
         </p>
       )}
 
-      <p className="mt-3 text-[12px] leading-relaxed text-ink-muted">{label.help}</p>
+      <p className="mt-3 text-xs leading-relaxed text-ink-muted">{label.help}</p>
 
       {/* The margin is stated only once it is doing something. Explaining a
           courtesy nobody has needed yet is noise on every other screen. */}
       {state === 'grace' && allowance !== null && (
-        <p className="mt-2 text-[12px] leading-relaxed text-amber">
+        <p className="mt-2 text-xs leading-relaxed text-amber">
           Te pasaste del plan y Cortex sigue trabajando: te quedan{' '}
           <span className="tabular font-semibold">{count(Math.max(0, allowance - used))}</span> de
           cortesía sobre las <span className="tabular">{count(grace)}</span> del margen. Nada se
@@ -122,13 +122,13 @@ function MeterBlock({ entitlement }: { entitlement: Entitlement }) {
         </p>
       )}
       {state === 'blocked' && meter === 'answers' && (
-        <p className="mt-2 text-[12px] leading-relaxed text-rose">
+        <p className="mt-2 text-xs leading-relaxed text-rose">
           Se acabó el margen. Cortex no empieza respuestas nuevas, pero todo lo que ya está adentro
           se sigue leyendo y buscando. Amplía el plan y vuelve a responder de inmediato.
         </p>
       )}
       {state === 'blocked' && meter === 'documents' && (
-        <p className="mt-2 text-[12px] leading-relaxed text-amber">
+        <p className="mt-2 text-xs leading-relaxed text-amber">
           Los documentos nuevos se siguen guardando: quedan legibles y se buscan por palabra, pero
           todavía no entran en las respuestas. Al ampliar el plan se indexan solos, sin volverlos a
           subir.
@@ -200,7 +200,7 @@ export default async function PlanPage({
           }
         />
         <div className="px-5 pb-5 pt-3">
-          <p className="text-[13px] text-ink-muted">{plan.tagline}</p>
+          <p className="text-sm text-ink-muted">{plan.tagline}</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <Field label="Respuestas por persona">
               <span className="tabular">
@@ -226,7 +226,7 @@ export default async function PlanPage({
               multiplication rather than a lookup. Showing the rate, the count and
               the product means the figure can be checked without asking us. */}
           {plan.priceCopPerSeat > 0 && (
-            <div className="tabular mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] text-ink-muted">
+            <div className="tabular mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-xs text-ink-muted">
               <span>{cop(plan.priceCopPerSeat)}</span>
               <span className="text-ink-faint">×</span>
               <span>
@@ -238,12 +238,12 @@ export default async function PlanPage({
           )}
 
           {seatNote && (
-            <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">{seatNote}</p>
+            <p className="mt-2 text-xs leading-relaxed text-ink-muted">{seatNote}</p>
           )}
 
           {/* Said plainly, because the public page says it plainly too. */}
           {plan.priceCopPerSeat > 0 && (
-            <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+            <p className="mt-2 text-xs leading-relaxed text-ink-faint">
               Todavía no cobramos dentro de Cortex: esta es la cuenta del mes tal como la
               calculamos, no un cargo. Cuando entre alguien nuevo, esta cifra sube sola y aquí lo
               ves.
@@ -251,7 +251,7 @@ export default async function PlanPage({
           )}
 
           {unlimited && (
-            <p className="mt-4 rounded-sm border border-primary/15 bg-primary-soft px-3 py-2.5 text-[12px] leading-relaxed text-primary-ink">
+            <p className="mt-4 rounded-sm border border-primary/15 bg-primary-soft px-3 py-2.5 text-xs leading-relaxed text-primary-ink">
               Tu espacio no tiene topes ni tope de personas. Seguimos midiendo el consumo para que
               puedas verlo, pero nada aquí te limita.
             </p>
@@ -278,7 +278,7 @@ export default async function PlanPage({
           ))}
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-3.5">
-          <div className="flex items-center gap-2 text-[12.5px] text-ink-muted">
+          <div className="flex items-center gap-2 text-xs text-ink-muted">
             <Users className="h-3.5 w-3.5 text-ink-faint" />
             <span className="tabular text-ink">{count(seats.members)}</span> personas
             {seats.pending > 0 && (
@@ -288,7 +288,7 @@ export default async function PlanPage({
               </span>
             )}
           </div>
-          <Link href="/onboarding" className="text-[12.5px] font-semibold text-primary hover:underline">
+          <Link href="/onboarding" className="text-xs font-semibold text-primary hover:underline">
             Invitar a alguien
           </Link>
         </div>
@@ -314,26 +314,26 @@ export default async function PlanPage({
           }
         />
         <div className="px-5 pb-2 pt-3">
-          <p className="text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="text-xs leading-relaxed text-ink-muted">
             Cada fila es una unidad cobrada y nombra la conversación o el documento que la produjo.
             La cifra de arriba no es una afirmación: es el largo de esta lista.
           </p>
         </div>
 
         {ledger.length === 0 ? (
-          <div className="px-5 pb-5 pt-2 text-[13px] text-ink-faint">
+          <div className="px-5 pb-5 pt-2 text-sm text-ink-faint">
             Todavía no hay {METER_LABEL[openMeter].many} en {periodLabel(usage.period)}.
           </div>
         ) : (
           <ul className="divide-y divide-border">
             {ledger.map((row) => (
               <li key={row.id} className="flex items-center gap-3 px-5 py-2.5">
-                <span className="tabular w-[92px] shrink-0 text-[12px] text-ink-faint">
+                <span className="tabular w-[92px] shrink-0 text-xs text-ink-faint">
                   {stamp(row.occurredAt)}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">
                   {row.label ?? (
-                    <span className="font-mono text-[12px] text-ink-faint">
+                    <span className="font-mono text-xs text-ink-faint">
                       {row.subjectId.slice(0, 8)}
                     </span>
                   )}
@@ -350,7 +350,7 @@ export default async function PlanPage({
 
         {/* The honest footnote. A list capped at 60 rows next to a total of
             1.240 would otherwise read as a contradiction. */}
-        <div className="border-t border-border px-5 py-3 text-[12px] text-ink-faint">
+        <div className="border-t border-border px-5 py-3 text-xs text-ink-faint">
           {ledgerTotal < meterTotal ? (
             <>
               Se muestran las <span className="tabular">{count(ledgerTotal)}</span> más recientes de{' '}
@@ -372,7 +372,7 @@ export default async function PlanPage({
           <div className="px-5 pb-5 pt-3">
             {/* Said plainly rather than hidden behind a checkout that does not
                 exist. See the billing note in agent-tools/src/billing/plans.ts. */}
-            <p className="text-[12.5px] leading-relaxed text-ink-muted">
+            <p className="text-xs leading-relaxed text-ink-muted">
               Todavía no cobramos dentro del producto. Dinos cuál necesitas y lo activamos; queda
               anotado con tu nombre y la fecha.
             </p>
@@ -380,15 +380,15 @@ export default async function PlanPage({
               {others.map((other) => (
                 <div key={other.code} className="rounded-card border border-border bg-surface-2 p-4">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[13px] font-semibold text-ink">{other.name}</span>
-                    <span className="tabular text-[13px] text-ink">
+                    <span className="text-sm font-semibold text-ink">{other.name}</span>
+                    <span className="tabular text-sm text-ink">
                       {other.priceCopPerSeat > 0
                         ? `${cop(other.priceCopPerSeat)} por persona`
                         : 'Gratis'}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-[12px] text-ink-muted">{other.tagline}</p>
-                  <div className="tabular mt-3 text-[12px] text-ink-faint">
+                  <p className="mt-1.5 text-xs text-ink-muted">{other.tagline}</p>
+                  <div className="tabular mt-3 text-xs text-ink-faint">
                     Cada persona trae{' '}
                     {other.perSeat.answers === null
                       ? 'respuestas sin límite'
@@ -401,7 +401,7 @@ export default async function PlanPage({
                   {/* The minimum is a floor on the bill and is said as one. A
                       workspace with fewer people is not being turned away; it is
                       being told what the smallest invoice on this plan is. */}
-                  <div className="tabular mt-1 text-[12px] text-ink-faint">
+                  <div className="tabular mt-1 text-xs text-ink-faint">
                     {other.seatsMaximum !== null
                       ? `Hasta ${count(other.seatsMaximum)} personas`
                       : other.billableSeatsMinimum > 1
@@ -419,7 +419,7 @@ export default async function PlanPage({
       )}
 
       {usage.status !== 'active' && (
-        <p className="text-[12px] text-rose">
+        <p className="text-xs text-rose">
           Tu suscripción está marcada como{' '}
           {usage.status === 'past_due' ? 'pendiente de pago' : 'cancelada'}. Escríbenos antes de que
           afecte al equipo.

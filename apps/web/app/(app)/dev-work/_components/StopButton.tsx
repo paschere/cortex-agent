@@ -32,7 +32,7 @@ export function StopButton({
   const [error, setError] = useState<string | null>(null);
 
   const shape =
-    size === 'sm' ? 'gap-1 px-2 py-1 text-[11.5px]' : 'gap-1.5 px-2.5 py-1.5 text-[12px]';
+    size === 'sm' ? 'gap-1 px-2 py-1 text-micro' : 'gap-1.5 px-2.5 py-1.5 text-xs';
 
   if (stopping) {
     return (
@@ -94,7 +94,7 @@ export function StopButton({
         )}
       </button>
       {error && (
-        <p className="rounded-sm border border-rose/40 bg-rose-soft px-2 py-1 text-[11px] text-rose">
+        <p className="rounded-sm border border-rose/40 bg-rose-soft px-2 py-1 text-micro text-rose">
           {error} La ejecución sigue corriendo; vuelve a intentarlo.
         </p>
       )}

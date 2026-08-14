@@ -96,7 +96,7 @@ export function NotificationBell({ initialUnread = 0 }: { initialUnread?: number
       {unread > 0 && (
         // Anillado en la superficie de la barra para que conserve su borde
         // cuando el botón se rellena al pasar por encima.
-        <span className="tabular-nums absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-[9.5px] font-bold leading-4 text-white ring-2 ring-surface">
+        <span className="tabular-nums absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-primary px-1 text-center text-micro font-bold leading-4 text-white ring-2 ring-surface">
           {unread > 9 ? '9+' : unread}
         </span>
       )}

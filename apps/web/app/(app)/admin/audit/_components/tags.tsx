@@ -102,7 +102,7 @@ export function Tag({
     <span
       title={title}
       className={clsx(
-        'inline-block whitespace-nowrap rounded-pill border px-2.5 py-[3px] text-[10.5px] font-semibold',
+        'inline-block whitespace-nowrap rounded-pill border px-2.5 py-[3px] text-micro font-semibold',
         tone,
         className,
       )}
@@ -121,7 +121,7 @@ export function StatusTag({ status }: { status: string }) {
 }
 
 export function SurfaceTag({ surface }: { surface: string | null }) {
-  if (!surface) return <span className="tabular text-[10px] text-ink-faint">—</span>;
+  if (!surface) return <span className="tabular text-micro text-ink-faint">—</span>;
   return <Tag tone={SURFACE_TAG[surface] ?? NEUTRAL}>{SURFACE_SHORT[surface] ?? surface}</Tag>;
 }
 
@@ -139,7 +139,7 @@ export function DecisionTag({ decision }: { decision: string | null }) {
 /** Small grey chip used for risk signals. */
 export function SignalChip({ children }: { children: ReactNode }) {
   return (
-    <span className="tabular inline-block rounded-pill border border-border bg-surface-2 px-2.5 py-[3px] text-[10.5px] text-ink-muted">
+    <span className="tabular inline-block rounded-pill border border-border bg-surface-2 px-2.5 py-[3px] text-micro text-ink-muted">
       {children}
     </span>
   );
@@ -156,7 +156,7 @@ export function LegendDot({
   value?: string;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-muted">
+    <span className="inline-flex items-center gap-1.5 text-micro text-ink-muted">
       <span className={clsx('h-2 w-2 shrink-0 rounded-full', color)} />
       {label}
       {value && <span className="tabular font-semibold text-ink">{value}</span>}

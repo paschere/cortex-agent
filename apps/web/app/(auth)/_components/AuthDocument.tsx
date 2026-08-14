@@ -41,11 +41,11 @@ export function AuthMasthead({
         {/* App icon lives at /icon.png (Next metadata) — same mark as the tab. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/icon.png" alt="" className="h-7 w-7" />
-        <span className="text-[25px] font-semibold uppercase leading-none tracking-[0.2em]">
+        <span className="text-xl font-semibold uppercase leading-none tracking-[0.2em]">
           Cortex
         </span>
       </div>
-      <p className="mt-4 text-[13px] leading-snug text-white/75">{note}</p>
+      <p className="mt-4 text-sm leading-snug text-white/75">{note}</p>
     </div>
   );
 }
@@ -58,8 +58,8 @@ export function AuthBody({ children }: { children: ReactNode }) {
 export function AuthTitle({ children, hint }: { children: ReactNode; hint?: ReactNode }) {
   return (
     <div className="mb-5">
-      <h1 className="text-[17px] font-bold tracking-tight text-ink">{children}</h1>
-      {hint && <p className="mt-1.5 text-[13px] leading-snug text-ink-muted">{hint}</p>}
+      <h1 className="text-lg font-bold tracking-tight text-ink">{children}</h1>
+      {hint && <p className="mt-1.5 text-sm leading-snug text-ink-muted">{hint}</p>}
     </div>
   );
 }
@@ -84,7 +84,7 @@ export function AuthField({
       <input
         id={id}
         className={clsx(
-          'mt-1 w-full rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-[13px] text-ink',
+          'mt-1 w-full rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-sm text-ink',
           'transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-surface',
           'focus:outline-none focus:ring-4 focus:ring-primary/10',
           // Credentials and one-time codes are read character by character.
@@ -102,7 +102,7 @@ export function AuthDivider({ label = 'o' }: { label?: string }) {
   return (
     <div className="my-4 flex items-center gap-3">
       <span className="h-px flex-1 bg-border" />
-      <span className="text-[11px] font-medium text-ink-faint">{label}</span>
+      <span className="text-micro font-medium text-ink-faint">{label}</span>
       <span className="h-px flex-1 bg-border" />
     </div>
   );
@@ -113,7 +113,7 @@ export function AuthError({ children }: { children: ReactNode }) {
   return (
     <p
       role="alert"
-      className="mt-4 rounded-sm border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] leading-snug text-rose"
+      className="mt-4 rounded-sm border border-rose/40 bg-rose-soft px-3 py-2 text-xs leading-snug text-rose"
     >
       {children}
     </p>

@@ -77,15 +77,15 @@ const BODY_LABEL: Record<CustomToolBodyEncoding, string> = {
 };
 
 const TEXTAREA_CLASS =
-  'w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 motion-reduce:transition-none';
+  'w-full rounded-[10px] border border-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 motion-reduce:transition-none';
 
 const SELECT_CLASS =
-  'rounded-[10px] border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10';
+  'rounded-[10px] border border-border bg-surface px-3 py-2 text-sm text-ink focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10';
 
 const CHECKBOX_CLASS = 'h-3.5 w-3.5 rounded-[4px] border-border text-primary';
 
-const HELP = 'mt-0.5 text-[11.5px] leading-relaxed text-ink-faint';
-const LABEL = 'block text-[12px] font-semibold text-ink';
+const HELP = 'mt-0.5 text-micro leading-relaxed text-ink-faint';
+const LABEL = 'block text-xs font-semibold text-ink';
 
 export function CustomTools() {
   const [loading, setLoading] = useState(true);
@@ -134,8 +134,8 @@ export function CustomTools() {
             <Boxes className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <h2 className="text-[14px] font-bold text-ink">Herramientas propias</h2>
-            <p className="mt-0.5 max-w-2xl text-[12px] leading-relaxed text-ink-muted">
+            <h2 className="text-base font-bold text-ink">Herramientas propias</h2>
+            <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-ink-muted">
               Conecta la API de tu empresa sin escribir código: le pones nombre, explicas para qué
               sirve, y Cortex la usa cuando haga falta igual que cualquier otra herramienta. Corren
               con las mismas reglas: quedan en la auditoría y respetan los permisos de cada equipo.
@@ -150,31 +150,31 @@ export function CustomTools() {
         )}
       </div>
 
-      {loading && <p className="mt-3 text-[12px] text-ink-faint">Cargando…</p>}
+      {loading && <p className="mt-3 text-xs text-ink-faint">Cargando…</p>}
 
       {atCapacity && canManage && (
-        <p className="mt-3 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12px] font-semibold text-amber">
+        <p className="mt-3 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs font-semibold text-amber">
           Llegaste al máximo de <span className="tabular">{maxTools}</span> herramientas propias.
           Borra una para poder crear otra.
         </p>
       )}
 
       {loadError && (
-        <p className="mt-3 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] font-semibold text-rose">
+        <p className="mt-3 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs font-semibold text-rose">
           {loadError}
         </p>
       )}
 
       {notice && (
-        <p className="mt-3 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12px] leading-relaxed text-amber">
+        <p className="mt-3 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs leading-relaxed text-amber">
           {notice}
         </p>
       )}
 
       {!loading && !editing && tools.length === 0 && !loadError && (
         <div className="mt-3 rounded-card border border-dashed border-border-strong bg-surface-2 p-6 text-center">
-          <p className="text-[13px] font-semibold text-ink">Todavía no hay ninguna</p>
-          <p className="mx-auto mt-1 max-w-md text-[12px] leading-relaxed text-ink-muted">
+          <p className="text-sm font-semibold text-ink">Todavía no hay ninguna</p>
+          <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
             Sirven para lo que solo existe en tu empresa: consultar el inventario, mirar el estado
             de un pedido, crear una orden. Describes la llamada una sola vez y queda disponible para
             todo el mundo.
@@ -185,7 +185,7 @@ export function CustomTools() {
               Crear la primera
             </Button>
           ) : (
-            <p className="mt-3 text-[11.5px] text-ink-faint">
+            <p className="mt-3 text-micro text-ink-faint">
               Solo un administrador puede crearlas: quien define una puede consultar cualquier cosa
               que la red de Cortex alcance.
             </p>
@@ -269,29 +269,29 @@ function ToolCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-[13.5px] font-semibold text-ink">{tool.name}</span>
-            <code className="tabular text-[11px] text-ink-faint">{tool.toolId}</code>
+            <span className="text-sm font-semibold text-ink">{tool.name}</span>
+            <code className="tabular text-micro text-ink-faint">{tool.toolId}</code>
             {!tool.enabled && (
-              <span className="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">
+              <span className="rounded-pill border border-border bg-surface px-2 py-0.5 text-micro font-semibold text-ink-muted">
                 Apagada
               </span>
             )}
             {tool.requiresConfirmation && (
-              <span className="inline-flex items-center gap-1 rounded-pill border border-amber/30 bg-amber-soft px-2 py-0.5 text-[10.5px] font-semibold text-amber">
+              <span className="inline-flex items-center gap-1 rounded-pill border border-amber/30 bg-amber-soft px-2 py-0.5 text-micro font-semibold text-amber">
                 <ShieldAlert className="h-3 w-3" />
                 Pide confirmación
               </span>
             )}
             {tool.lastError && (
-              <span className="inline-flex items-center gap-1 rounded-pill border border-rose/30 bg-rose-soft px-2 py-0.5 text-[10.5px] font-semibold text-rose">
+              <span className="inline-flex items-center gap-1 rounded-pill border border-rose/30 bg-rose-soft px-2 py-0.5 text-micro font-semibold text-rose">
                 <TriangleAlert className="h-3 w-3" />
                 Falló la última prueba
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">{tool.description}</p>
+          <p className="mt-0.5 text-xs leading-snug text-ink-muted">{tool.description}</p>
           {canManage && tool.urlTemplate && (
-            <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-ink-faint">
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 text-micro text-ink-faint">
               <span className="tabular font-semibold text-ink-muted">{tool.method}</span>
               <span className="tabular break-all">{tool.urlTemplate}</span>
               {tool.authType && tool.authType !== 'none' && (
@@ -300,7 +300,7 @@ function ToolCard({
             </p>
           )}
           {canManage && tool.lastError && (
-            <p className="mt-1 text-[11px] leading-snug text-rose">{tool.lastError}</p>
+            <p className="mt-1 text-micro leading-snug text-rose">{tool.lastError}</p>
           )}
         </div>
 
@@ -381,7 +381,7 @@ function Tester({ tool }: { tool: CustomToolView }) {
 
   return (
     <div className="mt-3 border-t border-border pt-3">
-      <p className="text-[12px] font-semibold text-ink">Probar la llamada</p>
+      <p className="text-xs font-semibold text-ink">Probar la llamada</p>
       <p className={HELP}>
         Llama a tu API de verdad, por el mismo camino que usaría Cortex. Vas a ver qué se envió, qué
         respondió y con qué se quedaría el modelo. La llave no se muestra nunca.
@@ -448,38 +448,38 @@ function TestResult({ result }: { result: CustomToolTestResponse }) {
           <TriangleAlert className="h-4 w-4 text-rose" />
         )}
         <span
-          className={clsx('text-[12.5px] font-semibold', result.ok ? 'text-emerald' : 'text-rose')}
+          className={clsx('text-xs font-semibold', result.ok ? 'text-emerald' : 'text-rose')}
         >
           {result.ok ? 'Respondió bien' : 'No funcionó'}
         </span>
         {result.response && (
-          <span className="tabular text-[11px] text-ink-muted">
+          <span className="tabular text-micro text-ink-muted">
             HTTP {result.response.status} {result.response.statusText}
           </span>
         )}
         {result.elapsedMs != null && (
-          <span className="tabular text-[11px] text-ink-muted">{result.elapsedMs} ms</span>
+          <span className="tabular text-micro text-ink-muted">{result.elapsedMs} ms</span>
         )}
       </div>
 
-      {result.error && <p className="mt-1 text-[11.5px] leading-snug text-rose">{result.error}</p>}
+      {result.error && <p className="mt-1 text-micro leading-snug text-rose">{result.error}</p>}
       {result.problems?.map((p) => (
-        <p key={p} className="mt-1 text-[11.5px] leading-snug text-rose">
+        <p key={p} className="mt-1 text-micro leading-snug text-rose">
           {p}
         </p>
       ))}
       {result.modelResult?.message && (
-        <p className="mt-1 text-[11.5px] leading-snug text-ink-muted">
+        <p className="mt-1 text-micro leading-snug text-ink-muted">
           Lo que le llegaría al modelo: {result.modelResult.message}
         </p>
       )}
 
       {result.request && (
         <details className="mt-2">
-          <summary className="cursor-pointer text-[11.5px] font-semibold text-ink-muted">
+          <summary className="cursor-pointer text-micro font-semibold text-ink-muted">
             Qué se envió
           </summary>
-          <pre className="tabular mt-1 max-h-40 overflow-auto rounded-sm border border-border bg-surface p-2 text-[11px] leading-relaxed text-ink-muted">
+          <pre className="tabular mt-1 max-h-40 overflow-auto rounded-sm border border-border bg-surface p-2 text-micro leading-relaxed text-ink-muted">
             {`${result.request.method} ${result.request.url}\n${Object.entries(
               result.request.headers,
             )
@@ -487,7 +487,7 @@ function TestResult({ result }: { result: CustomToolTestResponse }) {
               .join('\n')}${result.request.body ? `\n\n${result.request.body}` : ''}`}
           </pre>
           {result.chain && result.chain.length > 1 && (
-            <p className="mt-1 text-[11px] text-ink-faint">
+            <p className="mt-1 text-micro text-ink-faint">
               Redirecciones: {result.chain.join(' → ')}
             </p>
           )}
@@ -496,10 +496,10 @@ function TestResult({ result }: { result: CustomToolTestResponse }) {
 
       {result.response && (
         <details className="mt-2" open>
-          <summary className="cursor-pointer text-[11.5px] font-semibold text-ink-muted">
+          <summary className="cursor-pointer text-micro font-semibold text-ink-muted">
             Qué respondió{result.response.truncated ? ' (recortado)' : ''}
           </summary>
-          <pre className="tabular mt-1 max-h-48 overflow-auto rounded-sm border border-border bg-surface p-2 text-[11px] leading-relaxed text-ink-muted">
+          <pre className="tabular mt-1 max-h-48 overflow-auto rounded-sm border border-border bg-surface p-2 text-micro leading-relaxed text-ink-muted">
             {result.response.body || '(vacío)'}
           </pre>
         </details>
@@ -596,7 +596,7 @@ function CustomToolForm({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-[13.5px] font-bold text-ink">
+          <h3 className="text-sm font-bold text-ink">
             {editingId ? 'Editar herramienta' : 'Nueva herramienta'}
           </h3>
           <p className={HELP}>
@@ -631,7 +631,7 @@ function CustomToolForm({
           placeholder="Consultar inventario"
           onChange={(e) => setName(e.target.value)}
         />
-        <p className="mt-1 text-[11px] text-ink-faint">
+        <p className="mt-1 text-micro text-ink-faint">
           Queda registrada como{' '}
           <code className="tabular text-ink-muted">custom.{draft.slug || '…'}</code>
         </p>
@@ -642,7 +642,7 @@ function CustomToolForm({
         <label className={LABEL} htmlFor="ct-description">
           ¿Para qué sirve?
         </label>
-        <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-muted">
+        <p className="mt-0.5 text-micro leading-relaxed text-ink-muted">
           <span className="font-semibold text-ink">Esto es lo único que Cortex lee</span> cuando
           decide si esta herramienta es la indicada para lo que le pidieron. Si no queda claro
           cuándo usarla, no la va a escoger nunca. Escribe en qué situación conviene, qué le tienes
@@ -659,7 +659,7 @@ function CustomToolForm({
         />
         <p
           className={clsx(
-            'mt-1 text-[11.5px]',
+            'mt-1 text-micro',
             quality.tone === 'emerald' && 'text-emerald',
             quality.tone === 'amber' && 'text-amber',
             quality.tone === 'faint' && 'text-ink-faint',
@@ -711,7 +711,7 @@ function CustomToolForm({
         </p>
 
         {draft.fields.length === 0 && (
-          <p className="mt-2 rounded-sm border border-dashed border-border-strong bg-surface px-3 py-2 text-[11.5px] text-ink-faint">
+          <p className="mt-2 rounded-sm border border-dashed border-border-strong bg-surface px-3 py-2 text-micro text-ink-faint">
             Ninguno todavía. Si tu API no necesita nada, déjalo así.
           </p>
         )}
@@ -747,7 +747,7 @@ function CustomToolForm({
                     ))}
                   </select>
                 </label>
-                <label className="flex items-center gap-1.5 pb-2.5 text-[12px] text-ink-muted">
+                <label className="flex items-center gap-1.5 pb-2.5 text-xs text-ink-muted">
                   <input
                     type="checkbox"
                     checked={field.required}
@@ -795,7 +795,7 @@ function CustomToolForm({
                       })
                     }
                   />
-                  <span className="mt-0.5 block text-[11px] text-ink-faint">
+                  <span className="mt-0.5 block text-micro text-ink-faint">
                     Si solo hay unos valores posibles, ponlos: el modelo no podrá inventarse uno que
                     tu sistema no conoce.
                   </span>
@@ -847,7 +847,7 @@ function CustomToolForm({
                 onChange={(e) => setBody(e.target.value)}
               />
               {bodyError && (
-                <p className="mt-1 text-[11.5px] font-semibold text-rose">{bodyError}</p>
+                <p className="mt-1 text-micro font-semibold text-rose">{bodyError}</p>
               )}
             </>
           )}
@@ -929,7 +929,7 @@ function CustomToolForm({
       {/* 7 — Confirmation posture */}
       <div className="mt-4">
         <span className={LABEL}>¿Le pregunta a alguien antes?</span>
-        <label className="mt-1.5 flex items-start gap-2 text-[12px] leading-snug text-ink-muted">
+        <label className="mt-1.5 flex items-start gap-2 text-xs leading-snug text-ink-muted">
           <input
             type="checkbox"
             checked={gated}
@@ -946,7 +946,7 @@ function CustomToolForm({
           </span>
         </label>
         {writes && !gated && (
-          <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[11.5px] leading-relaxed text-amber">
+          <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-micro leading-relaxed text-amber">
             Esta herramienta escribe en un sistema externo y quedaría sin confirmación: Cortex podrá
             ejecutarla sola, también en rutinas donde no hay nadie mirando. Queda en la auditoría,
             pero nadie la aprueba antes.
@@ -960,7 +960,7 @@ function CustomToolForm({
           type="button"
           onClick={() => setAdvanced((v) => !v)}
           aria-expanded={advanced}
-          className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary hover:underline"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
         >
           <ChevronDown
             className={clsx(
@@ -984,7 +984,7 @@ function CustomToolForm({
                   patch({ slug: e.target.value });
                 }}
               />
-              <span className="mt-0.5 block text-[11px] text-ink-faint">
+              <span className="mt-0.5 block text-micro text-ink-faint">
                 Cambiarlo renombra la herramienta en la auditoría y en los permisos.
               </span>
             </label>
@@ -997,7 +997,7 @@ function CustomToolForm({
                 placeholder="data.items"
                 onChange={(e) => patch({ responsePath: e.target.value })}
               />
-              <span className="mt-0.5 block text-[11px] text-ink-faint">
+              <span className="mt-0.5 block text-micro text-ink-faint">
                 Vacío devuelve todo. Sirve para no llenarle el contexto al modelo con envoltorios.
               </span>
             </label>
@@ -1038,7 +1038,7 @@ function CustomToolForm({
               />
             </label>
             <div className="flex flex-col gap-2 pt-4">
-              <label className="flex items-center gap-2 text-[12px] text-ink-muted">
+              <label className="flex items-center gap-2 text-xs text-ink-muted">
                 <input
                   type="checkbox"
                   checked={draft.followRedirects}
@@ -1047,7 +1047,7 @@ function CustomToolForm({
                 />
                 Seguir redirecciones
               </label>
-              <label className="flex items-center gap-2 text-[12px] text-ink-muted">
+              <label className="flex items-center gap-2 text-xs text-ink-muted">
                 <input
                   type="checkbox"
                   checked={draft.allowInsecureHttp}
@@ -1085,9 +1085,9 @@ function CustomToolForm({
 
       {(problems.length > 0 || saveError) && (
         <div className="mt-4 rounded-card border border-rose/30 bg-rose-soft px-3 py-2">
-          {saveError && <p className="text-[12px] font-semibold text-rose">{saveError}</p>}
+          {saveError && <p className="text-xs font-semibold text-rose">{saveError}</p>}
           {problems.length > 0 && (
-            <ul className="mt-1 list-disc pl-4 text-[11.5px] leading-relaxed text-rose">
+            <ul className="mt-1 list-disc pl-4 text-micro leading-relaxed text-rose">
               {problems.map((p) => (
                 <li key={p}>{p}</li>
               ))}
@@ -1103,7 +1103,7 @@ function CustomToolForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar
         </Button>
-        <label className="ml-auto flex items-center gap-1.5 text-[12px] text-ink-muted">
+        <label className="ml-auto flex items-center gap-1.5 text-xs text-ink-muted">
           <input
             type="checkbox"
             checked={draft.enabled}

@@ -36,8 +36,8 @@ export default async function AgentsPage() {
       {agents.length === 0 ? (
         <Panel className="p-10 text-center">
           <Bot className="mx-auto mb-3 h-8 w-8 text-ink-faint" />
-          <p className="text-[13px] font-semibold text-ink">No hay agentes configurados</p>
-          <p className="mx-auto mt-1 max-w-md text-[13px] leading-relaxed text-ink-muted">
+          <p className="text-sm font-semibold text-ink">No hay agentes configurados</p>
+          <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-ink-muted">
             Un agente es un modelo con nombre y una lista fija de herramientas. Los habilita el
             equipo técnico: pídele a un administrador que cree el primero.
           </p>
@@ -52,14 +52,14 @@ export default async function AgentsPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-[14px] font-bold text-ink">{a.name}</span>
+                        <span className="truncate text-base font-bold text-ink">{a.name}</span>
                         {isCortex && (
-                          <span className="shrink-0 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 text-[10.5px] font-semibold text-primary-ink">
+                          <span className="shrink-0 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 text-micro font-semibold text-primary-ink">
                             Super-agente
                           </span>
                         )}
                       </div>
-                      <div className="truncate text-[11px] text-ink-faint">
+                      <div className="truncate text-micro text-ink-faint">
                         <span className="tabular">{a.slug}</span> ·{' '}
                         {a.teams?.[0]?.name ?? 'Sin equipo'}
                       </div>
@@ -79,7 +79,7 @@ export default async function AgentsPage() {
                     </span>
                   </div>
 
-                  <div className="mt-auto flex items-center justify-between border-t border-border pt-2.5 text-[11.5px] text-ink-faint">
+                  <div className="mt-auto flex items-center justify-between border-t border-border pt-2.5 text-micro text-ink-faint">
                     <span className="inline-flex items-center gap-1 truncate">
                       <Cpu className="h-3.5 w-3.5 shrink-0" />
                       <span className="tabular truncate">{a.default_model}</span>

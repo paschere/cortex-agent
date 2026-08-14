@@ -235,7 +235,17 @@ export function ChatRoot({
         // remount the [conversationId] route and reload initialMessages from the
         // DB mid-stream — wiping the messages until a manual reload. history API
         // changes the address bar while keeping the live useChat state intact.
-        window.history.replaceState(null, '', `/chat/${newConvId}`);
+        //
+        // THE QUERY STRING SURVIVES THE REWRITE. `?panel=payments` belongs to
+        // the panel beside this chat, and this line used to drop it: the panel
+        // stayed open — it lives in React state, not in the URL — but the
+        // address stopped describing the screen, so copying the link handed
+        // somebody a chat without the panel they were looking at.
+        //
+        // Read off `window.location` rather than tracked here, because the
+        // panel owns that parameter and this component only rewrites the path
+        // in front of it.
+        window.history.replaceState(null, '', `/chat/${newConvId}${window.location.search}`);
       }
     },
     sendExtraMessageFields: false,
@@ -345,12 +355,12 @@ export function ChatRoot({
             <Brain className="h-3.5 w-3.5" />
           </span>
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-[13px] font-semibold text-ink">
+            <div className="truncate text-sm font-semibold text-ink">
               {activeAgent?.name ?? 'Cortex'}
             </div>
             {/* The conversation id is what a person quotes when they need this
                 exchange looked up later, so it is set as evidence, not prose. */}
-            <div className="font-mono text-[10.5px] text-ink-faint">
+            <div className="font-mono text-micro text-ink-faint">
               {conversationId ? (
                 <span title={conversationId}>#{conversationId.slice(0, 8)}</span>
               ) : (
@@ -368,9 +378,7 @@ export function ChatRoot({
       {/* Se cae solo en cuanto hay un mensaje: a partir del primer turno la
           conversación es lo único que importa en esta columna. Va aquí y no
           dentro de la pantalla vacía para no acoplarse a ella. */}
-      {waiting && messages.length === 0 && (
-        <WaitingNotice waiting={waiting} onAsk={handleSend} />
-      )}
+      {waiting && messages.length === 0 && <WaitingNotice waiting={waiting} onAsk={handleSend} />}
 
       <MessageList
         messages={messages}
@@ -389,7 +397,7 @@ export function ChatRoot({
         <div
           role="status"
           className={clsx(
-            'mx-4 mb-2 rounded-card border px-4 py-3 text-[12.5px] leading-relaxed',
+            'mx-4 mb-2 rounded-card border px-4 py-3 text-xs leading-relaxed',
             blocked.isLimit
               ? 'border-amber/25 bg-amber-soft text-amber'
               : 'border-rose/25 bg-rose-soft text-rose',

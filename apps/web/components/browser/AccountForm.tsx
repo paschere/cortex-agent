@@ -199,11 +199,11 @@ export function AccountForm({
   if (done) {
     return (
       <div className="rounded-card border border-emerald/20 bg-emerald-soft px-4 py-3">
-        <p className="flex flex-wrap items-center gap-1.5 text-[13px] font-semibold text-emerald">
+        <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-emerald">
           <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
           Cuenta vinculada: «{done}»
         </p>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
           Queda cifrada y sólo se abre para {host}. Nadie —tú tampoco— la vuelve a ver desde Cortex;
           si cambia, se reemplaza.
         </p>
@@ -222,16 +222,16 @@ export function AccountForm({
     >
       <div className="flex flex-wrap items-center gap-2">
         <KeyRound className="h-4 w-4 shrink-0 text-ink" aria-hidden="true" />
-        <h4 className="text-[13.5px] font-semibold text-ink">{need.title}</h4>
+        <h4 className="text-sm font-semibold text-ink">{need.title}</h4>
         <span className={chipClass(need.certain ? 'amber' : 'neutral')}>
           {need.certain ? 'le falta la cuenta' : 'seguramente la necesita'}
         </span>
       </div>
 
-      <p className="mt-1.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">{need.reason}</p>
+      <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-ink-muted">{need.reason}</p>
 
       {need.loginNeverTaught && (
-        <p className="mt-2.5 rounded-sm border border-amber/20 bg-surface px-3 py-2 text-[12.5px] leading-relaxed text-ink">
+        <p className="mt-2.5 rounded-sm border border-amber/20 bg-surface px-3 py-2 text-xs leading-relaxed text-ink">
           <AlertTriangle
             className="mr-1.5 inline h-3.5 w-3.5 align-[-2px] text-amber"
             aria-hidden="true"
@@ -245,7 +245,7 @@ export function AccountForm({
       )}
 
       {canSave === null && (
-        <p className="mt-3 flex items-center gap-2 text-[12.5px] text-ink-faint">
+        <p className="mt-3 flex items-center gap-2 text-xs text-ink-faint">
           <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
           Un momento…
         </p>
@@ -255,11 +255,11 @@ export function AccountForm({
           haber hecho que alguien teclee una contraseña para nada. */}
       {canSave === false && (
         <div className="mt-3 rounded-sm border border-border bg-surface px-3 py-2.5">
-          <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-ink">
             <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             Esto lo guarda un administrador
           </p>
-          <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="mt-1 text-xs leading-relaxed text-ink-muted">
             Una clave de la empresa le da a Cortex el poder de actuar como la empresa en {host}, así
             que quién la guarda es una decisión de administración y no te voy a pedir que la
             escribas aquí. Dile a un administrador del espacio de trabajo que abra este {MODULE.one}{' '}
@@ -280,14 +280,14 @@ export function AccountForm({
                     type="button"
                     disabled={busy}
                     onClick={() => void useExisting(credential)}
-                    className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:border-border-strong disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
+                    className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:border-border-strong disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
                   >
                     <KeyRound className="h-3 w-3" aria-hidden="true" />
                     Usar «{credential.label}»
                   </button>
                 ))}
               </div>
-              <p className="mt-1.5 text-[12px] text-ink-faint">
+              <p className="mt-1.5 text-xs text-ink-faint">
                 O guarda una nueva abajo. Reusar la misma evita tener dos claves del mismo portal
                 que hay que rotar por separado.
               </p>
@@ -329,7 +329,7 @@ export function AccountForm({
             ))}
           </div>
 
-          <p className="mt-2.5 flex gap-1.5 text-[12px] leading-snug text-ink-faint">
+          <p className="mt-2.5 flex gap-1.5 text-xs leading-snug text-ink-faint">
             <ShieldCheck
               className="mt-[1px] h-3.5 w-3.5 shrink-0 text-emerald"
               aria-hidden="true"
@@ -343,7 +343,7 @@ export function AccountForm({
           </p>
 
           {error && (
-            <p className="mt-2.5 text-[12.5px] font-medium text-rose" role="alert">
+            <p className="mt-2.5 text-xs font-medium text-rose" role="alert">
               {error}
             </p>
           )}

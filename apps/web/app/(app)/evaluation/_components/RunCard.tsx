@@ -34,7 +34,7 @@ function Trend({
   const tone = toneFor(direction, before, after);
   if (!text) {
     return (
-      <span className="inline-flex items-center gap-1 text-[11px] text-ink-faint">
+      <span className="inline-flex items-center gap-1 text-micro text-ink-faint">
         <Minus className="h-3 w-3" />
         {before === undefined ? 'sin comparación' : 'igual'}
       </span>
@@ -45,7 +45,7 @@ function Trend({
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1 font-mono text-[11px]',
+        'inline-flex items-center gap-1 font-mono text-micro',
         tone === 'good' && 'text-emerald',
         tone === 'bad' && 'text-rose',
         tone === 'flat' && 'text-ink-faint',
@@ -78,12 +78,12 @@ function Metric({
     <div className="min-w-0">
       <div className="field-label">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
-        <span className="font-mono text-[22px] font-semibold tracking-[-0.02em] text-ink">
+        <span className="font-mono text-xl font-semibold tracking-[-0.02em] text-ink">
           {value}
         </span>
         <Trend direction={direction} before={before} after={after} asPercent={asPercent} />
       </div>
-      <p className="mt-1 text-[11px] leading-snug text-ink-faint">{help}</p>
+      <p className="mt-1 text-micro leading-snug text-ink-faint">{help}</p>
     </div>
   );
 }
@@ -112,7 +112,7 @@ function FailureCount({
       <div className="mt-1 flex items-baseline gap-2">
         <span
           className={clsx(
-            'font-mono text-[22px] font-semibold tracking-[-0.02em]',
+            'font-mono text-xl font-semibold tracking-[-0.02em]',
             bad ? 'text-rose' : 'text-emerald',
           )}
         >
@@ -120,7 +120,7 @@ function FailureCount({
         </span>
         <Trend direction="down" before={before} after={value} asPercent={false} />
       </div>
-      <p className={clsx('mt-1 text-[11px] leading-snug', bad ? 'text-rose' : 'text-ink-muted')}>
+      <p className={clsx('mt-1 text-micro leading-snug', bad ? 'text-rose' : 'text-ink-muted')}>
         {help}
       </p>
     </div>
@@ -129,7 +129,7 @@ function FailureCount({
 
 function Notice({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-4 flex items-start gap-2 rounded-sm bg-amber-soft px-4 py-3 text-[12px] leading-relaxed text-amber">
+    <div className="mt-4 flex items-start gap-2 rounded-sm bg-amber-soft px-4 py-3 text-xs leading-relaxed text-amber">
       <AlertTriangle className="mt-[2px] h-3.5 w-3.5 shrink-0" />
       <div>{children}</div>
     </div>
@@ -147,11 +147,11 @@ export function RunCard({ run, baseline }: { run: StoredRun; baseline?: StoredRu
     <Panel className="p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-ink">Última corrida</h2>
-          <p className="mt-1 font-mono text-[12px] text-ink-muted">
+          <h2 className="text-base font-semibold text-ink">Última corrida</h2>
+          <p className="mt-1 font-mono text-xs text-ink-muted">
             {FULL_DATE.format(new Date(run.startedAt))} · {TIER_LABEL[run.tier]}
           </p>
-          <p className="mt-1 text-[12px] text-ink-faint">
+          <p className="mt-1 text-xs text-ink-faint">
             {run.vectorSource} · embeddings{' '}
             <span className="font-mono text-ink-muted">{run.embeddingModel}</span> · corte{' '}
             <span className="font-mono text-ink-muted">{run.strongMatch}</span> · piso{' '}
@@ -160,14 +160,14 @@ export function RunCard({ run, baseline }: { run: StoredRun; baseline?: StoredRu
         </div>
         <div className="text-right">
           <div className="field-label">Costo y duración</div>
-          <p className="mt-1 font-mono text-[13px] text-ink">
+          <p className="mt-1 font-mono text-sm text-ink">
             USD {run.costUsd.toFixed(4)} · {(run.elapsedMs / 1000).toFixed(1)} s
           </p>
         </div>
       </div>
 
       {baseline ? (
-        <p className="mt-3 text-[12px] text-ink-faint">
+        <p className="mt-3 text-xs text-ink-faint">
           Comparada contra la corrida del{' '}
           <span className="font-mono">
             {FULL_DATE.format(new Date(baseline.startedAt))}
@@ -175,7 +175,7 @@ export function RunCard({ run, baseline }: { run: StoredRun; baseline?: StoredRu
           , que respondió el mismo cuestionario en la misma modalidad.
         </p>
       ) : (
-        <p className="mt-3 text-[12px] text-ink-faint">
+        <p className="mt-3 text-xs text-ink-faint">
           No hay una corrida anterior que haya respondido el mismo cuestionario en la misma
           modalidad, así que no se muestran diferencias. Comparar contra otra sería medir el cambio
           del cuestionario, no el del sistema.

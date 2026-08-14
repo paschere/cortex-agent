@@ -86,10 +86,10 @@ export function StatCard({
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-start justify-between">
-        <span className="text-[13px] font-medium text-ink-muted">{label}</span>
+        <span className="text-sm font-medium text-ink-muted">{label}</span>
         <IconChip tone={tone}>{icon}</IconChip>
       </div>
-      <div className="stat-num mt-3 text-[34px] leading-none text-ink">{value}</div>
+      <div className="stat-num mt-3 text-display leading-none text-ink">{value}</div>
       {sub && <div className="mt-2 text-xs text-ink-faint">{sub}</div>}
     </div>
   );
@@ -117,7 +117,7 @@ export function ProgressRow({
   };
   return (
     <div>
-      <div className="mb-1.5 flex items-center justify-between text-[13px]">
+      <div className="mb-1.5 flex items-center justify-between text-sm">
         <span className="text-ink-muted">{label}</span>
         <span className="stat-num text-ink">{value.toLocaleString()}</span>
       </div>

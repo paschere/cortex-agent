@@ -107,10 +107,10 @@ export function GenerateReport() {
                   <Icon className="h-[18px] w-[18px]" />
                 </span>
                 <div className="min-w-0">
-                  <h3 className="text-[15px] font-semibold leading-tight text-ink">
+                  <h3 className="text-base font-semibold leading-tight text-ink">
                     {REPORT_KIND_LABEL[kind]}
                   </h3>
-                  <p className="mt-1 text-[12.5px] leading-snug text-ink-muted">
+                  <p className="mt-1 text-xs leading-snug text-ink-muted">
                     {REPORT_KIND_PITCH[kind]}
                   </p>
                 </div>
@@ -131,7 +131,7 @@ export function GenerateReport() {
                         aria-checked={active}
                         onClick={() => setSpan((s) => ({ ...s, [kind]: o.value }))}
                         className={clsx(
-                          'rounded-pill px-3 py-1 text-[12px] font-medium transition-colors duration-150',
+                          'rounded-pill px-3 py-1 text-xs font-medium transition-colors duration-150',
                           active
                             ? 'bg-ink text-white'
                             : 'border border-border bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink',
@@ -169,7 +169,7 @@ export function GenerateReport() {
       {error && (
         <p
           role="alert"
-          className="mt-3 rounded-sm border border-rose/20 bg-rose-soft px-4 py-2.5 text-[12.5px] text-rose"
+          className="mt-3 rounded-sm border border-rose/20 bg-rose-soft px-4 py-2.5 text-xs text-rose"
         >
           {error}
         </p>

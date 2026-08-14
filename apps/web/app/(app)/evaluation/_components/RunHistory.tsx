@@ -42,7 +42,7 @@ export function RunHistory({ runs }: { runs: StoredRun[] }) {
         {/* The table scrolls inside its own box rather than pushing the page
             sideways on a phone. */}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[46rem] text-[12px]">
+          <table className="w-full min-w-[46rem] text-xs">
             <thead>
               <tr className="border-b border-border text-left">
                 <th className="field-label px-4 py-2.5 font-normal">Cuándo</th>
@@ -80,7 +80,7 @@ export function RunHistory({ runs }: { runs: StoredRun[] }) {
           </table>
         </div>
       </Panel>
-      <p className="mt-2 text-[11px] leading-snug text-ink-faint">
+      <p className="mt-2 text-micro leading-snug text-ink-faint">
         Dos filas solo se pueden leer una contra otra si tienen el mismo cuestionario y la misma
         modalidad. Con cuestionarios distintos no se respondió lo mismo, y la diferencia entre sus
         puntajes no es una mejora más pequeña: no es un número.

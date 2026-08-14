@@ -160,7 +160,7 @@ export function SelectionActions({
     >
       {mode === 'menu' ? (
         <div className="flex flex-wrap items-center gap-1">
-          <span className="px-2 text-[10.5px] font-semibold uppercase tracking-field text-ink-faint">
+          <span className="px-2 text-micro font-semibold uppercase tracking-field text-ink-faint">
             Selección
           </span>
           <ChipButton icon={CalendarPlus} onClick={() => setMode('commitment')}>
@@ -219,7 +219,7 @@ function ChipButton({
       type="button"
       onClick={onClick}
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[12px] font-medium transition-colors duration-150 motion-reduce:transition-none',
+        'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-medium transition-colors duration-150 motion-reduce:transition-none',
         tone === 'done'
           ? 'bg-emerald-soft text-emerald'
           : 'text-ink-muted hover:bg-primary-soft hover:text-primary-ink',
@@ -292,7 +292,7 @@ function CommitmentForm({
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         maxLength={160}
-        className="w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-primary/40"
+        className="w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-primary/40"
       />
 
       <div className="flex flex-wrap items-end gap-2">
@@ -307,7 +307,7 @@ function CommitmentForm({
             min={todayInBogota()}
             value={dueOn}
             onChange={(e) => setDueOn(e.target.value)}
-            className="tabular mt-1 w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-primary/40"
+            className="tabular mt-1 w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-primary/40"
           />
         </div>
         <div className="min-w-[9rem] flex-1">
@@ -318,7 +318,7 @@ function CommitmentForm({
             id="sel-kind"
             value={kind}
             onChange={(e) => setKind(e.target.value as CommitmentKind)}
-            className="mt-1 w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-primary/40"
+            className="mt-1 w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-primary/40"
           >
             {COMMITMENT_KINDS.map((k) => (
               <option key={k} value={k}>
@@ -330,7 +330,7 @@ function CommitmentForm({
       </div>
 
       {error && (
-        <p role="alert" className="text-[12px] text-rose">
+        <p role="alert" className="text-xs text-rose">
           {error}
         </p>
       )}
@@ -339,14 +339,14 @@ function CommitmentForm({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-pill px-3 py-1.5 text-[12.5px] font-medium text-ink-muted hover:bg-surface-2"
+          className="rounded-pill px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-2"
         >
           Volver
         </button>
         <button
           type="submit"
           disabled={busy || !title.trim() || !dueOn}
-          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-colors duration-150 hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none motion-reduce:transition-none"
+          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-pop transition-colors duration-150 hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none motion-reduce:transition-none"
         >
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
           Registrar

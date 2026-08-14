@@ -125,8 +125,8 @@ export function MandateList({
     return (
       <Panel className="px-4 py-12 text-center">
         <KeyRound className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
-        <p className="text-[13px] font-semibold text-ink">No hay ningún mandato concedido</p>
-        <p className="mx-auto mt-1 max-w-lg text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="text-sm font-semibold text-ink">No hay ningún mandato concedido</p>
+        <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-ink-muted">
           Cortex te pregunta antes de cada acción que sale de la empresa o que toca datos delicados.
           Así seguirá mientras esta lista esté vacía.
         </p>
@@ -138,7 +138,7 @@ export function MandateList({
     <Panel className="overflow-hidden">
       <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div className="field-label">Mandatos</div>
-        <span className="text-[11px] text-ink-faint">
+        <span className="text-micro text-ink-faint">
           {activeCount === 0
             ? 'ninguno en vigor'
             : `${activeCount} en vigor · ${mandates.length} en total`}
@@ -146,7 +146,7 @@ export function MandateList({
       </div>
 
       {error && (
-        <div className="border-b border-border bg-rose-soft px-4 py-2 text-[12px] text-rose">
+        <div className="border-b border-border bg-rose-soft px-4 py-2 text-xs text-rose">
           {error}
         </div>
       )}
@@ -165,7 +165,7 @@ export function MandateList({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13.5px] font-bold text-ink">{m.label}</span>
+                      <span className="text-sm font-bold text-ink">{m.label}</span>
                       <span className={chipClass(st.tone)}>{st.label}</span>
                       {m.appliesUnattended && (
                         <span className={chipClass('neutral')}>también en rutinas</span>
@@ -175,7 +175,7 @@ export function MandateList({
 
                     {/* La frase completa. Es lo que alguien tiene que poder leer
                         de un vistazo dentro de seis meses. */}
-                    <p className="mt-1.5 max-w-3xl text-[12.5px] leading-relaxed text-ink-muted">
+                    <p className="mt-1.5 max-w-3xl text-xs leading-relaxed text-ink-muted">
                       Cortex usa{' '}
                       <button
                         type="button"
@@ -222,12 +222,12 @@ export function MandateList({
                     </p>
 
                     {m.reason && (
-                      <p className="mt-1.5 max-w-3xl border-l-2 border-border pl-2.5 text-[12px] italic leading-relaxed text-ink-faint">
+                      <p className="mt-1.5 max-w-3xl border-l-2 border-border pl-2.5 text-xs italic leading-relaxed text-ink-faint">
                         {m.reason}
                       </p>
                     )}
 
-                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-faint">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-ink-faint">
                       <span className="inline-flex items-center gap-1">
                         <User className="h-3 w-3" />
                         Concedido por {m.grantedBy}
@@ -242,7 +242,7 @@ export function MandateList({
                     {/* Lo que ha hecho, que es la mitad de por qué esta pantalla
                         existe: un permiso solo se puede revisar sabiendo si se
                         usa y para qué. */}
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-muted">
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-muted">
                       <span className={idle ? 'font-semibold text-ink' : undefined}>
                         {m.lastUseNote}
                       </span>
@@ -269,7 +269,7 @@ export function MandateList({
                     </div>
 
                     {usesOpen && (
-                      <ul className="mt-2 max-w-3xl divide-y divide-border rounded-sm border border-border bg-surface-2 text-[11.5px]">
+                      <ul className="mt-2 max-w-3xl divide-y divide-border rounded-sm border border-border bg-surface-2 text-micro">
                         {m.usage.byTool.map((t) => (
                           <li
                             key={t.toolId}
@@ -292,7 +292,7 @@ export function MandateList({
                       onClick={() => revoke(m)}
                       disabled={working === m.id}
                       className={clsx(
-                        'inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-rose/25 bg-rose-soft px-3 py-1.5 text-[12px] font-semibold text-rose',
+                        'inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-rose/25 bg-rose-soft px-3 py-1.5 text-xs font-semibold text-rose',
                         'transition-all duration-150 hover:-translate-y-px disabled:opacity-50 motion-reduce:transform-none',
                       )}
                     >
@@ -307,7 +307,7 @@ export function MandateList({
                 </div>
 
                 {isOpen && (
-                  <ul className="tabular mt-2 grid gap-0.5 rounded-sm border border-border bg-surface-2 p-2.5 text-[11px] text-ink-muted md:grid-cols-2">
+                  <ul className="tabular mt-2 grid gap-0.5 rounded-sm border border-border bg-surface-2 p-2.5 text-micro text-ink-muted md:grid-cols-2">
                     {m.covered.map((t) => (
                       <li key={t.id} className="truncate" title={t.label}>
                         {t.id}

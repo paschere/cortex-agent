@@ -158,7 +158,7 @@ export function StepEditor({
               )}
             >
               <div className="flex items-start gap-2">
-                <span className="tabular mt-2.5 w-5 shrink-0 text-[11px] font-semibold text-ink-faint">
+                <span className="tabular mt-2.5 w-5 shrink-0 text-micro font-semibold text-ink-faint">
                   {String(index + 1).padStart(2, '0')}
                 </span>
 
@@ -230,7 +230,7 @@ export function StepEditor({
                           })
                         }
                         className={clsx(
-                          'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-[3px] text-[11px] font-semibold transition-colors duration-150',
+                          'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-[3px] text-micro font-semibold transition-colors duration-150',
                           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
                           step.optional
                             ? 'border-amber/20 bg-amber-soft text-amber'
@@ -247,12 +247,12 @@ export function StepEditor({
                         A veces no aparece
                       </button>
                     ) : (
-                      <span className="text-[11.5px] text-ink-faint">
+                      <span className="text-micro text-ink-faint">
                         El arranque corre siempre.
                       </span>
                     )}
                     {step.optional && (
-                      <span className="text-[11.5px] text-ink-muted">
+                      <span className="text-micro text-ink-muted">
                         Si no lo encuentro, sigo con el siguiente en vez de fallar.
                       </span>
                     )}
@@ -265,7 +265,7 @@ export function StepEditor({
                           key={`${t.kind}-${t.value}-${i}`}
                           title={TARGET_WHY[t.kind]}
                           className={clsx(
-                            'rounded-pill border px-2 py-[2px] font-mono text-[10.5px]',
+                            'rounded-pill border px-2 py-[2px] font-mono text-micro',
                             i === 0
                               ? 'border-primary/20 bg-primary-soft text-primary-ink'
                               : 'border-border bg-surface text-ink-faint',
@@ -278,7 +278,7 @@ export function StepEditor({
                   )}
 
                   {anchor && (
-                    <p className="mt-2 text-[11.5px] leading-snug text-ink-faint">
+                    <p className="mt-2 text-micro leading-snug text-ink-faint">
                       Abre el sitio y va siempre de primero. La dirección se toma de «Empieza en»,
                       arriba.
                     </p>
@@ -287,7 +287,7 @@ export function StepEditor({
                   {rowProblems.map((problem) => (
                     <p
                       key={problem.message}
-                      className="mt-1.5 text-[12px] leading-snug text-rose"
+                      className="mt-1.5 text-xs leading-snug text-rose"
                       role="alert"
                     >
                       {problem.message}
@@ -337,7 +337,7 @@ export function StepEditor({
       {general.length > 0 && (
         <ul className="mt-3 space-y-1">
           {general.map((problem) => (
-            <li key={problem.message} className="text-[12.5px] leading-snug text-rose" role="alert">
+            <li key={problem.message} className="text-xs leading-snug text-rose" role="alert">
               {problem.message}
             </li>
           ))}
@@ -401,7 +401,7 @@ function ValueField({
           <KeyRound className="h-3 w-3" aria-hidden="true" />
           clave guardada
         </span>
-        <span className="text-[11.5px] text-ink-muted">
+        <span className="text-micro text-ink-muted">
           Se toma del campo «{step.value.field}» de la credencial vinculada. No queda escrita en el{' '}
           {MODULE.one}.
         </span>
@@ -440,7 +440,7 @@ function ValueField({
             else if (picked === NEW) onStartCreate();
             else if (picked !== MIXED) onPick(picked);
           }}
-          className="rounded-[10px] border border-border bg-surface px-2.5 py-1.5 text-[12.5px] text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+          className="rounded-[10px] border border-border bg-surface px-2.5 py-1.5 text-xs text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
         >
           <option value={FIXED}>Siempre lo mismo</option>
           {variables.map((variable) => (
@@ -454,7 +454,7 @@ function ValueField({
         <Input
           className={clsx(
             'min-w-[140px] max-w-[280px] flex-1',
-            step.value?.kind === 'template' && 'font-mono text-[12px] text-primary',
+            step.value?.kind === 'template' && 'font-mono text-xs text-primary',
           )}
           value={text}
           maxLength={4000}
@@ -489,18 +489,18 @@ function ValueField({
             type="button"
             onClick={onCreate}
             disabled={draftLabel.trim().length === 0}
-            className="rounded-pill bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
+            className="rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
           >
             Marcarlo como dato
           </button>
           <button
             type="button"
             onClick={onCancelCreate}
-            className="rounded-pill px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="rounded-pill px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             Cancelar
           </button>
-          <p className="basis-full text-[11.5px] leading-snug text-ink-faint">
+          <p className="basis-full text-micro leading-snug text-ink-faint">
             Lo que escribiste al grabar queda como el valor de la prueba, y en cada corrida se
             reemplaza por el que te pidan.
           </p>
@@ -508,7 +508,7 @@ function ValueField({
       )}
 
       {selected !== FIXED && !creating && (
-        <p className="mt-1 text-[11.5px] leading-snug text-ink-faint">
+        <p className="mt-1 text-micro leading-snug text-ink-faint">
           {selected === MIXED
             ? 'Mezcla texto fijo con {{huecos}}. Cada hueco tiene que ser uno de los datos declarados arriba.'
             : `En la prueba escribo «${sample[selected] || 'lo que pongas arriba'}».`}

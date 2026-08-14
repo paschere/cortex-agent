@@ -111,7 +111,7 @@ export default async function DevRepositoriesPage() {
       <div className="mb-4">
         <Link
           href="/dev-work"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint transition-colors hover:text-ink"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Trabajo de desarrollo
         </Link>
@@ -124,9 +124,9 @@ export default async function DevRepositoriesPage() {
       />
 
       {notReady ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-muted">
+        <Panel className="p-10 text-center text-sm text-ink-muted">
           <FolderGit2 className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <p className="mb-1 text-[15px] font-bold text-ink">
+          <p className="mb-1 text-base font-bold text-ink">
             Todavía no está activo en este ambiente
           </p>
           <p className="mx-auto max-w-md leading-relaxed">
@@ -138,7 +138,7 @@ export default async function DevRepositoriesPage() {
         <div className="space-y-4">
           <Panel className="flex flex-wrap items-center gap-3 p-4">
             <FolderGit2 className="h-4 w-4 shrink-0 text-primary" />
-            <p className="min-w-0 flex-1 text-[12.5px] text-ink-muted">
+            <p className="min-w-0 flex-1 text-xs text-ink-muted">
               {enabled.length === 0 ? (
                 <>
                   Ahora mismo Cortex no puede cambiar{' '}
@@ -160,7 +160,7 @@ export default async function DevRepositoriesPage() {
           {isAdmin && (
             <Panel className="p-5">
               <Eyebrow>Permitir un repositorio nuevo</Eyebrow>
-              <p className="mt-1.5 text-[12.5px] text-ink-muted">
+              <p className="mt-1.5 text-xs text-ink-muted">
                 Agregar uno amplía lo que Cortex puede cambiar. Agrega solo repositorios en los que
                 estés dispuesto a que abra pull requests.
               </p>
@@ -172,23 +172,23 @@ export default async function DevRepositoriesPage() {
                   placeholder="dueño/repositorio"
                   title="dueño/repositorio, tal como aparece en GitHub"
                   aria-label="Nombre completo del repositorio"
-                  className="min-w-[220px] flex-1 rounded-card border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                  className="min-w-[220px] flex-1 rounded-card border border-border bg-surface px-3 py-2 font-mono text-sm text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                 />
                 <input
                   name="defaultBranch"
                   placeholder="main"
                   aria-label="Rama base"
-                  className="w-28 rounded-card border border-border bg-surface px-3 py-2 font-mono text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                  className="w-28 rounded-card border border-border bg-surface px-3 py-2 font-mono text-sm text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                 />
                 <input
                   name="description"
                   placeholder="¿Qué es? (opcional)"
                   aria-label="Descripción del repositorio"
-                  className="min-w-[200px] flex-1 rounded-card border border-border bg-surface px-3 py-2 text-[13px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                  className="min-w-[200px] flex-1 rounded-card border border-border bg-surface px-3 py-2 text-sm text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
                 />
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+                  className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
                 >
                   <Plus className="h-3.5 w-3.5" /> Permitir
                 </button>
@@ -197,8 +197,8 @@ export default async function DevRepositoriesPage() {
           )}
 
           {repos.length === 0 ? (
-            <Panel className="p-8 text-center text-[13px] text-ink-muted">
-              <p className="mb-1 text-[14px] font-bold text-ink">No hay repositorios</p>
+            <Panel className="p-8 text-center text-sm text-ink-muted">
+              <p className="mb-1 text-base font-bold text-ink">No hay repositorios</p>
               <p className="mx-auto max-w-sm leading-relaxed">
                 Mientras esta lista esté vacía, Cortex no puede cambiar ningún código.
                 {isAdmin
@@ -225,7 +225,7 @@ export default async function DevRepositoriesPage() {
 
                       <div className="min-w-0 flex-1 basis-[18rem]">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="truncate font-mono text-[13px] font-bold text-ink">
+                          <span className="truncate font-mono text-sm font-bold text-ink">
                             {repo.fullName ?? repo.name}
                           </span>
                           <span className={chipClass(repo.enabled ? 'emerald' : 'neutral')}>
@@ -233,9 +233,9 @@ export default async function DevRepositoriesPage() {
                           </span>
                         </div>
                         {repo.description && (
-                          <p className="mt-1 text-[12.5px] text-ink-muted">{repo.description}</p>
+                          <p className="mt-1 text-xs text-ink-muted">{repo.description}</p>
                         )}
-                        <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-faint">
+                        <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-ink-faint">
                           <span className="inline-flex items-center gap-1.5">
                             <GitBranch className="h-3.5 w-3.5" />
                             ramifica desde {repo.defaultBranch ?? 'main'}
@@ -259,7 +259,7 @@ export default async function DevRepositoriesPage() {
                             />
                             <button
                               type="submit"
-                              className={`inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                              className={`inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                                 repo.enabled
                                   ? 'text-amber hover:bg-amber-soft'
                                   : 'text-emerald hover:bg-emerald-soft'
@@ -279,7 +279,7 @@ export default async function DevRepositoriesPage() {
                             <button
                               type="submit"
                               title="Olvidar este repositorio por completo. Casi siempre lo que quieres es apagarlo."
-                              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-rose transition-colors hover:bg-rose-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-rose"
+                              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-semibold text-rose transition-colors hover:bg-rose-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-rose"
                             >
                               <Trash2 className="h-3.5 w-3.5" /> Quitar
                             </button>
@@ -294,7 +294,7 @@ export default async function DevRepositoriesPage() {
           )}
 
           {!isAdmin && (
-            <p className="flex items-start gap-2 px-1 text-[12px] text-ink-muted">
+            <p className="flex items-start gap-2 px-1 text-xs text-ink-muted">
               <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               Solo un administrador del espacio puede cambiar esta lista. Detener una ejecución en
               curso lo puede hacer cualquiera.

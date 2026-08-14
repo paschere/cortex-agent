@@ -37,8 +37,8 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
     return (
       <div className="rounded-card border border-dashed border-border-strong px-4 py-8 text-center">
         <History className="mx-auto mb-2 h-6 w-6 text-ink-faint" />
-        <p className="text-[13px] font-semibold text-ink">Todavía no hay ejecuciones</p>
-        <p className="mt-0.5 text-[12px] text-ink-muted">
+        <p className="text-sm font-semibold text-ink">Todavía no hay ejecuciones</p>
+        <p className="mt-0.5 text-xs text-ink-muted">
           Dale <span className="font-semibold text-ink">Ejecutar ahora</span> arriba para ver qué
           produce esta rutina sin esperar a la hora programada.
         </p>
@@ -64,7 +64,7 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
               className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <span className={chipClass(TONE[run.status])}>{LABEL[run.status]}</span>
-              <span className="tabular min-w-0 flex-1 truncate text-[12px] text-ink-muted">
+              <span className="tabular min-w-0 flex-1 truncate text-xs text-ink-muted">
                 {fmtLong(run.started_at)}
                 <span className="text-ink-faint">
                   {' · '}
@@ -72,7 +72,7 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
                 </span>
               </span>
               <span
-                className="tabular shrink-0 text-[11.5px] text-ink-faint"
+                className="tabular shrink-0 text-micro text-ink-faint"
                 title="Duración de la ejecución"
               >
                 {took ?? (run.status === 'running' ? 'en curso' : '—')}
@@ -101,7 +101,7 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
                 {run.error && (
                   <div className="mb-3">
                     <div className="field-label mb-1.5">Error</div>
-                    <pre className="scroll-slim overflow-x-auto whitespace-pre-wrap rounded-card border border-rose/40 bg-rose-soft px-3.5 py-2.5 font-mono text-[12px] leading-[1.6] text-rose">
+                    <pre className="scroll-slim overflow-x-auto whitespace-pre-wrap rounded-card border border-rose/40 bg-rose-soft px-3.5 py-2.5 font-mono text-xs leading-[1.6] text-rose">
                       {run.error}
                     </pre>
                   </div>
@@ -114,7 +114,7 @@ export function RunHistory({ runs }: { runs: JobRun[] }) {
                   />
                 ) : (
                   !run.error && (
-                    <p className="rounded-card border border-border bg-surface px-3.5 py-3 text-[12.5px] text-ink-muted">
+                    <p className="rounded-card border border-border bg-surface px-3.5 py-3 text-xs text-ink-muted">
                       {run.status === 'running'
                         ? 'Sigue en curso. El resultado aparece aquí apenas termine.'
                         : 'Esta ejecución terminó sin escribir nada.'}
@@ -152,7 +152,7 @@ function CopyRaw({ text }: { text: string }) {
           setCopied(false);
         }
       }}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1 text-micro font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
     >
       {copied ? (
         <>

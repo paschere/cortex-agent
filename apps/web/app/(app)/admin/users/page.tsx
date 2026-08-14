@@ -73,14 +73,14 @@ export default async function UsersPage() {
         {users.length === 0 ? (
           <div className="px-4 py-12 text-center">
             <Users className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
-            <p className="text-[13px] font-semibold text-ink">Todavía no hay nadie registrado</p>
-            <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
+            <p className="text-sm font-semibold text-ink">Todavía no hay nadie registrado</p>
+            <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
               Las personas aparecen aquí la primera vez que entran a Cortex con su cuenta de Google.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-xs">
               <thead className="border-b border-border-strong bg-surface-2">
                 <tr className="text-left">
                   <th className="field-label px-4 py-2.5">Persona</th>
@@ -107,7 +107,7 @@ export default async function UsersPage() {
                               {u.name || u.email}
                             </span>
                             {u.name && (
-                              <span className="tabular block truncate text-[11px] text-ink-faint">
+                              <span className="tabular block truncate text-micro text-ink-faint">
                                 {u.email}
                               </span>
                             )}
@@ -118,7 +118,7 @@ export default async function UsersPage() {
                       <td className="whitespace-nowrap px-4 py-3">
                         <span
                           className={clsx(
-                            'rounded-pill border px-2 py-0.5 text-[11px] font-semibold',
+                            'rounded-pill border px-2 py-0.5 text-micro font-semibold',
                             ROLE_TAG[u.role],
                           )}
                         >
@@ -148,14 +148,14 @@ export default async function UsersPage() {
                         {a.flagged30d > 0 ? (
                           <Link
                             href={`/admin/users/${u.id}#security`}
-                            className="inline-flex items-center gap-1 rounded-pill border border-rose/40 bg-rose-soft px-2 py-0.5 font-mono text-[10px] font-semibold text-rose transition-all duration-150 hover:-translate-y-px hover:opacity-90 motion-reduce:transform-none motion-reduce:transition-none"
+                            className="inline-flex items-center gap-1 rounded-pill border border-rose/40 bg-rose-soft px-2 py-0.5 font-mono text-micro font-semibold text-rose transition-all duration-150 hover:-translate-y-px hover:opacity-90 motion-reduce:transform-none motion-reduce:transition-none"
                             title={`${a.flagged30d} evento${a.flagged30d === 1 ? '' : 's'} de seguridad en los últimos ${WINDOW_DAYS} días`}
                           >
                             <Flag className="h-3 w-3" />
                             {a.flagged30d} marcados
                           </Link>
                         ) : (
-                          <span className="text-[11px] text-ink-faint">sin marcas</span>
+                          <span className="text-micro text-ink-faint">sin marcas</span>
                         )}
                       </td>
                       <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-ink-faint">
@@ -188,7 +188,7 @@ export default async function UsersPage() {
         )}
       </Panel>
 
-      <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+      <p className="mt-2 text-micro leading-relaxed text-ink-faint">
         La actividad sale de la auditoría de los últimos <span className="tabular">{WINDOW_DAYS}</span>{' '}
         días
         {activity.capped

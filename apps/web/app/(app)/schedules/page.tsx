@@ -127,7 +127,7 @@ export default async function SchedulesPage() {
             </div>
             <div
               className={clsx(
-                'stat-num mt-1 truncate text-[20px] leading-none',
+                'stat-num mt-1 truncate text-lg leading-none',
                 s.tone === 'emerald'
                   ? 'text-emerald'
                   : s.tone === 'rose'
@@ -138,7 +138,7 @@ export default async function SchedulesPage() {
             >
               {s.value}
             </div>
-            <div className="mt-1 truncate text-[10.5px] text-ink-faint" title={s.sub}>
+            <div className="mt-1 truncate text-micro text-ink-faint" title={s.sub}>
               {s.sub}
             </div>
           </div>

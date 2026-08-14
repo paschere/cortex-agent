@@ -77,12 +77,12 @@ export default function TwoFactorPage() {
               placeholder={useBackup ? 'xxxx-xxxx' : '000000'}
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              className="tabular mt-1 w-full rounded-sm border border-border bg-surface-2 px-3 py-3 text-center text-[19px] tracking-[0.3em] text-ink transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-surface focus:outline-none focus:ring-4 focus:ring-primary/10"
+              className="tabular mt-1 w-full rounded-sm border border-border bg-surface-2 px-3 py-3 text-center text-lg tracking-[0.3em] text-ink transition-colors placeholder:text-ink-faint focus:border-primary focus:bg-surface focus:outline-none focus:ring-4 focus:ring-primary/10"
             />
           </div>
 
           {!useBackup && (
-            <label className="flex items-center gap-2 text-[12px] text-ink-muted">
+            <label className="flex items-center gap-2 text-xs text-ink-muted">
               <input
                 type="checkbox"
                 checked={trust}
@@ -105,7 +105,7 @@ export default function TwoFactorPage() {
             setCode('');
             setErr(null);
           }}
-          className="mt-4 w-full text-center text-[12px] font-semibold text-primary hover:underline"
+          className="mt-4 w-full text-center text-xs font-semibold text-primary hover:underline"
         >
           {useBackup ? 'Usar el código de la app' : 'Usar un código de respaldo'}
         </button>

@@ -107,9 +107,9 @@ export function CaptureContract({ kind }: { kind: CaptureKind }) {
         <div key={cell.title} className="bg-surface-2 p-3.5">
           <div className="flex items-center gap-1.5">
             <cell.icon className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden="true" />
-            <p className="text-[12.5px] font-semibold text-ink">{cell.title}</p>
+            <p className="text-xs font-semibold text-ink">{cell.title}</p>
           </div>
-          <p className="mt-1 text-[11.5px] leading-snug text-ink-muted">{cell.body}</p>
+          <p className="mt-1 text-micro leading-snug text-ink-muted">{cell.body}</p>
         </div>
       ))}
     </div>

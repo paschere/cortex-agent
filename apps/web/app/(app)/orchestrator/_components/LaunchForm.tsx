@@ -72,7 +72,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
         maxLength={4000}
         disabled={busy}
         placeholder="Describe el resultado que quieres. Cortex lo reparte entre subagentes, corre en paralelo los que no dependen de nadie y te escribe un solo informe."
-        className="scroll-slim w-full resize-y rounded-card border border-border bg-canvas px-3.5 py-3 text-[14px] leading-relaxed text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
+        className="scroll-slim w-full resize-y rounded-card border border-border bg-canvas px-3.5 py-3 text-base leading-relaxed text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:opacity-60"
       />
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -85,7 +85,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
               disabled={busy}
               title={example}
               onClick={() => setObjective(example)}
-              className="tabular rounded-pill border border-border bg-surface-2 px-2.5 py-0.5 text-[11px] font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:text-ink disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none"
+              className="tabular rounded-pill border border-border bg-surface-2 px-2.5 py-0.5 text-micro font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:text-ink disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none"
             >
               Ejemplo {i + 1}
             </button>
@@ -93,7 +93,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
         </div>
 
         <div className="flex items-center gap-2.5">
-          <span className="tabular hidden text-[11px] text-ink-faint sm:inline">
+          <span className="tabular hidden text-micro text-ink-faint sm:inline">
             {objective.trim().length}/4000
           </span>
           <button
@@ -101,7 +101,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
             onClick={() => void launch()}
             disabled={busy || tooShort}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-pill px-4 py-2 text-[13px] font-semibold shadow-pop transition-all duration-150',
+              'inline-flex items-center gap-1.5 rounded-pill px-4 py-2 text-sm font-semibold shadow-pop transition-all duration-150',
               'bg-primary text-white hover:-translate-y-px hover:bg-primary-strong',
               'disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
               'motion-reduce:transform-none motion-reduce:transition-none',
@@ -122,7 +122,7 @@ export function LaunchForm({ concurrency }: { concurrency: number }) {
       </div>
 
       {error && (
-        <p className="mt-3 flex items-start gap-2 rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+        <p className="mt-3 flex items-start gap-2 rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-xs text-rose">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{error} No se lanzó nada: revisa el objetivo y vuelve a ejecutar.</span>
         </p>

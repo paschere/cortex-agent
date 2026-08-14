@@ -48,8 +48,8 @@ function NoGoalsYet({ options }: { options: MetricOptionView[] }) {
   return (
     <Panel>
       <div className="px-5 py-8 text-center">
-        <p className="text-[14px] font-semibold text-ink">Todavía no hay ninguna meta fijada</p>
-        <p className="mx-auto mt-1 max-w-[62ch] text-[13px] leading-relaxed text-ink-muted">
+        <p className="text-base font-semibold text-ink">Todavía no hay ninguna meta fijada</p>
+        <p className="mx-auto mt-1 max-w-[62ch] text-sm leading-relaxed text-ink-muted">
           {measurable.length > 0
             ? `Una meta es una frase como «la cartera no debe pasar de 45 días»: un número que alguien decide y contra el que Cortex compara la realidad cada período. Con los datos que ya hay aquí se pueden medir ${measurable.length} cosa(s) — están abajo.`
             : 'Una meta es un número que alguien decide y contra el que Cortex compara la realidad cada período. Ahora mismo este espacio todavía no tiene datos que alimenten ninguna: abajo está cada una con lo que le falta.'}
@@ -82,7 +82,7 @@ function GoalCard({ goal }: { goal: GoalView }) {
         icon={<Target className="h-4 w-4" aria-hidden />}
         title={goal.label}
         right={
-          <span className="text-[12px] text-ink-faint">
+          <span className="text-xs text-ink-faint">
             {goal.cadenceLabel} · {goal.targetLabel}
           </span>
         }
@@ -91,18 +91,18 @@ function GoalCard({ goal }: { goal: GoalView }) {
       <div className="flex flex-wrap items-end gap-x-10 gap-y-4 px-5 py-4">
         {/* EL PERÍODO CERRADO. Congelado, y por eso es el que se cita. */}
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[.08em] text-ink-faint">
+          <p className="text-micro font-semibold uppercase tracking-[.08em] text-ink-faint">
             {goal.latest ? goal.latest.periodLabel : 'Sin período cerrado'}
           </p>
           <div className="mt-1 flex items-baseline gap-3">
-            <span className="stat-num text-[28px] font-semibold text-ink">
+            <span className="stat-num text-display font-semibold text-ink">
               {goal.latest ? goal.latest.display : '—'}
             </span>
             {goal.latest ? (
               <span className={chipClass(goal.latest.statusTone)}>{goal.latest.statusLabel}</span>
             ) : null}
           </div>
-          <p className="mt-1 text-[12px] text-ink-muted">
+          <p className="mt-1 text-xs text-ink-muted">
             {goal.latest
               ? `Juzgado contra: ${goal.latest.judgedAgainst}. Congelado el ${goal.latest.frozenAt}.`
               : 'Se congela la primera lectura en cuanto cierre el período. No se rellena hacia atrás: un número calculado hoy y presentado como el del mes pasado no sería historia.'}
@@ -112,23 +112,23 @@ function GoalCard({ goal }: { goal: GoalView }) {
         {/* EL PERÍODO EN CURSO. Se marca porque cambia cada mañana. */}
         {goal.live ? (
           <div className="rounded-card border border-dashed border-border px-4 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[.08em] text-ink-faint">
+            <p className="text-micro font-semibold uppercase tracking-[.08em] text-ink-faint">
               {goal.live.periodLabel} · en curso
             </p>
             <div className="mt-1 flex items-baseline gap-3">
-              <span className="stat-num text-[20px] font-semibold text-ink-muted">
+              <span className="stat-num text-lg font-semibold text-ink-muted">
                 {goal.live.display}
               </span>
               <span className={chipClass(goal.live.statusTone)}>{goal.live.statusLabel}</span>
             </div>
-            <p className="mt-1 text-[11.5px] text-ink-faint">
+            <p className="mt-1 text-micro text-ink-faint">
               Calculado ahora mismo y no guardado: cambiará mañana.
             </p>
           </div>
         ) : null}
 
         <div className="ml-auto flex flex-col items-end gap-2">
-          <span className="text-[12px] text-ink-faint">
+          <span className="text-xs text-ink-faint">
             Fijada por {goal.createdByName} el {goal.createdOn}
           </span>
           <div className="flex gap-2">
@@ -143,7 +143,7 @@ function GoalCard({ goal }: { goal: GoalView }) {
       </div>
 
       {goal.metricLabel == null ? (
-        <p className="border-t border-border bg-amber-soft px-5 py-3 text-[12.5px] text-amber">
+        <p className="border-t border-border bg-amber-soft px-5 py-3 text-xs text-amber">
           Esta meta apunta a una métrica que ya no está en el catálogo
           {` («${goal.metricKey}»)`}. No se mide ni se avisa nada nuevo, y su histórico se queda tal
           como se congeló.
@@ -153,7 +153,7 @@ function GoalCard({ goal }: { goal: GoalView }) {
       {result ? (
         <p
           className={clsx(
-            'border-t border-border px-5 py-3 text-[12.5px]',
+            'border-t border-border px-5 py-3 text-xs',
             result.ok ? 'bg-emerald-soft text-emerald' : 'bg-rose-soft text-rose',
           )}
         >
@@ -171,7 +171,7 @@ function GoalCard({ goal }: { goal: GoalView }) {
 function History({ rows, live }: { rows: ReadingView[]; live: string | null }) {
   if (rows.length === 0) {
     return (
-      <div className="border-t border-border bg-surface-2 px-5 py-4 text-[12.5px] text-ink-muted">
+      <div className="border-t border-border bg-surface-2 px-5 py-4 text-xs text-ink-muted">
         Todavía no hay ningún período cerrado.
         {live ? ` En lo que va del actual: ${live}` : ''}
       </div>
@@ -182,14 +182,14 @@ function History({ rows, live }: { rows: ReadingView[]; live: string | null }) {
       {rows.map((row) => (
         <li key={row.id} className="px-5 py-3">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span className="min-w-[9rem] text-[13px] font-semibold text-ink">
+            <span className="min-w-[9rem] text-sm font-semibold text-ink">
               {row.periodLabel}
             </span>
-            <span className="stat-num text-[15px] font-semibold text-ink tabular">
+            <span className="stat-num text-base font-semibold text-ink tabular">
               {row.display}
             </span>
             <span className={chipClass(row.statusTone)}>{row.statusLabel}</span>
-            <span className="text-[12px] text-ink-faint">
+            <span className="text-xs text-ink-faint">
               objetivo de entonces: {row.judgedAgainst} · {row.sampleSize} dato(s)
             </span>
           </div>
@@ -198,7 +198,7 @@ function History({ rows, live }: { rows: ReadingView[]; live: string | null }) {
             rehacer el número a mano meses después. Una cifra sin esta frase es
             una afirmación, y una afirmación no se audita: se cree o no se cree.
           */}
-          <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">{row.method}</p>
+          <p className="mt-1 text-xs leading-relaxed text-ink-muted">{row.method}</p>
         </li>
       ))}
     </ul>
@@ -253,7 +253,7 @@ function NewGoal({ options }: { options: MetricOptionView[] }) {
         icon={<Plus className="h-4 w-4" aria-hidden />}
         title="Fijar una meta"
         right={
-          <span className="text-[12px] text-ink-faint">
+          <span className="text-xs text-ink-faint">
             {available.length} de {options.length} se pueden medir aquí
           </span>
         }
@@ -261,7 +261,7 @@ function NewGoal({ options }: { options: MetricOptionView[] }) {
 
       <div className="space-y-4 px-5 py-4">
         <fieldset>
-          <legend className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink-faint">
+          <legend className="text-xs font-semibold uppercase tracking-[.06em] text-ink-faint">
             Qué medir
           </legend>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -278,11 +278,11 @@ function NewGoal({ options }: { options: MetricOptionView[] }) {
                     : 'border-border bg-surface hover:bg-surface-2',
                 )}
               >
-                <span className="block text-[13.5px] font-semibold text-ink">{option.label}</span>
-                <span className="mt-0.5 block text-[12px] leading-relaxed text-ink-muted">
+                <span className="block text-sm font-semibold text-ink">{option.label}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">
                   {option.blurb}
                 </span>
-                <span className="mt-1 block text-[11.5px] text-ink-faint">
+                <span className="mt-1 block text-micro text-ink-faint">
                   {option.directionLabel} un número · fuente: {option.sourceSystem}
                 </span>
               </button>
@@ -290,7 +290,7 @@ function NewGoal({ options }: { options: MetricOptionView[] }) {
           </div>
 
           {available.length === 0 ? (
-            <p className="mt-2 rounded-card border border-amber/20 bg-amber-soft px-4 py-3 text-[12.5px] leading-relaxed text-amber">
+            <p className="mt-2 rounded-card border border-amber/20 bg-amber-soft px-4 py-3 text-xs leading-relaxed text-amber">
               Este espacio de trabajo todavía no puede calcular ninguna meta. Abajo está cada una
               con lo que le falta — y esa es toda la lista: una meta sin datos detrás es una casilla
               vacía, y una casilla vacía resta más confianza de la que suma.
@@ -308,12 +308,12 @@ function NewGoal({ options }: { options: MetricOptionView[] }) {
                   key={option.key}
                   className="rounded-card border border-dashed border-border bg-surface-2 px-4 py-3 opacity-90"
                 >
-                  <span className="flex items-center gap-2 text-[13px] font-semibold text-ink-muted">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-ink-muted">
                     <CircleSlash className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     {option.label}
                     <span className={chipClass('neutral')}>sin datos todavía</span>
                   </span>
-                  <span className="mt-1 block text-[12px] leading-relaxed text-ink-muted">
+                  <span className="mt-1 block text-xs leading-relaxed text-ink-muted">
                     {option.reason}
                   </span>
                 </li>
@@ -325,7 +325,7 @@ function NewGoal({ options }: { options: MetricOptionView[] }) {
         {spec?.available ? (
           <div className="grid gap-3 sm:grid-cols-[8rem_10rem_minmax(0,1fr)_auto] sm:items-end">
             <label className="block" htmlFor="goal-target">
-              <span className="mb-1 block text-[12px] font-semibold text-ink-muted">
+              <span className="mb-1 block text-xs font-semibold text-ink-muted">
                 {spec.directionLabel}
               </span>
               <Input
@@ -337,18 +337,18 @@ function NewGoal({ options }: { options: MetricOptionView[] }) {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[12px] font-semibold text-ink-muted">Cada</span>
+              <span className="mb-1 block text-xs font-semibold text-ink-muted">Cada</span>
               <select
                 value={cadence}
                 onChange={(e) => setCadence(e.target.value as 'week' | 'month')}
-                className="h-10 w-full rounded-input border border-border bg-surface px-3 text-[14px] text-ink"
+                className="h-10 w-full rounded-input border border-border bg-surface px-3 text-base text-ink"
               >
                 <option value="month">mes</option>
                 <option value="week">semana</option>
               </select>
             </label>
             <label className="block" htmlFor="goal-label">
-              <span className="mb-1 block text-[12px] font-semibold text-ink-muted">
+              <span className="mb-1 block text-xs font-semibold text-ink-muted">
                 Cómo llamarla (opcional)
               </span>
               <Input
@@ -367,7 +367,7 @@ function NewGoal({ options }: { options: MetricOptionView[] }) {
         {result ? (
           <p
             className={clsx(
-              'rounded-card px-4 py-3 text-[12.5px] leading-relaxed',
+              'rounded-card px-4 py-3 text-xs leading-relaxed',
               result.ok ? 'bg-emerald-soft text-emerald' : 'bg-rose-soft text-rose',
             )}
           >

@@ -40,7 +40,7 @@ export function WaitingIndex({ index }: { index: WaitingIndexData }) {
     <Panel className="animate-rise flex h-full flex-col overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div className="field-label">Lo que te espera</div>
-        <div className="tabular text-[11px] text-ink-faint">
+        <div className="tabular text-micro text-ink-faint">
           {index.total === 0 ? 'las cuatro colas están vacías' : `${index.total} en cuatro colas`}
         </div>
       </div>
@@ -69,7 +69,7 @@ function QueueBlock({ queue }: { queue: WaitingQueueView }) {
         <Icon className={clsx('h-3.5 w-3.5 shrink-0', quiet ? 'text-ink-faint' : 'text-primary')} />
         <Link
           href={queue.href}
-          className="group inline-flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-ink transition-colors hover:text-primary"
+          className="group inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold text-ink transition-colors hover:text-primary"
         >
           <span className="truncate">{queue.label}</span>
           <ArrowRight className="h-3 w-3 shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
@@ -83,7 +83,7 @@ function QueueBlock({ queue }: { queue: WaitingQueueView }) {
           viene de otra consulta y puede seguir en pie; lo que falta es el
           detalle, y eso se dice. Ver la cabecera de lib/waiting.ts. */}
       {queue.error ? (
-        <p className="mt-2 flex items-start gap-1.5 rounded-sm border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] leading-snug text-rose">
+        <p className="mt-2 flex items-start gap-1.5 rounded-sm border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro leading-snug text-rose">
           <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
           <span>{queue.error}</span>
         </p>
@@ -107,10 +107,10 @@ function QueueBlock({ queue }: { queue: WaitingQueueView }) {
                     )}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="line-clamp-2 text-[12.5px] font-medium leading-snug text-ink">
+                    <div className="line-clamp-2 text-xs font-medium leading-snug text-ink">
                       {item.title}
                     </div>
-                    <div className="tabular mt-0.5 truncate text-[11px] text-ink-faint">
+                    <div className="tabular mt-0.5 truncate text-micro text-ink-faint">
                       {[item.detail, item.when].filter(Boolean).join(' · ')}
                     </div>
                   </div>
@@ -122,7 +122,7 @@ function QueueBlock({ queue }: { queue: WaitingQueueView }) {
             <li className="px-1.5 pt-1">
               <Link
                 href={queue.href}
-                className="text-[11.5px] font-semibold text-primary hover:text-primary-strong"
+                className="text-micro font-semibold text-primary hover:text-primary-strong"
               >
                 y {queue.count - queue.items.length} más
               </Link>
@@ -133,11 +133,11 @@ function QueueBlock({ queue }: { queue: WaitingQueueView }) {
         // El conteo dice que hay algo y la lista llegó vacía. Pasa cuando algo
         // se resolvió entre las dos consultas, y también cuando la lectura del
         // detalle se rindió en silencio. Ninguna de las dos justifica callarse.
-        <p className="mt-2 px-1.5 text-[11.5px] leading-snug text-ink-muted">
+        <p className="mt-2 px-1.5 text-micro leading-snug text-ink-muted">
           Hay {queue.count} esperando, pero el detalle no llegó. Ábrela para verlos.
         </p>
       ) : (
-        <p className="mt-2 flex items-center gap-1.5 px-1.5 text-[11.5px] text-ink-faint">
+        <p className="mt-2 flex items-center gap-1.5 px-1.5 text-micro text-ink-faint">
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald" />
           {QUEUE_EMPTY[queue.queue]}
         </p>

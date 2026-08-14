@@ -30,7 +30,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
   return (
     <Panel className="p-4">
       <div className="field-label mb-2">Ejecutarlo</div>
-      <p className="mb-3 text-[12px] text-ink-muted">
+      <p className="mb-3 text-xs text-ink-muted">
         Llena los datos y dile esta frase a Cortex: en el chat de la web, desde Claude o desde una
         rutina programada.
       </p>
@@ -39,7 +39,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
         <div className="mb-3 space-y-2">
           {params.map((p) => (
             <label key={p.name} className="block">
-              <span className="mb-1 flex items-center gap-1 font-mono text-[11px] font-semibold text-ink">
+              <span className="mb-1 flex items-center gap-1 font-mono text-micro font-semibold text-ink">
                 <Hash className="h-3 w-3 text-primary" />
                 {p.name}
                 {p.required !== false && <span className="text-rose">*</span>}
@@ -48,7 +48,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
                 value={values[p.name] ?? ''}
                 onChange={(e) => setValues((v) => ({ ...v, [p.name]: e.target.value }))}
                 placeholder={p.description || `Valor de ${p.name}`}
-                className="w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                className="w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-xs text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
               />
             </label>
           ))}
@@ -57,7 +57,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
 
       <div className="flex items-start gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5">
         <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-        <code className="min-w-0 flex-1 break-words text-[12px] leading-relaxed text-ink">
+        <code className="min-w-0 flex-1 break-words text-xs leading-relaxed text-ink">
           {sentence}
         </code>
       </div>
@@ -66,7 +66,7 @@ export function RunItPanel({ slug, params }: { slug: string; params: ParamDef[] 
         type="button"
         onClick={copy}
         className={clsx(
-          'mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-pill px-3 py-2 text-[12.5px] font-semibold transition-all duration-150 motion-reduce:transform-none motion-reduce:transition-none',
+          'mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-pill px-3 py-2 text-xs font-semibold transition-all duration-150 motion-reduce:transform-none motion-reduce:transition-none',
           copied
             ? 'bg-emerald-soft text-emerald'
             : 'bg-primary text-white shadow-pop hover:-translate-y-px hover:bg-primary-strong',

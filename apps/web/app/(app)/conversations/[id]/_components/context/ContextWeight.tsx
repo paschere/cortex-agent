@@ -43,16 +43,16 @@ export function ContextWeight({ turn }: { turn: TurnView }) {
   return (
     <section>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h4 className="text-[12px] font-bold text-ink">El peso</h4>
+        <h4 className="text-xs font-bold text-ink">El peso</h4>
         {turn.promptTokens !== null ? (
-          <span className="tabular ml-auto text-[11px] text-ink-muted">
+          <span className="tabular ml-auto text-micro text-ink-muted">
             {num(turn.promptTokens)} tokens de entrada
           </span>
         ) : (
-          <span className="ml-auto text-[11px] text-ink-faint">sin conteo del proveedor</span>
+          <span className="ml-auto text-micro text-ink-faint">sin conteo del proveedor</span>
         )}
       </div>
-      <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-faint">
+      <p className="mt-0.5 text-micro leading-relaxed text-ink-faint">
         Los porcentajes son exactos: se miden sobre los caracteres del texto que se envió. Los
         tokens de cada parte son aproximados; el único conteo real es el de arriba, que lo reporta
         el proveedor, y cubre además el andamiaje de las herramientas que aquí no se desglosa.
@@ -86,18 +86,18 @@ function Row({ part, biggest }: { part: PartView; biggest: boolean }) {
       <span className="min-w-0 flex-1">
         <span
           className={clsx(
-            'text-[12px]',
+            'text-xs',
             biggest ? 'font-bold text-ink' : 'font-semibold text-ink-muted',
           )}
         >
           {PART_LABEL[part.key]}
         </span>
-        <span className="ml-2 text-[11px] text-ink-faint">{PART_NOTE[part.key]}</span>
+        <span className="ml-2 text-micro text-ink-faint">{PART_NOTE[part.key]}</span>
       </span>
-      <span className="tabular shrink-0 text-[11.5px] font-semibold text-ink">
+      <span className="tabular shrink-0 text-micro font-semibold text-ink">
         {pct(part.share)}
       </span>
-      <span className="tabular w-[92px] shrink-0 text-right text-[10.5px] text-ink-faint">
+      <span className="tabular w-[92px] shrink-0 text-right text-micro text-ink-faint">
         ~{num(part.tokens)} tokens
       </span>
     </li>

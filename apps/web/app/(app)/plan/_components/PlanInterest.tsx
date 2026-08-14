@@ -39,7 +39,7 @@ export function PlanInterest({ planCode, planName }: { planCode: string; planNam
 
   if (state === 'sent') {
     return (
-      <p className="mt-3 text-[12px] font-semibold text-emerald">
+      <p className="mt-3 text-xs font-semibold text-emerald">
         Anotado. Te buscamos para activar {planName}.
       </p>
     );
@@ -57,7 +57,7 @@ export function PlanInterest({ planCode, planName }: { planCode: string; planNam
         {state === 'sending' ? 'Anotando…' : `Quiero ${planName}`}
       </Button>
       {state === 'failed' && (
-        <p className="mt-2 text-[12px] text-rose">
+        <p className="mt-2 text-xs text-rose">
           No se pudo anotar. Vuelve a intentarlo en un momento.
         </p>
       )}

@@ -41,7 +41,7 @@ export function TaskCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className={status.chip}>{status.label}</span>
             {task.issueKey && (
-              <span className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 font-mono text-[10.5px] font-semibold text-ink-muted">
+              <span className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 font-mono text-micro font-semibold text-ink-muted">
                 {task.issueKey}
               </span>
             )}
@@ -49,16 +49,16 @@ export function TaskCard({
 
           <Link
             href={`/dev-work/${task.id}`}
-            className="mt-1.5 block text-[14px] font-bold leading-snug text-ink transition-colors hover:text-primary"
+            className="mt-1.5 block text-base font-bold leading-snug text-ink transition-colors hover:text-primary"
           >
             {task.title}
           </Link>
 
           {task.status === 'failed' && task.failureReason && (
-            <p className="mt-1.5 text-[12.5px] leading-snug text-rose">{task.failureReason}</p>
+            <p className="mt-1.5 text-xs leading-snug text-rose">{task.failureReason}</p>
           )}
 
-          <div className="tabular mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-faint">
+          <div className="tabular mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-ink-faint">
             {repository && (
               <span className="inline-flex items-center gap-1.5">
                 <FolderGit2 className="h-3.5 w-3.5" />
@@ -92,7 +92,7 @@ export function TaskCard({
               href={task.prUrl}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <GitPullRequest className="h-3.5 w-3.5" />
               {task.prNumber ? `Revisar #${task.prNumber}` : 'Revisar el cambio'}

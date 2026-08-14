@@ -44,13 +44,13 @@ export function ContextTools({ turn }: { turn: TurnView }) {
   return (
     <section>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <h4 className="text-[12px] font-bold text-ink">Las herramientas que se le ofrecieron</h4>
-        <span className="tabular ml-auto text-[11px] text-ink-faint">
+        <h4 className="text-xs font-bold text-ink">Las herramientas que se le ofrecieron</h4>
+        <span className="tabular ml-auto text-micro text-ink-faint">
           {tools.offered.length.toLocaleString(LOCALE)} de{' '}
           {tools.candidates.toLocaleString(LOCALE)}
         </span>
       </div>
-      <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-faint">
+      <p className="mt-0.5 text-micro leading-relaxed text-ink-faint">
         {SELECTION_REASON[tools.reason]}
       </p>
 
@@ -61,7 +61,7 @@ export function ContextTools({ turn }: { turn: TurnView }) {
           ))}
           {withheld.length > 0 && (
             <li className="pt-1.5">
-              <span className="text-[10.5px] font-semibold text-ink-faint">
+              <span className="text-micro font-semibold text-ink-faint">
                 No se le ofrecieron
               </span>
             </li>
@@ -74,7 +74,7 @@ export function ContextTools({ turn }: { turn: TurnView }) {
               <button
                 type="button"
                 onClick={() => setShowAll(true)}
-                className="text-[11px] font-semibold text-primary hover:underline"
+                className="text-micro font-semibold text-primary hover:underline"
               >
                 Ver las otras {withheld.length - visible.length}
               </button>
@@ -85,14 +85,14 @@ export function ContextTools({ turn }: { turn: TurnView }) {
 
       {tools.offered.length > 0 && (
         <details className="mt-2.5">
-          <summary className="cursor-pointer text-[11px] font-semibold text-ink-muted hover:text-ink">
+          <summary className="cursor-pointer text-micro font-semibold text-ink-muted hover:text-ink">
             Ver las {tools.offered.length.toLocaleString(LOCALE)} herramientas, una por una
           </summary>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {tools.offered.map((id) => (
               <span
                 key={id}
-                className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 font-mono text-[10.5px] text-ink-muted"
+                className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 font-mono text-micro text-ink-muted"
                 title={id}
               >
                 {toolDisplayName(id.replaceAll('.', '_'))}
@@ -120,14 +120,14 @@ function FamilyRow({ family }: { family: FamilyView }) {
       />
       <span
         className={clsx(
-          'font-mono text-[11.5px]',
+          'font-mono text-micro',
           family.offered ? 'text-ink' : 'text-ink-faint',
         )}
       >
         {family.family}
       </span>
-      <span className="text-[10.5px] text-ink-faint">{FAMILY_REASON[family.reason]}</span>
-      <span className="tabular ml-auto shrink-0 text-[11px] text-ink-muted">
+      <span className="text-micro text-ink-faint">{FAMILY_REASON[family.reason]}</span>
+      <span className="tabular ml-auto shrink-0 text-micro text-ink-muted">
         {score(family.score)}
       </span>
     </li>

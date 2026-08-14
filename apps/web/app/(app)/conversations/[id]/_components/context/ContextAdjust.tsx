@@ -101,35 +101,35 @@ export function ContextAdjust({
     <div className="rounded-card border border-border bg-surface-2 px-4 py-3.5">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <SlidersHorizontal className="h-3.5 w-3.5 text-ink-faint" />
-        <h4 className="text-[12px] font-bold text-ink">Ajustar lo que recibe</h4>
-        <span className="rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">
+        <h4 className="text-xs font-bold text-ink">Ajustar lo que recibe</h4>
+        <span className="rounded-pill border border-border bg-surface px-2 py-0.5 text-micro font-semibold text-ink-muted">
           Solo en esta conversación
         </span>
         {pending && (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-ink-faint motion-reduce:animate-none" />
         )}
         {saved && !pending && (
-          <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-emerald">
+          <span className="inline-flex items-center gap-1 text-micro font-semibold text-emerald">
             <Check className="h-3 w-3" />
             Guardado
           </span>
         )}
       </div>
-      <p className="mt-1 text-[11.5px] leading-relaxed text-ink-muted">
+      <p className="mt-1 text-micro leading-relaxed text-ink-muted">
         Cambia lo que se le entrega de aquí en adelante, y solo aquí. Ni otras conversaciones ni
         las de tus compañeros se enteran. Si empiezas una conversación nueva, vuelve todo a lo
         normal. La mayoría de la gente no debería tocar nada de esto.
       </p>
 
       {error && (
-        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[11.5px] text-rose">
+        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-micro text-rose">
           {error}
         </p>
       )}
 
       {/* ------------------------------------------------------- fragments */}
       <div className="mt-3">
-        <div className="text-[11px] font-semibold text-ink">Cuántos fragmentos se le pegan</div>
+        <div className="text-micro font-semibold text-ink">Cuántos fragmentos se le pegan</div>
         <div className="mt-1.5 flex flex-wrap gap-1">
           {CHOICES.map((choice) => (
             <button
@@ -138,7 +138,7 @@ export function ContextAdjust({
               disabled={pending}
               onClick={() => commit({ ...value, fragmentLimit: choice.value })}
               className={clsx(
-                'rounded-pill border px-2.5 py-1 text-[11.5px] transition-colors disabled:opacity-50',
+                'rounded-pill border px-2.5 py-1 text-micro transition-colors disabled:opacity-50',
                 value.fragmentLimit === choice.value
                   ? 'border-primary bg-primary text-white'
                   : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
@@ -148,7 +148,7 @@ export function ContextAdjust({
             </button>
           ))}
         </div>
-        <p className="mt-1 text-[10.5px] leading-relaxed text-ink-faint">
+        <p className="mt-1 text-micro leading-relaxed text-ink-faint">
           «Ninguno» le hace contestar sin nada del cerebro encima — útil para comprobar si el
           problema venía de ahí.
         </p>
@@ -157,14 +157,14 @@ export function ContextAdjust({
       {/* ---------------------------------------------------------- spaces */}
       {spaces.length > 1 && (
         <div className="mt-3">
-          <div className="text-[11px] font-semibold text-ink">De qué espacios puede sacarlos</div>
+          <div className="text-micro font-semibold text-ink">De qué espacios puede sacarlos</div>
           <div className="mt-1.5 flex flex-wrap gap-1">
             <button
               type="button"
               disabled={pending}
               onClick={() => commit({ ...value, spaceIds: null })}
               className={clsx(
-                'rounded-pill border px-2.5 py-1 text-[11.5px] transition-colors disabled:opacity-50',
+                'rounded-pill border px-2.5 py-1 text-micro transition-colors disabled:opacity-50',
                 value.spaceIds === null
                   ? 'border-primary bg-primary text-white'
                   : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
@@ -179,7 +179,7 @@ export function ContextAdjust({
                 disabled={pending}
                 onClick={() => toggleSpace(space.id)}
                 className={clsx(
-                  'rounded-pill border px-2.5 py-1 text-[11.5px] transition-colors disabled:opacity-50',
+                  'rounded-pill border px-2.5 py-1 text-micro transition-colors disabled:opacity-50',
                   value.spaceIds?.includes(space.id)
                     ? 'border-primary bg-primary text-white'
                     : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
@@ -189,7 +189,7 @@ export function ContextAdjust({
               </button>
             ))}
           </div>
-          <p className="mt-1 text-[10.5px] leading-relaxed text-ink-faint">
+          <p className="mt-1 text-micro leading-relaxed text-ink-faint">
             Esto solo recorta. Nunca te da acceso a un espacio que no puedas ver de todos modos.
           </p>
         </div>
@@ -198,7 +198,7 @@ export function ContextAdjust({
       {/* --------------------------------------------------------- families */}
       {families.length > 0 && (
         <div className="mt-3">
-          <div className="text-[11px] font-semibold text-ink">
+          <div className="text-micro font-semibold text-ink">
             Familias de herramientas que no quieres que se le ofrezcan
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1">
@@ -211,7 +211,7 @@ export function ContextAdjust({
                   disabled={pending}
                   onClick={() => toggleFamily(family)}
                   className={clsx(
-                    'rounded-pill border px-2.5 py-1 font-mono text-[11px] transition-colors disabled:opacity-50',
+                    'rounded-pill border px-2.5 py-1 font-mono text-micro transition-colors disabled:opacity-50',
                     muted
                       ? 'border-rose/40 bg-rose-soft text-rose line-through'
                       : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
@@ -222,7 +222,7 @@ export function ContextAdjust({
               );
             })}
           </div>
-          <p className="mt-1 text-[10.5px] leading-relaxed text-ink-faint">
+          <p className="mt-1 text-micro leading-relaxed text-ink-faint">
             Tachada quiere decir que no se le ofrece aquí. Igual verás arriba lo que habría
             puntuado, para que puedas devolverte si te equivocaste.
           </p>

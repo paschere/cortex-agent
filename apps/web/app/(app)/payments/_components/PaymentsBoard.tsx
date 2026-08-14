@@ -61,12 +61,12 @@ function Receivables({ view }: { view: ReceivablesView }) {
       <PanelHead
         icon={<Banknote className="h-4 w-4" aria-hidden />}
         title="Cartera"
-        right={<span className="text-[12px] text-ink-faint">al {view.today}</span>}
+        right={<span className="text-xs text-ink-faint">al {view.today}</span>}
       />
       {view.byCurrency.length === 0 ? (
         <div className="px-5 py-8 text-center">
-          <p className="text-[14px] font-semibold text-ink">Todavía no hay cartera que calcular</p>
-          <p className="mt-1 text-[13px] text-ink-muted">
+          <p className="text-base font-semibold text-ink">Todavía no hay cartera que calcular</p>
+          <p className="mt-1 text-sm text-ink-muted">
             {view.pendingExcluded > 0
               ? `Hay ${plural(view.pendingExcluded, 'factura')} leída(s) que nadie ha confirmado. Ninguna entra en una cifra hasta que alguien las revise — y esa revisión es justo lo que convierte lo leído en algo que se puede sumar.`
               : 'No hay ninguna factura confirmada con saldo pendiente.'}
@@ -79,8 +79,8 @@ function Receivables({ view }: { view: ReceivablesView }) {
               key={c.currency}
               className="flex flex-wrap items-baseline gap-x-6 gap-y-2 px-5 py-4"
             >
-              <span className="stat-num text-[22px] font-semibold text-ink">{c.outstanding}</span>
-              <span className="text-[13px] text-ink-muted">
+              <span className="stat-num text-xl font-semibold text-ink">{c.outstanding}</span>
+              <span className="text-sm text-ink-muted">
                 {c.ageDays != null ? `a ${c.ageDays} días` : 'sin edad calculable'} ·{' '}
                 {plural(c.openInvoices, 'factura abierta', 'facturas abiertas')}
               </span>
@@ -89,7 +89,7 @@ function Receivables({ view }: { view: ReceivablesView }) {
                   {c.overdue} vencido en {plural(c.overdueInvoices, 'factura')}
                 </span>
               ) : null}
-              <span className="ml-auto text-[12px] text-ink-faint tabular">
+              <span className="ml-auto text-xs text-ink-faint tabular">
                 facturado {c.invoiced} · abonado {c.paid}
               </span>
             </li>
@@ -101,7 +101,7 @@ function Receivables({ view }: { view: ReceivablesView }) {
         enseñaría a leer un total incompleto como si fuera completo, y eso es
         peor que no dar el número: se cita en una reunión y nadie lo audita.
       */}
-      <p className="border-t border-border bg-surface-2 px-5 py-3 text-[12.5px] leading-relaxed text-ink-muted">
+      <p className="border-t border-border bg-surface-2 px-5 py-3 text-xs leading-relaxed text-ink-muted">
         {view.sentence}
       </p>
     </Panel>
@@ -144,7 +144,7 @@ function Disputes({ disputes }: { disputes: DisputeView[] }) {
       {error || note ? (
         <div
           className={clsx(
-            'mx-5 mt-3 rounded-sm px-3 py-2 text-[12.5px]',
+            'mx-5 mt-3 rounded-sm px-3 py-2 text-xs',
             error ? 'bg-rose-soft text-rose' : 'bg-emerald-soft text-emerald',
           )}
         >
@@ -154,8 +154,8 @@ function Disputes({ disputes }: { disputes: DisputeView[] }) {
 
       {disputes.length === 0 ? (
         <div className="px-5 py-8 text-center">
-          <p className="text-[14px] font-semibold text-ink">Ninguna fuente se contradice</p>
-          <p className="mt-1 text-[13px] text-ink-muted">
+          <p className="text-base font-semibold text-ink">Ninguna fuente se contradice</p>
+          <p className="mt-1 text-sm text-ink-muted">
             Cuando dos fuentes cuenten un mismo pago de forma distinta, aparecerá aquí y saldrá de
             todas las cifras hasta que alguien decida cuál vale.
           </p>
@@ -167,17 +167,17 @@ function Disputes({ disputes }: { disputes: DisputeView[] }) {
             return (
               <li key={d.paymentId} className="px-5 py-4">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <span className="text-[14px] font-semibold text-ink">
+                  <span className="text-base font-semibold text-ink">
                     {d.client ?? 'Sin cliente identificado'}
                   </span>
-                  <span className="text-[13px] text-ink-muted">{d.paidOn}</span>
+                  <span className="text-sm text-ink-muted">{d.paidOn}</span>
                   {d.invoiceNumber ? (
-                    <span className="text-[13px] text-ink-muted tabular">{d.invoiceNumber}</span>
+                    <span className="text-sm text-ink-muted tabular">{d.invoiceNumber}</span>
                   ) : null}
                   <span className={clsx(chipClass('amber'), 'ml-auto')}>Fuera de las cifras</span>
                 </div>
 
-                <p className="mt-1 text-[12.5px] text-ink-muted">
+                <p className="mt-1 text-xs text-ink-muted">
                   Este pago no está en la cartera ni en ningún total mientras siga aquí. No es una
                   cifra menor: no está en la cifra.
                 </p>
@@ -206,20 +206,20 @@ function Disputes({ disputes }: { disputes: DisputeView[] }) {
                           }
                           aria-label={`Dar por bueno ${v.amount} según ${v.source}`}
                         />
-                        <span className="stat-num text-[14px] font-semibold text-ink">
+                        <span className="stat-num text-base font-semibold text-ink">
                           {v.amount}
                         </span>
-                        <span className="text-[12.5px] text-ink-muted">
+                        <span className="text-xs text-ink-muted">
                           según {v.source} · {v.paidOn}
                         </span>
                         {i === 0 ? (
-                          <span className="ml-auto text-[11px] text-ink-faint">
+                          <span className="ml-auto text-micro text-ink-faint">
                             marcado por defecto — sugerencia, no veredicto
                           </span>
                         ) : null}
                       </label>
                       {v.quote ? (
-                        <p className="mt-1.5 flex gap-1.5 text-[12px] italic text-ink-muted">
+                        <p className="mt-1.5 flex gap-1.5 text-xs italic text-ink-muted">
                           <Quote className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
                           {v.quote}
                         </p>
@@ -270,7 +270,7 @@ function Disputes({ disputes }: { disputes: DisputeView[] }) {
                     ) : null}
                     El pago no era real
                   </Button>
-                  <span className="text-[11.5px] text-ink-faint">
+                  <span className="text-micro text-ink-faint">
                     Queda con tu nombre. Lo que dijo cada fuente se guarda igual, sin tocar.
                   </span>
                 </div>
@@ -326,7 +326,7 @@ function RecordForm({ clients, today }: { clients: ClientOption[]; today: string
       <PanelHead
         icon={<Banknote className="h-4 w-4" aria-hidden />}
         title="Anotar un pago"
-        right={<span className="text-[12px] text-ink-faint">queda con tu nombre</span>}
+        right={<span className="text-xs text-ink-faint">queda con tu nombre</span>}
       />
       <div className="space-y-3 px-5 py-4">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -353,7 +353,7 @@ function RecordForm({ clients, today }: { clients: ClientOption[]; today: string
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
               aria-label="Moneda del pago"
-              className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13.5px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+              className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
             >
               <option value="">Elige la moneda</option>
               {CURRENCIES.map((c) => (
@@ -382,7 +382,7 @@ function RecordForm({ clients, today }: { clients: ClientOption[]; today: string
               value={kind}
               onChange={(e) => setKind(e.target.value as typeof kind)}
               aria-label="Clase de movimiento"
-              className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13.5px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+              className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
             >
               <option value="payment">Un abono</option>
               <option value="reversal">Una anulación o devolución</option>
@@ -397,7 +397,7 @@ function RecordForm({ clients, today }: { clients: ClientOption[]; today: string
             value={clientId}
             onChange={(e) => setClientId(e.target.value)}
             aria-label="Cliente que pagó"
-            className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13.5px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+            className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
           >
             <option value="">Sin cliente identificado</option>
             {clients.map((c) => (
@@ -434,7 +434,7 @@ function RecordForm({ clients, today }: { clients: ClientOption[]; today: string
         {error || note ? (
           <div
             className={clsx(
-              'rounded-sm px-3 py-2 text-[12.5px]',
+              'rounded-sm px-3 py-2 text-xs',
               error ? 'bg-rose-soft text-rose' : 'bg-emerald-soft text-emerald',
             )}
           >
@@ -447,7 +447,7 @@ function RecordForm({ clients, today }: { clients: ClientOption[]; today: string
             {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
             Registrar
           </Button>
-          <span className="text-[11.5px] text-ink-faint">
+          <span className="text-micro text-ink-faint">
             Si otra fuente ya lo había dicho, no se duplica: se enlaza.
           </span>
         </div>
@@ -464,8 +464,8 @@ function Ledger({ payments }: { payments: PaymentView[] }) {
       <PanelHead title="Lo que hay registrado" />
       {payments.length === 0 ? (
         <div className="px-5 py-8 text-center">
-          <p className="text-[14px] font-semibold text-ink">Todavía no hay ningún pago</p>
-          <p className="mt-1 text-[13px] text-ink-muted">
+          <p className="text-base font-semibold text-ink">Todavía no hay ningún pago</p>
+          <p className="mt-1 text-sm text-ink-muted">
             Anota el primero a la izquierda, o sube un comprobante de pago a Brain Knowledge: al
             confirmarlo, el pago se registra solo con la frase de la que se leyó el importe.
           </p>
@@ -474,14 +474,14 @@ function Ledger({ payments }: { payments: PaymentView[] }) {
         <ul className="divide-y divide-border">
           {payments.map((p) => (
             <li key={p.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3">
-              <span className="stat-num text-[14px] font-semibold text-ink">
+              <span className="stat-num text-base font-semibold text-ink">
                 {p.kind === 'reversal' ? `− ${p.amount}` : p.amount}
               </span>
-              <span className="text-[13px] text-ink-muted">
+              <span className="text-sm text-ink-muted">
                 {p.client ?? 'sin cliente'} · {p.paidOn}
               </span>
               {p.invoiceNumber ? (
-                <span className="text-[12px] text-ink-faint tabular">{p.invoiceNumber}</span>
+                <span className="text-xs text-ink-faint tabular">{p.invoiceNumber}</span>
               ) : null}
               <span
                 className={clsx(chipClass(PAYMENT_STATE_TONE[p.state]), 'ml-auto')}
@@ -489,7 +489,7 @@ function Ledger({ payments }: { payments: PaymentView[] }) {
               >
                 {PAYMENT_STATE_LABEL[p.state]}
               </span>
-              <span className="text-[11.5px] text-ink-faint">
+              <span className="text-micro text-ink-faint">
                 {plural(p.sourceCount, 'fuente')}
               </span>
             </li>

@@ -96,19 +96,19 @@ export function IntakeChooser({
   return (
     <Panel>
       <PanelHead title="De qué se alimenta" right="cuatro entradas" />
-      <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
+      <p className="px-5 pt-1 text-xs text-ink-muted">
         Todo termina en el mismo sitio: troceado, indexado y listo para citar.
       </p>
 
       {writable.length === 0 ? (
         <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border px-5 py-4">
-          <p className="text-[12.5px] text-ink-muted">
+          <p className="text-xs text-ink-muted">
             Necesitas un espacio antes de poder alimentarlo.
           </p>
           <button
             type="button"
             onClick={onCreateSpace}
-            className="inline-flex items-center gap-1.5 rounded-card bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong"
+            className="inline-flex items-center gap-1.5 rounded-card bg-primary px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-strong"
           >
             <Plus className="h-3.5 w-3.5" />
             Crear un espacio
@@ -121,7 +121,7 @@ export function IntakeChooser({
             <select
               value={target}
               onChange={(e) => setChosen(e.target.value)}
-              className="h-8 min-w-0 max-w-full rounded-card border border-border bg-surface px-2.5 text-[12.5px] font-medium text-ink focus:border-border-strong"
+              className="h-8 min-w-0 max-w-full rounded-card border border-border bg-surface px-2.5 text-xs font-medium text-ink focus:border-border-strong"
             >
               {writable.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -145,10 +145,10 @@ export function IntakeChooser({
               >
                 <span className="flex items-center gap-2">
                   <Icon className="h-4 w-4 shrink-0 text-primary" />
-                  <span className="text-[13px] font-bold text-ink">{label}</span>
+                  <span className="text-sm font-bold text-ink">{label}</span>
                 </span>
-                <span className="text-[11.5px] leading-snug text-ink-muted">{line}</span>
-                <span className="tabular mt-auto pt-1 text-[11px] text-ink-faint">
+                <span className="text-micro leading-snug text-ink-muted">{line}</span>
+                <span className="tabular mt-auto pt-1 text-micro text-ink-faint">
                   {haul(totals[key], unit)}
                 </span>
               </button>
@@ -179,7 +179,7 @@ export function IntakePanel({
   return (
     <Panel>
       <PanelHead title={`Alimentar a ${space.name}`} />
-      <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
+      <p className="px-5 pt-1 text-xs text-ink-muted">
         Elige por dónde entra. Cortex lo indexa y queda citable.
       </p>
 
@@ -206,14 +206,14 @@ export function IntakePanel({
                 />
                 <span
                   className={clsx(
-                    'text-[12.5px] font-semibold',
+                    'text-xs font-semibold',
                     on ? 'text-primary' : 'text-ink-muted',
                   )}
                 >
                   {label}
                 </span>
               </span>
-              <span className="tabular text-[10.5px] text-ink-faint">
+              <span className="tabular text-micro text-ink-faint">
                 {haul(space.intake[key], unit)}
               </span>
             </button>

@@ -103,10 +103,10 @@ export default async function ConversationsPage({
 
       <Panel className="overflow-hidden">
         {conversations.length === 0 ? (
-          <div className="p-10 text-center text-[13px] text-ink-muted">
+          <div className="p-10 text-center text-sm text-ink-muted">
             {q ? (
               <>
-                <p className="mb-1 text-[14px] font-bold text-ink">
+                <p className="mb-1 text-base font-bold text-ink">
                   Ninguna conversación se llama así
                 </p>
                 <p className="mx-auto max-w-sm leading-relaxed">
@@ -114,21 +114,21 @@ export default async function ConversationsPage({
                 </p>
                 <Link
                   href="/conversations"
-                  className="mt-4 inline-flex rounded-pill border border-border-strong px-4 py-2 text-[12.5px] font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+                  className="mt-4 inline-flex rounded-pill border border-border-strong px-4 py-2 text-xs font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
                 >
                   Limpiar la búsqueda
                 </Link>
               </>
             ) : (
               <>
-                <p className="mb-1 text-[14px] font-bold text-ink">Todavía no hay conversaciones</p>
+                <p className="mb-1 text-base font-bold text-ink">Todavía no hay conversaciones</p>
                 <p className="mx-auto max-w-sm leading-relaxed">
                   Aquí queda todo lo que le has preguntado a Cortex, con las herramientas que usó
                   para responderte.
                 </p>
                 <Link
                   href="/chat"
-                  className="mt-4 inline-flex rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+                  className="mt-4 inline-flex rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
                 >
                   Abrir el chat
                 </Link>
@@ -152,10 +152,10 @@ export default async function ConversationsPage({
                       <MessagesSquare className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-semibold text-ink">
+                      <div className="truncate text-sm font-semibold text-ink">
                         {c.title?.trim() || 'Conversación sin título'}
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-faint">
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-micro text-ink-faint">
                         <SurfaceBadge surface={c.derived} />
                         <span className="truncate">{relName(c.agents) ?? 'Cortex'}</span>
                         {count !== undefined && (
@@ -168,7 +168,7 @@ export default async function ConversationsPage({
                         )}
                       </div>
                     </div>
-                    <span className="tabular shrink-0 text-[11.5px] text-ink-faint">
+                    <span className="tabular shrink-0 text-micro text-ink-faint">
                       {relativeTime(c.updated_at)}
                     </span>
                   </Link>

@@ -76,7 +76,7 @@ export function ToolPicker({
                 t?.description ?? 'Esta herramienta ya no existe en el registro: quítala del paso'
               }
               className={clsx(
-                'inline-flex items-center gap-1 rounded-pill border px-1.5 py-0.5 font-mono text-[10.5px] font-semibold',
+                'inline-flex items-center gap-1 rounded-pill border px-1.5 py-0.5 font-mono text-micro font-semibold',
                 write
                   ? 'border-amber/40 bg-amber-soft text-amber'
                   : 'border-primary/30 bg-primary-soft text-primary',
@@ -101,7 +101,7 @@ export function ToolPicker({
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-1 rounded-pill border border-dashed border-border-strong px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary hover:text-primary motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1 rounded-pill border border-dashed border-border-strong px-1.5 py-0.5 text-micro font-semibold text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary hover:text-primary motion-reduce:transform-none motion-reduce:transition-none"
           >
             <Plus className="h-3 w-3" />
             Herramienta
@@ -117,12 +117,12 @@ export function ToolPicker({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Busca una herramienta…"
-                  className="h-9 w-full bg-transparent pl-9 pr-3 text-[12.5px] text-ink placeholder:text-ink-faint focus:outline-none"
+                  className="h-9 w-full bg-transparent pl-9 pr-3 text-xs text-ink placeholder:text-ink-faint focus:outline-none"
                 />
               </div>
               <div className="max-h-[280px] overflow-y-auto p-1.5">
                 {groups.length === 0 && (
-                  <p className="px-2 py-4 text-center text-[12px] text-ink-muted">
+                  <p className="px-2 py-4 text-center text-xs text-ink-muted">
                     Ninguna herramienta coincide con eso. Borra lo que escribiste para ver todas.
                   </p>
                 )}
@@ -152,13 +152,13 @@ export function ToolPicker({
                           <span className="min-w-0 flex-1">
                             <span
                               className={clsx(
-                                'block font-mono text-[11px] font-semibold',
+                                'block font-mono text-micro font-semibold',
                                 on ? 'text-primary' : 'text-ink',
                               )}
                             >
                               {t.id}
                             </span>
-                            <span className="line-clamp-2 block text-[11px] leading-snug text-ink-faint">
+                            <span className="line-clamp-2 block text-micro leading-snug text-ink-faint">
                               {t.description}
                             </span>
                           </span>
@@ -168,7 +168,7 @@ export function ToolPicker({
                   </div>
                 ))}
               </div>
-              <div className="flex items-center justify-between border-t border-border bg-surface-2 px-3 py-1.5 text-[10.5px] text-ink-faint">
+              <div className="flex items-center justify-between border-t border-border bg-surface-2 px-3 py-1.5 text-micro text-ink-faint">
                 <span className="inline-flex items-center gap-2">
                   <span className="inline-flex items-center gap-1">
                     <span className="h-2 w-2 rounded-full bg-emerald" /> solo lee

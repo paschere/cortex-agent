@@ -114,7 +114,7 @@ export default async function ConversationDetailPage({
     <>
       <Link
         href="/conversations"
-        className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:text-ink"
+        className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Todas las conversaciones
@@ -135,16 +135,16 @@ export default async function ConversationDetailPage({
       />
 
       {asAdmin && (
-        <Panel className="mb-4 flex items-center gap-2 border-amber/40 bg-amber-soft px-4 py-2.5 text-[12.5px] font-semibold text-amber">
+        <Panel className="mb-4 flex items-center gap-2 border-amber/40 bg-amber-soft px-4 py-2.5 text-xs font-semibold text-amber">
           <ShieldCheck className="h-4 w-4 shrink-0" />
           Estás viendo la conversación de otra persona como administrador de la organización.
         </Panel>
       )}
 
       {messages.length === 0 ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-muted">
+        <Panel className="p-10 text-center text-sm text-ink-muted">
           <MessagesSquare className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <p className="text-[14px] font-bold text-ink">Aquí no se dijo nada</p>
+          <p className="text-base font-bold text-ink">Aquí no se dijo nada</p>
           <p className="mx-auto mt-1 max-w-sm leading-relaxed">
             La conversación se creó pero no llegó ningún mensaje. Retómala en el chat para empezarla.
           </p>

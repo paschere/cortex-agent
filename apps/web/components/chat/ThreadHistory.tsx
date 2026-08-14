@@ -42,7 +42,7 @@ async function fetchConversations(): Promise<Conversation[]> {
 }
 
 const itemClass =
-  'flex cursor-pointer items-center rounded-sm px-2.5 py-[7px] text-[13px] outline-none transition-colors duration-150 data-[highlighted]:bg-surface-2 motion-reduce:transition-none';
+  'flex cursor-pointer items-center rounded-sm px-2.5 py-[7px] text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-surface-2 motion-reduce:transition-none';
 
 export function ThreadHistory() {
   const pathname = usePathname();
@@ -83,13 +83,13 @@ export function ThreadHistory() {
             className="z-50 w-[280px] rounded-card border border-border bg-surface p-1.5 shadow-pop"
           >
             {isPending ? (
-              <div className="px-2.5 py-2 text-[12.5px] text-ink-faint">Cargando…</div>
+              <div className="px-2.5 py-2 text-xs text-ink-faint">Cargando…</div>
             ) : recent.length === 0 ? (
               // Not an error and not a dead end: a person with no threads here
               // may still have conversations in the archive, because this list
               // drops MCP sessions (see app/api/conversations/route.ts) and
               // routine deliveries only show up over there.
-              <div className="px-2.5 py-2 text-[12.5px] text-ink-faint">
+              <div className="px-2.5 py-2 text-xs text-ink-faint">
                 Todavía no hay conversaciones recientes.
               </div>
             ) : (

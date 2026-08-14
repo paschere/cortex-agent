@@ -150,7 +150,7 @@ export default async function RoutineDetailPage({
       <div className="mb-4">
         <Link
           href="/schedules"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint transition-colors hover:text-ink"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Rutinas
         </Link>
@@ -184,7 +184,7 @@ export default async function RoutineDetailPage({
             )}
           </h1>
 
-          <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink-faint">
+          <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-ink-faint">
             <span className="inline-flex items-center gap-1.5 font-semibold text-ink-muted">
               <AlarmClock className="h-3.5 w-3.5 text-primary" />
               {schedule} · {job.timezone}
@@ -225,19 +225,19 @@ export default async function RoutineDetailPage({
                   {job.instruction}
                 </RunMarkdown>
               ) : (
-                <p className="text-[12.5px] text-ink-muted">
+                <p className="text-xs text-ink-muted">
                   No quedó guardada ninguna instrucción. Pídele a Cortex en el chat que la vuelva a
                   describir y se reescribe.
                 </p>
               )
             ) : (
               <div className="space-y-2">
-                <span className="inline-flex items-center gap-1.5 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[11.5px] font-semibold text-primary">
+                <span className="inline-flex items-center gap-1.5 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-micro font-semibold text-primary">
                   <Wrench className="h-3 w-3" />
                   {job.toolId ?? 'herramienta desconocida'}
                 </span>
                 {toolInput != null && (
-                  <pre className="scroll-slim overflow-x-auto rounded-card border border-border bg-surface-2 px-3.5 py-3 font-mono text-[11.5px] leading-[1.6] text-ink-muted">
+                  <pre className="scroll-slim overflow-x-auto rounded-card border border-border bg-surface-2 px-3.5 py-3 font-mono text-micro leading-[1.6] text-ink-muted">
                     {JSON.stringify(toolInput, null, 2)}
                   </pre>
                 )}
@@ -245,13 +245,13 @@ export default async function RoutineDetailPage({
             )}
 
             <div className="mt-4 space-y-2 border-t border-border pt-3.5">
-              <p className="flex items-start gap-2 text-[12.5px] text-ink-muted">
+              <p className="flex items-start gap-2 text-xs text-ink-muted">
                 <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
                 {job.notifyEmail
                   ? 'Envía el resultado por correo cada vez que termina.'
                   : 'No le escribe a nadie: el resultado se queda aquí y en la conversación.'}
               </p>
-              <p className="flex items-start gap-2 text-[12.5px] text-ink-muted">
+              <p className="flex items-start gap-2 text-xs text-ink-muted">
                 <ShieldAlert
                   className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${job.allowUnattendedWrites ? 'text-amber' : 'text-ink-faint'}`}
                 />
@@ -263,7 +263,7 @@ export default async function RoutineDetailPage({
               <div className="pt-1">
                 <div className={`mb-1.5 ${SECTION}`}>Destinatarios</div>
                 {job.recipients.length === 0 ? (
-                  <p className="text-[12px] text-ink-muted">
+                  <p className="text-xs text-ink-muted">
                     Nadie agregado: el resultado le llega solo al dueño.
                   </p>
                 ) : (
@@ -271,7 +271,7 @@ export default async function RoutineDetailPage({
                     {job.recipients.map((r) => (
                       <span
                         key={r}
-                        className="inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-[11px] font-semibold text-primary"
+                        className="inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft px-2 py-0.5 font-mono text-micro font-semibold text-primary"
                       >
                         <Mail className="h-3 w-3" />
                         {r}
@@ -287,7 +287,7 @@ export default async function RoutineDetailPage({
           <Panel className="p-5">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className={SECTION}>Ejecuciones</div>
-              <span className="tabular text-[11px] text-ink-faint">
+              <span className="tabular text-micro text-ink-faint">
                 {runs.length === 0 ? 'ninguna' : `últimas ${runs.length}`}
               </span>
             </div>
@@ -308,19 +308,19 @@ export default async function RoutineDetailPage({
                   readAt={fmtLong(lastSuccess.started_at)}
                   detail="exitosa"
                 />
-                <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+                <p className="mt-2 text-xs leading-relaxed text-ink-muted">
                   {summary}
                   {(lastSuccess.output?.length ?? 0) > 420 && '…'}
                 </p>
                 <Link
                   href={`#run-${lastSuccess.id}`}
-                  className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary transition-colors hover:text-primary-strong"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary transition-colors hover:text-primary-strong"
                 >
                   <Sparkles className="h-3.5 w-3.5" /> Leer el reporte completo
                 </Link>
               </>
             ) : (
-              <p className="text-[12.5px] text-ink-muted">
+              <p className="text-xs text-ink-muted">
                 Ninguna ejecución ha salido bien todavía. La primera que funcione se resume aquí.
               </p>
             )}
@@ -329,7 +329,7 @@ export default async function RoutineDetailPage({
           {/* Track record */}
           <Panel className="p-4">
             <div className={`mb-2.5 ${SECTION}`}>Historial</div>
-            <ul className="space-y-2 text-[12.5px]">
+            <ul className="space-y-2 text-xs">
               <li className="flex items-center justify-between gap-3">
                 <span className="inline-flex items-center gap-1.5 text-ink-muted">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald" /> Ejecuciones exitosas
@@ -350,7 +350,7 @@ export default async function RoutineDetailPage({
               </li>
             </ul>
             {okCount + failedCount > 0 && (
-              <p className="tabular mt-2.5 border-t border-border pt-2 text-[11px] text-ink-faint">
+              <p className="tabular mt-2.5 border-t border-border pt-2 text-micro text-ink-faint">
                 {Math.round((okCount / (okCount + failedCount)) * 100)}% de las ejecuciones
                 terminadas salieron bien
                 {avg && ` · promedio de las últimas ${runs.length}`}
@@ -362,12 +362,12 @@ export default async function RoutineDetailPage({
           {job.conversationId && (
             <Panel className="p-4">
               <div className={`mb-2 ${SECTION}`}>Conversación de resultados</div>
-              <p className="mb-2.5 text-[12px] text-ink-muted">
+              <p className="mb-2.5 text-xs text-ink-muted">
                 Cada ejecución publica su resultado en este chat. Responde ahí para profundizar.
               </p>
               <Link
                 href={`/chat/${job.conversationId}`}
-                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-primary shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-semibold text-primary shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
               >
                 <MessageSquare className="h-3.5 w-3.5" /> Abrir la conversación
               </Link>

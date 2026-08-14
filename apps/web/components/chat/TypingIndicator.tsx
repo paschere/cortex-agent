@@ -32,7 +32,7 @@ export function TypingIndicator({ label }: { label?: string }) {
             />
           ))}
         </span>
-        <span className="text-[13px] font-medium text-ink-muted">{label ?? 'Trabajando…'}</span>
+        <span className="text-sm font-medium text-ink-muted">{label ?? 'Trabajando…'}</span>
       </div>
     </output>
   );

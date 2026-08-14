@@ -259,7 +259,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
             <h3 className="text-sm font-semibold leading-tight">
               {result.company.name ?? 'Empresa sin nombre'}
             </h3>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-faint">
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-faint">
               {result.company.industry && (
                 <span className="rounded-pill bg-surface-2 px-2 py-0.5 font-medium text-ink-muted">
                   {result.company.industry}
@@ -299,7 +299,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
           {daysLast != null && (
             <span
               className={clsx(
-                'ml-auto inline-flex items-center gap-1 rounded-pill border px-2.5 py-0.5 text-[11px] font-medium',
+                'ml-auto inline-flex items-center gap-1 rounded-pill border px-2.5 py-0.5 text-micro font-medium',
                 activityTone(daysLast),
               )}
             >
@@ -367,7 +367,7 @@ export function ProposalCard({ result }: { result: ProposalResult }) {
                         {(r.techStack ?? []).map((t) => (
                           <span
                             key={t}
-                            className="rounded-pill bg-surface-2 px-2 py-0.5 text-[10px] text-ink-muted"
+                            className="rounded-pill bg-surface-2 px-2 py-0.5 text-micro text-ink-muted"
                           >
                             {t}
                           </span>

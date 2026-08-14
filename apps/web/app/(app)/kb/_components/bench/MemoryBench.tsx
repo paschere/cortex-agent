@@ -158,7 +158,7 @@ export function MemoryBench({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="¿Qué quedamos con Coltrans sobre los sábados?"
             aria-label="Pregúntale a la memoria"
-            className="h-11 w-full rounded-pill border border-border bg-surface-2 pl-10 pr-24 text-[13.5px] text-ink shadow-card transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface"
+            className="h-11 w-full rounded-pill border border-border bg-surface-2 pl-10 pr-24 text-sm text-ink shadow-card transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:bg-surface"
           />
           <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1">
             {(query || probe) && (
@@ -174,7 +174,7 @@ export function MemoryBench({
             <button
               type="submit"
               disabled={running || !query.trim()}
-              className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-primary px-3.5 text-[12px] font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none"
+              className="inline-flex h-8 items-center gap-1.5 rounded-pill bg-primary px-3.5 text-xs font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none"
             >
               {running ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -187,7 +187,7 @@ export function MemoryBench({
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <p className="text-[11.5px] text-ink-faint">
+          <p className="text-micro text-ink-faint">
             Te muestro los fragmentos exactos que recuperaría, en su orden y con su puntaje. No
             gasta una respuesta.
           </p>
@@ -196,7 +196,7 @@ export function MemoryBench({
               value={scopeId}
               onChange={(e) => onScopeChange(e.target.value)}
               aria-label="Dónde buscar"
-              className="ml-auto h-7 rounded-pill border border-border bg-surface px-2.5 text-[11.5px] font-medium text-ink-muted focus:border-border-strong"
+              className="ml-auto h-7 rounded-pill border border-border bg-surface px-2.5 text-micro font-medium text-ink-muted focus:border-border-strong"
             >
               <option value="">En todo lo que ves</option>
               {spaces.map((s) => (
@@ -210,7 +210,7 @@ export function MemoryBench({
       </form>
 
       {error && (
-        <p className="mx-4 mt-3 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+        <p className="mx-4 mt-3 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
           {error}
         </p>
       )}
@@ -218,7 +218,7 @@ export function MemoryBench({
       {/* --------------------------------------------------------- nothing yet */}
       {!probe && !error && (
         <div className="px-4 py-5">
-          <p className="text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="text-xs leading-relaxed text-ink-muted">
             Escribe una pregunta de verdad — de las que alguien le hace a Cortex un martes. Si lo
             que sale aquí no sirve, la respuesta tampoco iba a servir.
           </p>
@@ -231,7 +231,7 @@ export function MemoryBench({
                   setQuery(example);
                   void run(example);
                 }}
-                className="rounded-pill border border-border bg-surface px-3 py-1.5 text-[11.5px] text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+                className="rounded-pill border border-border bg-surface px-3 py-1.5 text-micro text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
               >
                 {example}
               </button>
@@ -247,10 +247,10 @@ export function MemoryBench({
             <div className={clsx('rounded-card border px-3.5 py-3', COVERAGE[probe.coverage].tone)}>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className={clsx('h-2 w-2 rounded-full', COVERAGE[probe.coverage].dot)} />
-                <span className="text-[13px] font-bold text-ink">
+                <span className="text-sm font-bold text-ink">
                   {COVERAGE[probe.coverage].title}
                 </span>
-                <span className="tabular ml-auto text-[10.5px] text-ink-faint">
+                <span className="tabular ml-auto text-micro text-ink-faint">
                   {num(probe.elapsedMs)} ms · {num(reached)}/{num(window)} citables
                 </span>
               </div>
@@ -260,13 +260,13 @@ export function MemoryBench({
                 the model is told is itself a thing worth being able to read,
                 and a second wording of it would eventually disagree.
               */}
-              <p className="mt-1.5 border-l-2 border-ink-faint/25 pl-2.5 text-[12px] italic leading-relaxed text-ink-muted">
+              <p className="mt-1.5 border-l-2 border-ink-faint/25 pl-2.5 text-xs italic leading-relaxed text-ink-muted">
                 {probe.summary}
               </p>
             </div>
 
             {!probe.scale.measured && (
-              <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[11.5px] leading-relaxed text-ink">
+              <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-micro leading-relaxed text-ink">
                 Los cortes de esta regla no están medidos para «{probe.scale.modelId}», el modelo de
                 embeddings que está corriendo. Son un margen provisional y amplio: lee estos
                 veredictos con pinzas y no tomes un «no hay nada» como prueba de que no hay nada.
@@ -274,7 +274,7 @@ export function MemoryBench({
             )}
 
             {probe.degraded && (
-              <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[11.5px] leading-relaxed text-ink">
+              <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-micro leading-relaxed text-ink">
                 {probe.degraded} Que no aparezca algo aquí no prueba que no esté guardado.
               </p>
             )}
@@ -288,15 +288,15 @@ export function MemoryBench({
                   key={`${c.documentTitle}-${c.otherDocumentTitle}-${c.similarity}`}
                   className="mb-2 rounded-card border border-rose/30 bg-rose-soft px-3.5 py-3"
                 >
-                  <div className="flex items-center gap-1.5 text-[12px] font-bold text-rose">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-rose">
                     <AlertTriangle className="h-3.5 w-3.5" />
                     Dos documentos dicen cosas distintas
                   </div>
-                  <p className="mt-1 text-[12px] leading-relaxed text-ink">{c.note}</p>
-                  <p className="mt-1.5 line-clamp-3 border-l-2 border-rose/30 pl-2.5 text-[11.5px] leading-relaxed text-ink-muted">
+                  <p className="mt-1 text-xs leading-relaxed text-ink">{c.note}</p>
+                  <p className="mt-1.5 line-clamp-3 border-l-2 border-rose/30 pl-2.5 text-micro leading-relaxed text-ink-muted">
                     {c.otherContent}
                   </p>
-                  <p className="mt-1 text-[10.5px] text-ink-faint">
+                  <p className="mt-1 text-micro text-ink-faint">
                     «{c.otherDocumentTitle}» en {c.otherSpace} ·{' '}
                     {c.moreRecent === 'other' ? 'es el más reciente' : 'es el más viejo'}
                   </p>
@@ -308,7 +308,7 @@ export function MemoryBench({
           {/* ------------------------------------------------------ the rail */}
           {probe.fragments.length > 0 && (
             <div className="mt-4 px-4">
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-muted">
+              <div className="flex items-center gap-1.5 text-micro font-semibold text-ink-muted">
                 <Scale className="h-3.5 w-3.5 text-ink-faint" />
                 Qué tan cerca está cada fragmento de tu pregunta
               </div>
@@ -327,7 +327,7 @@ export function MemoryBench({
                   // ranked, and never shown to it.
                   <div className="mx-4 my-3 flex items-center gap-2">
                     <span className="h-px flex-1 bg-border-strong" />
-                    <span className="whitespace-nowrap text-[10.5px] font-semibold text-ink-faint">
+                    <span className="whitespace-nowrap text-micro font-semibold text-ink-faint">
                       hasta aquí le llega a Cortex
                     </span>
                     <span className="h-px flex-1 bg-border-strong" />
@@ -345,7 +345,7 @@ export function MemoryBench({
           </ol>
 
           {probe.fragments.length === 0 && (
-            <p className="px-4 py-6 text-[12.5px] leading-relaxed text-ink-muted">
+            <p className="px-4 py-6 text-xs leading-relaxed text-ink-muted">
               No recuperó ni un fragmento. Cortex diría que no sabe — y esa es la respuesta
               correcta. Si creías que sí lo sabía, es que lo que lo dice no está guardado, o entró
               con otras palabras.
@@ -384,7 +384,7 @@ function Row({
       <div className="flex items-start gap-3">
         <span
           className={clsx(
-            'stat-num mt-0.5 w-6 shrink-0 text-right text-[12px]',
+            'stat-num mt-0.5 w-6 shrink-0 text-right text-xs',
             dropped ? 'text-ink-faint' : 'text-primary',
           )}
         >
@@ -398,15 +398,15 @@ function Row({
               onClick={onOpen}
               className="group inline-flex min-w-0 items-center gap-1 text-left"
             >
-              <span className="truncate text-[12.5px] font-semibold text-ink group-hover:underline">
+              <span className="truncate text-xs font-semibold text-ink group-hover:underline">
                 {fragment.documentTitle}
               </span>
               <ArrowRight className="h-3 w-3 shrink-0 text-ink-faint opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
-            <span className="tabular shrink-0 text-[10.5px] text-ink-faint">
+            <span className="tabular shrink-0 text-micro text-ink-faint">
               frag. {num(fragment.chunkIndex + 1)}
             </span>
-            <span className="truncate text-[10.5px] text-ink-faint">· {fragment.spaceName}</span>
+            <span className="truncate text-micro text-ink-faint">· {fragment.spaceName}</span>
           </div>
 
           {/*
@@ -418,7 +418,7 @@ function Row({
           */}
           <p
             className={clsx(
-              'mt-1.5 whitespace-pre-wrap border-l-2 pl-3 text-[13px] leading-[1.7]',
+              'mt-1.5 whitespace-pre-wrap border-l-2 pl-3 text-sm leading-[1.7]',
               dropped ? 'border-border text-ink-faint' : 'border-primary/25 text-ink',
             )}
           >
@@ -441,12 +441,12 @@ function Row({
               />
             )}
             {!fragment.speaker && fragment.age && (
-              <span className={clsx('text-[10.5px]', stale ? 'text-rose' : 'text-ink-faint')}>
+              <span className={clsx('text-micro', stale ? 'text-rose' : 'text-ink-faint')}>
                 {fragment.age}
               </span>
             )}
             {dropped && (
-              <span className="text-[10.5px] font-semibold text-ink-faint">
+              <span className="text-micro font-semibold text-ink-faint">
                 por debajo del mínimo — Cortex no lo puede citar
               </span>
             )}
@@ -501,7 +501,7 @@ function CopyFragment({ fragment }: { fragment: ProbeFragment }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);
       }}
-      className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-ink-faint transition-colors hover:text-primary"
+      className="inline-flex items-center gap-1 text-micro font-semibold text-ink-faint transition-colors hover:text-primary"
       title="Copiar el fragmento. Cortex apunta que este te sirvió."
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}

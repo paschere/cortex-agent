@@ -239,7 +239,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
     <div className="rounded-card border border-border bg-surface-2 px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-ink">
+          <p className="text-sm font-semibold text-ink">
             {recording
               ? 'Grabando…'
               : phase === 'asking'
@@ -248,7 +248,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
                   ? 'Escúchalo antes de guardarlo'
                   : 'Graba desde aquí'}
           </p>
-          <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-faint">
+          <p className="mt-0.5 text-micro leading-relaxed text-ink-faint">
             {recording
               ? 'Si son varios, digan su nombre: Cortex cita al hablante y el minuto.'
               : phase === 'preview' || phase === 'saving'
@@ -262,7 +262,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
           {recording && (
             <>
-              <span className="stat-num text-[15px] text-ink">{formatElapsed(elapsedMs)}</span>
+              <span className="stat-num text-base text-ink">{formatElapsed(elapsedMs)}</span>
               <LevelMeter level={level} />
             </>
           )}
@@ -271,7 +271,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
             <button
               type="button"
               onClick={start}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-card border border-border-strong bg-surface px-4 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:bg-surface-2 sm:w-auto sm:py-2"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-card border border-border-strong bg-surface px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-surface-2 sm:w-auto sm:py-2"
             >
               <Mic className="h-4 w-4 text-primary" />
               Grabar
@@ -279,7 +279,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
           )}
 
           {phase === 'asking' && (
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Permite el micrófono
             </span>
@@ -289,7 +289,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
             <button
               type="button"
               onClick={stop}
-              className="ml-auto inline-flex items-center justify-center gap-1.5 rounded-card bg-rose px-4 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 sm:py-2"
+              className="ml-auto inline-flex items-center justify-center gap-1.5 rounded-card bg-rose px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:py-2"
             >
               <Square className="h-3 w-3 fill-current" />
               Parar
@@ -306,7 +306,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
             type="button"
             onClick={save}
             disabled={phase === 'saving'}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-primary-strong disabled:opacity-50 sm:flex-none"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-card bg-primary px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-strong disabled:opacity-50 sm:flex-none"
           >
             {phase === 'saving' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {phase === 'saving' ? 'Guardando…' : `Guardar en ${spaceName}`}
@@ -315,7 +315,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
             type="button"
             onClick={discard}
             disabled={phase === 'saving'}
-            className="inline-flex items-center gap-1.5 rounded-card px-3 py-2 text-[12.5px] font-semibold text-ink-faint transition-colors hover:bg-surface hover:text-rose disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-card px-3 py-2 text-xs font-semibold text-ink-faint transition-colors hover:bg-surface hover:text-rose disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Descartar
@@ -324,7 +324,7 @@ export function AudioRecorder({ spaceId, spaceName }: { spaceId: string; spaceNa
       )}
 
       {error && (
-        <p className="mt-2.5 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] leading-relaxed text-rose">
+        <p className="mt-2.5 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs leading-relaxed text-rose">
           {error}
         </p>
       )}

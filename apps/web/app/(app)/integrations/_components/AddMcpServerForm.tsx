@@ -7,7 +7,7 @@ import { useState } from 'react';
 type AuthType = 'none' | 'bearer' | 'api_key';
 
 const FIELD =
-  'mt-1 w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary disabled:opacity-50';
+  'mt-1 w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-primary disabled:opacity-50';
 
 export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
   const router = useRouter();
@@ -111,7 +111,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
             maxLength={512}
             disabled={disabled}
             placeholder="https://mcp.example.com/sse"
-            className={`${FIELD} font-mono text-[12px]`}
+            className={`${FIELD} font-mono text-xs`}
           />
         </label>
       </div>
@@ -120,7 +120,7 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
         <legend className="field-label">Autenticación</legend>
         <div className="mt-1.5 flex flex-wrap gap-4">
           {(['none', 'bearer', 'api_key'] as AuthType[]).map((t) => (
-            <label key={t} className="flex items-center gap-1.5 text-[13px] text-ink">
+            <label key={t} className="flex items-center gap-1.5 text-sm text-ink">
               <input
                 type="radio"
                 name="authType"
@@ -148,19 +148,19 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
             placeholder="••••••••••••"
             className={FIELD}
           />
-          <span className="mt-1 block text-[11px] leading-relaxed text-ink-faint">
+          <span className="mt-1 block text-micro leading-relaxed text-ink-faint">
             Se guarda cifrada y no se vuelve a mostrar. Para cambiarla, agrega el servidor de nuevo.
           </span>
         </label>
       )}
 
       {error && (
-        <p className="rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+        <p className="rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
           {error}
         </p>
       )}
       {result && (
-        <p className="rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-[12.5px] text-emerald">
+        <p className="rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-xs text-emerald">
           Servidor agregado. Cortex encontró <span className="tabular">{result.toolCount}</span>{' '}
           {result.toolCount === 1 ? 'herramienta' : 'herramientas'}.
           {result.lastError ? ` También reportó: ${result.lastError}` : ''}

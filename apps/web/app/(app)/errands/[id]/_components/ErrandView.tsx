@@ -115,7 +115,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
       <div className="mb-4 flex items-center justify-between gap-3">
         <Link
           href="/errands"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint transition-colors hover:text-ink"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Encargos
         </Link>
@@ -132,7 +132,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1 basis-[20rem]">
             <div className="field-label">{ERRAND_KIND_LABEL[errand.kind]}</div>
-            <h1 className="mt-1 text-[19px] font-extrabold leading-snug tracking-tight text-ink">
+            <h1 className="mt-1 text-lg font-extrabold leading-snug tracking-tight text-ink">
               {errand.request}
             </h1>
           </div>
@@ -143,7 +143,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
                 type="button"
                 onClick={() => void stop()}
                 disabled={stopping}
-                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-rose shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-rose-soft disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-rose shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-rose-soft disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
               >
                 {stopping ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -156,7 +156,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
               <button
                 type="button"
                 onClick={() => void refresh()}
-                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink motion-reduce:transform-none motion-reduce:transition-none"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink motion-reduce:transform-none motion-reduce:transition-none"
               >
                 <RefreshCw className="h-3.5 w-3.5" /> Actualizar
               </button>
@@ -166,7 +166,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
 
         {/* Said in words, always. A forty-minute job that only shows a spinner
             is indistinguishable from a hung one. */}
-        <p className="mt-3 text-[13px] leading-relaxed text-ink-muted">{detail.situation}</p>
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">{detail.situation}</p>
 
         <Panel className="mt-3 overflow-hidden">
           <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
@@ -194,7 +194,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
               style={{ width: `${Math.max(2, spent)}%` }}
             />
           </div>
-          <p className="tabular mt-1 text-[11px] text-ink-faint">
+          <p className="tabular mt-1 text-micro text-ink-faint">
             Tope de consumo: {errand.tokenCeiling.toLocaleString('es-CO')} tokens. Al llegar ahí se
             cierra con lo que tenga.
           </p>
@@ -203,7 +203,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
 
       {settling && (
         <Panel className="mb-5 border-border-strong bg-surface-2 px-4 py-3">
-          <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-ink-muted">
             <CircleStop className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint" />
             <span className="min-w-0">
               Pedimos detenerlo. No se lanza nada nuevo, pero la vuelta que iba a medias termina el
@@ -222,8 +222,8 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
             <div className="flex items-start gap-2">
               <MessageCircleQuestion className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
               <div className="min-w-0">
-                <h2 className="text-[14.5px] font-bold text-amber">{openQuestion.question}</h2>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+                <h2 className="text-base font-bold text-amber">{openQuestion.question}</h2>
+                <p className="mt-1 text-xs leading-relaxed text-ink-muted">
                   {openQuestion.why}
                 </p>
               </div>
@@ -234,7 +234,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
               options={openQuestion.options}
               onAnswered={() => void refresh()}
             />
-            <p className="mt-2 text-[11.5px] text-ink-faint">
+            <p className="mt-2 text-micro text-ink-faint">
               Nada se pierde mientras esperas: lo que ya encontró está guardado y sigue desde ahí
               apenas contestes.
             </p>
@@ -260,18 +260,18 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
           {errand.deliverable ? (
             <RunMarkdown>{errand.deliverable}</RunMarkdown>
           ) : active ? (
-            <p className="flex items-center gap-2 text-[12.5px] text-ink-faint">
+            <p className="flex items-center gap-2 text-xs text-ink-faint">
               <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
               Todavía no hay resultado. Cortex lo escribe cuando tenga con qué.
             </p>
           ) : (
-            <p className="text-[12.5px] text-ink-muted">
+            <p className="text-xs text-ink-muted">
               Este encargo no alcanzó a producir un resultado. Abajo está hasta dónde llegó.
             </p>
           )}
 
           {errand.closingNote && (
-            <p className="mt-4 border-t border-border pt-3 text-[12.5px] leading-relaxed text-ink-muted">
+            <p className="mt-4 border-t border-border pt-3 text-xs leading-relaxed text-ink-muted">
               {errand.closingNote}
             </p>
           )}
@@ -293,7 +293,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
                 {errand.sources.map((source, i) => (
                   <li
                     key={`${source.url ?? source.title}-${i}`}
-                    className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[12px]"
+                    className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs"
                   >
                     <span className="tabular shrink-0 text-ink-faint">[{i + 1}]</span>
                     {source.url ? (
@@ -328,7 +328,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
         <Panel className="mb-5 overflow-hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="field-label">Vueltas</div>
-            <div className="tabular text-[11px] text-ink-faint">
+            <div className="tabular text-micro text-ink-faint">
               {legs.length} de {errand.legCeiling} permitidas
             </div>
           </div>
@@ -340,12 +340,12 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
                 <li key={leg.id} className="border-b border-border px-4 py-3 last:border-b-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="tabular text-[11px] font-bold text-ink-faint">
+                      <span className="tabular text-micro font-bold text-ink-faint">
                         Vuelta {leg.seq}
                       </span>
                       <span
                         className={clsx(
-                          'text-[12px] font-semibold',
+                          'text-xs font-semibold',
                           leg.status === 'completed' && 'text-emerald',
                           leg.status === 'running' && 'text-primary',
                           (leg.status === 'failed' ||
@@ -357,13 +357,13 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
                         {LEG_LABEL[leg.status]}
                       </span>
                       {isCurrent && currentLeg && currentLeg.total > 0 && (
-                        <span className="tabular text-[11px] text-ink-muted">
+                        <span className="tabular text-micro text-ink-muted">
                           {currentLeg.done}/{currentLeg.total} subagentes
                           {currentLeg.working.length > 0 && ` · ${currentLeg.working[0]}`}
                         </span>
                       )}
                       {leg.tokens > 0 && (
-                        <span className="tabular text-[11px] text-ink-faint">
+                        <span className="tabular text-micro text-ink-faint">
                           {leg.tokens.toLocaleString('es-CO')} tokens
                         </span>
                       )}
@@ -371,7 +371,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
                     {leg.runId && (
                       <Link
                         href={`/orchestrator/${leg.runId}`}
-                        className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-primary hover:underline"
+                        className="inline-flex items-center gap-1 text-micro font-semibold text-primary hover:underline"
                       >
                         Ver en vivo <ExternalLink className="h-3 w-3" />
                       </Link>
@@ -396,10 +396,10 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
           <ul>
             {answered.map((q) => (
               <li key={q.id} className="border-b border-border px-4 py-3 last:border-b-0">
-                <div className="text-[12.5px] font-semibold text-ink">{q.question}</div>
-                <div className="mt-1 text-[12.5px] text-ink-muted">→ {q.answer}</div>
+                <div className="text-xs font-semibold text-ink">{q.question}</div>
+                <div className="mt-1 text-xs text-ink-muted">→ {q.answer}</div>
                 {q.answeredAt && (
-                  <div className="tabular mt-1 text-[11px] text-ink-faint">
+                  <div className="tabular mt-1 text-micro text-ink-faint">
                     {stamp(q.answeredAt)}
                   </div>
                 )}
@@ -409,7 +409,7 @@ export function ErrandView({ initial }: { initial: ErrandDetail }) {
         </Panel>
       )}
 
-      <p className="flex items-start gap-2 rounded-card border border-border bg-surface-2 px-3 py-2 text-[12px] leading-relaxed text-ink-muted">
+      <p className="flex items-start gap-2 rounded-card border border-border bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-muted">
         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
         <span>{ERRAND_BOUNDARY_NOTICE}</span>
       </p>
@@ -429,7 +429,7 @@ function Meter({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-surface px-3 py-2">
       <div className="field-label">{label}</div>
-      <div className="stat-num mt-0.5 truncate text-[16px] leading-none text-ink">{value}</div>
+      <div className="stat-num mt-0.5 truncate text-base leading-none text-ink">{value}</div>
     </div>
   );
 }

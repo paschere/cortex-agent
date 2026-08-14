@@ -441,12 +441,12 @@ export default async function IntegrationsPage({
       <DirectionPair active="outbound" />
 
       {sp.connected && (
-        <div className="mb-4 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-[12.5px] text-emerald">
+        <div className="mb-4 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-xs text-emerald">
           Se conectó {sp.connected}.
         </div>
       )}
       {sp.error && (
-        <div className="mb-4 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+        <div className="mb-4 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
           No se pudo conectar: {sp.error}. Inténtalo otra vez desde la tarjeta.
         </div>
       )}
@@ -461,10 +461,10 @@ export default async function IntegrationsPage({
                 <s.icon className={clsx('h-3.5 w-3.5', s.tone)} />
                 <span className="field-label">{s.label}</span>
               </div>
-              <div className={clsx('stat-num mt-1.5 text-[26px] leading-none', s.tone)}>
+              <div className={clsx('stat-num mt-1.5 text-xl leading-none', s.tone)}>
                 {s.value}
               </div>
-              <div className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-ink-faint">
+              <div className="mt-1.5 line-clamp-2 text-micro leading-snug text-ink-faint">
                 {s.sub}
               </div>
             </div>
@@ -486,12 +486,12 @@ export default async function IntegrationsPage({
               <Gauge className="h-5 w-5" />
             </span>
             <div>
-              <div className="text-[13.5px] font-bold text-ink">Embeddings de Brain Knowledge</div>
-              <p className="mt-0.5 text-[12px] leading-snug text-ink-muted">
+              <div className="text-sm font-bold text-ink">Embeddings de Brain Knowledge</div>
+              <p className="mt-0.5 text-xs leading-snug text-ink-muted">
                 {embeddingOk ? (
                   <>
                     <span className="font-semibold text-ink">{embedding.provider.label}</span> ·{' '}
-                    <span className="font-mono text-[11.5px]">{embedding.model}</span> · 1024
+                    <span className="font-mono text-micro">{embedding.model}</span> · 1024
                     dimensiones
                   </>
                 ) : (
@@ -502,7 +502,7 @@ export default async function IntegrationsPage({
           </div>
           <span
             className={clsx(
-              'rounded-pill border px-2.5 py-0.5 text-[10.5px] font-semibold',
+              'rounded-pill border px-2.5 py-0.5 text-micro font-semibold',
               semanticSearchOn
                 ? 'border-emerald/40 bg-emerald-soft text-emerald'
                 : 'border-amber/40 bg-amber-soft text-amber',
@@ -513,7 +513,7 @@ export default async function IntegrationsPage({
         </div>
 
         {!embeddingOk && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11px] leading-snug text-rose">
+          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro leading-snug text-rose">
             <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
             <span>{embedding.error}</span>
           </p>
@@ -523,7 +523,7 @@ export default async function IntegrationsPage({
             model without a free allowance is a decision, not a default, and it
             should be visible before the credits run out rather than after. */}
         {embeddingOk && embedding.facts && embedding.facts.freeTierTokens === 0 && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
+          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
             <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
             <span>
               <span className="font-semibold">Este modelo no tiene tokens gratis: </span>
@@ -534,7 +534,7 @@ export default async function IntegrationsPage({
           </p>
         )}
         {embeddingOk && !embedding.facts && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
+          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
             <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
             <span>
               No conocemos <span className="font-mono">{embedding.model}</span>, así que no podemos
@@ -544,7 +544,7 @@ export default async function IntegrationsPage({
           </p>
         )}
         {embeddingOk && !embedding.keyConfigured && (
-          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
+          <p className="mt-3 flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
             <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
             <span>
               Falta <span className="font-mono">{embedding.apiKeyEnv}</span>. Nada se pierde: los
@@ -557,21 +557,21 @@ export default async function IntegrationsPage({
         <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-4">
           <div className="bg-surface p-3">
             <span className="field-label">Tokens embebidos · 30 días</span>
-            <div className="stat-num mt-1 text-[22px] leading-none text-ink">
+            <div className="stat-num mt-1 text-xl leading-none text-ink">
               {spend.tokens.toLocaleString('es-CO')}
             </div>
-            <div className="mt-1 text-[11px] leading-snug text-ink-faint">
+            <div className="mt-1 text-micro leading-snug text-ink-faint">
               {spend.anyEstimated ? 'incluye estimados nuestros' : 'según el proveedor'}
             </div>
           </div>
           <div className="bg-surface p-3">
             <span className="field-label">Costo aproximado</span>
-            <div className="stat-num mt-1 text-[22px] leading-none text-ink">
+            <div className="stat-num mt-1 text-xl leading-none text-ink">
               {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
                 ? `US$${((spend.tokens / 1_000_000) * embedding.facts.pricePerMillionTokensUsd).toFixed(4)}`
                 : '—'}
             </div>
-            <div className="mt-1 text-[11px] leading-snug text-ink-faint">
+            <div className="mt-1 text-micro leading-snug text-ink-faint">
               {embeddingOk && embedding.facts?.pricePerMillionTokensUsd != null
                 ? `US$${embedding.facts.pricePerMillionTokensUsd}/millón · precio verificado el ${PRICES_CHECKED_ON}`
                 : 'el proveedor no publica precio por token'}
@@ -579,20 +579,20 @@ export default async function IntegrationsPage({
           </div>
           <div className="bg-surface p-3">
             <span className="field-label">Fragmentos</span>
-            <div className="stat-num mt-1 text-[22px] leading-none text-ink">
+            <div className="stat-num mt-1 text-xl leading-none text-ink">
               {spend.texts.toLocaleString('es-CO')}
             </div>
-            <div className="mt-1 text-[11px] leading-snug text-ink-faint">
+            <div className="mt-1 text-micro leading-snug text-ink-faint">
               en {spend.requests.toLocaleString('es-CO')}{' '}
               {spend.requests === 1 ? 'llamada' : 'llamadas'}
             </div>
           </div>
           <div className="bg-surface p-3">
             <span className="field-label">Modelos usados</span>
-            <div className="stat-num mt-1 text-[22px] leading-none text-ink">
+            <div className="stat-num mt-1 text-xl leading-none text-ink">
               {spend.models.length || '—'}
             </div>
-            <div className="mt-1 line-clamp-2 text-[11px] leading-snug text-ink-faint">
+            <div className="mt-1 line-clamp-2 text-micro leading-snug text-ink-faint">
               {spend.models.length > 1
                 ? 'hubo un cambio de modelo; se está reindexando'
                 : (spend.models[0] ?? 'nada embebido en el periodo')}
@@ -607,12 +607,12 @@ export default async function IntegrationsPage({
               {spend.topDocuments.map((d) => (
                 <li
                   key={d.documentId ?? 'sin-documento'}
-                  className="flex items-baseline justify-between gap-3 text-[11.5px]"
+                  className="flex items-baseline justify-between gap-3 text-micro"
                 >
                   <span className="truncate text-ink-muted">
                     {d.title ?? (d.documentId ? 'Documento eliminado' : 'Sin documento')}
                   </span>
-                  <span className="shrink-0 font-mono text-[11px] text-ink-faint">
+                  <span className="shrink-0 font-mono text-micro text-ink-faint">
                     {d.tokens.toLocaleString('es-CO')} tokens · {d.texts} fragmentos
                   </span>
                 </li>
@@ -640,7 +640,7 @@ export default async function IntegrationsPage({
                 </span>
                 <span
                   className={clsx(
-                    'rounded-pill border px-2.5 py-0.5 text-[10.5px] font-semibold',
+                    'rounded-pill border px-2.5 py-0.5 text-micro font-semibold',
                     tag.cls,
                   )}
                 >
@@ -649,17 +649,17 @@ export default async function IntegrationsPage({
               </div>
 
               <div>
-                <div className="text-[13.5px] font-bold text-ink">{p.name}</div>
-                <p className="mt-0.5 text-[12px] leading-snug text-ink-muted">{p.unlocks}</p>
+                <div className="text-sm font-bold text-ink">{p.name}</div>
+                <p className="mt-0.5 text-xs leading-snug text-ink-muted">{p.unlocks}</p>
               </div>
 
-              <p className="flex items-start gap-1.5 text-[11px] leading-snug text-ink-faint">
+              <p className="flex items-start gap-1.5 text-micro leading-snug text-ink-faint">
                 <Users className="mt-px h-3 w-3 shrink-0" />
                 {p.owner}
               </p>
 
               {!isOn && (
-                <p className="flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11px] leading-snug text-amber">
+                <p className="flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
                   <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
                   <span>
                     <span className="font-semibold">Mientras esté apagada: </span>
@@ -669,7 +669,7 @@ export default async function IntegrationsPage({
               )}
 
               <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2.5">
-                <span className="inline-flex items-center gap-1 text-[11px] text-ink-faint">
+                <span className="inline-flex items-center gap-1 text-micro text-ink-faint">
                   {p.footNote ? (
                     <>
                       <MessageCircle className="h-3 w-3" />
@@ -692,7 +692,7 @@ export default async function IntegrationsPage({
                 {p.connectHref && (
                   <Link
                     href={p.connectHref}
-                    className="rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+                    className="rounded-pill bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
                   >
                     {p.ctaLabel ?? 'Conectar'}
                   </Link>
@@ -712,15 +712,15 @@ export default async function IntegrationsPage({
           </span>
           <div className="min-w-0 flex-1">
             <div className="field-label">Advanced</div>
-            <h2 className="mt-0.5 text-[15px] font-bold tracking-tight text-ink">
+            <h2 className="mt-0.5 text-base font-bold tracking-tight text-ink">
               Herramientas extra que le conectas a Cortex
             </h2>
-            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
               Apunta Cortex a tu propio servidor de Model Context Protocol —Notion, el servidor de
               un proveedor, algo que tú mismo alojes— y sus herramientas se suman a la lista de
               arriba, solo para tu cuenta. Casi nadie necesita esto.
             </p>
-            <p className="mt-1 text-[11.5px] text-ink-faint">
+            <p className="mt-1 text-micro text-ink-faint">
               Hasta <span className="tabular">{MAX_MCP_SERVERS}</span> servidores y{' '}
               <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas en total. ¿Lo que buscas
               es usar Cortex <em>desde</em> Claude?{' '}
@@ -736,13 +736,13 @@ export default async function IntegrationsPage({
           <McpServerList servers={mcpServers} />
 
           {atServerCapacity && (
-            <p className="mt-4 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
+            <p className="mt-4 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
               Llegaste al tope de <span className="tabular">{MAX_MCP_SERVERS}</span> servidores.
               Elimina uno de arriba para agregar otro.
             </p>
           )}
           {atToolCapacity && (
-            <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
+            <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
               Llegaste al tope de <span className="tabular">{MAX_MCP_TOOLS}</span> herramientas.
               Cortex deja de sincronizar nuevas hasta que elimines un servidor de arriba.
             </p>
@@ -750,7 +750,7 @@ export default async function IntegrationsPage({
 
           {!atServerCapacity && (
             <div className="mt-4 border-t border-border pt-4">
-              <h3 className="text-[12.5px] font-semibold text-ink">Agregar un servidor</h3>
+              <h3 className="text-xs font-semibold text-ink">Agregar un servidor</h3>
               <AddMcpServerForm disabled={atServerCapacity} />
             </div>
           )}

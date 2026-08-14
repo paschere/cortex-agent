@@ -118,8 +118,8 @@ export function Flows({
     <Panel className="overflow-hidden">
       {ordered.length === 0 ? (
         <div className="px-5 py-14 text-center">
-          <p className="text-[14px] font-semibold text-ink">Ninguno en este grupo</p>
-          <p className="mx-auto mt-1 max-w-[420px] text-[13px] leading-snug text-ink-muted">
+          <p className="text-base font-semibold text-ink">Ninguno en este grupo</p>
+          <p className="mx-auto mt-1 max-w-[420px] text-sm leading-snug text-ink-muted">
             {filtered
               ? `Tienes ${total} ${total === 1 ? MODULE.one : MODULE.many} en total. Quita el filtro para verlos.`
               : 'Enseña el primero grabando la pestaña del portal.'}
@@ -174,7 +174,7 @@ function Row({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <span className={chipClass(STATUS_TONE[flow.status])}>{STATUS_LABEL[flow.status]}</span>
-            <span className="min-w-0 truncate text-[14.5px] font-semibold text-ink">
+            <span className="min-w-0 truncate text-base font-semibold text-ink">
               {flow.name}
             </span>
             <span className="ml-auto shrink-0">
@@ -182,8 +182,8 @@ function Row({
             </span>
           </div>
 
-          <p className="mt-1 truncate text-[12.5px] text-ink-muted">
-            <span className="font-mono text-[11.5px] text-ink-faint">{flow.site}</span>
+          <p className="mt-1 truncate text-xs text-ink-muted">
+            <span className="font-mono text-micro text-ink-faint">{flow.site}</span>
             {flow.description && ` · ${flow.description}`}
           </p>
 
@@ -201,14 +201,14 @@ function Row({
                 tone={state === 'trouble' ? 'seal' : 'stamp'}
               />
             ) : (
-              <span className="text-[11.5px] font-medium text-amber">
+              <span className="text-micro font-medium text-amber">
                 todavía nadie lo ha visto funcionar
               </span>
             )}
 
             {flow.hasCredential && (
               <span
-                className="inline-flex items-center gap-1 text-[11.5px] font-medium text-ink"
+                className="inline-flex items-center gap-1 text-micro font-medium text-ink"
                 title="Al correr, entra con una clave guardada de la empresa. Quien lo corre nunca la ve."
               >
                 <KeyRound className="h-3 w-3" aria-hidden="true" />
@@ -221,7 +221,7 @@ function Row({
                 fila, ámbar, junto a lo demás que exige una decisión. */}
             {flow.needsCredential && (
               <span
-                className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-amber"
+                className="inline-flex items-center gap-1 text-micro font-semibold text-amber"
                 title="El portal pide iniciar sesión y este trámite no tiene una cuenta vinculada. Ábrelo para ponérsela."
               >
                 <KeyRound className="h-3 w-3" aria-hidden="true" />
@@ -231,7 +231,7 @@ function Row({
 
             {flow.delivery.deliverTo !== 'none' && (
               <span
-                className="inline-flex items-center gap-1 text-[11.5px] font-medium text-ink"
+                className="inline-flex items-center gap-1 text-micro font-medium text-ink"
                 title={
                   flow.delivery.deliverWhen === 'failure'
                     ? 'Te avisa sólo cuando falla.'
@@ -246,7 +246,7 @@ function Row({
 
             {flow.effect === 'write' && (
               <span
-                className="inline-flex items-center gap-1 text-[11.5px] font-medium text-ink"
+                className="inline-flex items-center gap-1 text-micro font-medium text-ink"
                 title="Escribe en el sitio del tercero, así que desde el chat pide aprobación antes de correr."
               >
                 <Send className="h-3 w-3" aria-hidden="true" />
@@ -265,11 +265,11 @@ function Row({
 /** Cuándo corrió por última vez y si salió bien, en una línea. */
 function LastRun({ flow }: { flow: FlowSummary }) {
   if (!flow.lastRunAt) {
-    return <span className="text-[12px] text-ink-faint">nunca se ha corrido</span>;
+    return <span className="text-xs text-ink-faint">nunca se ha corrido</span>;
   }
   const failed = flow.lastRunStatus === 'failed';
   return (
-    <span className={clsx('text-[12px]', failed ? 'font-semibold text-rose' : 'text-ink-muted')}>
+    <span className={clsx('text-xs', failed ? 'font-semibold text-rose' : 'text-ink-muted')}>
       {failed ? 'falló ' : 'corrió bien '}
       <span className="tabular">{relativeTime(flow.lastRunAt)}</span>
       {!failed && flow.lastRunSeconds !== null && (
@@ -350,7 +350,7 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
   return (
     <div className="divide-y divide-border border-t border-border bg-surface-2/40">
       {flow.status === 'draft' && (
-        <p className="bg-amber-soft/60 px-5 py-3 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="bg-amber-soft/60 px-5 py-3 text-xs leading-relaxed text-ink-muted">
           Salió de una grabación y todavía <strong className="text-ink">no ha reproducido</strong>.
           Se puede correr a mano desde aquí, pero el agente no lo ve en el chat y no se puede
           programar hasta que funcione una vez completo.
@@ -363,7 +363,7 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
         </p>
       )}
       {flow.status !== 'draft' && flow.lastError && flow.lastRunStatus === 'failed' && (
-        <p className="bg-rose-soft/60 px-5 py-3 text-[12.5px] leading-relaxed text-rose">
+        <p className="bg-rose-soft/60 px-5 py-3 text-xs leading-relaxed text-rose">
           {flow.lastError}
         </p>
       )}
@@ -419,7 +419,7 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
             {running ? 'Corriendo…' : 'Correr'}
           </Button>
         </div>
-        {result && <p className="mt-3 text-[13px] leading-relaxed text-ink">{result}</p>}
+        {result && <p className="mt-3 text-sm leading-relaxed text-ink">{result}</p>}
 
         {/* The portal asked whether we are a robot and the tab is still open.
             Right here, under the button that started the run, because that is
@@ -446,25 +446,25 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
             <ol className="mt-2 space-y-1.5">
               {detail.flow.steps.map((s, index) => (
                 <li key={`${s.label}-${index}`} className="flex flex-wrap items-baseline gap-2">
-                  <span className="tabular text-[11px] text-ink-faint">
+                  <span className="tabular text-micro text-ink-faint">
                     {String(index + 1).padStart(2, '0')}
                   </span>
-                  <span className="text-[13px] text-ink">
+                  <span className="text-sm text-ink">
                     <span className="text-ink-muted">{ACTION_LABEL[s.action]}</span> {s.label}
                   </span>
                   {s.value?.kind === 'secret' && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-ink">
+                    <span className="inline-flex items-center gap-1 text-micro font-medium text-ink">
                       <KeyRound className="h-3 w-3" aria-hidden="true" />
                       clave guardada
                     </span>
                   )}
                   {s.value?.kind === 'template' && (
-                    <code className="font-mono text-[11.5px] text-primary">{s.value.text}</code>
+                    <code className="font-mono text-micro text-primary">{s.value.text}</code>
                   )}
                   {s.targets[0] && (
                     <span
                       title={TARGET_WHY[s.targets[0].kind]}
-                      className="font-mono text-[10.5px] text-ink-faint"
+                      className="font-mono text-micro text-ink-faint"
                     >
                       {TARGET_LABEL[s.targets[0].kind]}
                       {s.targets.length > 1 && ` +${s.targets.length - 1}`}
@@ -478,13 +478,13 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
           <div className="p-5">
             <h3 className="field-label">Últimas ejecuciones</h3>
             {detail.runs.length === 0 ? (
-              <p className="mt-2 text-[13px] text-ink-muted">Todavía no se ha corrido.</p>
+              <p className="mt-2 text-sm text-ink-muted">Todavía no se ha corrido.</p>
             ) : (
               <ul className="mt-2 divide-y divide-border">
                 {detail.runs.map((run) => (
                   <li
                     key={run.id}
-                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 text-[12.5px]"
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2 text-xs"
                   >
                     <span className="tabular w-[76px] shrink-0 text-ink-faint">
                       {relativeTime(run.startedAt)}
@@ -501,15 +501,15 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
                           : 'funcionó'
                         : (FAILURE_LABEL[run.failureKind ?? ''] ?? 'falló')}
                     </span>
-                    <span className="text-[11.5px] text-ink-faint">
+                    <span className="text-micro text-ink-faint">
                       {MODE_LABEL[run.mode] ?? run.mode}
                     </span>
-                    <span className="tabular shrink-0 text-[11.5px] text-ink-muted">
+                    <span className="tabular shrink-0 text-micro text-ink-muted">
                       {run.seconds !== null ? secs(run.seconds) : '—'}
                     </span>
                     <span
                       className={clsx(
-                        'tabular w-[86px] shrink-0 text-right text-[11.5px]',
+                        'tabular w-[86px] shrink-0 text-right text-micro',
                         run.modelCalls === 0 ? 'text-emerald' : 'text-ink-muted',
                       )}
                       title={
@@ -533,7 +533,7 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
                 {detail.trace.map((entry) => (
                   <li
                     key={String(entry.step_index)}
-                    className="flex flex-wrap items-baseline gap-2 text-[12px]"
+                    className="flex flex-wrap items-baseline gap-2 text-xs"
                   >
                     <span className="tabular text-ink-faint">
                       {String(Number(entry.step_index) + 1).padStart(2, '0')}
@@ -542,12 +542,12 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
                       {String(entry.label)}
                     </span>
                     {entry.value_preview ? (
-                      <span className="font-mono text-[11px] text-ink-muted">
+                      <span className="font-mono text-micro text-ink-muted">
                         «{String(entry.value_preview)}»
                       </span>
                     ) : null}
                     {entry.matched_target ? (
-                      <span className="font-mono text-[10.5px] text-ink-faint">
+                      <span className="font-mono text-micro text-ink-faint">
                         {String(entry.matched_target)}
                         {Number(entry.matched_rank) > 0 && (
                           // A fallback carried this step. Worth surfacing: it is
@@ -669,13 +669,13 @@ function Remove({
           type="button"
           onClick={() => setAsking(true)}
           disabled={!removal.allowed}
-          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold text-rose transition-colors duration-150 hover:bg-rose-soft disabled:cursor-not-allowed disabled:text-ink-faint disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 motion-reduce:transition-none"
+          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold text-rose transition-colors duration-150 hover:bg-rose-soft disabled:cursor-not-allowed disabled:text-ink-faint disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 motion-reduce:transition-none"
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           Eliminar este {MODULE.one}
         </button>
         {!removal.allowed && removal.reason && (
-          <p className="text-[12px] leading-snug text-ink-muted">{removal.reason}</p>
+          <p className="text-xs leading-snug text-ink-muted">{removal.reason}</p>
         )}
       </div>
     );
@@ -683,21 +683,21 @@ function Remove({
 
   return (
     <div className="bg-rose-soft/50 p-5">
-      <h3 className="text-[13.5px] font-semibold text-ink">Eliminar «{flow.name}»</h3>
+      <h3 className="text-sm font-semibold text-ink">Eliminar «{flow.name}»</h3>
 
       {removal.dependents.length > 0 && (
         <div className="mt-2.5 rounded-sm border border-amber/20 bg-amber-soft px-3 py-2">
-          <p className="text-[12.5px] font-semibold text-amber">
+          <p className="text-xs font-semibold text-amber">
             Hay algo que depende de este {MODULE.one}
           </p>
           <ul className="mt-1 space-y-0.5">
             {removal.dependents.map((d) => (
-              <li key={d} className="text-[12.5px] leading-snug text-ink-muted">
+              <li key={d} className="text-xs leading-snug text-ink-muted">
                 · {d}
               </li>
             ))}
           </ul>
-          <p className="mt-1.5 text-[12px] leading-snug text-ink-muted">
+          <p className="mt-1.5 text-xs leading-snug text-ink-muted">
             Quítalo de ahí primero; si no, quedaría apuntando al vacío.
           </p>
         </div>
@@ -708,7 +708,7 @@ function Remove({
           <p className="field-label">Se pierde</p>
           <ul className="mt-1.5 space-y-1">
             {removal.losing.map((item) => (
-              <li key={item} className="text-[12.5px] leading-snug text-ink">
+              <li key={item} className="text-xs leading-snug text-ink">
                 · {item}
               </li>
             ))}
@@ -718,7 +718,7 @@ function Remove({
           <p className="field-label">Se queda</p>
           <ul className="mt-1.5 space-y-1">
             {removal.keeping.map((item) => (
-              <li key={item} className="text-[12.5px] leading-snug text-ink-muted">
+              <li key={item} className="text-xs leading-snug text-ink-muted">
                 · {item}
               </li>
             ))}
@@ -729,14 +729,14 @@ function Remove({
       {removal.credential && (
         <div className="mt-3 rounded-sm border border-border bg-surface px-3 py-2.5">
           {shared ? (
-            <p className="text-[12.5px] leading-snug text-ink-muted">
+            <p className="text-xs leading-snug text-ink-muted">
               <KeyRound className="mr-1 inline h-3 w-3 align-[-1px]" aria-hidden="true" />
               La clave{' '}
               <strong className="font-semibold text-ink">«{removal.credential.label}»</strong> se
               queda, porque también la usa {removal.credential.alsoUsedBy.join(', ')}.
             </p>
           ) : (
-            <label className="flex cursor-pointer items-start gap-2 text-[12.5px] leading-snug text-ink">
+            <label className="flex cursor-pointer items-start gap-2 text-xs leading-snug text-ink">
               <input
                 type="checkbox"
                 checked={dropCredential}
@@ -754,7 +754,7 @@ function Remove({
         </div>
       )}
 
-      {error && <p className="mt-3 text-[12.5px] font-medium text-rose">{error}</p>}
+      {error && <p className="mt-3 text-xs font-medium text-rose">{error}</p>}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button variant="danger" onClick={() => void remove()} disabled={busy || blocked}>

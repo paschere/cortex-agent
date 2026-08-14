@@ -105,8 +105,8 @@ export function Inbox({ initial }: { initial: NotificationView[] }) {
     return (
       <div className="px-6 py-12 text-center">
         <BellOff className="mx-auto mb-3 h-7 w-7 text-ink-faint" />
-        <h2 className="text-[15px] font-bold text-ink">Nada que contarte todavía</h2>
-        <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-muted">
+        <h2 className="text-base font-bold text-ink">Nada que contarte todavía</h2>
+        <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-ink-muted">
           Aquí van a aparecer los hechos: un trámite que terminó y dejó un documento, una rutina que
           no pudo correr, un encargo que se atascó y te preguntó algo, un correo que salió. Lo que
           sigue <em>esperándote</em> no vive aquí — eso está en Aprobaciones, Acciones, Compromisos
@@ -127,7 +127,7 @@ export function Inbox({ initial }: { initial: NotificationView[] }) {
             type="button"
             onClick={markEverything}
             disabled={markingAll}
-            className="inline-flex items-center gap-1.5 rounded-pill border border-border px-2.5 py-[3px] text-[11px] font-semibold text-ink-muted transition-colors duration-150 hover:border-border-strong hover:text-ink disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-pill border border-border px-2.5 py-[3px] text-micro font-semibold text-ink-muted transition-colors duration-150 hover:border-border-strong hover:text-ink disabled:opacity-60"
           >
             {markingAll ? (
               <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
@@ -166,16 +166,16 @@ export function Inbox({ initial }: { initial: NotificationView[] }) {
                 >
                   <div
                     className={clsx(
-                      'text-[13.5px] leading-snug text-ink',
+                      'text-sm leading-snug text-ink',
                       isUnread ? 'font-semibold' : 'font-medium',
                     )}
                   >
                     {item.title}
                   </div>
                   {item.body && (
-                    <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">{item.body}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-ink-muted">{item.body}</p>
                   )}
-                  <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-faint">
+                  <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-faint">
                     <span className={chipClass(TONE_CHIP[item.tone])}>
                       {NOTIFICATION_KIND_LABEL[item.kind]}
                     </span>

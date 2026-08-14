@@ -60,15 +60,15 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         <div className="min-w-0">
           <Link
             href="/reports"
-            className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-ink-muted transition-colors hover:text-ink"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted transition-colors hover:text-ink"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
             Informes
           </Link>
-          <h1 className="mt-2 text-[20px] font-extrabold tracking-[-0.02em] text-ink">
+          <h1 className="mt-2 text-lg font-extrabold tracking-[-0.02em] text-ink">
             {REPORT_KIND_LABEL[row.kind as ReportKind] ?? row.kind}
           </h1>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink-faint">
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
             <span className="field-label">Calculado</span>
             <span className="tabular">{stamp(row.generated_at)}</span>
             <span aria-hidden className="opacity-40">
@@ -81,7 +81,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         <div className="flex flex-wrap items-center gap-2">
           <a
             href={`/api/reports/${row.id}/export`}
-            className="inline-flex items-center justify-center gap-1.5 rounded-pill border border-border bg-surface px-4 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:border-border-strong hover:bg-surface-2"
+            className="inline-flex items-center justify-center gap-1.5 rounded-pill border border-border bg-surface px-4 py-2 text-sm font-semibold text-ink shadow-card transition-all duration-150 hover:border-border-strong hover:bg-surface-2"
             download
           >
             <Download className="h-3.5 w-3.5" aria-hidden />
@@ -110,10 +110,10 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         >
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose" aria-hidden />
           <div>
-            <p className="text-[13px] font-semibold text-rose">
+            <p className="text-sm font-semibold text-rose">
               El contenido guardado no coincide con su huella
             </p>
-            <p className="mt-1 text-[12.5px] leading-snug text-ink-muted">
+            <p className="mt-1 text-xs leading-snug text-ink-muted">
               La fila se modificó después de generarse. Estas cifras ya no son la fotografía que se
               guardó: vuelve a generar el informe antes de citarlas.
             </p>

@@ -155,7 +155,7 @@ function TaskRow({
   const result =
     invocation.state === 'result' ? (invocation as { result?: unknown }).result : undefined;
   const evidence =
-    'scroll-slim mt-1 max-h-52 overflow-auto rounded-sm border border-border bg-surface-2 p-2.5 font-mono text-[10.5px] leading-relaxed text-ink-muted';
+    'scroll-slim mt-1 max-h-52 overflow-auto rounded-sm border border-border bg-surface-2 p-2.5 font-mono text-micro leading-relaxed text-ink-muted';
 
   return (
     <li className={clsx('border-t border-border first:border-t-0', failed && 'bg-rose-soft')}>
@@ -177,7 +177,7 @@ function TaskRow({
 
         <span
           className={clsx(
-            'shrink-0 text-[12.5px] font-medium',
+            'shrink-0 text-xs font-medium',
             failed ? 'text-rose' : running ? 'text-ink' : 'text-ink-muted',
           )}
         >
@@ -187,7 +187,7 @@ function TaskRow({
         {args && (
           // The arguments are evidence — what Cortex actually asked — so they
           // get the monospace face, like every other checkable value.
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-ink-faint">
+          <span className="min-w-0 flex-1 truncate font-mono text-micro text-ink-faint">
             {args}
           </span>
         )}
@@ -195,7 +195,7 @@ function TaskRow({
 
         {shown && (
           <span
-            className="tabular shrink-0 text-[10.5px] text-ink-faint"
+            className="tabular shrink-0 text-micro text-ink-faint"
             title={running ? 'Tiempo transcurrido' : 'Medido en el servidor'}
           >
             {running ? `${shown}…` : shown}
@@ -215,7 +215,7 @@ function TaskRow({
         <div className="space-y-2 px-3 pb-2.5 pl-9">
           {/* The raw id: what identifies this call in the audit log and in a
               support conversation. */}
-          <div className="font-mono text-[10.5px] text-ink-faint">{invocation.toolName}</div>
+          <div className="font-mono text-micro text-ink-faint">{invocation.toolName}</div>
           {invocation.args !== undefined && (
             <div>
               <div className="field-label">Argumentos</div>
@@ -306,7 +306,7 @@ export function TaskRows({
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-ink-muted transition-colors duration-150 hover:bg-surface-2 motion-reduce:transition-none"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink-muted transition-colors duration-150 hover:bg-surface-2 motion-reduce:transition-none"
         >
           <Check className="h-3 w-3 shrink-0 text-ink-faint" aria-hidden />
           <span>

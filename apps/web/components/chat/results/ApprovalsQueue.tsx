@@ -70,7 +70,7 @@ export function ApprovalsQueue({ result, onSettled }: ResultViewProps) {
 
   if (pending.length === 0) {
     return (
-      <div className="flex items-center gap-2 rounded-card border border-border bg-surface px-4 py-3 text-[13px] text-ink-muted shadow-card">
+      <div className="flex items-center gap-2 rounded-card border border-border bg-surface px-4 py-3 text-sm text-ink-muted shadow-card">
         <Inbox className="h-4 w-4 shrink-0 text-primary" />
         No hay nada esperando tu permiso ahora mismo.
       </div>
@@ -82,7 +82,7 @@ export function ApprovalsQueue({ result, onSettled }: ResultViewProps) {
       <div className="field-label flex items-center gap-2 text-amber">
         <ShieldAlert className="h-3.5 w-3.5" />
         Esperando tu permiso
-        <span className="tabular rounded-pill border border-amber/40 bg-amber-soft px-1.5 text-[10.5px] font-semibold">
+        <span className="tabular rounded-pill border border-amber/40 bg-amber-soft px-1.5 text-micro font-semibold">
           {pending.length}
         </span>
       </div>

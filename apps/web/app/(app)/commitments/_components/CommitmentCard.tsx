@@ -72,12 +72,12 @@ export function CommitmentCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className={chipClass(tone)}>{c.stateLabel}</span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-faint">
+            <span className="text-micro font-semibold uppercase tracking-[0.04em] text-ink-faint">
               {c.kindLabel}
             </span>
             {c.recurrence !== 'none' && (
               <span
-                className="inline-flex items-center gap-1 text-[11px] text-ink-faint"
+                className="inline-flex items-center gap-1 text-micro text-ink-faint"
                 title="Se repite"
               >
                 <Repeat className="h-3 w-3" aria-hidden />
@@ -85,7 +85,7 @@ export function CommitmentCard({
               </span>
             )}
           </div>
-          <h3 className="mt-1.5 truncate text-[15px] font-semibold text-ink">
+          <h3 className="mt-1.5 truncate text-base font-semibold text-ink">
             <Link
               href={`/commitments/${c.id}`}
               className="rounded-sm hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
@@ -94,7 +94,7 @@ export function CommitmentCard({
             </Link>
           </h3>
           {(c.counterparty || c.vehiclePlate) && (
-            <p className="mt-0.5 flex items-center gap-2 text-[12.5px] text-ink-muted">
+            <p className="mt-0.5 flex items-center gap-2 text-xs text-ink-muted">
               {c.vehiclePlate && (
                 <span className="inline-flex items-center gap-1">
                   <Car className="h-3.5 w-3.5 text-ink-faint" aria-hidden />
@@ -109,7 +109,7 @@ export function CommitmentCard({
         <div className="shrink-0 text-right">
           <div
             className={clsx(
-              'tabular text-[15px] font-semibold leading-none',
+              'tabular text-base font-semibold leading-none',
               overdue ? 'text-rose' : c.state === 'due_soon' ? 'text-amber' : 'text-ink',
             )}
           >
@@ -117,7 +117,7 @@ export function CommitmentCard({
           </div>
           <div
             className={clsx(
-              'mt-1 text-[11.5px]',
+              'mt-1 text-micro',
               overdue ? 'font-semibold text-rose' : 'text-ink-faint',
             )}
           >
@@ -129,7 +129,7 @@ export function CommitmentCard({
       {c.amountCop != null && (
         <div className="mt-3">
           <div className="field-label">Valor</div>
-          <div className="stat-num text-[17px] leading-none text-ink">{cop(c.amountCop)}</div>
+          <div className="stat-num text-lg leading-none text-ink">{cop(c.amountCop)}</div>
         </div>
       )}
 
@@ -142,7 +142,7 @@ export function CommitmentCard({
         />
         {c.noticesSent > 0 && (
           <span
-            className="inline-flex items-center gap-1 text-[11px] text-ink-faint"
+            className="inline-flex items-center gap-1 text-micro text-ink-faint"
             title={c.lastNoticeOn ? `Último aviso: ${longDate(c.lastNoticeOn)}` : undefined}
           >
             <BellRing className="h-3 w-3" aria-hidden />
@@ -150,13 +150,13 @@ export function CommitmentCard({
           </span>
         )}
         {c.acknowledged && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-ink-faint">
+          <span className="inline-flex items-center gap-1 text-micro text-ink-faint">
             <Eye className="h-3 w-3" aria-hidden /> visto
           </span>
         )}
         {c.calendarError && (
           <span
-            className="inline-flex items-center gap-1 text-[11px] text-ink-faint"
+            className="inline-flex items-center gap-1 text-micro text-ink-faint"
             title={c.calendarError}
           >
             <CalendarOff className="h-3 w-3" aria-hidden /> sin calendario
@@ -170,7 +170,7 @@ export function CommitmentCard({
             type="button"
             onClick={onFulfil}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:border-emerald/40 hover:text-emerald disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:border-emerald/40 hover:text-emerald disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
           >
             {busy ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -184,7 +184,7 @@ export function CommitmentCard({
               type="button"
               onClick={onAcknowledge}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+              className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
               title="Frena el escalamiento sin decir que ya está resuelto"
             >
               <Eye className="h-3.5 w-3.5" aria-hidden />
@@ -193,7 +193,7 @@ export function CommitmentCard({
           )}
           <Link
             href={`/commitments/${c.id}`}
-            className="ml-auto text-[12.5px] font-medium text-ink-faint transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="ml-auto text-xs font-medium text-ink-faint transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             Ver detalle
           </Link>
@@ -231,24 +231,24 @@ export function ProposalCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <span className={chipClass('amber')}>Sin confirmar</span>
-          <h3 className="mt-1.5 truncate text-[15px] font-semibold text-ink">{c.title}</h3>
-          <p className="mt-0.5 text-[12.5px] text-ink-muted">
+          <h3 className="mt-1.5 truncate text-base font-semibold text-ink">{c.title}</h3>
+          <p className="mt-0.5 text-xs text-ink-muted">
             {c.kindLabel}
             {c.counterparty ? ` · ${c.counterparty}` : ''}
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <div className="tabular text-[15px] font-semibold leading-none text-ink">
+          <div className="tabular text-base font-semibold leading-none text-ink">
             {c.dueLabel}
           </div>
-          <div className="mt-1 text-[11.5px] text-ink-faint">{whenPhrase(c.daysLeft)}</div>
+          <div className="mt-1 text-micro text-ink-faint">{whenPhrase(c.daysLeft)}</div>
         </div>
       </div>
 
       {c.source.quote && (
         <blockquote className="mt-3 rounded-sm border-l-2 border-amber/40 bg-amber-soft/40 px-3 py-2">
           <div className="field-label">Lo que dice el documento</div>
-          <p className="mt-1 font-mono text-[12.5px] leading-relaxed text-ink">
+          <p className="mt-1 font-mono text-xs leading-relaxed text-ink">
             «{c.source.quote}»
           </p>
         </blockquote>
@@ -256,7 +256,7 @@ export function ProposalCard({
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Provenance source={c.source.label} readAt={c.source.readAt ?? undefined} />
-        <span className="text-[11.5px] text-ink-faint">
+        <span className="text-micro text-ink-faint">
           No se está vigilando: no manda avisos hasta que alguien la confirme.
         </span>
       </div>
@@ -266,7 +266,7 @@ export function ProposalCard({
           type="button"
           onClick={onConfirm}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
+          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
         >
           {busy ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -279,7 +279,7 @@ export function ProposalCard({
           type="button"
           onClick={onReject}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-medium text-ink-muted transition-colors duration-150 hover:bg-rose-soft hover:text-rose disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 motion-reduce:transition-none"
+          className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors duration-150 hover:bg-rose-soft hover:text-rose disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose/40 motion-reduce:transition-none"
         >
           <X className="h-3.5 w-3.5" aria-hidden />
           Descartar
@@ -287,7 +287,7 @@ export function ProposalCard({
         {c.source.documentId && (
           <Link
             href={`/kb?document=${c.source.documentId}`}
-            className="ml-auto inline-flex items-center gap-1 text-[12.5px] font-medium text-ink-faint transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
             Abrir el documento

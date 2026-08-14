@@ -31,7 +31,7 @@ type Status =
  * product rather than the browser's default outline.
  */
 const FIELD =
-  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60';
+  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60';
 
 /**
  * A labelled switch — the same control the master opt-in and the channels use.
@@ -54,9 +54,9 @@ function Toggle({
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
-        <div className="text-[13px] font-semibold text-ink">{label}</div>
+        <div className="text-sm font-semibold text-ink">{label}</div>
         {description && (
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">{description}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{description}</p>
         )}
       </div>
       <button
@@ -206,7 +206,7 @@ export function SettingsForm({
             <ShieldCheck className="h-4 w-4 text-primary" />
             <Eyebrow>Qué lee Cortex y qué no</Eyebrow>
           </div>
-          <ul className="mt-2.5 space-y-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+          <ul className="mt-2.5 space-y-1.5 text-xs leading-relaxed text-ink-muted">
             <li>
               <strong className="text-ink">Solo tu buzón.</strong> Cortex lee las conversaciones
               recientes de tu propio correo —quién escribió, cuándo, el asunto y el contenido— con
@@ -271,7 +271,7 @@ export function SettingsForm({
             </select>
           </div>
         </div>
-        <p className="mt-2 text-[12px] text-ink-faint">
+        <p className="mt-2 text-xs text-ink-faint">
           Cortex revisa cada media hora, así que el resumen te llega dentro de los 30 minutos
           siguientes a la hora que elijas.
         </p>
@@ -294,7 +294,7 @@ export function SettingsForm({
                 </>
               }
             />
-            <div className="mt-2 flex items-start gap-1.5 text-[12px] leading-relaxed text-ink-faint">
+            <div className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-ink-faint">
               <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               Es la dirección de tu cuenta de Cortex y no se puede cambiar desde aquí.
             </div>
@@ -326,10 +326,10 @@ export function SettingsForm({
                   set('chatWebhookUrl', e.target.value);
                   setTestStatus({ kind: 'idle' });
                 }}
-                className={clsx(FIELD, 'font-mono text-[12px]')}
+                className={clsx(FIELD, 'font-mono text-xs')}
               />
 
-              <ol className="mt-2.5 space-y-1 text-[12px] leading-relaxed text-ink-muted">
+              <ol className="mt-2.5 space-y-1 text-xs leading-relaxed text-ink-muted">
                 <li>1. En Google Chat, abre el espacio donde quieres el resumen.</li>
                 <li>
                   2. Haz clic en el nombre del espacio →{' '}
@@ -342,7 +342,7 @@ export function SettingsForm({
                 </li>
                 <li>4. Copia la URL completa que te da y pégala arriba.</li>
               </ol>
-              <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+              <p className="mt-2 text-xs leading-relaxed text-ink-faint">
                 Todo el que esté en ese espacio va a ver tu resumen. Si lo prefieres privado, usa un
                 espacio que sea solo tuyo.
               </p>
@@ -362,13 +362,13 @@ export function SettingsForm({
                   Enviar un mensaje de prueba al espacio
                 </Button>
                 {testStatus.kind === 'saved' && (
-                  <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-emerald">
                     <Check className="h-3.5 w-3.5" />
                     Enviado. Revisa el espacio.
                   </span>
                 )}
                 {testStatus.kind === 'error' && (
-                  <span className="flex items-start gap-1.5 text-[12.5px] text-rose">
+                  <span className="flex items-start gap-1.5 text-xs text-rose">
                     <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     {testStatus.message}
                   </span>
@@ -394,7 +394,7 @@ export function SettingsForm({
               {/* The link status is the whole point of this block: without it,
                   the toggle is a checkbox that can silently do nothing. */}
               {!chatDm.configured ? (
-                <div className="flex items-start gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+                <div className="flex items-start gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-xs leading-relaxed text-ink-muted">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     La app de Cortex para Chat todavía no está configurada en este entorno, así que
@@ -402,7 +402,7 @@ export function SettingsForm({
                   </span>
                 </div>
               ) : dmReady ? (
-                <div className="flex items-start gap-2 rounded-sm border border-emerald/30 bg-emerald-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-emerald">
+                <div className="flex items-start gap-2 rounded-sm border border-emerald/30 bg-emerald-soft px-3 py-2.5 text-xs leading-relaxed text-emerald">
                   <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>
                     Conectado como{' '}
@@ -413,7 +413,7 @@ export function SettingsForm({
                   </span>
                 </div>
               ) : (
-                <div className="rounded-sm border border-amber/30 bg-amber-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+                <div className="rounded-sm border border-amber/30 bg-amber-soft px-3 py-2.5 text-xs leading-relaxed text-ink-muted">
                   <div className="flex items-start gap-2 font-medium text-amber">
                     <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>Todavía no está conectado, así que aquí no llega nada.</span>
@@ -426,7 +426,7 @@ export function SettingsForm({
                 </div>
               )}
 
-              <p className="mt-2 text-[12px] leading-relaxed text-ink-faint">
+              <p className="mt-2 text-xs leading-relaxed text-ink-faint">
                 Esta es la opción privada: a diferencia del espacio de arriba, el resumen te llega
                 solo a ti.
               </p>
@@ -446,13 +446,13 @@ export function SettingsForm({
                   Enviar un mensaje de prueba
                 </Button>
                 {testDmStatus.kind === 'saved' && (
-                  <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-emerald">
                     <Check className="h-3.5 w-3.5" />
                     Enviado. Revisa tu chat con Cortex.
                   </span>
                 )}
                 {testDmStatus.kind === 'error' && (
-                  <span className="flex items-start gap-1.5 text-[12.5px] text-rose">
+                  <span className="flex items-start gap-1.5 text-xs text-rose">
                     <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     {testDmStatus.message}
                   </span>
@@ -460,7 +460,7 @@ export function SettingsForm({
               </div>
 
               {prefs.deliverChatDm && chatDm.configured && !chatDm.linked && (
-                <p className="mt-2.5 flex items-start gap-1.5 text-[12px] leading-relaxed text-amber">
+                <p className="mt-2.5 flex items-start gap-1.5 text-xs leading-relaxed text-amber">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   Puedes guardarlo ya, pero el resumen no va a llegar a Google Chat hasta que
                   saludes a Cortex allá.
@@ -474,7 +474,7 @@ export function SettingsForm({
       {/* ---- Focus --------------------------------------------------------- */}
       <Panel className={clsx('p-5 transition-opacity', !on && 'opacity-55')}>
         <Eyebrow>Qué es lo que más te importa</Eyebrow>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
           Cuéntale a Cortex cómo ordenar tu mañana, con tus propias palabras. Sirve para ordenar el
           resumen, no para decidir qué se lee.
         </p>
@@ -487,7 +487,7 @@ export function SettingsForm({
           placeholder="Primero los clientes, después lo de las vacantes abiertas. Los boletines internos al final."
           className={clsx(FIELD, 'mt-2.5 resize-y')}
         />
-        <div className="tabular mt-1 text-right text-[11px] text-ink-faint">
+        <div className="tabular mt-1 text-right text-micro text-ink-faint">
           {prefs.digestFocus.length}/600
         </div>
       </Panel>
@@ -504,7 +504,7 @@ export function SettingsForm({
           label="Parte semanal de la empresa"
           description="Cada lunes temprano, un informe de lo que pasó la semana pasada y lo que viene: qué se venció, qué se cumplió, quién debe qué, qué propuse y en qué quedó, y a qué nadie contestó. Sale solo, sin que nadie lo pida."
         />
-        <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
+        <p className="mt-3 text-xs leading-relaxed text-ink-faint">
           Sólo llega a quienes son administradores del espacio de trabajo. Aunque lo apagues, el
           parte se sigue guardando en Informes: lo que se apaga es el correo, no el informe.
         </p>
@@ -517,13 +517,13 @@ export function SettingsForm({
           Guardar
         </Button>
         {status.kind === 'saved' && (
-          <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-emerald">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-emerald">
             <Check className="h-3.5 w-3.5" />
             Guardado.
           </span>
         )}
         {status.kind === 'error' && (
-          <span className="flex items-start gap-1.5 text-[12.5px] text-rose">
+          <span className="flex items-start gap-1.5 text-xs text-rose">
             <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             {status.message}
           </span>

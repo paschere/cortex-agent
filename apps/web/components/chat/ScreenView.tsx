@@ -474,10 +474,10 @@ export function ScreenViewButton({
         <Dialog.Content className="scroll-slim fixed left-1/2 top-1/2 z-50 max-h-[86vh] w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card bg-canvas p-4 shadow-pop focus:outline-none sm:p-5">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <Dialog.Title className="text-[15px] font-semibold text-ink">
+              <Dialog.Title className="text-base font-semibold text-ink">
                 Pregúntame por lo que estás viendo
               </Dialog.Title>
-              <Dialog.Description className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">
+              <Dialog.Description className="mt-0.5 text-xs leading-snug text-ink-muted">
                 Comparte la pestaña una vez y pregunta lo que quieras sobre ella, sin describirla ni
                 recortar una captura.
               </Dialog.Description>
@@ -497,11 +497,11 @@ export function ScreenViewButton({
             {session.error && (
               <div className="mb-4 flex items-start gap-2 rounded-sm border border-rose/20 bg-rose-soft px-3.5 py-2.5">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose" aria-hidden="true" />
-                <p className="text-[13px] leading-relaxed text-rose">{session.error}</p>
+                <p className="text-sm leading-relaxed text-rose">{session.error}</p>
               </div>
             )}
 
-            <p className="max-w-2xl text-[13.5px] leading-relaxed text-ink-muted">
+            <p className="max-w-2xl text-sm leading-relaxed text-ink-muted">
               «¿Qué significa este error?», «¿este formulario está bien lleno?», «¿qué me está
               pidiendo aquí?». Y lo que ningún asistente con cámara puede hacer: cruzarlo con lo que
               ya sabemos de la empresa —{' '}
@@ -557,7 +557,7 @@ function HowItWorks() {
             className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
             aria-hidden="true"
           />
-          <p className="text-[12.5px] leading-snug text-ink-muted">{point}</p>
+          <p className="text-xs leading-snug text-ink-muted">{point}</p>
         </li>
       ))}
     </ul>
@@ -621,7 +621,7 @@ export function ScreenViewStrip({ session }: { session: ScreenViewSession }) {
 
         <p
           className={clsx(
-            'min-w-0 flex-1 text-[12.5px] leading-snug',
+            'min-w-0 flex-1 text-xs leading-snug',
             watching ? 'text-amber' : 'text-primary-ink',
           )}
         >
@@ -653,7 +653,7 @@ export function ScreenViewStrip({ session }: { session: ScreenViewSession }) {
           <button
             type="button"
             onClick={session.stopWatching}
-            className="shrink-0 rounded-pill border border-amber/30 bg-surface px-3 py-1 text-[12px] font-semibold text-amber transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/40 motion-reduce:transition-none"
+            className="shrink-0 rounded-pill border border-amber/30 bg-surface px-3 py-1 text-xs font-semibold text-amber transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/40 motion-reduce:transition-none"
           >
             Dejar de mirar
           </button>
@@ -665,7 +665,7 @@ export function ScreenViewStrip({ session }: { session: ScreenViewSession }) {
           type="button"
           onClick={session.stop}
           className={clsx(
-            'shrink-0 rounded-pill border bg-surface px-3 py-1 text-[12px] font-semibold transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none motion-reduce:transition-none',
+            'shrink-0 rounded-pill border bg-surface px-3 py-1 text-xs font-semibold transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none motion-reduce:transition-none',
             watching
               ? 'border-amber/30 text-amber focus-visible:ring-2 focus-visible:ring-amber/40'
               : 'border-primary/25 text-primary-ink focus-visible:ring-2 focus-visible:ring-primary/40',
@@ -679,7 +679,7 @@ export function ScreenViewStrip({ session }: { session: ScreenViewSession }) {
           vuelva a encenderla o deje de compartir, porque un tope que se agota en
           silencio es idéntico a una función que dejó de servir. */}
       {session.watchOff && (
-        <p className="mt-1.5 border-t border-border pt-1.5 text-[12px] leading-snug text-ink-muted">
+        <p className="mt-1.5 border-t border-border pt-1.5 text-xs leading-snug text-ink-muted">
           {session.watchOff}
         </p>
       )}
@@ -711,7 +711,7 @@ function WatchOffer({ session }: { session: ScreenViewSession }) {
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-primary/25 bg-surface px-3 py-1 text-[12px] font-semibold text-primary-ink transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-primary/25 bg-surface px-3 py-1 text-xs font-semibold text-primary-ink transition-colors duration-150 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
         >
           <BellRing className="h-3.5 w-3.5" aria-hidden="true" />
           Avísame si ves algo
@@ -723,10 +723,10 @@ function WatchOffer({ session }: { session: ScreenViewSession }) {
         <Dialog.Content className="scroll-slim fixed left-1/2 top-1/2 z-50 max-h-[86vh] w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card bg-canvas p-4 shadow-pop focus:outline-none sm:p-5">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <Dialog.Title className="text-[15px] font-semibold text-ink">
+              <Dialog.Title className="text-base font-semibold text-ink">
                 ¿Miro solo y te aviso?
               </Dialog.Title>
-              <Dialog.Description className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">
+              <Dialog.Description className="mt-0.5 text-xs leading-snug text-ink-muted">
                 Esto es distinto de lo que ya autorizaste: hasta ahora miro cuando preguntas, y esto
                 es mirar sin que preguntes.
               </Dialog.Description>
@@ -743,7 +743,7 @@ function WatchOffer({ session }: { session: ScreenViewSession }) {
           </div>
 
           <div className="rounded-card border border-border bg-surface p-5 shadow-card">
-            <p className="max-w-2xl text-[13.5px] leading-relaxed text-ink-muted">
+            <p className="max-w-2xl text-sm leading-relaxed text-ink-muted">
               Te aviso cuando aparezca{' '}
               <strong className="font-semibold text-ink">
                 un error, algo vencido o un campo mal puesto
@@ -801,7 +801,7 @@ function WatchTerms() {
             className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber"
             aria-hidden="true"
           />
-          <p className="text-[12.5px] leading-snug text-ink-muted">{point}</p>
+          <p className="text-xs leading-snug text-ink-muted">{point}</p>
         </li>
       ))}
     </ul>
@@ -826,7 +826,7 @@ export function GlanceNote({ at }: { at: string }) {
     : when.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <p className="mt-1 flex items-center justify-end gap-1.5 text-[11px] text-ink-faint">
+    <p className="mt-1 flex items-center justify-end gap-1.5 text-micro text-ink-faint">
       <ScanEye className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span>
         Miré tu pestaña compartida

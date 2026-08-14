@@ -63,10 +63,10 @@ export function TranscriptMessage({
         >
           {isUser ? <User className="h-3.5 w-3.5" /> : <Sparkles className="h-4 w-4" />}
         </span>
-        <span className="text-[12.5px] font-bold text-ink">
+        <span className="text-xs font-bold text-ink">
           {speakerLabel(message.role, agentName)}
         </span>
-        <span className="tabular ml-auto shrink-0 text-[11px] text-ink-faint">
+        <span className="tabular ml-auto shrink-0 text-micro text-ink-faint">
           {new Date(message.created_at).toLocaleString('es-CO', {
             day: '2-digit',
             month: 'short',
@@ -78,12 +78,12 @@ export function TranscriptMessage({
 
       {content ? (
         isUser ? (
-          <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-ink">{content}</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">{content}</p>
         ) : (
           <ChatMarkdown content={content} />
         )
       ) : !invocations ? (
-        <p className="text-[13px] text-ink-faint">Mensaje vacío.</p>
+        <p className="text-sm text-ink-faint">Mensaje vacío.</p>
       ) : null}
 
       {invocations && invocations.length > 0 && (

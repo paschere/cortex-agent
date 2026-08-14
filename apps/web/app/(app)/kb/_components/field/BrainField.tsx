@@ -442,7 +442,7 @@ export function BrainField({
               key={`label-${p.id}`}
               aria-hidden
               className={clsx(
-                'pointer-events-none absolute max-w-[38%] -translate-x-1/2 truncate rounded-pill px-1.5 py-px text-[10.5px] font-semibold leading-tight',
+                'pointer-events-none absolute max-w-[38%] -translate-x-1/2 truncate rounded-pill px-1.5 py-px text-micro font-semibold leading-tight',
                 on
                   ? 'bg-primary text-white shadow-pop'
                   : near
@@ -471,19 +471,19 @@ export function BrainField({
               top: `${(lens.y / VIEWBOX.height) * 100}%`,
             }}
           >
-            <div className="max-w-[220px] truncate text-[12px] font-bold text-ink">
+            <div className="max-w-[220px] truncate text-xs font-bold text-ink">
               {lens.seed.label}
             </div>
-            <div className="stat-num mt-0.5 text-[11px] text-primary">
+            <div className="stat-num mt-0.5 text-micro text-primary">
               {num(Math.round(lens.seed.weight))}{' '}
-              <span className="font-sans text-[10.5px] font-medium text-ink-faint">{unit}</span>
+              <span className="font-sans text-micro font-medium text-ink-faint">{unit}</span>
             </div>
           </div>
         )}
 
         {empty && (
           <div className="absolute inset-0 grid place-items-center px-6">
-            <p className="max-w-[16rem] text-center text-[12px] leading-relaxed text-ink-faint">
+            <p className="max-w-[16rem] text-center text-xs leading-relaxed text-ink-faint">
               {emptyText}
             </p>
           </div>
@@ -492,7 +492,7 @@ export function BrainField({
 
       {/* Said out loud as well as drawn, once, for anybody arriving by keyboard
           or by screen reader. */}
-      <p className="mt-1 min-h-[16px] text-center text-[11px] text-ink-faint" aria-live="polite">
+      <p className="mt-1 min-h-[16px] text-center text-micro text-ink-faint" aria-live="polite">
         {at ? (
           <>
             <span className="font-semibold text-ink">{at.label}</span> ·{' '}

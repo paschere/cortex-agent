@@ -72,7 +72,7 @@ export function ScopeStrip({
       className="animate-rise mb-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-card border border-amber/25 bg-amber-soft px-3 py-2"
     >
       <Brain className="h-3.5 w-3.5 shrink-0 text-amber" aria-hidden />
-      <span className="text-[12px] font-semibold text-amber">Contestando sólo con</span>
+      <span className="text-xs font-semibold text-amber">Contestando sólo con</span>
 
       <ul className="flex min-w-0 flex-wrap items-center gap-1">
         {selected.map((space) => (
@@ -82,7 +82,7 @@ export function ScopeStrip({
               disabled={disabled}
               onClick={() => onRemove(space.id)}
               aria-label={`Dejar de buscar sólo en ${space.name}`}
-              className="group inline-flex max-w-[14rem] items-center gap-1 rounded-pill border border-amber/30 bg-surface px-2 py-0.5 text-[12px] font-medium text-ink transition-colors duration-150 hover:border-amber hover:bg-amber/10 disabled:opacity-50 motion-reduce:transition-none"
+              className="group inline-flex max-w-[14rem] items-center gap-1 rounded-pill border border-amber/30 bg-surface px-2 py-0.5 text-xs font-medium text-ink transition-colors duration-150 hover:border-amber hover:bg-amber/10 disabled:opacity-50 motion-reduce:transition-none"
             >
               <span className="truncate">{space.name}</span>
               <X className="h-3 w-3 shrink-0 text-ink-faint group-hover:text-amber" aria-hidden />
@@ -95,7 +95,7 @@ export function ScopeStrip({
         type="button"
         disabled={disabled}
         onClick={onClear}
-        className="ml-auto shrink-0 rounded-pill px-2 py-0.5 text-[12px] font-semibold text-amber underline decoration-amber/40 underline-offset-2 transition-colors duration-150 hover:decoration-amber disabled:opacity-50 motion-reduce:transition-none"
+        className="ml-auto shrink-0 rounded-pill px-2 py-0.5 text-xs font-semibold text-amber underline decoration-amber/40 underline-offset-2 transition-colors duration-150 hover:decoration-amber disabled:opacity-50 motion-reduce:transition-none"
       >
         Buscar en todo
       </button>
@@ -169,14 +169,14 @@ export function ScopePicker({
           sideOffset={8}
           className="scroll-slim z-50 max-h-72 w-[19rem] overflow-y-auto rounded-card border border-border bg-surface p-1.5 shadow-pop"
         >
-          <DropdownMenu.Label className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold leading-snug text-ink-faint">
+          <DropdownMenu.Label className="px-2.5 pb-1 pt-1.5 text-micro font-semibold leading-snug text-ink-faint">
             Cortex busca en todo lo que puedes ver. Acótalo cuando quieras una respuesta de una sola
             parte del cerebro.
           </DropdownMenu.Label>
 
           <DropdownMenu.Item
             onSelect={() => onChange([])}
-            className="flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-[13px] outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
+            className="flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
           >
             <span className="grid h-4 w-4 shrink-0 place-items-center">
               {!active && <Check className="h-3.5 w-3.5 text-primary" aria-hidden />}
@@ -189,14 +189,14 @@ export function ScopePicker({
           <div className="my-1 h-px bg-border" aria-hidden />
 
           {spaces === null && (
-            <div className="flex items-center gap-2 px-2.5 py-3 text-[12.5px] text-ink-faint">
+            <div className="flex items-center gap-2 px-2.5 py-3 text-xs text-ink-faint">
               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
               Buscando tus espacios…
             </div>
           )}
 
           {spaces !== null && spaces.length === 0 && (
-            <p className="px-2.5 py-3 text-[12.5px] leading-snug text-ink-faint">
+            <p className="px-2.5 py-3 text-xs leading-snug text-ink-faint">
               Todavía no hay espacios en Brain Knowledge. Sube un documento y aparecerán aquí.
             </p>
           )}
@@ -214,14 +214,14 @@ export function ScopePicker({
                   e.preventDefault();
                   toggle(space);
                 }}
-                className="flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-[13px] outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
+                className="flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
               >
                 <span className="grid h-4 w-4 shrink-0 place-items-center">
                   {on && <Check className="h-3.5 w-3.5 text-primary" aria-hidden />}
                 </span>
                 <Icon className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />
                 <span className="min-w-0 flex-1 truncate font-medium text-ink">{space.name}</span>
-                <span className="shrink-0 text-[11px] text-ink-faint">
+                <span className="shrink-0 text-micro text-ink-faint">
                   {space.kind === 'personal' ? 'tuyo' : 'la empresa'}
                 </span>
               </DropdownMenu.CheckboxItem>

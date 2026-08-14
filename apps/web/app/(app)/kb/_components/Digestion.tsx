@@ -214,7 +214,7 @@ export function DigestionPanel({
         }
       />
 
-      <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
+      <p className="px-5 pt-1 text-xs text-ink-muted">
         Nada se puede recordar hasta que termina de pasar por aquí.
         {focus ? ` Aquí solo ${focus.label.toLowerCase()}.` : ''}
       </p>
@@ -249,13 +249,13 @@ export function DigestionPanel({
               </div>
               <div
                 className={clsx(
-                  'stat-num mt-1.5 text-[26px] leading-none',
+                  'stat-num mt-1.5 text-xl leading-none',
                   quiet ? 'text-ink-faint' : stage.text,
                 )}
               >
                 {num(value)}
               </div>
-              <div className="mt-1 text-[11px] text-ink-faint">{stage.hint}</div>
+              <div className="mt-1 text-micro text-ink-faint">{stage.hint}</div>
             </div>
           );
         })}
@@ -296,10 +296,10 @@ export function DigestionPanel({
             {landed.slice(0, 3).map((doc) => (
               <li key={doc.id} className="flex flex-wrap items-center gap-x-2">
                 <BeltTicks stage="memory" done />
-                <span className="min-w-0 max-w-full truncate text-[12.5px] font-medium text-ink">
+                <span className="min-w-0 max-w-full truncate text-xs font-medium text-ink">
                   {doc.title}
                 </span>
-                <span className="text-[11.5px] text-ink-faint">
+                <span className="text-micro text-ink-faint">
                   Cortex ya puede citarlo{doc.spaceName ? ` · ${doc.spaceName}` : ''}
                 </span>
               </li>
@@ -310,7 +310,7 @@ export function DigestionPanel({
 
       <div className="border-t border-border px-5 py-4">
         {stats.digesting.length === 0 ? (
-          <p className="text-[12.5px] text-ink-muted">
+          <p className="text-xs text-ink-muted">
             {total === 0
               ? 'Todavía no hay nada dentro. Dale el primer documento abajo.'
               : stats.stages.stuck > 0
@@ -324,10 +324,10 @@ export function DigestionPanel({
               {stats.digesting.slice(0, 4).map((doc) => (
                 <li key={doc.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <BeltTicks stage={doc.stage} done={false} />
-                  <span className="min-w-0 max-w-full truncate text-[12.5px] font-medium text-ink">
+                  <span className="min-w-0 max-w-full truncate text-xs font-medium text-ink">
                     {doc.title}
                   </span>
-                  <span className="text-[11.5px] text-ink-faint">
+                  <span className="text-micro text-ink-faint">
                     {doc.transcribing
                       ? 'transcribiendo'
                       : doc.stage === 'digesting'
@@ -339,7 +339,7 @@ export function DigestionPanel({
               ))}
             </ul>
             {stats.digesting.length > 4 && (
-              <p className="mt-2 text-[11.5px] text-ink-faint">
+              <p className="mt-2 text-micro text-ink-faint">
                 y <span className="tabular">{num(stats.digesting.length - 4)}</span> más en la fila.
               </p>
             )}
@@ -367,7 +367,7 @@ export function KnowsPanel({
         title="Cuánto sabe"
         right={focus ? `solo ${focus.label.toLowerCase()}` : undefined}
       />
-      <p className="px-5 pt-1 text-[12.5px] text-ink-muted">
+      <p className="px-5 pt-1 text-xs text-ink-muted">
         Contado ahora, sobre lo que ya indexó.
         {focus
           ? ' Los fragmentos se cuentan por espacio, no por fuente, así que ahí no hay cifra.'
@@ -411,9 +411,9 @@ function Figure({ label, value, hint }: { label: string; value: string; hint: st
     <div className="flex items-baseline justify-between gap-3 px-5 py-3">
       <div className="min-w-0">
         <dt className="field-label">{label}</dt>
-        <dd className="mt-0.5 text-[11px] leading-snug text-ink-faint">{hint}</dd>
+        <dd className="mt-0.5 text-micro leading-snug text-ink-faint">{hint}</dd>
       </div>
-      <span className="stat-num shrink-0 text-[19px] leading-none text-ink">{value}</span>
+      <span className="stat-num shrink-0 text-lg leading-none text-ink">{value}</span>
     </div>
   );
 }

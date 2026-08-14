@@ -65,7 +65,7 @@ export function SpaceTools({
       {space.canWrite ? (
         <IntakePanel space={space} active={intake} onActiveChange={onIntakeChange} />
       ) : (
-        <Panel className="px-5 py-4 text-[12.5px] leading-relaxed text-ink-faint">
+        <Panel className="px-5 py-4 text-xs leading-relaxed text-ink-faint">
           Puedes leerlo todo y Cortex responde con esto, pero solo un administrador añade o quita.
           Si quieres tu propia copia, guárdala en uno de tus espacios.
         </Panel>
@@ -75,7 +75,7 @@ export function SpaceTools({
 
       <Panel>
         <PanelHead title="Todo lo que hay dentro" right="incluido lo que todavía no es memoria" />
-        <p className="px-5 pt-1 text-[12px] text-ink-muted">
+        <p className="px-5 pt-1 text-xs text-ink-muted">
           El mapa de arriba solo dibuja lo que ya quedó en fragmentos. Aquí está todo, en cualquier
           estado.
         </p>
@@ -94,7 +94,7 @@ export function SpaceTools({
         <Panel className="px-5 py-3">
           {confirming ? (
             <div className="rounded-card border border-rose/30 bg-rose-soft px-3.5 py-3">
-              <p className="text-[12.5px] leading-relaxed text-ink">
+              <p className="text-xs leading-relaxed text-ink">
                 Borrar <b>{space.name}</b> borra{' '}
                 {space.documentCount === 1
                   ? 'el documento que tiene'
@@ -109,7 +109,7 @@ export function SpaceTools({
                   type="button"
                   onClick={remove}
                   disabled={removing}
-                  className="inline-flex items-center gap-1.5 rounded-pill bg-rose px-3.5 py-1.5 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-pill bg-rose px-3.5 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
                 >
                   {removing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Borrar el espacio y lo que contiene
@@ -117,7 +117,7 @@ export function SpaceTools({
                 <button
                   type="button"
                   onClick={() => setConfirming(false)}
-                  className="rounded-pill px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                  className="rounded-pill px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
                 >
                   Dejarlo así
                 </button>
@@ -127,14 +127,14 @@ export function SpaceTools({
             <button
               type="button"
               onClick={() => setConfirming(true)}
-              className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[12px] font-semibold text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose"
+              className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-semibold text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Borrar este espacio
             </button>
           )}
           {error && (
-            <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+            <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
               {error}
             </p>
           )}

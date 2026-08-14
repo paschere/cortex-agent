@@ -92,7 +92,7 @@ export function ShareControls({
           Compartir
         </Button>
         {error && (
-          <p role="alert" className="mt-2 text-[12px] text-rose">
+          <p role="alert" className="mt-2 text-xs text-rose">
             {error}
           </p>
         )}
@@ -103,7 +103,7 @@ export function ShareControls({
   return (
     <div className="rounded-card border border-border bg-surface-2 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <code className="tabular min-w-0 flex-1 truncate rounded-sm bg-surface px-2.5 py-1.5 text-[11.5px] text-ink-muted">
+        <code className="tabular min-w-0 flex-1 truncate rounded-sm bg-surface px-2.5 py-1.5 text-micro text-ink-muted">
           {url}
         </code>
         <Button type="button" variant="outline" onClick={copy} className="shrink-0">
@@ -125,13 +125,13 @@ export function ShareControls({
           Revocar
         </Button>
       </div>
-      <p className={clsx('mt-2 text-[11.5px] leading-snug text-ink-faint')}>
+      <p className={clsx('mt-2 text-micro leading-snug text-ink-faint')}>
         Quien tenga el enlace puede abrirlo, sin contraseña. Muestra la misma fotografía guardada.
         {expiresLabel ? ` Vence el ${expiresLabel}.` : ''}
         {views > 0 ? ` Se ha abierto ${views} ${views === 1 ? 'vez' : 'veces'}.` : ''}
       </p>
       {error && (
-        <p role="alert" className="mt-2 text-[12px] text-rose">
+        <p role="alert" className="mt-2 text-xs text-rose">
           {error}
         </p>
       )}

@@ -26,12 +26,12 @@ function authBadge(t: McpServer['auth_type']): string {
 }
 
 /** A soft pill tag on the row: short label, no shadow of its own. */
-const TAG = 'rounded-pill border px-2.5 py-0.5 text-[11px] font-semibold';
+const TAG = 'rounded-pill border px-2.5 py-0.5 text-micro font-semibold';
 
 export function McpServerList({ servers }: { servers: McpServer[] }) {
   if (servers.length === 0) {
     return (
-      <p className="max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+      <p className="max-w-2xl text-xs leading-relaxed text-ink-muted">
         No hay nada conectado. Cortex funciona con las integraciones de arriba; agrega un servidor
         abajo solo si tienes uno propio de MCP.
       </p>
@@ -118,7 +118,7 @@ function McpServerRow({ server }: { server: McpServer }) {
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[13.5px] font-bold text-ink">{server.name}</span>
+            <span className="text-sm font-bold text-ink">{server.name}</span>
             <span className={clsx(TAG, 'border-border bg-surface text-ink-faint')}>
               {authBadge(server.auth_type)}
               {server.authConfigured ? ' · stored' : ''}
@@ -130,12 +130,12 @@ function McpServerRow({ server }: { server: McpServer }) {
               <span className={clsx(TAG, 'border-amber/40 bg-amber-soft text-amber')}>En pausa</span>
             )}
           </div>
-          <p className="tabular mt-1 max-w-md truncate text-[11px] text-ink-faint" title={server.url}>
+          <p className="tabular mt-1 max-w-md truncate text-micro text-ink-faint" title={server.url}>
             {server.url}
           </p>
         </div>
 
-        <div className="flex items-center gap-3 text-[12.5px] text-ink-muted">
+        <div className="flex items-center gap-3 text-xs text-ink-muted">
           <label
             className="flex items-center gap-1.5"
             title="Deja que Cortex vea las herramientas de este servidor"
@@ -166,13 +166,13 @@ function McpServerRow({ server }: { server: McpServer }) {
       </div>
 
       {server.last_error && (
-        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
+        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro text-rose">
           Cortex no pudo comunicarse con este servidor: {server.last_error}. Revisa la URL y la
           credencial, y vuelve a sincronizar sus herramientas.
         </p>
       )}
       {error && (
-        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose">
+        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro text-rose">
           {error}
         </p>
       )}
@@ -192,7 +192,7 @@ function McpServerRow({ server }: { server: McpServer }) {
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="text-[11.5px] font-semibold text-primary hover:underline"
+            className="text-micro font-semibold text-primary hover:underline"
           >
             {expanded
               ? 'Ocultar las herramientas'
@@ -202,7 +202,7 @@ function McpServerRow({ server }: { server: McpServer }) {
       </div>
 
       {expanded && server.tools.length > 0 && (
-        <ul className="mt-3 space-y-1 border-t border-border pt-2.5 text-[11.5px]">
+        <ul className="mt-3 space-y-1 border-t border-border pt-2.5 text-micro">
           {server.tools.map((t) => (
             <li key={t.tool_name}>
               <span className="tabular text-ink">{t.tool_name}</span>

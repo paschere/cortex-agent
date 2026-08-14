@@ -141,23 +141,23 @@ export function FragmentReader({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[12px] font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
+          className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           {backLabel}
         </button>
         {total > 0 && (
-          <span className="tabular text-[11px] text-ink-faint">
+          <span className="tabular text-micro text-ink-faint">
             {num(from + 1)}–{num(from + shown)} de {num(total)}
           </span>
         )}
       </div>
 
       <div className="px-5 pt-2">
-        <h2 className="truncate text-[16px] font-extrabold tracking-tight text-ink">
+        <h2 className="truncate text-base font-extrabold tracking-tight text-ink">
           {page?.documentTitle ?? '…'}
         </h2>
-        <p className="mt-0.5 text-[12px] text-ink-muted">
+        <p className="mt-0.5 text-xs text-ink-muted">
           {page ? (
             <>
               {plural(total, 'fragmento', 'fragmentos')} en {page.spaceName}. Esto — no el archivo —
@@ -187,20 +187,20 @@ export function FragmentReader({
       )}
 
       {error && (
-        <p className="mx-5 mt-3 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+        <p className="mx-5 mt-3 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
           {error}
         </p>
       )}
 
       {loading && !page && (
-        <p className="flex items-center gap-1.5 px-5 py-6 text-[12.5px] text-ink-faint">
+        <p className="flex items-center gap-1.5 px-5 py-6 text-xs text-ink-faint">
           <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
           Leyendo los fragmentos…
         </p>
       )}
 
       {page && total === 0 && (
-        <p className="max-w-xl px-5 py-6 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="max-w-xl px-5 py-6 text-xs leading-relaxed text-ink-muted">
           Este documento todavía no tiene fragmentos. O está en cola, o no se pudo leer — mientras
           tanto Cortex no puede citar nada de él.
         </p>
@@ -233,7 +233,7 @@ export function FragmentReader({
                 marked.current = null;
                 void load(Math.max(0, from - 30));
               }}
-              className="rounded-pill border border-border px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-40"
+              className="rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-40"
             >
               Anteriores
             </button>
@@ -251,7 +251,7 @@ export function FragmentReader({
                 marked.current = null;
                 void load(from + shown);
               }}
-              className="rounded-pill border border-border px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-40"
+              className="rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink disabled:opacity-40"
             >
               Siguientes
             </button>
@@ -273,7 +273,7 @@ function Piece({ fragment, focused }: { fragment: Fragment; focused: boolean }) 
       )}
     >
       <div className="flex items-start gap-3">
-        <span className="stat-num w-9 shrink-0 pt-0.5 text-right text-[11.5px] text-ink-faint">
+        <span className="stat-num w-9 shrink-0 pt-0.5 text-right text-micro text-ink-faint">
           {num(fragment.chunkIndex + 1)}
         </span>
         <div className="min-w-0 flex-1">
@@ -297,11 +297,11 @@ function Piece({ fragment, focused }: { fragment: Fragment; focused: boolean }) 
             </div>
           )}
 
-          <p className="whitespace-pre-wrap text-[13.5px] leading-[1.75] text-ink">
+          <p className="whitespace-pre-wrap text-sm leading-[1.75] text-ink">
             {fragment.content}
           </p>
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-ink-faint">
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-faint">
             <span className="tabular">{num(fragment.tokens)} tokens</span>
             {fragment.pages !== null && <span>de un PDF de {num(fragment.pages)} páginas</span>}
             <span
@@ -355,19 +355,19 @@ function Seam({
     <div className="my-1 flex items-center gap-2 pl-12 pr-2">
       <span className={clsx('h-px flex-1', cutOff ? 'bg-amber/50' : 'bg-border')} aria-hidden />
       {cutOff ? (
-        <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-semibold text-amber">
+        <span className="inline-flex items-center gap-1 whitespace-nowrap text-micro font-semibold text-amber">
           <Scissors className="h-3 w-3" />
           se cortó a mitad de una frase
         </span>
       ) : overlap ? (
         <span
-          className="max-w-[60%] truncate whitespace-nowrap text-[10px] text-ink-faint"
+          className="max-w-[60%] truncate whitespace-nowrap text-micro text-ink-faint"
           title={overlap}
         >
           se repite en los dos: «{overlap.trim()}»
         </span>
       ) : (
-        <span className="whitespace-nowrap text-[10px] text-ink-faint">corte limpio</span>
+        <span className="whitespace-nowrap text-micro text-ink-faint">corte limpio</span>
       )}
       <span className={clsx('h-px flex-1', cutOff ? 'bg-amber/50' : 'bg-border')} aria-hidden />
     </div>
@@ -387,7 +387,7 @@ function JumpBox({ total, onJump }: { total: number; onJump: (index: number) => 
         onJump(Math.min(total - 1, n - 1));
       }}
     >
-      <label htmlFor="kb-jump" className="text-[11px] text-ink-faint">
+      <label htmlFor="kb-jump" className="text-micro text-ink-faint">
         Ir al
       </label>
       <input
@@ -396,7 +396,7 @@ function JumpBox({ total, onJump }: { total: number; onJump: (index: number) => 
         onChange={(e) => setValue(e.target.value.replace(/\D/g, ''))}
         inputMode="numeric"
         placeholder="nº"
-        className="tabular h-7 w-16 rounded-pill border border-border bg-surface px-2.5 text-[11.5px] text-ink focus:border-primary/40"
+        className="tabular h-7 w-16 rounded-pill border border-border bg-surface px-2.5 text-micro text-ink focus:border-primary/40"
       />
     </form>
   );

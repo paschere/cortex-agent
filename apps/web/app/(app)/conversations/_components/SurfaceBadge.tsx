@@ -19,7 +19,7 @@ export function SurfaceBadge({
   return (
     <span
       title={meta.description}
-      className={clsx(CHIP_BASE, CHIP_TONE.neutral, size === 'md' && 'px-2 py-1 text-[11px]')}
+      className={clsx(CHIP_BASE, CHIP_TONE.neutral, size === 'md' && 'px-2 py-1 text-micro')}
     >
       <Icon className={size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
       {meta.label}

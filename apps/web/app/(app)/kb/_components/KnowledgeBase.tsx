@@ -373,7 +373,7 @@ export function KnowledgeBase({
                 </TabButton>
                 <TabButton on={tab === 'index'} onClick={() => setTab('index')}>
                   Índice
-                  <span className="tabular ml-1.5 text-[10.5px] opacity-70">
+                  <span className="tabular ml-1.5 text-micro opacity-70">
                     {num(items.length)}
                   </span>
                 </TabButton>
@@ -414,7 +414,7 @@ export function KnowledgeBase({
                       <button
                         type="button"
                         onClick={() => setCreating('personal')}
-                        className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+                        className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
                       >
                         <Lock className="h-3.5 w-3.5" />
                         Nuevo espacio propio
@@ -423,7 +423,7 @@ export function KnowledgeBase({
                         <button
                           type="button"
                           onClick={() => setCreating('global')}
-                          className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-[12px] font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+                          className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
                         >
                           <Building2 className="h-3.5 w-3.5" />
                           Nuevo espacio común
@@ -504,7 +504,7 @@ function Breadcrumb({
   onCortex: () => void;
   onSpace: () => void;
 }) {
-  const crumb = 'rounded-pill px-2 py-0.5 text-[12px] font-semibold transition-colors';
+  const crumb = 'rounded-pill px-2 py-0.5 text-xs font-semibold transition-colors';
   return (
     <nav aria-label="Dónde estás" className="flex flex-wrap items-center gap-0.5 px-3 pt-3">
       <button
@@ -557,7 +557,7 @@ function TabButton({
       onClick={onClick}
       aria-pressed={on}
       className={clsx(
-        '-mb-px border-b-2 px-3 pb-2 pt-1 text-[12.5px] font-semibold transition-colors',
+        '-mb-px border-b-2 px-3 pb-2 pt-1 text-xs font-semibold transition-colors',
         on ? 'border-primary text-primary' : 'border-transparent text-ink-faint hover:text-ink',
       )}
     >
@@ -601,17 +601,17 @@ function SourceLegend({
           >
             <span
               className={clsx(
-                'block truncate text-[11px] font-semibold',
+                'block truncate text-micro font-semibold',
                 on ? 'text-primary' : 'text-ink-muted',
               )}
             >
               {LOBE_NAME[key]}
             </span>
-            <span className="stat-num block text-[13px] text-ink">{num(stats.indexed[key])}</span>
+            <span className="stat-num block text-sm text-ink">{num(stats.indexed[key])}</span>
           </button>
         );
       })}
-      <p className="col-span-full mt-0.5 text-[10.5px] text-ink-faint">
+      <p className="col-span-full mt-0.5 text-micro text-ink-faint">
         {active
           ? `Solo ${LOBE_NAME[active].toLowerCase()}. Toca otra vez para ver todo.`
           : 'Cada cosa se dibuja sobre el lóbulo del que viene. Toca uno para ver solo eso.'}
@@ -624,8 +624,8 @@ function SourceLegend({
 function FirstRun({ isAdmin, onCreate }: { isAdmin: boolean; onCreate: () => void }) {
   return (
     <Panel className="px-6 py-10 text-center">
-      <p className="text-[15px] font-bold text-ink">Este cerebro está vacío</p>
-      <p className="mx-auto mt-1.5 max-w-lg text-[13px] leading-relaxed text-ink-muted">
+      <p className="text-base font-bold text-ink">Este cerebro está vacío</p>
+      <p className="mx-auto mt-1.5 max-w-lg text-sm leading-relaxed text-ink-muted">
         Aquí Cortex guarda lo que la empresa sabe: una tarifa, un instructivo, lo que se dijo en una
         llamada. Dale el primer documento y podrá citarlo cuando alguien pregunte.
       </p>
@@ -633,13 +633,13 @@ function FirstRun({ isAdmin, onCreate }: { isAdmin: boolean; onCreate: () => voi
         <button
           type="button"
           onClick={onCreate}
-          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong"
+          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong"
         >
           <Plus className="h-3.5 w-3.5" />
           Crear el primer espacio
         </button>
       </div>
-      <p className="mx-auto mt-3 max-w-lg text-[11.5px] text-ink-faint">
+      <p className="mx-auto mt-3 max-w-lg text-micro text-ink-faint">
         {isAdmin
           ? 'Un espacio propio es solo tuyo. Uno común lo lee toda la empresa.'
           : 'Un espacio propio es solo tuyo. Para uno común, pídeselo a un administrador.'}
@@ -654,7 +654,7 @@ export function SpaceChip({ kind, label }: { kind: 'global' | 'personal'; label?
   return (
     <span
       className={clsx(
-        'inline-flex shrink-0 items-center gap-1 rounded-pill px-2 py-0.5 text-[10.5px] font-bold',
+        'inline-flex shrink-0 items-center gap-1 rounded-pill px-2 py-0.5 text-micro font-bold',
         kind === 'global' ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-muted',
       )}
     >

@@ -117,7 +117,7 @@ export function Surface() {
     return (
       <Panel className="flex items-center gap-2 p-6">
         <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
-        <span className="text-[13px] text-ink-muted">Cargando…</span>
+        <span className="text-sm text-ink-muted">Cargando…</span>
       </Panel>
     );
   }
@@ -183,7 +183,7 @@ export function Surface() {
             onClick={() => setFilter(f.id)}
             aria-pressed={filter === f.id}
             className={clsx(
-              'rounded-pill px-3 py-1.5 text-[12.5px] font-semibold transition-all duration-150',
+              'rounded-pill px-3 py-1.5 text-xs font-semibold transition-all duration-150',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
               'motion-reduce:transform-none motion-reduce:transition-none',
               filter === f.id
@@ -229,7 +229,7 @@ function Stat({
       <div className="field-label truncate">{label}</div>
       <div
         className={clsx(
-          'stat-num mt-1 text-[26px] leading-none',
+          'stat-num mt-1 text-xl leading-none',
           tone === 'rose'
             ? 'text-rose'
             : tone === 'amber'
@@ -241,7 +241,7 @@ function Stat({
       >
         {value}
       </div>
-      <div className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-ink-faint">{sub}</div>
+      <div className="mt-1.5 line-clamp-2 text-micro leading-snug text-ink-faint">{sub}</div>
     </div>
   );
 }
@@ -266,7 +266,7 @@ function NoticeBanner({ notice, onClose }: { notice: Notice; onClose: () => void
       ) : (
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" aria-hidden="true" />
       )}
-      <p className="flex-1 text-[13px] leading-relaxed text-ink">{notice.text}</p>
+      <p className="flex-1 text-sm leading-relaxed text-ink">{notice.text}</p>
       <button
         type="button"
         onClick={onClose}

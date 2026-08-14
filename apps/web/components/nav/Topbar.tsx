@@ -53,14 +53,14 @@ export function Topbar({ email }: { email?: string }) {
         onClick={() => openCommandMenu(true)}
         aria-label="Buscar o ir a una pantalla"
         aria-keyshortcuts="Meta+K Control+K"
-        className="relative flex h-9 shrink-0 items-center gap-2.5 rounded-pill border border-border bg-surface-2 px-2.5 text-left text-[13px] text-ink-faint transition-[background-color,border-color,color] duration-150 hover:border-border-strong hover:bg-surface hover:text-ink-muted focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 motion-reduce:transition-none sm:max-w-sm sm:flex-1 sm:pl-3.5 sm:pr-2"
+        className="relative flex h-9 shrink-0 items-center gap-2.5 rounded-pill border border-border bg-surface-2 px-2.5 text-left text-sm text-ink-faint transition-[background-color,border-color,color] duration-150 hover:border-border-strong hover:bg-surface hover:text-ink-muted focus-visible:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/10 motion-reduce:transition-none sm:max-w-sm sm:flex-1 sm:pl-3.5 sm:pr-2"
       >
         <Search className="h-4 w-4 shrink-0" />
         <span className="hidden truncate sm:inline">Buscar o ir a…</span>
         {/* No aria-hidden: the button carries an explicit aria-label, so nothing
             inside it is announced anyway, and `aria-keyshortcuts` is what tells
             a screen reader about ⌘K properly. */}
-        <kbd className="ml-auto hidden shrink-0 rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[10px] font-semibold text-ink-faint ring-1 ring-inset ring-border sm:block">
+        <kbd className="ml-auto hidden shrink-0 rounded-sm bg-surface px-1.5 py-0.5 font-mono text-micro font-semibold text-ink-faint ring-1 ring-inset ring-border sm:block">
           {modKey}K
         </kbd>
       </button>

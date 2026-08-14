@@ -290,7 +290,7 @@ function Trust() {
               o un chat— de qué minuto y de quién.
             </p>
             <div className="lp-trust__demo">
-              <p className="lp-data text-[13px] leading-relaxed">
+              <p className="lp-data text-sm leading-relaxed">
                 Llamada con el jefe de bodega · 31 jul · min 12:04
                 <br />
                 «Los sábados no hay quien reciba, mejor el lunes a primera hora.»
@@ -307,7 +307,7 @@ function Trust() {
               la que trabaja siempre.
             </p>
             <div className="lp-trust__demo">
-              <p className="text-[13px] leading-relaxed">
+              <p className="text-sm leading-relaxed">
                 «No encuentro nada sobre ese anexo en lo que tengo adentro. No quiero suponerlo: si
                 existe, no ha entrado todavía.»
               </p>

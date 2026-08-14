@@ -70,7 +70,7 @@ export function RunDetailDialog({
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div className="min-w-0">
               <Dialog.Title className="truncate text-sm font-bold text-ink">{jobName}</Dialog.Title>
-              <Dialog.Description className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-ink-faint">
+              <Dialog.Description className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-ink-faint">
                 <span className={chipClass(RUN_STATUS_TONE[run.status])}>
                   {RUN_STATUS_LABEL[run.status]}
                 </span>
@@ -108,7 +108,7 @@ export function RunDetailDialog({
             {run.error && (
               <div className="mb-4">
                 <div className="field-label mb-1.5">Error</div>
-                <p className="whitespace-pre-wrap rounded-card border border-rose/40 bg-rose-soft px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.65] text-rose">
+                <p className="whitespace-pre-wrap rounded-card border border-rose/40 bg-rose-soft px-3.5 py-2.5 font-mono text-xs leading-[1.65] text-rose">
                   {run.error}
                 </p>
               </div>
@@ -121,7 +121,7 @@ export function RunDetailDialog({
                 className="rounded-card border border-border bg-surface-2 px-3.5 py-3"
               />
             ) : (
-              <p className="rounded-card border border-border bg-surface-2 px-3.5 py-3 text-[13px] text-ink-muted">
+              <p className="rounded-card border border-border bg-surface-2 px-3.5 py-3 text-sm text-ink-muted">
                 {run.status === 'running'
                   ? 'Sigue en curso. El resultado aparece aquí apenas termine.'
                   : 'Esta ejecución terminó sin escribir nada.'}
@@ -133,12 +133,12 @@ export function RunDetailDialog({
             {conversationId ? (
               <Link
                 href={`/chat/${conversationId}`}
-                className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <MessageSquare className="h-3.5 w-3.5" /> Abrir la conversación
               </Link>
             ) : (
-              <span className="text-[11.5px] text-ink-faint">
+              <span className="text-micro text-ink-faint">
                 Esta rutina no tiene conversación de resultados
               </span>
             )}
@@ -146,7 +146,7 @@ export function RunDetailDialog({
               type="button"
               onClick={copyOutput}
               disabled={!body && !run.error}
-              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             >
               {copied ? (
                 <>
@@ -169,7 +169,7 @@ function Meta({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-surface px-5 py-2.5">
       <div className="field-label">{label}</div>
-      <div className="tabular mt-0.5 truncate text-[12px] font-medium text-ink" title={value}>
+      <div className="tabular mt-0.5 truncate text-xs font-medium text-ink" title={value}>
         {value}
       </div>
     </div>

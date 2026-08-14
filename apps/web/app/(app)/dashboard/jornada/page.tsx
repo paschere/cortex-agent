@@ -41,7 +41,7 @@ export default async function JornadaPage() {
         actions={
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Volver a inicio
@@ -53,14 +53,14 @@ export default async function JornadaPage() {
         <p
           className={
             journal.total > 0
-              ? 'text-[15px] font-bold leading-snug tracking-tight text-ink'
-              : 'text-[15px] font-semibold leading-snug text-ink-muted'
+              ? 'text-base font-bold leading-snug tracking-tight text-ink'
+              : 'text-base font-semibold leading-snug text-ink-muted'
           }
         >
           {journal.headline}
         </p>
         {journal.total > 0 && (
-          <p className="tabular mt-1 text-[12px] text-ink-faint">
+          <p className="tabular mt-1 text-xs text-ink-faint">
             {journal.total} {journal.total === 1 ? 'cosa' : 'cosas'} en las últimas 48 horas
             {journal.attention > 0 && `, ${journal.attention} sin salir como debía`}.
           </p>
@@ -79,7 +79,7 @@ export default async function JornadaPage() {
           <Panel key={day.date} className="animate-rise mb-4 overflow-hidden">
             <div className="flex items-baseline justify-between gap-3 px-4 py-3">
               <div className="field-label">{day.label}</div>
-              <div className="tabular text-[11px] text-ink-faint">{day.date}</div>
+              <div className="tabular text-micro text-ink-faint">{day.date}</div>
             </div>
             <div className="rule-double" />
             <ol className="px-2 py-2">
@@ -102,7 +102,7 @@ export default async function JornadaPage() {
           <div className="rule-double" />
           <ul className="space-y-1 px-4 py-3">
             {journal.lingering.map((line) => (
-              <li key={line.id} className="flex items-start gap-2 text-[12.5px] leading-snug">
+              <li key={line.id} className="flex items-start gap-2 text-xs leading-snug">
                 <Hourglass className="mt-[3px] h-3.5 w-3.5 shrink-0 text-amber" />
                 {line.href ? (
                   <Link href={line.href} className="text-ink-muted hover:text-primary">
@@ -121,7 +121,7 @@ export default async function JornadaPage() {
         <Panel className="animate-rise overflow-hidden">
           <div className="px-4 py-3">
             <div className="field-label">Lo que no pude leer</div>
-            <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">
+            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
               Esta parte de la jornada no aparece arriba. No es que no hubiera pasado nada: es que
               la consulta falló, y una pantalla vacía y una rota significan lo contrario.
             </p>

@@ -79,7 +79,7 @@ export function ChartCard({ chartId, heading }: { chartId: string; heading: stri
 
   if (failed) {
     return (
-      <div className="mt-2 flex items-start gap-2.5 rounded-card border border-border bg-surface-2 px-3.5 py-3 text-[12.5px] text-ink-muted shadow-card">
+      <div className="mt-2 flex items-start gap-2.5 rounded-card border border-border bg-surface-2 px-3.5 py-3 text-xs text-ink-muted shadow-card">
         <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" aria-hidden />
         <span>
           Este gráfico ya no está disponible. Los que nadie conserva se borran a los 30 días;
@@ -93,7 +93,7 @@ export function ChartCard({ chartId, heading }: { chartId: string; heading: stri
     <figure className="mt-2 overflow-hidden rounded-card border border-border bg-surface shadow-card">
       <figcaption className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <ChartNoAxesColumn className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
           {payload?.title ?? heading}
         </span>
 
@@ -102,7 +102,7 @@ export function ChartCard({ chartId, heading }: { chartId: string; heading: stri
           // "guardar" again would invite a second identical report.
           <Link
             href={savedUrl}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-emerald-soft px-3 py-1 text-[11.5px] font-semibold text-emerald transition-colors duration-150 hover:bg-emerald/15 motion-reduce:transition-none"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-emerald-soft px-3 py-1 text-micro font-semibold text-emerald transition-colors duration-150 hover:bg-emerald/15 motion-reduce:transition-none"
           >
             <BookmarkCheck className="h-3.5 w-3.5" aria-hidden />
             Guardado — abrir informe
@@ -112,7 +112,7 @@ export function ChartCard({ chartId, heading }: { chartId: string; heading: stri
             type="button"
             onClick={save}
             disabled={saving || !payload}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border px-3 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors duration-150 hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink disabled:opacity-40 motion-reduce:transition-none"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border px-3 py-1 text-micro font-semibold text-ink-muted transition-colors duration-150 hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink disabled:opacity-40 motion-reduce:transition-none"
           >
             {saving ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -131,7 +131,7 @@ export function ChartCard({ chartId, heading }: { chartId: string; heading: stri
           <div className="rp-doc" dangerouslySetInnerHTML={{ __html: payload.html }} />
         ) : (
           <div
-            className="flex items-center gap-2 py-6 text-[12.5px] text-ink-faint"
+            className="flex items-center gap-2 py-6 text-xs text-ink-faint"
             aria-live="polite"
           >
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -143,7 +143,7 @@ export function ChartCard({ chartId, heading }: { chartId: string; heading: stri
       {saveError && (
         <p
           role="alert"
-          className={clsx('border-t border-rose/20 bg-rose-soft px-4 py-2 text-[12px] text-rose')}
+          className={clsx('border-t border-rose/20 bg-rose-soft px-4 py-2 text-xs text-rose')}
         >
           {saveError}
         </p>

@@ -51,14 +51,14 @@ function ToolCallRow({ call }: { call: ToolCallEntry }) {
             <Wrench className="h-3 w-3" />
           )}
         </span>
-        <code className="shrink-0 font-mono text-[11.5px] font-semibold text-ink">
+        <code className="shrink-0 font-mono text-micro font-semibold text-ink">
           {call.toolId}
         </code>
-        <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-ink-faint">
+        <span className="min-w-0 flex-1 truncate font-mono text-micro text-ink-faint">
           {call.args}
         </span>
         {call.durationMs !== null && (
-          <span className="tabular shrink-0 text-[10.5px] text-ink-faint">
+          <span className="tabular shrink-0 text-micro text-ink-faint">
             {formatDuration(call.durationMs)}
           </span>
         )}
@@ -67,13 +67,13 @@ function ToolCallRow({ call }: { call: ToolCallEntry }) {
       {open && (
         <div className="border-t border-border bg-canvas px-2.5 py-2">
           <div className="field-label">Argumentos</div>
-          <pre className="scroll-slim mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-sm border border-border bg-surface p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted">
+          <pre className="scroll-slim mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-sm border border-border bg-surface p-2 font-mono text-micro leading-relaxed text-ink-muted">
             {call.args || '(ninguno)'}
           </pre>
           <div className="field-label mt-2">{failed ? 'Error' : 'Resultado'}</div>
           <pre
             className={clsx(
-              'scroll-slim mt-1 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm border p-2 font-mono text-[10.5px] leading-relaxed',
+              'scroll-slim mt-1 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm border p-2 font-mono text-micro leading-relaxed',
               failed
                 ? 'border-rose/40 bg-rose-soft text-rose'
                 : 'border-border bg-surface text-ink-muted',
@@ -129,12 +129,12 @@ export function TaskCard({
         <TaskStatusIcon status={task.status} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className="tabular text-[11px] font-semibold text-ink-faint">
+            <span className="tabular text-micro font-semibold text-ink-faint">
               #{String(task.seq).padStart(2, '0')}
             </span>
-            <h3 className="text-[13.5px] font-bold leading-snug text-ink">{task.title}</h3>
+            <h3 className="text-sm font-bold leading-snug text-ink">{task.title}</h3>
           </div>
-          <div className="tabular mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10.5px] text-ink-faint">
+          <div className="tabular mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-faint">
             {task.agentLabel && (
               <span className="font-semibold text-ink-muted">{task.agentLabel}</span>
             )}
@@ -154,7 +154,7 @@ export function TaskCard({
         <div className="px-3.5 pb-2.5">
           <p
             className={clsx(
-              'text-[12px] leading-relaxed text-ink-muted',
+              'text-xs leading-relaxed text-ink-muted',
               !showBrief && 'line-clamp-2',
             )}
           >
@@ -164,7 +164,7 @@ export function TaskCard({
             <button
               type="button"
               onClick={() => setShowBrief((v) => !v)}
-              className="mt-1 text-[11px] font-semibold text-primary hover:underline"
+              className="mt-1 text-micro font-semibold text-primary hover:underline"
             >
               {showBrief ? 'Ocultar el encargo' : 'Leer el encargo completo'}
             </button>
@@ -177,13 +177,13 @@ export function TaskCard({
           {task.allowedTools.slice(0, 6).map((id) => (
             <span
               key={id}
-              className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 font-mono text-[10px] text-ink-muted"
+              className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 font-mono text-micro text-ink-muted"
             >
               {id}
             </span>
           ))}
           {task.allowedTools.length > 6 && (
-            <span className="tabular px-1 py-0.5 text-[10px] text-ink-faint">
+            <span className="tabular px-1 py-0.5 text-micro text-ink-faint">
               +{task.allowedTools.length - 6}
             </span>
           )}
@@ -205,14 +205,14 @@ export function TaskCard({
       )}
 
       {running && calls.length === 0 && (
-        <div className="flex items-center gap-1.5 px-3.5 pb-3 text-[11.5px] text-ink-faint">
+        <div className="flex items-center gap-1.5 px-3.5 pb-3 text-micro text-ink-faint">
           <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" />
           Pensando: todavía no ha llamado ninguna herramienta.
         </div>
       )}
 
       {task.error && (
-        <p className="mx-3.5 mb-3 flex items-start gap-1.5 rounded-card border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-[11.5px] leading-relaxed text-rose">
+        <p className="mx-3.5 mb-3 flex items-start gap-1.5 rounded-card border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-micro leading-relaxed text-rose">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 break-words">{task.error}</span>
         </p>
@@ -226,7 +226,7 @@ export function TaskCard({
                 type="button"
                 onClick={() => setShowAnswer((v) => !v)}
                 aria-expanded={showAnswer}
-                className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-primary hover:underline"
+                className="inline-flex items-center gap-1 text-micro font-semibold text-primary hover:underline"
               >
                 {showAnswer ? (
                   <ChevronDown className="h-3 w-3" />

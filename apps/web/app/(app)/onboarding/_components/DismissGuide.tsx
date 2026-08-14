@@ -28,7 +28,7 @@ export function DismissGuide() {
       type="button"
       onClick={() => void dismiss()}
       disabled={busy}
-      className="text-[12.5px] font-semibold text-ink-faint transition-colors duration-150 hover:text-ink motion-reduce:transition-none"
+      className="text-xs font-semibold text-ink-faint transition-colors duration-150 hover:text-ink motion-reduce:transition-none"
     >
       {busy ? 'Cerrando…' : 'No me muestres esta guía'}
     </button>

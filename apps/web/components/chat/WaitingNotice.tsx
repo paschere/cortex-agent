@@ -44,7 +44,7 @@ export function WaitingNotice({
         type="button"
         onClick={() => onAsk(question)}
         title={question}
-        className="group flex w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-card border border-border bg-surface px-3 py-2 text-left text-[12px] shadow-card transition-colors duration-150 hover:border-border-strong hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="group flex w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-card border border-border bg-surface px-3 py-2 text-left text-xs shadow-card transition-colors duration-150 hover:border-border-strong hover:bg-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber" />
         <span className="font-semibold text-ink">{waiting.sentence}</span>

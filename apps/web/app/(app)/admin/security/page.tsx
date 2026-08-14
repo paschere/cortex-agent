@@ -83,7 +83,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function EmptyNote({ children }: { children: React.ReactNode }) {
-  return <p className="max-w-lg text-[12.5px] leading-relaxed text-ink-muted">{children}</p>;
+  return <p className="max-w-lg text-xs leading-relaxed text-ink-muted">{children}</p>;
 }
 
 export default async function SecurityPage() {
@@ -210,14 +210,14 @@ export default async function SecurityPage() {
           <>
             <Link
               href="/admin/mandates"
-              className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+              className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-sm font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
             >
               <KeyRound className="h-4 w-4" />
               Mandatos
             </Link>
             <Link
               href="/admin/audit?risk=high"
-              className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+              className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-sm font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
             >
               <ShieldAlert className="h-4 w-4" />
               Ver los eventos riesgosos
@@ -238,7 +238,7 @@ export default async function SecurityPage() {
                   <span className="field-label">{t.label}</span>
                 </div>
                 <div
-                  className={clsx('stat-num mt-1.5 truncate text-[24px] leading-none', t.tone)}
+                  className={clsx('stat-num mt-1.5 truncate text-xl leading-none', t.tone)}
                   title={t.value}
                 >
                   {t.value}
@@ -260,7 +260,7 @@ export default async function SecurityPage() {
             </div>
           </div>
           {timelineTotal === 0 ? (
-            <div className="flex h-28 items-center justify-center rounded-sm border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
+            <div className="flex h-28 items-center justify-center rounded-sm border border-border bg-surface-2 px-4 text-center text-xs text-ink-muted">
               No se marcó ni se bloqueó nada en esta ventana.
             </div>
           ) : (
@@ -289,7 +289,7 @@ export default async function SecurityPage() {
               })}
             </div>
           )}
-          <div className="tabular mt-1.5 flex justify-between text-[10px] text-ink-faint">
+          <div className="tabular mt-1.5 flex justify-between text-micro text-ink-faint">
             <span>{timeline[0]?.day}</span>
             <span>{timeline[timeline.length - 1]?.day}</span>
           </div>
@@ -305,7 +305,7 @@ export default async function SecurityPage() {
               <ul className="space-y-2.5">
                 {topTools.map(([toolId, t]) => (
                   <li key={toolId}>
-                    <div className="mb-1 flex items-center justify-between gap-2 text-[11.5px]">
+                    <div className="mb-1 flex items-center justify-between gap-2 text-micro">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <Wrench className="h-3 w-3 shrink-0 text-ink-faint" />
                         <span className="truncate font-semibold text-ink">
@@ -344,7 +344,7 @@ export default async function SecurityPage() {
               <ul className="space-y-2.5">
                 {topSignals.map(([signal, count]) => (
                   <li key={signal}>
-                    <div className="mb-1 flex items-center justify-between gap-2 text-[11.5px]">
+                    <div className="mb-1 flex items-center justify-between gap-2 text-micro">
                       <span className="tabular truncate text-ink">{signal}</span>
                       <span className="tabular shrink-0 text-ink-faint">{count}×</span>
                     </div>
@@ -365,7 +365,7 @@ export default async function SecurityPage() {
         <Panel className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div className="field-label">Eventos de seguridad recientes</div>
-            <span className="text-[11px] text-ink-faint">
+            <span className="text-micro text-ink-faint">
               {events.length === 0
                 ? 'nada todavía'
                 : `${events.length} en los últimos ${WINDOW_DAYS} días`}
@@ -374,14 +374,14 @@ export default async function SecurityPage() {
           {recent.length === 0 ? (
             <div className="px-4 py-12 text-center">
               <ShieldCheck className="mx-auto mb-3 h-6 w-6 text-emerald" />
-              <p className="text-[13px] font-semibold text-ink">Nada por revisar</p>
-              <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="text-sm font-semibold text-ink">Nada por revisar</p>
+              <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
                 No se ha marcado ni bloqueado ninguna llamada. Apenas pase una, aparece aquí.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
+              <table className="w-full text-xs">
                 <thead className="border-b border-border-strong bg-surface-2">
                   <tr className="text-left">
                     <th className="field-label px-4 py-2.5">Cuándo</th>
@@ -421,7 +421,7 @@ export default async function SecurityPage() {
                           <div className="truncate font-semibold text-ink">
                             {toolLabel(e.tool_id).label}
                           </div>
-                          <div className="tabular truncate text-[10.5px] text-ink-faint">
+                          <div className="tabular truncate text-micro text-ink-faint">
                             {e.tool_id}
                           </div>
                         </td>
@@ -461,7 +461,7 @@ export default async function SecurityPage() {
         <Panel className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="field-label">Políticas activas</div>
-            <span className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-ink-faint">
+            <span className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface-2 px-2.5 py-1 text-micro font-semibold text-ink-faint">
               <Lock className="h-3 w-3" />
               Solo lectura
             </span>
@@ -475,30 +475,30 @@ export default async function SecurityPage() {
                 return (
                   <li key={p.key} className="rounded-sm border border-border bg-surface-2 p-3">
                     <div className="flex items-start justify-between gap-2">
-                      <span className="text-[12.5px] font-bold text-ink">
+                      <span className="text-xs font-bold text-ink">
                         {copy?.title ?? p.key.replaceAll('_', ' ')}
                       </span>
-                      <span className="tabular shrink-0 rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink">
+                      <span className="tabular shrink-0 rounded-pill border border-border bg-surface px-2 py-0.5 text-micro font-semibold text-ink">
                         {policyDisplay(p.value)}
                       </span>
                     </div>
-                    <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-muted">
+                    <p className="mt-1.5 text-micro leading-relaxed text-ink-muted">
                       {copy?.explain(p.value) ?? `Guardada como ${JSON.stringify(p.value)}.`}
                     </p>
-                    <p className="tabular mt-1.5 text-[10px] text-ink-faint">{p.key}</p>
+                    <p className="tabular mt-1.5 text-micro text-ink-faint">{p.key}</p>
                   </li>
                 );
               })}
             </ul>
           )}
-          <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
+          <p className="mt-3 text-micro leading-relaxed text-ink-faint">
             Las políticas se muestran tal como están guardadas. Todavía no se pueden editar desde
             aquí: cambia los valores en <span className="tabular">security_policies</span> y toman
             efecto en la siguiente llamada.
           </p>
         </Panel>
 
-        <p className="text-[11px] leading-relaxed text-ink-faint">
+        <p className="text-micro leading-relaxed text-ink-faint">
           Superficies:{' '}
           {Object.entries(SURFACE_LABEL)
             .filter(([key]) => key !== 'unknown')

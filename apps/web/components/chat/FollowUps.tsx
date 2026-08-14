@@ -111,7 +111,7 @@ export function FollowUps({
             <button
               type="button"
               onClick={() => onPick(question)}
-              className="animate-rise group inline-flex max-w-full items-start gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-left text-[12.5px] leading-snug text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink hover:shadow-card motion-reduce:transform-none motion-reduce:transition-none"
+              className="animate-rise group inline-flex max-w-full items-start gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-left text-xs leading-snug text-ink-muted transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink hover:shadow-card motion-reduce:transform-none motion-reduce:transition-none"
             >
               <CornerDownRight
                 className="mt-0.5 h-3 w-3 shrink-0 text-ink-faint group-hover:text-primary"

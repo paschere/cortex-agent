@@ -166,7 +166,7 @@ export default async function OnboardingPage() {
       {!state.steps.find((s) => s.id === 'knowledge')?.done &&
         !state.steps.find((s) => s.id === 'source')?.done && (
           <Panel className="border-primary/20 bg-primary-soft/40 p-4">
-            <p className="text-[13px] leading-relaxed text-primary-ink">
+            <p className="text-sm leading-relaxed text-primary-ink">
               Ahora mismo Cortex no sabe nada de{' '}
               <span className="font-semibold">{user.organization.name}</span>. No es que esté
               vacío el panel: es que todavía no le has dado de dónde responder. Los dos primeros
@@ -201,14 +201,14 @@ export default async function OnboardingPage() {
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="tabular text-[11px] font-semibold text-ink-faint">
+                      <span className="tabular text-micro font-semibold text-ink-faint">
                         {String(index + 1).padStart(2, '0')}
                       </span>
-                      <h2 className="text-[14px] font-semibold text-ink">{copy.title}</h2>
+                      <h2 className="text-base font-semibold text-ink">{copy.title}</h2>
                       {isNext && <span className={chipClass('primary')}>Sigue esto</span>}
                     </div>
 
-                    <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+                    <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
                       {step.done ? copy.doneNote : copy.body}
                     </p>
 
@@ -238,7 +238,7 @@ export default async function OnboardingPage() {
                     {copy.action && !step.done && (
                       <Link
                         href={copy.action.href}
-                        className="mt-3.5 inline-flex items-center rounded-pill bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
+                        className="mt-3.5 inline-flex items-center rounded-pill bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
                       >
                         {copy.action.label}
                       </Link>
@@ -277,7 +277,7 @@ export default async function OnboardingPage() {
             }
           />
           <div className="px-5 pb-5 pt-3">
-            <p className="max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+            <p className="max-w-2xl text-xs leading-relaxed text-ink-muted">
               De las <span className="tabular font-semibold text-ink">{setup.created}</span> cosas
               que se crearon desde la entrevista,{' '}
               <span className="tabular font-semibold text-ink">{setup.alive}</span> siguen ahí y{' '}
@@ -289,7 +289,7 @@ export default async function OnboardingPage() {
               {setup.rows.slice(0, 5).map((row) => (
                 <li
                   key={row.item.id}
-                  className="flex flex-wrap items-baseline justify-between gap-2 text-[12.5px]"
+                  className="flex flex-wrap items-baseline justify-between gap-2 text-xs"
                 >
                   <span className={clsx('truncate', row.alive ? 'text-ink' : 'text-ink-faint')}>
                     {row.item.title}
@@ -302,7 +302,7 @@ export default async function OnboardingPage() {
             </ul>
             <Link
               href="/onboarding/entrevista"
-              className="mt-3.5 inline-block text-[12.5px] font-semibold text-primary hover:underline"
+              className="mt-3.5 inline-block text-xs font-semibold text-primary hover:underline"
             >
               Contarle algo más
             </Link>
@@ -317,11 +317,11 @@ export default async function OnboardingPage() {
                   <IconChip tone="primary">
                     <MessagesSquare className="h-4 w-4" />
                   </IconChip>
-                  <h2 className="text-[14px] font-semibold text-ink">
+                  <h2 className="text-base font-semibold text-ink">
                     Ahora dile qué debería estar haciendo por ti
                   </h2>
                 </div>
-                <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+                <p className="mt-2 text-xs leading-relaxed text-ink-muted">
                   Cuéntale cómo trabajan — qué se les vence, qué revisan cada semana, qué
                   procedimiento siguen — y te propone qué dejar configurado. Nada se crea sin que
                   lo apruebes, y todo se puede deshacer.
@@ -329,7 +329,7 @@ export default async function OnboardingPage() {
               </div>
               <Link
                 href="/onboarding/entrevista"
-                className="inline-flex shrink-0 items-center rounded-pill bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
+                className="inline-flex shrink-0 items-center rounded-pill bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
               >
                 Empezar a contarle
               </Link>
@@ -341,14 +341,14 @@ export default async function OnboardingPage() {
       <Panel>
         <PanelHead title="Tu plan mientras tanto" icon={<Rocket className="h-4 w-4" />} />
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5 pt-3">
-          <p className="max-w-xl text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="max-w-xl text-xs leading-relaxed text-ink-muted">
             Estás en el plan <span className="font-semibold text-ink">{plan.name}</span>. Se mide
             por respuestas y documentos, no por tokens, y puedes ver de dónde sale cada cifra
             cuando quieras.
           </p>
           <Link
             href="/plan"
-            className="text-[12.5px] font-semibold text-primary hover:underline"
+            className="text-xs font-semibold text-primary hover:underline"
           >
             Ver plan y consumo
           </Link>

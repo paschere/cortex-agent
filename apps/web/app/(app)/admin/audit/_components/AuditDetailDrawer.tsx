@@ -35,7 +35,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <div className="min-w-0">
       <div className="field-label">{label}</div>
-      <div className="tabular mt-0.5 truncate text-[12.5px] text-ink">{children}</div>
+      <div className="tabular mt-0.5 truncate text-xs text-ink">{children}</div>
     </div>
   );
 }
@@ -56,7 +56,7 @@ function SequenceRow({
   return (
     <li
       className={clsx(
-        'flex items-center gap-2 rounded-sm px-2 py-1.5 text-[11.5px] transition-colors',
+        'flex items-center gap-2 rounded-sm px-2 py-1.5 text-micro transition-colors',
         current ? 'bg-primary-soft' : 'hover:bg-surface-2',
       )}
     >
@@ -142,7 +142,7 @@ export function AuditDetailDrawer({
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div className="min-w-0">
               <Dialog.Title className="truncate text-sm font-bold text-ink">{label}</Dialog.Title>
-              <Dialog.Description className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-faint">
+              <Dialog.Description className="mt-1 flex flex-wrap items-center gap-1.5 text-micro text-ink-faint">
                 <span className="font-mono">{event.tool_id}</span>
                 <span>·</span>
                 <span>{absoluteTime(event.created_at)}</span>
@@ -174,7 +174,7 @@ export function AuditDetailDrawer({
             {(event.risk_reason || risky) && (
               <div
                 className={clsx(
-                  'flex gap-2.5 rounded-sm p-3 text-[12.5px]',
+                  'flex gap-2.5 rounded-sm p-3 text-xs',
                   event.risk_level === 'critical'
                     ? 'bg-rose-soft text-rose'
                     : 'bg-amber-soft text-amber',
@@ -197,13 +197,13 @@ export function AuditDetailDrawer({
               <Field label="Riesgo">{event.risk_level ?? '—'}</Field>
               <Field label="Decisión">{event.decision ?? '—'}</Field>
               <Field label="Id del evento">
-                <span className="text-[11px]">{event.id}</span>
+                <span className="text-micro">{event.id}</span>
               </Field>
               <Field label="Hash de entrada">
-                <span className="text-[11px]">{event.input_hash ?? '—'}</span>
+                <span className="text-micro">{event.input_hash ?? '—'}</span>
               </Field>
               <Field label="Agente">
-                <span className="text-[11px]">
+                <span className="text-micro">
                   {event.agent_id ? event.agent_id.slice(0, 8) : '—'}
                 </span>
               </Field>
@@ -212,7 +212,7 @@ export function AuditDetailDrawer({
             {detail && (
               <div>
                 <SectionLabel>Detalle</SectionLabel>
-                <p className="text-[12.5px] text-ink-muted">{detail}</p>
+                <p className="text-xs text-ink-muted">{detail}</p>
               </div>
             )}
 
@@ -232,7 +232,7 @@ export function AuditDetailDrawer({
                 <SectionLabel>Conversación</SectionLabel>
                 <Link
                   href={`/chat/${event.conversation_id}`}
-                  className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-primary hover:underline"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
                 >
                   Abrir la conversación
                   <ExternalLink className="h-3.5 w-3.5" />
@@ -242,7 +242,7 @@ export function AuditDetailDrawer({
 
             <div>
               <SectionLabel>Metadatos</SectionLabel>
-              <pre className="scroll-slim max-h-64 overflow-auto rounded-card border border-border bg-surface-2 p-3 font-mono text-[11px] leading-relaxed text-ink-muted">
+              <pre className="scroll-slim max-h-64 overflow-auto rounded-card border border-border bg-surface-2 p-3 font-mono text-micro leading-relaxed text-ink-muted">
                 {metadataJson === '{}' ? 'No se registraron metadatos.' : metadataJson}
               </pre>
             </div>
@@ -256,9 +256,9 @@ export function AuditDetailDrawer({
                     : ' · mismo usuario'
                   : ''}
               </SectionLabel>
-              {loadingContext && <p className="text-[12px] text-ink-faint">Cargando la secuencia…</p>}
+              {loadingContext && <p className="text-xs text-ink-faint">Cargando la secuencia…</p>}
               {!loadingContext && !context && (
-                <p className="text-[12px] text-ink-muted">
+                <p className="text-xs text-ink-muted">
                   No se pudieron cargar los eventos vecinos. Cierra y vuelve a abrir el detalle.
                 </p>
               )}
@@ -272,7 +272,7 @@ export function AuditDetailDrawer({
                     <SequenceRow key={e.id} event={e} who={context.users[e.user_id]} />
                   ))}
                   {context.before.length === 0 && context.after.length === 0 && (
-                    <li className="px-2 py-1.5 text-[12px] text-ink-faint">
+                    <li className="px-2 py-1.5 text-xs text-ink-faint">
                       No pasó nada más alrededor de este evento.
                     </li>
                   )}

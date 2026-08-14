@@ -110,7 +110,7 @@ export default function LoginPage() {
           {loading === 'google' ? 'Redirigiendo…' : 'Continuar con Google'}
         </Button>
 
-        <div className="mt-4 flex items-center justify-between gap-3 text-[12px]">
+        <div className="mt-4 flex items-center justify-between gap-3 text-xs">
           <Link href="/forgot-password" className="text-ink-faint hover:text-ink-muted">
             ¿Olvidaste tu contraseña?
           </Link>
@@ -130,7 +130,7 @@ export default function LoginPage() {
         {CLAIMS.map((c) => (
           <li
             key={c.text}
-            className="flex items-start gap-2.5 py-2.5 text-[12.5px] leading-snug text-ink-muted"
+            className="flex items-start gap-2.5 py-2.5 text-xs leading-snug text-ink-muted"
           >
             <c.icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
             {c.text}

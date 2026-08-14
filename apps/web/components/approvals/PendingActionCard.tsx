@@ -209,7 +209,7 @@ export function PendingActionCard({
     return (
       <div
         className={clsx(
-          'flex flex-wrap items-center gap-2 rounded-card border px-4 py-3 text-[13px] shadow-card',
+          'flex flex-wrap items-center gap-2 rounded-card border px-4 py-3 text-sm shadow-card',
           decision === 'approved'
             ? 'border-emerald/40 bg-emerald-soft text-emerald'
             : 'border-border bg-surface-2 text-ink-muted',
@@ -219,7 +219,7 @@ export function PendingActionCard({
         <span className="font-semibold">
           {decision === 'approved' ? 'Aprobada' : 'Rechazada'} — {title}
         </span>
-        {detail && <span className="tabular text-[11.5px] text-ink-faint">{detail}</span>}
+        {detail && <span className="tabular text-micro text-ink-faint">{detail}</span>}
       </div>
     );
   }
@@ -228,12 +228,12 @@ export function PendingActionCard({
   if (status === 'done') {
     return (
       <div className="rounded-card border border-emerald/40 bg-emerald-soft px-4 py-3 shadow-card">
-        <div className="flex items-center gap-2 text-[13px] font-semibold text-emerald">
+        <div className="flex items-center gap-2 text-sm font-semibold text-emerald">
           <Check className="h-4 w-4 shrink-0" />
           Aprobada y ejecutada — {title}
         </div>
         {result && (
-          <pre className="scroll-slim mt-2 max-h-32 overflow-auto rounded-sm border border-emerald/30 bg-surface p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted">
+          <pre className="scroll-slim mt-2 max-h-32 overflow-auto rounded-sm border border-emerald/30 bg-surface p-2 font-mono text-micro leading-relaxed text-ink-muted">
             {result}
           </pre>
         )}
@@ -242,7 +242,7 @@ export function PendingActionCard({
   }
   if (status === 'declined') {
     return (
-      <div className="flex items-center gap-2 rounded-card border border-border bg-surface-2 px-4 py-3 text-[13px] text-ink-muted shadow-card">
+      <div className="flex items-center gap-2 rounded-card border border-border bg-surface-2 px-4 py-3 text-sm text-ink-muted shadow-card">
         <X className="h-4 w-4" />
         Rechazada — {title} no se ejecutó
       </div>
@@ -262,17 +262,17 @@ export function PendingActionCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="field-label text-amber">Necesita tu confirmación</span>
-            <span className="tabular inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">
+            <span className="tabular inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2 py-0.5 text-micro font-semibold text-ink-muted">
               <Clock className="h-3 w-3" />
               {timeLeft(expiresAt)}
             </span>
           </div>
           <p className="mt-0.5 text-sm font-semibold text-ink">{title}</p>
-          <p className="mt-1 text-[12px] leading-snug text-ink-muted">
+          <p className="mt-1 text-xs leading-snug text-ink-muted">
             {confirmationReason(toolId)}
           </p>
           {originLabel && (
-            <p className="mt-1 text-[11.5px] text-ink-faint">Quedó pendiente en {originLabel}.</p>
+            <p className="mt-1 text-micro text-ink-faint">Quedó pendiente en {originLabel}.</p>
           )}
         </div>
       </div>
@@ -292,16 +292,16 @@ export function PendingActionCard({
         {showDetails && (
           <>
             {payload.state === 'loading' && (
-              <p className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-faint">
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-faint">
                 <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
                 Trayéndolo…
               </p>
             )}
             {payload.state === 'failed' && (
-              <p className="mt-2 text-[12px] text-rose">{payload.message}</p>
+              <p className="mt-2 text-xs text-rose">{payload.message}</p>
             )}
             {payload.state === 'ready' && (
-              <pre className="scroll-slim mt-2 max-h-48 overflow-auto rounded-sm border border-border bg-surface-2 p-2 font-mono text-[10.5px] leading-relaxed text-ink-muted">
+              <pre className="scroll-slim mt-2 max-h-48 overflow-auto rounded-sm border border-border bg-surface-2 p-2 font-mono text-micro leading-relaxed text-ink-muted">
                 {payload.text}
               </pre>
             )}
@@ -319,7 +319,7 @@ export function PendingActionCard({
             type="button"
             onClick={() => act('approve')}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-pill bg-amber px-4 py-1.5 text-[13px] font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-amber px-4 py-1.5 text-sm font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
           >
             {status === 'running' ? (
               <>
@@ -337,7 +337,7 @@ export function PendingActionCard({
             type="button"
             onClick={() => act('decline')}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[13px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-60"
           >
             {status === 'declining' ? (
               <>

@@ -44,8 +44,8 @@ export function PeopleBoard({ load }: { load: PeopleLoad }) {
   if (load.pending.length === 0 && load.clear.length === 0) {
     return (
       <Panel className="p-8 text-center">
-        <h2 className="text-[15px] font-semibold text-ink">Nadie tiene nada a su nombre</h2>
-        <p className="mx-auto mt-2 max-w-lg text-[13px] leading-relaxed text-ink-muted">
+        <h2 className="text-base font-semibold text-ink">Nadie tiene nada a su nombre</h2>
+        <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-ink-muted">
           Ni promesas entre personas ni papeles con responsable anotado. Cuando alguien quede de
           mandar algo y Cortex lo escuche, aparece aquí con su nombre.
         </p>
@@ -59,9 +59,9 @@ export function PeopleBoard({ load }: { load: PeopleLoad }) {
         <div className="mb-1 flex items-center gap-2">
           <CircleUser className="h-4 w-4 text-primary" aria-hidden />
           <h2 className="text-sm font-semibold text-ink">Quién tiene qué encima</h2>
-          <span className="tabular text-[12px] text-ink-faint">({load.pending.length})</span>
+          <span className="tabular text-xs text-ink-faint">({load.pending.length})</span>
         </div>
-        <p className="max-w-2xl text-[12.5px] leading-snug text-ink-muted">
+        <p className="max-w-2xl text-xs leading-snug text-ink-muted">
           De quien más carga tiene a quien menos. Sirve para saber a quién preguntarle hoy y a quién
           hay que quitarle cosas de encima — no para llevar cuentas.
         </p>
@@ -75,7 +75,7 @@ export function PeopleBoard({ load }: { load: PeopleLoad }) {
 
       {load.clear.length > 0 && <ClearPanel people={load.clear} />}
 
-      <p className="px-1 text-[11.5px] leading-relaxed text-ink-faint">
+      <p className="px-1 text-micro leading-relaxed text-ink-faint">
         El cumplimiento se mide sobre lo que se cerró en los últimos {load.windowDays} días
         {load.closedInWindow > 0 ? ` (${load.closedInWindow} en total)` : ''}. Lo que alguien
         descartó no cuenta como incumplido: descartar es mantener la lista limpia, y eso no se
@@ -114,7 +114,7 @@ function PersonRow({ person }: { person: PersonLoad }) {
             ) : (
               <CircleUser className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
             )}
-            <h3 className="truncate text-[15px] font-semibold text-ink">{person.name}</h3>
+            <h3 className="truncate text-base font-semibold text-ink">{person.name}</h3>
           </div>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -139,12 +139,12 @@ function PersonRow({ person }: { person: PersonLoad }) {
       </div>
 
       {person.unassigned ? (
-        <p className="mt-3 text-[12.5px] leading-snug text-ink-muted">
+        <p className="mt-3 text-xs leading-snug text-ink-muted">
           Nadie está anotado como responsable, así que ningún recordatorio sale con nombre. No es de
           nadie hasta que alguien lo tome.
         </p>
       ) : (
-        <p className="mt-3 text-[12.5px] leading-snug text-ink-muted">
+        <p className="mt-3 text-xs leading-snug text-ink-muted">
           {nudge(person.promises, person.papers)}
         </p>
       )}
@@ -162,7 +162,7 @@ function PersonRow({ person }: { person: PersonLoad }) {
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
-            className="mt-2 rounded-pill px-2 py-1 text-[12px] font-medium text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="mt-2 rounded-pill px-2 py-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             {open ? 'Ocultar lo demás' : `Ver las otras ${rest}`}
           </button>
@@ -193,14 +193,14 @@ function ItemLine({ item }: { item: PersonItem }) {
       {item.internal && <Handshake className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />}
       <Link
         href={`/commitments/${item.id}`}
-        className="truncate text-[13.5px] font-medium text-ink transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="truncate text-sm font-medium text-ink transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         {item.title}
       </Link>
-      <span className="text-[11.5px] text-ink-faint">{item.kindLabel}</span>
+      <span className="text-micro text-ink-faint">{item.kindLabel}</span>
       <span
         className={clsx(
-          'tabular text-[12px]',
+          'tabular text-xs',
           overdue
             ? 'font-semibold text-rose'
             : item.state === 'due_soon'
@@ -267,17 +267,17 @@ function ClearPanel({ people }: { people: PersonLoad[] }) {
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-emerald" aria-hidden />
         <h2 className="text-sm font-semibold text-ink">Al día</h2>
-        <span className="tabular text-[12px] text-ink-faint">({people.length})</span>
+        <span className="tabular text-xs text-ink-faint">({people.length})</span>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          className="ml-auto rounded-pill px-2.5 py-1 text-[12px] font-medium text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+          className="ml-auto rounded-pill px-2.5 py-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
         >
           {open ? 'Ocultar' : 'Mostrar'}
         </button>
       </div>
-      <p className="mt-1 text-[12.5px] leading-snug text-ink-muted">
+      <p className="mt-1 text-xs leading-snug text-ink-muted">
         Sin nada abierto encima, y con cosas cerradas detrás. Están aquí porque entregaron, no
         porque no se les haya pedido nada.
       </p>
@@ -286,7 +286,7 @@ function ClearPanel({ people }: { people: PersonLoad[] }) {
         <div className="mt-3 space-y-2">
           {people.map((person) => (
             <div key={person.key} className="flex flex-wrap items-center gap-2">
-              <span className="text-[13.5px] font-medium text-ink">{person.name}</span>
+              <span className="text-sm font-medium text-ink">{person.name}</span>
               <RecordChip person={person} of="promise" />
               <RecordChip person={person} of="paper" />
             </div>

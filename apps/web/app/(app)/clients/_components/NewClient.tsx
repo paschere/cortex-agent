@@ -113,10 +113,10 @@ export function NewClientButton() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[min(620px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card border border-border bg-surface p-6 shadow-pop outline-none">
-          <Dialog.Title className="text-[17px] font-bold tracking-[-0.01em] text-ink">
+          <Dialog.Title className="text-lg font-bold tracking-[-0.01em] text-ink">
             Registrar cliente
           </Dialog.Title>
-          <Dialog.Description className="mt-1 text-[13px] leading-snug text-ink-muted">
+          <Dialog.Description className="mt-1 text-sm leading-snug text-ink-muted">
             El NIT es la llave de verdad: el nombre se escribe de cinco maneras, el NIT no. Si
             además pones el dominio de su correo, todo lo que llegue de ahí se le cuelga solo.
           </Dialog.Description>
@@ -163,7 +163,7 @@ export function NewClientButton() {
               />
               <p
                 className={clsx(
-                  'mt-1.5 text-[12px] leading-snug',
+                  'mt-1.5 text-xs leading-snug',
                   publicDomain ? 'text-rose' : 'text-ink-faint',
                 )}
               >
@@ -220,7 +220,7 @@ export function NewClientButton() {
                       onClick={() => toggleService(service)}
                       aria-pressed={on}
                       className={clsx(
-                        'rounded-pill px-3 py-1.5 text-[12.5px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
+                        'rounded-pill px-3 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none',
                         on
                           ? 'bg-primary text-white'
                           : 'border border-border bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink',
@@ -271,7 +271,7 @@ export function NewClientButton() {
           </div>
 
           {error && (
-            <p className="mt-4 rounded-sm bg-rose-soft px-3 py-2 text-[12.5px] leading-snug text-rose">
+            <p className="mt-4 rounded-sm bg-rose-soft px-3 py-2 text-xs leading-snug text-rose">
               {error}
             </p>
           )}
@@ -294,7 +294,7 @@ export function NewClientButton() {
 }
 
 const INPUT =
-  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13.5px] text-ink shadow-sm outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 motion-reduce:transition-none';
+  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink shadow-sm outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 motion-reduce:transition-none';
 
 /**
  * A labelled control, wired by id rather than by nesting. `htmlFor` is

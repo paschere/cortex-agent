@@ -154,7 +154,7 @@ export default async function DevWorkPage() {
           <>
             <Link
               href="/dev-work/repositories"
-              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <ShieldCheck className="h-3.5 w-3.5" /> Repositorios
             </Link>
@@ -164,9 +164,9 @@ export default async function DevWorkPage() {
       />
 
       {notReady ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-muted">
+        <Panel className="p-10 text-center text-sm text-ink-muted">
           <Hammer className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <p className="mb-1 text-[15px] font-bold text-ink">
+          <p className="mb-1 text-base font-bold text-ink">
             Todavía no está activo en este ambiente
           </p>
           <p className="mx-auto max-w-md leading-relaxed">
@@ -184,14 +184,14 @@ export default async function DevWorkPage() {
                 </div>
                 <div
                   className={clsx(
-                    'stat-num mt-1 truncate text-[20px] leading-none',
+                    'stat-num mt-1 truncate text-lg leading-none',
                     s.tone === 'amber' ? 'text-amber' : s.tone === 'rose' ? 'text-rose' : 'text-ink',
                   )}
                   title={s.value}
                 >
                   {s.value}
                 </div>
-                <div className="mt-1 truncate text-[10.5px] text-ink-faint" title={s.sub}>
+                <div className="mt-1 truncate text-micro text-ink-faint" title={s.sub}>
                   {s.sub}
                 </div>
               </div>
@@ -199,9 +199,9 @@ export default async function DevWorkPage() {
           </Panel>
 
           {tasks.length === 0 ? (
-            <Panel className="p-10 text-center text-[13px] text-ink-muted">
+            <Panel className="p-10 text-center text-sm text-ink-muted">
               <Hammer className="mx-auto mb-3 h-7 w-7 text-primary" />
-              <p className="mb-1 text-[15px] font-bold text-ink">Nadie le ha pedido nada a Cortex</p>
+              <p className="mb-1 text-base font-bold text-ink">Nadie le ha pedido nada a Cortex</p>
               <p className="mx-auto max-w-md leading-relaxed">
                 Asígnale un issue de Linear a Cortex y aparece aquí. Vas a verlo tomar el trabajo, y
                 puedes detenerlo en cualquier momento.

@@ -139,7 +139,7 @@ export default async function ApprovalsPage() {
         actions={
           <Link
             href="/actions"
-            className="inline-flex items-center gap-1 rounded-pill border border-border px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:border-border-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="inline-flex items-center gap-1 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:border-border-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             Lo redactado, en Acciones <ArrowRight className="h-3.5 w-3.5" />
           </Link>
@@ -147,9 +147,9 @@ export default async function ApprovalsPage() {
       />
 
       {nothingPending ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-muted">
+        <Panel className="p-10 text-center text-sm text-ink-muted">
           <Inbox className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <p className="mb-1 text-[15px] font-bold text-ink">No hay nada pendiente</p>
+          <p className="mb-1 text-base font-bold text-ink">No hay nada pendiente</p>
           <p className="mx-auto max-w-md leading-relaxed">
             Aquí aparece lo que Cortex no hace sin permiso: una acción que necesita tu visto bueno,
             un prospecto nuevo por revisar o una rutina que falló. Los correos que ya redactó y
@@ -235,20 +235,20 @@ export default async function ApprovalsPage() {
                       <div className="flex items-start gap-3">
                         <AlarmClockOff className="mt-0.5 h-4 w-4 shrink-0 text-rose" />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-[13.5px] font-bold text-ink">{j.name}</div>
-                          <div className="tabular text-[11px] text-ink-faint">
+                          <div className="truncate text-sm font-bold text-ink">{j.name}</div>
+                          <div className="tabular text-micro text-ink-faint">
                             La última ejecución falló {relativeTime(run.started_at)}
                           </div>
                         </div>
                       </div>
                       {excerpt && (
-                        <p className="rounded-sm border border-rose/30 bg-rose-soft px-2.5 py-1.5 font-mono text-[11px] leading-snug text-rose">
+                        <p className="rounded-sm border border-rose/30 bg-rose-soft px-2.5 py-1.5 font-mono text-micro leading-snug text-rose">
                           {excerpt}
                         </p>
                       )}
                       <Link
                         href="/schedules"
-                        className="mt-auto inline-flex items-center gap-1 text-[12px] font-semibold text-primary transition-colors hover:text-primary-strong"
+                        className="mt-auto inline-flex items-center gap-1 text-xs font-semibold text-primary transition-colors hover:text-primary-strong"
                       >
                         Revisar en Rutinas <ArrowRight className="h-3.5 w-3.5" />
                       </Link>

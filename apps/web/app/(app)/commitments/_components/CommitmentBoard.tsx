@@ -110,7 +110,7 @@ export function CommitmentBoard({
       {error && (
         <div
           role="alert"
-          className="rounded-card border border-rose/25 bg-rose-soft px-4 py-3 text-[13px] text-rose"
+          className="rounded-card border border-rose/25 bg-rose-soft px-4 py-3 text-sm text-rose"
         >
           {error}
         </div>
@@ -142,7 +142,7 @@ export function CommitmentBoard({
               onClick={() => setFilter(f.id)}
               aria-pressed={filter === f.id}
               className={clsx(
-                'rounded-pill px-3 py-1.5 text-[12.5px] font-semibold transition-all duration-150',
+                'rounded-pill px-3 py-1.5 text-xs font-semibold transition-all duration-150',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
                 'motion-reduce:transform-none motion-reduce:transition-none',
                 filter === f.id
@@ -162,7 +162,7 @@ export function CommitmentBoard({
         <button
           type="button"
           onClick={() => setMode('persona')}
-          className="flex w-full items-center gap-2 rounded-card border border-border bg-surface-2 px-4 py-2.5 text-left text-[12.5px] text-ink-muted transition-colors duration-150 hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+          className="flex w-full items-center gap-2 rounded-card border border-border bg-surface-2 px-4 py-2.5 text-left text-xs text-ink-muted transition-colors duration-150 hover:border-primary/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
         >
           <Users className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
           <span>
@@ -184,9 +184,9 @@ export function CommitmentBoard({
           <div className="mb-3 flex items-center gap-2">
             <Inbox className="h-4 w-4 text-amber" aria-hidden />
             <h2 className="text-sm font-semibold text-ink">Esperando que alguien confirme</h2>
-            <span className="tabular text-[12px] text-ink-faint">({pending.length})</span>
+            <span className="tabular text-xs text-ink-faint">({pending.length})</span>
           </div>
-          <p className="mb-4 max-w-2xl text-[12.5px] leading-snug text-ink-muted">
+          <p className="mb-4 max-w-2xl text-xs leading-snug text-ink-muted">
             Cortex sacó estas fechas de documentos. Ninguna se está vigilando todavía: compara la
             fecha con la frase del documento y confirma sólo lo que sea cierto. Lo que confirmes
             queda a tu nombre.
@@ -263,7 +263,7 @@ function ModeButton({
       onClick={onClick}
       aria-pressed={active}
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-[12.5px] font-semibold transition-colors duration-150',
+        'inline-flex items-center gap-1.5 rounded-pill px-3 py-1 text-xs font-semibold transition-colors duration-150',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
         'motion-reduce:transition-none',
         active ? 'bg-primary text-white' : 'text-ink-muted hover:text-ink',
@@ -303,13 +303,13 @@ function Section({
       <div className="mb-3 flex items-center gap-2">
         {icon}
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
-        <span className="tabular text-[12px] text-ink-faint">({count})</span>
+        <span className="tabular text-xs text-ink-faint">({count})</span>
         {collapsedByDefault && count > 0 && (
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
-            className="ml-auto rounded-pill px-2.5 py-1 text-[12px] font-medium text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="ml-auto rounded-pill px-2.5 py-1 text-xs font-medium text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             {open ? 'Ocultar' : 'Mostrar'}
           </button>
@@ -317,7 +317,7 @@ function Section({
       </div>
 
       {count === 0 ? (
-        <p className="text-[13px] text-ink-muted">{empty}</p>
+        <p className="text-sm text-ink-muted">{empty}</p>
       ) : open ? (
         <div className="grid gap-3 lg:grid-cols-2">
           {rows.map((c) => (

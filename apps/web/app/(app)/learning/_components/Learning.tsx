@@ -46,7 +46,7 @@ export function Learning({ view }: { view: LearningView }) {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="rounded-card border border-rose/30 bg-rose-soft px-4 py-3 text-[12.5px] text-rose">
+        <div className="rounded-card border border-rose/30 bg-rose-soft px-4 py-3 text-xs text-rose">
           {error}
         </div>
       )}
@@ -152,23 +152,23 @@ function Explainer({ onRefresh, busy }: { onRefresh: () => void; busy: boolean }
     <Panel className="p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
-          <h2 className="flex items-center gap-2 text-[14px] font-bold text-ink">
+          <h2 className="flex items-center gap-2 text-base font-bold text-ink">
             <Sprout className="h-4 w-4 text-emerald" />
             Cómo aprende, y hasta dónde puede llegar solo
           </h2>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="mt-2 text-xs leading-relaxed text-ink-muted">
             Cortex mira cómo se usa: si alguien vuelve a preguntar lo mismo con otras palabras al
             minuto, si copia un fragmento, si corrige a mano una fecha o un dato que se leyó de un
             documento. Con eso ordena mejor lo que ya sirve.
           </p>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="mt-2 text-xs leading-relaxed text-ink-muted">
             <span className="font-semibold text-ink">Lo que sí hace solo:</span> mover un fragmento
             adelante o atrás <em>dentro de su mismo grupo de relevancia</em>. Nunca sube uno que no
             alcanzó el umbral, nunca tumba el único que sí sirve, y nunca cambia una palabra de un
             documento. <span className="font-semibold text-ink">Lo que no hace solo:</span> nada que
             cambie lo que la empresa da por cierto. Eso queda abajo, esperando a una persona.
           </p>
-          <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="mt-2 text-xs leading-relaxed text-ink-muted">
             Todo ajuste vence a los 90 días si deja de haber evidencia, y cualquiera lo puede
             deshacer de un clic.
           </p>
@@ -177,7 +177,7 @@ function Explainer({ onRefresh, busy }: { onRefresh: () => void; busy: boolean }
           type="button"
           onClick={onRefresh}
           disabled={busy}
-          className="inline-flex shrink-0 items-center gap-2 rounded-pill border border-border bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink shadow-card transition hover:bg-surface-2 disabled:opacity-50"
+          className="inline-flex shrink-0 items-center gap-2 rounded-pill border border-border bg-surface px-3.5 py-2 text-xs font-semibold text-ink shadow-card transition hover:bg-surface-2 disabled:opacity-50"
         >
           <RotateCcw className={clsx('h-3.5 w-3.5', busy && 'animate-spin')} />
           {busy ? 'Revisando…' : 'Revisar ahora'}
@@ -190,8 +190,8 @@ function Explainer({ onRefresh, busy }: { onRefresh: () => void; busy: boolean }
 function Quiet() {
   return (
     <Panel className="p-8 text-center">
-      <p className="text-[13px] font-semibold text-ink">Todavía no ha aprendido nada.</p>
-      <p className="mx-auto mt-2 max-w-lg text-[12.5px] leading-relaxed text-ink-muted">
+      <p className="text-sm font-semibold text-ink">Todavía no ha aprendido nada.</p>
+      <p className="mx-auto mt-2 max-w-lg text-xs leading-relaxed text-ink-muted">
         Necesita que la gente use el chat y revise vencimientos y documentos. En cuanto haya
         conversaciones en las que alguien repita una pregunta, o corrija a mano un dato que Cortex
         leyó, esto se empieza a llenar solo. No hay nada que configurar.
@@ -229,7 +229,7 @@ function Adjustment({
           <div className="flex items-center gap-2">
             <span
               className={clsx(
-                'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[11.5px] font-bold',
+                'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-micro font-bold',
                 negative ? 'bg-amber-soft text-amber' : 'bg-emerald-soft text-emerald',
               )}
             >
@@ -240,11 +240,11 @@ function Adjustment({
               )}
               {card.label}
             </span>
-            <span className="text-[12.5px] text-ink-faint">
+            <span className="text-xs text-ink-faint">
               vence en {card.daysLeft} {card.daysLeft === 1 ? 'día' : 'días'}
             </span>
           </div>
-          <p className="mt-2 truncate text-[13.5px] font-semibold text-ink">
+          <p className="mt-2 truncate text-sm font-semibold text-ink">
             {docName(card)}
             {card.chunkIndex >= 0 && (
               <span className="ml-1.5 font-normal text-ink-faint">
@@ -253,25 +253,25 @@ function Adjustment({
             )}
           </p>
           {card.document.spaceName && (
-            <p className="mt-0.5 text-[11.5px] text-ink-faint">en {card.document.spaceName}</p>
+            <p className="mt-0.5 text-micro text-ink-faint">en {card.document.spaceName}</p>
           )}
         </div>
         <button
           type="button"
           onClick={onUndo}
           disabled={busy}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-[12px] font-semibold text-ink transition hover:bg-surface-2 disabled:opacity-50"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-surface-2 disabled:opacity-50"
         >
           <Undo2 className="h-3.5 w-3.5" />
           Deshacer
         </button>
       </div>
 
-      <p className="mt-3 text-[12.5px] leading-relaxed text-ink-muted">{card.explanation}</p>
+      <p className="mt-3 text-xs leading-relaxed text-ink-muted">{card.explanation}</p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Box title="Con qué evidencia se aplicó">
-          <p className="text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="text-xs leading-relaxed text-ink-muted">
             {card.evidence.actors === 1
               ? 'Una sola persona, pero en '
               : `${card.evidence.actors} personas distintas, en `}
@@ -282,13 +282,13 @@ function Adjustment({
           </p>
         </Box>
         <Box title="Qué se ha visto desde entonces">
-          <p className="text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="text-xs leading-relaxed text-ink-muted">
             {card.since.negative === 0 && card.since.positive === 0
               ? 'Nada nuevo todavía. Si no vuelve a aparecer evidencia, este ajuste se vence solo.'
               : `${card.since.negative} en contra y ${card.since.positive} a favor (antes: ${card.before.negative} y ${card.before.positive}).`}
           </p>
           {worseSince && (
-            <p className="mt-1.5 text-[11.5px] font-semibold text-amber">
+            <p className="mt-1.5 text-micro font-semibold text-amber">
               Sigue apareciendo evidencia en contra: el ajuste no está resolviendo el problema.
             </p>
           )}
@@ -319,10 +319,10 @@ function Proposal({
     <Panel>
       <PanelHead icon={PROPOSAL_ICON[card.kind]} title={card.label} />
       <div className="px-5 pb-5 pt-2">
-        <p className="text-[13.5px] font-semibold text-ink">{card.headline}</p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-ink-muted">{card.detail}</p>
+        <p className="text-sm font-semibold text-ink">{card.headline}</p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-muted">{card.detail}</p>
         {card.document && (
-          <p className="mt-2 text-[11.5px] text-ink-faint">
+          <p className="mt-2 text-micro text-ink-faint">
             {card.document.withheld
               ? 'En un documento de un espacio que no puedes ver.'
               : `En «${card.document.title ?? 'un documento que ya no está'}»`}
@@ -333,7 +333,7 @@ function Proposal({
             type="button"
             onClick={() => onDecide('accepted')}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           >
             <Check className="h-3.5 w-3.5" />
             Me hago cargo
@@ -342,13 +342,13 @@ function Proposal({
             type="button"
             onClick={() => onDecide('dismissed')}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3.5 py-1.5 text-[12px] font-semibold text-ink transition hover:bg-surface-2 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-ink transition hover:bg-surface-2 disabled:opacity-50"
           >
             <X className="h-3.5 w-3.5" />
             No es un problema
           </button>
         </div>
-        <p className="mt-2.5 text-[11.5px] text-ink-faint">
+        <p className="mt-2.5 text-micro text-ink-faint">
           Cualquiera de las dos es solo una nota. Cortex no toca el documento en ningún caso.
         </p>
       </div>
@@ -369,16 +369,16 @@ function Signal({ card }: { card: SignalCard }) {
         aria-hidden="true"
       />
       <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] text-ink">{card.note}</p>
+        <p className="text-xs text-ink">{card.note}</p>
         {card.asked && (
-          <p className="mt-0.5 truncate text-[11.5px] text-ink-faint">«{card.asked}»</p>
+          <p className="mt-0.5 truncate text-micro text-ink-faint">«{card.asked}»</p>
         )}
-        <p className="mt-0.5 text-[11.5px] text-ink-faint">
+        <p className="mt-0.5 text-micro text-ink-faint">
           {docName(card)}
           {card.chunkIndex >= 0 && ` · fragmento ${card.chunkIndex}`}
         </p>
       </div>
-      <span className="shrink-0 text-[11.5px] text-ink-faint">{when(card.observedAt)}</span>
+      <span className="shrink-0 text-micro text-ink-faint">{when(card.observedAt)}</span>
     </div>
   );
 }
@@ -397,8 +397,8 @@ function Section({
   return (
     <section>
       <div className="mb-2.5">
-        <h2 className="text-[14px] font-bold text-ink">{title}</h2>
-        <p className="mt-0.5 max-w-3xl text-[12px] leading-relaxed text-ink-faint">{hint}</p>
+        <h2 className="text-base font-bold text-ink">{title}</h2>
+        <p className="mt-0.5 max-w-3xl text-xs leading-relaxed text-ink-faint">{hint}</p>
       </div>
       {children}
     </section>
@@ -408,14 +408,14 @@ function Section({
 function Box({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="rounded-card bg-surface-2 px-4 py-3">
-      <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ink-faint">{title}</p>
+      <p className="mb-1 text-micro font-bold uppercase tracking-wide text-ink-faint">{title}</p>
       {children}
     </div>
   );
 }
 
 function Empty({ children }: { children: ReactNode }) {
-  return <Panel className="px-5 py-6 text-center text-[12.5px] text-ink-muted">{children}</Panel>;
+  return <Panel className="px-5 py-6 text-center text-xs text-ink-muted">{children}</Panel>;
 }
 
 function PastRow({
@@ -429,8 +429,8 @@ function PastRow({
 }) {
   return (
     <div className="flex items-start justify-between gap-3 px-5 py-3">
-      <p className="min-w-0 flex-1 truncate text-[12.5px] text-ink">{left}</p>
-      <p className="shrink-0 text-[11.5px] text-ink-faint">
+      <p className="min-w-0 flex-1 truncate text-xs text-ink">{left}</p>
+      <p className="shrink-0 text-micro text-ink-faint">
         {right}
         {at && ` · ${when(at)}`}
       </p>

@@ -194,9 +194,9 @@ export function ScheduleList({
 
   if (jobs.length === 0) {
     return (
-      <section className="rounded-card border border-border bg-surface p-10 text-center text-[13px] text-ink-muted shadow-card">
+      <section className="rounded-card border border-border bg-surface p-10 text-center text-sm text-ink-muted shadow-card">
         <AlarmClock className="mx-auto mb-3 h-7 w-7 text-primary" />
-        <p className="mb-1 text-[15px] font-bold text-ink">Todavía no hay rutinas</p>
+        <p className="mb-1 text-base font-bold text-ink">Todavía no hay rutinas</p>
         <p className="mx-auto max-w-md leading-relaxed">
           Una rutina es un trabajo que Cortex ejecuta solo, a la hora que le digas. Descríbela en el
           chat y aparece aquí:{' '}
@@ -207,7 +207,7 @@ export function ScheduleList({
         </p>
         <Link
           href="/chat"
-          className="mt-4 inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
         >
           Programar una rutina en el chat
         </Link>
@@ -226,7 +226,7 @@ export function ScheduleList({
               onClick={() => setFilter(f.id)}
               aria-pressed={filter === f.id}
               className={clsx(
-                'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1.5 text-[12px] font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                'inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
                 filter === f.id
                   ? 'bg-primary-soft text-primary-ink'
                   : 'text-ink-muted hover:text-ink',
@@ -235,7 +235,7 @@ export function ScheduleList({
               {f.label}
               <span
                 className={clsx(
-                  'tabular rounded-pill px-1 text-[10.5px] font-bold',
+                  'tabular rounded-pill px-1 text-micro font-bold',
                   filter === f.id ? 'text-primary-ink' : 'text-ink-faint',
                 )}
               >
@@ -252,7 +252,7 @@ export function ScheduleList({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por nombre o instrucción…"
             aria-label="Buscar rutinas"
-            className="w-full rounded-pill border border-border bg-surface py-1.5 pl-8 pr-7 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+            className="w-full rounded-pill border border-border bg-surface py-1.5 pl-8 pr-7 text-xs text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
           />
           {query && (
             <button
@@ -268,15 +268,15 @@ export function ScheduleList({
       </div>
 
       {error && (
-        <div className="rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-[12.5px] text-rose shadow-card">
+        <div className="rounded-card border border-rose/40 bg-rose-soft px-3 py-2 text-xs text-rose shadow-card">
           {error} No se cambió nada; vuelve a intentarlo.
         </div>
       )}
 
       {visible.length === 0 ? (
-        <section className="rounded-card border border-border bg-surface p-8 text-center text-[13px] text-ink-muted shadow-card">
+        <section className="rounded-card border border-border bg-surface p-8 text-center text-sm text-ink-muted shadow-card">
           <SearchX className="mx-auto mb-2.5 h-7 w-7 text-ink-faint" />
-          <p className="mb-1 text-[14px] font-bold text-ink">Ninguna rutina coincide</p>
+          <p className="mb-1 text-base font-bold text-ink">Ninguna rutina coincide</p>
           <p className="mb-3">
             Nada encaja con este filtro y esta búsqueda a la vez. Todas siguen guardadas.
           </p>
@@ -286,7 +286,7 @@ export function ScheduleList({
               setFilter('all');
               setQuery('');
             }}
-            className="rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
+            className="rounded-pill bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
           >
             Ver todas las rutinas
           </button>

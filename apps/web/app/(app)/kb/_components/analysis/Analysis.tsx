@@ -54,8 +54,8 @@ export function Analysis({
   return (
     <section>
       <div className="mb-2.5">
-        <h2 className="text-[14px] font-bold text-ink">Cómo quedó lo que memorizó</h2>
-        <p className="mt-0.5 max-w-2xl text-[12px] text-ink-faint">
+        <h2 className="text-base font-bold text-ink">Cómo quedó lo que memorizó</h2>
+        <p className="mt-0.5 max-w-2xl text-xs text-ink-faint">
           Cuatro cosas que sí se pueden arreglar. Todo lo de aquí sale de contar fragmentos, no de
           estimar nada.
         </p>
@@ -100,12 +100,12 @@ function DeadMemory({
 
       {!counting ? (
         <div className="px-5 pb-5 pt-2">
-          <p className="text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="text-xs leading-relaxed text-ink-muted">
             Todavía no he registrado ni una recuperación, así que no te puedo decir qué sobra.
             Empieza a contar desde ahora: cuando Cortex responda usando la memoria, los fragmentos
             que use quedan marcados y aquí van a aparecer los que nunca le sirvieron.
           </p>
-          <p className="mt-2 text-[11.5px] text-ink-faint">
+          <p className="mt-2 text-micro text-ink-faint">
             De momento hay <span className="tabular text-ink-muted">{num(health.total)}</span>{' '}
             fragmentos guardados en{' '}
             <span className="tabular text-ink-muted">{num(health.documents)}</span> documentos.
@@ -115,12 +115,12 @@ function DeadMemory({
         <>
           <div className="flex flex-wrap items-end gap-x-4 gap-y-1 px-5 pb-3 pt-2">
             <div>
-              <div className="stat-num text-[34px] leading-none text-ink">
+              <div className="stat-num text-display leading-none text-ink">
                 {num(health.neverUsed)}
               </div>
               <div className="field-label mt-1">fragmentos sin usar nunca</div>
             </div>
-            <p className="max-w-xs text-[11.5px] leading-relaxed text-ink-faint">
+            <p className="max-w-xs text-micro leading-relaxed text-ink-faint">
               El <span className="tabular text-ink-muted">{num(share)}%</span> de la memoria. Se
               guardó, se indexó y nunca ha entrado en una respuesta.
               {health.lastUsedAt && ` La última vez que usó algo fue ${ago(health.lastUsedAt)}.`}
@@ -137,18 +137,18 @@ function DeadMemory({
                     className="flex w-full items-center justify-between gap-3 px-5 py-2 text-left transition-colors hover:bg-surface-2"
                   >
                     <span className="min-w-0">
-                      <span className="block truncate text-[12px] font-semibold text-ink">
+                      <span className="block truncate text-xs font-semibold text-ink">
                         {doc.documentTitle}
                       </span>
-                      <span className="block truncate text-[10.5px] text-ink-faint">
+                      <span className="block truncate text-micro text-ink-faint">
                         {doc.spaceName}
                       </span>
                     </span>
                     <span className="shrink-0 text-right">
-                      <span className="stat-num text-[13px] text-ink">
+                      <span className="stat-num text-sm text-ink">
                         {num(doc.never)}/{num(doc.total)}
                       </span>
-                      <span className="block text-[10px] text-ink-faint">sin usar</span>
+                      <span className="block text-micro text-ink-faint">sin usar</span>
                     </span>
                   </button>
                 </li>
@@ -210,7 +210,7 @@ function BadlyCut({
         title="Fragmentos mal cortados"
         right={`mediana ${num(health.medianTokens)} tokens`}
       />
-      <p className="px-5 pt-1 text-[12px] text-ink-muted">
+      <p className="px-5 pt-1 text-xs text-ink-muted">
         {count === 0
           ? 'Ninguno. El troceado de este corpus está limpio.'
           : `${plural(count, 'fragmento', 'fragmentos')} que le quitan puntería a la búsqueda.`}
@@ -233,12 +233,12 @@ function BadlyCut({
                 {defect.icon}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[12px] font-semibold text-ink">{defect.label}</span>
-                <span className="block text-[10.5px] leading-snug text-ink-faint">
+                <span className="block text-xs font-semibold text-ink">{defect.label}</span>
+                <span className="block text-micro leading-snug text-ink-faint">
                   {defect.why}
                 </span>
               </span>
-              <span className="stat-num shrink-0 text-[15px] text-ink">{num(defect.value)}</span>
+              <span className="stat-num shrink-0 text-base text-ink">{num(defect.value)}</span>
               {defect.value > 0 && (
                 <ChevronDown
                   className={clsx(
@@ -255,7 +255,7 @@ function BadlyCut({
                   <Sample key={sample.chunkId} sample={sample} onOpen={onOpenFragment} />
                 ))}
                 {defect.samples.length === 0 && (
-                  <li className="py-2 text-[11.5px] text-ink-faint">
+                  <li className="py-2 text-micro text-ink-faint">
                     No pude traer ejemplos de estos.
                   </li>
                 )}
@@ -266,7 +266,7 @@ function BadlyCut({
       </ul>
 
       {health.unembedded > 0 && (
-        <p className="border-t border-border px-5 py-2.5 text-[11.5px] leading-relaxed text-amber">
+        <p className="border-t border-border px-5 py-2.5 text-micro leading-relaxed text-amber">
           Además, <span className="tabular">{num(health.unembedded)}</span> fragmentos están
           guardados pero sin indexar por significado: solo se encuentran si escribes las palabras
           exactas.
@@ -290,10 +290,10 @@ function Sample({
         onClick={() => onOpen(sample.documentId, sample.chunkIndex)}
         className="block w-full py-2 text-left"
       >
-        <p className="line-clamp-2 border-l-2 border-border-strong pl-2.5 text-[12px] leading-relaxed text-ink">
+        <p className="line-clamp-2 border-l-2 border-border-strong pl-2.5 text-xs leading-relaxed text-ink">
           {sample.content || '(vacío)'}
         </p>
-        <p className="mt-1 truncate pl-2.5 text-[10.5px] text-ink-faint">
+        <p className="mt-1 truncate pl-2.5 text-micro text-ink-faint">
           {sample.documentTitle} · frag.{' '}
           <span className="tabular">{num(sample.chunkIndex + 1)}</span> ·{' '}
           <span className="tabular">{num(sample.tokens)}</span> tokens
@@ -327,7 +327,7 @@ function Shape({
         title="De qué sabe por varios lados"
         right={partial ? `los ${num(shape.considered)} más recientes` : undefined}
       />
-      <p className="px-5 pt-1 text-[12px] leading-relaxed text-ink-muted">
+      <p className="px-5 pt-1 text-xs leading-relaxed text-ink-muted">
         Un dato que aparece en cuatro documentos es un dato en el que la empresa está de acuerdo
         consigo misma. Uno que solo aparece en un sitio depende de que ese sitio esté bien.
       </p>
@@ -380,10 +380,10 @@ function Column({
     <div className="bg-surface pb-2">
       <div className="px-5 pt-3">
         <div className="field-label">{title}</div>
-        <div className="text-[10.5px] text-ink-faint">{hint}</div>
+        <div className="text-micro text-ink-faint">{hint}</div>
       </div>
       {rows.length === 0 ? (
-        <p className="px-5 pt-2 text-[11.5px] text-ink-faint">
+        <p className="px-5 pt-2 text-micro text-ink-faint">
           {empty ?? 'Todavía nada que medir.'}
         </p>
       ) : (
@@ -395,10 +395,10 @@ function Column({
                 onClick={() => onOpen(row.documentId)}
                 className="flex w-full items-baseline justify-between gap-2 px-5 py-1.5 text-left transition-colors hover:bg-surface-2"
               >
-                <span className="min-w-0 truncate text-[12px] text-ink">{row.title}</span>
-                <span className={clsx('stat-num shrink-0 text-[12px]', tone)}>
+                <span className="min-w-0 truncate text-xs text-ink">{row.title}</span>
+                <span className={clsx('stat-num shrink-0 text-xs', tone)}>
                   {measure(row)}
-                  <span className="ml-1 font-sans text-[10px] font-medium text-ink-faint">
+                  <span className="ml-1 font-sans text-micro font-medium text-ink-faint">
                     {measureLabel}
                   </span>
                 </span>
@@ -436,7 +436,7 @@ function Stale({
         title="Vencido o reemplazado"
         right={stale.length > 0 ? `${num(stale.length)} para revisar` : undefined}
       />
-      <p className="px-5 pt-1 text-[12px] leading-relaxed text-ink-muted">
+      <p className="px-5 pt-1 text-xs leading-relaxed text-ink-muted">
         {stale.length === 0
           ? 'Nada vencido ni reemplazado. Todo lo que Cortex puede citar sigue en pie.'
           : blocking > 0
@@ -454,14 +454,14 @@ function Stale({
                 className="flex w-full items-center justify-between gap-3 px-5 py-2 text-left transition-colors hover:bg-surface-2"
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-[12px] font-semibold text-ink">
+                  <span className="block truncate text-xs font-semibold text-ink">
                     {doc.title}
                   </span>
-                  <span className="block truncate text-[10.5px] text-ink-faint">
+                  <span className="block truncate text-micro text-ink-faint">
                     {doc.spaceName}
                   </span>
                 </span>
-                <span className={clsx('shrink-0 text-right text-[11px]', STALE_TONE[doc.status])}>
+                <span className={clsx('shrink-0 text-right text-micro', STALE_TONE[doc.status])}>
                   {doc.label}
                 </span>
               </button>
@@ -484,7 +484,7 @@ function Unavailable({ title, icon }: { title: string; icon: ReactNode }) {
   return (
     <Panel>
       <PanelHead icon={icon} title={title} />
-      <p className="px-5 pb-5 pt-2 text-[12px] leading-relaxed text-ink-faint">
+      <p className="px-5 pb-5 pt-2 text-xs leading-relaxed text-ink-faint">
         No se pudo calcular ahora mismo. Vuelve a cargar la página; si sigue igual, es que el
         análisis no alcanzó a correr sobre un corpus de este tamaño.
       </p>

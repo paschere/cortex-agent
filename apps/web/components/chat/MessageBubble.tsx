@@ -359,7 +359,7 @@ export function MessageBubble({
                   {cards.length > 0 && <div className="space-y-1.5">{cards.slice(0, 3)}</div>}
                   {cards.length > 3 && (
                     <details className="mt-1.5">
-                      <summary className="cursor-pointer text-[12px] text-ink-muted hover:text-ink">
+                      <summary className="cursor-pointer text-xs text-ink-muted hover:text-ink">
                         {cards.length - 3} resultado{cards.length - 3 === 1 ? '' : 's'} más
                       </summary>
                       <div className="mt-1.5 space-y-1.5">{cards.slice(3)}</div>

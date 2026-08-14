@@ -291,7 +291,7 @@ export function TeachFlow({
   if (!canRecordTab()) {
     return (
       <Panel className="p-5">
-        <p className="text-[13px] leading-relaxed text-ink-muted">
+        <p className="text-sm leading-relaxed text-ink-muted">
           Este navegador no permite compartir una pestaña, así que no se puede enseñar un{' '}
           {MODULE.one} desde aquí. Funciona en Chrome, Edge y Firefox de escritorio.
         </p>
@@ -304,16 +304,16 @@ export function TeachFlow({
       {error && (
         <div className="flex items-start gap-2 border-b border-rose/20 bg-rose-soft px-5 py-3">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose" aria-hidden="true" />
-          <p className="text-[13px] leading-relaxed text-rose">{error}</p>
+          <p className="text-sm leading-relaxed text-rose">{error}</p>
         </div>
       )}
 
       {stage.name === 'idle' && (
         <div className="p-5 sm:p-6">
-          <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-ink">
+          <h2 className="text-lg font-semibold tracking-[-0.01em] text-ink">
             {first ? `Enséñame el primer ${MODULE.one}` : `Enséñame un ${MODULE.one}`}
           </h2>
-          <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-muted">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted">
             {first ? (
               <>
                 Un {MODULE.one} es una vuelta que hoy alguien hace a mano en un portal: sacar un
@@ -372,18 +372,18 @@ export function TeachFlow({
               />
               {stage.paused ? 'En pausa' : 'Grabando'}
             </span>
-            <span className="tabular text-[15px] font-semibold text-ink">
+            <span className="tabular text-base font-semibold text-ink">
               {String(Math.floor(stage.seconds / 60)).padStart(2, '0')}:
               {String(stage.seconds % 60).padStart(2, '0')}
             </span>
-            <span className="text-[12px] text-ink-faint">
+            <span className="text-xs text-ink-faint">
               <span className="tabular">{stage.frames}</span> de{' '}
               <span className="tabular">{MAX_FRAMES}</span> momentos capturados · sin video, y se
               borran al terminar
             </span>
           </div>
 
-          <p className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-ink-muted">
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
             Haz la vuelta en la otra pestaña. Vuelve aquí y pulsa Terminar cuando la hayas
             completado —{' '}
             <strong className="font-semibold text-ink">
@@ -422,7 +422,7 @@ export function TeachFlow({
               <Square className="h-4 w-4" aria-hidden="true" />
               Terminar
             </Button>
-            <p className="self-center text-[12px] text-ink-faint">
+            <p className="self-center text-xs text-ink-faint">
               Pausa si vas a escribir algo que no debería quedar.
             </p>
           </div>
@@ -432,7 +432,7 @@ export function TeachFlow({
       {(stage.name === 'reading' || stage.name === 'saving') && (
         <div className="flex items-center gap-3 p-6">
           <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
-          <p className="text-[13px] text-ink-muted">
+          <p className="text-sm text-ink-muted">
             {stage.name === 'reading'
               ? 'Leyendo la grabación y armando los pasos…'
               : 'Guardando y probándolo contra el sitio real. Esto se demora lo que se demore el portal.'}
@@ -459,10 +459,10 @@ export function TeachFlow({
 
       {stage.name === 'account' && (
         <div className="p-5 sm:p-6">
-          <h2 className="text-[15px] font-semibold text-ink">
+          <h2 className="text-base font-semibold text-ink">
             Guardado. Falta una cosa: la cuenta
           </h2>
-          <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-ink-muted">
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">
             {stage.saved.message}
           </p>
           <div className="mt-4">
@@ -546,7 +546,7 @@ function HowToRecord() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         <ChevronDown
           className={clsx(
@@ -567,7 +567,7 @@ function HowToRecord() {
                   className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
                   aria-hidden="true"
                 />
-                <p className="text-[12.5px] leading-snug text-ink-muted">
+                <p className="text-xs leading-snug text-ink-muted">
                   <strong className="font-semibold text-ink">{step.title}.</strong> {step.why}
                 </p>
               </li>
@@ -577,7 +577,7 @@ function HowToRecord() {
           <div className="mt-3.5 flex gap-2 border-t border-border pt-3">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" aria-hidden="true" />
             <div>
-              <p className="text-[12.5px] leading-snug text-ink">
+              <p className="text-xs leading-snug text-ink">
                 <strong className="font-semibold">
                   Hay cosas que todavía no puedo aprender viendo.
                 </strong>{' '}
@@ -585,7 +585,7 @@ function HowToRecord() {
                 un archivo desde tu computador, no gastes la grabación: por ahora ese hay que
                 seguirlo haciendo a mano.
               </p>
-              <p className="mt-1 text-[12px] leading-snug text-ink-muted">
+              <p className="mt-1 text-xs leading-snug text-ink-muted">
                 Y si hay un menú que sólo se abre al pasar el ratón, hazle clic si el portal deja —
                 un menú que aparece solo no queda en ningún fotograma. Arrastrar y soltar tampoco lo
                 aprendo.
@@ -593,7 +593,7 @@ function HowToRecord() {
             </div>
           </div>
 
-          <p className="mt-3 border-t border-border pt-3 text-[12px] leading-snug text-ink-faint">
+          <p className="mt-3 border-t border-border pt-3 text-xs leading-snug text-ink-faint">
             Grabar no es el final: al terminar te muestro los pasos que entendí para que los
             corrijas, y lo corro una vez contra el sitio real. Sólo si reproduce completo queda{' '}
             <strong className="font-semibold text-ink">probado</strong>.
@@ -651,8 +651,8 @@ function Review({
       <div className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold text-ink">Esto es lo que entendí</h2>
-            <p className="mt-1 text-[12.5px] text-ink-faint">
+            <h2 className="text-base font-semibold text-ink">Esto es lo que entendí</h2>
+            <p className="mt-1 text-xs text-ink-faint">
               Leí <span className="tabular">{frames}</span> momentos de la grabación
               {costUsd > 0 && (
                 <>
@@ -686,7 +686,7 @@ function Review({
             </label>
             <Input
               id="p-url"
-              className="mt-1.5 font-mono text-[12px]"
+              className="mt-1.5 font-mono text-xs"
               value={proposal.startUrl}
               onChange={(e) => onChange({ ...proposal, startUrl: e.target.value })}
             />
@@ -695,11 +695,11 @@ function Review({
 
         {connected && (
           <div className="mt-4 rounded-sm border border-primary/20 bg-primary-soft px-3.5 py-3">
-            <p className="flex items-center gap-1.5 text-[13px] font-semibold text-primary-ink">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-primary-ink">
               <Plug className="h-3.5 w-3.5" aria-hidden="true" />
               Esto ya lo puedo hacer sin navegador
             </p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
               Grabaste algo en {connected.service}, y a {connected.service} ya me conecto por su
               propia puerta: leo {connected.where} con un permiso que tú autorizas y que se renueva
               solo. Aprender esto como {MODULE.one} sería más lento, se rompería cada vez que
@@ -708,7 +708,7 @@ function Review({
             </p>
             <Link
               href="/integrations"
-              className="mt-2.5 inline-flex items-center rounded-pill bg-primary px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
+              className="mt-2.5 inline-flex items-center rounded-pill bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transform-none motion-reduce:transition-none"
             >
               Conectar {connected.service} en Integraciones
             </Link>
@@ -716,7 +716,7 @@ function Review({
         )}
 
         {proposal.effect === 'write' && (
-          <p className="mt-3 rounded-sm bg-amber-soft px-3 py-2 text-[12.5px] leading-relaxed text-amber">
+          <p className="mt-3 rounded-sm bg-amber-soft px-3 py-2 text-xs leading-relaxed text-amber">
             Marqué este {MODULE.one} como que <strong>escribe</strong> en el sitio del tercero.
             Cuando lo pida el agente desde el chat, va a pedir aprobación de una persona antes de
             correr.
@@ -745,14 +745,14 @@ function Review({
       {/* The variables are the reason a recording becomes a procedure, so they
           get their own block at the top rather than living inside the steps. */}
       <div className="p-5">
-        <h3 className="text-[13.5px] font-semibold text-ink">Lo que cambia cada vez</h3>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+        <h3 className="text-sm font-semibold text-ink">Lo que cambia cada vez</h3>
+        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
           Sin esto, el {MODULE.one} sólo sabría repetir exactamente la misma consulta. Aquí pones el
           valor con el que lo pruebo ahora; para marcar un dato nuevo, o para volver fijo uno que no
           cambiaba, es en los pasos de abajo.
         </p>
         {proposal.variables.length === 0 ? (
-          <p className="mt-3 rounded-sm bg-amber-soft px-3 py-2 text-[12.5px] text-amber">
+          <p className="mt-3 rounded-sm bg-amber-soft px-3 py-2 text-xs text-amber">
             No detecté ningún dato variable. Revisa los pasos de abajo: si alguno escribe algo que
             va a cambiar, márcalo ahí — mientras tanto este {MODULE.one} sólo sirve para el caso
             exacto que grabaste.
@@ -761,10 +761,10 @@ function Review({
           <ul className="mt-3 space-y-2">
             {proposal.variables.map((variable) => (
               <li key={variable.name} className="flex flex-wrap items-center gap-2">
-                <code className="rounded-sm bg-surface-2 px-2 py-1 font-mono text-[12px] text-primary">
+                <code className="rounded-sm bg-surface-2 px-2 py-1 font-mono text-xs text-primary">
                   {`{{${variable.name}}}`}
                 </code>
-                <span className="text-[13px] text-ink">{variable.label}</span>
+                <span className="text-sm text-ink">{variable.label}</span>
                 <Input
                   className="ml-auto max-w-[220px]"
                   value={sample[variable.name] ?? ''}
@@ -779,8 +779,8 @@ function Review({
       </div>
 
       <div className="p-5">
-        <h3 className="text-[13.5px] font-semibold text-ink">Qué produce y dónde te llega</h3>
-        <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+        <h3 className="text-sm font-semibold text-ink">Qué produce y dónde te llega</h3>
+        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
           Lo pregunto ahora, mientras te acuerdas de a qué fuiste. Un {MODULE.one} que corre solo de
           madrugada y deja el resultado en una pantalla que nadie abre no le sirve a nadie.
         </p>
@@ -794,8 +794,8 @@ function Review({
           máquina y una placa que quedó fija. Se arregla aquí o se vuelve a
           grabar. */}
       <div className="p-5">
-        <h3 className="text-[13.5px] font-semibold text-ink">Los pasos</h3>
-        <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+        <h3 className="text-sm font-semibold text-ink">Los pasos</h3>
+        <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-muted">
           Quita lo que sobre, ponlos en orden, y dile a cada uno cómo se llama de verdad: ese nombre
           es lo que vas a leer el día que el {MODULE.one} falle. Lo que no puedas arreglar aquí se
           arregla volviendo a grabar.
@@ -813,10 +813,10 @@ function Review({
 
       {warnings.length > 0 && (
         <div className="bg-amber-soft/40 p-5">
-          <h3 className="text-[13px] font-semibold text-amber">Mira esto antes de guardar</h3>
+          <h3 className="text-sm font-semibold text-amber">Mira esto antes de guardar</h3>
           <ul className="mt-2 space-y-1.5">
             {warnings.map((warning) => (
-              <li key={warning} className="text-[12.5px] leading-relaxed text-ink-muted">
+              <li key={warning} className="text-xs leading-relaxed text-ink-muted">
                 · {warning}
               </li>
             ))}
@@ -835,7 +835,7 @@ function Review({
         <Button variant="ghost" onClick={onDiscard}>
           Descartar
         </Button>
-        <p className="max-w-md text-[12px] leading-snug text-ink-faint">
+        <p className="max-w-md text-xs leading-snug text-ink-faint">
           {problems.length > 0 ? (
             <>
               Arregla lo que quedó en rojo arriba —{' '}

@@ -144,7 +144,7 @@ export default async function DashboardPage() {
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
           <div className="min-w-0">
             <div className="field-label">Espacio de trabajo</div>
-            <h1 className="mt-1 text-[22px] font-extrabold tracking-tight text-ink">
+            <h1 className="mt-1 text-xl font-extrabold tracking-tight text-ink">
               Hola, {firstName}
             </h1>
             {/* LA FRASE. Va aquí, pegada al saludo y antes que cualquier
@@ -154,7 +154,7 @@ export default async function DashboardPage() {
                 una palabra sale de un modelo. */}
             <p
               className={clsx(
-                'mt-1 text-[14px] font-semibold leading-snug',
+                'mt-1 text-base font-semibold leading-snug',
                 waiting.total > 0 ? 'text-ink' : 'text-ink-muted',
               )}
             >
@@ -202,7 +202,7 @@ export default async function DashboardPage() {
           className="group mb-4 flex items-center gap-3 rounded-card border border-amber/50 bg-amber-soft px-4 py-3 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-amber motion-reduce:transform-none motion-reduce:transition-none"
         >
           <BadgeCheck className="h-4 w-4 shrink-0 text-amber" />
-          <div className="min-w-0 flex-1 text-[13px]">
+          <div className="min-w-0 flex-1 text-sm">
             <span className="font-semibold text-ink">Prospectos nuevos</span>
             <span className="text-ink-muted">
               {' '}
@@ -239,17 +239,17 @@ export default async function DashboardPage() {
                   <li key={r.id} className="py-2.5 first:pt-0 last:pb-0">
                     <div className="flex items-center gap-2">
                       <RunStatusChip status={r.status} />
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
                         {relName(r.scheduled_jobs) ?? 'Rutina'}
                       </span>
-                      <span className="tabular shrink-0 text-[11.5px] text-ink-faint">
+                      <span className="tabular shrink-0 text-micro text-ink-faint">
                         {relativeTime(r.started_at)}
                       </span>
                     </div>
                     {excerpt && (
                       <p
                         className={clsx(
-                          'mt-1 line-clamp-2 text-[12px] leading-snug',
+                          'mt-1 line-clamp-2 text-xs leading-snug',
                           r.status === 'error' ? 'text-rose' : 'text-ink-muted',
                         )}
                       >
@@ -292,14 +292,14 @@ export default async function DashboardPage() {
                       <MessagesSquare className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13px] font-medium text-ink">
+                      <div className="truncate text-sm font-medium text-ink">
                         {c.title?.trim() || 'Conversación sin título'}
                       </div>
                       <div className="truncate text-xs text-ink-faint">
                         {relName(c.agents) ?? 'Cortex'}
                       </div>
                     </div>
-                    <span className="tabular shrink-0 text-[11.5px] text-ink-faint">
+                    <span className="tabular shrink-0 text-micro text-ink-faint">
                       {relativeTime(c.updated_at)}
                     </span>
                   </Link>
@@ -343,10 +343,10 @@ export default async function DashboardPage() {
               <Plug className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <h2 className="text-[15px] font-bold tracking-tight text-ink">
+              <h2 className="text-base font-bold tracking-tight text-ink">
                 Conecta Cortex donde trabajes
               </h2>
-              <p className="mt-0.5 max-w-2xl text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-ink-muted">
                 El mismo cerebro —todas las herramientas, Brain Knowledge, los pipelines y las
                 rutinas— dentro de Claude, Claude Code, ChatGPT o cualquier cliente MCP. Corre con
                 tus propios permisos y cada acción queda auditada.
@@ -355,7 +355,7 @@ export default async function DashboardPage() {
           </div>
           <Link
             href="/mcp-tokens"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
           >
             Configurar un cliente
             <ArrowRight className="h-3.5 w-3.5" />
@@ -365,12 +365,12 @@ export default async function DashboardPage() {
         <div className="mt-4">
           <div className="field-label">URL del conector</div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5">
-            <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[13px] font-semibold text-ink">
+            <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-sm font-semibold text-ink">
               {mcpUrl}
             </code>
             <CopyButton text={mcpUrl} label="Copiar la URL" />
           </div>
-          <p className="mt-2 text-[11.5px] text-ink-faint">
+          <p className="mt-2 text-micro text-ink-faint">
             Claude te identifica con tu cuenta de Google: no hay ningún token que pegar.{' '}
             <Link href="/mcp-tokens" className="font-semibold text-primary hover:underline">
               Paso a paso para Claude, ChatGPT y Claude Code
@@ -380,7 +380,7 @@ export default async function DashboardPage() {
         </div>
 
         {/* Trust strip */}
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-[11.5px]">
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3 text-micro">
           <TrustItem
             href="/tools"
             icon={<ShieldCheck className="h-3.5 w-3.5" />}
@@ -444,11 +444,11 @@ function Empty({
 }) {
   return (
     <div className="px-2 py-6 text-center">
-      <p className="text-[13px] font-semibold text-ink">{title}</p>
-      <p className="mx-auto mt-1 max-w-xs text-[12px] leading-relaxed text-ink-muted">{body}</p>
+      <p className="text-sm font-semibold text-ink">{title}</p>
+      <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-ink-muted">{body}</p>
       <Link
         href={action.href}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-[12px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+        className="mt-3 inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
       >
         {action.label} <ArrowRight className="h-3.5 w-3.5" />
       </Link>
@@ -478,7 +478,7 @@ function QuickAction({
       className="group flex items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 py-3 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
     >
       <span className="shrink-0 text-primary">{icon}</span>
-      <span className="truncate text-[13px] font-semibold text-ink">{label}</span>
+      <span className="truncate text-sm font-semibold text-ink">{label}</span>
       <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
     </Link>
   );

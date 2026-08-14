@@ -259,7 +259,7 @@ export default async function CommitmentsPage() {
             </div>
             <div
               className={clsx(
-                'stat-num mt-1 truncate text-[20px] leading-none',
+                'stat-num mt-1 truncate text-lg leading-none',
                 s.tone === 'rose'
                   ? 'text-rose'
                   : s.tone === 'amber'
@@ -272,7 +272,7 @@ export default async function CommitmentsPage() {
             >
               {s.value}
             </div>
-            <div className="mt-1 truncate text-[10.5px] text-ink-faint" title={s.sub}>
+            <div className="mt-1 truncate text-micro text-ink-faint" title={s.sub}>
               {s.sub}
             </div>
           </div>
@@ -281,13 +281,13 @@ export default async function CommitmentsPage() {
 
       {views.length === 0 && pending.length === 0 ? (
         <Panel className="p-8 text-center">
-          <h2 className="text-[15px] font-semibold text-ink">Todavía no hay nada que vigilar</h2>
-          <p className="mx-auto mt-2 max-w-lg text-[13px] leading-relaxed text-ink-muted">
+          <h2 className="text-base font-semibold text-ink">Todavía no hay nada que vigilar</h2>
+          <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-ink-muted">
             Registra el primero, o pídele a Cortex en el chat que lea un contrato del cerebro y te
             proponga las fechas. Los SOAT y las tecnomecánicas de la flota entran solos apenas
             consultes el RUNT de cada placa.
           </p>
-          <p className="mt-3 text-[11.5px] text-ink-faint">Hoy es {longDate(today)} en Colombia.</p>
+          <p className="mt-3 text-micro text-ink-faint">Hoy es {longDate(today)} en Colombia.</p>
         </Panel>
       ) : null}
 

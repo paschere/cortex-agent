@@ -32,7 +32,7 @@ function ChipGroup({ label, chips }: { label: string; chips: Chip[] }) {
           key={c.key}
           href={c.href}
           className={clsx(
-            'rounded-pill border px-2.5 py-1 text-[11.5px] font-semibold transition-all duration-150',
+            'rounded-pill border px-2.5 py-1 text-micro font-semibold transition-all duration-150',
             c.mono && 'font-mono',
             c.active
               ? 'border-primary/30 bg-primary-soft text-primary-ink'
@@ -121,7 +121,7 @@ export function FilterBar({
       {filters.user && (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="field-label w-[62px] shrink-0">Persona</span>
-          <span className="tabular rounded-pill border border-primary/30 bg-primary-soft px-2.5 py-1 text-[11.5px] font-semibold text-primary-ink">
+          <span className="tabular rounded-pill border border-primary/30 bg-primary-soft px-2.5 py-1 text-micro font-semibold text-primary-ink">
             {userLabel ?? `${filters.user.slice(0, 8)}…`}
           </span>
           <Link

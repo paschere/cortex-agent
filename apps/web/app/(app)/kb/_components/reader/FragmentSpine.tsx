@@ -113,7 +113,7 @@ export function FragmentSpine({
         )}
       </div>
 
-      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[10.5px] text-ink-faint">
+      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-micro text-ink-faint">
         <span>
           {never > 0 ? (
             <>

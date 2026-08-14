@@ -28,8 +28,8 @@ export function PageHeader({
           </span>
         )}
         <div className="min-w-0">
-          <h1 className="text-[22px] font-extrabold tracking-[-0.02em] text-ink">{title}</h1>
-          {subtitle && <p className="mt-1 text-[13px] leading-snug text-ink-muted">{subtitle}</p>}
+          <h1 className="text-xl font-extrabold tracking-[-0.02em] text-ink">{title}</h1>
+          {subtitle && <p className="mt-1 text-sm leading-snug text-ink-muted">{subtitle}</p>}
         </div>
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}

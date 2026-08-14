@@ -68,7 +68,7 @@ export default async function EntrevistaPage({
         actions={
           <Link
             href="/onboarding"
-            className="text-[12.5px] font-semibold text-ink-muted hover:text-ink"
+            className="text-xs font-semibold text-ink-muted hover:text-ink"
           >
             Primeros pasos
           </Link>
@@ -88,7 +88,7 @@ export default async function EntrevistaPage({
       />
 
       <Panel className="p-4">
-        <p className="text-[12px] leading-relaxed text-ink-muted">
+        <p className="text-xs leading-relaxed text-ink-muted">
           Nada de lo que cuentes aquí sale de tu empresa, y nada se crea sin que lo apruebes en
           pantalla. Lo que se cree queda en su módulo de siempre y lo puedes deshacer.
         </p>

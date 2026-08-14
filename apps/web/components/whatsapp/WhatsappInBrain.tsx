@@ -52,12 +52,12 @@ export async function WhatsappInBrain({ organizationId }: { organizationId: stri
             <MessageCircle className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <div className="text-[13.5px] font-bold text-ink">
+            <div className="text-sm font-bold text-ink">
               <span className="tabular">{rows.length}</span>{' '}
               {rows.length === 1 ? 'grupo de WhatsApp está' : 'grupos de WhatsApp están'} entrando
               aquí
             </div>
-            <p className="mt-0.5 max-w-xl text-[12px] leading-snug text-ink-muted">
+            <p className="mt-0.5 max-w-xl text-xs leading-snug text-ink-muted">
               Sus conversaciones se guardan como documentos normales, con el nombre de quien
               escribió cada mensaje. Se buscan, se citan y se borran desde el espacio donde caen.
             </p>
@@ -65,7 +65,7 @@ export async function WhatsappInBrain({ organizationId }: { organizationId: stri
         </div>
         <Link
           href="/integrations/whatsapp"
-          className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-border px-3 py-1.5 text-[11.5px] font-semibold text-primary transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:shadow-card motion-reduce:transform-none motion-reduce:transition-none"
+          className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-border px-3 py-1.5 text-micro font-semibold text-primary transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:shadow-card motion-reduce:transform-none motion-reduce:transition-none"
         >
           Cambiar cuáles
           <ArrowRight className="h-3 w-3" />
@@ -75,10 +75,10 @@ export async function WhatsappInBrain({ organizationId }: { organizationId: stri
       <ul className="mt-3 grid gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-2">
         {rows.map((g) => (
           <li key={g.id} className="flex items-baseline justify-between gap-3 bg-surface px-3 py-2">
-            <span className="truncate text-[12.5px] text-ink">
+            <span className="truncate text-xs text-ink">
               {g.subject ?? 'Grupo sin nombre'}
             </span>
-            <span className="shrink-0 font-mono text-[11px] text-ink-faint">
+            <span className="shrink-0 font-mono text-micro text-ink-faint">
               {g.space_id ? (names.get(g.space_id) ?? 'espacio borrado') : 'sin espacio'}
             </span>
           </li>

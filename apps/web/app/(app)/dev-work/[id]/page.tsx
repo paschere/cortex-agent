@@ -111,7 +111,7 @@ export default async function DevWorkDetailPage({
       <div className="mb-4">
         <Link
           href="/dev-work"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint transition-colors hover:text-ink"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint transition-colors hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Trabajo de desarrollo
         </Link>
@@ -127,9 +127,9 @@ export default async function DevWorkDetailPage({
             {task.title}
             <span className={status.chip}>{status.label}</span>
           </h1>
-          <p className="mt-1 text-[13px] text-ink-muted">{status.blurb}</p>
+          <p className="mt-1 text-sm text-ink-muted">{status.blurb}</p>
 
-          <div className="tabular mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-ink-faint">
+          <div className="tabular mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-ink-faint">
             {repository && (
               <span className="inline-flex items-center gap-1.5">
                 <FolderGit2 className="h-3.5 w-3.5" />
@@ -163,7 +163,7 @@ export default async function DevWorkDetailPage({
               href={task.prUrl}
               target="_blank"
               rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <GitPullRequest className="h-3.5 w-3.5" />
               {task.prNumber ? `Revisar #${task.prNumber}` : 'Revisar el cambio'}
@@ -178,7 +178,7 @@ export default async function DevWorkDetailPage({
       {overdue && (
         <Panel className="mb-4 flex items-start gap-3 border-rose/40 bg-rose-soft p-4">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose" />
-          <div className="text-[12.5px] text-ink">
+          <div className="text-xs text-ink">
             <p className="font-semibold text-rose">Esta ejecución todavía no se detiene</p>
             <p className="mt-0.5 text-ink-muted">
               {stoppedBy} pidió detenerla el <span className="tabular">{stamp(task.cancelRequestedAt)}</span>{' '}
@@ -198,7 +198,7 @@ export default async function DevWorkDetailPage({
                 {task.request}
               </RunMarkdown>
             ) : (
-              <p className="text-[12.5px] text-ink-muted">
+              <p className="text-xs text-ink-muted">
                 Solo llegó el título. La petición completa está en el issue de Linear.
               </p>
             )}
@@ -207,7 +207,7 @@ export default async function DevWorkDetailPage({
                 href={task.issueUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary transition-colors hover:text-primary-strong"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary transition-colors hover:text-primary-strong"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 Abrir {task.issueKey ?? 'el issue'} en Linear
@@ -218,7 +218,7 @@ export default async function DevWorkDetailPage({
           {task.status === 'failed' && (
             <Panel className="p-5">
               <div className={`mb-3 ${SECTION}`}>Qué salió mal</div>
-              <p className="rounded-sm border border-rose/30 bg-rose-soft px-3.5 py-3 text-[13.5px] leading-relaxed text-ink">
+              <p className="rounded-sm border border-rose/30 bg-rose-soft px-3.5 py-3 text-sm leading-relaxed text-ink">
                 {task.failureReason ??
                   'Cortex se detuvo antes de terminar y no dijo por qué. No se integró nada.'}
               </p>
@@ -226,10 +226,10 @@ export default async function DevWorkDetailPage({
                   never the first thing a person reads. */}
               {task.errorDetail && (
                 <details className="group mt-3">
-                  <summary className="cursor-pointer list-none text-[12px] font-semibold text-ink-muted transition-colors hover:text-ink">
+                  <summary className="cursor-pointer list-none text-xs font-semibold text-ink-muted transition-colors hover:text-ink">
                     Ver el detalle técnico
                   </summary>
-                  <pre className="scroll-slim mt-2 overflow-x-auto rounded-sm border border-border bg-surface-2 px-3.5 py-3 font-mono text-[11px] leading-[1.6] text-ink-muted">
+                  <pre className="scroll-slim mt-2 overflow-x-auto rounded-sm border border-border bg-surface-2 px-3.5 py-3 font-mono text-micro leading-[1.6] text-ink-muted">
                     {task.errorDetail}
                   </pre>
                 </details>
@@ -242,7 +242,7 @@ export default async function DevWorkDetailPage({
             {task.summary ? (
               <RunMarkdown>{task.summary}</RunMarkdown>
             ) : (
-              <p className="text-[12.5px] text-ink-muted">
+              <p className="text-xs text-ink-muted">
                 {task.status === 'queued' || task.status === 'running'
                   ? 'Cortex escribe este resumen cuando termina.'
                   : 'No quedó ningún resumen de esta ejecución.'}
@@ -254,7 +254,7 @@ export default async function DevWorkDetailPage({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className={SECTION}>Pruebas automáticas</div>
               {task.checks.length > 0 && (
-                <span className="tabular text-[11px] text-ink-faint">
+                <span className="tabular text-micro text-ink-faint">
                   {failedChecks.length > 0
                     ? `${failedChecks.length} de ${task.checks.length} fallaron`
                     : `${task.checks.length} corrieron`}
@@ -262,7 +262,7 @@ export default async function DevWorkDetailPage({
               )}
             </div>
             {task.checks.length === 0 ? (
-              <p className="text-[12.5px] text-ink-muted">
+              <p className="text-xs text-ink-muted">
                 No se reportó ninguna prueba automática para esta ejecución.
               </p>
             ) : (
@@ -278,7 +278,7 @@ export default async function DevWorkDetailPage({
                       ) : (
                         <Hourglass className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
                       )}
-                      <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-ink">
+                      <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink">
                         {check.name}
                       </span>
                       {check.url && (
@@ -286,7 +286,7 @@ export default async function DevWorkDetailPage({
                           href={check.url}
                           target="_blank"
                           rel="noreferrer noopener"
-                          className="shrink-0 text-[11.5px] font-semibold text-primary hover:text-primary-strong"
+                          className="shrink-0 text-micro font-semibold text-primary hover:text-primary-strong"
                         >
                           detalle
                         </a>
@@ -303,16 +303,16 @@ export default async function DevWorkDetailPage({
         <div className="space-y-4">
           <Panel className="p-4">
             <div className={`mb-2.5 ${SECTION}`}>Dónde vive el trabajo</div>
-            <ul className="space-y-2 text-[12.5px]">
+            <ul className="space-y-2 text-xs">
               <li className="flex items-start gap-2">
                 <FolderGit2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
-                <span className="min-w-0 break-words font-mono text-[11.5px] text-ink-muted">
+                <span className="min-w-0 break-words font-mono text-micro text-ink-muted">
                   {repository ?? 'Sin repositorio registrado'}
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <GitBranch className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />
-                <span className="min-w-0 break-words font-mono text-[11.5px] text-ink-muted">
+                <span className="min-w-0 break-words font-mono text-micro text-ink-muted">
                   {task.branch ?? 'Todavía sin rama'}
                 </span>
               </li>
@@ -348,7 +348,7 @@ export default async function DevWorkDetailPage({
           {task.cancelRequestedAt && (
             <Panel className="p-4">
               <div className={`mb-2 ${SECTION}`}>Detenido por una persona</div>
-              <p className="text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="text-xs leading-relaxed text-ink-muted">
                 {stoppedBy} pisó el freno el{' '}
                 <span className="tabular">{stamp(task.cancelRequestedAt)}</span>.{' '}
                 {task.status === 'cancelled'

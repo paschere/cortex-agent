@@ -68,7 +68,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /** Header links styled like the outline button variant: pill, bordered, lifted off the canvas with a soft shadow. */
 const HEADER_ACTION =
-  'inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:border-border-strong hover:bg-surface-2';
+  'inline-flex items-center gap-2 rounded-pill border border-border bg-surface px-3.5 py-2 text-sm font-semibold text-ink shadow-card transition-all duration-150 hover:border-border-strong hover:bg-surface-2';
 const SURFACE_KEYS = ['web', 'mcp', 'schedule', 'unknown'] as const;
 
 type Role = 'member' | 'team_admin' | 'org_admin';
@@ -160,7 +160,7 @@ function PanelHeadRow({ label, right }: { label: ReactNode; right?: ReactNode })
     <>
       <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
         <SectionLabel>{label}</SectionLabel>
-        {right && <span className="text-[11px] text-ink-faint">{right}</span>}
+        {right && <span className="text-micro text-ink-faint">{right}</span>}
       </div>
       <div className="rule-double" />
     </>
@@ -340,19 +340,19 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-[17px] font-extrabold tracking-tight text-ink">
+                <h2 className="text-lg font-extrabold tracking-tight text-ink">
                   {displayName}
                 </h2>
                 <span
                   className={clsx(
-                    'rounded-pill border px-2 py-0.5 text-[11px] font-semibold',
+                    'rounded-pill border px-2 py-0.5 text-micro font-semibold',
                     ROLE_TAG[user.role] ?? 'border-border bg-surface-2 text-ink-muted',
                   )}
                 >
                   {ROLE_LABEL[user.role] ?? user.role}
                 </span>
               </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-ink-muted">
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted">
                 <span className="tabular inline-flex items-center gap-1.5">
                   <Mail className="h-3.5 w-3.5 text-ink-faint" />
                   {user.email}
@@ -406,14 +406,14 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <div className="mt-5 border-t border-border pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <SectionLabel>Integraciones conectadas</SectionLabel>
-              <span className="tabular text-[11px] text-ink-faint">
+              <span className="tabular text-micro text-ink-faint">
                 {liveTokens > 0
                   ? `${liveTokens} conexión${liveTokens === 1 ? '' : 'es'} viva${liveTokens === 1 ? '' : 's'} con Claude`
                   : 'Sin conexión viva con Claude'}
               </span>
             </div>
             {integrations.length === 0 ? (
-              <p className="mt-2.5 flex items-start gap-2 text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="mt-2.5 flex items-start gap-2 text-xs leading-relaxed text-ink-muted">
                 <Unplug className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 No ha conectado nada. Las herramientas que dependen de Google, HubSpot, GitHub o
                 Linear le van a fallar hasta que conecte esa cuenta desde Integraciones.
@@ -443,13 +443,13 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                       <span className="min-w-0">
                         <span
                           className={clsx(
-                            'block text-[12.5px] font-bold capitalize leading-tight',
+                            'block text-xs font-bold capitalize leading-tight',
                             expired ? 'text-rose' : 'text-ink',
                           )}
                         >
                           {i.provider}
                         </span>
-                        <span className="tabular block text-[10.5px] text-ink-faint">
+                        <span className="tabular block text-micro text-ink-faint">
                           {scopeCount} scope{scopeCount === 1 ? '' : 's'} ·{' '}
                           {expired
                             ? 'token vencido'
@@ -464,7 +464,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
               </div>
             )}
             {integrations.some((i) => !!i.expires_at && i.expires_at <= nowIso) && (
-              <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] leading-relaxed text-rose">
+              <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro leading-relaxed text-rose">
                 Un token vencido es la razón más común de que las herramientas dejen de responder
                 de un momento a otro. Pídele que vuelva a conectar esa cuenta en Integraciones.
               </p>
@@ -526,7 +526,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         <Panel className="p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <SectionLabel>Actividad diaria · últimos {WINDOW_DAYS} días</SectionLabel>
-            <span className="text-[11px] text-ink-faint">
+            <span className="text-micro text-ink-faint">
               {usage.capped
                 ? `con tope de ${AUDIT_ROW_CAP.toLocaleString()} eventos: esto es un piso`
                 : 'todos los eventos registrados'}
@@ -545,7 +545,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                 <ul className="space-y-2.5">
                   {usage.topTools.map((t) => (
                     <li key={t.toolId}>
-                      <div className="mb-1 flex items-center justify-between gap-2 text-[11.5px]">
+                      <div className="mb-1 flex items-center justify-between gap-2 text-micro">
                         <span className="min-w-0 truncate font-semibold text-ink">
                           {toolLabel(t.toolId).label}
                         </span>
@@ -572,7 +572,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             <SectionLabel>Desde dónde trabaja</SectionLabel>
             <div className="mt-3">
               <StackedBar segments={surfaceSegments} total={surfaceTotal} />
-              <p className="mt-3 text-[11.5px] leading-relaxed text-ink-faint">
+              <p className="mt-3 text-micro leading-relaxed text-ink-faint">
                 {surfaceTotal === 0
                   ? 'No hay llamadas registradas en esta ventana.'
                   : (usage.bySurface.unknown ?? 0) === surfaceTotal
@@ -628,21 +628,21 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
               }
             />
             {security.unavailable ? (
-              <div className="px-4 py-8 text-center text-[12.5px] leading-relaxed text-ink-muted">
+              <div className="px-4 py-8 text-center text-xs leading-relaxed text-ink-muted">
                 Esta base de datos todavía no corrió la migración de seguridad, así que no se está
                 registrando nada para nadie.
               </div>
             ) : securityClean ? (
               <div className="px-4 py-12 text-center">
                 <ShieldCheck className="mx-auto mb-3 h-6 w-6 text-emerald" />
-                <p className="text-[13px] font-semibold text-ink">Nada marcado</p>
-                <p className="mt-1 text-[12.5px] text-ink-muted">
+                <p className="text-sm font-semibold text-ink">Nada marcado</p>
+                <p className="mt-1 text-xs text-ink-muted">
                   Todo lo que hizo esta persona fue rutinario.
                 </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px]">
+                <table className="w-full text-xs">
                   <thead className="border-b border-border-strong bg-surface-2">
                     <tr className="text-left">
                       <th className="field-label px-4 py-2.5">Cuándo</th>
@@ -670,7 +670,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                           <div className="truncate font-semibold text-ink">
                             {toolLabel(e.tool_id).label}
                           </div>
-                          <div className="tabular truncate text-[10.5px] text-ink-faint">
+                          <div className="tabular truncate text-micro text-ink-faint">
                             {e.tool_id}
                           </div>
                         </td>
@@ -708,7 +708,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <Panel className="p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <SectionLabel>Esperando su confirmación</SectionLabel>
-              <span className="tabular text-[11px] text-ink-faint">
+              <span className="tabular text-micro text-ink-faint">
                 {livePending.length === 0
                   ? 'nada pendiente'
                   : `${livePending.length} pendiente${livePending.length === 1 ? '' : 's'}`}
@@ -727,15 +727,15 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                       className="flex flex-wrap items-center justify-between gap-2 rounded-card bg-surface-2 px-3 py-2"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-[12.5px] font-semibold text-ink">
+                        <span className="block truncate text-xs font-semibold text-ink">
                           {toolLabel(p.tool_id).label}
                         </span>
-                        <span className="tabular block truncate text-[10.5px] text-ink-faint">
+                        <span className="tabular block truncate text-micro text-ink-faint">
                           {p.tool_id}
                         </span>
                       </span>
                       <span
-                        className="tabular inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-amber"
+                        className="tabular inline-flex shrink-0 items-center gap-1.5 text-micro text-amber"
                         title={absoluteTime(p.expires_at)}
                       >
                         <Clock className="h-3.5 w-3.5" />
@@ -765,15 +765,15 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         className="group flex items-center justify-between gap-2 rounded-card px-2 py-1.5 transition-colors duration-150 hover:bg-surface-2"
                       >
                         <span className="min-w-0">
-                          <span className="block truncate text-[12.5px] font-semibold text-ink group-hover:text-primary">
+                          <span className="block truncate text-xs font-semibold text-ink group-hover:text-primary">
                             {p.name}
                           </span>
-                          <span className="tabular block truncate text-[10.5px] text-ink-faint">
+                          <span className="tabular block truncate text-micro text-ink-faint">
                             {p.slug}
                             {p.archived ? ' · archivado' : ''}
                           </span>
                         </span>
-                        <span className="tabular shrink-0 text-[11px] text-ink-faint">
+                        <span className="tabular shrink-0 text-micro text-ink-faint">
                           {(p.times_run ?? 0).toLocaleString()}{' '}
                           {(p.times_run ?? 0) === 1 ? 'corrida' : 'corridas'}
                         </span>
@@ -801,11 +801,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         <span className="min-w-0">
                           <span className="flex items-center gap-1.5">
                             <AlarmClock className="h-3 w-3 shrink-0 text-ink-faint" />
-                            <span className="truncate text-[12.5px] font-semibold text-ink group-hover:text-primary">
+                            <span className="truncate text-xs font-semibold text-ink group-hover:text-primary">
                               {j.name}
                             </span>
                           </span>
-                          <span className="tabular block truncate text-[10.5px] text-ink-faint">
+                          <span className="tabular block truncate text-micro text-ink-faint">
                             {j.next_run_at
                               ? `próxima corrida ${countdown(j.next_run_at)}`
                               : 'sin próxima corrida'}
@@ -814,7 +814,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         </span>
                         <span
                           className={clsx(
-                            'shrink-0 rounded-pill border px-2 py-0.5 text-[10.5px] font-semibold',
+                            'shrink-0 rounded-pill border px-2 py-0.5 text-micro font-semibold',
                             JOB_STATUS_TONE[j.status] ?? 'border-border bg-surface-2 text-ink-faint',
                           )}
                         >
@@ -842,11 +842,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                         className="group flex items-center justify-between gap-2 rounded-card px-2 py-1.5 transition-colors duration-150 hover:bg-surface-2"
                       >
                         <span className="min-w-0">
-                          <span className="block truncate text-[12.5px] font-semibold text-ink group-hover:text-primary">
+                          <span className="block truncate text-xs font-semibold text-ink group-hover:text-primary">
                             {c.title || 'Conversación sin título'}
                           </span>
                           <span
-                            className="tabular block truncate text-[10.5px] text-ink-faint"
+                            className="tabular block truncate text-micro text-ink-faint"
                             title={absoluteTime(c.updated_at)}
                           >
                             {relativeTime(c.updated_at)}
@@ -866,27 +866,27 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
         <Panel className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <SectionLabel>Acceso real a herramientas</SectionLabel>
-            <span className="text-[11px] text-ink-faint">
+            <span className="text-micro text-ink-faint">
               <span className="tabular">{reachableTools}</span> de{' '}
               <span className="tabular">{catalog.length}</span> herramientas a su alcance
             </span>
           </div>
 
           {teams.length === 0 ? (
-            <p className="mt-3 flex items-start gap-2 text-[12.5px] text-ink-muted">
+            <p className="mt-3 flex items-start gap-2 text-xs text-ink-muted">
               <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald" />
               No está en ningún equipo, así que nada le resta acceso: puede usar todas las
               herramientas que le permita su agente.
             </p>
           ) : denials.length === 0 ? (
-            <p className="mt-3 flex items-start gap-2 text-[12.5px] text-ink-muted">
+            <p className="mt-3 flex items-start gap-2 text-xs text-ink-muted">
               <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald" />
               {teams.length === 1 ? 'Su equipo no le bloquea nada' : 'Sus equipos no le bloquean nada'}
               : puede usar todas las herramientas que le permita su agente.
             </p>
           ) : (
             <div className="mt-3">
-              <div className="text-[11.5px] font-semibold text-ink">
+              <div className="text-micro font-semibold text-ink">
                 Bloqueado por sus equipos
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -907,7 +907,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                   );
                 })}
               </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
+              <p className="mt-2 text-micro leading-relaxed text-ink-faint">
                 Los equipos solo restan: entrar a otro equipo nunca devuelve una herramienta
                 bloqueada.
               </p>
@@ -916,7 +916,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
           <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-3">
             <div>
-              <div className="text-[11px] font-semibold text-emerald">
+              <div className="text-micro font-semibold text-emerald">
                 Familias abiertas (<span className="tabular">{openFamilies.length}</span>)
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -932,7 +932,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
               </div>
             </div>
             <div>
-              <div className="text-[11px] font-semibold text-amber">
+              <div className="text-micro font-semibold text-amber">
                 Parcialmente restringidas (<span className="tabular">{partialFamilies.length}</span>)
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -955,7 +955,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
               </div>
             </div>
             <div>
-              <div className="text-[11px] font-semibold text-rose">
+              <div className="text-micro font-semibold text-rose">
                 Bloqueadas del todo (<span className="tabular">{closedFamilies.length}</span>)
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -984,24 +984,24 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             }
           />
           {usage.legacySchema && (
-            <p className="border-b border-border bg-amber-soft px-4 py-2 text-[11.5px] text-amber">
+            <p className="border-b border-border bg-amber-soft px-4 py-2 text-micro text-amber">
               Esta base de datos todavía no registra superficie, riesgo ni decisión.
             </p>
           )}
           {usage.recent.length === 0 ? (
             <div className="px-4 py-12 text-center">
               <Workflow className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
-              <p className="text-[13px] font-semibold text-ink">
+              <p className="text-sm font-semibold text-ink">
                 Nada en los últimos {WINDOW_DAYS} días
               </p>
-              <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
                 Sus llamadas a herramientas, turnos de chat y rutinas van cayendo aquí a medida que
                 ocurren.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
+              <table className="w-full text-xs">
                 <thead className="border-b border-border-strong bg-surface-2">
                   <tr className="text-left">
                     <th className="field-label px-4 py-2.5">Cuándo</th>
@@ -1036,7 +1036,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                             {isAgentTurn(e.tool_id) ? 'Turno de chat' : toolLabel(e.tool_id).label}
                           </div>
                           {!isAgentTurn(e.tool_id) && (
-                            <div className="tabular truncate text-[10.5px] text-ink-faint">
+                            <div className="tabular truncate text-micro text-ink-faint">
                               {e.tool_id}
                             </div>
                           )}
@@ -1077,7 +1077,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <div className="border-t border-border px-4 py-2.5 text-right">
             <Link
               href={`/admin/audit?user=${user.id}&range=30d`}
-              className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-micro font-semibold text-primary hover:underline"
             >
               Ver todo en la auditoría
               <ChevronRight className="h-3.5 w-3.5" />

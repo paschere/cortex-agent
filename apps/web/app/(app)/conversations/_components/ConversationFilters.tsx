@@ -33,7 +33,7 @@ export function ConversationFilters({ surface, q }: { surface: SurfaceFilter; q:
               role="tab"
               aria-selected={active}
               className={clsx(
-                'rounded-pill px-3 py-1.5 text-[12px] font-semibold transition-colors',
+                'rounded-pill px-3 py-1.5 text-xs font-semibold transition-colors',
                 active
                   ? 'bg-primary text-white'
                   : 'text-ink-muted hover:bg-surface-2 hover:text-ink',
@@ -55,7 +55,7 @@ export function ConversationFilters({ surface, q }: { surface: SurfaceFilter; q:
             defaultValue={q}
             placeholder="Buscar por título…"
             aria-label="Buscar conversaciones por título"
-            className="w-56 rounded-card border border-border bg-surface py-1.5 pl-8 pr-3 text-[12.5px] text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+            className="w-56 rounded-card border border-border bg-surface py-1.5 pl-8 pr-3 text-xs text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
           />
         </div>
         {q && (

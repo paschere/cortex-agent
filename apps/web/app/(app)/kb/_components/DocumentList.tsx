@@ -216,7 +216,7 @@ export function DocumentList({
 
   if (isLoading) {
     return (
-      <p className="flex items-center gap-1.5 py-2 text-[12.5px] text-ink-faint">
+      <p className="flex items-center gap-1.5 py-2 text-xs text-ink-faint">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         Cargando…
       </p>
@@ -225,7 +225,7 @@ export function DocumentList({
 
   if (docs.length === 0) {
     return (
-      <p className="max-w-lg py-2 text-[12.5px] leading-relaxed text-ink-muted">
+      <p className="max-w-lg py-2 text-xs leading-relaxed text-ink-muted">
         {spaceName} está vacío. Mete una tarifa, un instructivo, la grabación de una llamada — algo
         que si no, te toca explicar dos veces.
       </p>
@@ -241,8 +241,8 @@ export function DocumentList({
           <section key={group.label}>
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-b border-border pb-1.5">
               <span className="field-label">{group.label}</span>
-              <span className="tabular text-[11px] text-ink-faint">{num(members.length)}</span>
-              <span className="text-[11px] text-ink-faint">· {group.hint}</span>
+              <span className="tabular text-micro text-ink-faint">{num(members.length)}</span>
+              <span className="text-micro text-ink-faint">· {group.hint}</span>
             </div>
             <ul className="divide-y divide-border">
               {members.map((d) => (
@@ -335,11 +335,11 @@ function Row({
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="min-w-0 truncate text-[13px] font-medium text-ink">{d.title}</span>
+            <span className="min-w-0 truncate text-sm font-medium text-ink">{d.title}</span>
             {(pointed || hit) && !fresh && (
               <span
                 className={clsx(
-                  'shrink-0 rounded-card px-2 py-0.5 text-[10.5px] font-semibold',
+                  'shrink-0 rounded-card px-2 py-0.5 text-micro font-semibold',
                   pointed ? 'bg-primary text-white' : 'bg-amber-soft text-amber',
                 )}
               >
@@ -348,7 +348,7 @@ function Row({
             )}
             <span
               className={clsx(
-                'inline-flex shrink-0 items-center gap-1 rounded-card px-2 py-0.5 text-[10.5px] font-semibold',
+                'inline-flex shrink-0 items-center gap-1 rounded-card px-2 py-0.5 text-micro font-semibold',
                 isDrive
                   ? 'bg-sky-soft text-sky'
                   : isMeeting
@@ -377,7 +377,7 @@ function Row({
             </span>
           </div>
 
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-faint">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-micro text-ink-faint">
             <span className="inline-flex items-center gap-1.5">
               <span
                 className={clsx(
@@ -442,7 +442,7 @@ function Row({
             <button
               type="button"
               onClick={() => onOpenFragments(d.id)}
-              className="inline-flex items-center gap-1 rounded-pill border border-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:border-primary/40 hover:text-primary"
+              className="inline-flex items-center gap-1 rounded-pill border border-border px-2.5 py-1 text-micro font-semibold text-ink-muted transition-colors hover:border-primary/40 hover:text-primary"
             >
               <ScanText className="h-3.5 w-3.5" />
               Ver sus fragmentos
@@ -455,7 +455,7 @@ function Row({
                   value=""
                   disabled={working}
                   onChange={(e) => onMove(d, e.target.value)}
-                  className="h-7 rounded-card border border-border bg-surface px-2.5 text-[11.5px] font-medium text-ink-muted focus:border-border-strong disabled:opacity-50"
+                  className="h-7 rounded-card border border-border bg-surface px-2.5 text-micro font-medium text-ink-muted focus:border-border-strong disabled:opacity-50"
                   aria-label={`Mover ${d.title} a otro espacio`}
                 >
                   <option value="">Mover a…</option>
@@ -471,7 +471,7 @@ function Row({
                 type="button"
                 disabled={working}
                 onClick={() => onConfirm(confirming ? null : d.id)}
-                className="rounded-pill px-2.5 py-1 text-[11.5px] font-semibold text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
+                className="rounded-pill px-2.5 py-1 text-micro font-semibold text-ink-faint transition-colors hover:bg-rose-soft hover:text-rose disabled:opacity-50"
               >
                 {working ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Quitar'}
               </button>
@@ -482,7 +482,7 @@ function Row({
 
       {confirming && (
         <div className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2.5">
-          <p className="text-[12px] leading-relaxed text-ink">
+          <p className="text-xs leading-relaxed text-ink">
             Quitar <b>{d.title}</b> lo borra junto con todo lo que Cortex aprendió de él. Las
             respuestas que lo citaban dejan de citarlo. No se puede deshacer.
           </p>
@@ -490,14 +490,14 @@ function Row({
             <button
               type="button"
               onClick={() => onRemove(d)}
-              className="rounded-card bg-rose px-3 py-1 text-[11.5px] font-semibold text-white transition-opacity hover:opacity-90"
+              className="rounded-card bg-rose px-3 py-1 text-micro font-semibold text-white transition-opacity hover:opacity-90"
             >
               Quitarlo
             </button>
             <button
               type="button"
               onClick={() => onConfirm(null)}
-              className="rounded-card px-2.5 py-1 text-[11.5px] font-semibold text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+              className="rounded-card px-2.5 py-1 text-micro font-semibold text-ink-muted transition-colors hover:bg-surface hover:text-ink"
             >
               Dejarlo
             </button>
@@ -506,12 +506,12 @@ function Row({
       )}
 
       {error && (
-        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+        <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
           {error}
         </p>
       )}
       {note && !error && (
-        <p className="mt-2 rounded-card border border-border bg-surface-2 px-3 py-2 text-[11.5px] text-ink-muted">
+        <p className="mt-2 rounded-card border border-border bg-surface-2 px-3 py-2 text-micro text-ink-muted">
           {note}
         </p>
       )}

@@ -173,10 +173,10 @@ export function ChallengeHelper({
           <ShieldQuestion className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold text-ink">
+          <div className="text-sm font-semibold text-ink">
             El portal quiere comprobar que no eres un robot
           </div>
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
             {expired
               ? 'El navegador ya se cerró, así que esta verificación se quedó sin resolver.'
               : 'Resuélvelo aquí abajo y Cortex sigue con el trámite desde donde se quedó. El navegador se queda abierto un rato; nada de lo que hagas aquí se guarda.'}
@@ -184,7 +184,7 @@ export function ChallengeHelper({
         </div>
         <span
           className={clsx(
-            'shrink-0 rounded-pill px-2.5 py-1 text-[11.5px] font-semibold tabular-nums',
+            'shrink-0 rounded-pill px-2.5 py-1 text-micro font-semibold tabular-nums',
             expired ? 'bg-rose-soft text-rose' : 'bg-surface-2 text-ink-muted',
           )}
         >
@@ -194,7 +194,7 @@ export function ChallengeHelper({
 
       {view && (
         <div className="border-b border-border px-5 py-2">
-          <div className="truncate font-mono text-[11px] text-ink-faint" title={view.url}>
+          <div className="truncate font-mono text-micro text-ink-faint" title={view.url}>
             {view.url}
           </div>
         </div>
@@ -202,11 +202,11 @@ export function ChallengeHelper({
 
       <div className="p-5">
         {error ? (
-          <p className="rounded-card bg-rose-soft px-4 py-3 text-[12.5px] leading-relaxed text-rose">
+          <p className="rounded-card bg-rose-soft px-4 py-3 text-xs leading-relaxed text-rose">
             {error}
           </p>
         ) : expired ? (
-          <p className="rounded-card bg-surface-2 px-4 py-3 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="rounded-card bg-surface-2 px-4 py-3 text-xs leading-relaxed text-ink-muted">
             La sesión se cerró sola. Vuelve a ejecutar el trámite para intentarlo otra vez.
           </p>
         ) : view ? (
@@ -229,7 +229,7 @@ export function ChallengeHelper({
             )}
           </div>
         ) : (
-          <div className="grid h-40 place-items-center text-[12.5px] text-ink-faint">
+          <div className="grid h-40 place-items-center text-xs text-ink-faint">
             Abriendo la pantalla del navegador…
           </div>
         )}
@@ -253,12 +253,12 @@ export function ChallengeHelper({
                 name="texto"
                 maxLength={200}
                 placeholder="Si te pide escribir algo, escríbelo aquí"
-                className="min-w-0 flex-1 rounded-pill border border-border bg-surface-2 px-3.5 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                className="min-w-0 flex-1 rounded-pill border border-border bg-surface-2 px-3.5 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
               />
               <button
                 type="submit"
                 disabled={busy || resuming}
-                className="rounded-pill border border-border px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-ink-faint"
+                className="rounded-pill border border-border px-3.5 py-2 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-ink-faint"
               >
                 Escribir
               </button>
@@ -266,7 +266,7 @@ export function ChallengeHelper({
                 type="button"
                 disabled={busy || resuming}
                 onClick={() => void send({ kind: 'key', text: 'Enter' })}
-                className="rounded-pill border border-border px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-ink-faint"
+                className="rounded-pill border border-border px-3.5 py-2 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-ink-faint"
               >
                 Enter
               </button>
@@ -277,7 +277,7 @@ export function ChallengeHelper({
                 type="button"
                 onClick={() => void resume()}
                 disabled={resuming || busy}
-                className="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-card transition-colors duration-150 hover:bg-primary-strong disabled:cursor-not-allowed disabled:bg-ink-faint"
+                className="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition-colors duration-150 hover:bg-primary-strong disabled:cursor-not-allowed disabled:bg-ink-faint"
               >
                 {resuming && <Loader2 className="h-4 w-4 animate-spin" />}
                 {resuming ? 'Siguiendo con el trámite…' : 'Ya lo resolví, sigue'}
@@ -286,7 +286,7 @@ export function ChallengeHelper({
                 type="button"
                 onClick={() => void refresh()}
                 disabled={busy || resuming}
-                className="text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:text-ink disabled:text-ink-faint"
+                className="text-xs font-semibold text-ink-muted transition-colors duration-150 hover:text-ink disabled:text-ink-faint"
               >
                 Actualizar la imagen
               </button>

@@ -103,7 +103,7 @@ export default function SignupPage() {
               on the screen. */}
           <Link
             href="/login"
-            className="inline-flex w-full items-center justify-center rounded-pill border border-border bg-surface px-3.5 py-2.5 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex w-full items-center justify-center rounded-pill border border-border bg-surface px-3.5 py-2.5 text-sm font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
           >
             Volver a iniciar sesión
           </Link>
@@ -182,7 +182,7 @@ export default function SignupPage() {
           {loading === 'google' ? 'Redirigiendo…' : 'Continuar con Google'}
         </Button>
 
-        <p className="mt-4 text-center text-[12px] text-ink-faint">
+        <p className="mt-4 text-center text-xs text-ink-faint">
           ¿Ya tienes cuenta?{' '}
           <Link href="/login" className="font-semibold text-primary hover:underline">
             Inicia sesión

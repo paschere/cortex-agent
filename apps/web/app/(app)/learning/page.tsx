@@ -45,7 +45,7 @@ export default async function LearningPage() {
         actions={
           <Link
             href="/evaluation"
-            className="inline-flex items-center gap-1 rounded-pill border border-border px-3 py-1.5 text-[12.5px] font-semibold text-ink-muted transition-colors duration-150 hover:border-border-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+            className="inline-flex items-center gap-1 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:border-border-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
           >
             ¿Mejoraron las respuestas? <ArrowRight className="h-3.5 w-3.5" />
           </Link>

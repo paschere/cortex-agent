@@ -32,10 +32,10 @@ function EmptyState({ filters }: { filters: AuditFilters }) {
   return (
     <div className="px-4 py-12 text-center">
       <ScrollText className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
-      <p className="text-[13px] font-semibold text-ink">
+      <p className="text-sm font-semibold text-ink">
         {unfiltered ? 'Todavía no se ha registrado nada' : 'Ningún evento coincide con estos filtros'}
       </p>
-      <p className="mx-auto mt-1 max-w-md text-[12.5px] leading-relaxed text-ink-muted">
+      <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
         {unfiltered
           ? 'Cada llamada a una herramienta, cada turno de chat y cada rutina cae aquí apenas ocurre, con quién la pidió y qué devolvió.'
           : 'Amplía el rango o quita un filtro para ver más del registro.'}
@@ -43,7 +43,7 @@ function EmptyState({ filters }: { filters: AuditFilters }) {
       {!unfiltered && (
         <Link
           href="/admin/audit?range=all"
-          className="mt-4 inline-block rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+          className="mt-4 inline-block rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-sm font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
         >
           Quitar todos los filtros
         </Link>
@@ -100,7 +100,7 @@ export default async function AuditPage({
         actions={
           <a
             href={exportHref}
-            className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-2 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-sm font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
           >
             <Download className="h-4 w-4" />
             Exportar CSV
@@ -116,7 +116,7 @@ export default async function AuditPage({
       />
 
       {legacySchema && (
-        <div className="mb-4 flex items-start gap-2.5 rounded-card border border-border bg-amber-soft p-3 text-[12.5px] text-amber shadow-card">
+        <div className="mb-4 flex items-start gap-2.5 rounded-card border border-border bg-amber-soft p-3 text-xs text-amber shadow-card">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             Esta base de datos todavía no corrió la migración de seguridad, así que no se registran
@@ -133,7 +133,7 @@ export default async function AuditPage({
         )}
       </Panel>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-faint">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-micro text-ink-faint">
         <span>
           Mostrando <span className="tabular">{rows.length}</span>
           {typeof total === 'number' && total > rows.length ? (

@@ -111,7 +111,7 @@ export function DelegatedNotice({ entry, exercised, canRevoke, onRevoked }: Dele
    */
   if (entry.variant === 'brief') {
     return (
-      <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-[11.5px] text-ink-faint">
+      <p className="mt-2 flex flex-wrap items-center gap-x-1.5 text-micro text-ink-faint">
         <KeyRound className="h-3 w-3 shrink-0" aria-hidden />
         <span>
           {headline}, bajo el mismo mandato «{entry.label}».
@@ -128,22 +128,22 @@ export function DelegatedNotice({ entry, exercised, canRevoke, onRevoked }: Dele
       <div className="flex items-start gap-2.5">
         <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="text-[12.5px] font-semibold leading-relaxed text-ink">
+          <p className="text-xs font-semibold leading-relaxed text-ink">
             {headline}
             {phrase ? `, ${phrase}` : ''}.
           </p>
-          <p className="mt-0.5 text-[12px] leading-relaxed text-ink-muted">
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
             Está dentro del mandato «{entry.label}»{phrase ? '' : ', que un administrador concedió'}
             . Quedó registrado en la auditoría.
             {note ? ` ${note}` : ''}
           </p>
 
-          {error && <p className="mt-1 text-[12px] font-medium text-rose">{error}</p>}
+          {error && <p className="mt-1 text-xs font-medium text-rose">{error}</p>}
 
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
             <Link
               href="/admin/mandates"
-              className="text-[12px] font-semibold text-primary hover:underline"
+              className="text-xs font-semibold text-primary hover:underline"
             >
               Ver el mandato
             </Link>
@@ -153,7 +153,7 @@ export function DelegatedNotice({ entry, exercised, canRevoke, onRevoked }: Dele
                 onClick={revoke}
                 disabled={working}
                 className={clsx(
-                  'inline-flex items-center gap-1.5 text-[12px] font-semibold text-rose',
+                  'inline-flex items-center gap-1.5 text-xs font-semibold text-rose',
                   'transition-opacity duration-150 hover:underline disabled:opacity-50',
                   'motion-reduce:transition-none',
                 )}
@@ -170,7 +170,7 @@ export function DelegatedNotice({ entry, exercised, canRevoke, onRevoked }: Dele
               // Se dice quién puede, en vez de esconder el botón sin explicar:
               // conceder y revocar son la misma potestad, y quien no la tiene
               // necesita saber a quién pedírselo.
-              <span className="text-[11.5px] text-ink-faint">
+              <span className="text-micro text-ink-faint">
                 Solo un administrador puede revocarlo
               </span>
             )}

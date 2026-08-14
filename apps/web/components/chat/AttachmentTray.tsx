@@ -216,8 +216,8 @@ export function AttachmentTray({
           <div className="flex items-start gap-2.5">
             <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-ink">{pending.name}</p>
-              <p className="mt-0.5 text-[12px] leading-snug text-ink-muted">
+              <p className="truncate text-sm font-semibold text-ink">{pending.name}</p>
+              <p className="mt-0.5 text-xs leading-snug text-ink-muted">
                 ¿Lo guardo en la memoria de la empresa, o lo uso sólo para esta conversación?
               </p>
             </div>
@@ -234,11 +234,11 @@ export function AttachmentTray({
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {/* Memory */}
             <div className="flex flex-col rounded-sm border border-border bg-surface-2 p-2.5">
-              <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-ink">
                 <Brain className="h-3.5 w-3.5 text-primary" aria-hidden />
                 Guardar en la memoria
               </div>
-              <p className="mt-1 text-[11.5px] leading-snug text-ink-faint">
+              <p className="mt-1 text-micro leading-snug text-ink-faint">
                 Queda indexado y citable en las respuestas, también en las de otros si el espacio es
                 de la empresa.
               </p>
@@ -250,7 +250,7 @@ export function AttachmentTray({
                 id="att-space"
                 value={spaceId}
                 onChange={(e) => setSpaceId(e.target.value)}
-                className="mt-1 w-full rounded-sm border border-border bg-surface px-2 py-1.5 text-[12.5px] text-ink outline-none focus:border-primary/40"
+                className="mt-1 w-full rounded-sm border border-border bg-surface px-2 py-1.5 text-xs text-ink outline-none focus:border-primary/40"
               >
                 <option value="">Tus propias notas</option>
                 {spaces
@@ -268,7 +268,7 @@ export function AttachmentTray({
                 type="button"
                 disabled={busy}
                 onClick={() => void send('memory')}
-                className="mt-2.5 inline-flex items-center justify-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white shadow-pop transition-colors duration-150 hover:bg-primary-strong disabled:opacity-40 motion-reduce:transition-none"
+                className="mt-2.5 inline-flex items-center justify-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-pop transition-colors duration-150 hover:bg-primary-strong disabled:opacity-40 motion-reduce:transition-none"
               >
                 {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
                 Guardar
@@ -277,11 +277,11 @@ export function AttachmentTray({
 
             {/* This turn only */}
             <div className="flex flex-col rounded-sm border border-border bg-surface-2 p-2.5">
-              <div className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-ink">
                 <MessageSquare className="h-3.5 w-3.5 text-ink-muted" aria-hidden />
                 Sólo esta conversación
               </div>
-              <p className="mt-1 text-[11.5px] leading-snug text-ink-faint">
+              <p className="mt-1 text-micro leading-snug text-ink-faint">
                 Cortex lo lee para responderte aquí. No se indexa, no lo ve nadie más y se borra a
                 la semana.
               </p>
@@ -290,7 +290,7 @@ export function AttachmentTray({
                   type="button"
                   disabled={busy}
                   onClick={() => void send('turn')}
-                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-[12.5px] font-semibold text-ink transition-colors duration-150 hover:border-border-strong hover:bg-surface-2 disabled:opacity-40 motion-reduce:transition-none"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink transition-colors duration-150 hover:border-border-strong hover:bg-surface-2 disabled:opacity-40 motion-reduce:transition-none"
                 >
                   {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
                   Usar sólo aquí
@@ -300,7 +300,7 @@ export function AttachmentTray({
           </div>
 
           {error && (
-            <p role="alert" className="mt-2 text-[12px] text-rose">
+            <p role="alert" className="mt-2 text-xs text-rose">
               {error}
             </p>
           )}
@@ -336,7 +336,7 @@ function AttachmentRow({
   const ephemeral = attachment.disposition === 'turn';
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-card border border-border bg-surface px-3 py-2 text-[12px] shadow-card">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-card border border-border bg-surface px-3 py-2 text-xs shadow-card">
       {ephemeral ? (
         <MessageSquare className="h-3.5 w-3.5 shrink-0 text-ink-faint" aria-hidden />
       ) : (
@@ -373,7 +373,7 @@ function AttachmentRow({
         <button
           type="button"
           onClick={() => onAsk(`Sobre "${attachment.filename}": `)}
-          className="ml-auto inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[11.5px] font-medium text-primary-ink transition-colors duration-150 hover:bg-primary-soft motion-reduce:transition-none"
+          className="ml-auto inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-micro font-medium text-primary-ink transition-colors duration-150 hover:bg-primary-soft motion-reduce:transition-none"
         >
           <Check className="h-3 w-3" aria-hidden />
           Preguntar por él

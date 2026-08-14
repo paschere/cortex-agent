@@ -178,7 +178,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     <div className="mx-auto max-w-[1180px] px-6 py-8">
       <Link
         href="/clients"
-        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-ink-muted transition-colors duration-150 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-muted transition-colors duration-150 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
         Clientes
@@ -192,12 +192,12 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-[22px] font-extrabold tracking-[-0.02em] text-ink">
+              <h1 className="text-xl font-extrabold tracking-[-0.02em] text-ink">
                 {client.name}
               </h1>
               <span
                 className={clsx(
-                  'rounded-pill px-2 py-0.5 text-[10.5px] font-bold',
+                  'rounded-pill px-2 py-0.5 text-micro font-bold',
                   STATUS_TONE[status] === 'emerald' && 'bg-emerald-soft text-emerald',
                   STATUS_TONE[status] === 'amber' && 'bg-amber-soft text-amber',
                   STATUS_TONE[status] === 'sky' && 'bg-sky-soft text-sky',
@@ -208,9 +208,9 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
               </span>
             </div>
             {client.legal_name && (
-              <p className="mt-0.5 text-[13px] text-ink-muted">{client.legal_name}</p>
+              <p className="mt-0.5 text-sm text-ink-muted">{client.legal_name}</p>
             )}
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12.5px] text-ink-muted">
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-ink-muted">
               {client.tax_id && (
                 <span className="tabular font-medium text-ink">NIT {fullNit(client.tax_id)}</span>
               )}
@@ -236,7 +236,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                 {(client.services ?? []).map((s) => (
                   <span
                     key={s}
-                    className="rounded-pill bg-surface-2 px-2.5 py-1 text-[11.5px] font-medium text-ink-muted"
+                    className="rounded-pill bg-surface-2 px-2.5 py-1 text-micro font-medium text-ink-muted"
                   >
                     {SERVICE_LABEL[s as ClientService] ?? s}
                   </span>
@@ -261,7 +261,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
               }
             />
             {openCommitments.length === 0 ? (
-              <p className="px-5 pb-5 pt-3 text-[13px] leading-snug text-ink-muted">
+              <p className="px-5 pb-5 pt-3 text-sm leading-snug text-ink-muted">
                 No hay nada con fecha a nombre de este cliente. Los vencimientos se registran en la
                 pantalla de Vencimientos y llegan acá solos cuando la contraparte es este cliente.
               </p>
@@ -270,8 +270,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                 {openCommitments.map((c) => (
                   <li key={c.id} className="flex items-center justify-between gap-3 px-5 py-3">
                     <div className="min-w-0">
-                      <p className="truncate text-[13.5px] font-medium text-ink">{c.title}</p>
-                      <p className="mt-0.5 text-[12px] text-ink-faint">
+                      <p className="truncate text-sm font-medium text-ink">{c.title}</p>
+                      <p className="mt-0.5 text-xs text-ink-faint">
                         {c.kindLabel}
                         {c.amountCop ? ` · ${cop(c.amountCop)}` : ''}
                       </p>
@@ -279,7 +279,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                     <div className="shrink-0 text-right">
                       <p
                         className={clsx(
-                          'tabular text-[13px] font-semibold',
+                          'tabular text-sm font-semibold',
                           c.state === 'overdue' && 'text-rose',
                           c.state === 'due_soon' && 'text-amber',
                           c.state === 'in_force' && 'text-ink',
@@ -287,7 +287,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                       >
                         {c.dueLabel}
                       </p>
-                      <p className="text-[11.5px] text-ink-faint">{whenPhrase(c.daysLeft)}</p>
+                      <p className="text-micro text-ink-faint">{whenPhrase(c.daysLeft)}</p>
                     </div>
                   </li>
                 ))}
@@ -309,11 +309,11 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             />
             {links.length === 0 ? (
               <div className="px-5 pb-6 pt-3">
-                <p className="text-[13px] leading-snug text-ink-muted">
+                <p className="text-sm leading-snug text-ink-muted">
                   Todavía no hay nada colgado de este cliente. Cortex ya guarda correos, reuniones,
                   documentos y grupos: lo que falta es decirle cuáles son de esta empresa.
                 </p>
-                <p className="mt-2 text-[13px] leading-snug text-ink-muted">
+                <p className="mt-2 text-sm leading-snug text-ink-muted">
                   Registrar el dominio de su correo —acá al lado— es lo que más rinde: desde ese
                   momento, todo lo que llegue de ahí se le atribuye solo.
                 </p>
@@ -329,10 +329,10 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="truncate text-[13.5px] font-medium text-ink">
+                          <span className="truncate text-sm font-medium text-ink">
                             {link.label}
                           </span>
-                          <span className="text-[11.5px] text-ink-faint">{link.kindLabel}</span>
+                          <span className="text-micro text-ink-faint">{link.kindLabel}</span>
                         </div>
                         <div className="mt-1.5 flex flex-wrap items-center gap-2">
                           {/*
@@ -347,7 +347,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                             detail={link.evidence ?? undefined}
                           />
                           {!link.automatic && (
-                            <span className="text-[11.5px] text-ink-faint">
+                            <span className="text-micro text-ink-faint">
                               confirmado por una persona
                             </span>
                           )}

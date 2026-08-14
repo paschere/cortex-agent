@@ -111,7 +111,7 @@ function OpenerCard({
       type="button"
       // CSS animation, not framer-motion: globals.css already neutralises it
       // under prefers-reduced-motion.
-      className="animate-rise group flex items-start gap-2.5 rounded-card border border-border bg-surface p-3.5 text-left text-[13px] leading-snug text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-ink hover:shadow-pop motion-reduce:transform-none motion-reduce:transition-none"
+      className="animate-rise group flex items-start gap-2.5 rounded-card border border-border bg-surface p-3.5 text-left text-sm leading-snug text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:border-primary/30 hover:bg-primary-soft hover:text-ink hover:shadow-pop motion-reduce:transform-none motion-reduce:transition-none"
       style={{ animationDelay: `${60 + index * 40}ms` }}
       onClick={() => onSuggestion(opener.text)}
     >
@@ -122,7 +122,7 @@ function OpenerCard({
           // La procedencia se dibuja porque es la mitad del valor: una tarjeta
           // que nombra un documento tiene que decir que lo está nombrando, o
           // se lee como una frase de ejemplo más.
-          <span className="mt-1 block truncate text-[11px] text-ink-faint">{opener.hint}</span>
+          <span className="mt-1 block truncate text-micro text-ink-faint">{opener.hint}</span>
         ) : null}
       </span>
     </button>
@@ -139,8 +139,8 @@ function FirstStepCard({ step, index }: { step: FirstStep; index: number }) {
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
       <span className="min-w-0">
-        <span className="block text-[13px] font-semibold leading-snug text-ink">{step.label}</span>
-        <span className="mt-1 block text-[12px] leading-snug text-ink-muted">{step.blurb}</span>
+        <span className="block text-sm font-semibold leading-snug text-ink">{step.label}</span>
+        <span className="mt-1 block text-xs leading-snug text-ink-muted">{step.blurb}</span>
       </span>
     </Link>
   );
@@ -185,7 +185,7 @@ export function EmptyState({
         <h2 className="mt-4 text-lg font-bold tracking-tight text-ink">
           {blank ? 'Todavía no hay nada que preguntarle' : copy.title}
         </h2>
-        <p className="mt-1.5 max-w-md text-[13px] leading-snug text-ink-muted">
+        <p className="mt-1.5 max-w-md text-sm leading-snug text-ink-muted">
           {blank
             ? 'Cortex contesta con lo que tenga tu empresa adentro, y este espacio está recién creado. Empieza por aquí y la próxima vez esta pantalla te propone preguntas con tus propios documentos.'
             : copy.subtitle}
@@ -198,7 +198,7 @@ export function EmptyState({
         sólo una de las dos manda a alguien a subir de nuevo algo que ya está.
       */}
       {data?.notice || openers.isError ? (
-        <p className="animate-rise mb-3 flex max-w-xl items-start gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2 text-left text-[12px] leading-snug text-ink-muted">
+        <p className="animate-rise mb-3 flex max-w-xl items-start gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2 text-left text-xs leading-snug text-ink-muted">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" aria-hidden />
           <span>
             {data?.notice ??

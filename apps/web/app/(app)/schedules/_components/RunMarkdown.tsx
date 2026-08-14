@@ -20,7 +20,7 @@ const PROSE = clsx(
   'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
   'prose-code:rounded prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-medium prose-code:text-primary-ink prose-code:before:content-[""] prose-code:after:content-[""]',
   'prose-pre:rounded-card prose-pre:border prose-pre:border-border',
-  'prose-table:text-[13px] prose-th:text-ink prose-td:text-ink-muted',
+  'prose-table:text-sm prose-th:text-ink prose-td:text-ink-muted',
 );
 
 /** Renders GFM markdown — headings, tables, lists — inside a prose container. */
@@ -56,7 +56,7 @@ export function RunOutput({ text, className }: { text: string; className?: strin
         <button
           type="button"
           onClick={() => setFull(!full)}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transform-none motion-reduce:transition-none"
         >
           {full ? (
             <>

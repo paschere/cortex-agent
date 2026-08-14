@@ -254,13 +254,13 @@ function PanelBody({
   if (load.state === 'error') {
     return (
       <div className="p-4">
-        <div className="rounded-card border border-rose/25 bg-rose-soft px-4 py-3 text-[12.5px] leading-relaxed text-rose">
+        <div className="rounded-card border border-rose/25 bg-rose-soft px-4 py-3 text-xs leading-relaxed text-rose">
           {load.message}
         </div>
         <button
           type="button"
           onClick={onRefresh}
-          className="mt-2 text-[12.5px] font-semibold text-primary underline underline-offset-2"
+          className="mt-2 text-xs font-semibold text-primary underline underline-offset-2"
         >
           Reintentar
         </button>
@@ -285,7 +285,7 @@ function PanelBody({
   if (sentinel) {
     return (
       <div className="p-4">
-        <div className="rounded-card border border-amber/25 bg-amber-soft px-4 py-3 text-[12.5px] leading-relaxed text-amber">
+        <div className="rounded-card border border-amber/25 bg-amber-soft px-4 py-3 text-xs leading-relaxed text-amber">
           {sentinel}
         </div>
       </div>
@@ -332,14 +332,14 @@ function PanelHeader({
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary ring-1 ring-inset ring-primary/15">
         <Icon strokeWidth={1.75} className="h-3.5 w-3.5" />
       </span>
-      <div className="min-w-0 flex-1 text-[13px] font-semibold text-ink">{shape.title}</div>
+      <div className="min-w-0 flex-1 text-sm font-semibold text-ink">{shape.title}</div>
 
       {/* La puerta a la pantalla completa. Ésta SÍ navega, y por eso es un
           enlace de verdad: quien la pulsa está pidiendo la pantalla, no el
           resumen. Ningún destino desaparece — sólo deja de ser obligatorio. */}
       <Link
         href={shape.href}
-        className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-[11.5px] font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-micro font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         Ver todo
         <ArrowUpRight strokeWidth={1.75} className="h-3.5 w-3.5" />

@@ -171,7 +171,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
   // ---- Settled states ----------------------------------------------------
   if (status === 'sent') {
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-card border border-emerald/25 bg-emerald-soft px-4 py-3 text-[13px] font-semibold text-emerald shadow-card">
+      <div className="flex flex-wrap items-center gap-2 rounded-card border border-emerald/25 bg-emerald-soft px-4 py-3 text-sm font-semibold text-emerald shadow-card">
         <Check className="h-4 w-4 shrink-0" />
         Enviada — {draft.kindLabel} a {draft.to.join(', ')}
       </div>
@@ -179,7 +179,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
   }
   if (status === 'dismissed') {
     return (
-      <div className="flex items-center gap-2 rounded-card border border-border bg-surface-2 px-4 py-3 text-[13px] text-ink-muted">
+      <div className="flex items-center gap-2 rounded-card border border-border bg-surface-2 px-4 py-3 text-sm text-ink-muted">
         <X className="h-4 w-4 shrink-0" />
         Descartada — no se envió nada
       </div>
@@ -208,17 +208,17 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold text-primary-ink">
+            <span className="text-micro font-semibold text-primary-ink">
               Acción propuesta · {draft.kindLabel}
             </span>
-            <span className="tabular inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2 py-0.5 text-[10.5px] font-semibold text-ink-muted">
+            <span className="tabular inline-flex items-center gap-1 rounded-pill border border-border bg-surface px-2 py-0.5 text-micro font-semibold text-ink-muted">
               <Clock className="h-3 w-3" />
               {expiryPhrase(draft.expiresAt)}
             </span>
           </div>
           {/* Where it came from. An action with no derivation is a suggestion,
               and this product does not make suggestions. */}
-          <p className="mt-1 flex items-start gap-1.5 text-[12.5px] leading-snug text-ink-muted">
+          <p className="mt-1 flex items-start gap-1.5 text-xs leading-snug text-ink-muted">
             <Lightbulb className="mt-[3px] h-3.5 w-3.5 shrink-0 text-primary" />
             {draft.rationale}
           </p>
@@ -230,17 +230,17 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
             before anything leaves. */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="field-label">Para</span>
-          <span className="tabular text-[12.5px] font-medium text-ink">{draft.to.join(', ')}</span>
+          <span className="tabular text-xs font-medium text-ink">{draft.to.join(', ')}</span>
           {draft.cc.length > 0 && (
             <>
               <span className="field-label">Copia</span>
-              <span className="tabular text-[12.5px] text-ink-muted">{draft.cc.join(', ')}</span>
+              <span className="tabular text-xs text-ink-muted">{draft.cc.join(', ')}</span>
             </>
           )}
         </div>
 
         {external && (
-          <p className="flex items-start gap-1.5 rounded-sm border border-amber/25 bg-amber-soft px-2.5 py-1.5 text-[12px] leading-snug text-amber">
+          <p className="flex items-start gap-1.5 rounded-sm border border-amber/25 bg-amber-soft px-2.5 py-1.5 text-xs leading-snug text-amber">
             <AlertTriangle className="mt-[2px] h-3.5 w-3.5 shrink-0" />
             Sale de tu Gmail hacia una persona fuera de la empresa y no se puede recuperar.
           </p>
@@ -253,7 +253,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="mt-1 w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-[13px] font-semibold text-ink"
+                className="mt-1 w-full rounded-sm border border-border bg-surface px-2.5 py-1.5 text-sm font-semibold text-ink"
               />
             </label>
             <label className="block">
@@ -262,7 +262,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 rows={12}
-                className="scroll-slim mt-1 w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-[13px] leading-relaxed text-ink"
+                className="scroll-slim mt-1 w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-sm leading-relaxed text-ink"
               />
             </label>
           </div>
@@ -270,7 +270,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
           <div className="space-y-1.5">
             <p className="text-sm font-semibold text-ink">{draft.subject}</p>
             {/* The entire message. Nothing collapsed, nothing summarised. */}
-            <p className="scroll-slim max-h-80 overflow-auto whitespace-pre-wrap rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-[13px] leading-relaxed text-ink-muted">
+            <p className="scroll-slim max-h-80 overflow-auto whitespace-pre-wrap rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-sm leading-relaxed text-ink-muted">
               {draft.body}
             </p>
           </div>
@@ -287,7 +287,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
         </div>
 
         {status === 'error' && message && (
-          <p className="rounded-sm border border-rose/25 bg-rose-soft px-2.5 py-1.5 text-[12px] leading-snug text-rose">
+          <p className="rounded-sm border border-rose/25 bg-rose-soft px-2.5 py-1.5 text-xs leading-snug text-rose">
             {message}
           </p>
         )}
@@ -299,7 +299,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
                 type="button"
                 onClick={saveEdit}
                 disabled={busy}
-                className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 motion-reduce:transform-none motion-reduce:transition-none"
+                className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 motion-reduce:transform-none motion-reduce:transition-none"
               >
                 {status === 'saving' ? (
                   <>
@@ -320,7 +320,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
                   setStatus('idle');
                 }}
                 disabled={busy}
-                className="rounded-pill px-3 py-2 text-[13px] font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60"
+                className="rounded-pill px-3 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60"
               >
                 Cancelar
               </button>
@@ -331,7 +331,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
                 type="button"
                 onClick={send}
                 disabled={busy}
-                className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[13px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+                className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
               >
                 {status === 'sending' ? (
                   <>
@@ -349,7 +349,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
                 type="button"
                 onClick={() => setStatus('editing')}
                 disabled={busy}
-                className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-2 text-[13px] font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60"
               >
                 <Pencil className="h-3.5 w-3.5" /> Editar
               </button>
@@ -357,7 +357,7 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
                 type="button"
                 onClick={dismiss}
                 disabled={busy}
-                className="rounded-pill px-3 py-2 text-[13px] font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60"
+                className="rounded-pill px-3 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60"
               >
                 {status === 'dismissing' ? 'Descartando…' : 'Descartar'}
               </button>
@@ -389,19 +389,19 @@ function SettledSummary({ action }: { action: ActionView }) {
         ) : (
           <X className="h-4 w-4 shrink-0 text-ink-faint" />
         )}
-        <span className="text-[13px] font-semibold text-ink">
+        <span className="text-sm font-semibold text-ink">
           {sent ? 'Enviada' : action.stateLabel} — {action.kindLabel}
         </span>
-        <span className="tabular text-[12px] text-ink-muted">{action.to.join(', ')}</span>
+        <span className="tabular text-xs text-ink-muted">{action.to.join(', ')}</span>
         {sent && (
           <span className={chipClass(outcomeChipTone(OUTCOME_TONE[action.outcome]))}>
             {OUTCOME_LABEL[action.outcome]}
           </span>
         )}
       </div>
-      <p className="mt-1 truncate text-[12.5px] text-ink-muted">{action.subject}</p>
+      <p className="mt-1 truncate text-xs text-ink-muted">{action.subject}</p>
       {action.outcomeNote && (
-        <p className="mt-1 text-[12px] text-ink-faint">{action.outcomeNote}</p>
+        <p className="mt-1 text-xs text-ink-faint">{action.outcomeNote}</p>
       )}
     </div>
   );

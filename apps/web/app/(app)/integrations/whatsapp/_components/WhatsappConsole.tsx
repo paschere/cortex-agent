@@ -171,8 +171,8 @@ function SetupChecklist({ facts }: { facts: SetupFacts }) {
           <CheckCircle2 className="h-4 w-4" />
         </IconChip>
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold text-ink">Listo para usarse</div>
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+          <div className="text-sm font-semibold text-ink">Listo para usarse</div>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
             El número está en línea, el tuyo está vinculado y hay{' '}
             <span className="tabular">{facts.groupsConfigured}</span>{' '}
             {facts.groupsConfigured === 1 ? 'grupo configurado' : 'grupos configurados'}. Escríbele
@@ -189,7 +189,7 @@ function SetupChecklist({ facts }: { facts: SetupFacts }) {
         title="Para que Cortex te conteste"
         right={answer.yes ? 'ya te contesta' : 'todavía no te contesta'}
       />
-      <p className="px-5 pt-1 text-[12.5px] leading-relaxed text-ink-muted">
+      <p className="px-5 pt-1 text-xs leading-relaxed text-ink-muted">
         Tres pasos, en este orden. El del medio es el que se olvida: sin él el número queda en línea
         y aun así te responde que no sabe quién eres.
       </p>
@@ -200,7 +200,7 @@ function SetupChecklist({ facts }: { facts: SetupFacts }) {
             <li key={step.key} className="flex items-start gap-3 px-5 py-3">
               <span
                 className={clsx(
-                  'grid h-7 w-7 shrink-0 place-items-center rounded-sm text-[12px] font-bold',
+                  'grid h-7 w-7 shrink-0 place-items-center rounded-sm text-xs font-bold',
                   step.state === 'done' && 'bg-emerald-soft text-emerald',
                   step.state === 'now' && 'bg-amber-soft text-amber',
                   step.state === 'later' && 'bg-surface-2 text-ink-faint',
@@ -211,7 +211,7 @@ function SetupChecklist({ facts }: { facts: SetupFacts }) {
               <div className="min-w-0 flex-1">
                 <div
                   className={clsx(
-                    'text-[13px] font-semibold',
+                    'text-sm font-semibold',
                     step.state === 'later' ? 'text-ink-faint' : 'text-ink',
                   )}
                 >
@@ -219,7 +219,7 @@ function SetupChecklist({ facts }: { facts: SetupFacts }) {
                 </div>
                 <p
                   className={clsx(
-                    'mt-0.5 text-[12px] leading-relaxed',
+                    'mt-0.5 text-xs leading-relaxed',
                     step.state === 'later' ? 'text-ink-faint' : 'text-ink-muted',
                   )}
                 >
@@ -227,7 +227,7 @@ function SetupChecklist({ facts }: { facts: SetupFacts }) {
                 </p>
               </div>
               {step.state === 'now' && (
-                <span className="shrink-0 rounded-pill border border-amber/40 bg-amber-soft px-2.5 py-0.5 text-[10.5px] font-semibold text-amber">
+                <span className="shrink-0 rounded-pill border border-amber/40 bg-amber-soft px-2.5 py-0.5 text-micro font-semibold text-amber">
                   Sigue esto
                 </span>
               )}
@@ -301,10 +301,10 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
       <div className="flex items-start gap-3 px-5 py-4">
         <IconChip tone={COPY.tone}>{COPY.icon}</IconChip>
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold text-ink">{COPY.title}</div>
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">{COPY.line}</p>
+          <div className="text-sm font-semibold text-ink">{COPY.title}</div>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">{COPY.line}</p>
           {connection.lastError && state !== 'connected' && (
-            <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-[12px] leading-relaxed text-ink">
+            <p className="mt-2 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs leading-relaxed text-ink">
               {connection.lastError}
             </p>
           )}
@@ -320,7 +320,7 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
             alt="Código QR para vincular WhatsApp"
             className="h-56 w-56 rounded-card border border-border bg-white p-2"
           />
-          <p className="max-w-sm text-center text-[12px] leading-relaxed text-ink-faint">
+          <p className="max-w-sm text-center text-xs leading-relaxed text-ink-faint">
             El código cambia cada pocos segundos. Si se vence, esta pantalla muestra el siguiente
             sola.
           </p>
@@ -328,7 +328,7 @@ function ConnectionPanel({ connection }: { connection: Connection }) {
       )}
 
       <div className="border-t border-border px-5 py-3">
-        <p className="text-[12px] leading-relaxed text-ink-faint">
+        <p className="text-xs leading-relaxed text-ink-faint">
           Usa un <b className="font-semibold text-ink-muted">número dedicado de la empresa</b>,
           nunca el personal de alguien. Este es un cliente no oficial y WhatsApp puede bloquear el
           número.
@@ -387,10 +387,10 @@ function MyNumberPanel({
             <CheckCircle2 className="h-4 w-4" />
           </IconChip>
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-semibold text-ink">Cortex ya te contesta</div>
-            <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+            <div className="text-sm font-semibold text-ink">Cortex ya te contesta</div>
+            <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
               Escribe desde{' '}
-              <span className="font-mono text-[12px] text-ink">{telefono(me.phone)}</span> y la
+              <span className="font-mono text-xs text-ink">{telefono(me.phone)}</span> y la
               conversación corre con tu identidad y tus permisos, igual que en la web.
             </p>
           </div>
@@ -399,7 +399,7 @@ function MyNumberPanel({
               href={waHref}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
             >
               <Send className="h-3.5 w-3.5" />
               Escribirle
@@ -418,10 +418,10 @@ function MyNumberPanel({
           <UserRound className="h-4 w-4" />
         </IconChip>
         <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold text-ink">
+          <div className="text-sm font-semibold text-ink">
             Hoy Cortex te respondería que no te reconoce
           </div>
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
             Un mensaje directo corre con la identidad de la persona dueña del número. Mientras el
             tuyo no esté aquí, recibes una negativa corta y no se ejecuta nada.
           </p>
@@ -429,7 +429,7 @@ function MyNumberPanel({
       </div>
 
       {!paired ? (
-        <p className="border-t border-border px-5 py-3.5 text-[12.5px] leading-relaxed text-ink-faint">
+        <p className="border-t border-border px-5 py-3.5 text-xs leading-relaxed text-ink-faint">
           Primero hay que emparejar el número de la empresa, arriba. Sin línea no hay a quién
           escribirle.
         </p>
@@ -437,7 +437,7 @@ function MyNumberPanel({
         <>
           <div className="border-t border-border px-5 py-3.5">
             <div className="field-label">Cómo se hace sin teclear tu número</div>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+            <p className="mt-1 text-xs leading-relaxed text-ink-muted">
               Escríbele <b className="font-semibold text-ink">“Hola”</b> al número de la empresa
               desde tu teléfono. Te va a decir que no te reconoce —es lo esperado— y tu número
               aparece abajo para vincularlo con un clic, tal como WhatsApp lo escribe.
@@ -447,7 +447,7 @@ function MyNumberPanel({
                 href={waHref}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-2.5 inline-flex items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+                className="mt-2.5 inline-flex items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
               >
                 <Send className="h-3.5 w-3.5" />
                 Escribirle al número
@@ -470,13 +470,13 @@ function MyNumberPanel({
             </div>
 
             {!isAdmin ? (
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="mt-1 text-xs leading-relaxed text-ink-muted">
                 Vincular un número da permisos, así que lo hace un administrador. Escríbele al
                 número y pídele a un administrador que abra esta pantalla: el tuyo le aparece ahí
                 para vincularlo de una.
               </p>
             ) : unlinked.length === 0 ? (
-              <p className="mt-1 text-[12.5px] leading-relaxed text-ink-faint">
+              <p className="mt-1 text-xs leading-relaxed text-ink-faint">
                 Todavía no ha escrito nadie desconocido. En cuanto lo hagas, tu número sale aquí en
                 segundos.
               </p>
@@ -488,8 +488,8 @@ function MyNumberPanel({
                     className="flex flex-wrap items-center gap-2 rounded-card bg-surface-2 px-3 py-2"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="font-mono text-[12.5px] text-ink">{telefono(n.phone)}</div>
-                      <div className="mt-0.5 text-[11px] text-ink-faint">
+                      <div className="font-mono text-xs text-ink">{telefono(n.phone)}</div>
+                      <div className="mt-0.5 text-micro text-ink-faint">
                         <span className="tabular">{n.attempts}</span>{' '}
                         {n.attempts === 1 ? 'intento' : 'intentos'} · último {fecha(n.lastAt)}
                       </div>
@@ -507,7 +507,7 @@ function MyNumberPanel({
             )}
 
             {isAdmin && unlinked.length > 0 && (
-              <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">
+              <p className="mt-2 text-micro leading-relaxed text-ink-faint">
                 Si alguno es de un compañero, vincúlalo abajo eligiendo a quién pertenece. “Es mío”
                 lo vincula a ti, {me.name}.
               </p>
@@ -588,10 +588,10 @@ function GroupRow({
         </IconChip>
 
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold text-ink">
+          <div className="truncate text-sm font-semibold text-ink">
             {group.subject ?? 'Grupo sin nombre'}
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-faint">
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-micro text-ink-faint">
             {group.participants != null && (
               <span className="tabular">{group.participants} personas</span>
             )}
@@ -610,13 +610,13 @@ function GroupRow({
         <div className="min-w-0 flex-1">
           <div className="field-label">Archivar</div>
           {group.archiving ? (
-            <p className="text-[12px] leading-relaxed text-emerald">
+            <p className="text-xs leading-relaxed text-emerald">
               Se guarda en{' '}
               <b className="font-semibold">{group.spaceName ?? 'un espacio borrado'}</b> desde el{' '}
               {fecha(group.archivingSince)}.
             </p>
           ) : (
-            <p className="text-[12px] leading-relaxed text-ink-faint">
+            <p className="text-xs leading-relaxed text-ink-faint">
               No se guarda nada de este grupo.
             </p>
           )}
@@ -626,7 +626,7 @@ function GroupRow({
             value={spaceId}
             onChange={(e) => setSpaceId(e.target.value)}
             aria-label="Espacio de destino"
-            className="h-9 rounded-card border border-border bg-surface px-2.5 text-[12.5px] text-ink"
+            className="h-9 rounded-card border border-border bg-surface px-2.5 text-xs text-ink"
           >
             <option value="">¿En qué espacio?</option>
             {spaces.map((s) => (
@@ -659,15 +659,15 @@ function GroupRow({
           <div className="field-label">Responder si lo mencionan</div>
           {group.replying ? (
             <>
-              <p className="text-[12px] leading-relaxed text-emerald">
+              <p className="text-xs leading-relaxed text-emerald">
                 Responde solo cuando lo mencionen con @, desde el {fecha(group.replyingSince)}.
                 Máximo {group.replyLimitPerHour} respuestas por hora.
               </p>
               <p
                 className={
                   scopeCopy.tone === 'amber'
-                    ? 'mt-1 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-[11.5px] leading-relaxed text-ink'
-                    : 'mt-1 text-[11.5px] leading-relaxed text-ink-muted'
+                    ? 'mt-1 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-relaxed text-ink'
+                    : 'mt-1 text-micro leading-relaxed text-ink-muted'
                 }
               >
                 <b className="font-semibold">{scopeCopy.name}.</b> {scopeCopy.line}
@@ -680,7 +680,7 @@ function GroupRow({
               </p>
             </>
           ) : (
-            <p className="text-[12px] leading-relaxed text-ink-faint">
+            <p className="text-xs leading-relaxed text-ink-faint">
               Cortex lee pero nunca escribe en este grupo.
             </p>
           )}
@@ -692,7 +692,7 @@ function GroupRow({
               value={scope}
               onChange={(e) => setScope(e.target.value as Group['replyScope'])}
               aria-label="Qué puede responder"
-              className="h-9 rounded-card border border-border bg-surface px-2.5 text-[12.5px] text-ink"
+              className="h-9 rounded-card border border-border bg-surface px-2.5 text-xs text-ink"
             >
               <option value="plain">Solo la conversación</option>
               <option value="knowledge">Conversación + un espacio</option>
@@ -703,7 +703,7 @@ function GroupRow({
                 value={replySpaceId}
                 onChange={(e) => setReplySpaceId(e.target.value)}
                 aria-label="Espacio que puede citar"
-                className="h-9 rounded-card border border-border bg-surface px-2.5 text-[12.5px] text-ink"
+                className="h-9 rounded-card border border-border bg-surface px-2.5 text-xs text-ink"
               >
                 <option value="">¿Qué espacio puede citar?</option>
                 {citableSpaces.map((s) => (
@@ -763,7 +763,7 @@ function LinksPanel({
   return (
     <Panel>
       <PanelHead title="Quién más puede escribirle" right={`${links.length} números`} />
-      <p className="px-5 pt-1 text-[12.5px] leading-relaxed text-ink-muted">
+      <p className="px-5 pt-1 text-xs leading-relaxed text-ink-muted">
         Cada mensaje directo corre con la identidad y los permisos de la persona del número. Un
         número que no esté aquí recibe una negativa corta y queda registrado; nunca se ejecuta nada.
       </p>
@@ -771,7 +771,7 @@ function LinksPanel({
       {isAdmin && (
         <div className="mt-3 border-t border-border px-5 py-3">
           <div className="field-label">Vincular a mano</div>
-          <p className="mt-1 text-[11.5px] leading-relaxed text-ink-faint">
+          <p className="mt-1 text-micro leading-relaxed text-ink-faint">
             Para alguien que no está frente a la pantalla. Escríbelo con indicativo; nosotros lo
             dejamos en el formato que WhatsApp usa.
           </p>
@@ -781,13 +781,13 @@ function LinksPanel({
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+57 300 111 2233"
               aria-label="Número de WhatsApp"
-              className="h-9 w-full max-w-[190px] rounded-card border border-border bg-surface px-3 font-mono text-[13px] text-ink placeholder:text-ink-faint focus:border-primary/40"
+              className="h-9 w-full max-w-[190px] rounded-card border border-border bg-surface px-3 font-mono text-sm text-ink placeholder:text-ink-faint focus:border-primary/40"
             />
             <select
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
               aria-label="Persona"
-              className="h-9 rounded-card border border-border bg-surface px-2.5 text-[12.5px] text-ink"
+              className="h-9 rounded-card border border-border bg-surface px-2.5 text-xs text-ink"
             >
               <option value="">¿De quién es?</option>
               {people.map((p) => (
@@ -812,7 +812,7 @@ function LinksPanel({
       )}
 
       {links.length === 0 ? (
-        <p className="border-t border-border px-5 py-4 text-[12.5px] text-ink-faint">
+        <p className="border-t border-border px-5 py-4 text-xs text-ink-faint">
           Todavía no hay números vinculados, así que nadie puede conversar con Cortex por WhatsApp.
         </p>
       ) : (
@@ -825,8 +825,8 @@ function LinksPanel({
               <UserRound className="h-4 w-4" />
             </IconChip>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-semibold text-ink">{link.personName}</div>
-              <div className="mt-0.5 font-mono text-[11.5px] text-ink-faint">
+              <div className="truncate text-sm font-semibold text-ink">{link.personName}</div>
+              <div className="mt-0.5 font-mono text-micro text-ink-faint">
                 {telefono(link.phone)}
                 {link.lastSeenAt ? ` · escribió ${fecha(link.lastSeenAt)}` : ' · nunca ha escrito'}
               </div>
@@ -974,8 +974,8 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
         <p
           className={
             message.tone === 'ok'
-              ? 'rounded-card border border-emerald/30 bg-emerald-soft px-4 py-2.5 text-[12.5px] leading-relaxed text-ink'
-              : 'rounded-card border border-rose/30 bg-rose-soft px-4 py-2.5 text-[12.5px] leading-relaxed text-ink'
+              ? 'rounded-card border border-emerald/30 bg-emerald-soft px-4 py-2.5 text-xs leading-relaxed text-ink'
+              : 'rounded-card border border-rose/30 bg-rose-soft px-4 py-2.5 text-xs leading-relaxed text-ink'
           }
         >
           {message.text}
@@ -1000,7 +1000,7 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
           title="3 · Grupos"
           right={`${data.groups.filter((g) => g.archiving).length} archivándose · ${data.groups.filter((g) => g.replying).length} respondiendo`}
         />
-        <div className="px-5 pb-3 pt-1 text-[12.5px] leading-relaxed text-ink-muted">
+        <div className="px-5 pb-3 pt-1 text-xs leading-relaxed text-ink-muted">
           <p>
             Cada grupo tiene <b className="font-semibold text-ink">dos permisos aparte</b>, y uno no
             implica el otro.
@@ -1018,14 +1018,14 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
         </div>
 
         {data.spaces.length === 0 && (
-          <p className="border-t border-border px-5 py-4 text-[12.5px] text-ink-faint">
+          <p className="border-t border-border px-5 py-4 text-xs text-ink-faint">
             Necesitas un espacio de Brain Knowledge donde puedas escribir antes de archivar un
             grupo.
           </p>
         )}
 
         {data.groups.length === 0 ? (
-          <p className="border-t border-border px-5 py-4 text-[12.5px] text-ink-faint">
+          <p className="border-t border-border px-5 py-4 text-xs text-ink-faint">
             Todavía no hay grupos. Aparecen solos cuando el número quede conectado y esté dentro de
             algún grupo.
           </p>
@@ -1053,7 +1053,7 @@ export function WhatsappConsole({ isAdmin }: { isAdmin: boolean }) {
         onUnlink={(phone) => unlinkNumber.mutate(phone)}
       />
 
-      <p className="flex items-start gap-2 px-1 text-[12px] leading-relaxed text-ink-faint">
+      <p className="flex items-start gap-2 px-1 text-xs leading-relaxed text-ink-faint">
         <MessageCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         Las conversaciones archivadas quedan como documentos normales: se buscan, se citan y se
         borran desde{' '}

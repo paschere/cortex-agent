@@ -75,10 +75,10 @@ export function NewCommitmentButton({ people }: { people: Array<{ id: string; na
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[min(560px,94vw)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card border border-border bg-surface p-6 shadow-pop outline-none">
-          <Dialog.Title className="text-[17px] font-bold tracking-[-0.01em] text-ink">
+          <Dialog.Title className="text-lg font-bold tracking-[-0.01em] text-ink">
             Registrar vencimiento
           </Dialog.Title>
-          <Dialog.Description className="mt-1 text-[13px] leading-snug text-ink-muted">
+          <Dialog.Description className="mt-1 text-sm leading-snug text-ink-muted">
             Queda a tu nombre: la fuente de esta fecha eres tú, y así se va a mostrar.
           </Dialog.Description>
 
@@ -184,7 +184,7 @@ export function NewCommitmentButton({ people }: { people: Array<{ id: string; na
                 <option value="yearly">Cada año</option>
               </select>
             </Field>
-            <p className="text-[11.5px] leading-snug text-ink-faint">
+            <p className="text-micro leading-snug text-ink-faint">
               Sólo marca que se repite si tú sabes la periodicidad. Cuando lo marques como cumplido,
               el siguiente aparece solo con esa misma cadencia.
             </p>
@@ -192,7 +192,7 @@ export function NewCommitmentButton({ people }: { people: Array<{ id: string; na
             {error && (
               <div
                 role="alert"
-                className="rounded-sm border border-rose/25 bg-rose-soft px-3 py-2 text-[12.5px] text-rose"
+                className="rounded-sm border border-rose/25 bg-rose-soft px-3 py-2 text-xs text-rose"
               >
                 {error}
               </div>
@@ -217,7 +217,7 @@ export function NewCommitmentButton({ people }: { people: Array<{ id: string; na
 }
 
 const INPUT =
-  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13.5px] text-ink shadow-sm outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 motion-reduce:transition-none';
+  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink shadow-sm outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 motion-reduce:transition-none';
 
 /**
  * A labelled control, wired by id rather than by nesting.

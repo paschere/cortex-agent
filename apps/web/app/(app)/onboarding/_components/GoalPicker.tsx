@@ -63,13 +63,13 @@ export function GoalPicker({ current }: { current: OnboardingGoal | null }) {
             >
               <div
                 className={clsx(
-                  'text-[13px] font-semibold leading-snug',
+                  'text-sm font-semibold leading-snug',
                   active ? 'text-primary-ink' : 'text-ink',
                 )}
               >
                 {GOAL_LABEL[goal].title}
               </div>
-              <div className="mt-1.5 text-[12px] leading-relaxed text-ink-muted">
+              <div className="mt-1.5 text-xs leading-relaxed text-ink-muted">
                 {GOAL_LABEL[goal].detail}
               </div>
             </button>
@@ -77,7 +77,7 @@ export function GoalPicker({ current }: { current: OnboardingGoal | null }) {
         })}
       </div>
       {failed && (
-        <p className="mt-3 text-[12px] text-rose">
+        <p className="mt-3 text-xs text-rose">
           No se pudo guardar tu respuesta. Vuelve a tocarla en un momento.
         </p>
       )}

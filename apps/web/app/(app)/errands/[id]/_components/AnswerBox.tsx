@@ -64,7 +64,7 @@ export function AnswerBox({
               type="button"
               disabled={busy}
               onClick={() => void send(option)}
-              className="rounded-pill border border-amber/30 bg-surface px-3 py-1 text-[12px] font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:border-amber hover:bg-amber-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/40 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none"
+              className="rounded-pill border border-amber/30 bg-surface px-3 py-1 text-xs font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:border-amber hover:bg-amber-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/40 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none"
             >
               {option}
             </button>
@@ -90,14 +90,14 @@ export function AnswerBox({
               ? 'O escribe tu propia respuesta…'
               : 'Escribe tu respuesta y el encargo sigue desde donde iba…'
           }
-          className="scroll-slim min-w-0 flex-1 resize-y rounded-card border border-border bg-surface px-3 py-2 text-[13px] leading-relaxed text-ink transition-colors placeholder:text-ink-faint focus:border-amber/50 focus:outline-none focus:ring-4 focus:ring-amber/10 disabled:opacity-60"
+          className="scroll-slim min-w-0 flex-1 resize-y rounded-card border border-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink transition-colors placeholder:text-ink-faint focus:border-amber/50 focus:outline-none focus:ring-4 focus:ring-amber/10 disabled:opacity-60"
         />
         <button
           type="button"
           onClick={() => void send(text)}
           disabled={busy || text.trim().length === 0}
           className={clsx(
-            'inline-flex shrink-0 items-center gap-1.5 rounded-pill px-3.5 py-2 text-[12.5px] font-semibold shadow-pop transition-all duration-150',
+            'inline-flex shrink-0 items-center gap-1.5 rounded-pill px-3.5 py-2 text-xs font-semibold shadow-pop transition-all duration-150',
             'bg-primary text-white hover:-translate-y-px hover:bg-primary-strong',
             'disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
             'motion-reduce:transform-none motion-reduce:transition-none',
@@ -113,7 +113,7 @@ export function AnswerBox({
       </div>
 
       {error && (
-        <p className="mt-2 flex items-start gap-1.5 text-[12px] text-rose">
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-rose">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{error}</span>
         </p>

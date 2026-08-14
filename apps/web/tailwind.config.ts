@@ -56,6 +56,42 @@ const config: Config = {
         // For the small uppercase labels that name a field on a form.
         field: '0.12em',
       },
+      /**
+       * THE SCALE, AND WHY THERE WAS NOT ONE.
+       *
+       * This block did not exist, and that single omission is the whole
+       * explanation for what the app looked like: 23 different arbitrary sizes
+       * across 1.849 uses of `text-[Npx]`, against 56 of the named scale. It
+       * was never a discipline problem — colours have tokens right above and
+       * there is not one raw hex in the entire app. There was simply nothing to
+       * reach for, so every component invented its own size, and the three
+       * commonest were 12.5px, 12px and 13px: a difference nobody can see that
+       * still had to be decided, separately, hundreds of times.
+       *
+       * Seven steps, and they take Tailwind's own names on purpose. A house
+       * scale that hides behind `text-body-sm` while `text-sm` still resolves
+       * to something else is two scales. The 56 existing uses shift by at most
+       * one pixel, which is the cost of having one.
+       *
+       * Each value carries its line-height, so a component gets a whole type
+       * setting from one class rather than remembering to pair `leading-`.
+       */
+      fontSize: {
+        /** Labels, timestamps, evidence. Uppercase ones pair with tracking-field. */
+        micro: ['11px', { lineHeight: '1.45' }],
+        /** The workhorse: secondary text, table cells, most of the chrome. */
+        xs: ['12.5px', { lineHeight: '1.5' }],
+        /** Body text and anything somebody reads a paragraph of. */
+        sm: ['13px', { lineHeight: '1.6' }],
+        /** Emphasis inside a card; the name of the thing you are looking at. */
+        base: ['15px', { lineHeight: '1.5' }],
+        /** Section heading. */
+        lg: ['19px', { lineHeight: '1.35' }],
+        /** Page heading. */
+        xl: ['22px', { lineHeight: '1.25' }],
+        /** One per screen at most, and most screens have none. */
+        display: ['32px', { lineHeight: '1.15' }],
+      },
     },
   },
   plugins: [require('@tailwindcss/typography')],

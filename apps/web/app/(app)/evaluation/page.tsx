@@ -60,12 +60,12 @@ export default async function EvaluationPage() {
 
       {!latest ? (
         <Panel className="p-8 text-center">
-          <h2 className="text-[15px] font-semibold text-ink">Todavía no hay corridas guardadas</h2>
-          <p className="mx-auto mt-2 max-w-xl text-[13px] leading-relaxed text-ink-muted">
+          <h2 className="text-base font-semibold text-ink">Todavía no hay corridas guardadas</h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-ink-muted">
             La evaluación corre sola en cada cambio, dentro de las pruebas, y ahí no guarda nada:
             pasa o falla. Acá se guarda lo que se corre a mano contra la API en vivo, que es lo que
             sirve para ver si un número viene bajando desde hace semanas. Está explicado en{' '}
-            <span className="font-mono text-[12px] text-ink">docs/operations/answer-quality.md</span>.
+            <span className="font-mono text-xs text-ink">docs/operations/answer-quality.md</span>.
           </p>
         </Panel>
       ) : (

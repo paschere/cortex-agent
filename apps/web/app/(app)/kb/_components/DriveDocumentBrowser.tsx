@@ -178,7 +178,7 @@ export function DriveDocumentBrowser({
   return (
     <div className="flex h-full flex-col">
       {/* Breadcrumbs */}
-      <nav className="flex flex-wrap items-center gap-1 px-5 pt-4 text-[13px] text-ink-muted">
+      <nav className="flex flex-wrap items-center gap-1 px-5 pt-4 text-sm text-ink-muted">
         {path.map((crumb, i) => (
           <span key={crumb.id} className="flex items-center gap-1">
             {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-ink-faint" />}
@@ -206,7 +206,7 @@ export function DriveDocumentBrowser({
       {/* List */}
       <div className="mt-3 flex-1 overflow-y-auto px-5">
         {!connected ? (
-          <p className="py-10 text-center text-[13px] text-ink-muted">
+          <p className="py-10 text-center text-sm text-ink-muted">
             Google Drive no está conectado todavía.
           </p>
         ) : isLoading ? (
@@ -219,7 +219,7 @@ export function DriveDocumentBrowser({
             ))}
           </ul>
         ) : isError ? (
-          <div className="my-4 rounded-card border border-rose/30 bg-rose-soft px-4 py-3 text-[13px] text-rose">
+          <div className="my-4 rounded-card border border-rose/30 bg-rose-soft px-4 py-3 text-sm text-rose">
             <div className="font-medium">No se pudo abrir esta carpeta.</div>
             <div className="mt-0.5 text-rose/80">
               {error instanceof Error ? error.message : 'Algo falló.'}
@@ -229,7 +229,7 @@ export function DriveDocumentBrowser({
             </Button>
           </div>
         ) : files.length === 0 ? (
-          <p className="py-10 text-center text-[13px] text-ink-faint">
+          <p className="py-10 text-center text-sm text-ink-faint">
             {debouncedSearch ? 'Ningún archivo coincide.' : 'Esta carpeta está vacía.'}
           </p>
         ) : (
@@ -245,7 +245,7 @@ export function DriveDocumentBrowser({
                     <span className="grid h-6 w-6 place-items-center text-amber">
                       <FolderClosed className="h-4 w-4" />
                     </span>
-                    <span className="flex-1 truncate text-[13px] font-medium text-ink">
+                    <span className="flex-1 truncate text-sm font-medium text-ink">
                       {f.name}
                     </span>
                     <ChevronRight className="h-4 w-4 text-ink-faint" />
@@ -263,7 +263,7 @@ export function DriveDocumentBrowser({
                     <span className="grid h-6 w-6 place-items-center rounded-card border border-border bg-surface text-ink-faint transition-colors peer-checked:border-primary/40 peer-checked:bg-primary-soft peer-checked:text-primary">
                       <FileText className="h-3.5 w-3.5" />
                     </span>
-                    <span className="flex-1 truncate text-[13px] text-ink-muted peer-checked:font-medium peer-checked:text-ink">
+                    <span className="flex-1 truncate text-sm text-ink-muted peer-checked:font-medium peer-checked:text-ink">
                       {f.name}
                     </span>
                   </label>
@@ -285,12 +285,12 @@ export function DriveDocumentBrowser({
       {/* Footer action bar */}
       <div className="border-t border-border px-5 py-3">
         {actionError && (
-          <div className="mb-2.5 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-[12px] text-rose">
+          <div className="mb-2.5 rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
             {actionError}
           </div>
         )}
         <div className="flex items-center justify-between gap-3">
-          <span className="text-[12px] text-ink-faint">
+          <span className="text-xs text-ink-faint">
             {selectedCount > 0
               ? `${selectedCount} ${selectedCount === 1 ? 'archivo elegido' : 'archivos elegidos'}`
               : atRoot

@@ -25,7 +25,7 @@ export function DriveBrowserModal({
               </IconChip>
               <div>
                 <Dialog.Title className="text-sm font-semibold text-ink">Google Drive</Dialog.Title>
-                <Dialog.Description className="text-[11.5px] text-ink-faint">
+                <Dialog.Description className="text-micro text-ink-faint">
                   Trae archivos sueltos o enlaza una carpeta para que se mantenga sola.
                 </Dialog.Description>
               </div>

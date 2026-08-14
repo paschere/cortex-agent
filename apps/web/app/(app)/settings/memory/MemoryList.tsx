@@ -45,7 +45,7 @@ function whenLastUseful(memory: MemoryView): string {
 }
 
 function Meta({ children }: { children: React.ReactNode }) {
-  return <span className="text-[12px] text-ink-faint">{children}</span>;
+  return <span className="text-xs text-ink-faint">{children}</span>;
 }
 
 /** One memory: the sentence first, everything else smaller and underneath. */
@@ -66,7 +66,7 @@ function MemoryCard({
       )}
     >
       <div className="min-w-0">
-        <p className="text-[14px] leading-relaxed text-ink">{memory.content}</p>
+        <p className="text-base leading-relaxed text-ink">{memory.content}</p>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           <Meta>{KIND_LABEL[memory.kind]}</Meta>
           <Meta>·</Meta>
@@ -79,14 +79,14 @@ function MemoryCard({
           )}
         </div>
         {memory.sourceNote && (
-          <p className="mt-2 border-l-2 border-border pl-3 text-[12.5px] leading-relaxed text-ink-muted">
+          <p className="mt-2 border-l-2 border-border pl-3 text-xs leading-relaxed text-ink-muted">
             {memory.sourceNote}
           </p>
         )}
         {memory.sourceConversationId && (
           <Link
             href={`/chat/${memory.sourceConversationId}`}
-            className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-primary hover:underline"
+            className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
           >
             <MessageSquare className="h-3.5 w-3.5" />
             Abrir la conversación de donde salió
@@ -142,7 +142,7 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
   return (
     <div className="flex flex-col gap-5">
       {error && (
-        <div className="rounded-card border border-border bg-rose-soft px-4 py-3 text-[13px] text-rose shadow-card">
+        <div className="rounded-card border border-border bg-rose-soft px-4 py-3 text-sm text-rose shadow-card">
           {error}
         </div>
       )}
@@ -151,11 +151,11 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
         <Panel>
           <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
             <Eyebrow>Esperando por ti</Eyebrow>
-            <span className="text-[12px] text-ink-faint">
+            <span className="text-xs text-ink-faint">
               <span className="tabular">{suggested.length}</span> por decidir
             </span>
           </div>
-          <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
+          <p className="px-5 pb-3 text-sm leading-relaxed text-ink-muted">
             Cortex notó estas cosas mientras trabajabas. Nada de esto se está usando todavía:
             empieza a influir en las respuestas solo cuando lo guardas.
           </p>
@@ -194,18 +194,18 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
       <Panel>
         <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
           <Eyebrow>En cada conversación</Eyebrow>
-          <span className="tabular text-[12px] text-ink-faint">
+          <span className="tabular text-xs text-ink-faint">
             {active.length} de {MEMORY_LIMIT_VIEW}
           </span>
         </div>
-        <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
+        <p className="px-5 pb-3 text-sm leading-relaxed text-ink-muted">
           Cortex lleva esto a cada conversación, en todas partes: la app, Google Chat y Claude.
           Nunca las cita en voz alta en un espacio de grupo, solo las usa.
         </p>
         {active.length === 0 ? (
           <div className="border-t border-border px-5 py-10 text-center">
             <Brain className="mx-auto h-6 w-6 text-ink-faint" />
-            <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-ink-muted">
+            <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-ink-muted">
               Cortex todavía no lleva nada. Dile &ldquo;acuérdate de que…&rdquo; en una conversación,
               o déjalo así: empieza a sugerir cosas después de unos días trabajando contigo.
             </p>
@@ -256,7 +256,7 @@ export function MemoryList({ initial }: { initial: MemoryView[] }) {
           <div className="px-5 pt-4 pb-3">
             <Eyebrow>Ya no se usan</Eyebrow>
           </div>
-          <p className="px-5 pb-3 text-[13px] leading-relaxed text-ink-muted">
+          <p className="px-5 pb-3 text-sm leading-relaxed text-ink-muted">
             Las guardaste aparte, o se salieron cuando llegaste a{' '}
             <span className="tabular">{MEMORY_LIMIT_VIEW}</span>. Cortex no las usa, y nada se borra
             a tus espaldas.

@@ -58,7 +58,7 @@ export default async function PipelinesPage() {
         actions={
           <Link
             href="/pipelines/new"
-            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
           >
             <Plus className="h-4 w-4" /> Nuevo flujo
           </Link>
@@ -66,9 +66,9 @@ export default async function PipelinesPage() {
       />
 
       {pipelines.length === 0 ? (
-        <Panel className="p-10 text-center text-[13px] text-ink-muted">
+        <Panel className="p-10 text-center text-sm text-ink-muted">
           <Workflow className="mx-auto mb-3 h-7 w-7 text-primary" />
-          <p className="mb-1 text-[15px] font-bold text-ink">Todavía no hay flujos</p>
+          <p className="mb-1 text-base font-bold text-ink">Todavía no hay flujos</p>
           <p className="mx-auto max-w-md leading-relaxed">
             Un flujo es un instructivo que escribes una vez y ejecutas donde quieras: aquí, desde
             Claude o en una rutina. Ármalo paso a paso, o pídeselo a Cortex en el chat:{' '}
@@ -80,13 +80,13 @@ export default async function PipelinesPage() {
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
             <Link
               href="/pipelines/new"
-              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
             >
               <Plus className="h-3.5 w-3.5" /> Nuevo flujo
             </Link>
             <Link
               href="/chat"
-              className="rounded-pill border border-border-strong bg-surface px-4 py-2 text-[12.5px] font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+              className="rounded-pill border border-border-strong bg-surface px-4 py-2 text-xs font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
             >
               Pedírselo a Cortex en el chat
             </Link>
@@ -129,17 +129,17 @@ function PipelineCard({ p }: { p: PipelineRow }) {
           }`}
         >
           <div className="flex items-start gap-2.5 pr-9">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-[19px]">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-lg">
               {p.emoji || '⚡'}
             </span>
             <div className="min-w-0">
-              <div className="truncate text-[14px] font-bold text-ink">{p.name}</div>
-              <div className="truncate font-mono text-[11px] text-ink-faint">{p.slug}</div>
+              <div className="truncate text-base font-bold text-ink">{p.name}</div>
+              <div className="truncate font-mono text-micro text-ink-faint">{p.slug}</div>
             </div>
           </div>
 
           {p.description && (
-            <p className="line-clamp-2 text-[12.5px] leading-snug text-ink-muted">
+            <p className="line-clamp-2 text-xs leading-snug text-ink-muted">
               {p.description}
             </p>
           )}
@@ -171,7 +171,7 @@ function PipelineCard({ p }: { p: PipelineRow }) {
                 <span
                   key={param.name}
                   title={param.description}
-                  className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10.5px] text-ink-muted"
+                  className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-micro text-ink-muted"
                 >
                   <Hash className="h-3 w-3" />
                   {param.name}
@@ -181,7 +181,7 @@ function PipelineCard({ p }: { p: PipelineRow }) {
             </div>
           )}
 
-          <div className="tabular mt-auto flex items-center justify-between border-t border-border pt-2.5 text-[11px] text-ink-faint">
+          <div className="tabular mt-auto flex items-center justify-between border-t border-border pt-2.5 text-micro text-ink-faint">
             <span className="inline-flex items-center gap-1">
               <Play className="h-3.5 w-3.5" />
               {p.times_run} {p.times_run === 1 ? 'ejecución' : 'ejecuciones'}

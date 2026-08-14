@@ -96,10 +96,10 @@ export default async function SettingsPage() {
               <Brain className="h-4 w-4" />
             </span>
             <div>
-              <div className="text-[13px] font-semibold text-ink">
+              <div className="text-sm font-semibold text-ink">
                 Lo que Cortex recuerda de ti
               </div>
-              <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
                 {activeMemories === 0 ? (
                   'Todavía nada. Cortex va anotando cosas a medida que trabajan juntos.'
                 ) : (
@@ -142,10 +142,10 @@ export default async function SettingsPage() {
               <MessagesSquare className="h-4 w-4" />
             </span>
             <div>
-              <div className="text-[13px] font-semibold text-ink">
+              <div className="text-sm font-semibold text-ink">
                 Cuéntale cómo trabaja tu empresa
               </div>
-              <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink-muted">
+              <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
                 {setup === null || setup === 0 ? (
                   'Le explicas tus procesos, te hace unas preguntas, y te propone qué vigilar y qué hacer solo. Nada se crea sin que lo apruebes.'
                 ) : (

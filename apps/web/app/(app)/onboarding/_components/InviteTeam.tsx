@@ -75,7 +75,7 @@ export function InviteTeam({
 
   if (!canInvite) {
     return (
-      <p className="text-[12.5px] text-ink-muted">
+      <p className="text-xs text-ink-muted">
         Quien administra el espacio es quien invita. Pídele a esa persona que te agregue a alguien.
       </p>
     );
@@ -101,7 +101,7 @@ export function InviteTeam({
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as 'member' | 'admin')}
-            className="h-[38px] rounded-pill border border-border bg-surface px-3.5 text-[13px] text-ink"
+            className="h-[38px] rounded-pill border border-border bg-surface px-3.5 text-sm text-ink"
           >
             <option value="member">Miembro</option>
             <option value="admin">Administra</option>
@@ -112,7 +112,7 @@ export function InviteTeam({
         </Button>
       </form>
 
-      <p className="mt-2.5 text-[12px] text-ink-faint">
+      <p className="mt-2.5 text-xs text-ink-faint">
         {seatsMaximum === null ? (
           <>
             <span className="tabular">{count(seatsUsed)}</span> personas en el espacio. Cada una
@@ -139,13 +139,13 @@ export function InviteTeam({
       </p>
 
       {sent.length > 0 && (
-        <p className="mt-2 text-[12px] text-emerald">
+        <p className="mt-2 text-xs text-emerald">
           Invitación enviada a{' '}
           <span className="font-mono">{sent[sent.length - 1]}</span>. Le llega un enlace que dura
           48 horas.
         </p>
       )}
-      {err && <p className="mt-2 text-[12px] leading-relaxed text-rose">{err}</p>}
+      {err && <p className="mt-2 text-xs leading-relaxed text-rose">{err}</p>}
     </div>
   );
 }

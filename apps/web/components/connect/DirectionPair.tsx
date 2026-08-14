@@ -49,21 +49,21 @@ function CardBody({ card, active }: { card: Card; active: boolean }) {
         >
           <Icon className="h-3.5 w-3.5" />
         </span>
-        <span className={clsx('text-[13px] font-bold', active ? 'text-primary-ink' : 'text-ink')}>
+        <span className={clsx('text-sm font-bold', active ? 'text-primary-ink' : 'text-ink')}>
           {card.title}
         </span>
         {active ? (
-          <span className="ml-auto rounded-pill bg-primary-soft px-2.5 py-0.5 text-[11px] font-semibold text-primary-ink">
+          <span className="ml-auto rounded-pill bg-primary-soft px-2.5 py-0.5 text-micro font-semibold text-primary-ink">
             Estás aquí
           </span>
         ) : (
-          <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-semibold text-primary">
+          <span className="ml-auto inline-flex items-center gap-1 text-micro font-semibold text-primary">
             {card.cta}
             <ArrowRight className="h-3 w-3" />
           </span>
         )}
       </div>
-      <p className="mt-1.5 text-[12px] leading-snug text-ink-muted">{card.body}</p>
+      <p className="mt-1.5 text-xs leading-snug text-ink-muted">{card.body}</p>
     </>
   );
 }

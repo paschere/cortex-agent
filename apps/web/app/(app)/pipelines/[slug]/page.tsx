@@ -57,7 +57,7 @@ export default async function PipelineDetailPage({
       <div className="mb-4">
         <Link
           href="/pipelines"
-          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-faint hover:text-ink"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink-faint hover:text-ink"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Flujos
         </Link>
@@ -65,7 +65,7 @@ export default async function PipelineDetailPage({
 
       {/* Header */}
       <div className="rule-double mb-6 flex flex-wrap items-start gap-4 pt-4">
-        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-[26px]">
+        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-card border border-border bg-surface-2 text-xl">
           {(p.emoji as string) || '⚡'}
         </span>
         <div className="min-w-0 flex-1 basis-[18rem]">
@@ -77,11 +77,11 @@ export default async function PipelineDetailPage({
               </span>
             )}
           </h1>
-          <p className="mt-0.5 text-[13px] text-ink-muted">
+          <p className="mt-0.5 text-sm text-ink-muted">
             {(p.description as string) ||
               'Todavía no tiene descripción: agrégale una la próxima vez que lo edites.'}
           </p>
-          <div className="tabular mt-2 flex flex-wrap items-center gap-3 text-[11px] text-ink-faint">
+          <div className="tabular mt-2 flex flex-wrap items-center gap-3 text-micro text-ink-faint">
             <span>{p.slug as string}</span>
             <span className="inline-flex items-center gap-1">
               <Play className="h-3.5 w-3.5" /> {p.times_run as number}{' '}
@@ -98,12 +98,12 @@ export default async function PipelineDetailPage({
         <Panel className="p-5">
           <div className="field-label mb-4">Los pasos</div>
           {(p.intro as string) && (
-            <p className="mb-5 rounded-card border border-border bg-surface-2 px-4 py-3 text-[13px] leading-relaxed text-ink-muted">
+            <p className="mb-5 rounded-card border border-border bg-surface-2 px-4 py-3 text-sm leading-relaxed text-ink-muted">
               {p.intro as string}
             </p>
           )}
           {steps.length === 0 ? (
-            <p className="text-[13px] text-ink-faint">
+            <p className="text-sm text-ink-faint">
               Este flujo es de los viejos: no tiene pasos, sino una instrucción libre.{' '}
               <Link
                 href={`/pipelines/${p.slug as string}/edit`}
@@ -129,7 +129,7 @@ export default async function PipelineDetailPage({
                         <UserCheck className="h-4 w-4 text-amber" />
                       </span>
                     ) : (
-                      <span className="stat-num z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card bg-primary text-[13px] text-white">
+                      <span className="stat-num z-10 grid h-9 w-9 shrink-0 place-items-center rounded-card bg-primary text-sm text-white">
                         {String(i + 1).padStart(2, '0')}
                       </span>
                     )}
@@ -139,14 +139,14 @@ export default async function PipelineDetailPage({
                           Punto de control · decides tú
                         </div>
                       )}
-                      <div className="text-[13.5px] font-bold text-ink">{s.title}</div>
-                      <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">{s.detail}</p>
+                      <div className="text-sm font-bold text-ink">{s.title}</div>
+                      <p className="mt-1 text-xs leading-relaxed text-ink-muted">{s.detail}</p>
                       {(s.tools ?? []).length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {(s.tools ?? []).map((t) => (
                             <span
                               key={t}
-                              className="inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-primary"
+                              className="inline-flex items-center gap-1 rounded-pill border border-primary/30 bg-primary-soft px-1.5 py-0.5 font-mono text-micro font-semibold text-primary"
                             >
                               <Wrench className="h-3 w-3" />
                               {t}
@@ -172,14 +172,14 @@ export default async function PipelineDetailPage({
               <div className="field-label mb-2.5">Parámetros</div>
               <ul className="space-y-2">
                 {pipelineParams.map((param) => (
-                  <li key={param.name} className="text-[12.5px]">
-                    <span className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-ink">
+                  <li key={param.name} className="text-xs">
+                    <span className="inline-flex items-center gap-1 rounded-pill border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-micro font-semibold text-ink">
                       <Hash className="h-3 w-3 text-primary" />
                       {param.name}
                       {param.required !== false && <span className="text-rose">*</span>}
                     </span>
                     {param.description && (
-                      <p className="mt-1 pl-1 text-[11.5px] text-ink-faint">{param.description}</p>
+                      <p className="mt-1 pl-1 text-micro text-ink-faint">{param.description}</p>
                     )}
                   </li>
                 ))}
@@ -191,7 +191,7 @@ export default async function PipelineDetailPage({
           <Panel className="p-4">
             <div className="field-label mb-2.5">Ejecuciones recientes</div>
             {runs.length === 0 ? (
-              <p className="text-[12px] leading-relaxed text-ink-muted">
+              <p className="text-xs leading-relaxed text-ink-muted">
                 Nadie lo ha ejecutado todavía. Copia la frase de arriba y dísela a Cortex: la
                 ejecución y quién la arrancó aparecen aquí.
               </p>
@@ -218,17 +218,17 @@ export default async function PipelineDetailPage({
                         />
                       )}
                       <div className="min-w-0 flex-1">
-                        <div className="text-[12px] font-semibold text-ink">
+                        <div className="text-xs font-semibold text-ink">
                           {u?.name || u?.email || 'Sin identificar'}{' '}
                           <span className="tabular font-normal text-ink-faint">
                             · {relativeTime(r.started_at)}
                           </span>
                         </div>
                         {r.summary && (
-                          <p className="mt-0.5 text-[11.5px] leading-snug text-ink-muted">{r.summary}</p>
+                          <p className="mt-0.5 text-micro leading-snug text-ink-muted">{r.summary}</p>
                         )}
                         {Object.keys(r.args ?? {}).length > 0 && (
-                          <p className="mt-0.5 truncate font-mono text-[10.5px] text-ink-faint">
+                          <p className="mt-0.5 truncate font-mono text-micro text-ink-faint">
                             {Object.entries(r.args)
                               .map(([k, v]) => `${k}=${v}`)
                               .join(' · ')}

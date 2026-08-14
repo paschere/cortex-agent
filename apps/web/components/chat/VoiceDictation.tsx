@@ -206,7 +206,7 @@ export function VoiceDictation({
       </span>
 
       {problem && (
-        <span className="max-w-[16rem] truncate text-[11px] text-rose" title={problem}>
+        <span className="max-w-[16rem] truncate text-micro text-rose" title={problem}>
           {problem}
         </span>
       )}

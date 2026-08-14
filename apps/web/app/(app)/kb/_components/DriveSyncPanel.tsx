@@ -55,12 +55,12 @@ export function DriveSyncPanel({ spaceId }: { spaceId: string }) {
         <div className="h-9 w-40 animate-pulse rounded-card bg-surface-2" />
       ) : !connected ? (
         <div className="flex flex-col items-start gap-3">
-          <p className="text-[12.5px] text-ink-muted">
+          <p className="text-xs text-ink-muted">
             Conecta Google Drive y enlaza una carpeta: lo que pongas ahí entra solo.
           </p>
           <a
             href="/api/integrations/google?preset=drive"
-            className="inline-flex items-center justify-center gap-1.5 rounded-card bg-primary px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-primary-strong"
+            className="inline-flex items-center justify-center gap-1.5 rounded-card bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-strong"
           >
             <FolderSearch className="h-3.5 w-3.5" />
             Conectar Google Drive
@@ -73,10 +73,10 @@ export function DriveSyncPanel({ spaceId }: { spaceId: string }) {
               <FolderClosed className="h-4 w-4" />
             </IconChip>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-semibold text-ink">
+              <div className="truncate text-sm font-semibold text-ink">
                 {folder.name ?? folder.id}
               </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-faint">
+              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-micro text-ink-faint">
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${synced ? 'bg-emerald' : 'bg-amber'}`}
                 />
@@ -103,7 +103,7 @@ export function DriveSyncPanel({ spaceId }: { spaceId: string }) {
         </div>
       ) : (
         <div className="flex flex-col items-start gap-3">
-          <p className="text-[12.5px] text-ink-muted">
+          <p className="text-xs text-ink-muted">
             Drive está conectado. Trae archivos sueltos o enlaza una carpeta entera.
           </p>
           <Button variant="outline" onClick={() => setOpen(true)}>

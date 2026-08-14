@@ -59,7 +59,7 @@ export function PipelineHeaderActions({ slug, archived }: { slug: string; archiv
     <div className="flex shrink-0 items-center gap-2">
       <Link
         href={`/pipelines/${slug}/edit`}
-        className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+        className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
       >
         <Pencil className="h-3.5 w-3.5" /> Editar
       </Link>
@@ -67,7 +67,7 @@ export function PipelineHeaderActions({ slug, archived }: { slug: string; archiv
         type="button"
         onClick={duplicate}
         disabled={busy !== null}
-        className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+        className="inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3.5 py-2 text-xs font-semibold text-ink-muted shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 hover:text-ink disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
       >
         {busy === 'duplicate' ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

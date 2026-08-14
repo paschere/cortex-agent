@@ -302,7 +302,7 @@ function FilterChip({
       onClick={onClick}
       aria-pressed={active}
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11.5px] font-semibold transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none',
+        'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-micro font-semibold transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none',
         active
           ? 'border-primary bg-primary text-white'
           : 'border-border bg-surface text-ink-muted hover:border-border-strong hover:text-ink',
@@ -329,7 +329,7 @@ function Badge({
     <span
       title={title}
       className={clsx(
-        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-[10.5px] font-semibold',
+        'inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 text-micro font-semibold',
         className,
       )}
     >
@@ -639,8 +639,8 @@ export function ToolsControlCentre({
                 <s.icon className={`h-3.5 w-3.5 ${s.tone}`} />
                 <span className="field-label">{s.label}</span>
               </div>
-              <div className={`stat-num mt-1.5 text-[26px] leading-none ${s.tone}`}>{s.value}</div>
-              <div className="mt-1.5 text-[11px] leading-snug text-ink-faint">{s.sub}</div>
+              <div className={`stat-num mt-1.5 text-xl leading-none ${s.tone}`}>{s.value}</div>
+              <div className="mt-1.5 text-micro leading-snug text-ink-faint">{s.sub}</div>
             </button>
           ))}
         </div>
@@ -650,8 +650,8 @@ export function ToolsControlCentre({
       <Panel className="p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div>
-            <h2 className="text-[14px] font-bold text-ink">Qué sabe hacer Cortex</h2>
-            <p className="mt-0.5 text-[12px] leading-snug text-ink-muted">
+            <h2 className="text-base font-bold text-ink">Qué sabe hacer Cortex</h2>
+            <p className="mt-0.5 text-xs leading-snug text-ink-muted">
               Agrupado por lo que resuelve, no por el sistema que hay detrás. Toca un grupo para ver
               solo esas herramientas.
             </p>
@@ -690,11 +690,11 @@ export function ToolsControlCentre({
                   <Icon className="h-4 w-4" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-bold text-ink">{g.name}</span>
-                  <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-muted">
+                  <span className="block text-sm font-bold text-ink">{g.name}</span>
+                  <span className="mt-0.5 block text-micro leading-snug text-ink-muted">
                     {g.blurb}
                   </span>
-                  <span className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[10.5px]">
+                  <span className="mt-1.5 flex flex-wrap items-center gap-x-2 text-micro">
                     <span className="text-ink-faint">
                       <span className="tabular">{s.total - s.blocked}</span> listas
                     </span>
@@ -727,8 +727,8 @@ export function ToolsControlCentre({
             )}
           </span>
           <div className="min-w-0">
-            <h2 className="text-[14px] font-bold text-ink">Por qué no hizo lo que le pediste</h2>
-            <p className="mt-0.5 text-[12px] leading-relaxed text-ink-muted">
+            <h2 className="text-base font-bold text-ink">Por qué no hizo lo que le pediste</h2>
+            <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
               {blockedTools.length > 0 ? (
                 <>
                   <span className="tabular font-semibold text-ink">{blockedTools.length}</span> de{' '}
@@ -770,19 +770,19 @@ export function ToolsControlCentre({
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-baseline gap-x-2">
-                          <span className="text-[12.5px] font-bold text-ink">
+                          <span className="text-xs font-bold text-ink">
                             {BLOCK_LABEL[reason]}
                           </span>
                           <span
                             className={clsx(
-                              'tabular text-[11px] font-semibold',
+                              'tabular text-micro font-semibold',
                               tone === 'rose' ? 'text-rose' : 'text-amber',
                             )}
                           >
                             {list.length}
                           </span>
                         </div>
-                        <p className="mt-0.5 text-[11.5px] leading-snug text-ink-muted">
+                        <p className="mt-0.5 text-micro leading-snug text-ink-muted">
                           {BLOCK_BLURB[reason]}
                         </p>
                         <CauseDetail
@@ -799,7 +799,7 @@ export function ToolsControlCentre({
                             setState('all');
                           }}
                           aria-pressed={active}
-                          className="mt-2 text-[11.5px] font-semibold text-primary hover:underline"
+                          className="mt-2 text-micro font-semibold text-primary hover:underline"
                         >
                           {active ? 'Quitar este filtro' : 'Ver cuáles son'}
                         </button>
@@ -821,8 +821,8 @@ export function ToolsControlCentre({
               <UsersRound className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <div className="text-[13px] font-semibold text-ink">Qué está encendido</div>
-              <div className="text-[11.5px] leading-relaxed text-ink-faint">
+              <div className="text-sm font-semibold text-ink">Qué está encendido</div>
+              <div className="text-micro leading-relaxed text-ink-faint">
                 El acceso se da por equipo, nunca por persona. Escoge un equipo y usa los
                 interruptores de abajo para bloquear grupos enteros o herramientas sueltas.
               </div>
@@ -832,7 +832,7 @@ export function ToolsControlCentre({
                 value={selectedTeamId}
                 onChange={(e) => selectTeam(e.target.value)}
                 aria-label="Equipo cuyos permisos vas a editar"
-                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink focus:border-primary sm:w-auto sm:min-w-[240px]"
+                className="w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink focus:border-primary sm:w-auto sm:min-w-[240px]"
               >
                 <option value="">Solo mirar — sin equipo seleccionado</option>
                 {teams.map((t) => (
@@ -842,7 +842,7 @@ export function ToolsControlCentre({
                 ))}
               </select>
               {selectedTeam && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-border bg-surface-2 px-2.5 py-1 text-[11px] font-semibold text-ink-muted">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-border bg-surface-2 px-2.5 py-1 text-micro font-semibold text-ink-muted">
                   <Users2 className="h-3 w-3" />
                   <span className="tabular">{selectedTeam.memberCount}</span>{' '}
                   {selectedTeam.memberCount === 1 ? 'persona' : 'personas'}
@@ -851,7 +851,7 @@ export function ToolsControlCentre({
             </div>
           </div>
           {selectedTeam && (
-            <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">
+            <p className="mt-2 text-micro leading-relaxed text-ink-faint">
               Los interruptores controlan qué puede usar{' '}
               <span className="font-semibold text-ink-muted">{selectedTeam.name}</span>. Apagado
               bloquea la herramienta para todo el equipo; encendido quita el bloqueo y vuelve a lo
@@ -861,7 +861,7 @@ export function ToolsControlCentre({
             </p>
           )}
           {teams.length === 0 && (
-            <p className="mt-2 text-[11.5px] text-ink-faint">
+            <p className="mt-2 text-micro text-ink-faint">
               Todavía no hay equipos a los que darles acceso.{' '}
               <Link href="/admin/teams" className="font-semibold text-primary hover:underline">
                 Crea uno en Equipos
@@ -870,7 +870,7 @@ export function ToolsControlCentre({
             </p>
           )}
           {error && (
-            <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-[11.5px] font-semibold text-rose">
+            <p className="mt-2 rounded-card border border-rose/30 bg-rose-soft px-2.5 py-1.5 text-micro font-semibold text-rose">
               {error}
             </p>
           )}
@@ -887,7 +887,7 @@ export function ToolsControlCentre({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Busca por nombre, por lo que hace o por el sistema que toca…"
-              className="h-9 w-full rounded-sm border border-border bg-surface-2 pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-faint focus:border-primary focus:bg-surface"
+              className="h-9 w-full rounded-sm border border-border bg-surface-2 pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-primary focus:bg-surface"
             />
           </label>
           <Button
@@ -950,7 +950,7 @@ export function ToolsControlCentre({
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="max-w-3xl text-[11px] leading-relaxed text-ink-faint">
+          <p className="max-w-3xl text-micro leading-relaxed text-ink-faint">
             El riesgo es la línea base que la capa de seguridad le asigna a cada herramienta según
             qué toca y hasta dónde llega. La llamada real puede puntuar más alto: cifras de sueldos
             en los datos, un destinatario fuera de la empresa o una exportación masiva la suben.
@@ -970,7 +970,7 @@ export function ToolsControlCentre({
           )}
         </div>
         {usageMeta.available && usageMeta.truncated && (
-          <p className="text-[11px] leading-relaxed text-ink-faint">
+          <p className="text-micro leading-relaxed text-ink-faint">
             El uso se calcula leyendo los{' '}
             <span className="tabular">{usageMeta.scanLimit.toLocaleString('es-CO')}</span> eventos
             más recientes, no los {usageMeta.windowDays} días completos: esta organización los pasó.
@@ -987,7 +987,7 @@ export function ToolsControlCentre({
       {/* --- 6. The catalogue ---------------------------------------------- */}
       {grouped.length === 0 ? (
         <Panel className="p-10 text-center">
-          <p className="mx-auto max-w-sm text-[13px] leading-relaxed text-ink-muted">
+          <p className="mx-auto max-w-sm text-sm leading-relaxed text-ink-muted">
             Ninguna herramienta coincide con esta búsqueda y estos filtros. Amplía la búsqueda o
             quita lo que tengas puesto.
           </p>
@@ -1023,23 +1023,23 @@ export function ToolsControlCentre({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      <span className="text-[14px] font-bold text-ink">{meta.name}</span>
-                      <span className="text-[10.5px] text-ink-faint">
+                      <span className="text-base font-bold text-ink">{meta.name}</span>
+                      <span className="text-micro text-ink-faint">
                         <span className="tabular">{list.length}</span>{' '}
                         {list.length === 1 ? 'herramienta' : 'herramientas'}
                       </span>
                       {approvals > 0 && (
-                        <span className="text-[10.5px] font-semibold text-amber">
+                        <span className="text-micro font-semibold text-amber">
                           <span className="tabular">{approvals}</span> piden confirmación
                         </span>
                       )}
                       {blocked > 0 && (
-                        <span className="text-[10.5px] font-semibold text-rose">
+                        <span className="text-micro font-semibold text-rose">
                           <span className="tabular">{blocked}</span> frenadas
                         </span>
                       )}
                     </span>
-                    <span className="mt-0.5 block text-[12px] leading-snug text-ink-muted">
+                    <span className="mt-0.5 block text-xs leading-snug text-ink-muted">
                       {meta.blurb}
                     </span>
                   </span>
@@ -1106,7 +1106,7 @@ function CauseDetail({
 }) {
   if (reason === 'disabled') {
     return (
-      <p className="mt-1.5 text-[11.5px] leading-snug text-ink">
+      <p className="mt-1.5 text-micro leading-snug text-ink">
         {tools.map((t) => t.title).join(', ')}{' '}
         {tools.length === 1 ? 'está apagada' : 'están apagadas'}.{' '}
         {isAdmin ? (
@@ -1123,7 +1123,7 @@ function CauseDetail({
   if (reason === 'integration') {
     const providers = [...new Set(tools.flatMap((t) => t.missingProviders))].sort();
     return (
-      <p className="mt-1.5 text-[11.5px] leading-snug text-ink">
+      <p className="mt-1.5 text-micro leading-snug text-ink">
         Falta conectar {providers.map(providerLabel).join(', ')}.{' '}
         <Link href="/integrations" className="font-semibold text-primary hover:underline">
           Conéctalo en Integraciones
@@ -1136,7 +1136,7 @@ function CauseDetail({
   if (reason === 'team_blocked') {
     const teams = [...new Set(tools.flatMap((t) => t.blockingTeams))].sort();
     return (
-      <p className="mt-1.5 text-[11.5px] leading-snug text-ink">
+      <p className="mt-1.5 text-micro leading-snug text-ink">
         {teams.length > 0 ? (
           <>
             Lo bloqueó {teams.length === 1 ? 'tu equipo' : 'tus equipos'}{' '}
@@ -1155,7 +1155,7 @@ function CauseDetail({
   if (reason === 'credential') {
     const vars = [...new Set(tools.flatMap((t) => t.missingCredentials))].sort();
     return (
-      <p className="mt-1.5 text-[11.5px] leading-snug text-ink">
+      <p className="mt-1.5 text-micro leading-snug text-ink">
         {isAdmin ? (
           <>
             Al servidor le falta <span className="tabular font-semibold">{vars.join(', ')}</span>.
@@ -1172,14 +1172,14 @@ function CauseDetail({
   // not_granted
   if (agentCount === 0) {
     return (
-      <p className="mt-1.5 text-[11.5px] leading-snug text-ink">
+      <p className="mt-1.5 text-micro leading-snug text-ink">
         Esta organización no tiene ningún agente activo, así que ninguna herramienta le llega al
         modelo.
       </p>
     );
   }
   return (
-    <p className="mt-1.5 text-[11.5px] leading-snug text-ink">
+    <p className="mt-1.5 text-micro leading-snug text-ink">
       Están en el registro, pero ningún agente activo las lista.{' '}
       {isAdmin ? (
         <>
@@ -1233,16 +1233,16 @@ function FamilyBlock({
         <div className="flex items-center gap-3 border-b border-border bg-surface-2 px-4 py-2">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-[12px] font-bold text-ink">
+              <span className="text-xs font-bold text-ink">
                 {isMcp ? (server?.name ?? 'Servidor MCP') : meta.name}
               </span>
               {!isMcp && (
-                <code className="tabular text-[10.5px] text-ink-faint">{familyPattern}</code>
+                <code className="tabular text-micro text-ink-faint">{familyPattern}</code>
               )}
               {isMcp && server && (
                 <span
                   className={clsx(
-                    'text-[10.5px] font-semibold',
+                    'text-micro font-semibold',
                     server.trusted ? 'text-emerald' : 'text-amber',
                   )}
                 >
@@ -1251,7 +1251,7 @@ function FamilyBlock({
               )}
             </div>
             {isMcp && server?.lastError && (
-              <p className="mt-0.5 text-[11px] leading-snug text-rose">
+              <p className="mt-0.5 text-micro leading-snug text-rose">
                 Última revisión con error: {server.lastError}
               </p>
             )}
@@ -1259,7 +1259,7 @@ function FamilyBlock({
           {isMcp ? (
             <Link
               href="/integrations"
-              className="shrink-0 text-[11.5px] font-semibold text-primary hover:underline"
+              className="shrink-0 text-micro font-semibold text-primary hover:underline"
             >
               Administrar servidor
             </Link>
@@ -1268,7 +1268,7 @@ function FamilyBlock({
               <div className="flex shrink-0 items-center gap-2">
                 <span
                   className={clsx(
-                    'text-[10.5px] font-semibold',
+                    'text-micro font-semibold',
                     familyBlocked ? 'text-rose' : 'text-ink-faint',
                   )}
                 >
@@ -1340,16 +1340,16 @@ function ToolRow({
         <div className={clsx(unavailable && 'opacity-70')}>
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span
-              className="text-[13.5px] font-semibold text-ink"
+              className="text-sm font-semibold text-ink"
               title={t.kind === 'registry' ? qualifiedToolLabel(t.id) : t.title}
             >
               {t.title}
             </span>
             {/* Raw id kept as secondary detail: it is what the permission
                 patterns and the audit log speak. */}
-            <code className="tabular text-[11px] text-ink-faint">{t.id}</code>
+            <code className="tabular text-micro text-ink-faint">{t.id}</code>
           </div>
-          <p className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">{t.description}</p>
+          <p className="mt-0.5 text-xs leading-snug text-ink-muted">{t.description}</p>
         </div>
 
         {/* The answer to "why didn't it work", on the row itself. */}
@@ -1375,7 +1375,7 @@ function ToolRow({
             })()}
             <p
               className={clsx(
-                'text-[11.5px] leading-snug',
+                'text-micro leading-snug',
                 BLOCK_TONE[reason] === 'rose' ? 'text-rose' : 'text-amber',
               )}
             >
@@ -1508,7 +1508,7 @@ function ToolRow({
         {usageAvailable && <UsageLine usage={t.usage} />}
 
         {t.needsApproval && t.approvalReason && (
-          <p className="mt-1.5 border-l-2 border-amber/40 pl-2 text-[11.5px] leading-snug text-ink-faint">
+          <p className="mt-1.5 border-l-2 border-amber/40 pl-2 text-micro leading-snug text-ink-faint">
             {t.approvalReason}
           </p>
         )}
@@ -1523,9 +1523,9 @@ function ToolRow({
             onClick={() => setPermission(t.id, toolBlocked)}
           />
           {familyBlocked ? (
-            <span className="text-[10.5px] font-semibold text-rose">Por familia</span>
+            <span className="text-micro font-semibold text-rose">Por familia</span>
           ) : (
-            toolBlocked && <span className="text-[10.5px] font-semibold text-rose">Bloqueada</span>
+            toolBlocked && <span className="text-micro font-semibold text-rose">Bloqueada</span>
           )}
         </div>
       )}
@@ -1617,11 +1617,11 @@ function UsageLine({ usage }: { usage: ToolUsage | null }) {
   useEffect(() => setMounted(true), []);
 
   if (!usage) {
-    return <p className="mt-1.5 text-[11px] text-ink-faint">Nunca se ha usado.</p>;
+    return <p className="mt-1.5 text-micro text-ink-faint">Nunca se ha usado.</p>;
   }
   const failures = usage.errors + usage.rateLimited;
   return (
-    <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink-faint">
+    <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-ink-faint">
       <span>
         Última vez{' '}
         {mounted && (

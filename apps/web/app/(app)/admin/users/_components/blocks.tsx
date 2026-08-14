@@ -31,7 +31,7 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 }
 
 export function EmptyNote({ children }: { children: ReactNode }) {
-  return <p className="max-w-lg text-[12.5px] leading-relaxed text-ink-muted">{children}</p>;
+  return <p className="max-w-lg text-xs leading-relaxed text-ink-muted">{children}</p>;
 }
 
 /** Compact KPI: tinted icon square + big number + caption. */
@@ -56,10 +56,10 @@ export function StatTile({
         {icon}
       </span>
       <div className="min-w-0">
-        <div className="stat-num truncate text-[17px] leading-tight text-ink" title={value}>
+        <div className="stat-num truncate text-lg leading-tight text-ink" title={value}>
           {value}
         </div>
-        <div className="truncate text-[10.5px] text-ink-faint" title={sub ?? label}>
+        <div className="truncate text-micro text-ink-faint" title={sub ?? label}>
           {sub ?? label}
         </div>
       </div>
@@ -81,7 +81,7 @@ export function Chip({
     <span
       title={title}
       className={clsx(
-        'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11.5px] font-semibold',
+        'inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-micro font-semibold',
         TONE_CHIP[tone],
         TONE_BORDER[tone],
       )}
@@ -101,7 +101,7 @@ export function DayBars({ days }: { days: DayPoint[] }) {
 
   if (total === 0) {
     return (
-      <div className="flex h-28 items-center justify-center rounded-card border border-border bg-surface-2 px-4 text-center text-[12.5px] text-ink-muted">
+      <div className="flex h-28 items-center justify-center rounded-card border border-border bg-surface-2 px-4 text-center text-xs text-ink-muted">
         Sin actividad registrada en esta ventana.
       </div>
     );
@@ -131,7 +131,7 @@ export function DayBars({ days }: { days: DayPoint[] }) {
           );
         })}
       </div>
-      <div className="tabular mt-1.5 flex justify-between text-[10px] text-ink-faint">
+      <div className="tabular mt-1.5 flex justify-between text-micro text-ink-faint">
         <span>{days[0]?.day}</span>
         <span>{total.toLocaleString()} eventos</span>
         <span>{days[days.length - 1]?.day}</span>

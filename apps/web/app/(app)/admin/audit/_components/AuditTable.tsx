@@ -42,7 +42,7 @@ export function AuditTable({
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full text-[12px]">
+        <table className="w-full text-xs">
           <thead className="border-b border-border-strong bg-surface-2">
             <tr className="text-left">
               {HEADERS.map((h) => (
@@ -95,7 +95,7 @@ export function AuditTable({
                       {isAgentTurn(e.tool_id) ? 'Turno de chat' : toolLabel(e.tool_id).label}
                     </div>
                     {!isAgentTurn(e.tool_id) && (
-                      <div className="tabular truncate text-[10.5px] text-ink-faint">
+                      <div className="tabular truncate text-micro text-ink-faint">
                         {e.tool_id}
                       </div>
                     )}
@@ -117,7 +117,7 @@ export function AuditTable({
                     {e.decision && e.decision !== 'allowed' ? (
                       <DecisionTag decision={e.decision} />
                     ) : (
-                      <span className="tabular text-[10.5px] text-ink-faint">
+                      <span className="tabular text-micro text-ink-faint">
                         {e.decision ? (DECISION_LABEL[e.decision] ?? e.decision) : '—'}
                       </span>
                     )}

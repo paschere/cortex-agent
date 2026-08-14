@@ -71,8 +71,8 @@ export default async function ReportsPage() {
 
       {rows.length === 0 ? (
         <Panel className="mt-6 p-8 text-center">
-          <h2 className="text-[15px] font-semibold text-ink">Todavía no hay informes guardados</h2>
-          <p className="mx-auto mt-2 max-w-lg text-[13px] leading-relaxed text-ink-muted">
+          <h2 className="text-base font-semibold text-ink">Todavía no hay informes guardados</h2>
+          <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-ink-muted">
             Genera el primero desde una de las tres tarjetas de arriba, o pídeselo a Cortex en el
             chat: «hazme el informe de vencimientos de este mes». Queda guardado acá con la fecha en
             que se calculó y la fuente de cada cifra.
@@ -84,7 +84,7 @@ export default async function ReportsPage() {
           <div className="space-y-6">
             {groups.map((group) => (
               <div key={group.key}>
-                <h3 className="mb-2 text-[12px] font-semibold text-ink-faint">
+                <h3 className="mb-2 text-xs font-semibold text-ink-faint">
                   {monthHeading(group.key)}
                 </h3>
                 <ul className="grid gap-2.5 sm:grid-cols-2">
@@ -99,7 +99,7 @@ export default async function ReportsPage() {
                           <div className="flex items-start justify-between gap-3">
                             <span
                               className={clsx(
-                                'rounded-pill px-2.5 py-0.5 text-[10.5px] font-semibold',
+                                'rounded-pill px-2.5 py-0.5 text-micro font-semibold',
                                 KIND_TONE[row.kind as ReportKind] ?? 'bg-surface-2 text-ink-muted',
                               )}
                             >
@@ -107,7 +107,7 @@ export default async function ReportsPage() {
                             </span>
                             {live && (
                               <span
-                                className="flex items-center gap-1 text-[10.5px] font-medium text-ink-faint"
+                                className="flex items-center gap-1 text-micro font-medium text-ink-faint"
                                 title={`Enlace público activo · ${row.share_views} ${row.share_views === 1 ? 'apertura' : 'aperturas'}`}
                               >
                                 <Link2 className="h-3 w-3" aria-hidden />
@@ -119,14 +119,14 @@ export default async function ReportsPage() {
                             )}
                           </div>
 
-                          <h4 className="mt-2.5 text-[14px] font-semibold leading-snug text-ink group-hover:text-primary-ink">
+                          <h4 className="mt-2.5 text-base font-semibold leading-snug text-ink group-hover:text-primary-ink">
                             {row.title}
                           </h4>
-                          <p className="mt-1 text-[12px] text-ink-muted">{row.period_label}</p>
+                          <p className="mt-1 text-xs text-ink-muted">{row.period_label}</p>
 
                           {/* The stamp that says this is a photograph. Mono, because
                               it is the one thing on the card somebody might check. */}
-                          <p className="mt-3 flex items-center gap-1.5 text-[11px] text-ink-faint">
+                          <p className="mt-3 flex items-center gap-1.5 text-micro text-ink-faint">
                             <span className="field-label">Calculado</span>
                             <span className="tabular">{stamp(row.generated_at)}</span>
                           </p>
@@ -139,7 +139,7 @@ export default async function ReportsPage() {
             ))}
           </div>
           {rows.length >= 60 && (
-            <p className="mt-4 text-[11.5px] text-ink-faint">
+            <p className="mt-4 text-micro text-ink-faint">
               Se muestran los 60 más recientes. Los anteriores siguen guardados y se abren por su
               enlace directo. Hoy es {longDate(new Date().toISOString().slice(0, 10))}.
             </p>

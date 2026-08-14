@@ -78,7 +78,7 @@ export function Field({
   return (
     <div className={clsx('min-w-0', className)}>
       <div className="field-label">{label}</div>
-      <div className="tabular mt-1 text-[15px] font-medium text-ink">{children}</div>
+      <div className="tabular mt-1 text-base font-medium text-ink">{children}</div>
     </div>
   );
 }

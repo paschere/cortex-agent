@@ -8,7 +8,7 @@ import { EditRoutineDialog } from './EditRoutineDialog';
 import type { ScheduledJob } from './types';
 
 const GHOST =
-  'inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-[12px] font-semibold shadow-card transition-all duration-150 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none';
+  'inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 py-1.5 text-xs font-semibold shadow-card transition-all duration-150 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none';
 
 /**
  * The routine detail header's action row — the same four verbs the card offers
@@ -76,7 +76,7 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
               ? 'Ejecutar esta rutina ahora'
               : 'Solo se pueden ejecutar las rutinas activas'
           }
-          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-[12px] font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
+          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
         >
           {running ? (
             <>
@@ -135,7 +135,7 @@ export function RoutineActions({ job, canEdit }: { job: ScheduledJob; canEdit: b
       </div>
 
       {error && (
-        <p className="rounded-card border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-[11.5px] text-rose shadow-card">
+        <p className="rounded-card border border-rose/40 bg-rose-soft px-2.5 py-1.5 text-micro text-rose shadow-card">
           {error} No se cambió nada; vuelve a intentarlo.
         </p>
       )}

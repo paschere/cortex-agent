@@ -22,7 +22,7 @@ export function DeclaredTable({ spec, result }: { spec: TableSpec; result: unkno
   if (rows.length === 0) {
     return (
       <div className="rounded-card border border-border bg-surface px-4 py-3">
-        <p className="text-[12.5px] text-ink-muted">{spec.empty}</p>
+        <p className="text-xs text-ink-muted">{spec.empty}</p>
       </div>
     );
   }
@@ -30,20 +30,20 @@ export function DeclaredTable({ spec, result }: { spec: TableSpec; result: unkno
   return (
     <div className="overflow-hidden rounded-card border border-border bg-surface">
       {note && (
-        <p className="border-b border-border px-4 py-2.5 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="border-b border-border px-4 py-2.5 text-xs leading-relaxed text-ink-muted">
           {note}
         </p>
       )}
       {/* Su propio scroll: una tabla ancha no puede empujar la conversación. */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-[12.5px]">
+        <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="border-b border-border">
               {spec.columns.map((c) => (
                 <th
                   key={c.key}
                   className={clsx(
-                    'whitespace-nowrap px-4 py-2 text-[11px] font-semibold uppercase tracking-field text-ink-faint',
+                    'whitespace-nowrap px-4 py-2 text-micro font-semibold uppercase tracking-field text-ink-faint',
                     c.kind === 'number' || c.kind === 'money' ? 'text-right' : 'text-left',
                   )}
                 >

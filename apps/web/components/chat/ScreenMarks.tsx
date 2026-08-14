@@ -88,7 +88,7 @@ export function ScreenMarks({
                     the left or top edge of the frame would have its number
                     clipped by the card, which is exactly the box somebody is
                     most likely to be looking for. */}
-                <span className="absolute left-0 top-0 grid h-5 w-5 place-items-center rounded-sm bg-primary text-[11px] font-semibold leading-none text-white">
+                <span className="absolute left-0 top-0 grid h-5 w-5 place-items-center rounded-sm bg-primary text-micro font-semibold leading-none text-white">
                   {i + 1}
                 </span>
               </span>
@@ -103,10 +103,10 @@ export function ScreenMarks({
         <ol className="space-y-1.5">
           {marks.map((mark, i) => (
             <li key={`${mark.x1}-${mark.y1}-${mark.label}`} className="flex items-start gap-2">
-              <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-sm bg-primary-soft text-[11px] font-semibold leading-none text-primary-ink">
+              <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-sm bg-primary-soft text-micro font-semibold leading-none text-primary-ink">
                 {i + 1}
               </span>
-              <span className="min-w-0 text-[12.5px] leading-snug text-ink">{mark.label}</span>
+              <span className="min-w-0 text-xs leading-snug text-ink">{mark.label}</span>
             </li>
           ))}
         </ol>
@@ -134,7 +134,7 @@ function FrameGone({ count }: { count: number }) {
   return (
     <div className="flex items-start gap-2.5 bg-surface-2 px-3 py-2.5">
       <ImageOff className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint" aria-hidden="true" />
-      <p className="text-[12px] leading-snug text-ink-muted">
+      <p className="text-xs leading-snug text-ink-muted">
         Ya no tengo la imagen para dibujar encima: el cuadro de tu pantalla no se guarda en ninguna
         parte y se pierde al recargar.{' '}
         {count === 1

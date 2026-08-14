@@ -96,24 +96,24 @@ function Proposals({
   return (
     <Panel className="border-amber/30">
       <PanelHead title="Por revisar" right={`${proposals.length}`} />
-      <p className="px-5 pt-1 text-[12.5px] leading-snug text-ink-muted">
+      <p className="px-5 pt-1 text-xs leading-snug text-ink-muted">
         Cortex cree que esto es de {clientName}, pero nadie lo ha confirmado, así que no aparece en
         la ficha ni cuenta en ningún número.
       </p>
       {error && (
-        <p className="mx-5 mt-3 rounded-sm bg-rose-soft px-3 py-2 text-[12.5px] text-rose">
+        <p className="mx-5 mt-3 rounded-sm bg-rose-soft px-3 py-2 text-xs text-rose">
           {error}
         </p>
       )}
       <ul className="mt-3 divide-y divide-border">
         {proposals.map((p) => (
           <li key={p.id} className="px-5 py-3">
-            <p className="truncate text-[13px] font-medium text-ink">{p.label}</p>
-            <p className="mt-0.5 text-[11.5px] text-ink-faint">
+            <p className="truncate text-sm font-medium text-ink">{p.label}</p>
+            <p className="mt-0.5 text-micro text-ink-faint">
               {p.kindLabel} · {p.why}
             </p>
             {p.evidence && (
-              <p className="tabular mt-1 truncate text-[11.5px] text-ink-muted">{p.evidence}</p>
+              <p className="tabular mt-1 truncate text-micro text-ink-muted">{p.evidence}</p>
             )}
             <div className="mt-2 flex items-center gap-2">
               <Button
@@ -184,7 +184,7 @@ function Contacts({ clientId, contacts }: { clientId: string; contacts: ContactV
         right={contacts.length > 0 ? `${contacts.length}` : undefined}
       />
       {contacts.length === 0 && !adding && (
-        <p className="px-5 pb-1 pt-2 text-[12.5px] leading-snug text-ink-muted">
+        <p className="px-5 pb-1 pt-2 text-xs leading-snug text-ink-muted">
           Nadie registrado todavía. Con el correo de una persona, lo que ella escriba se le atribuye
           a este cliente aunque no tengas el dominio completo.
         </p>
@@ -193,15 +193,15 @@ function Contacts({ clientId, contacts }: { clientId: string; contacts: ContactV
         {contacts.map((c) => (
           <li key={c.id} className="px-5 py-2.5">
             <div className="flex items-center gap-2">
-              <span className="truncate text-[13px] font-medium text-ink">{c.name}</span>
+              <span className="truncate text-sm font-medium text-ink">{c.name}</span>
               {c.isPrimary && (
-                <span className="shrink-0 rounded-pill bg-primary-soft px-2 py-0.5 text-[10px] font-bold text-primary">
+                <span className="shrink-0 rounded-pill bg-primary-soft px-2 py-0.5 text-micro font-bold text-primary">
                   principal
                 </span>
               )}
             </div>
-            {c.role && <p className="text-[11.5px] text-ink-faint">{c.role}</p>}
-            {c.email && <p className="tabular truncate text-[12px] text-ink-muted">{c.email}</p>}
+            {c.role && <p className="text-micro text-ink-faint">{c.role}</p>}
+            {c.email && <p className="tabular truncate text-xs text-ink-muted">{c.email}</p>}
           </li>
         ))}
       </ul>
@@ -230,7 +230,7 @@ function Contacts({ clientId, contacts }: { clientId: string; contacts: ContactV
               aria-label="Cargo del contacto"
               className={INPUT}
             />
-            {error && <p className="text-[12px] text-rose">{error}</p>}
+            {error && <p className="text-xs text-rose">{error}</p>}
             <div className="flex items-center gap-2">
               <Button type="button" onClick={submit} disabled={pending || !name.trim()}>
                 {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
@@ -284,7 +284,7 @@ function Domains({ clientId, domains }: { clientId: string; domains: DomainView[
   return (
     <Panel>
       <PanelHead icon={<AtSign className="h-4 w-4" aria-hidden />} title="Dominios de su correo" />
-      <p className="px-5 pt-1 text-[12.5px] leading-snug text-ink-muted">
+      <p className="px-5 pt-1 text-xs leading-snug text-ink-muted">
         Todo lo que llegue de estos dominios se le atribuye a este cliente sin que nadie lo revise.
         Por eso queda a nombre de quien lo registró.
       </p>
@@ -293,7 +293,7 @@ function Domains({ clientId, domains }: { clientId: string; domains: DomainView[
         {domains.map((d) => (
           <li key={d.id} className="flex items-center justify-between gap-2 px-5 py-2.5">
             <div className="min-w-0">
-              <p className="tabular truncate text-[13px] font-medium text-ink">@{d.domain}</p>
+              <p className="tabular truncate text-sm font-medium text-ink">@{d.domain}</p>
               {d.verifiedBy && (
                 <Provenance
                   source={d.verifiedBy}
@@ -329,7 +329,7 @@ function Domains({ clientId, domains }: { clientId: string; domains: DomainView[
           className={`${INPUT} tabular`}
         />
         {(isPublic || error) && (
-          <p className={clsx('text-[12px] leading-snug', 'text-rose')}>
+          <p className={clsx('text-xs leading-snug', 'text-rose')}>
             {isPublic
               ? `${candidate} es un correo público. Si lo registras, cualquier cuenta personal quedaría atribuida a este cliente.`
               : error}
@@ -373,7 +373,7 @@ function StatusPicker({ clientId, status }: { clientId: string; status: ClientSt
             </option>
           ))}
         </select>
-        <p className="mt-2 text-[11.5px] leading-snug text-ink-faint">
+        <p className="mt-2 text-micro leading-snug text-ink-faint">
           &ldquo;Bloqueado&rdquo; es una decisión, no una descripción: significa que no se le
           despacha.
         </p>
@@ -383,4 +383,4 @@ function StatusPicker({ clientId, status }: { clientId: string; status: ClientSt
 }
 
 const INPUT =
-  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink shadow-sm outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 motion-reduce:transition-none';
+  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink shadow-sm outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 motion-reduce:transition-none';

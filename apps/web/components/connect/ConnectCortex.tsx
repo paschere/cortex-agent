@@ -89,7 +89,7 @@ export function CopyButton({
       onClick={onCopy}
       aria-label={copied ? 'Copiado' : label}
       className={clsx(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-[11.5px] font-semibold transition-colors duration-150 motion-reduce:transition-none',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-3 py-1.5 text-micro font-semibold transition-colors duration-150 motion-reduce:transition-none',
         copied
           ? 'border-emerald/20 bg-emerald-soft text-emerald'
           : 'border-border bg-surface text-ink-muted hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink',
@@ -106,7 +106,7 @@ export function CopyButton({
 function CodeLine({ text }: { text: string }) {
   return (
     <div className="flex items-center gap-2 rounded-sm border border-border bg-surface-2 px-3 py-2">
-      <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[11.5px] leading-relaxed text-ink">
+      <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-micro leading-relaxed text-ink">
         {text}
       </code>
       <CopyButton text={text} />
@@ -178,7 +178,7 @@ export function ConnectCortex({ url }: { url: string }) {
       {/* Connector URL */}
       <div className="field-label">URL del conector</div>
       <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface-2 px-3 py-2.5">
-        <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[13px] font-semibold text-ink">
+        <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-sm font-semibold text-ink">
           {url}
         </code>
         <CopyButton text={url} label="Copiar la URL" />
@@ -193,7 +193,7 @@ export function ConnectCortex({ url }: { url: string }) {
             onClick={() => setActive(t.id)}
             aria-pressed={t.id === active}
             className={clsx(
-              'inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-semibold transition-all duration-150 motion-reduce:transition-none',
+              'inline-flex items-center gap-1.5 rounded-pill px-3 py-1.5 text-xs font-semibold transition-all duration-150 motion-reduce:transition-none',
               t.id === active
                 ? 'bg-surface text-primary-ink shadow-card'
                 : 'text-ink-muted hover:bg-surface/60 hover:text-ink',
@@ -207,14 +207,14 @@ export function ConnectCortex({ url }: { url: string }) {
 
       {/* Steps for the active target */}
       <div className="mt-3 rounded-card border border-border bg-surface p-4">
-        <div className="text-[11.5px] text-ink-faint">{current.caption}</div>
+        <div className="text-micro text-ink-faint">{current.caption}</div>
         <ol className="mt-2.5 space-y-2">
           {current.steps.map((step, i) => (
             <li key={step} className="flex items-start gap-2.5">
-              <span className="stat-num mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary-soft text-[11px] text-primary">
+              <span className="stat-num mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-primary-soft text-micro text-primary">
                 {i + 1}
               </span>
-              <span className="text-[12.5px] leading-relaxed text-ink-muted">
+              <span className="text-xs leading-relaxed text-ink-muted">
                 <Step text={step} />
               </span>
             </li>
@@ -230,7 +230,7 @@ export function ConnectCortex({ url }: { url: string }) {
         {current.note && (
           <>
             <div className="rule-double mt-3" />
-            <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink-faint">{current.note}</p>
+            <p className="mt-2.5 text-micro leading-relaxed text-ink-faint">{current.note}</p>
           </>
         )}
       </div>

@@ -76,7 +76,7 @@ export default function ForgotPasswordPage() {
           </>
         )}
 
-        <p className="mt-4 text-center text-[12px]">
+        <p className="mt-4 text-center text-xs">
           <Link href="/login" className="font-semibold text-primary hover:underline">
             Volver a iniciar sesión
           </Link>

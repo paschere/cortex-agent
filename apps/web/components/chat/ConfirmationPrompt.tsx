@@ -57,7 +57,7 @@ export function ConfirmationPrompt({
   // ---- Resolved states (a single settled line) ----
   if (status === 'allowed') {
     return (
-      <div className="flex items-center gap-2 rounded-card border border-emerald/20 bg-emerald-soft px-3.5 py-2 text-[13px] font-medium text-emerald shadow-card">
+      <div className="flex items-center gap-2 rounded-card border border-emerald/20 bg-emerald-soft px-3.5 py-2 text-sm font-medium text-emerald shadow-card">
         <Check className="h-4 w-4" />
         Listo — {summary}
       </div>
@@ -65,7 +65,7 @@ export function ConfirmationPrompt({
   }
   if (status === 'cancelled') {
     return (
-      <div className="flex items-center gap-2 rounded-card border border-border bg-surface-2 px-3.5 py-2 text-[13px] text-ink-faint">
+      <div className="flex items-center gap-2 rounded-card border border-border bg-surface-2 px-3.5 py-2 text-sm text-ink-faint">
         <X className="h-4 w-4" />
         Descartada
       </div>
@@ -84,9 +84,9 @@ export function ConfirmationPrompt({
         <div className="min-w-0 flex-1">
           {/* Names the state of the whole block, not a value beneath it, so
               it is deliberately not `.field-label`. */}
-          <div className="text-[11px] font-semibold text-amber">Confirmación requerida</div>
+          <div className="text-micro font-semibold text-amber">Confirmación requerida</div>
           <p className="mt-1 text-sm font-semibold text-ink">{summary}</p>
-          <p className="mt-1 text-[12px] leading-snug text-ink-muted">
+          <p className="mt-1 text-xs leading-snug text-ink-muted">
             {confirmationReason(toolId)}
           </p>
         </div>
@@ -109,7 +109,7 @@ export function ConfirmationPrompt({
         </button>
         {showDetails && (
           // Exactly what leaves the building, in the face evidence is set in.
-          <pre className="scroll-slim mt-2 max-h-48 overflow-auto rounded-sm border border-border bg-surface-2 p-2.5 font-mono text-[10.5px] leading-relaxed text-ink-muted">
+          <pre className="scroll-slim mt-2 max-h-48 overflow-auto rounded-sm border border-border bg-surface-2 p-2.5 font-mono text-micro leading-relaxed text-ink-muted">
             {JSON.stringify(input, null, 2)}
           </pre>
         )}
@@ -125,7 +125,7 @@ export function ConfirmationPrompt({
             type="button"
             onClick={handleAllow}
             disabled={status === 'running'}
-            className="inline-flex items-center gap-1.5 rounded-pill bg-amber px-4 py-2 text-[13px] font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+            className="inline-flex items-center gap-1.5 rounded-pill bg-amber px-4 py-2 text-sm font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:brightness-95 disabled:opacity-60 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
           >
             {status === 'running' ? (
               <>
@@ -142,7 +142,7 @@ export function ConfirmationPrompt({
             type="button"
             onClick={() => setStatus('cancelled')}
             disabled={status === 'running'}
-            className="rounded-pill px-4 py-2 text-[13px] font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60 motion-reduce:transition-none"
+            className="rounded-pill px-4 py-2 text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-60 motion-reduce:transition-none"
           >
             Descartar
           </button>

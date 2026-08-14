@@ -56,7 +56,7 @@ export function DetailActions({
     return (
       <Panel className="border-amber/25 p-5">
         <h2 className="text-sm font-semibold text-ink">Falta confirmarlo</h2>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
           {quote
             ? 'Compara la fecha con la frase citada. Si el documento dice eso, confírmalo y queda a tu nombre.'
             : 'Revisa la fecha antes de confirmarla. Al confirmar queda a tu nombre.'}
@@ -74,7 +74,7 @@ export function DetailActions({
           />
         </div>
         {error && (
-          <div role="alert" className="mt-3 text-[12.5px] text-rose">
+          <div role="alert" className="mt-3 text-xs text-rose">
             {error}
           </div>
         )}
@@ -111,7 +111,7 @@ export function DetailActions({
     return (
       <Panel className="p-5">
         <h2 className="text-sm font-semibold text-ink">Cerrado</h2>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-muted">
+        <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
           Este ya no se vigila. Queda como historia; si vuelve a aplicar, registra uno nuevo.
         </p>
       </Panel>
@@ -169,7 +169,7 @@ export function DetailActions({
             Mover
           </Button>
         </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-ink-faint">
+        <p className="mt-1.5 text-micro leading-snug text-ink-faint">
           Cambiar la fecha reabre los avisos: el nuevo plazo vuelve a avisar desde cero.
         </p>
       </div>
@@ -200,13 +200,13 @@ export function DetailActions({
         type="button"
         disabled={busy}
         onClick={() => run(() => acknowledgeCommitment(id))}
-        className="mt-4 w-full rounded-pill px-3 py-2 text-[12.5px] font-medium text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="mt-4 w-full rounded-pill px-3 py-2 text-xs font-medium text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         Ya lo vi — frena el escalamiento
       </button>
 
       {error && (
-        <div role="alert" className="mt-3 text-[12.5px] text-rose">
+        <div role="alert" className="mt-3 text-xs text-rose">
           {error}
         </div>
       )}
@@ -215,4 +215,4 @@ export function DetailActions({
 }
 
 const INPUT =
-  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13px] text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 motion-reduce:transition-none';
+  'w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-faint focus:border-primary/40 focus-visible:ring-2 focus-visible:ring-primary/20 motion-reduce:transition-none';

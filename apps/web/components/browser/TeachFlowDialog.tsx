@@ -70,10 +70,10 @@ export function TeachFlowDialog({ onCompose }: { onCompose: (text: string) => vo
         <Dialog.Content className="scroll-slim fixed left-1/2 top-1/2 z-50 max-h-[86vh] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card bg-canvas p-4 shadow-pop focus:outline-none sm:p-5">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <Dialog.Title className="text-[15px] font-semibold text-ink">
+              <Dialog.Title className="text-base font-semibold text-ink">
                 Enséñame un {MODULE.one}
               </Dialog.Title>
-              <Dialog.Description className="mt-0.5 text-[12.5px] leading-snug text-ink-muted">
+              <Dialog.Description className="mt-0.5 text-xs leading-snug text-ink-muted">
                 Sin salir de la conversación. Al terminar queda disponible aquí mismo.
               </Dialog.Description>
             </div>
@@ -95,7 +95,7 @@ export function TeachFlowDialog({ onCompose }: { onCompose: (text: string) => vo
                   className={saved.verified ? 'mt-0.5 h-4 w-4 text-emerald' : 'mt-0.5 h-4 w-4 text-amber'}
                   aria-hidden="true"
                 />
-                <p className="text-[13.5px] leading-relaxed text-ink">{saved.message}</p>
+                <p className="text-sm leading-relaxed text-ink">{saved.message}</p>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -111,7 +111,7 @@ export function TeachFlowDialog({ onCompose }: { onCompose: (text: string) => vo
                 ) : (
                   <Link
                     href="/browser"
-                    className="inline-flex items-center rounded-pill border border-border bg-surface px-4 py-2 text-[13px] font-semibold text-ink shadow-card transition-all duration-150 hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+                    className="inline-flex items-center rounded-pill border border-border bg-surface px-4 py-2 text-sm font-semibold text-ink shadow-card transition-all duration-150 hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
                   >
                     Ver en {MODULE.label}
                   </Link>
