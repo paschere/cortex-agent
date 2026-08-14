@@ -401,3 +401,50 @@ export async function noteActionSent(db: SupabaseClient, note: ActionSentNote): 
     'una acción',
   );
 }
+
+// ---------------------------------------------------------------------------
+
+export interface WeeklyReportNote {
+  userId: string | null;
+  reportId: string;
+  /** Cómo se llama la semana que reporta, ya escrito: «del 3 al 9 de agosto». */
+  periodLabel: string;
+  /** Por qué no salió el correo. Se enseña tal cual, recortada. */
+  reason: string | null;
+}
+
+/**
+ * El parte semanal quedó guardado y el correo NO llegó.
+ *
+ * ESTE PRODUCTOR SÓLO SE LLAMA EN ESE CASO, y es la regla de la 0096 aplicada
+ * al pie de la letra: si el correo salió, la campana no lo repite. Un aviso
+ * diciendo «tienes un informe nuevo» junto a un correo con el informe dentro es
+ * exactamente cómo la campana se convierte en el sitio donde se relee lo que ya
+ * se leyó.
+ *
+ * Cuando el correo falla, en cambio, este aviso es el ÚNICO rastro de que la
+ * semana se reportó. Sin él, el parte del lunes existiría en una tabla que nadie
+ * va a mirar por su cuenta, y el producto habría rendido cuentas al vacío.
+ */
+export async function noteWeeklyReportUndelivered(
+  db: SupabaseClient,
+  note: WeeklyReportNote,
+): Promise<void> {
+  if (!note.userId) return;
+
+  await quietly(
+    db,
+    {
+      userId: note.userId,
+      kind: 'report_ready',
+      title: `El parte de la semana ${short(note.periodLabel, 80)} está listo`,
+      body: `No se pudo enviar por correo: ${short(note.reason, 300) || 'motivo desconocido'}. Está guardado en Informes.`,
+      href: `/reports/${note.reportId}`,
+      source: { kind: 'report', id: note.reportId },
+      // Por informe: cada semana es un parte distinto, y fundir dos semanas en
+      // una línea escondería una de las dos.
+      groupKey: `report:${note.reportId}`,
+    },
+    'el parte semanal',
+  );
+}

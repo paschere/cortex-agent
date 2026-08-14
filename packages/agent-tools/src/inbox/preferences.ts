@@ -27,10 +27,27 @@ export interface DigestPreferences {
   deliverChatDm: boolean;
   /** Free text: "clients first, ignore newsletters". */
   digestFocus: string | null;
+  /**
+   * EL PARTE SEMANAL, Y LA ÚNICA PREFERENCIA DE ESTA TABLA QUE VIENE ENCENDIDA.
+   *
+   * El resto está apagado porque concede una CAPACIDAD sobre algo ajeno: que
+   * Cortex lea el buzón de esta persona, que publique en su espacio de Chat.
+   * Eso lo tiene que conceder su dueño, deliberadamente, desde la pantalla.
+   *
+   * El parte no lee nada de nadie. Es la empresa rindiéndole cuentas a quien
+   * responde por ella, con datos que ese destinatario ya puede abrir en la
+   * aplicación. Apagado por defecto significaría que el producto no reporta
+   * nunca hasta que alguien descubra una casilla, que es la forma más cara
+   * posible de no tener la funcionalidad. Ver la migración 0100, sección 4.
+   *
+   * Sólo se consulta para quienes son `org_admin`: nadie más lo recibe, esté
+   * como esté esta columna.
+   */
+  weeklyReportEnabled: boolean;
 }
 
 export const PREFERENCE_COLUMNS =
-  'user_id, inbox_digest_enabled, inbox_digest_time, timezone, deliver_email, deliver_chat, chat_webhook_url, deliver_chat_dm, digest_focus';
+  'user_id, inbox_digest_enabled, inbox_digest_time, timezone, deliver_email, deliver_chat, chat_webhook_url, deliver_chat_dm, digest_focus, weekly_report_enabled';
 
 export const DEFAULT_PREFERENCES: Omit<DigestPreferences, 'userId'> = {
   enabled: false,
@@ -41,6 +58,7 @@ export const DEFAULT_PREFERENCES: Omit<DigestPreferences, 'userId'> = {
   chatWebhookUrl: null,
   deliverChatDm: false,
   digestFocus: null,
+  weeklyReportEnabled: true,
 };
 
 type PreferenceRow = Record<string, unknown>;
@@ -63,6 +81,10 @@ export function rowToPreferences(userId: string, row: PreferenceRow | null): Dig
     chatWebhookUrl: str(row.chat_webhook_url, null),
     deliverChatDm: row.deliver_chat_dm === true,
     digestFocus: str(row.digest_focus, null),
+    // NULL significa «el default de la columna», que aquí es true. Es la misma
+    // lectura que `deliver_email` y por la misma razón: una fila escrita antes
+    // de que la columna existiera no es una renuncia.
+    weeklyReportEnabled: row.weekly_report_enabled !== false,
   };
 }
 

@@ -118,6 +118,7 @@ export function SettingsForm({
           chatWebhookUrl: prefs.chatWebhookUrl,
           deliverChatDm: prefs.deliverChatDm,
           digestFocus: prefs.digestFocus,
+          weeklyReportEnabled: prefs.weeklyReportEnabled,
         }),
       });
       const json = (await res.json()) as {
@@ -489,6 +490,24 @@ export function SettingsForm({
         <div className="tabular mt-1 text-right text-[11px] text-ink-faint">
           {prefs.digestFocus.length}/600
         </div>
+      </Panel>
+
+      {/* ---- El parte semanal ---------------------------------------------- */}
+      {/* Fuera del bloque atenuado por `on`: no depende del resumen diario ni
+          lo necesita. Y viene encendido, al contrario que todo lo de arriba —
+          aquello concede que Cortex lea un buzón ajeno; esto sólo decide si la
+          empresa te manda por correo lo que ya puedes abrir en la aplicación. */}
+      <Panel className="p-5">
+        <Toggle
+          checked={prefs.weeklyReportEnabled}
+          onChange={(v) => set('weeklyReportEnabled', v)}
+          label="Parte semanal de la empresa"
+          description="Cada lunes temprano, un informe de lo que pasó la semana pasada y lo que viene: qué se venció, qué se cumplió, quién debe qué, qué propuse y en qué quedó, y a qué nadie contestó. Sale solo, sin que nadie lo pida."
+        />
+        <p className="mt-3 text-[12px] leading-relaxed text-ink-faint">
+          Sólo llega a quienes son administradores del espacio de trabajo. Aunque lo apagues, el
+          parte se sigue guardando en Informes: lo que se apaga es el correo, no el informe.
+        </p>
       </Panel>
 
       {/* ---- Save ---------------------------------------------------------- */}

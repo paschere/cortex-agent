@@ -31,6 +31,7 @@ function toView(
     chatWebhookUrl: p.chatWebhookUrl ?? '',
     deliverChatDm: p.deliverChatDm,
     digestFocus: p.digestFocus ?? '',
+    weeklyReportEnabled: p.weeklyReportEnabled,
     email,
   };
 }
@@ -84,6 +85,7 @@ async function upsert(req: NextRequest) {
   if (p.chatWebhookUrl !== undefined) patch.chat_webhook_url = p.chatWebhookUrl || null;
   if (p.deliverChatDm !== undefined) patch.deliver_chat_dm = p.deliverChatDm;
   if (p.digestFocus !== undefined) patch.digest_focus = p.digestFocus || null;
+  if (p.weeklyReportEnabled !== undefined) patch.weekly_report_enabled = p.weeklyReportEnabled;
 
   const db = getOrgScopedClient(user.organization.id);
   const { data, error } = await db

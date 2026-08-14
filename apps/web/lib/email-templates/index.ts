@@ -43,5 +43,7 @@ export { renderDevTaskEmail } from './dev-task-result';
 export type { DevTaskEmailCheck, DevTaskEmailInput } from './dev-task-result';
 export { renderCommitmentNoticeEmail } from './commitment-notice';
 export type { CommitmentNoticeEmailInput, CommitmentNoticeKind } from './commitment-notice';
+export { renderWeeklyReportEmail, weeklySubject } from './weekly-report';
+export type { WeeklyReportEmailInput } from './weekly-report';
 export { renderFlowResultEmail } from './flow-result';
 export type { FlowOutputKind, FlowResultEmailInput } from './flow-result';

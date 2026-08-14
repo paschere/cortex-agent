@@ -78,7 +78,7 @@ export const REPORTS_TABLE = 'reports';
 export const DEFAULT_SHARE_DAYS = 30;
 
 export const REPORT_COLUMNS =
-  'id, kind, title, subtitle, period_label, params, document, content_hash, document_version, renderer_version, generated_at, generated_by, conversation_id, client_id, share_token, share_expires_at, share_views, created_at';
+  'id, kind, title, subtitle, period_label, period_start, params, document, content_hash, document_version, renderer_version, generated_at, generated_by, conversation_id, client_id, share_token, share_expires_at, share_views, created_at';
 
 export interface ReportRow {
   id: string;
@@ -86,6 +86,8 @@ export interface ReportRow {
   title: string;
   subtitle: string | null;
   period_label: string;
+  /** El lunes de la semana que reporta, sólo en los partes que salen solos. */
+  period_start: string | null;
   params: Record<string, unknown>;
   document: unknown;
   content_hash: string;
@@ -246,6 +248,100 @@ export async function saveReport(ctx: ToolContext, input: SaveReportInput): Prom
 }
 
 // ---------------------------------------------------------------------------
+// Reclamar una semana
+// ---------------------------------------------------------------------------
+
+export interface ClaimWeeklyInput {
+  /** El lunes de la semana que este parte reporta, `YYYY-MM-DD`. */
+  periodStart: string;
+  document: ReportDocument;
+  params?: Record<string, unknown>;
+}
+
+export type ClaimWeeklyResult =
+  /** Ganamos la semana. Sólo en este caso se manda el correo. */
+  | { claimed: true; row: ReportRow }
+  /** Otro proceso ya la tenía. No hay nada que hacer y no hay nada que decir. */
+  | { claimed: false; reason: 'already_claimed' };
+
+/**
+ * ESCRIBIR EL PARTE ES RECLAMAR LA SEMANA. No hay dos pasos.
+ *
+ * ===========================================================================
+ * POR QUÉ ESTO NO ES `saveReport` CON UN CAMPO MÁS
+ * ===========================================================================
+ * `saveReport` guarda lo que alguien pidió, y puede haber quince informes de
+ * vencimientos generados el mismo martes sin que ninguno esté de más: cada uno
+ * es una pregunta que una persona hizo. Este parte es lo contrario — hay UNO
+ * por espacio de trabajo y semana, y el segundo no es redundante sino dañino.
+ *
+ * Un parte que llega dos veces no es un fallo cosmético. Es la lección de que a
+ * Cortex se le puede ignorar: quien recibe el mismo informe duplicado deja de
+ * leer los dos, y a partir de ahí el producto entero es ruido. Inngest reintenta
+ * pasos, los despliegues reinician funciones a medias y un cron que dispara dos
+ * veces es un lunes normal, así que esto NO puede depender de que el código
+ * recuerde lo que hizo.
+ *
+ * Así que «¿ya lo mandamos?» lo contesta el índice único parcial
+ * `reports_period_once_idx` de la migración 0100, exactamente como
+ * `commitment_notices_once_idx` contesta «¿ya lo avisamos?» en la 0069. Esta
+ * función inserta y deja decidir a la base:
+ *
+ *   inserción aceptada  →  la semana es nuestra, mándese el correo
+ *   23505               →  ya era de otro, no se manda nada y no se dice nada
+ *
+ * ===========================================================================
+ * RECLAMAR PRIMERO, ENVIAR DESPUÉS
+ * ===========================================================================
+ * El orden importa porque los dos fallos no cuestan lo mismo. Reclamar y no
+ * poder enviar deja el parte guardado en /reports y un aviso en la campana
+ * diciendo que el correo no salió: la información existe y se puede ir a
+ * buscar. Enviar y no poder reclamar manda el mismo parte otra vez en cada
+ * reintento, que es el único desenlace que este mecanismo existe para impedir.
+ *
+ * `generated_by` va nulo a propósito: no lo pidió nadie. Ésa es la
+ * característica del parte, no un dato que falte.
+ */
+export async function claimWeeklyReport(
+  db: SupabaseClient,
+  input: ClaimWeeklyInput,
+): Promise<ClaimWeeklyResult> {
+  const document = validateDocument(input.document);
+  const { data, error } = await db
+    .from(REPORTS_TABLE)
+    .insert({
+      id: randomUUID(),
+      kind: document.kind,
+      period_start: input.periodStart,
+      title: document.title,
+      subtitle: document.subtitle,
+      period_label: document.periodLabel,
+      params: input.params ?? { periodStart: input.periodStart },
+      document,
+      content_hash: documentHash(document),
+      document_version: document.version ?? REPORT_DOCUMENT_VERSION,
+      renderer_version: RENDERER_VERSION,
+      generated_at: document.generatedAt,
+      generated_by: null,
+      conversation_id: null,
+      share_views: 0,
+    })
+    .select(REPORT_COLUMNS)
+    .maybeSingle();
+
+  if (error) {
+    // 23505: el índice único parcial de la 0100 hizo su trabajo. No es un fallo
+    // que haya que registrar ni reintentar — es la respuesta correcta.
+    if (error.code === '23505') return { claimed: false, reason: 'already_claimed' };
+    throw new Error(`No se pudo reclamar la semana del parte: ${error.message}`);
+  }
+  // Sin error y sin fila sólo puede pasar si la inserción no devolvió nada, que
+  // con el índice de por medio significa lo mismo que un 23505.
+  if (!data) return { claimed: false, reason: 'already_claimed' };
+  return { claimed: true, row: data as unknown as ReportRow };
+}
+
+// ---------------------------------------------------------------------------
 // Reading
 // ---------------------------------------------------------------------------
 
@@ -265,7 +361,7 @@ export async function listReports(
   let q = db
     .from(REPORTS_TABLE)
     .select(
-      'id, kind, title, subtitle, period_label, params, content_hash, document_version, renderer_version, generated_at, generated_by, conversation_id, client_id, share_token, share_expires_at, share_views, created_at',
+      'id, kind, title, subtitle, period_label, period_start, params, content_hash, document_version, renderer_version, generated_at, generated_by, conversation_id, client_id, share_token, share_expires_at, share_views, created_at',
     )
     .order('generated_at', { ascending: false })
     .limit(Math.min(opts.limit ?? 25, 100));

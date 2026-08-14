@@ -71,8 +71,15 @@ export type {
   Tone as ReportTone,
 } from './document';
 
-export { buildReport } from './build';
-export type { BuildInput as ReportBuildInput, ReportParams } from './build';
+export { buildReport, buildWeekly, mondayOf, weekSpan } from './build';
+export type {
+  BuildInput as ReportBuildInput,
+  GroupByPerson,
+  ReportParams,
+  WeeklyInput,
+  WeeklyPeople,
+  WeeklyPerson,
+} from './build';
 
 export {
   REPORT_CSS,
@@ -88,6 +95,7 @@ export {
   REPORT_COLUMNS,
   appBaseUrl as reportsAppBaseUrl,
   canonicalize,
+  claimWeeklyReport,
   documentHash,
   exportUrl,
   getReport,
@@ -103,4 +111,10 @@ export {
   shareReport,
   shareUrl,
 } from './store';
-export type { ReportRow, StoredReport, ShareResult } from './store';
+export type {
+  ClaimWeeklyInput,
+  ClaimWeeklyResult,
+  ReportRow,
+  StoredReport,
+  ShareResult,
+} from './store';

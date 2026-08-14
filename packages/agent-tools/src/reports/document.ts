@@ -95,10 +95,20 @@ export const GENERATED_REPORT_KINDS = ['expiries', 'fleet', 'client_activity'] a
 export type GeneratedReportKind = (typeof GENERATED_REPORT_KINDS)[number];
 
 /**
- * Every kind a stored report may have. Wider than the list above by exactly one:
- * `chart`, which arrives from the chat rather than from the builder.
+ * Every kind a stored report may have. Wider than the list above by exactly two,
+ * and neither of them is a recipe:
+ *
+ *   chart    arrives from the chat. It was drawn from numbers a tool had
+ *            already returned, so there is no query to re-run.
+ *   weekly   arrives from the Monday cron. It is not "a report about the last
+ *            seven days" that anybody may ask for at any moment — it is THE
+ *            parte of one specific week, and migration 0100 gives it a
+ *            `period_start` plus a unique index so exactly one of them can
+ *            exist per workspace and week. Offering it in the picker would
+ *            offer a button that either loses to that index or wins it and
+ *            leaves Monday's email unsent.
  */
-export const REPORT_KINDS = [...GENERATED_REPORT_KINDS, 'chart'] as const;
+export const REPORT_KINDS = [...GENERATED_REPORT_KINDS, 'chart', 'weekly'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 /** Spanish names, because this is what the report calls itself on screen. */
@@ -107,6 +117,7 @@ export const REPORT_KIND_LABEL: Record<ReportKind, string> = {
   fleet: 'Estado de la flota',
   client_activity: 'Actividad por cliente',
   chart: 'Gráfico del chat',
+  weekly: 'Parte semanal',
 };
 
 export const REPORT_KIND_BLURB: Record<ReportKind, string> = {
@@ -118,6 +129,8 @@ export const REPORT_KIND_BLURB: Record<ReportKind, string> = {
     'Qué tiene comprometido cada contraparte, cuánto pesa en plata y qué se le vence primero.',
   chart:
     'Un gráfico que salió de una conversación y alguien decidió conservar. Se guarda igual que los demás: la fotografía, con la fuente y el método de cada cifra.',
+  weekly:
+    'Lo que pasó la semana pasada y lo que viene la que entra: qué se venció, qué se cumplió, quién debe qué, qué propuso Cortex y en qué quedó, y a qué nadie contestó. Sale solo cada lunes temprano y no se puede pedir: es el parte de una semana concreta, no una consulta.',
 };
 
 /**

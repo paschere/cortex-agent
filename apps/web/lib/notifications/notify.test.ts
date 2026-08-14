@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NOTIFICATION_KINDS } from '@/lib/notifications-shape';
 import { createOrgScopedClient } from '@cortex/agent-tools';
@@ -311,17 +312,42 @@ describe('el vocabulario y la migración', () => {
    * traga el error — es decir, en silencio, que es la forma de fallar que este
    * módulo entero existe para evitar.
    */
-  it('la lista de clases es exactamente la del CHECK de la 0096', () => {
-    const sql = readFileSync(
-      fileURLToPath(
-        new URL('../../../../infra/supabase/migrations/0096_notifications.sql', import.meta.url),
-      ),
-      'utf8',
-    );
-    const block = sql.slice(sql.indexOf('kind             text not null check'));
-    const inSql = [...block.slice(0, block.indexOf('))')).matchAll(/'([a-z_]+)'/g)].map(
-      (m) => m[1],
-    );
-    expect([...inSql].sort()).toEqual([...NOTIFICATION_KINDS].sort());
+  /**
+   * Se lee el CHECK EFECTIVO, no el de una migración concreta.
+   *
+   * La 0096 lo escribió y la 0100 lo reescribió para añadir `report_ready`, y
+   * habrá una tercera. Apuntar este test a un archivo fijo lo convierte en algo
+   * que hay que acordarse de mover, que es exactamente el tipo de disciplina
+   * que este test existe para no necesitar. Así que se recorren las migraciones
+   * en orden y gana la última que define la lista.
+   */
+  it('la lista de clases es exactamente la del CHECK vigente en las migraciones', () => {
+    const dir = fileURLToPath(new URL('../../../../infra/supabase/migrations', import.meta.url));
+    const files = readdirSync(dir)
+      .filter((f) => f.endsWith('.sql'))
+      .sort();
+
+    let effective: string[] | null = null;
+    for (const file of files) {
+      const sql = readFileSync(join(dir, file), 'utf8');
+      // Las dos formas que ha tomado: en línea al crear la tabla, y como
+      // constraint con nombre al reescribirlo después.
+      for (const marker of [
+        // La 0096, en línea al crear la tabla.
+        'kind             text not null check',
+        // Cualquier migración posterior que lo reescriba con nombre.
+        'add constraint notifications_kind_check',
+      ]) {
+        const at = sql.indexOf(marker);
+        if (at < 0) continue;
+        const block = sql.slice(at);
+        effective = [...block.slice(0, block.indexOf('))')).matchAll(/'([a-z_]+)'/g)]
+          .map((m) => m[1] as string)
+          .filter((k) => k !== 'kind');
+      }
+    }
+
+    expect(effective, 'ninguna migración define el CHECK de notifications.kind').not.toBeNull();
+    expect([...(effective ?? [])].sort()).toEqual([...NOTIFICATION_KINDS].sort());
   });
 });

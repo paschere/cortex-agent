@@ -64,6 +64,7 @@ export default async function SettingsPage() {
     chatWebhookUrl: p.chatWebhookUrl ?? '',
     deliverChatDm: p.deliverChatDm,
     digestFocus: p.digestFocus ?? '',
+    weeklyReportEnabled: p.weeklyReportEnabled,
     email: user.email,
   };
 

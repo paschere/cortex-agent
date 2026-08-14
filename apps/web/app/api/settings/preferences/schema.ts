@@ -70,6 +70,14 @@ export const PreferencesBody = z
      */
     deliverChatDm: z.boolean(),
     digestFocus: z.string().trim().max(600).default(''),
+    /**
+     * El parte semanal, la única preferencia de esta pantalla que llega
+     * encendida. Las demás conceden una capacidad sobre algo ajeno (leer este
+     * buzón, publicar en este espacio) y tienen que concederse; ésta sólo dice
+     * si la empresa te manda por correo lo que ya puedes abrir en la
+     * aplicación. Ver la migración 0100, sección 4.
+     */
+    weeklyReportEnabled: z.boolean(),
   })
   .partial()
   .refine((b) => !b.chatWebhookUrl || isGoogleChatWebhookUrl(b.chatWebhookUrl), {
@@ -94,6 +102,7 @@ export interface PreferencesView {
   chatWebhookUrl: string;
   deliverChatDm: boolean;
   digestFocus: string;
+  weeklyReportEnabled: boolean;
   /** The address the email digest would go to — shown, never edited here. */
   email: string;
 }

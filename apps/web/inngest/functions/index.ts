@@ -16,6 +16,7 @@ import { reindexEmbeddings } from './reindex-embeddings';
 import { scheduleDispatch } from './schedule-dispatch';
 import { scheduleRun } from './schedule-run';
 import { turnContextPurge, turnLatencyPurge } from './turn-context-purge';
+import { weeklyReportDispatch, weeklyReportWorkspace } from './weekly-report';
 
 export {
   actionsSweepDispatch,
@@ -40,6 +41,8 @@ export {
   errandSweep,
   turnContextPurge,
   turnLatencyPurge,
+  weeklyReportDispatch,
+  weeklyReportWorkspace,
 };
 export const functions = [
   ingestDocument,
@@ -65,4 +68,6 @@ export const functions = [
   errandSweep,
   turnContextPurge,
   turnLatencyPurge,
+  weeklyReportDispatch,
+  weeklyReportWorkspace,
 ];

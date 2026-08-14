@@ -38,6 +38,10 @@ const KIND_TONE: Record<ReportKind, string> = {
   // here would be asserting a meaning the report does not have. The three above
   // are subjects with a fixed colour; this one is a provenance.
   chart: 'bg-surface-2 text-ink-muted',
+  // El parte no es un tema, es una cadencia: se distingue del resto porque
+  // llega solo, no porque hable de otra cosa. Sky, que en el sistema de diseño
+  // es «informativo», y no uno de los tres colores de estado.
+  weekly: 'bg-sky-soft text-sky',
 };
 
 export default async function ReportsPage() {

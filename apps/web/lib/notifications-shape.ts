@@ -18,7 +18,7 @@
  */
 
 /**
- * Las nueve clases de aviso, y ninguna más sin una migración.
+ * Las diez clases de aviso, y ninguna más sin una migración.
  *
  * LO QUE NO ESTÁ AQUÍ ES LA MITAD DE LA DECISIÓN. No hay `approval_pending`,
  * `action_proposed`, `commitment_due` ni `errand_blocked`: eso es ESTADO, sigue
@@ -37,6 +37,14 @@ export const NOTIFICATION_KINDS = [
   'errand_finished',
   'action_sent',
   'action_failed',
+  /**
+   * El parte semanal quedó guardado y el correo NO salió.
+   *
+   * Es la única clase que habla de algo que salió bien, y sólo se escribe
+   * cuando el canal que debía llevarlo falló: si el correo llegó, la campana no
+   * lo repite. Ver la 0100, sección 3.
+   */
+  'report_ready',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -45,7 +53,13 @@ export const NOTIFICATION_TONES = ['info', 'good', 'warning', 'bad'] as const;
 export type NotificationTone = (typeof NOTIFICATION_TONES)[number];
 
 /** De qué habla el aviso. Sirve para agrupar y para saber a qué se refiere. */
-export const NOTIFICATION_SOURCES = ['flow_run', 'routine_run', 'errand', 'action'] as const;
+export const NOTIFICATION_SOURCES = [
+  'flow_run',
+  'routine_run',
+  'errand',
+  'action',
+  'report',
+] as const;
 export type NotificationSource = (typeof NOTIFICATION_SOURCES)[number];
 
 /**
@@ -65,6 +79,9 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   errand_finished: 'good',
   action_sent: 'good',
   action_failed: 'bad',
+  // Ámbar y no verde: lo que cuenta no es que el informe exista, es que no
+  // llegó a quien tenía que leerlo.
+  report_ready: 'warning',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -78,6 +95,7 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   errand_finished: 'Encargo',
   action_sent: 'Acción',
   action_failed: 'Acción',
+  report_ready: 'Informe',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */

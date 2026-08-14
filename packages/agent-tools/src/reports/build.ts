@@ -1,4 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+// Straight from the modules rather than through `../actions`, `../payments` and
+// `../documents`: those barrels register tools by the mere fact of being
+// imported, and a report builder has no business dragging the tool registry in
+// behind it.
+import { type ActionRow, KIND_LABEL as ACTION_KIND_LABEL } from '../actions/shape';
+import { listActions } from '../actions/store';
 import {
   type CommitmentRow,
   KIND_LABEL,
@@ -10,6 +16,8 @@ import {
   describeSource,
   listCommitments,
 } from '../commitments';
+import { fieldLabel, typeLabel } from '../documents/types';
+import { type ReceivablesResult, receivables } from '../payments/store';
 import {
   type ChartBody,
   type Figure,
@@ -23,7 +31,17 @@ import {
   type Tone,
   validateDocument,
 } from './document';
-import { clip, cop, count, longDate, monthTick, share, shortDate, whenPhrase } from './format';
+import {
+  clip,
+  cop,
+  count,
+  longDate,
+  monthTick,
+  plural,
+  share,
+  shortDate,
+  whenPhrase,
+} from './format';
 
 /**
  * Rows → ReportDocument. Every number in this product's reports is produced
@@ -1329,6 +1347,917 @@ async function buildClientActivity(
     sections,
     notes,
   });
+}
+
+// ---------------------------------------------------------------------------
+// 4. El parte semanal
+// ---------------------------------------------------------------------------
+
+/**
+ * EL INFORME QUE NADIE PIDE.
+ *
+ * Los tres de arriba se generan cuando alguien pulsa un botón. Éste sale solo,
+ * cada lunes temprano en Bogotá, y va a quien responde por la empresa. Ésa es
+ * toda la diferencia y cambia lo que puede decir: un informe que alguien pidió
+ * puede permitirse ser un corte de datos; uno que llega sin que lo pidan tiene
+ * que justificar la interrupción en la primera pantalla, o la segunda semana ya
+ * nadie lo abre.
+ *
+ * ===========================================================================
+ * DE QUÉ HABLA, Y POR QUÉ DE ESO
+ * ===========================================================================
+ * De hechos con dueño y con fecha, y de los huecos entre ellos:
+ *
+ *   1. qué se vence la semana que entra y qué se pasó   (papeles, no promesas)
+ *   2. qué se cumplió la semana que acabó
+ *   3. quién debe qué                                    (promesas y papeles,
+ *                                                         contados aparte)
+ *   4. qué propuso Cortex y en qué quedó
+ *   5. los silencios: lo que salió y nadie contestó
+ *   6. lo que quedó sin revisar
+ *   7. la flota, con la fecha en que se consultó cada registro
+ *   8. dónde se equivoca Cortex leyendo
+ *   9. la cartera, si la hay, con su confesión pegada
+ *
+ * NUNCA: ingresos, crecimiento, márgenes, «todo va bien». No porque estén
+ * prohibidos por gusto, sino porque este producto no los sabe, y una cifra de
+ * negocio inventada en un correo automático desacredita de paso a las nueve que
+ * sí son ciertas.
+ *
+ * La sección 8 es la que compra la confianza de las otras ocho: un gerente que
+ * reporta sus propios errores de lectura es un gerente al que se le cree el
+ * resto. Se paga barato — es un `select` sobre `document_field_corrections` — y
+ * es lo único del parte que hace quedar mal a quien lo escribe.
+ *
+ * ===========================================================================
+ * POR QUÉ EL AGRUPADO POR PERSONA SE INYECTA
+ * ===========================================================================
+ * «Quién debe qué» ya está resuelto, y bien, en
+ * apps/web/app/(app)/commitments/_lib/people.ts: promesas y papeles nunca se
+ * suman, lo que no tiene dueño va al final, y el orden es por atrasos y no por
+ * volumen. Reescribirlo aquí produciría dos respuestas distintas a la misma
+ * pregunta — la pantalla diciendo una cosa y el correo del lunes otra — que es
+ * exactamente el fallo que un informe automático no se puede permitir.
+ *
+ * Y un paquete no puede importar de una aplicación. Así que la función entra
+ * como argumento: `groupByPerson` está tipada estructuralmente contra lo que
+ * `buildPeopleLoad` ya devuelve, sin que este archivo dependa de aquél. Quien
+ * llama (el cron) le pasa la de verdad.
+ */
+
+/** Lo que el parte necesita de una persona. Subconjunto de `PersonLoad`. */
+export interface WeeklyPerson {
+  name: string;
+  unassigned: boolean;
+  /** Promesas entre personas: `kind = 'internal'`. */
+  promises: { open: number; overdue: number };
+  /** Papeles con vencimiento: todo lo demás. */
+  papers: { open: number; overdue: number };
+  items: Array<{
+    title: string;
+    internal: boolean;
+    dueOn: string;
+    daysLeft: number;
+    stateLabel: string;
+  }>;
+}
+
+/** Lo que el parte necesita del agrupado entero. Subconjunto de `PeopleLoad`. */
+export interface WeeklyPeople {
+  pending: WeeklyPerson[];
+}
+
+/**
+ * La firma de `buildPeopleLoad`, escrita aquí para no depender de la app.
+ *
+ * Es estructural a propósito: si aquella función cambia de forma, esto deja de
+ * compilar en el sitio que la inyecta, que es donde se puede arreglar.
+ */
+export type GroupByPerson = (input: {
+  open: CommitmentRow[];
+  closed: CommitmentRow[];
+  today: string;
+}) => WeeklyPeople;
+
+export interface WeeklyInput {
+  db: SupabaseClient;
+  /** Hoy en Bogotá: el lunes en que sale el parte. */
+  today?: string;
+  now?: Date;
+  /** El lunes con que empieza la semana que se reporta. Por defecto, la pasada. */
+  weekStart?: string;
+  groupByPerson: GroupByPerson;
+}
+
+/** El lunes de la semana de `date`, en el calendario colombiano. */
+export function mondayOf(date: string): string {
+  const t = Date.parse(`${date}T00:00:00Z`);
+  if (Number.isNaN(t)) return date;
+  // getUTCDay: 0 es domingo. Se convierte a «cuántos días hay que retroceder
+  // hasta el lunes», que para domingo son seis y no cero.
+  const back = (new Date(t).getUTCDay() + 6) % 7;
+  return addDays(date, -back);
+}
+
+/** El día colombiano de un instante. `met_at`, `executed_at`, `created_at`: todos
+ * son instantes, y la semana que reporta el parte es calendario colombiano. */
+function bogotaDayOf(instant: string | null): string | null {
+  if (!instant) return null;
+  const at = new Date(instant);
+  return Number.isNaN(at.getTime()) ? null : bogotaToday(at);
+}
+
+/** "del 3 al 9 de agosto de 2026" cuando cabe, y con los dos meses cuando no. */
+export function weekSpan(from: string, to: string): string {
+  const sameMonth = from.slice(0, 7) === to.slice(0, 7);
+  return sameMonth
+    ? `del ${Number(from.slice(8))} al ${longDate(to)}`
+    : `del ${longDate(from)} al ${longDate(to)}`;
+}
+
+interface PendingExtractionRow {
+  id: string;
+  doc_type: string | null;
+  counterparty_name: string | null;
+  doc_number: string | null;
+  created_at: string;
+}
+
+interface CorrectionRow {
+  doc_type: string | null;
+  field_key: string;
+  outcome: string;
+  corrected_at: string;
+}
+
+export async function buildWeekly(input: WeeklyInput): Promise<ReportDocument> {
+  const db = input.db;
+  const now = input.now ?? new Date();
+  const today = input.today ?? bogotaToday(now);
+  // Por defecto, la semana que acaba de cerrarse: el lunes de la semana de hoy,
+  // menos siete. Ejecutado un lunes eso es el lunes anterior; ejecutado
+  // cualquier otro día (una reejecución a mano, una prueba) sigue apuntando a la
+  // última semana completa, que es lo que un parte reporta.
+  const weekStart = input.weekStart ?? addDays(mondayOf(today), -7);
+  const weekEnd = addDays(weekStart, 6);
+  const aheadStart = addDays(weekEnd, 1);
+  const aheadEnd = addDays(aheadStart, 6);
+  const readAt = now.toISOString();
+  // `met_at` es un instante; la semana es calendario colombiano. Bogotá es
+  // UTC-5 todo el año, así que el lunes a las 00:00 de allá son las 05:00 UTC.
+  const weekStartInstant = `${weekStart}T05:00:00.000Z`;
+
+  const SRC_DUE = 'commitments_due';
+  const SRC_MET = 'commitments_met';
+  const SRC_OPEN = 'commitments_open';
+  const SRC_ACTIONS = 'actions';
+  const SRC_SILENCE = 'actions_silence';
+  const SRC_PENDING = 'document_extractions';
+  const SRC_FLEET = 'vehicles';
+  const SRC_FIXES = 'document_field_corrections';
+  const SRC_CARTERA = 'payments';
+
+  // --- Las lecturas, todas primero y todas declaradas ---------------------
+  const [dueRows, metRowsRaw, openRows, actionRows, silenceRows] = await Promise.all([
+    // UNA PROMESA ENTRE COLEGAS NO ES UN PAPEL QUE VENCE. La sección de
+    // vencimientos cuenta compromisos con terceros, y meter «Ana quedó de
+    // mandar el informe» ahí infla el número que alguien lee como «papeles a
+    // punto de caducar». Las promesas tienen su propia sección, por nombre.
+    listCommitments(db, {
+      reviewState: 'confirmed',
+      excludeKinds: ['internal'],
+      dueBefore: aheadEnd,
+      today,
+      limit: ROW_CAP,
+    }),
+    // Aquí SÍ entran las internas: cumplir una promesa cuenta como cumplir.
+    listCommitments(db, {
+      states: ['met'],
+      reviewState: 'confirmed',
+      metAfter: weekStartInstant,
+      today,
+      limit: 300,
+    }),
+    // Los estados se derivan de la fecha contra hoy, no se leen de la columna
+    // `state` (que es una caché que el vigilante refresca de madrugada). Sin
+    // este filtro entrarían los cumplidos y los descartados, y «quién debe qué»
+    // le pondría encima a alguien lo que ya cerró.
+    listCommitments(db, {
+      reviewState: 'confirmed',
+      states: ['in_force', 'due_soon', 'overdue'],
+      today,
+      limit: ROW_CAP,
+    }),
+    listActions(db, { limit: 300 }),
+    listActions(db, { outcome: 'no_reply', limit: 100 }),
+  ]);
+
+  // `metAfter` acota por abajo y ordena por `met_at` descendente; el borde de
+  // arriba se pone aquí, porque lo que se cerró esta mañana pertenece al parte
+  // del lunes que viene y no a éste.
+  const metRows = metRowsRaw.filter((r) => {
+    const day = bogotaDayOf(r.met_at);
+    return day !== null && day >= weekStart && day <= weekEnd;
+  });
+
+  const pendingRead = await db
+    .from('document_extractions')
+    .select('id, doc_type, counterparty_name, doc_number, created_at')
+    .eq('review_state', 'pending')
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (pendingRead.error) {
+    throw new Error(`No se pudo leer la bandeja de revisión: ${pendingRead.error.message}`);
+  }
+  const pending = (pendingRead.data ?? []) as unknown as PendingExtractionRow[];
+
+  const fleetRead = await db
+    .from('vehicles')
+    .select('id, plate, soat_expires_at, rtm_expires_at, last_runt_sync')
+    .eq('archived', false)
+    .order('plate', { ascending: true })
+    .limit(200);
+  if (fleetRead.error) throw new Error(`No se pudo leer la flota: ${fleetRead.error.message}`);
+  const fleet = (fleetRead.data ?? []) as unknown as Array<{
+    id: string;
+    plate: string;
+    soat_expires_at: string | null;
+    rtm_expires_at: string | null;
+    last_runt_sync: string | null;
+  }>;
+
+  const fixesRead = await db
+    .from('document_field_corrections')
+    .select('doc_type, field_key, outcome, corrected_at')
+    .gte('corrected_at', weekStartInstant)
+    .limit(500);
+  if (fixesRead.error) {
+    throw new Error(`No se pudieron leer las correcciones: ${fixesRead.error.message}`);
+  }
+  const fixes = ((fixesRead.data ?? []) as unknown as CorrectionRow[]).filter(
+    (f) => (bogotaDayOf(f.corrected_at) ?? '') <= weekEnd,
+  );
+
+  // La cartera es opcional de verdad: una empresa que todavía no registra pagos
+  // no tiene por qué recibir una sección vacía, y si el módulo no está en esta
+  // base el parte entero no puede caerse por ello. El fallo se CUENTA en las
+  // notas en vez de tragarse.
+  let cartera: ReceivablesResult | null = null;
+  let carteraError: string | null = null;
+  try {
+    cartera = await receivables(db, { today });
+  } catch (err) {
+    carteraError = err instanceof Error ? err.message : 'error desconocido';
+  }
+
+  // --- Las fuentes --------------------------------------------------------
+  const sources: ReportSource[] = [
+    source({
+      id: SRC_DUE,
+      system: 'Cortex · commitments',
+      detail: `Compromisos confirmados con terceros (sin promesas internas) que vencen hasta el ${longDate(aheadEnd)}, incluidos los que ya se pasaron y siguen abiertos.`,
+      readAt,
+      rowCount: dueRows.length,
+      caveat:
+        dueRows.length >= ROW_CAP
+          ? `La lectura se cortó en ${ROW_CAP} filas; hay más compromisos de los que este parte alcanzó a contar.`
+          : null,
+    }),
+    source({
+      id: SRC_MET,
+      system: 'Cortex · commitments',
+      detail: `Compromisos marcados como cumplidos entre el ${longDate(weekStart)} y el ${longDate(weekEnd)}, contando el día colombiano en que se marcaron. Incluye las promesas internas.`,
+      readAt,
+      rowCount: metRows.length,
+      caveat:
+        'Se cuenta el día en que alguien marcó el cumplimiento, no el día en que la cosa se hizo. Lo que se hizo el viernes y se marcó el lunes sale en el parte siguiente.',
+    }),
+    source({
+      id: SRC_OPEN,
+      system: 'Cortex · commitments',
+      detail:
+        'Todos los compromisos confirmados que siguen abiertos, promesas internas incluidas, agrupados por la persona que responde por cada uno.',
+      readAt,
+      rowCount: openRows.length,
+      caveat:
+        'Promesas y papeles no se suman en ninguna cifra: un SOAT lo paga la empresa y una promesa la hizo una persona, y un total que los mezcle no significa nada.',
+    }),
+    source({
+      id: SRC_ACTIONS,
+      system: 'Cortex · actions',
+      detail: `Acciones que Cortex propuso, con lo que se decidió sobre cada una. Las 300 más recientes; se cuentan las creadas entre el ${longDate(weekStart)} y el ${longDate(weekEnd)}.`,
+      readAt,
+      rowCount: actionRows.length,
+      caveat: null,
+    }),
+    source({
+      id: SRC_SILENCE,
+      system: 'Cortex · actions',
+      detail:
+        'Acciones ya ejecutadas cuyo desenlace quedó en «sin respuesta»: salieron, pasó la ventana de seguimiento y nadie contestó. De cualquier semana, no sólo de ésta.',
+      readAt,
+      rowCount: silenceRows.length,
+      caveat: null,
+    }),
+    source({
+      id: SRC_PENDING,
+      system: 'Cortex · document_extractions',
+      detail:
+        'Documentos leídos cuya extracción sigue en review_state = pending: nadie los ha confirmado, así que no entran en ninguna otra cifra de este parte ni de ningún otro.',
+      readAt,
+      rowCount: pending.length,
+      caveat: null,
+    }),
+    source({
+      id: SRC_FLEET,
+      system: 'Cortex · vehicles (datos de RUNT)',
+      detail:
+        'Placas activas con la vigencia de SOAT y tecnomecánica tal como las devolvió el RUNT la última vez que se consultó cada placa.',
+      readAt,
+      rowCount: fleet.length,
+      caveat:
+        'Una vigencia de RUNT es un hecho del día en que se consultó, no una verdad permanente. La fecha de consulta está en la tabla.',
+    }),
+    source({
+      id: SRC_FIXES,
+      system: 'Cortex · document_field_corrections',
+      detail: `Campos que una persona corrigió o descartó al revisar una extracción, entre el ${longDate(weekStart)} y el ${longDate(weekEnd)}.`,
+      readAt,
+      rowCount: fixes.length,
+      caveat: null,
+    }),
+  ];
+
+  if (cartera) {
+    sources.push(
+      source({
+        id: SRC_CARTERA,
+        system: 'Cortex · payments',
+        detail:
+          'Cartera calculada sólo sobre facturas que una persona confirmó. Los pagos en disputa no restan de nada y las monedas no se suman entre sí.',
+        readAt,
+        rowCount: cartera.confirmedInvoices,
+        caveat: cartera.sentence,
+      }),
+    );
+  }
+
+  // --- Los cortes ---------------------------------------------------------
+  const openDue = dueRows.filter((r) => {
+    const s = deriveState(r, today);
+    return s === 'overdue' || s === 'due_soon' || s === 'in_force';
+  });
+  const overdue = openDue.filter((r) => deriveState(r, today) === 'overdue');
+  const nextWeek = openDue.filter((r) => r.due_on >= aheadStart && r.due_on <= aheadEnd);
+  const atRisk = [...overdue, ...nextWeek].reduce((sum, r) => sum + (r.amount_cop ?? 0), 0);
+
+  const onTime = metRows.filter((r) => (bogotaDayOf(r.met_at) ?? '') <= r.due_on).length;
+
+  const inWeek = (iso: string | null): boolean => {
+    const day = bogotaDayOf(iso);
+    return day !== null && day >= weekStart && day <= weekEnd;
+  };
+  const proposedThisWeek = actionRows.filter((a) => inWeek(a.created_at));
+  const approvedThisWeek = actionRows.filter((a) => a.state === 'approved' && inWeek(a.decided_at));
+  const dismissedThisWeek = actionRows.filter(
+    (a) => a.state === 'dismissed' && inWeek(a.decided_at),
+  );
+  const sentThisWeek = actionRows.filter((a) => inWeek(a.executed_at) && a.execution_status === 'ok');
+  const answeredThisWeek = sentThisWeek.filter(
+    (a) => a.outcome === 'replied' || a.outcome === 'resolved',
+  );
+  const stillOpen = actionRows.filter(
+    (a) => a.state === 'proposed' && Date.parse(a.expires_at) > now.getTime(),
+  );
+
+  const people = input.groupByPerson({ open: openRows, closed: [], today });
+
+  // --- Las cifras ---------------------------------------------------------
+  const metrics: ReportSection = {
+    type: 'metrics',
+    heading: 'Cómo quedó la semana',
+    items: [
+      {
+        label: 'Vence la semana que entra',
+        figure: fig(
+          count(nextWeek.length),
+          nextWeek.length,
+          SRC_DUE,
+          `Conteo de compromisos confirmados con terceros, abiertos, cuya fecha cae entre el ${aheadStart} y el ${aheadEnd}.`,
+        ),
+        sub: `${aheadStart} → ${aheadEnd}`,
+        tone: nextWeek.length > 0 ? 'amber' : 'ink',
+      },
+      {
+        label: 'Vencido y sin cerrar',
+        figure: fig(
+          count(overdue.length),
+          overdue.length,
+          SRC_DUE,
+          `Conteo de compromisos confirmados con terceros cuya fecha ya pasó al ${today} y que nadie ha marcado cumplidos ni descartados.`,
+        ),
+        sub: overdue.length > 0 ? 'arrastrado de antes' : 'nada arrastrado',
+        tone: overdue.length > 0 ? 'rose' : 'emerald',
+      },
+      {
+        label: 'Se cumplió',
+        figure: fig(
+          count(metRows.length),
+          metRows.length,
+          SRC_MET,
+          `Conteo de compromisos marcados cumplidos entre el ${weekStart} y el ${weekEnd}, por el día colombiano de met_at. ${onTime} de ellos antes de su fecha.`,
+        ),
+        sub:
+          metRows.length > 0
+            ? `${count(onTime)} a tiempo, ${count(metRows.length - onTime)} tarde`
+            : 'ninguno esta semana',
+        tone: metRows.length > 0 ? 'emerald' : 'ink',
+      },
+      {
+        label: 'Sin respuesta',
+        figure: fig(
+          count(silenceRows.length),
+          silenceRows.length,
+          SRC_SILENCE,
+          'Conteo de acciones ejecutadas cuyo desenlace quedó en no_reply: salieron y nadie contestó dentro de la ventana de seguimiento.',
+        ),
+        sub: silenceRows.length > 0 ? 'salieron y nadie contestó' : 'nada en silencio',
+        tone: silenceRows.length > 0 ? 'amber' : 'emerald',
+      },
+      {
+        label: 'Sin revisar',
+        figure: fig(
+          count(pending.length),
+          pending.length,
+          SRC_PENDING,
+          'Conteo de extracciones de documentos con review_state = pending. Están fuera de todas las demás cifras de este parte.',
+        ),
+        sub: pending.length > 0 ? 'nadie los ha confirmado' : 'bandeja vacía',
+        tone: pending.length > 0 ? 'amber' : 'emerald',
+      },
+      {
+        label: 'Plata en juego',
+        figure: fig(
+          atRisk > 0 ? cop(atRisk) : '—',
+          atRisk,
+          SRC_DUE,
+          'Suma de amount_cop de lo vencido y de lo que vence la semana que entra. Lo que no tiene monto registrado suma cero, así que es un piso y no un total.',
+          'COP',
+        ),
+        sub: 'vencido y por vencer, con monto',
+        tone: atRisk > 0 ? 'rose' : 'ink',
+      },
+    ],
+  };
+
+  // --- 1. Lo que se vence y lo que se pasó --------------------------------
+  const dueItems = [...overdue, ...nextWeek]
+    .sort((a, b) => a.due_on.localeCompare(b.due_on))
+    .slice(0, 60);
+  const timelineFrom = minDate(
+    dueItems.map((r) => r.due_on),
+    aheadStart,
+  );
+  const dueMethod = `Compromisos confirmados con terceros que están vencidos al ${today} o que vencen entre el ${aheadStart} y el ${aheadEnd}. Las promesas internas (kind = 'internal') quedan fuera a propósito.`;
+
+  const dueSection: ReportSection = {
+    type: 'chart',
+    heading: 'Lo que se vence, y lo que ya se pasó',
+    chart: {
+      type: 'timeline',
+      from: timelineFrom,
+      to: aheadEnd,
+      today,
+      items: dueItems.map((r) => ({
+        label: r.title,
+        date: r.due_on,
+        detail: `${KIND_LABEL[r.kind] ?? r.kind} · ${whenPhrase(daysUntilDue(r.due_on, today))}`,
+        tone: STATE_TONE[deriveState(r, today)] ?? 'primary',
+      })),
+    },
+    altText: `Línea de tiempo con ${count(dueItems.length)} vencimientos. Hoy, ${shortDate(today)}, está marcado con una línea vertical: ${count(overdue.length)} quedan a la izquierda porque ya se pasaron y ${count(nextWeek.length)} caen en los siete días siguientes.`,
+    caption:
+      'Rojo: ya se venció y sigue abierto. Ámbar y verde: lo que viene. Sólo papeles con terceros; las promesas internas están más abajo, con nombre.',
+    table: {
+      columns: [
+        { label: 'Compromiso', align: 'left', mono: false },
+        { label: 'Con', align: 'left', mono: false },
+        { label: 'Vence', align: 'left', mono: true },
+        { label: 'Cuándo', align: 'right', mono: true },
+        { label: 'Monto', align: 'right', mono: true },
+        { label: 'Responsable', align: 'left', mono: false },
+        { label: 'De dónde salió la fecha', align: 'left', mono: false },
+      ],
+      rows: dueItems.map((r) => {
+        const state = deriveState(r, today);
+        return [
+          cell(r.title),
+          cell(r.counterparty ?? '—'),
+          cell(shortDate(r.due_on)),
+          cell(whenPhrase(daysUntilDue(r.due_on, today)), STATE_TONE[state] ?? null),
+          cell(r.amount_cop ? cop(r.amount_cop) : '—'),
+          cell(r.owner_name ?? 'Sin responsable', r.owner_user_id ? null : 'amber'),
+          cell(sourceLabelOf(r)),
+        ];
+      }),
+      sourceId: SRC_DUE,
+      method: dueMethod,
+      caption: null,
+    },
+    sourceId: SRC_DUE,
+    method: dueMethod,
+  };
+
+  // --- 2. Lo que se cumplió -----------------------------------------------
+  const metMethod = `Compromisos cuyo met_at cae, en día colombiano, entre el ${weekStart} y el ${weekEnd}. «A tiempo» compara ese día contra due_on, no el instante contra la fecha: algo marcado a las 20:00 en Bogotá se cumplió ese día y no el siguiente.`;
+  const metSection: ReportSection = {
+    type: 'table',
+    heading: 'Lo que se cumplió esta semana',
+    table: {
+      columns: [
+        { label: 'Compromiso', align: 'left', mono: false },
+        { label: 'Tipo', align: 'left', mono: false },
+        { label: 'Quién', align: 'left', mono: false },
+        { label: 'Vencía', align: 'left', mono: true },
+        { label: 'Se marcó', align: 'left', mono: true },
+        { label: '', align: 'left', mono: false },
+      ],
+      rows: metRows.slice(0, 60).map((r) => {
+        const day = bogotaDayOf(r.met_at) ?? '';
+        const punctual = day !== '' && day <= r.due_on;
+        return [
+          cell(r.title),
+          cell(KIND_LABEL[r.kind] ?? r.kind),
+          cell(r.owner_name ?? 'Sin responsable'),
+          cell(shortDate(r.due_on)),
+          cell(day ? shortDate(day) : '—'),
+          cell(punctual ? 'A tiempo' : 'Tarde', punctual ? 'emerald' : 'amber'),
+        ];
+      }),
+      sourceId: SRC_MET,
+      method: metMethod,
+      caption:
+        metRows.length === 0
+          ? 'Nadie marcó nada como cumplido esta semana. Puede ser que no hubiera nada que cerrar, o que se cerrara sin anotarlo — el sistema no distingue las dos cosas y no va a fingir que sí.'
+          : null,
+    },
+  };
+
+  // --- 3. Quién debe qué ---------------------------------------------------
+  const peopleMethod =
+    'Compromisos confirmados abiertos, agrupados por owner_user_id. Promesas internas y papeles se cuentan en columnas separadas y no se suman en ninguna parte: son cosas distintas y un total conjunto no significa nada.';
+  const peopleSection: ReportSection = {
+    type: 'table',
+    heading: 'Quién debe qué',
+    table: {
+      columns: [
+        { label: 'Persona', align: 'left', mono: false },
+        { label: 'Papeles', align: 'right', mono: true },
+        { label: 'Papeles vencidos', align: 'right', mono: true },
+        { label: 'Promesas', align: 'right', mono: true },
+        { label: 'Promesas vencidas', align: 'right', mono: true },
+        { label: 'Lo que aprieta primero', align: 'left', mono: false },
+      ],
+      rows: people.pending.slice(0, 40).map((p) => {
+        const first = p.items[0];
+        return [
+          cell(p.name, p.unassigned ? 'amber' : null),
+          cell(count(p.papers.open)),
+          cell(count(p.papers.overdue), p.papers.overdue > 0 ? 'rose' : null),
+          cell(count(p.promises.open)),
+          cell(count(p.promises.overdue), p.promises.overdue > 0 ? 'rose' : null),
+          cell(
+            first ? `${first.title} · ${whenPhrase(first.daysLeft)}` : '—',
+            first && first.daysLeft < 0 ? 'rose' : null,
+          ),
+        ];
+      }),
+      sourceId: SRC_OPEN,
+      method: peopleMethod,
+      caption:
+        'Lo que no tiene responsable va siempre al final: no es una persona a la que preguntarle, es una tarea de administración.',
+    },
+  };
+
+  // --- 4. Lo que Cortex propuso -------------------------------------------
+  const actionSlices = [
+    { label: 'Aprobadas', tone: 'emerald' as Tone, n: approvedThisWeek.length },
+    { label: 'Descartadas', tone: 'ink' as Tone, n: dismissedThisWeek.length },
+    { label: 'Sin decidir', tone: 'amber' as Tone, n: stillOpen.length },
+  ];
+  const actionTotal = actionSlices.reduce((s, x) => s + x.n, 0);
+  const actionsMethod = `Acciones de la tabla actions. «Propuestas» cuenta las creadas entre el ${weekStart} y el ${weekEnd}; «aprobadas» y «descartadas», las decididas en esa misma semana; «sin decidir» son propuestas todavía vivas al ${today}, sean de esta semana o de antes.`;
+
+  const actionsSection: ReportSection = {
+    type: 'chart',
+    heading: 'Lo que propuse, y en qué quedó',
+    chart: {
+      type: 'composition',
+      slices: actionSlices
+        .filter((s) => s.n > 0)
+        .map((s) => ({
+          label: s.label,
+          value: s.n,
+          display: `${count(s.n)} · ${share(s.n, actionTotal)}`,
+          tone: s.tone,
+        })),
+    },
+    altText:
+      actionTotal > 0
+        ? `De ${count(actionTotal)} acciones: ${actionSlices
+            .filter((s) => s.n > 0)
+            .map((s) => `${s.label.toLowerCase()}, ${count(s.n)}`)
+            .join('; ')}.`
+        : 'No hubo ninguna acción propuesta ni pendiente de decidir en esta semana.',
+    caption:
+      'Nada de esto salió sin que una persona lo aprobara. «Sin decidir» es lo que sigue esperando una firma, y caduca solo a los siete días.',
+    table: {
+      columns: [
+        { label: 'Qué', align: 'left', mono: false },
+        { label: 'Cuántas', align: 'right', mono: true },
+      ],
+      rows: [
+        [cell('Propuestas esta semana'), cell(count(proposedThisWeek.length))],
+        [cell('Aprobadas'), cell(count(approvedThisWeek.length), 'emerald')],
+        [cell('Descartadas'), cell(count(dismissedThisWeek.length))],
+        [cell('Enviadas de verdad'), cell(count(sentThisWeek.length))],
+        [cell('Contestadas'), cell(count(answeredThisWeek.length), 'emerald')],
+        [
+          cell('Todavía esperando una decisión'),
+          cell(count(stillOpen.length), stillOpen.length > 0 ? 'amber' : null),
+        ],
+      ],
+      sourceId: SRC_ACTIONS,
+      method: actionsMethod,
+      caption: null,
+    },
+    sourceId: SRC_ACTIONS,
+    method: actionsMethod,
+  };
+
+  // --- 5. Los silencios ----------------------------------------------------
+  const silenceMethod =
+    'Acciones con outcome = no_reply: se ejecutaron, pasó la ventana de seguimiento de diez días y nadie contestó. La antigüedad se cuenta desde executed_at.';
+  const silenceSection: ReportSection = {
+    type: 'table',
+    heading: 'Los silencios',
+    table: {
+      columns: [
+        { label: 'Qué salió', align: 'left', mono: false },
+        { label: 'A quién', align: 'left', mono: false },
+        { label: 'Asunto', align: 'left', mono: false },
+        { label: 'Salió', align: 'left', mono: true },
+        { label: 'Lleva', align: 'right', mono: true },
+      ],
+      rows: silenceRows.slice(0, 40).map((a: ActionRow) => {
+        const day = a.executed_at ? (bogotaDayOf(a.executed_at) ?? today) : today;
+        const age = daysUntilDue(day, today);
+        return [
+          cell(ACTION_KIND_LABEL[a.kind] ?? a.kind),
+          cell(a.recipient),
+          cell(clip(a.subject, 60)),
+          cell(shortDate(day)),
+          cell(whenPhrase(age), age <= -10 ? 'rose' : 'amber'),
+        ];
+      }),
+      sourceId: SRC_SILENCE,
+      method: silenceMethod,
+      caption:
+        silenceRows.length === 0
+          ? 'Nada salió y se quedó sin respuesta. Es el mejor resultado posible de esta sección.'
+          : 'Un cobro que salió hace diez días y nadie contestó no es un fallo del sistema: es el hallazgo. Alguien tiene que llamar.',
+    },
+  };
+
+  // --- 6. Lo que quedó sin revisar ----------------------------------------
+  const pendingMethod = `Extracciones con review_state = pending al ${today}, ordenadas de la más vieja a la más nueva. La antigüedad se cuenta desde created_at.`;
+  const pendingSection: ReportSection = {
+    type: 'table',
+    heading: 'Lo que quedó sin revisar',
+    table: {
+      columns: [
+        { label: 'Tipo de documento', align: 'left', mono: false },
+        { label: 'De quién', align: 'left', mono: false },
+        { label: 'Número', align: 'left', mono: true },
+        { label: 'Esperando desde', align: 'left', mono: true },
+        { label: 'Lleva', align: 'right', mono: true },
+      ],
+      rows: pending.slice(0, 40).map((p) => {
+        const day = (bogotaDayOf(p.created_at) ?? p.created_at).slice(0, 10);
+        const age = daysUntilDue(day, today);
+        return [
+          cell(typeLabel(p.doc_type)),
+          cell(p.counterparty_name ?? '—'),
+          cell(p.doc_number ?? '—'),
+          cell(shortDate(day)),
+          cell(whenPhrase(age), age <= -7 ? 'rose' : 'amber'),
+        ];
+      }),
+      sourceId: SRC_PENDING,
+      method: pendingMethod,
+      caption:
+        pending.length === 0
+          ? 'No hay nada esperando revisión.'
+          : 'Nada de esto está en ninguna otra cifra de este parte, ni en la cartera. Un documento sin confirmar es una propuesta, no un dato.',
+    },
+  };
+
+  // --- 7. La flota ---------------------------------------------------------
+  const classify = (expiry: string | null): Tone => {
+    if (!expiry) return 'ink';
+    const left = daysUntilDue(expiry.slice(0, 10), today);
+    if (left < 0) return 'rose';
+    if (left <= 30) return 'amber';
+    return 'emerald';
+  };
+  const fleetMethod =
+    'Una fila por placa activa. Las vigencias son las que devolvió el RUNT el día de la última columna; una placa sin consultar tiene vigencias desconocidas, no correctas.';
+  const fleetSection: ReportSection = {
+    type: 'table',
+    heading: 'La flota',
+    table: {
+      columns: [
+        { label: 'Placa', align: 'left', mono: true },
+        { label: 'SOAT', align: 'left', mono: true },
+        { label: 'Tecnomecánica', align: 'left', mono: true },
+        { label: 'RUNT consultado', align: 'left', mono: true },
+      ],
+      rows: fleet.slice(0, 60).map((v) => [
+        cell(v.plate),
+        cell(
+          v.soat_expires_at ? shortDate(v.soat_expires_at.slice(0, 10)) : 'sin consultar',
+          classify(v.soat_expires_at),
+        ),
+        cell(
+          v.rtm_expires_at ? shortDate(v.rtm_expires_at.slice(0, 10)) : 'sin consultar',
+          classify(v.rtm_expires_at),
+        ),
+        cell(
+          v.last_runt_sync ? v.last_runt_sync.slice(0, 10) : 'nunca',
+          v.last_runt_sync ? null : 'amber',
+        ),
+      ]),
+      sourceId: SRC_FLEET,
+      method: fleetMethod,
+      caption:
+        fleet.length === 0
+          ? 'No hay placas registradas.'
+          : 'La última columna es la que hace verificables a las otras tres.',
+    },
+  };
+
+  // --- 8. Dónde me equivoco leyendo ---------------------------------------
+  const fixTally = new Map<string, { docType: string | null; field: string; n: number; thrown: number }>();
+  for (const f of fixes) {
+    const key = `${f.doc_type ?? '—'}#${f.field_key}`;
+    const entry = fixTally.get(key) ?? {
+      docType: f.doc_type,
+      field: f.field_key,
+      n: 0,
+      thrown: 0,
+    };
+    entry.n += 1;
+    if (f.outcome === 'rejected') entry.thrown += 1;
+    fixTally.set(key, entry);
+  }
+  const fixRows = [...fixTally.values()].sort((a, b) => b.n - a.n).slice(0, 20);
+  const fixMethod = `Filas de document_field_corrections con corrected_at entre el ${weekStart} y el ${weekEnd}, agrupadas por tipo de documento y campo. «Descartado» es cuando quien revisaba tiró la lectura entera en vez de corregirla.`;
+
+  const fixSection: ReportSection = {
+    type: 'table',
+    heading: 'Dónde me equivoco leyendo',
+    table: {
+      columns: [
+        { label: 'Tipo de documento', align: 'left', mono: false },
+        { label: 'Campo', align: 'left', mono: false },
+        { label: 'Veces corregido', align: 'right', mono: true },
+        { label: 'Descartado', align: 'right', mono: true },
+      ],
+      rows: fixRows.map((f) => [
+        cell(typeLabel(f.docType)),
+        cell(fieldLabel(f.docType, f.field)),
+        cell(count(f.n), 'rose'),
+        cell(count(f.thrown)),
+      ]),
+      sourceId: SRC_FIXES,
+      method: fixMethod,
+      caption:
+        fixes.length === 0
+          ? 'Nadie tuvo que corregirme ninguna lectura esta semana. También puede ser que nadie haya revisado nada: mira la sección de arriba antes de leerlo como un elogio.'
+          : 'Un campo que hay que corregir siempre es un fallo mío, no del mundo. Está aquí para que se vea, no para que se disculpe.',
+    },
+  };
+
+  // --- 9. La cartera, con su confesión ------------------------------------
+  const carteraSection: ReportSection | null =
+    cartera && (cartera.byCurrency.length > 0 || cartera.pendingExcluded > 0)
+      ? {
+          type: 'table',
+          heading: 'La cartera',
+          table: {
+            columns: [
+              { label: 'Moneda', align: 'left', mono: true },
+              { label: 'Por cobrar', align: 'right', mono: true },
+              { label: 'Facturas abiertas', align: 'right', mono: true },
+              { label: 'Edad media', align: 'right', mono: true },
+              { label: 'Vencido', align: 'right', mono: true },
+            ],
+            rows: cartera.byCurrency.map((c) => [
+              cell(c.currency),
+              cell(`${Math.round(c.outstanding).toLocaleString('es-CO')}`),
+              cell(count(c.openInvoices)),
+              cell(c.ageDays == null ? '—' : plural(c.ageDays, 'día')),
+              cell(
+                `${Math.round(c.overdue).toLocaleString('es-CO')}`,
+                c.overdue > 0 ? 'rose' : null,
+              ),
+            ]),
+            sourceId: SRC_CARTERA,
+            method: `Sólo facturas confirmadas, cada moneda por separado y sin sumarlas entre sí. ${cartera.sentence}`,
+            caption: cartera.sentence,
+          },
+        }
+      : null;
+
+  const sections: ReportSection[] = [
+    {
+      type: 'prose',
+      heading: null,
+      paragraphs: [weeklyLede({ overdue: overdue.length, nextWeek: nextWeek.length, met: metRows.length, silences: silenceRows.length, pending: pending.length, weekStart, weekEnd })],
+    },
+    metrics,
+    dueSection,
+    metSection,
+    peopleSection,
+    actionsSection,
+    silenceSection,
+    pendingSection,
+    fleetSection,
+    fixSection,
+    ...(carteraSection ? [carteraSection] : []),
+  ];
+
+  const notes = [
+    'Este parte sale solo cada lunes temprano. Nadie lo pidió y nadie tuvo que acordarse.',
+    'No hay ingresos, ni crecimiento, ni márgenes: Cortex no los sabe, y una cifra de negocio inventada aquí desacreditaría de paso a todas las que sí son ciertas.',
+    'Las promesas internas no cuentan como vencimientos, y los papeles no cuentan como promesas. Están separados en todas las cifras del parte.',
+    'Lo que está sin confirmar —extracciones, compromisos leídos de documentos— no entra en ninguna cifra. Se cuenta aparte, para que se vea el hueco.',
+  ];
+  if (carteraError) {
+    notes.push(
+      `La cartera no se pudo leer en esta corrida (${clip(carteraError, 120)}), así que este parte no dice nada sobre ella. No significa que no haya.`,
+    );
+  } else if (!carteraSection) {
+    notes.push(
+      'No hay cartera que reportar: ninguna factura confirmada tiene saldo pendiente y no hay facturas leídas esperando revisión.',
+    );
+  }
+
+  return validateDocument({
+    version: REPORT_DOCUMENT_VERSION,
+    kind: 'weekly',
+    title: `${REPORT_KIND_LABEL.weekly} — semana ${weekSpan(weekStart, weekEnd)}`,
+    subtitle: `Lo que pasó entre el ${longDate(weekStart)} y el ${longDate(weekEnd)}, y lo que viene hasta el ${longDate(aheadEnd)}.`,
+    periodLabel: `semana ${weekSpan(weekStart, weekEnd)} · lo que viene hasta el ${longDate(aheadEnd)}`,
+    generatedAt: readAt,
+    timezone: 'America/Bogota',
+    sources,
+    sections,
+    notes,
+  });
+}
+
+/**
+ * El primer párrafo, que es donde este informe se gana la interrupción.
+ *
+ * Lidera con lo que exige una decisión — lo vencido, los silencios — y no con lo
+ * que salió bien. Un parte que empieza celebrando enseña a leerlo en diagonal.
+ */
+function weeklyLede(input: {
+  overdue: number;
+  nextWeek: number;
+  met: number;
+  silences: number;
+  pending: number;
+  weekStart: string;
+  weekEnd: string;
+}): string {
+  const urgent: string[] = [];
+  if (input.overdue > 0) urgent.push(`${plural(input.overdue, 'compromiso')} vencido sin cerrar`);
+  if (input.silences > 0)
+    urgent.push(`${plural(input.silences, 'cosa')} que salió y nadie contestó`);
+  if (input.pending > 0) urgent.push(`${plural(input.pending, 'documento')} sin revisar`);
+
+  if (urgent.length === 0 && input.met === 0 && input.nextWeek === 0) {
+    return `De la semana ${weekSpan(input.weekStart, input.weekEnd)} no tengo nada que reportar: no se venció nada, no se cerró nada y no hay nada esperando. Si eso no cuadra con lo que pasó de verdad, es que la semana no se está anotando en ninguna parte — y eso sí es un hallazgo.`;
+  }
+
+  const head =
+    urgent.length > 0
+      ? `Lo que pide una decisión: ${urgent.join(', ')}.`
+      : 'Nada pide una decisión urgente esta semana.';
+  const tail = `La semana que entra vencen ${plural(input.nextWeek, 'compromiso')}; la que acabó se cerraron ${plural(input.met, 'compromiso')}.`;
+  return `${head} ${tail} Cada cifra de abajo trae la fuente de la que salió y la cuenta que se hizo con ella.`;
 }
 
 // ---------------------------------------------------------------------------
