@@ -1,8 +1,10 @@
 'use client';
 
+import { usePanel } from '@/components/panel/PanelHost';
 import { MODULE } from '@/lib/browser-shape';
 import type { NavCounts } from '@/lib/nav-signals';
 import { orderByUsage, readUsage, recordVisit } from '@/lib/nav-usage';
+import { type PanelId, panelForHref } from '@/lib/panels/shape';
 import type { Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
@@ -247,22 +249,63 @@ function NavRow({
   pathname,
   counts,
   onNavigate,
+  /**
+   * El panel que esta fila abre en vez de navegar, si lo hay. Lo decide
+   * `SidebarNav`, que es quien sabe dónde está la persona.
+   */
+  panel: wanted,
 }: {
   item: NavItem;
   collapsed: boolean;
   pathname: string;
   counts: NavCounts;
   onNavigate?: () => void;
+  panel?: PanelId | null;
 }) {
   const Icon = item.icon;
-  const active = isActive(pathname, item.href);
+  const { panelId: openPanel, open, available } = usePanel();
+  // Sin proveedor encima no hay panel que abrir, y entonces la fila navega como
+  // siempre. Comerse el clic con un `open` que no hace nada sería dejarla
+  // muerta, que es peor que no tener panel.
+  const panel = available ? (wanted ?? null) : null;
+  // Un panel abierto también es «estás aquí». Se tiñe igual que una pantalla
+  // activa, pero se anuncia distinto: `aria-current="page"` sería falso — la
+  // página sigue siendo el chat.
+  const showing = panel != null && openPanel === panel;
+  const onPage = isActive(pathname, item.href);
+  const active = onPage || showing;
   const badge = item.signal ? counts[item.signal] : 0;
 
   return (
     <Link
       href={item.href}
-      onClick={onNavigate}
-      aria-current={active ? 'page' : undefined}
+      /**
+       * SIGUE SIENDO UN ENLACE, Y ESO NO ES UN DETALLE.
+       *
+       * Un `<button>` habría sido más corto y habría roto la forma en que la
+       * gente abre cosas: ⌘-clic, clic central, «abrir en una pestaña nueva»
+       * del menú contextual. Todo eso necesita un `href` de verdad. Así que la
+       * fila conserva el suyo y lo único que hace este manejador es
+       * interceptar el clic SIMPLE cuando hay panel: cualquier modificador cae
+       * por el `return` y el navegador hace lo de siempre. El clic central ni
+       * siquiera llega aquí — dispara `auxclick`, no `click`.
+       */
+      onClick={(event) => {
+        if (
+          panel &&
+          event.button === 0 &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.shiftKey &&
+          !event.altKey
+        ) {
+          event.preventDefault();
+          open(panel);
+        }
+        onNavigate?.();
+      }}
+      aria-current={onPage ? 'page' : undefined}
+      aria-expanded={panel ? showing : undefined}
       title={collapsed ? item.label : undefined}
       className={clsx(
         'group relative flex h-[30px] items-center rounded-sm text-[13px] transition-colors duration-150',
@@ -426,6 +469,24 @@ function SidebarNav({
     onNavigate?.();
   };
 
+  /**
+   * LA PIEZA QUE HACE QUE EL RAIL DEJE DE SER UNA SALIDA.
+   *
+   * Estando en el chat, una fila con panel lo abre AL LADO en vez de navegar.
+   * Es la diferencia entre preguntar «¿cuánto nos deben?» y perder la
+   * conversación para verlo, o verlo con la conversación delante.
+   *
+   * Sólo en `/chat`, y esa condición es la mitad del diseño: en cualquier otra
+   * pantalla el panel no tendría nada al lado que proteger, y una fila que a
+   * veces navega y a veces no, sin una razón visible, es una fila en la que no
+   * se puede confiar. Aquí la razón es visible: hay una conversación abierta.
+   *
+   * Fuera de la lista, nada cambia. Ningún destino desaparece: los cinco que
+   * tienen panel siguen teniendo su pantalla completa, con su enlace «Ver todo»
+   * en la cabecera del panel y su ⌘-clic en esta misma fila.
+   */
+  const inChat = pathname.startsWith('/chat');
+
   return (
     <nav aria-label="Main" className="scroll-slim h-full overflow-y-auto px-3 pb-3">
       <SearchRow collapsed={collapsed} onNavigate={onNavigate} />
@@ -453,6 +514,7 @@ function SidebarNav({
                   pathname={pathname}
                   counts={counts}
                   onNavigate={() => visit(item.href)}
+                  panel={inChat ? panelForHref(item.href) : null}
                 />
               ))}
             </div>

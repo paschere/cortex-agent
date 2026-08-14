@@ -1,39 +1,26 @@
-import { CommandMenuProvider } from '@/components/nav/CommandMenuContext';
-import { MobileSidebarProvider } from '@/components/nav/MobileSidebarContext';
-import { Sidebar } from '@/components/nav/Sidebar';
-import { countNavSignals } from '@/lib/nav-signals';
+import { AppShell } from '@/components/nav/AppShell';
 import { requireSession } from '@/lib/session';
-import { REPORT_CSS } from '@cortex/agent-tools';
 import type { ReactNode } from 'react';
 
 /**
- * The chart stylesheet is injected here, once, rather than by the card that
- * uses it.
+ * El chat ocupa el alto completo y gestiona su propio scroll. Ésa es la única
+ * diferencia que queda con `app/(app)/layout.tsx`, y es la razón por la que los
+ * dos layouts siguen existiendo: todo lo demás —proveedores, rail, conteos,
+ * panel— vive en `AppShell`.
  *
- * A chat turn can draw several charts and a scrolled-back conversation can hold
- * dozens; a `<style>` per card would be the same four kilobytes repeated down
- * the page. It also has to come from a SERVER component: `REPORT_CSS` is a
- * value in `@cortex/agent-tools`, and that barrel reaches `node:dns` — importing
- * a value from it inside a `'use client'` file fails the production build while
- * typecheck and tests stay green. See apps/web/lib/reports-shape.ts for the
- * time that shipped.
- *
- * Every rule in it is scoped to `.rp-doc`, so it cannot reach the app's own
- * chrome; `ChartCard` puts that class on its wrapper.
+ * LA HOJA DE LOS INFORMES YA NO SE INYECTA AQUÍ. Estaba en un
+ * `<style dangerouslySetInnerHTML>` porque `REPORT_CSS` es un valor de
+ * `@cortex/agent-tools` y sólo un componente de servidor puede importarlo. Eso
+ * la ataba a este layout, y en cuanto el panel de al lado pinta un informe hace
+ * falta también en el otro. Ahora es una hoja de verdad —`app/report.css` con
+ * `Cache-Control: immutable`, enlazada desde `app/layout.tsx`—, que además deja
+ * de viajar cuatro kilobytes en cada carga útil de RSC.
  */
 export default async function ChatLayout({ children }: { children: ReactNode }) {
   const user = await requireSession();
-  const counts = await countNavSignals(user.organization.id, user.id);
   return (
-    <MobileSidebarProvider>
-      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: our own stylesheet, scoped to .rp-doc; see REPORT_CSS. */}
-      <style dangerouslySetInnerHTML={{ __html: REPORT_CSS }} />
-      <CommandMenuProvider role={user.role}>
-        <div className="flex flex-row h-screen overflow-hidden">
-          <Sidebar role={user.role} counts={counts} />
-          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">{children}</div>
-        </div>
-      </CommandMenuProvider>
-    </MobileSidebarProvider>
+    <AppShell user={user}>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
+    </AppShell>
   );
 }

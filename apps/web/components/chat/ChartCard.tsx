@@ -19,8 +19,11 @@ import { useEffect, useState } from 'react';
  * renderings of one document that nothing forces to agree — and we would find
  * out when a client said the chart in the chat did not match the informe.
  *
- * The stylesheet is `REPORT_CSS`, injected once by the chat layout and scoped
- * entirely to `.rp-doc`, which is why the wrapper carries that class.
+ * The stylesheet is `REPORT_CSS`, served as a real sheet at `/report.css` and
+ * linked once from the root layout — it used to be a `<style>` inside the chat
+ * layout, which meant it only existed on one half of the app and travelled in
+ * every RSC payload. See `app/report.css/route.ts`. Every rule is scoped to
+ * `.rp-doc`, which is why the wrapper carries that class.
  *
  * ===========================================================================
  * WHY IT IS FETCHED RATHER THAN STREAMED

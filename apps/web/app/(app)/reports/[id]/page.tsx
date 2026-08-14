@@ -2,13 +2,7 @@ import { Panel } from '@/components/ui/panel';
 import { REPORT_KIND_LABEL, type ReportKind } from '@/lib/reports-shape';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import {
-  REPORT_CSS,
-  getReport,
-  renderReportHtml,
-  shareIsLive,
-  shareUrl,
-} from '@cortex/agent-tools';
+import { getReport, renderReportHtml, shareIsLive, shareUrl } from '@cortex/agent-tools';
 import { ArrowLeft, Download, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -127,10 +121,9 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         </div>
       )}
 
-      {/* Scoped entirely to .rp-doc — see REPORT_CSS. */}
-      {/* biome-ignore lint/security/noDangerouslySetInnerHtml: our own renderer's output; see the header. */}
-      <style dangerouslySetInnerHTML={{ __html: REPORT_CSS }} />
-
+      {/* La hoja ya no se inyecta aquí: es `/report.css`, enlazada una vez
+          desde `app/layout.tsx` y cacheada con su huella. Ver
+          `app/report.css/route.ts`. */}
       <Panel className="p-6 sm:p-8">
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: every byte produced by renderReportHtml, which escapes all content; see the header and reports/__tests__/render.test.ts. */}
         <div dangerouslySetInnerHTML={{ __html: html }} />
