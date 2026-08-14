@@ -205,7 +205,25 @@ async function saveCredential() {
 }
 
 describe('guardar la cuenta de un portal', () => {
-  it('la cifra y no la devuelve, ni entera ni en pedazos', async () => {
+  /**
+   * VEINTE SEGUNDOS, Y NO ES PEREZA.
+   *
+   * Esta prueba cifra de verdad, y el cifrado de una credencial es LENTO A
+   * PROPÓSITO: ése es el trabajo que le cuesta a quien robe la tabla. Sola
+   * tarda ~2,1 s; con el resto de la suite corriendo en paralelo en la misma
+   * máquina, medido, se va a ~8,7 s — y el tope por defecto de vitest son 5.
+   *
+   * Así que fallaba según lo ocupado que estuviera el portátil, que es la peor
+   * clase de prueba roja: la que enseña a la siguiente persona que un rojo se
+   * vuelve a lanzar en vez de leerse. Y lo que guarda —que la clave no vuelve
+   * en la respuesta ni entera ni en pedazos— es de lo más importante que hay
+   * probado en este repositorio.
+   *
+   * El tope se sube en ESTE caso y no en la configuración global: subirlo para
+   * todos convertiría un cuelgue de verdad en veinte segundos de espera en cada
+   * prueba de la app.
+   */
+  it('la cifra y no la devuelve, ni entera ni en pedazos', { timeout: 20_000 }, async () => {
     expect(KEY).toBeTruthy();
     const { response, body } = await saveCredential();
     expect(response.status).toBe(200);
