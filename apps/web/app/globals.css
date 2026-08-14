@@ -284,6 +284,74 @@ body {
   animation: cx-glow 7s ease-in-out infinite;
 }
 
+/* --- La respuesta que todavía está llegando -----------------------------
+   Una máscara que apaga el borde final del texto mientras se escribe. El
+   filo del degradado baja solo, porque el texto crece; no hay animación, no
+   hay temporizador y no se toca el árbol.
+
+   ===========================================================================
+   POR QUÉ NO ES PALABRA POR PALABRA, CON LA MEDICIÓN DELANTE
+   ===========================================================================
+   La referencia anima cada palabra saliendo de un desenfoque, sobre un array
+   fijo y un temporizador. Aquí el texto llega en trozos y `ChatMarkdown`
+   vuelve a parsear el markdown ENTERO en cada trozo, así que la sospecha era
+   que envolver cada palabra en un <span> reiniciaría la animación de toda la
+   respuesta en cada token.
+
+   SE MIDIÓ, Y ESO NO ES LO QUE PASA. Corriendo el mismo pipeline
+   (remark-parse + gfm + remark-rehype) sobre los prefijos de una respuesta
+   real, y comparando la ruta de cada palabra ya visible entre trozo y trozo:
+
+     prosa lisa .................. 0,0 % de las palabras cambian de sitio
+     con negritas, lista y tabla . 0,1 % (24 de 12.234), 6 % de los trozos,
+                                   como mucho 8 palabras a la vez
+
+   React reconcilia por posición, así que una palabra que no se mueve conserva
+   su nodo y su animación. La premisa era falsa.
+
+   Lo que sí es cierto, y es lo que decide: (a) al terminar el turno habría que
+   quitar los <span> —o quedarse con uno por palabra en todo el historial—, y
+   desenvolverlos remonta el árbol entero de golpe, que es el único parpadeo
+   grande que este diseño tendría y ocurriría en todas las respuestas; y (b)
+   multiplicar por ocho los elementos que React reconcilia en cada token es
+   trabajo en el camino caliente de cada respuesta para una decoración, cuando
+   la regla del sistema de diseño dice que el movimiento contesta una pregunta
+   y nunca decora. La máscara contesta la misma pregunta —«esto se está
+   resolviendo»— con una propiedad CSS y cero nodos.
+
+   ===========================================================================
+   Y SUSTITUYE AL CURSOR ▋
+   ===========================================================================
+   Convivir no: eran dos maneras de decir lo mismo. Y el cursor tenía un
+   defecto propio — es un `::after` del contenedor, así que caía DEBAJO del
+   último párrafo, en su propio renglón, en vez de al final de la frase.
+
+   `prefers-reduced-motion` la apaga entera. El filo se desplaza al crecer el
+   texto, y sobre todo: dejar media línea al 35 % a quien pidió que nada se
+   moviera sería exactamente el texto a medio desvanecer que esa preferencia
+   existe para evitar. */
+.answer-landing {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0) 0,
+    rgb(0 0 0) calc(100% - 2.4em),
+    rgb(0 0 0 / 0.3) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0) 0,
+    rgb(0 0 0) calc(100% - 2.4em),
+    rgb(0 0 0 / 0.3) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .answer-landing {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
 /* Keyboard focus has to survive a design that leans on fills over outlines. */
 :focus-visible {
   outline: 2px solid rgb(var(--primary));

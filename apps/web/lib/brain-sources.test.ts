@@ -80,7 +80,50 @@ describe('las fuentes de una respuesta', () => {
     expect(parseBrainSources(null)).toEqual([]);
     expect(parseBrainSources('no soy un array')).toEqual([]);
     expect(parseBrainSources([null, 3, 'x'])).toEqual([]);
-    expect(parseBrainSources([hit(), { basura: true }])).toHaveLength(1);
+    expect(parseBrainSources([fila(), { basura: true }])).toHaveLength(1);
+  });
+
+  /**
+   * LO QUE SE GUARDA NO TIENE LA FORMA DE LO QUE SE BUSCA, Y AQUÍ ESTABA EL
+   * FALLO.
+   *
+   * Un `hit` de `kb.search` trae `documentTitle`; una fila guardada trae
+   * `title`. `parseBrainSources` delegaba en `collectBrainSources`, que busca
+   * `documentTitle`, no lo encontraba en ninguna fila y las descartaba TODAS por
+   * su propia regla. O sea: cada conversación reabierta salía sin una sola
+   * fuente. Y como no tener fuentes no dibuja nada a propósito, no había nada
+   * roto que mirar en pantalla.
+   *
+   * Esta prueba usa la forma que de verdad hay en la base — la que produce
+   * `collectBrainSources` y escribe `/api/chat` — y por eso el ida y vuelta de
+   * abajo es la parte que importa: es lo único que puede volver a separarse.
+   */
+  const fila = (over: Record<string, unknown> = {}) => ({
+    documentId: 'd1',
+    title: 'Contrato Coltrans 2026',
+    relevance: 'strong',
+    ...over,
+  });
+
+  it('una fila guardada se vuelve a leer entera', () => {
+    const [leida] = parseBrainSources([fila({ age: 'de ayer', spokenAt: '12:34' })]);
+    expect(leida?.title).toBe('Contrato Coltrans 2026');
+    expect(leida?.age).toBe('de ayer');
+    expect(leida?.spokenAt).toBe('12:34');
+  });
+
+  it('lo que se escribe es exactamente lo que se vuelve a leer', () => {
+    const escrito = collectBrainSources([
+      hit({ age: 'de ayer' }),
+      hit({ documentId: 'd2', documentTitle: 'Acta', relevance: 'weak' }),
+    ]);
+    // El viaje de verdad: se serializa a jsonb y vuelve.
+    expect(parseBrainSources(JSON.parse(JSON.stringify(escrito)))).toEqual(escrito);
+  });
+
+  it('sin título tampoco es una fuente al leerla', () => {
+    expect(parseBrainSources([fila({ title: '  ' })])).toEqual([]);
+    expect(parseBrainSources([fila({ documentId: null })])).toEqual([]);
   });
 
   it('la edad y el minuto viajan cuando existen, y no cuando no', () => {

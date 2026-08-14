@@ -34,6 +34,12 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   // in the busy line while the box is being worked out; the result is a picture
   // rather than a step row, so it never becomes a task row. See ScreenMarks.tsx.
   screen_point_at: { label: 'Señalar en tu pantalla', icon: 'Crosshair' },
+  // Se dibuja como tarjeta, no como renglón — `MessageBubble` la saca de los
+  // pasos a propósito, porque un renglón que dice «Preguntarte» justo encima de
+  // la pregunta es la única duplicación literal que TaskRows puede producir.
+  // Este nombre existe para el medio segundo de la línea de actividad, y para
+  // que la fila de auditoría de un turno no diga `ask_choice`.
+  ask_choice: { label: 'Preguntarte', icon: 'HelpCircle' },
   sales_draft_proposal: { label: 'Redactar propuesta', icon: 'FileText' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },

@@ -67,6 +67,11 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   gsheets_append_row: 'Agregar fila a la hoja',
   kb_search: 'Buscar en Brain Knowledge',
   screen_point_at: 'Señalar en tu pantalla',
+  // Como `screen_point_at`: no está en el registro —se declara en `/api/chat` y
+  // no ejecuta nada— pero su nombre sí tiene que estar aquí, porque este
+  // catálogo y el de `apps/web/lib/tool-labels.ts` son la misma tabla partida en
+  // dos y `approvals-parity.test.ts` exige que no se separen.
+  ask_choice: 'Preguntarte',
   sales_draft_proposal: 'Redactar propuesta',
   web_search: 'Buscar en internet',
   web_scrape: 'Abrir página web',

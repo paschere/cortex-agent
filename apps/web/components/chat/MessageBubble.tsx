@@ -1,5 +1,6 @@
 'use client';
 
+import { type AwaitingChoice, isAwaitingChoice } from '@/lib/ask-choice';
 import type { BrainSource } from '@/lib/brain-sources-shape';
 import {
   type ExercisedMandate,
@@ -10,6 +11,7 @@ import type { ScreenFrame } from '@/lib/screen-marks';
 import type { Message, ToolInvocation } from 'ai';
 import { useRef } from 'react';
 import { ChatMarkdown } from './ChatMarkdown';
+import { ChoicePrompt } from './ChoicePrompt';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
 import { DelegatedNotice } from './DelegatedNotice';
 import { FollowUps } from './FollowUps';
@@ -75,6 +77,14 @@ interface MessageBubbleProps {
    * lleva chip, porque un chip vacío devalúa todos los reales.
    */
   brainSources?: readonly BrainSource[];
+  /**
+   * Contestar una pregunta con opciones — escribe la elección como un mensaje
+   * de la persona y arranca el turno siguiente. Es `handleSend` de `ChatRoot`,
+   * el mismo que usa el compositor: una respuesta elegida con un botón y una
+   * escrita a mano entran al hilo por el mismo sitio, que es lo que hace que la
+   * conversación se lea igual dentro de dos semanas. Ver ChoicePrompt.
+   */
+  onAnswer?: (text: string) => void;
   /** Las concesiones de esta conversación, leídas de la base. */
   exercisedMandates?: ExercisedMandate[];
   canRevokeMandates?: boolean;
@@ -123,6 +133,7 @@ export function MessageBubble({
   screenFrame,
   delegations,
   brainSources,
+  onAnswer,
   exercisedMandates,
   canRevokeMandates,
   onMandateRevoked,
@@ -141,6 +152,21 @@ export function MessageBubble({
   );
   const confirmationData = confirmationInvocation
     ? (confirmationInvocation as unknown as { result: ConfirmationSentinel }).result
+    : null;
+
+  /**
+   * La pregunta con opciones, si este mensaje trae una.
+   *
+   * `find` y no `filter`: la ruta ya impide que haya dos en un turno
+   * (`preguntadas` en /api/chat), y si alguna vez llegaran dos por un camino que
+   * hoy no existe, dibujar la primera es mejor que apilar dos tarjetas.
+   */
+  const choiceInvocation = toolInvocations?.find(
+    (inv): inv is ToolInvocation & { state: 'result' } =>
+      inv.state === 'result' && isAwaitingChoice((inv as { result?: unknown }).result),
+  );
+  const choiceData = choiceInvocation
+    ? (choiceInvocation as unknown as { result: AwaitingChoice }).result
     : null;
 
   if (isUser) {
@@ -172,9 +198,11 @@ export function MessageBubble({
         Tres estados y sólo tres, porque son los tres que esta posición puede
         conocer sin que nadie se los cuente:
           · escribiendo — hay texto saliendo AHORA en este mensaje;
-          · esperándote — este mensaje contiene una confirmación sin decidir, y
-            se pone en ámbar junto a lo que está parado por tu culpa, que es
-            exactamente donde sirve de algo;
+          · esperándote — este mensaje contiene una confirmación sin decidir, o
+            una pregunta sin contestar. Las dos paran el turno esperando a una
+            persona, que es lo único que este estado dice; lo que las diferencia
+            —si hay consecuencias o sólo hay una duda— lo dice la tarjeta con su
+            color, y repetirlo aquí sería decirlo dos veces;
           · quieto — todo lo demás, que es la inmensa mayoría del historial.
       */}
       <Presence
@@ -183,7 +211,7 @@ export function MessageBubble({
         state={
           isStreaming && content?.trim()
             ? 'writing'
-            : confirmationData && conversationId
+            : (confirmationData && conversationId) || (choiceData && !!onRegenerate && !isStreaming)
               ? 'waiting'
               : 'resting'
         }
@@ -195,7 +223,18 @@ export function MessageBubble({
         <ReasoningTrail text={reasoningOf(message)} live={isStreaming && !content?.trim()} />
 
         <div ref={bodyRef}>
-          {content && <ChatMarkdown content={content} isStreaming={isStreaming} />}
+          {/* `sources` es lo que resuelve las marcas `[^1]` de ESTA respuesta.
+              Es la misma lista que se enseña abajo en `MessageActions`, y no
+              una segunda: la de abajo dice qué se leyó en total y la marca dice
+              de dónde sale esa frase, pero las dos salen del mismo sitio o
+              acabarían contradiciéndose. Ver lib/citations.ts. */}
+          {content && (
+            <ChatMarkdown
+              content={content}
+              isStreaming={isStreaming}
+              {...(brainSources ? { sources: brainSources } : {})}
+            />
+          )}
         </div>
 
         {/*
@@ -215,6 +254,13 @@ export function MessageBubble({
             const steps: ToolInvocation[] = [];
 
             for (const inv of toolInvocations) {
+              // La pregunta no es un paso, y aquí sí se diferencia de la
+              // confirmación: el renglón de una confirmación nombra la
+              // herramienta peligrosa que se paró («Enviar correo»), que es
+              // información; el de una pregunta diría «Preguntarte» justo
+              // encima de la pregunta. Es la única duplicación literal que
+              // TaskRows podría producir, así que se quita aquí.
+              if (inv === choiceInvocation) continue;
               const result =
                 inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
 
@@ -303,6 +349,25 @@ export function MessageBubble({
             onRevoked={onMandateRevoked}
           />
         ))}
+
+        {/*
+          La pregunta va donde va la confirmación y por el mismo motivo: lo
+          último del mensaje es lo que está esperando a alguien, y así queda
+          pegada al compositor, que es el otro sitio desde donde se contesta.
+
+          `live` sale de `onRegenerate`, que MessageList sólo pasa a la última
+          respuesta del hilo. O sea: la pregunta está viva mientras no haya nada
+          debajo, que es literalmente lo que significa estar sin contestar —y
+          por eso sobrevive a una recarga sin guardar ningún estado nuevo.
+        */}
+        {choiceData && (
+          <ChoicePrompt
+            question={choiceData.question}
+            options={choiceData.options}
+            live={!!onRegenerate && !isStreaming}
+            {...(onAnswer ? { onAnswer } : {})}
+          />
+        )}
 
         {confirmationData && conversationId && (
           <div className="mt-2">

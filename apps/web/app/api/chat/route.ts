@@ -1,6 +1,14 @@
 import { buildToolContext } from '@/lib/agent';
+import {
+  ASK_CHOICE_DESCRIPTION,
+  ASK_CHOICE_TOOL_ID,
+  ASK_CHOICE_TOOL_NAME,
+  AskChoiceSchema,
+  askChoiceResult,
+} from '@/lib/ask-choice';
 import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape';
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
+import { CITATION_RULE } from '@/lib/citations';
 import {
   POINT_AT_DESCRIPTION,
   POINT_AT_TOOL_ID,
@@ -479,6 +487,14 @@ export async function POST(req: NextRequest) {
           (ragOut.conflicts && ragOut.conflicts.length > 0
             ? `\n\n${ragOut.conflicts.map((c) => `⚠ CONFLICTO: ${c.note}`).join('\n')}`
             : '') +
+          // La regla que pide USAR los números de arriba. Vivía en ninguna
+          // parte: este bloque lleva numerando los fragmentos desde siempre y
+          // nada se lo pedía al modelo ni los dibujaba en pantalla — la
+          // numeración se mandaba al vacío y se pagaba en tokens. Va aquí,
+          // pegada a los números que describe y sólo en la rama que los
+          // produce, en lugar de en el prompt del agente: el argumento entero
+          // está en `CITATION_RULE`, en lib/citations.ts.
+          `\n\n${CITATION_RULE}` +
           '\n</context>';
 
         // Sólo en esta rama, y ésa es la decisión. `coverage === 'nothing'`
@@ -670,7 +686,15 @@ export async function POST(req: NextRequest) {
     // because this column is what somebody reads to find out what the model was
     // holding when it answered, and a tool missing from it is a tool nobody can
     // account for later.
-    offered: [...selectedTools.map((t) => t.id), ...(glance ? [POINT_AT_TOOL_ID] : [])],
+    offered: [
+      ...selectedTools.map((t) => t.id),
+      ...(glance ? [POINT_AT_TOOL_ID] : []),
+      // Por el mismo motivo que la de señalar: esta columna es lo que alguien
+      // lee para saber qué tenía el modelo en la mano cuando contestó, y una
+      // herramienta que falta de ella es una herramienta de la que nadie puede
+      // dar cuenta después.
+      ASK_CHOICE_TOOL_ID,
+    ],
     families: familiesFrom({
       scores: selection.familyScores,
       alwaysFamilies: selection.alwaysFamilies,
@@ -811,6 +835,38 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  /**
+   * PREGUNTAR. Declarada en todos los turnos de esta superficie, y en ninguna
+   * otra parte.
+   *
+   * Se parece a la de señalar en todo salvo en la condición. Aquélla se ofrece
+   * sólo cuando llegó un cuadro, porque no se puede señalar sobre nada; ésta se
+   * ofrece siempre, porque cualquier turno puede toparse con una ambigüedad que
+   * sólo una persona resuelve. Lo que comparten es lo importante: no pasan por
+   * `runTool` —no hay efecto que auditar, ni límite de frecuencia que signifique
+   * algo sobre una función pura, ni nada que confirmar—, no están en el
+   * registro, y por tanto no las puede conceder un agente, levantarlas un
+   * mandato ni ofrecerlas el rankeador.
+   *
+   * `preguntadas` ES EL LÍMITE DURO DE UNA POR TURNO, y vive aquí porque aquí es
+   * donde existe la noción de turno. Un contador en el manejador de la
+   * herramienta no podría distinguir dos preguntas del mismo turno de dos
+   * preguntas de dos turnos seguidos, que son cosas distintas: la segunda es
+   * legítima (la persona contestó y siguió apareciendo ambigüedad), la primera
+   * es una tarjeta tapando a otra.
+   *
+   * NO CONFIRMA NADA Y NO PUEDE. Ver la cabecera entera de lib/ask-choice.ts: la
+   * puerta de una herramienta peligrosa la sigue abriendo `ConfirmationRequired-
+   * Error` y la política de riesgo, y elegir una opción sólo escribe un mensaje
+   * de la persona en el hilo.
+   */
+  let preguntadas = 0;
+  aiTools[ASK_CHOICE_TOOL_NAME] = tool({
+    description: ASK_CHOICE_DESCRIPTION,
+    parameters: AskChoiceSchema,
+    execute: async (args) => askChoiceResult(args, { alreadyAsked: preguntadas++ > 0 }),
+  });
+
   // Read far above, alongside retrieval and the tool ranking. Merged here, where
   // it always was — the merge is pure array work and belongs next to what uses
   // it, not next to the query that fetched the rows. Vive en `lib/turn-messages.ts`
@@ -870,6 +926,9 @@ export async function POST(req: NextRequest) {
       // by hand or the weight of a screen turn is understated by the length of
       // its description. This measurement is of characters really sent.
       ...(glance ? [`${POINT_AT_TOOL_ID}: ${POINT_AT_DESCRIPTION}`] : []),
+      // Se declara siempre, así que pesa siempre. Sin esta línea la barra
+      // subestimaría todos los turnos por la longitud de su descripción.
+      `${ASK_CHOICE_TOOL_ID}: ${ASK_CHOICE_DESCRIPTION}`,
     ].join('\n'),
   );
   // Split at the last message rather than by role, so the two parts are exactly

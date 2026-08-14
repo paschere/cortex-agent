@@ -79,6 +79,11 @@ interface MessageListProps {
   onRegenerate?: () => void;
   onSuggestion?: (text: string) => void;
   /**
+   * Contestar una pregunta con opciones: manda la elección como un mensaje de
+   * la persona. Es el mismo `handleSend` del compositor — ver ChoicePrompt.
+   */
+  onAnswer?: (text: string) => void;
+  /**
    * Follow-ups already saved, by message id. Only the newest answer can ever
    * show any, so this holds at most one entry — it is a map rather than a
    * single value so nothing here has to work out which message that is.
@@ -118,6 +123,7 @@ export function MessageList({
   onConfirmed,
   onRegenerate,
   onSuggestion,
+  onAnswer,
   storedFollowups,
   glances,
   initialBrainSources,
@@ -285,6 +291,7 @@ export function MessageList({
                 isStreaming={isLast && isLoading && m.role === 'assistant'}
                 metrics={isLast ? metrics : null}
                 onCompose={onSuggestion}
+                onAnswer={onAnswer}
                 question={nearestQuestion(messages, i)}
                 storedFollowups={storedFollowups?.[m.id]}
                 glanceAt={glances?.[m.id]}

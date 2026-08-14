@@ -415,6 +415,13 @@ export function ChatRoot({
         </div>
       </header>
 
+      {/*
+        `onAnswer` es `handleSend`, el mismo del compositor, y eso es la
+        decisión y no un ahorro: elegir una opción en una tarjeta y escribir la
+        respuesta a mano entran al hilo por la misma puerta, así que la
+        conversación se relee igual dentro de dos semanas — con la decisión
+        dicha en voz de quien la tomó. Ver ChoicePrompt.
+      */}
       <MessageList
         messages={messages}
         isLoading={isLoading}
@@ -423,6 +430,7 @@ export function ChatRoot({
         onConfirmed={reload}
         onRegenerate={handleRegenerate}
         onSuggestion={setDraft}
+        onAnswer={handleSend}
         storedFollowups={initialFollowups}
         glances={initialGlances ? { ...initialGlances, ...glances } : glances}
         initialBrainSources={initialBrainSources}

@@ -57,6 +57,36 @@ export interface BrainSource {
   relevance: 'strong' | 'weak';
   /** «12:34» cuando el fragmento viene de una grabación, y no un número de trozo. */
   spokenAt?: string;
+  /**
+   * QUÉ MARCAS DE LA RESPUESTA APUNTAN A ESTE DOCUMENTO.
+   *
+   * =========================================================================
+   * POR QUÉ NO BASTA CON LA POSICIÓN, QUE ERA LA SUPOSICIÓN OBVIA
+   * =========================================================================
+   * `/api/chat` numera los fragmentos que pega encima de la pregunta — `[^1]`,
+   * `[^2]`, … — en el orden de `ragOut.hits`, y esta lista sale de los MISMOS
+   * hits. Parece que `[^2]` sea la segunda fuente de la lista. **No lo es, y el
+   * caso en que falla es el normal.**
+   *
+   * `collectBrainSources` AGRUPA POR DOCUMENTO, porque cinco fragmentos suelen
+   * ser cinco trozos del mismo contrato y decir «leí 5 documentos» cuando era
+   * uno es la cifra inflada que este producto existe para dejar de producir. En
+   * cuanto dos fragmentos comparten documento, los números y las posiciones
+   * dejan de coincidir: con hits [A, A, B], `[^3]` es B y la segunda fuente de
+   * la lista también es B — pero `[^2]` es A y la lista no tiene segunda A.
+   *
+   * Así que el número se guarda, no se deduce. Un documento puede llevar
+   * varios: con hits [A, A, B], A trae [1, 2] y B trae [3].
+   *
+   * Un fragmento que no llegó a ser fuente —sin id, sin título, o pasado el
+   * tope de ocho— no aporta su número a nadie, y su marca en la respuesta se
+   * dibuja como un número apagado sin nada detrás. Eso es correcto: no había
+   * documento que nombrar.
+   *
+   * Ausente en las filas escritas antes de que esto existiera. Se dibujan como
+   * se dibujaban: la marca queda en texto plano y la lista de abajo, entera.
+   */
+  citations?: number[];
 }
 
 /** Lo que devuelve `kb.search`, en lo poco que a esto le hace falta. */
@@ -83,7 +113,14 @@ interface Hit {
 export function collectBrainSources(hits: readonly Hit[]): BrainSource[] {
   const byDocument = new Map<string, BrainSource>();
 
-  for (const hit of hits) {
+  // El número de la marca es la POSICIÓN EN `hits`, y tiene que ser la misma
+  // aritmética que la de `/api/chat` (`[^${i + 1}]`). Por eso se cuenta sobre el
+  // índice del bucle y no sobre las fuentes aceptadas: un fragmento descartado
+  // aquí abajo sigue llevándose su número en el bloque que vio el modelo, y
+  // renumerar haría que todas las marcas siguientes apuntaran una fuente
+  // desplazada — que es exactamente el fallo que esto existe para no tener.
+  for (const [index, hit] of hits.entries()) {
+    const cite = index + 1;
     const documentId = typeof hit.documentId === 'string' ? hit.documentId : null;
     const title = typeof hit.documentTitle === 'string' ? hit.documentTitle.trim() : '';
     // Sin id no se puede agrupar y sin título no se puede nombrar. Una fuente
@@ -94,6 +131,7 @@ export function collectBrainSources(hits: readonly Hit[]): BrainSource[] {
     const existing = byDocument.get(documentId);
     if (existing) {
       if (strong) existing.relevance = 'strong';
+      existing.citations?.push(cite);
       continue;
     }
     if (byDocument.size >= MAX_BRAIN_SOURCES) continue;
@@ -102,6 +140,7 @@ export function collectBrainSources(hits: readonly Hit[]): BrainSource[] {
       documentId,
       title,
       relevance: strong ? 'strong' : 'weak',
+      citations: [cite],
       ...(typeof hit.age === 'string' && hit.age ? { age: hit.age } : {}),
       ...(typeof hit.spokenAt === 'string' && hit.spokenAt ? { spokenAt: hit.spokenAt } : {}),
     });
@@ -110,18 +149,83 @@ export function collectBrainSources(hits: readonly Hit[]): BrainSource[] {
   return [...byDocument.values()];
 }
 
+/** Números de marca creíbles: enteros positivos, sin repetir y como mucho ocho. */
+function readCitations(value: unknown): number[] | null {
+  if (!Array.isArray(value)) return null;
+  const clean = [
+    ...new Set(
+      value.filter((n): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0),
+    ),
+  ].slice(0, 16);
+  return clean.length > 0 ? clean : null;
+}
+
 /**
  * Lo mismo, leído de la base de datos.
  *
- * Defensivo a propósito: `brain_sources` es `jsonb` y lo que hay ahí lo escribió
- * una versión anterior de este código. Una fila rara no puede tumbar la lectura
- * de una conversación entera — se descarta la fuente y se dibujan las demás.
+ * =========================================================================
+ * NO PUEDE DELEGAR EN `collectBrainSources`, Y ASÍ ESTABA
+ * =========================================================================
+ * Lo hacía, y por eso NO DEVOLVÍA NUNCA NADA. Las dos funciones leen formas
+ * distintas: un `hit` de `kb.search` trae `documentTitle` y una fila guardada
+ * trae `title`. Al pasarle filas guardadas, `collectBrainSources` no encontraba
+ * título en ninguna, las descartaba todas por su propia regla («una fuente que
+ * no se puede nombrar no es una fuente») y devolvía `[]`. El efecto en pantalla
+ * era exactamente el de no tener procedencia: cada conversación reabierta salía
+ * sin una sola fuente, y como la ausencia de fuentes NO DIBUJA NADA a propósito,
+ * no había nada roto que mirar. Sólo se veía en el turno vivo, que llega por
+ * `/api/chat/turn-metrics` y no pasa por aquí.
+ *
+ * Ahora lee su propia forma. Sigue siendo defensiva por el mismo motivo de
+ * siempre: `brain_sources` es `jsonb` y lo escribió una versión anterior de este
+ * código, así que una fila rara se descarta y las demás se dibujan.
+ *
+ * =========================================================================
+ * Y LOS NÚMEROS NO SE VUELVEN A DEDUCIR
+ * =========================================================================
+ * Lo que hay en la base ya viene agrupado por documento, así que su posición ya
+ * no es la del fragmento que lo produjo. Recalcular daría 1, 2, 3 sobre unas
+ * marcas que de verdad eran 1, 4, 5 — una cita apuntando al documento
+ * equivocado, que es peor que ninguna cita. Una fila sin `citations` (escrita
+ * antes de que existieran) se queda sin ellos y sus marcas salen apagadas.
  */
 export function parseBrainSources(value: unknown): BrainSource[] {
   if (!Array.isArray(value)) return [];
-  return collectBrainSources(
-    value.filter((v): v is Record<string, unknown> => typeof v === 'object' && v !== null),
-  );
+
+  const byDocument = new Map<string, BrainSource>();
+  for (const row of value) {
+    if (typeof row !== 'object' || row === null) continue;
+    const r = row as Record<string, unknown>;
+    const documentId = typeof r.documentId === 'string' ? r.documentId : null;
+    const title = typeof r.title === 'string' ? r.title.trim() : '';
+    if (!documentId || !title) continue;
+
+    const strong = r.relevance !== 'weak';
+    const cites = readCitations(r.citations);
+    const existing = byDocument.get(documentId);
+    if (existing) {
+      // Misma regla que al escribir: si cualquier fila de ese documento fue una
+      // coincidencia fuerte, el documento lo fue.
+      if (strong) existing.relevance = 'strong';
+      if (cites)
+        existing.citations = [...new Set([...(existing.citations ?? []), ...cites])].sort(
+          (a, b) => a - b,
+        );
+      continue;
+    }
+    if (byDocument.size >= MAX_BRAIN_SOURCES) continue;
+
+    byDocument.set(documentId, {
+      documentId,
+      title,
+      relevance: strong ? 'strong' : 'weak',
+      ...(cites ? { citations: cites } : {}),
+      ...(typeof r.age === 'string' && r.age ? { age: r.age } : {}),
+      ...(typeof r.spokenAt === 'string' && r.spokenAt ? { spokenAt: r.spokenAt } : {}),
+    });
+  }
+
+  return [...byDocument.values()];
 }
 
 /**

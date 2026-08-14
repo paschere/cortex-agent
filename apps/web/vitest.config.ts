@@ -9,6 +9,17 @@ import { defineConfig } from 'vitest/config';
  * same way the app does.
  */
 export default defineConfig({
+  /**
+   * `tsconfig.json` deja el JSX en `preserve` porque quien lo compila es Next,
+   * y esbuild —el que transforma para vitest— cae entonces en el runtime
+   * clásico y emite `React.createElement` sobre un `React` que nadie importó.
+   * El síntoma es «React is not defined» al RENDERIZAR, no al compilar: una
+   * prueba que sólo importa un componente pasa, y la que lo dibuja revienta.
+   *
+   * Con `automatic` se usa el mismo runtime que usa la app, así que lo que la
+   * prueba dibuja es lo que el navegador dibuja.
+   */
+  esbuild: { jsx: 'automatic' },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('.', import.meta.url)),
