@@ -1,5 +1,6 @@
 'use client';
 
+import type { BrainSource } from '@/lib/brain-sources-shape';
 import {
   type ExercisedMandate,
   type NoticePlanEntry,
@@ -67,6 +68,13 @@ interface MessageBubbleProps {
    * mandato ya se anunció tres respuestas más arriba.
    */
   delegations?: NoticePlanEntry[];
+  /**
+   * Los documentos del cerebro que se pegaron encima de la pregunta que produjo
+   * esta respuesta. Ausente —que es el caso normal— no dibuja nada: la regla de
+   * procedencia del sistema de diseño dice que un valor sin procedencia no
+   * lleva chip, porque un chip vacío devalúa todos los reales.
+   */
+  brainSources?: readonly BrainSource[];
   /** Las concesiones de esta conversación, leídas de la base. */
   exercisedMandates?: ExercisedMandate[];
   canRevokeMandates?: boolean;
@@ -114,6 +122,7 @@ export function MessageBubble({
   glanceAt,
   screenFrame,
   delegations,
+  brainSources,
   exercisedMandates,
   canRevokeMandates,
   onMandateRevoked,
@@ -335,6 +344,7 @@ export function MessageBubble({
             {...(question ? { question } : {})}
             {...(conversationId ? { conversationId } : {})}
             {...(onRegenerate ? { onRegenerate } : {})}
+            {...(brainSources && brainSources.length > 0 ? { brainSources } : {})}
           />
         )}
 

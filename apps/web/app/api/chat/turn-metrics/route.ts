@@ -1,3 +1,4 @@
+import { parseBrainSources } from '@/lib/brain-sources-shape';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { loadTurnLatencies } from '@cortex/agent-tools';
@@ -79,7 +80,35 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: true })
     .limit(MAX_TOOL_ROWS);
 
+  /**
+   * QUÉ SE LEYÓ DEL CEREBRO, POR EL MISMO VIAJE.
+   *
+   * Va aquí y no en una ruta propia porque es exactamente la misma clase de
+   * dato que las cifras de arriba: algo que sólo se puede saber CUANDO EL TURNO
+   * YA TERMINÓ, porque lo escribe `onFinish`. Una segunda petición por turno
+   * para leer una columna de la fila que este código ya identificó sería un
+   * viaje de ida y vuelta a cambio de nada.
+   *
+   * Y falla en silencio a propósito: si la columna todavía no existe en esta
+   * base de datos —una migración sin aplicar—, se pierde la línea de
+   * procedencia y no las cifras. Aquí sí es tolerable, al revés que en la
+   * lectura de la conversación: allí un fallo esconde la conversación ENTERA y
+   * por eso aquello lanza.
+   */
+  const { data: answer, error: sourcesError } = await db
+    .from('messages')
+    .select('brain_sources')
+    .eq('id', latest.messageId)
+    .maybeSingle();
+
+  // El error se mira, no se ignora por omisión — que es justo lo que
+  // `lib/unchecked-reads.test.ts` existe para impedir. Aquí tragárselo SÍ es lo
+  // correcto y por eso está escrito: la consecuencia es una respuesta sin línea
+  // de procedencia, no una pantalla vacía haciéndose pasar por una sin datos.
+  const brainSources = sourcesError ? [] : parseBrainSources(answer?.brain_sources);
+
   return NextResponse.json({
+    brainSources,
     metrics: {
       messageId: latest.messageId,
       /** Before anything appeared on screen. */

@@ -1,4 +1,5 @@
 import { ChatRoot } from '@/components/chat/ChatRoot';
+import { type BrainSource, parseBrainSources } from '@/lib/brain-sources-shape';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { toToolInvocations } from '@/lib/tool-invocations';
@@ -32,7 +33,12 @@ export default async function ResumeChatPage({
     // `screen_glance_at` rides along for the same reason `followups` does
     // (migration 0092): it is a property of the message and is only ever wanted
     // with it, so annotating a reopened thread costs no additional query.
-    .select('id, role, content, tool_calls, tool_results, followups, screen_glance_at, created_at')
+    // `brain_sources` viaja igual (migración 0105): es una propiedad del mensaje
+    // y sólo se quiere junto a él, así que reabrir un hilo con su procedencia
+    // sigue costando la misma lectura de siempre.
+    .select(
+      'id, role, content, tool_calls, tool_results, followups, screen_glance_at, brain_sources, created_at',
+    )
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 
@@ -120,6 +126,25 @@ export default async function ResumeChatPage({
   }
 
   /**
+   * Qué documentos del cerebro se leyeron para cada respuesta de este hilo.
+   *
+   * A DIFERENCIA de los seguimientos, esto se pasa para TODAS las respuestas y
+   * no sólo para la última. Un seguimiento es una sugerencia sobre qué preguntar
+   * ahora, y sólo tiene sentido al final del hilo; la procedencia es la prueba
+   * de dónde salió una cifra, y la cifra que alguien va a discutir dos semanas
+   * después está en mitad de la conversación, no al final.
+   *
+   * No cuesta ninguna consulta: la columna viene en el mismo `select` de arriba.
+   * Las respuestas sin fuentes se quedan fuera del mapa entero, que es lo que
+   * `BrainSources` lee como «no dibujes nada».
+   */
+  const initialBrainSources: Record<string, BrainSource[]> = {};
+  for (const m of msgs ?? []) {
+    const sources = parseBrainSources(m.brain_sources);
+    if (sources.length > 0) initialBrainSources[m.id as string] = sources;
+  }
+
+  /**
    * The memory filter this conversation was left on, resolved back into names.
    *
    * NAMES, NOT IDS, AND RESOLVED THROUGH `listVisibleSpaces`. The strip in the
@@ -161,6 +186,7 @@ export default async function ResumeChatPage({
       waiting={waiting}
       {...(storedFollowups ? { initialFollowups: storedFollowups } : {})}
       {...(Object.keys(initialGlances).length > 0 ? { initialGlances } : {})}
+      {...(Object.keys(initialBrainSources).length > 0 ? { initialBrainSources } : {})}
     />
   );
 }

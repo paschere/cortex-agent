@@ -1,5 +1,6 @@
 'use client';
 
+import type { BrainSource } from '@/lib/brain-sources-shape';
 import { type ExercisedMandate, planNotices } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
 import { toolDisplayName } from '@/lib/tool-labels';
@@ -99,6 +100,14 @@ interface MessageListProps {
    * reading its own id. See ChatRoot and lib/screen-marks.ts.
    */
   frames?: Record<string, ScreenFrame>;
+  /**
+   * Qué documentos del cerebro se leyeron para cada respuesta ya guardada.
+   *
+   * Los del turno que acaba de terminar NO vienen por aquí: los escribe
+   * `onFinish` en el servidor y llegan con las cifras del turno, por el mismo
+   * viaje. Ver el efecto de `/api/chat/turn-metrics` más abajo.
+   */
+  initialBrainSources?: Record<string, BrainSource[]>;
 }
 
 export function MessageList({
@@ -111,10 +120,22 @@ export function MessageList({
   onSuggestion,
   storedFollowups,
   glances,
+  initialBrainSources,
   frames,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<TurnMetrics | null>(null);
+  /**
+   * La procedencia del turno recién terminado, que la base ya tiene y esta
+   * pestaña todavía no.
+   *
+   * NO SE GUARDA POR ID, y ésa es la parte que hay que saber: el mensaje que
+   * `useChat` acaba de poner en pantalla lleva un id generado en el navegador,
+   * no el `uuid` de la fila que `onFinish` escribió. Los dos no coinciden nunca.
+   * Por eso esto se aplica al ÚLTIMO mensaje por posición, exactamente igual que
+   * las cifras del turno un poco más abajo, y por el mismo motivo.
+   */
+  const [freshSources, setFreshSources] = useState<BrainSource[] | null>(null);
   const [exercised, setExercised] = useState<ExercisedMandate[]>([]);
   const [canRevoke, setCanRevoke] = useState(false);
 
@@ -203,8 +224,18 @@ export function MessageList({
     const timer = setTimeout(() => {
       fetch(`/api/chat/turn-metrics?conversationId=${encodeURIComponent(conversationId)}`)
         .then((r) => (r.ok ? r.json() : { metrics: null }))
-        .then((data: { metrics: TurnMetrics | null }) => {
-          if (alive && data.metrics) setMetrics(data.metrics);
+        .then((data: { metrics: TurnMetrics | null; brainSources?: BrainSource[] }) => {
+          if (!alive || !data.metrics) return;
+          setMetrics(data.metrics);
+          // Sólo si hubo algo. Guardar un array vacío pondría una entrada en el
+          // mapa, y una entrada con cero fuentes y ninguna entrada tienen que
+          // dibujarse igual — que es no dibujar nada.
+          const sources = data.brainSources ?? [];
+          // Cero fuentes se guarda como `null` y no como `[]`: las dos cosas se
+          // dibujan igual —sin nada— y dos maneras de escribir el mismo hecho
+          // son dos maneras de que acaben significando cosas distintas. Es la
+          // misma regla que defiende la migración 0105.
+          setFreshSources(sources.length > 0 ? sources : null);
         })
         .catch(() => {
           // No numbers is a fine outcome: the rows simply show none.
@@ -259,6 +290,7 @@ export function MessageList({
                 glanceAt={glances?.[m.id]}
                 screenFrame={askedWith}
                 delegations={noticePlan[m.id]}
+                brainSources={isLast && freshSources ? freshSources : initialBrainSources?.[m.id]}
                 exercisedMandates={exercised}
                 canRevokeMandates={canRevoke}
                 onMandateRevoked={() => void loadExercised()}

@@ -1,6 +1,7 @@
 'use client';
 
 import { type ScopeSpace, setChatScopeAction } from '@/app/(chat)/chat/actions';
+import type { BrainSource } from '@/lib/brain-sources-shape';
 import { type ScreenFrame, rememberFrame } from '@/lib/screen-marks';
 import type { ScreenGlance } from '@/lib/tab-recorder';
 import type { WaitingNoticeData } from '@/lib/waiting-shape';
@@ -50,6 +51,14 @@ interface ChatRootProps {
    */
   initialGlances?: Record<string, string>;
   /**
+   * Qué se leyó del cerebro para cada respuesta de un hilo reabierto.
+   *
+   * Para TODAS las respuestas y no sólo la última, al revés que los
+   * seguimientos: la cifra que alguien va a discutir dos semanas después está en
+   * mitad de la conversación. Ver la página que lo arma y la migración 0105.
+   */
+  initialBrainSources?: Record<string, BrainSource[]>;
+  /**
    * Lo que está esperando a esta persona en las cuatro colas, contado por la
    * página que nos monta.
    *
@@ -74,6 +83,7 @@ export function ChatRoot({
   initialScope,
   initialFollowups,
   initialGlances,
+  initialBrainSources,
   waiting,
 }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
@@ -415,6 +425,7 @@ export function ChatRoot({
         onSuggestion={setDraft}
         storedFollowups={initialFollowups}
         glances={initialGlances ? { ...initialGlances, ...glances } : glances}
+        initialBrainSources={initialBrainSources}
         frames={frames}
       />
 

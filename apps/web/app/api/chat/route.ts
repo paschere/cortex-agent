@@ -1,4 +1,5 @@
 import { buildToolContext } from '@/lib/agent';
+import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape';
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import {
   POINT_AT_DESCRIPTION,
@@ -295,6 +296,15 @@ export async function POST(req: NextRequest) {
   // round-trip per message on fresh workspaces.
   const ragQuery = lastUserMessage?.content ?? '';
   let ragBlock = '';
+  /**
+   * Los documentos que se pegaron encima de esta pregunta, para escribirlos con
+   * la respuesta y poder decir en pantalla de dónde salió.
+   *
+   * Se llena en el mismo sitio donde se arma `ragBlock` y por el mismo criterio:
+   * lo que de verdad vio el modelo, no lo que la búsqueda puntuó. Ver
+   * `lib/brain-sources-shape.ts` y la migración 0105.
+   */
+  let ragSources: BrainSource[] = [];
   // "Does this workspace know anything yet?" — counted on kb_documents rather
   // than kb_chunks. Two reasons, and the second is the real one: chunks have no
   // organization_id (they inherit it from their document, see migration 0064
@@ -469,6 +479,14 @@ export async function POST(req: NextRequest) {
             ? `\n\n${ragOut.conflicts.map((c) => `⚠ CONFLICTO: ${c.note}`).join('\n')}`
             : '') +
           '\n</context>';
+
+        // Sólo en esta rama, y ésa es la decisión. `coverage === 'nothing'`
+        // también escribe un bloque —para que el modelo SEPA que no hay nada y
+        // pueda decirlo— pero ahí no se leyó ningún documento, así que no hay
+        // ninguna procedencia que enseñar. Un chip de procedencia vacío
+        // devalúa todos los reales; lo dice `docs/design-system.md` y es la
+        // misma regla, aplicada aquí.
+        ragSources = collectBrainSources(ragOut.hits);
       }
 
       // Written down from the block that was just built, not from the scores.
@@ -934,6 +952,11 @@ export async function POST(req: NextRequest) {
             content: text,
             tool_calls: toolCalls as unknown as object,
             tool_results: toolResults as unknown as object,
+            // NULL y no `[]` cuando no se leyó nada: la migración 0105 lo
+            // prohíbe a propósito, porque un array vacío y un NULL se dibujan
+            // igual y dos maneras de escribir el mismo hecho son dos maneras de
+            // que acaben significando cosas distintas.
+            brain_sources: ragSources.length > 0 ? ragSources : null,
           })
           .select('id')
           .single();

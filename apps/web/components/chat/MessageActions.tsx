@@ -1,10 +1,12 @@
 'use client';
 
 import { saveAnswerAsReportAction } from '@/app/(chat)/chat/actions';
+import type { BrainSource } from '@/lib/brain-sources-shape';
 import { clsx } from 'clsx';
 import { BookmarkCheck, Check, Copy, Loader2, RotateCw } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
+import { BrainSources } from './BrainSources';
 
 /**
  * LO QUE SE HACE CON UNA RESPUESTA: COPIARLA, REHACERLA, CONSERVARLA.
@@ -57,6 +59,8 @@ export function MessageActions({
   onRegenerate,
   /** La respuesta viva. Las de más arriba se esconden hasta que se las busca. */
   pinned,
+  /** De dónde salió, si salió del cerebro. Ver BrainSources. */
+  brainSources,
 }: {
   text: string;
   question?: string;
@@ -64,6 +68,7 @@ export function MessageActions({
   messageId: string;
   onRegenerate?: () => void;
   pinned?: boolean;
+  brainSources?: readonly BrainSource[];
 }) {
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -88,76 +93,98 @@ export function MessageActions({
   }
 
   return (
-    <div
-      className={clsx(
-        'mt-1 flex flex-wrap items-center gap-0.5 transition-opacity duration-150 motion-reduce:transition-none',
-        // Lo que dijo algo —se guardó, o no se pudo— deja de esconderse: un
-        // mensaje que sólo se ve mientras el ratón está encima es un mensaje
-        // que se pierde justo al apartarlo para leerlo.
-        pinned || savedUrl || error
-          ? 'opacity-100'
-          : 'opacity-0 focus-within:opacity-100 group-hover:opacity-100',
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => {
-          navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1400);
-        }}
-        className={button}
-        aria-label="Copiar mensaje"
-        title="Copiar mensaje"
+    <div className="mt-1 flex flex-wrap items-center gap-0.5">
+      {/*
+        LA PROCEDENCIA NO SE ESCONDE, Y ÉSA ES LA DIFERENCIA CON LAS DEMÁS.
+
+        Todo lo que hay a la derecha son ACCIONES, y una acción sólo hace falta
+        cuando alguien va a actuar: por eso se esconden hasta que el ratón llega
+        o hasta que se tabula. Esto no es una acción, es la prueba de dónde salió
+        la respuesta — y una prueba que sólo existe mientras el cursor está
+        encima no está en la conversación, está escondida en ella.
+
+        Es literalmente el caso que importa: la cifra que alguien va a discutir
+        dos semanas después está en mitad del hilo, no en la última respuesta.
+        Sin fuentes esto no dibuja nada, así que en la inmensa mayoría de los
+        mensajes no añade ni un píxel.
+      */}
+      {brainSources && brainSources.length > 0 && <BrainSources sources={brainSources} />}
+
+      <div
+        className={clsx(
+          'flex flex-wrap items-center gap-0.5 transition-opacity duration-150 motion-reduce:transition-none',
+          // Lo que dijo algo —se guardó, o no se pudo— deja de esconderse: un
+          // mensaje que sólo se ve mientras el ratón está encima es un mensaje
+          // que se pierde justo al apartarlo para leerlo.
+          pinned || savedUrl || error
+            ? 'opacity-100'
+            : 'opacity-0 focus-within:opacity-100 group-hover:opacity-100',
+        )}
       >
-        {copied ? <Check className="h-3.5 w-3.5 text-emerald" /> : <Copy className="h-3.5 w-3.5" />}
-      </button>
-
-      {onRegenerate && (
         <button
           type="button"
-          onClick={onRegenerate}
+          onClick={() => {
+            navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1400);
+          }}
           className={button}
-          aria-label="Volver a generar la respuesta"
-          title="Volver a generar la respuesta"
+          aria-label="Copiar mensaje"
+          title="Copiar mensaje"
         >
-          <RotateCw className="h-3.5 w-3.5" />
-        </button>
-      )}
-
-      {savedUrl ? (
-        // Guardada, el botón se convierte en la puerta. Ofrecer «guardar» otra
-        // vez invitaría a un segundo informe idéntico — y aunque el servidor lo
-        // impide, un botón que parece hacer algo y no lo hace es peor.
-        <Link
-          href={savedUrl}
-          className="inline-flex items-center gap-1.5 rounded-pill bg-emerald-soft px-2.5 py-1 text-micro font-semibold text-emerald transition-colors duration-150 hover:bg-emerald/15 motion-reduce:transition-none"
-        >
-          <BookmarkCheck className="h-3.5 w-3.5" aria-hidden />
-          Guardado — abrir informe
-        </Link>
-      ) : (
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving}
-          className={button}
-          aria-label="Conservar esta respuesta como informe"
-          title="Conservar como informe"
-        >
-          {saving ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-emerald" />
           ) : (
-            <BookmarkCheck className="h-3.5 w-3.5" />
+            <Copy className="h-3.5 w-3.5" />
           )}
         </button>
-      )}
 
-      {error && (
-        <span role="alert" className="ml-1 text-micro text-rose">
-          {error}
-        </span>
-      )}
+        {onRegenerate && (
+          <button
+            type="button"
+            onClick={onRegenerate}
+            className={button}
+            aria-label="Volver a generar la respuesta"
+            title="Volver a generar la respuesta"
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {savedUrl ? (
+          // Guardada, el botón se convierte en la puerta. Ofrecer «guardar» otra
+          // vez invitaría a un segundo informe idéntico — y aunque el servidor lo
+          // impide, un botón que parece hacer algo y no lo hace es peor.
+          <Link
+            href={savedUrl}
+            className="inline-flex items-center gap-1.5 rounded-pill bg-emerald-soft px-2.5 py-1 text-micro font-semibold text-emerald transition-colors duration-150 hover:bg-emerald/15 motion-reduce:transition-none"
+          >
+            <BookmarkCheck className="h-3.5 w-3.5" aria-hidden />
+            Guardado — abrir informe
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className={button}
+            aria-label="Conservar esta respuesta como informe"
+            title="Conservar como informe"
+          >
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : (
+              <BookmarkCheck className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
+
+        {error && (
+          <span role="alert" className="ml-1 text-micro text-rose">
+            {error}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
