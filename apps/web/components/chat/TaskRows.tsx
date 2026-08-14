@@ -6,6 +6,7 @@ import type { ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
 import { AlertCircle, Check, ChevronDown, Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { StructuralResult } from './results/StructuralResult';
 
 /**
  * WHAT CORTEX IS DOING, AS A LIST INSTEAD OF A STACK OF CARDS.
@@ -151,7 +152,8 @@ function TaskRow({
   const measured = formatDuration(durationMs ?? null);
   const shown = running ? formatDuration(elapsed >= 1000 ? elapsed : null) : measured;
 
-  const result = invocation.state === 'result' ? (invocation as { result?: unknown }).result : undefined;
+  const result =
+    invocation.state === 'result' ? (invocation as { result?: unknown }).result : undefined;
   const evidence =
     'scroll-slim mt-1 max-h-52 overflow-auto rounded-sm border border-border bg-surface-2 p-2.5 font-mono text-[10.5px] leading-relaxed text-ink-muted';
 
@@ -223,9 +225,29 @@ function TaskRow({
           {result !== undefined && (
             <div>
               <div className="field-label">{failed ? 'Error' : 'Resultado'}</div>
-              <pre className={evidence}>
-                {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-              </pre>
+              {/*
+                UN PASO SIGUE SIENDO UN PASO — lo que cambia es que ahora se
+                lee al desplegarlo.
+
+                El resultado de ~130 de las 134 herramientas terminaba aquí
+                como un objeto en bruto. `StructuralResult` mira la forma y
+                dibuja una tabla o una lista de campos cuando la reconoce, y
+                vuelve al JSON cuando no: una tabla que se come la mitad de los
+                datos es peor que el JSON, porque el JSON al menos se ve entero.
+
+                Deliberadamente NO asciende a tarjeta. La tesis de este archivo
+                —una llamada es un renglón, doce tarjetas son una pared— sigue
+                siendo cierta, y lo que la respeta es que esto viva dentro del
+                chevron. Un error se queda en JSON: la forma de un fallo es
+                justo la que nadie debería tener que interpretar.
+              */}
+              {failed || typeof result === 'string' ? (
+                <pre className={evidence}>
+                  {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+                </pre>
+              ) : (
+                <StructuralResult result={result} />
+              )}
             </div>
           )}
         </div>
@@ -249,7 +271,8 @@ export function TaskRows({
 
   // Open while it is happening, and while anything went wrong — a failed step
   // hidden behind a disclosure is a failed step nobody sees.
-  const shouldCollapse = !isStreaming && !running && failures === 0 && invocations.length > COLLAPSE_ABOVE;
+  const shouldCollapse =
+    !isStreaming && !running && failures === 0 && invocations.length > COLLAPSE_ABOVE;
   const [open, setOpen] = useState(!shouldCollapse);
   useEffect(() => {
     if (!shouldCollapse) setOpen(true);
@@ -259,9 +282,7 @@ export function TaskRows({
 
   const totalLabel = formatDuration(metrics?.toolMs ?? null);
   const currentLabel = running
-    ? toolDisplayName(
-        invocations.filter((i) => i.state !== 'result').slice(-1)[0]?.toolName ?? '',
-      )
+    ? toolDisplayName(invocations.filter((i) => i.state !== 'result').slice(-1)[0]?.toolName ?? '')
     : null;
 
   return (

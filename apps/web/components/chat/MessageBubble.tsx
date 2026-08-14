@@ -22,6 +22,8 @@ import { ScreenMarks } from './ScreenMarks';
 import { GlanceNote } from './ScreenView';
 import { SelectionActions } from './SelectionActions';
 import { TaskRows, type TurnMetrics } from './TaskRows';
+import { DeclaredTable } from './results/DeclaredTable';
+import { resolveView } from './results/registry';
 
 interface MessageBubbleProps {
   message: Message;
@@ -308,6 +310,36 @@ export function MessageBubble({
                     continue;
                   }
                 }
+
+                // EL REGISTRO, que es a donde van a parar las cuatro ramas de
+                // arriba en cuanto tenga ocho entradas corriendo en producción.
+                // Hasta entonces convive con ellas: no hay derecho a tocar el
+                // camino que ya funciona para demostrar que el nuevo también.
+                //
+                // Una entrada RICH dibuja tarjeta; una TABLE también, con la
+                // tabla que declara. Todo lo demás sigue siendo un paso — y un
+                // paso ahora se LEE al desplegarlo, porque `TaskRows` pinta el
+                // resultado con la capa estructural en vez del JSON en bruto.
+                const resolved = resolveView(inv.toolName);
+                if (result !== undefined && resolved.as === 'rich') {
+                  const View = resolved.View;
+                  cards.push(
+                    <View
+                      key={inv.toolCallId}
+                      result={result}
+                      toolCallId={inv.toolCallId}
+                      onSettled={onConfirmed}
+                    />,
+                  );
+                  continue;
+                }
+                if (result !== undefined && resolved.as === 'table') {
+                  cards.push(
+                    <DeclaredTable key={inv.toolCallId} spec={resolved.spec} result={result} />,
+                  );
+                  continue;
+                }
+
                 steps.push(inv);
               }
 
@@ -318,7 +350,21 @@ export function MessageBubble({
                     metrics={metrics ?? null}
                     isStreaming={isStreaming}
                   />
-                  {cards.length > 0 && <div className="space-y-1.5">{cards}</div>}
+                  {/*
+                    Tres tarjetas es un turno bien contestado; siete es una
+                    pared, que es exactamente lo que `TaskRows` existe para
+                    evitar. Por encima de tres, se apilan y solo la primera
+                    viene abierta.
+                  */}
+                  {cards.length > 0 && <div className="space-y-1.5">{cards.slice(0, 3)}</div>}
+                  {cards.length > 3 && (
+                    <details className="mt-1.5">
+                      <summary className="cursor-pointer text-[12px] text-ink-muted hover:text-ink">
+                        {cards.length - 3} resultado{cards.length - 3 === 1 ? '' : 's'} más
+                      </summary>
+                      <div className="mt-1.5 space-y-1.5">{cards.slice(3)}</div>
+                    </details>
+                  )}
                 </>
               );
             })()}

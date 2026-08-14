@@ -22,6 +22,15 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['app/**/*.test.ts', 'lib/**/*.test.ts', 'inngest/**/*.test.ts'],
+    // `components/` entra con el registro de renderizadores. Hasta ahora no
+    // estaba, y el efecto no era que nadie hubiera escrito pruebas ahí: era que
+    // escribirlas no servía de nada, porque no se habrían ejecutado. Un
+    // `include` es un techo además de una lista.
+    include: [
+      'app/**/*.test.ts',
+      'lib/**/*.test.ts',
+      'inngest/**/*.test.ts',
+      'components/**/*.test.ts',
+    ],
   },
 });
