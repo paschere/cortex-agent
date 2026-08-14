@@ -442,6 +442,23 @@ async function fromWeb(
     try {
       const page = await runTool(webScrape, { url, maxChars: 20000 }, ctx, { confirmed: true });
       pages.push({ host: hostOf(url), text: page.content });
+      /**
+       * SE DICE TAMBIÉN CUANDO SALE BIEN, Y ÉSA ES LA CORRECCIÓN.
+       *
+       * Antes sólo había nota si algo fallaba, así que la pantalla acababa
+       * diciendo «no encontré nada que pueda citarte» sin aclarar si había
+       * llegado a mirar la web siquiera. El dueño probó con su propia empresa
+       * —cuya página SÍ trae la razón social y el NIT— y lo que leyó fue un
+       * silencio: «si busco eso en Google aparece información, wtf».
+       *
+       * «Miré y no había» y «no llegué a mirar» son dos frases distintas, y sólo
+       * una de las dos manda a alguien a revisar la dirección que escribió.
+       */
+      notes.push(
+        page.truncated
+          ? `Leí ${hostOf(url)}, y era larga: me quedé con el principio y el pie, que es donde va el NIT.`
+          : `Leí ${hostOf(url)} entera.`,
+      );
     } catch {
       notes.push(`No se pudo leer ${hostOf(url)}. Revisa la dirección, o déjala en blanco.`);
     }
