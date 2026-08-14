@@ -1,11 +1,8 @@
-import { NextResponse, type NextRequest } from 'next/server';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { type NextRequest, NextResponse } from 'next/server';
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireSession();
   const { id } = await params;
   const db = getOrgScopedClient(user.organization.id);

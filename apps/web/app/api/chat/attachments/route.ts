@@ -2,11 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { inngest } from '@/lib/inngest';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import {
-  assertCanWriteToSpace,
-  ensurePersonalSpace,
-  parseDocument,
-} from '@cortex/agent-tools';
+import { assertCanWriteToSpace, ensurePersonalSpace, parseDocument } from '@cortex/agent-tools';
 import { ForbiddenError, NotFoundError, logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -307,7 +303,10 @@ export async function POST(req: NextRequest) {
     // rather than implying nothing happened.
     logger.error('chat attachment receipt failed', { message: attachError?.message });
     return NextResponse.json(
-      { error: 'El archivo entró a la memoria, pero el chat no pudo mostrarlo. Búscalo en Brain Knowledge.' },
+      {
+        error:
+          'El archivo entró a la memoria, pero el chat no pudo mostrarlo. Búscalo en Brain Knowledge.',
+      },
       { status: 500 },
     );
   }

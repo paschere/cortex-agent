@@ -1,9 +1,9 @@
-import { NextResponse, type NextRequest } from 'next/server';
-import { z } from 'zod';
-import { requireSession } from '@/lib/session';
 import { buildToolContext } from '@/lib/agent';
-import { getTool, runTool } from '@cortex/agent-tools';
+import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { getTool, runTool } from '@cortex/agent-tools';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 const Body = z.object({
   conversationId: z.string().uuid(),
@@ -82,7 +82,10 @@ export async function POST(req: NextRequest) {
       });
       if (idx !== -1) {
         tr[idx] = { ...tr[idx], result: out };
-        await db.from('messages').update({ tool_results: tr }).eq('id', row.id as string);
+        await db
+          .from('messages')
+          .update({ tool_results: tr })
+          .eq('id', row.id as string);
         break;
       }
     }
