@@ -85,3 +85,8 @@ export type {
   RecordReadingResult,
   WriteGoalInput,
 } from './store';
+
+// Las cuatro herramientas. Se exportan por su efecto secundario —registrarse—
+// tanto como por su valor: sin esta línea el módulo entero seguiría existiendo
+// y no se podría ni ver ni fijar una meta hablando.
+export { goalsList, goalsMeasure, goalsOfferMetrics, goalsSet } from './tools';

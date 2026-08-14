@@ -112,6 +112,17 @@ export const RICH: Record<string, ResultView> = {
   approvals_list: dynamic(() =>
     import('./ApprovalsQueue').then((m) => m.ApprovalsQueue as unknown as ResultView),
   ),
+  // La pregunta de apertura de cualquiera que abre Cortex por la mañana, y
+  // hasta ahora se contestaba con un enlace a otra pantalla. Se dibuja con el
+  // MISMO bloque de colas que `/dashboard`, no con una versión para el chat.
+  inbox_overview: dynamic(() =>
+    import('./WaitingOverview').then((m) => m.WaitingOverview as unknown as ResultView),
+  ),
+  // Una cifra, el objetivo contra el que se juzgó y si lo cumplió: las tres se
+  // leen de un vistazo o no se leen. En un JSON plegado nadie hace la resta.
+  goals_list: dynamic(() =>
+    import('./GoalsSummary').then((m) => m.GoalsSummary as unknown as ResultView),
+  ),
 };
 
 // ---------------------------------------------------------------------------

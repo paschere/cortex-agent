@@ -86,6 +86,16 @@ const CASES: Array<{ toolId: string; input: Record<string, unknown> }> = [
     },
   },
   { toolId: 'vehicles.register', input: { plate: 'ABC123' } },
+  {
+    toolId: 'goals.set',
+    input: { metricKey: 'receivables_days', cadence: 'month', targetValue: 45, label: 'Cartera' },
+  },
+  // Sin etiqueta, que es como llega cuando nadie la bautiza: la frase cae a la
+  // clave de la métrica en los dos lados o no cae en ninguno.
+  {
+    toolId: 'goals.set',
+    input: { metricKey: 'commitments_on_time', cadence: 'week', targetValue: 95 },
+  },
   { toolId: 'slack.post_message', input: { channel: '#general', text: 'hola' } },
 ];
 

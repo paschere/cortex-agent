@@ -121,6 +121,14 @@ export const TOOL_PHRASE: Record<string, string> = {
   'growth.list_signals': 'Muéstrame las señales de mercado guardadas',
   'growth.update_signal': 'Califica la señal de mercado ',
 
+  // Metas. La de fijar deja el número por escribir a propósito: el objetivo lo
+  // dice la empresa, y una frase que ya lo trajera puesto sería Cortex fijando
+  // una meta que nadie declaró.
+  'goals.list': '¿Cómo vamos con las metas?',
+  'goals.measure': '¿Cómo va la meta en lo que va del período?',
+  'goals.offer_metrics': '¿Qué puedes medir de esta empresa?',
+  'goals.set': 'Fija la meta de ',
+
   'gsheets.append_row': 'Agrégale una fila a la hoja ',
   'gsheets.read_range': 'Léeme el rango de la hoja ',
 
@@ -141,6 +149,10 @@ export const TOOL_PHRASE: Record<string, string> = {
 
   'inbox.deliver_digest': 'Mándame ya mi resumen de bandeja',
   'inbox.due_digests': '¿A quién le toca resumen de bandeja ahora?',
+  // La pregunta de apertura. Se distingue de la de arriba leída en el mismo
+  // menú: aquélla es el correo del día, ésta es el trabajo parado en las cuatro
+  // colas de Cortex.
+  'inbox.overview': '¿Qué me espera?',
   'inbox.priorities': '¿Qué tengo pendiente en el correo hoy?',
 
   'kb.context': 'Ármame el contexto de Brain Knowledge sobre ',

@@ -79,6 +79,17 @@ describe('cómo se dicen las fechas', () => {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * La edad de un documento se calcula contra el RELOJ, no contra el `today` de
+ * las semillas —`ageLabel` recibe `Date.now()`—, así que una fecha fija aquí es
+ * una prueba con fecha de caducidad: pasa el día que se escribe y falla al
+ * siguiente. Estas dos se cuentan hacia atrás desde ahora para que lo que se
+ * afirma sea la frase y no el calendario.
+ */
+function daysAgo(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString();
+}
+
 describe('un espacio con datos', () => {
   const full = seeds({
     orgName: 'Coltrans',
@@ -87,13 +98,13 @@ describe('un espacio con datos', () => {
       {
         id: 'd1',
         title: 'Contrato Coltrans 2026',
-        createdAt: '2026-08-12T10:00:00Z',
+        createdAt: daysAgo(1),
         mediaKind: 'text',
       },
       {
         id: 'd2',
         title: 'Comité comercial del martes',
-        createdAt: '2026-08-11T10:00:00Z',
+        createdAt: daysAgo(2),
         mediaKind: 'meeting',
       },
     ],

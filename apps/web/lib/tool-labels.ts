@@ -54,6 +54,9 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   vehicles_check_runt: { label: 'Consultar el RUNT (SOAT y tecnomecánica)', icon: 'ShieldCheck' },
   vehicles_check_simit: { label: 'Consultar el SIMIT (comparendos)', icon: 'ReceiptText' },
   vehicles_recently_changed: { label: 'Revisar cambios en la flota', icon: 'RefreshCw' },
+  // La única de metas que se para a pedir permiso, y por eso la única que
+  // necesita nombre: fijar una meta es una declaración de la empresa.
+  goals_set: { label: 'Fijar una meta de la empresa', icon: 'Target' },
 };
 
 function toTitleCase(s: string): string {
@@ -130,6 +133,13 @@ export function confirmationSummary(toolId: string, input: Record<string, unknow
     }
     case 'vehicles_register':
       return `Registrar el vehículo de placa ${input.plate}`;
+    case 'goals_set':
+      // Sin la dirección («no pasar de» / «al menos»), que no viene en la
+      // entrada: la pone el catálogo al guardar, y adivinarla aquí sería
+      // enseñarle a quien aprueba un objetivo que puede no ser el que se fija.
+      return `Fijar la meta «${input.label || input.metricKey}» — objetivo ${input.targetValue}, ${
+        input.cadence === 'week' ? 'semanal' : 'mensual'
+      }`;
     default:
       return `Ejecutar: ${toolLabel(toolId).label}`;
   }

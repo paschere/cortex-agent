@@ -94,9 +94,17 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   },
   inbox: {
     name: 'Bandeja del día',
-    blurb: 'La lista de prioridades y los resúmenes que Cortex arma con todo lo que alcanza a ver.',
+    blurb:
+      'Qué te espera en las cuatro colas donde el trabajo se para —permisos, vencimientos, correos redactados y encargos atascados—, más la lista de prioridades y los resúmenes que Cortex arma con todo lo que alcanza a ver.',
     tone: 'sky',
     icon: 'Inbox',
+  },
+  goals: {
+    name: 'Metas',
+    blurb:
+      'La cifra que la empresa fijó y lo que de verdad pasó, período a período. Sólo se pueden fijar metas que este espacio de trabajo sepa calcular: las demás salen con lo que les falta, porque una casilla vacía resta más confianza de la que suma.',
+    tone: 'primary',
+    icon: 'Target',
   },
   actions: {
     name: 'Acciones propuestas',
@@ -323,6 +331,18 @@ export const CAPABILITY_GROUPS: CapabilityGroup[] = [
     icon: 'Wallet',
   },
   {
+    id: 'goals',
+    // Aparte de «Nómina y costos» y aparte de «Documentos y memoria», que es
+    // donde viven los informes: un informe cuenta lo que pasó, una meta es el
+    // número que alguien DECIDIÓ y contra el que se compara lo que pasó. Quien
+    // pregunta por una no está pidiendo lo otro.
+    name: 'Metas y cifras',
+    blurb:
+      'Qué se puede medir de esta empresa, la meta que se fijó y cómo va el período — con la cuenta que produjo cada número.',
+    tone: 'primary',
+    icon: 'Target',
+  },
+  {
     id: 'vehicles',
     name: 'Vehículos y trámites',
     blurb:
@@ -405,6 +425,7 @@ const FAMILY_GROUP: Record<string, string> = {
   github: 'eng',
   linear: 'eng',
   payroll: 'money',
+  goals: 'goals',
   vehicles: 'vehicles',
   // Sits with the fleet rather than with automation: a SOAT that lapses is a
   // truck off the road, and the person who cares about one cares about the

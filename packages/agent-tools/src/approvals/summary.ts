@@ -84,6 +84,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   vehicles_check_runt: 'Consultar el RUNT (SOAT y tecnomecánica)',
   vehicles_check_simit: 'Consultar el SIMIT (comparendos)',
   vehicles_recently_changed: 'Revisar cambios en la flota',
+  goals_set: 'Fijar una meta de la empresa',
 };
 
 function toTitleCase(s: string): string {
@@ -130,6 +131,10 @@ export function pendingSummary(toolId: string, input: Record<string, unknown>): 
     }
     case 'vehicles_register':
       return `Registrar el vehículo de placa ${input.plate}`;
+    case 'goals_set':
+      return `Fijar la meta «${input.label || input.metricKey}» — objetivo ${input.targetValue}, ${
+        input.cadence === 'week' ? 'semanal' : 'mensual'
+      }`;
     default:
       return `Ejecutar: ${pendingToolLabel(toolId)}`;
   }
