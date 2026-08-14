@@ -140,6 +140,39 @@ const config: Config = {
           '0%, 100%': { transform: 'translate3d(0, 0, 0) scale(1)' },
           '50%': { transform: 'translate3d(-7%, -5%, 0) scale(1.15)' },
         },
+        /**
+         * EL BARRIDO. Una banda ancha de luz que cruza la malla, inclinada.
+         *
+         * La pausa está DENTRO del keyframe y no es un detalle: entre el 55% y
+         * el 100% la banda ya salió por la derecha y no se ve. Un barrido
+         * continuo es un metrónomo —vuelve cada tantos segundos, el ojo aprende
+         * el ritmo y a partir de ahí lo espera—; con casi la mitad del ciclo en
+         * negro, lo que se percibe es que de vez en cuando pasa algo, que es lo
+         * que se quería decir.
+         *
+         * `skewX` y no `rotate`: rotar una banda a lo alto de la pantalla obliga
+         * a hacerla mucho más larga para que no se le vean las puntas al girar.
+         */
+        sweep: {
+          '0%': { transform: 'translate3d(-60%, 0, 0) skewX(-14deg)' },
+          '55%, 100%': { transform: 'translate3d(240%, 0, 0) skewX(-14deg)' },
+        },
+        /**
+         * LA AURORA: un gradiente cónico gigante girando muy despacio.
+         *
+         * Es lo que separa «moderno» de «tenía un degradado». Un cónico da un
+         * color que CAMBIA según el ángulo, así que al girar la luz no se
+         * desplaza —eso ya lo hacen las manchas— sino que cambia de tono por
+         * zonas, que es lo que hace un cielo y no hace un foco.
+         *
+         * Cuarenta segundos por vuelta: una revolución entera dura más que la
+         * mayoría de las visitas a esta pantalla, así que nadie llega a ver que
+         * es un giro.
+         */
+        aurora: {
+          from: { transform: 'rotate(0deg) scale(1.35)' },
+          to: { transform: 'rotate(360deg) scale(1.35)' },
+        },
       },
       animation: {
         breathe: 'breathe 3.4s ease-in-out infinite',
@@ -152,6 +185,14 @@ const config: Config = {
         // chat. Y son lentísimos porque esto está detrás de un texto que se lee.
         'drift-a': 'drift-a 23s ease-in-out infinite',
         'drift-b': 'drift-b 31s ease-in-out infinite',
+        // 19s, y primo también con los dos anteriores: el barrido no debe
+        // coincidir nunca con el mismo sitio de las manchas.
+        sweep: 'sweep 19s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+        // El MISMO recorrido a un tercio del tiempo, para cuando hay un turno
+        // corriendo. No es otro movimiento: es el mismo, con prisa — que es
+        // exactamente lo que se quiere decir.
+        'sweep-fast': 'sweep 6.5s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+        aurora: 'aurora 40s linear infinite',
       },
       /**
        * THE SCALE, AND WHY THERE WAS NOT ONE.

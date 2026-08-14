@@ -351,7 +351,7 @@ export function ChatRoot({
       {/* Detrás de todo, y ligado al turno: ver AmbientField. Va aquí y no en
           MessageList porque el contenedor de los mensajes es el que scrollea, y
           una capa absoluta dentro de un scroll se va con el contenido. */}
-      <AmbientField busy={isLoading} />
+      <AmbientField busy={isLoading} mode={messages.length === 0 ? 'open' : 'thread'} />
 
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
         <button
