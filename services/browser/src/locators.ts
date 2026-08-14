@@ -10,7 +10,18 @@ import type { Target } from './types';
  * on: a portal can be restyled, rebuilt in another framework or reflowed for
  * mobile, and the button that said "Consultar" still says "Consultar".
  */
-export function buildLocator(page: Page, target: Target): Locator {
+/**
+ * Dónde se busca un elemento: el documento, o uno de sus marcos.
+ *
+ * `Page` y `Frame` comparten toda la API de localización, así que el resto del
+ * archivo no distingue entre los dos.
+ */
+type Searchable = Pick<
+  Page,
+  'getByTestId' | 'getByRole' | 'getByLabel' | 'getByPlaceholder' | 'getByText' | 'locator'
+>;
+
+export function buildLocator(page: Searchable, target: Target): Locator {
   switch (target.kind) {
     case 'testid':
       return page.getByTestId(target.value);
@@ -80,16 +91,9 @@ export async function resolveTarget(
     for (let rank = 0; rank < targets.length; rank++) {
       const target = targets[rank];
       if (!target) continue;
-      let matches = 0;
-      try {
-        matches = await buildLocator(page, target).locator('visible=true').count();
-      } catch {
-        matches = 0;
-      }
-      counts.set(`${rank}`, matches);
-      if (matches === 1) {
-        return { locator: buildLocator(page, target).locator('visible=true'), rank, target };
-      }
+      const found = await findAcrossFrames(page, target);
+      counts.set(`${rank}`, found.matches);
+      if (found.locator) return { locator: found.locator, rank, target };
     }
     if (Date.now() >= deadline) break;
 
@@ -117,6 +121,76 @@ export async function resolveTarget(
       matches: counts.get(`${i}`) ?? 0,
     })),
   };
+}
+
+/**
+ * EL DOCUMENTO PRIMERO, Y LUEGO DENTRO DE LOS MARCOS.
+ *
+ * ===========================================================================
+ * POR QUÉ HACÍA FALTA
+ * ===========================================================================
+ * Todo este archivo buscaba con `page.getByRole(...)`, que mira EXCLUSIVAMENTE
+ * el documento principal. Un portal que dibuja su formulario dentro de un
+ * `<iframe>` era invisible: cero coincidencias en todos los candidatos, veinte
+ * segundos de espera, y un veredicto de «el portal cambió» sobre un trámite
+ * recién grabado que nunca llegó a tener ninguna posibilidad.
+ *
+ * Y eso no es un caso raro aquí. Media administración colombiana corre sobre
+ * aplicaciones de hace quince años —Muisca por dentro, portales de aduana,
+ * intranets de operadores— y ésas se construyeron con marcos. La grabación sí
+ * los ve, porque una persona hace clic donde ve el botón; el que no los veía
+ * era el que repite.
+ *
+ * ===========================================================================
+ * EL ORDEN IMPORTA, Y LA AMBIGÜEDAD SIGUE MANDANDO
+ * ===========================================================================
+ * El documento principal va primero y gana si resuelve, porque es donde estaba
+ * mirando este código hasta hoy y no hay motivo para cambiar un acierto.
+ *
+ * Sólo si el documento no da EXACTAMENTE UNA coincidencia se entra en los
+ * marcos, y ahí se cuentan TODOS antes de decidir: dos marcos con un botón
+ * «Continuar» cada uno son dos coincidencias, y dos coincidencias es
+ * ambigüedad, que en este módulo significa no encontrado. Detenerse en el
+ * primer marco que dé una sería exactamente el «actuar sobre una suposición»
+ * que la regla de ambigüedad existe para prohibir — y en una página que radica
+ * algo ante una entidad del Estado, esa suposición es la que no se puede hacer.
+ *
+ * El coste sólo lo paga quien lo necesita: una página sin marcos hace una
+ * llamada de más a `page.frames()`, que es memoria del proceso, y ni una
+ * consulta al DOM.
+ */
+async function findAcrossFrames(
+  page: Page,
+  target: Target,
+): Promise<{ locator: Locator | null; matches: number }> {
+  const count = async (where: Searchable): Promise<{ locator: Locator; matches: number }> => {
+    const locator = buildLocator(where, target).locator('visible=true');
+    try {
+      return { locator, matches: await locator.count() };
+    } catch {
+      // Un marco puede desaparecer entre que se enumera y se consulta — es una
+      // página viva. Eso es cero coincidencias, no un error del paso.
+      return { locator, matches: 0 };
+    }
+  };
+
+  const main = await count(page);
+  if (main.matches === 1) return { locator: main.locator, matches: 1 };
+
+  const frames = page.frames().slice(1);
+  if (frames.length === 0) return { locator: null, matches: main.matches };
+
+  let total = main.matches;
+  let hit: Locator | null = null;
+  for (const frame of frames) {
+    const inFrame = await count(frame);
+    total += inFrame.matches;
+    if (inFrame.matches === 1 && !hit) hit = inFrame.locator;
+  }
+
+  // Uno en total y en un marco: es él. Más de uno, en cualquier combinación de
+  // documento y marcos: ambiguo, y ambiguo es no encontrado.
+  return total === 1 && hit ? { locator: hit, matches: 1 } : { locator: null, matches: total };
 }
 
 export function isResolved(value: Resolved | ResolveFailure): value is Resolved {
