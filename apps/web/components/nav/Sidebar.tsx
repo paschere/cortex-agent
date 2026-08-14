@@ -416,18 +416,22 @@ function DisclosureRow({
       {!collapsed && (
         <>
           <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-          {count !== undefined && (
-            <>
-              {/* La cifra va en `ink-faint`, un paso más apagada que la de una
-                  cola. En esta columna un número significa «cosas esperándote»,
-                  y aquí significa «pantallas ahí dentro»: no puede leerse con el
-                  mismo peso, y a un lector de pantalla se le dice cuál es. */}
-              <span aria-hidden="true" className="shrink-0 text-micro tabular-nums text-ink-faint">
-                {count}
-              </span>
-              <span className="sr-only">, {count} destinos</span>
-            </>
-          )}
+          {/*
+            LA CIFRA SE FUE, Y EL CHEVRON BASTA.
+
+            Estuvo aquí un momento, apagada un paso para distinguirla. No es
+            suficiente: en esta columna, en TODO el rail, un número significa
+            «esto te está esperando» — tres aprobaciones, dos vencimientos —, y
+            aquí significaba «pantallas ahí dentro». Dos significados en la
+            misma columna es el lector el que tiene que decidir cuál aplica, y
+            lo va a decidir mal el día que tenga prisa.
+
+            Que los contadores de este producto quieran decir siempre lo mismo
+            vale más que anunciar cuántas cosas hay detrás de un desplegable,
+            que además se ve al abrirlo. El chevron ya dice que hay algo dentro.
+            Y a quien navega escuchando se lo cuenta `aria-expanded`, que es lo
+            que de verdad contesta su pregunta: si está abierto o cerrado.
+          */}
           <ChevronRight
             aria-hidden="true"
             strokeWidth={1.75}
@@ -539,6 +543,13 @@ function SidebarNav({
    */
   const [usage, setUsage] = useState<Record<string, number>>({});
   const [quick, setQuick] = useState<string[]>(DEFAULT_QUICK);
+  /**
+   * `pathname` es el DISPARADOR, no un valor que este efecto lea, y por eso la
+   * regla lo ve de más. Sin él, el uso se leería una sola vez al montar y el
+   * rail no se reordenaría nunca dentro de una sesión — que es justo la mitad
+   * de lo que esto hace. Quitarlo deja el linter contento y la función muerta.
+   */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: es el disparador, no una lectura.
   useEffect(() => {
     const scores = readUsage();
     setUsage(scores);
