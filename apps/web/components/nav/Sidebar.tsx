@@ -1,247 +1,101 @@
 'use client';
 
 import { usePanel } from '@/components/panel/PanelHost';
-import { MODULE } from '@/lib/browser-shape';
+import {
+  ALL_ICON,
+  ALL_LABEL,
+  COMPANY_ICON,
+  DEFAULT_QUICK,
+  FOOTER,
+  type NavItem,
+  QUICK_CANDIDATES,
+  WAITING_ICON,
+  WAITING_LABEL,
+  buildRail,
+  waitingHref,
+} from '@/lib/nav-shape';
 import type { NavCounts } from '@/lib/nav-signals';
-import { orderByUsage, readUsage, recordVisit } from '@/lib/nav-usage';
+import {
+  orderByUsage,
+  pickQuick,
+  readQuick,
+  readUsage,
+  recordVisit,
+  writeQuick,
+} from '@/lib/nav-usage';
 import { type PanelId, panelForHref } from '@/lib/panels/shape';
+import { waitingTotal } from '@/lib/waiting-shape';
 import type { Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import {
-  AlarmClock,
-  BadgeCheck,
-  BarChart3,
-  BookOpen,
-  Briefcase,
-  Building2,
-  Cable,
-  CalendarClock,
-  FileBarChart,
-  Globe,
-  Hammer,
-  IdCard,
-  Inbox,
-  LayoutDashboard,
-  MessageCircle,
-  MessageSquare,
-  Network,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Plug,
-  Radar,
-  Receipt,
-  ScrollText,
-  Search,
-  Send,
-  Settings,
-  ShieldCheck,
-  Sprout,
-  Target,
-  Users,
-  UsersRound,
-  Wallet,
-  Workflow,
-  X,
-} from 'lucide-react';
+import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useCommandMenu } from './CommandMenuContext';
 import { useMobileSidebar } from './MobileSidebarContext';
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  /** Draws a live count on the right. Every queue that has one is wired. */
-  signal?: keyof NavCounts;
-  /**
-   * Hidden from everybody but an org admin.
-   *
-   * It used to live only on the section, and «La empresa» carried it for all
-   * six of its rows. That was true right up until a row appeared that everybody
-   * should be able to OPEN and only an admin should be able to CHANGE — the
-   * company facts, which are the reason Cortex answers the way it does. Moving
-   * the flag down a level says the same thing about the six old rows and lets
-   * the seventh say something different, instead of forcing it out of the
-   * section it belongs in.
-   */
-  adminOnly?: boolean;
-}
-
-interface NavSection {
-  id: string;
-  /** `null` for the opening block: the day's work needs no heading over it. */
-  label: string | null;
-  items: NavItem[];
-  adminOnly?: boolean;
-}
-
-// FLAT, AND QUIET.
+// CORTO ARRIBA, COMPLETO DEBAJO.
 //
-// The version this replaces put a sentence under every destination and hid
-// fifteen of them behind four disclosures. Both were mistakes of the same kind:
-// they made the rail something to READ when a rail is something to SCAN. The
-// prose was worse than useless because it was set to truncate in a 268px column,
-// so half of every explanation was cut off — height paid for text that did not
-// fit.
+// Este archivo DIBUJA el rail; la lista de destinos y el porqué de cada grupo
+// están en `lib/nav-shape.ts`, que es donde se puede probar sin un navegador.
 //
-// So: one line per destination, no explanations, nothing folded away. What a
-// screen is gets explained by the screen, which has a subtitle and the room to
-// use it. What the rail owes somebody is the answer to "where is it" and "is
-// there anything waiting", and those are a name and a number.
+// La forma es: tres filas que no se mueven nunca (Inicio, Chat, Te espera),
+// cinco plazas que se ganan por uso, «Todo» con el resto dentro y «La empresa»
+// aparte y plegada. Once filas donde había veintiocho, y ni un destino menos.
 //
-// THE ORDER IS FREQUENCY, NOT IMPORTANCE. Everything important is not everything
-// daily, and the failure mode of this file is addition — every module that
-// shipped this month arrived with a good argument for a top-level row. The first
-// section is the only one that has to be defended: an entry belongs there only
-// if somebody opens it without being sent by something else.
-//
-// EVERY DESTINATION LABEL IS THE WORD ITS OWN SCREEN USES. Untranslated on
-// purpose: Chat and WhatsApp read the same in Spanish, Brain Knowledge is the
-// product's name for the thing, and Conectar Claude names an external product.
-//
-// THE SECTION HEADINGS ARE THE EXCEPTION, AND THEY SPEAK IN THE FIRST PERSON.
-// This product is sold as a manager for a company, not as a box of tools, and
-// the rail is the first place that claim is either made or quietly dropped.
-// «Automático», «Seguimiento», «Conexiones» are categories of software;
-// «Lo que hago solo», «Cómo vamos», «De dónde saco todo» are the things a
-// manager would say about their own week.
-//
-// The headings can carry that voice precisely BECAUSE they name no screen —
-// they group. A destination has to keep saying what its own page says, or the
-// rail starts sending people to a word they will not find when they arrive,
-// which is the failure this file already fixed once.
-const SECTIONS: NavSection[] = [
-  {
-    id: 'daily',
-    label: null,
-    items: [
-      // First because it is where everybody already lands: `/` redirects here
-      // after sign-in. Named for its role rather than by its H1, which is a
-      // greeting ("Hola, Ana") and gives the rail no noun to use.
-      { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard },
-      { href: '/chat', label: 'Chat', icon: MessageSquare },
-      // Approvals and Acciones are both "waiting on your yes" and are NOT
-      // merged, because the queues are not the same object: an approval is a
-      // tool call parked mid-turn that expires and can be answered from a
-      // Google Chat button; an action is a drafted email with a content hash
-      // that keeps being watched after it is sent. Now that both carry a count,
-      // the rail can say which has something in it without explaining either.
-      { href: '/approvals', label: 'Aprobaciones', icon: Inbox, signal: 'approvals' },
-      { href: '/commitments', label: 'Vencimientos', icon: CalendarClock, signal: 'commitments' },
-      { href: '/actions', label: 'Acciones', icon: Send, signal: 'actions' },
-      // The axis the rest of the product hangs off (migration 0075): a question
-      // about a customer starts here and is followed into the mail, the meeting
-      // or the deadline.
-      { href: '/clients', label: 'Clientes', icon: Building2 },
-      // Cartera. En la sección diaria y no en Seguimiento porque no es un
-      // informe que se consulta al cerrar el mes: es la pregunta que alguien se
-      // hace el martes por la mañana, «¿quién nos debe y desde cuándo».
-      { href: '/payments', label: 'Cartera', icon: Wallet },
-      { href: '/kb', label: 'Brain Knowledge', icon: BookOpen },
-    ],
-  },
-  {
-    // Four unrelated table families, not four views of one thing. Ordered by how
-    // often somebody opens them rather than by how autonomous they are — the
-    // escalation from "a flow you wrote down" to "an errand that asks you
-    // questions" was an argument the old notes made, and the notes are gone.
-    id: 'automation',
-    label: 'Lo que hago solo',
-    items: [
-      { href: '/errands', label: 'Encargos', icon: Briefcase, signal: 'errands' },
-      // The label comes from lib/browser-shape so the screen, the palette and
-      // the tool catalogue cannot drift apart while the name is being settled.
-      { href: '/browser', label: MODULE.label, icon: Globe },
-      { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
-      { href: '/pipelines', label: 'Flujos', icon: Workflow },
-      { href: '/orchestrator', label: 'Orquestador', icon: Network },
-      { href: '/dev-work', label: 'Desarrollo', icon: Hammer },
-    ],
-  },
-  {
-    // Read, do not act. Everything here answers a question about a period.
-    id: 'review',
-    label: 'Cómo vamos',
-    items: [
-      // Primera de la sección porque es la única que responde «¿vamos bien?»
-      // con un sí o un no. Las otras tres cuentan lo que pasó y dejan la
-      // conclusión a quien lee.
-      { href: '/goals', label: 'Metas', icon: Target },
-      { href: '/reports', label: 'Informes', icon: FileBarChart },
-      { href: '/prospects', label: 'Prospectos', icon: Radar },
-      { href: '/learning', label: 'Aprendizaje', icon: Sprout },
-    ],
-  },
-  {
-    id: 'connections',
-    label: 'De dónde saco todo',
-    items: [
-      { href: '/integrations', label: 'Integraciones', icon: Plug },
-      { href: '/integrations/whatsapp', label: 'WhatsApp', icon: MessageCircle },
-      { href: '/mcp-tokens', label: 'Conectar Claude', icon: Cable },
-    ],
-  },
-  {
-    id: 'admin',
-    label: 'La empresa',
-    // La bandera baja a las filas. Ver `NavItem.adminOnly`: seis de estas siete
-    // siguen siendo sólo de admin, y la séptima no.
-    items: [
-      // LA ÚNICA FILA DE ESTA SECCIÓN QUE VE TODO EL MUNDO, Y ESTÁ ARGUMENTADO.
-      //
-      // Lo que hay detrás no es una pantalla de administración: es lo que Cortex
-      // cree sobre la empresa, y va entero en cada respuesta que le da a
-      // cualquiera. Esconderlo de quien no es admin esconde la EXPLICACIÓN de
-      // las respuestas que esa persona recibe todo el día — y deja como única
-      // salida preguntárselo al propio Cortex, que es justo el testigo cuya
-      // versión se querría contrastar.
-      //
-      // Escribir sí es de admin, y eso se hace cumplir en el servidor (la página
-      // y sus acciones comprueban el rol), no escondiendo el enlace.
-      { href: '/company', label: 'Datos de la empresa', icon: IdCard },
-      { href: '/admin/users', label: 'Personas', icon: Users, adminOnly: true },
-      { href: '/admin/teams', label: 'Equipos', icon: UsersRound, adminOnly: true },
-      { href: '/admin/usage', label: 'Uso', icon: BarChart3, adminOnly: true },
-      { href: '/admin/audit', label: 'Auditoría', icon: ScrollText, adminOnly: true },
-      { href: '/admin/security', label: 'Seguridad', icon: ShieldCheck, adminOnly: true },
-      // Lo que Cortex puede hacer sin preguntar. Vive junto a Seguridad porque
-      // es la misma conversación vista desde el otro lado: una dice qué se le
-      // impidió, la otra qué se le permitió de antemano.
-      { href: '/admin/mandates', label: 'Sin preguntar', icon: BadgeCheck, adminOnly: true },
-    ],
-  },
-];
-
-// WHAT IS NOT IN THIS RAIL, AND HOW YOU GET THERE.
-//
-// Three destinations are reachable only from the palette (⌘K, or the Buscar row
-// at the top of this rail, which exists so the palette is not a secret) and from
-// a door on a screen somebody is already on:
-//
-//   /tools       → from Inicio ("Atajos") and from the palette.
-//   /agents      → from /tools, which is where you go when a tool is blocked and
-//                  the answer is which agent may call it.
-//   /evaluation  → from /learning, via a header action. They are cause and
-//                  measurement: one says what Cortex changed about itself, the
-//                  other whether answers got better.
-//
-// /conversations used to hang off the thread list that lived in this rail. The
-// threads moved into the chat's own header (see ThreadHistory), and the archive
-// moved with them — it is Chat's archive, not Chat's sibling.
-const FOOTER: NavItem[] = [
-  // Beside Ajustes rather than inside Administración: what a workspace has
-  // consumed and what it is about to run out of is not an administrator's
-  // report, it is what anybody wondering "why did Cortex stop" needs to find.
-  { href: '/plan', label: 'Plan y consumo', icon: Receipt },
-  { href: '/settings', label: 'Ajustes', icon: Settings },
-];
+// LO QUE SE MANTIENE INTACTO, porque cada una costó una decisión: el rail se
+// estrecha dentro de `/chat` y se asoma al pasar por encima sin mover la
+// conversación; las filas con panel lo abren al lado en vez de navegar; los
+// contadores; el cajón de móvil, con cada enlace cerrándolo; `adminOnly`; y el
+// foco visible.
 
 const COLLAPSE_KEY = 'sidebar_collapsed';
 
+/**
+ * Lo que está desplegado, recordado.
+ *
+ * Tres claves sueltas y no un objeto, por lo mismo que `sidebar_collapsed` es
+ * una cadena: es una preferencia de esta persona en este navegador, no un dato
+ * con estructura. Y sobre todo NO van en `nav_usage_v1` — ese objeto lo decae
+ * `recordVisit` entero en cada escritura, así que un booleano metido ahí duraría
+ * hasta el siguiente clic.
+ */
+const OPEN_KEY = {
+  waiting: 'sidebar_waiting_open',
+  all: 'sidebar_all_open',
+  company: 'sidebar_company_open',
+};
+
 const NO_COUNTS: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
+
+const QUICK_HREFS = QUICK_CANDIDATES.map((item) => item.href);
+
+/**
+ * Un desplegable que se acuerda de cómo lo dejaste.
+ *
+ * Cerrado en el primer pintado, siempre, y la preferencia llega después de
+ * hidratar: `localStorage` no existe en el servidor, así que leerlo durante el
+ * render haría que el primer pintado del cliente no coincidiera con el HTML que
+ * bajó. Se ve como un rail que da un salto.
+ */
+function useRemembered(key: string): [boolean, () => void] {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setOpen(localStorage.getItem(key) === 'true');
+  }, [key]);
+  const toggle = () =>
+    setOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(key, String(next));
+      } catch {
+        // Modo privado. Se despliega igual; sólo no se recuerda.
+      }
+      return next;
+    });
+  return [open, toggle];
+}
 
 function isActive(pathname: string, href: string): boolean {
   // Query-bearing entries are deliberately never matched: reading the query
@@ -254,6 +108,31 @@ function isActive(pathname: string, href: string): boolean {
   // two rows at once and make "where am I" unanswerable.
   if (href === '/integrations') return pathname === '/integrations';
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** ¿Está la persona dentro de alguno de estos destinos? */
+function isInside(pathname: string, items: NavItem[]): boolean {
+  return items.some((item) => isActive(pathname, item.href));
+}
+
+/**
+ * La forma de una fila, en un solo sitio.
+ *
+ * La comparten el enlace, la fila de buscar y los desplegables. Tres controles
+ * distintos que tienen que verse como la misma columna: en cuanto las clases se
+ * copian, una de ellas se queda con el `h-[30px]` viejo y el ritmo se rompe por
+ * un píxel que nadie sabe de dónde sale.
+ */
+function rowClass(collapsed: boolean, active: boolean): string {
+  return clsx(
+    'group relative flex h-[30px] w-full items-center rounded-sm text-sm transition-colors duration-150',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+    'motion-reduce:transition-none',
+    collapsed ? 'justify-center' : 'gap-2.5 px-2.5',
+    active
+      ? 'bg-primary-soft font-semibold text-primary-ink'
+      : 'font-medium text-ink-muted hover:bg-surface-2 hover:text-ink',
+  );
 }
 
 /**
@@ -271,22 +150,32 @@ function isActive(pathname: string, href: string): boolean {
  */
 function NavRow({
   item,
+  badge,
   collapsed,
   pathname,
-  counts,
   onNavigate,
   /**
    * El panel que esta fila abre en vez de navegar, si lo hay. Lo decide
    * `SidebarNav`, que es quien sabe dónde está la persona.
    */
   panel: wanted,
+  /**
+   * Se tiñe como activa aunque la ruta no sea la suya. Lo usa «Te espera»: con
+   * las cuatro colas plegadas y la persona dentro de una de ellas, la fila padre
+   * es la única que puede contestar «estás aquí». No toca `aria-current`, que
+   * seguiría siendo mentira — la página no es la que este enlace abre.
+   */
+  groupActive = false,
+  className,
 }: {
   item: NavItem;
+  badge: number;
   collapsed: boolean;
   pathname: string;
-  counts: NavCounts;
   onNavigate?: () => void;
   panel?: PanelId | null;
+  groupActive?: boolean;
+  className?: string;
 }) {
   const Icon = item.icon;
   const { panelId: openPanel, open, available } = usePanel();
@@ -299,8 +188,7 @@ function NavRow({
   // página sigue siendo el chat.
   const showing = panel != null && openPanel === panel;
   const onPage = isActive(pathname, item.href);
-  const active = onPage || showing;
-  const badge = item.signal ? counts[item.signal] : 0;
+  const active = onPage || showing || groupActive;
 
   return (
     <Link
@@ -333,15 +221,7 @@ function NavRow({
       aria-current={onPage ? 'page' : undefined}
       aria-expanded={panel ? showing : undefined}
       title={collapsed ? item.label : undefined}
-      className={clsx(
-        'group relative flex h-[30px] items-center rounded-sm text-sm transition-colors duration-150',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-        'motion-reduce:transition-none',
-        collapsed ? 'justify-center' : 'gap-2.5 px-2.5',
-        active
-          ? 'bg-primary-soft font-semibold text-primary-ink'
-          : 'font-medium text-ink-muted hover:bg-surface-2 hover:text-ink',
-      )}
+      className={clsx(rowClass(collapsed, active), className)}
     >
       <span className="relative shrink-0">
         <Icon
@@ -387,6 +267,181 @@ function NavRow({
   );
 }
 
+/** El triángulo que abre un grupo. Gira; no rebota ni desaparece. */
+function Chevron({
+  open,
+  label,
+  controls,
+  onToggle,
+}: {
+  open: boolean;
+  label: string;
+  controls: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-controls={controls}
+      aria-label={label}
+      className="shrink-0 rounded-full p-1 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+    >
+      <ChevronRight
+        strokeWidth={1.75}
+        className={clsx(
+          'h-3.5 w-3.5 transition-transform duration-150 motion-reduce:transition-none',
+          open && 'rotate-90',
+        )}
+      />
+    </button>
+  );
+}
+
+/**
+ * LA FILA QUE SUSTITUYE A CUATRO.
+ *
+ * `/approvals`, `/commitments`, `/actions` y `/errands` eran cuatro filas
+ * haciendo la misma pregunta —«¿qué está parado esperándome?»— en un rail donde
+ * la respuesta corta ya existía: la insignia es el TOTAL que
+ * `waiting-shape.ts` ya suma para el aviso del chat, y el enlace lleva a la
+ * primera cola que tenga algo dentro, en el orden de reloj que ese archivo
+ * defiende.
+ *
+ * SON DOS CONTROLES Y ESO ES A PROPÓSITO. El enlace contesta «llévame a lo que
+ * hay»; el triángulo contesta «¿pero qué hay?», y despliega las cuatro con su
+ * cuenta cada una. Meter el triángulo dentro del enlace habría sido HTML
+ * inválido (un botón dentro de un `<a>`) y, peor, habría hecho que la mitad
+ * derecha de la fila hiciera algo distinto de la izquierda sin que se viera.
+ *
+ * Plegada, se dibuja como activa si estás dentro de cualquiera de las cuatro.
+ * Nada se esconde: el rail sigue pudiendo decir dónde estás.
+ */
+function WaitingRow({
+  counts,
+  collapsed,
+  pathname,
+  items,
+  open,
+  onToggle,
+  controls,
+  onNavigate,
+  panel,
+}: {
+  counts: NavCounts;
+  collapsed: boolean;
+  pathname: string;
+  items: NavItem[];
+  open: boolean;
+  onToggle: () => void;
+  controls: string;
+  onNavigate?: (href: string) => void;
+  panel: (href: string) => PanelId | null;
+}) {
+  const href = waitingHref(counts);
+  const item = { href, label: WAITING_LABEL, icon: WAITING_ICON };
+  // Plegada y estando dentro de una cola, la fila padre es quien dice «aquí».
+  const inside = !open && isInside(pathname, items);
+
+  return (
+    <div className={clsx('flex items-center', collapsed ? 'justify-center' : 'gap-0.5')}>
+      <NavRow
+        item={item}
+        badge={waitingTotal(counts)}
+        collapsed={collapsed}
+        pathname={pathname}
+        onNavigate={() => onNavigate?.(href)}
+        panel={panel(href)}
+        groupActive={inside}
+        className="min-w-0 flex-1"
+      />
+      {/* Contraído no hay 72px para dos controles, y no hace falta: lo único que
+          hay que ver de reojo ahí es el total. El triángulo vuelve en cuanto el
+          rail se ensancha, que en el chat es al acercar el ratón. */}
+      {!collapsed && (
+        <Chevron
+          open={open}
+          label={open ? 'Ocultar las cuatro colas' : 'Ver las cuatro colas'}
+          controls={controls}
+          onToggle={onToggle}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * «Todo» y «La empresa»: una fila que no va a ninguna parte y abre aquí mismo.
+ *
+ * NO ES UN ENLACE Y NO PUEDE SERLO. Es la diferencia con la fila «Buscar» de
+ * arriba, y es la que justifica que existan las dos: la paleta TE SACA de donde
+ * estás a una pantalla que nombras escribiendo; esto ABRE DONDE ESTÁS lo que no
+ * sabrías nombrar. Recordar contra reconocer. Por eso la paleta se queda con los
+ * tres destinos que ni siquiera están en el rail y con los nombres viejos que la
+ * gente teclea, y esto se queda con la lista para señalar con el dedo.
+ */
+function DisclosureRow({
+  icon: Icon,
+  label,
+  count,
+  collapsed,
+  open,
+  active,
+  onToggle,
+  controls,
+}: {
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  label: string;
+  count?: number;
+  collapsed: boolean;
+  open: boolean;
+  active: boolean;
+  onToggle: () => void;
+  controls: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-controls={controls}
+      title={collapsed ? label : undefined}
+      className={rowClass(collapsed, active)}
+    >
+      <Icon
+        strokeWidth={1.75}
+        className={clsx('h-4 w-4 shrink-0', active ? 'text-primary' : 'text-ink-faint')}
+      />
+      {!collapsed && (
+        <>
+          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+          {count !== undefined && (
+            <>
+              {/* La cifra va en `ink-faint`, un paso más apagada que la de una
+                  cola. En esta columna un número significa «cosas esperándote»,
+                  y aquí significa «pantallas ahí dentro»: no puede leerse con el
+                  mismo peso, y a un lector de pantalla se le dice cuál es. */}
+              <span aria-hidden="true" className="shrink-0 text-micro tabular-nums text-ink-faint">
+                {count}
+              </span>
+              <span className="sr-only">, {count} destinos</span>
+            </>
+          )}
+          <ChevronRight
+            aria-hidden="true"
+            strokeWidth={1.75}
+            className={clsx(
+              'h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform duration-150 motion-reduce:transition-none',
+              open && 'rotate-90',
+            )}
+          />
+        </>
+      )}
+    </button>
+  );
+}
+
 /**
  * The door to what the rail does not list.
  *
@@ -419,12 +474,7 @@ function SearchRow({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?:
       title={collapsed ? 'Buscar' : undefined}
       aria-label="Buscar o ir a una pantalla"
       aria-keyshortcuts="Meta+K Control+K"
-      className={clsx(
-        'group flex h-[30px] w-full items-center rounded-sm text-sm font-medium text-ink-muted transition-colors duration-150',
-        'hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-        'motion-reduce:transition-none',
-        collapsed ? 'justify-center' : 'gap-2.5 px-2.5',
-      )}
+      className={rowClass(collapsed, false)}
     >
       <Search strokeWidth={1.75} className="h-4 w-4 shrink-0 text-ink-faint" />
       {!collapsed && (
@@ -440,10 +490,10 @@ function SearchRow({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?:
   );
 }
 
-/** The name of a block of destinations. Never a button — nothing folds. */
+/** The name of a block of destinations. Never a button — the group above folds. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-2.5 pb-1 pt-[18px] text-micro font-semibold uppercase tracking-field text-ink-faint">
+    <div className="px-2.5 pb-1 pt-3 text-micro font-semibold uppercase tracking-field text-ink-faint">
       {children}
     </div>
   );
@@ -475,14 +525,7 @@ function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  // Se filtra por sección Y por fila, y las dos hacen falta. La sección sigue
-  // pudiendo esconderse entera; la fila permite que una sección de admin tenga
-  // una entrada que no lo es. Una sección que se queda sin filas no deja su
-  // encabezado colgando: un título con nada debajo se lee como algo roto.
   const admin = role === 'org_admin';
-  const sections = SECTIONS.filter((s) => !s.adminOnly || admin)
-    .map((s) => ({ ...s, items: s.items.filter((i) => !i.adminOnly || admin) }))
-    .filter((s) => s.items.length > 0);
 
   /**
    * Read once after mount, never during render.
@@ -490,12 +533,29 @@ function SidebarNav({
    * `localStorage` does not exist on the server, so reading it while rendering
    * would either throw or make the first client paint disagree with the HTML
    * that came down. Both show up as a rail that jumps. So the first paint is
-   * always the designed order, and the personalised one arrives a tick later —
-   * which is also the honest order of events: nothing is known about this
-   * person until their browser says so.
+   * always the designed order — las cinco plazas sembradas — and la personalizada
+   * llega un tick después, que es también el orden honesto de los hechos: no se
+   * sabe nada de esta persona hasta que su navegador lo dice.
    */
   const [usage, setUsage] = useState<Record<string, number>>({});
-  useEffect(() => setUsage(readUsage()), [pathname]);
+  const [quick, setQuick] = useState<string[]>(DEFAULT_QUICK);
+  useEffect(() => {
+    const scores = readUsage();
+    setUsage(scores);
+    // Se reevalúa al navegar, que es justo después de que `recordVisit` haya
+    // escrito. La pertenencia se guarda para que el que está arriba pueda
+    // defenderse la próxima vez — sin memoria no hay histéresis.
+    const next = pickQuick(QUICK_HREFS, scores, readQuick(), DEFAULT_QUICK);
+    writeQuick(next);
+    setQuick(next);
+  }, [pathname]);
+
+  const rail = buildRail(quick, admin);
+
+  const ids = useId();
+  const [waitingOpen, toggleWaiting] = useRemembered(OPEN_KEY.waiting);
+  const [allOpen, toggleAll] = useRemembered(OPEN_KEY.all);
+  const [companyOpen, toggleCompany] = useRemembered(OPEN_KEY.company);
 
   const visit = (href: string) => {
     recordVisit(href);
@@ -519,41 +579,92 @@ function SidebarNav({
    * en la cabecera del panel y su ⌘-clic en esta misma fila.
    */
   const inChat = pathname.startsWith('/chat');
+  const panel = (href: string) => (inChat ? panelForHref(href) : null);
+
+  const row = (item: NavItem) => (
+    <NavRow
+      key={item.href}
+      item={item}
+      badge={item.signal ? counts[item.signal] : 0}
+      collapsed={collapsed}
+      pathname={pathname}
+      onNavigate={() => visit(item.href)}
+      panel={panel(item.href)}
+    />
+  );
+
+  // Contraído, un rail de 72px no tiene sitio para un encabezado, así que los
+  // grupos se separan con la hairline que habría ido debajo de uno.
+  const nested = collapsed ? '' : 'pl-3';
 
   return (
     <nav aria-label="Main" className="scroll-slim h-full overflow-y-auto px-3 pb-3">
       <SearchRow collapsed={collapsed} onNavigate={onNavigate} />
 
-      {sections.map((section, i) => {
-        // The daily block keeps its authored order, always. It is the part
-        // people learn with their hands — Inicio, Chat, Aprobaciones, in that
-        // order, every morning — and moving a target somebody is already
-        // reaching for is exactly how an adaptive menu becomes a menu you have
-        // to read again.
-        const items = section.label ? orderByUsage(section.items, usage) : section.items;
-        return (
-          <div key={section.id}>
-            {/* Collapsed, a 72px rail has no room for a heading, so the sections
-                are separated by the hairline that would have sat under one. */}
-            {collapsed
-              ? i > 0 && <div className="mx-2 my-2 border-t border-border" />
-              : section.label && <SectionLabel>{section.label}</SectionLabel>}
-            <div className={clsx('flex flex-col', collapsed ? 'gap-0.5' : 'gap-px')}>
-              {items.map((item) => (
-                <NavRow
-                  key={item.href}
-                  item={item}
-                  collapsed={collapsed}
-                  pathname={pathname}
-                  counts={counts}
-                  onNavigate={() => visit(item.href)}
-                  panel={inChat ? panelForHref(item.href) : null}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
+      <div className="flex flex-col gap-px pt-1">{rail.pinned.map(row)}</div>
+
+      <div className="flex flex-col gap-px pt-3">
+        <WaitingRow
+          counts={counts}
+          collapsed={collapsed}
+          pathname={pathname}
+          items={rail.waiting}
+          open={waitingOpen}
+          onToggle={toggleWaiting}
+          controls={`${ids}-waiting`}
+          onNavigate={visit}
+          panel={panel}
+        />
+        <div id={`${ids}-waiting`} className={clsx('flex flex-col gap-px', nested)}>
+          {waitingOpen && rail.waiting.map(row)}
+        </div>
+        {rail.quick.map(row)}
+      </div>
+
+      <div className="flex flex-col gap-px pt-3">
+        <DisclosureRow
+          icon={ALL_ICON}
+          label={ALL_LABEL}
+          count={rail.restCount}
+          collapsed={collapsed}
+          open={allOpen}
+          active={!allOpen && rail.rest.some((s) => isInside(pathname, s.items))}
+          onToggle={toggleAll}
+          controls={`${ids}-all`}
+        />
+        <div id={`${ids}-all`} className={nested}>
+          {allOpen &&
+            rail.rest.map((section, i) => (
+              <div key={section.id}>
+                {collapsed ? (
+                  i > 0 && <div className="mx-2 my-2 border-t border-border" />
+                ) : (
+                  <SectionLabel>{section.label}</SectionLabel>
+                )}
+                <div className={clsx('flex flex-col', collapsed ? 'gap-0.5' : 'gap-px')}>
+                  {/* Dentro de «Todo» el orden sigue subiendo lo que se usa, que
+                      es lo que este archivo ya hacía antes de que existiera el
+                      bloque de arriba. Aquí no hay nada que aprender con las
+                      manos: es una lista que se abre a propósito. */}
+                  {orderByUsage(section.items, usage).map(row)}
+                </div>
+              </div>
+            ))}
+        </div>
+
+        <DisclosureRow
+          icon={COMPANY_ICON}
+          label={rail.company.label}
+          collapsed={collapsed}
+          open={companyOpen}
+          active={!companyOpen && isInside(pathname, rail.company.items)}
+          onToggle={toggleCompany}
+          controls={`${ids}-company`}
+        />
+        <div id={`${ids}-company`} className={clsx('flex flex-col gap-px', nested)}>
+          {companyOpen && rail.company.items.map(row)}
+        </div>
+      </div>
     </nav>
   );
 }
@@ -561,19 +672,16 @@ function SidebarNav({
 /**
  * The foot of the rail, OUTSIDE the scrolling area.
  *
- * With every destination visible there are twenty-four of them for an admin,
- * which is more than a laptop can show at once. The previous version kept these
- * rows inside the scrolling <nav> with `mt-auto` — fine while the list fitted,
- * and the moment it did not, Ajustes would have slid to the bottom of the scroll
- * and vanished. Pinning it is what makes the flat list affordable.
+ * The previous version kept these rows inside the scrolling <nav> with
+ * `mt-auto` — fine while the list fitted, and the moment it did not, Ajustes
+ * would have slid to the bottom of the scroll and vanished. The rail is short
+ * now, but «Todo» desplegado la vuelve a alargar, así que sigue anclado.
  */
 function SidebarFooter({
   collapsed,
-  counts,
   onNavigate,
 }: {
   collapsed: boolean;
-  counts: NavCounts;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -584,9 +692,9 @@ function SidebarFooter({
           <NavRow
             key={item.href}
             item={item}
+            badge={0}
             collapsed={collapsed}
             pathname={pathname}
-            counts={counts}
             onNavigate={onNavigate}
           />
         ))}
@@ -725,7 +833,7 @@ export function Sidebar({
           <div className="min-h-0 flex-1">
             <SidebarNav role={role} collapsed={!expanded} counts={counts} />
           </div>
-          <SidebarFooter collapsed={!expanded} counts={counts} />
+          <SidebarFooter collapsed={!expanded} />
         </div>
       </aside>
 
@@ -753,7 +861,7 @@ export function Sidebar({
                   which is what the disclosure buttons used to break. */}
               <SidebarNav role={role} collapsed={false} counts={counts} onNavigate={closeDrawer} />
             </div>
-            <SidebarFooter collapsed={false} counts={counts} onNavigate={closeDrawer} />
+            <SidebarFooter collapsed={false} onNavigate={closeDrawer} />
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

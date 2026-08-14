@@ -24,20 +24,35 @@
  * ===========================================================================
  * WHAT IT IS ALLOWED TO CHANGE, AND WHAT IT MUST NOT
  * ===========================================================================
- * ONLY the order INSIDE the grouped sections. Never the daily block, never
- * which section something belongs to, and nothing is ever hidden.
+ * Two things: the order INSIDE the grouped sections, and WHICH FIVE
+ * destinations sit in the short block at the top of the rail. Never the three
+ * pinned rows, never which section something belongs to, and nothing is ever
+ * hidden.
  *
- * The daily block is exempt because it is the one part of this rail people
- * learn with their hands: Inicio, Chat, Aprobaciones, in that order, every
- * morning. Reordering it would move a target somebody was already reaching for
- * — the exact way an adaptive menu becomes a menu you have to read again.
+ * Inicio, Chat and Te espera are exempt because they are the part of this rail
+ * people learn with their hands: those three, in that order, every morning.
+ * Reordering them would move a target somebody was already reaching for — the
+ * exact way an adaptive menu becomes a menu you have to read again.
  *
  * And nothing is hidden, because a destination that disappears because you have
- * not used it is a destination you can never discover. The rail gets easier to
- * scan; it never gets shorter behind your back.
+ * not used it is a destination you can never discover. What does not make the
+ * top block is inside «Todo», one click away, and `nav-shape.test.ts` fails if
+ * the union of the two ever loses a destination. The rail gets easier to scan;
+ * it never gets shorter behind your back.
  */
 
 const KEY = 'nav_usage_v1';
+
+/**
+ * La pertenencia al bloque de arriba, en SU PROPIA clave.
+ *
+ * No cabe en `nav_usage_v1` y no es un capricho: `read()` de ahí sólo admite
+ * números y `recordVisit` DECAE el objeto entero en cada escritura. Una lista de
+ * destinos metida en ese saco sería descartada al leerla o multiplicada por 0.98
+ * al escribirla. Son dos hechos distintos —cuánto usas algo, y qué hay hoy
+ * arriba— y viven en dos sitios.
+ */
+const QUICK_KEY = 'nav_quick_v1';
 
 /**
  * How much a click is worth against the ones before it.
@@ -122,4 +137,129 @@ export function orderByUsage<T extends { href: string }>(items: T[], scores: Sco
     .map((item, index) => ({ item, index, score: score(item) }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((e) => e.item);
+}
+
+/**
+ * Lo que hay que usar algo para que suba al bloque de arriba.
+ *
+ * Cinco visitas dentro de la ventana que el decaimiento deja abierta. Es
+ * deliberadamente el doble que `MIN_SCORE`: reordenar dentro de una sección
+ * cuesta poco si se equivoca —la fila sigue a la vista, dos puestos más arriba—
+ * y ascender al bloque fijo empuja a otra cosa fuera de él. Las dos decisiones
+ * no pueden costar lo mismo.
+ */
+const QUICK_MIN = 5;
+
+/**
+ * LA HISTÉRESIS, QUE ES LO QUE IMPIDE QUE EL BLOQUE BAILE.
+ *
+ * Un umbral solo no basta: dos destinos con puntuaciones parecidas se
+ * adelantarían el uno al otro con cada clic, y el bloque cambiaría de contenido
+ * a diario sin que nadie hubiera cambiado de costumbres. Así que quien ya está
+ * dentro se defiende: para echarlo hay que sacarle DOS VISITAS ENTERAS de
+ * ventaja, no una décima. Y como el que entra hereda esa misma defensa, volver
+ * a intercambiarlos exige otras dos en sentido contrario — que es exactamente lo
+ * que hace falta para que un empate técnico no se traduzca en movimiento.
+ *
+ * Por eso la pertenencia se GUARDA (`nav_quick_v1`) en vez de recalcularse desde
+ * cero: sin memoria de quién está dentro no hay a quién defender, y la regla se
+ * degrada a un umbral, que es el caso que oscila.
+ */
+const PROMOTE_MARGIN = 2;
+
+/**
+ * Qué destinos ocupan hoy el bloque corto de arriba.
+ *
+ * PURA, como `orderByUsage`, y por lo mismo: es la regla que decide qué ve la
+ * gente, así que tiene que poder probarse sin un navegador.
+ *
+ * Hay tantas plazas como semillas. `seeds` es la respuesta razonable para quien
+ * llega el primer día y no ha usado nada; a partir de ahí una plaza se gana, y
+ * `previous` —lo que había ayer— es lo que se defiende.
+ *
+ * COMO MUCHO UN CAMBIO POR EVALUACIÓN. Aunque tres destinos superen a la vez a
+ * sus rivales, el bloque se mueve de a una fila entre un pintado y el siguiente.
+ * Un menú que se rehace entero delante de ti no se lee como un menú que aprende,
+ * se lee como un menú roto.
+ */
+export function pickQuick(
+  candidates: string[],
+  scores: Scores,
+  previous: string[] | null,
+  seeds: string[],
+): string[] {
+  const allowed = new Set(candidates);
+  const slots = seeds.filter((href) => allowed.has(href));
+  if (slots.length === 0) return [];
+
+  // Lo de ayer manda, siempre que siga existiendo. Un destino que se renombró o
+  // se retiró deja su plaza libre en vez de dejar el bloque corto.
+  const block: string[] = [];
+  for (const href of previous ?? []) {
+    if (allowed.has(href) && !block.includes(href) && block.length < slots.length) {
+      block.push(href);
+    }
+  }
+  // Y lo que falte se rellena con las semillas primero y con el orden diseñado
+  // después, para que el bloque nunca tenga un hueco.
+  for (const href of [...slots, ...candidates]) {
+    if (block.length >= slots.length) break;
+    if (!block.includes(href)) block.push(href);
+  }
+
+  const score = (href: string) => scores[href] ?? 0;
+
+  // El más flojo de dentro, con el orden diseñado como desempate al revés: entre
+  // dos que valen lo mismo cae el que el diseño puso más abajo.
+  let weakest = block[0] as string;
+  for (const href of block) {
+    if (score(href) < score(weakest)) weakest = href;
+    else if (
+      score(href) === score(weakest) &&
+      candidates.indexOf(href) > candidates.indexOf(weakest)
+    )
+      weakest = href;
+  }
+
+  // El más fuerte de fuera. El desempate aquí sí es el orden diseñado normal.
+  let challenger: string | null = null;
+  for (const href of candidates) {
+    if (block.includes(href)) continue;
+    if (challenger === null || score(href) > score(challenger)) challenger = href;
+  }
+
+  if (
+    challenger !== null &&
+    score(challenger) >= Math.max(QUICK_MIN, score(weakest) + PROMOTE_MARGIN)
+  ) {
+    block[block.indexOf(weakest)] = challenger;
+  }
+
+  // Devuelto en el orden diseñado: la pertenencia la decide el uso, la posición
+  // no. Ver `buildRail`.
+  return candidates.filter((href) => block.includes(href));
+}
+
+/** Lo que había arriba la última vez. `null` si esta persona es nueva aquí. */
+export function readQuick(): string[] | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(QUICK_KEY) ?? 'null');
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((v): v is string => typeof v === 'string');
+  } catch {
+    return null;
+  }
+}
+
+/** Guarda la pertenencia. Sólo escribe si de verdad cambió. */
+export function writeQuick(hrefs: string[]): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const next = JSON.stringify(hrefs);
+    if (localStorage.getItem(QUICK_KEY) !== next) localStorage.setItem(QUICK_KEY, next);
+  } catch {
+    // Almacenamiento lleno o bloqueado (modo privado). El bloque se recalcula
+    // igual en cada carga; lo único que se pierde es la defensa del que estaba.
+  }
 }

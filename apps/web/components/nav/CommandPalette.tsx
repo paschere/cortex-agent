@@ -29,20 +29,26 @@ interface Section {
 /**
  * EVERY DESTINATION IN THE PRODUCT, INCLUDING THE ONES THE RAIL DOES NOT SHOW.
  *
- * This list is the other half of the sidebar's shortening. The rail carries the
- * daily work and four collapsed groups; four destinations are not on it at all
- * (/conversations, /tools, /agents, /evaluation). Those are not hidden — they
- * are HERE, and the rail now has a visible "Buscar" row so that this is a place
- * people know about rather than a shortcut in somebody's head.
+ * ESTO Y «TODO» NO SON DOS MANERAS DE LO MISMO, y la diferencia es la que
+ * justifica que existan las dos. Aquí se ESCRIBE el nombre de algo que ya sabes
+ * cómo se llama, y te saca de donde estás; «Todo», en el rail, ABRE LA LISTA
+ * donde estás para señalar con el dedo lo que no sabrías nombrar. Recordar
+ * contra reconocer.
  *
- * The headings mirror the rail's groups on purpose. Somebody who learns "Rutinas
- * lives under Trabajo automático" should find the same shelf in both places; two
- * different taxonomies for one product is the problem this change is undoing,
- * not a second chance to invent one.
+ * De ahí que esta lista sea más larga que el rail y no al revés: cuatro
+ * destinos no están en él (/conversations, /tools, /agents, /evaluation) y sólo
+ * se alcanzan por aquí o por una puerta en la pantalla donde surge la pregunta.
+ * No están escondidos: el rail tiene una fila «Buscar» visible para que esto sea
+ * un sitio conocido y no un atajo en la cabeza de alguien.
  *
- * Notes are the same sentences the rail shows, because the same thing should not
- * be described two ways. Keywords carry what the rail cannot: old names
- * ("scheduled jobs", "pipelines"), English, and the words people actually type.
+ * Las palabras clave son lo otro que el rail no puede llevar: nombres viejos
+ * («scheduled jobs», «pipelines»), inglés, y lo que la gente teclea de verdad.
+ *
+ * LOS ENCABEZADOS SE PARECEN A LOS DEL RAIL, NO SON LOS MISMOS, y eso es una
+ * deuda anotada aquí a propósito: «Trabajo automático» aquí es «Lo que hago
+ * solo» allí. Una taxonomía y media para un producto es peor que una; si algún
+ * día se unifica, se unifica contra `lib/nav-shape.ts`, que es donde vive la del
+ * rail.
  */
 const SECTIONS: Section[] = [
   {
