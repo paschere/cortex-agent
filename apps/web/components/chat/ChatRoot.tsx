@@ -348,10 +348,13 @@ export function ChatRoot({
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-canvas">
-      {/* Detrás de todo, y ligado al turno: ver AmbientField. Va aquí y no en
-          MessageList porque el contenedor de los mensajes es el que scrollea, y
-          una capa absoluta dentro de un scroll se va con el contenido. */}
-      <AmbientField busy={isLoading} mode={messages.length === 0 ? 'open' : 'thread'} />
+      {/* Sólo en la pantalla en blanco: con un mensaje en pantalla no dibuja
+          nada. Ver la cabecera de AmbientField, que explica por qué el fondo
+          animado detrás de una conversación era mala idea aunque el argumento
+          para tenerlo fuera bueno. Va aquí y no en MessageList porque el
+          contenedor de los mensajes es el que scrollea, y una capa absoluta
+          dentro de un scroll se va con el contenido. */}
+      <AmbientField mode={messages.length === 0 ? 'open' : 'thread'} />
 
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
         <button

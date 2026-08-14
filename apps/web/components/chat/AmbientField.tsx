@@ -4,83 +4,71 @@ import { clsx } from 'clsx';
 import type { CSSProperties } from 'react';
 
 /**
- * EL FONDO DE LA CONVERSACIÓN, Y POR QUÉ NO ES UN ADORNO.
+ * EL FONDO DE LA PANTALLA EN BLANCO, Y DE NINGUNA OTRA.
  *
  * ===========================================================================
- * LA REGLA QUE ESTO PARECE SALTARSE
+ * ESTO ES DECORACIÓN, Y ESA ES LA POSTURA
  * ===========================================================================
  * `docs/design-system.md` dice que el movimiento contesta una pregunta y nunca
- * decora. Un fondo animado es, por definición, la excepción — así que o
- * contesta algo o no debería existir.
+ * decora. Esto decora. No hay forma honesta de decirlo de otra manera, y por
+ * eso la regla que lo gobierna no es «qué pregunta contesta» sino DÓNDE SE LE
+ * PERMITE EXISTIR:
  *
- * Contesta esto: **hay alguien ahí, y ahora mismo está ocupado.** Es la misma
- * idea que `Presence`, a escala de habitación. La luz se aviva mientras Cortex
- * trabaja y se calma cuando termina, de modo que quien está mirando la
- * respuesta —y no el objeto de 36 píxeles que la acompaña— también lo nota.
- * Sin `busy`, esto sería papel pintado y habría que borrarlo.
+ *     sólo en la pantalla en blanco, que es la única del producto donde no hay
+ *     absolutamente nada que leer.
  *
- * ===========================================================================
- * TECNOLÓGICO DONDE SE VENDE, TRANQUILO DONDE SE TRABAJA
- * ===========================================================================
- * Hay una tensión real entre dos cosas ciertas. Este producto se vende como un
- * gerente para tu empresa y la primera pantalla es la que se ve en una demo,
- * así que tiene que impresionar. Y este producto lo tiene abierto ocho horas
- * un contador, así que una malla latiendo detrás de un párrafo es lo que
- * impresiona el primer día y se vuelve insoportable el tercero.
+ * En cuanto hay un solo mensaje, desaparece. Entero. No se atenúa ni se queda
+ * de fondo tenue: `mode="thread"` no dibuja ni un nodo.
  *
- * La salida no es un punto medio, es una separación en tres:
+ * La versión anterior era más ambiciosa y estaba equivocada. Encendía la
+ * habitación mientras Cortex pensaba y la apagaba al terminar — sobre el papel
+ * eso convertía el fondo en señal, y era la misma idea que `Presence` a escala
+ * de habitación. En pantalla se veía a payaso: una aurora girando y un barrido
+ * cruzando por detrás de una respuesta que alguien está intentando leer. Un
+ * argumento correcto sobre un resultado malo sigue siendo un resultado malo, y
+ * esta es una herramienta de trabajo antes que una demo.
  *
- *   PANTALLA EN BLANCO   todo encendido — malla entera y barrido.
- *   LEYENDO UNA RESPUESTA  malla a un cuarto, ningún barrido. El fondo se
- *                          aparta de lo único que importa, que es el texto.
- *   MIENTRAS PIENSA        la malla sube a dos tercios y el barrido vuelve, a
- *                          un tercio del tiempo.
- *
- * Ese tercer estado es el que convierte esto de decoración en señal, y es la
- * razón por la que se puede ser atrevido sin pagarlo: lo espectacular ocurre
- * cuando NO hay nada que leer, y se retira solo en cuanto lo hay.
- *
- * Y «tecnológico» aquí no es ciencia ficción, es INSTRUMENTO: una malla fina y
- * un barrido lento, que es como se ve algo que está escaneando. Nada de
- * partículas, constelaciones ni líneas que se persiguen — eso es la estética de
- * «una IA» y este producto no vende una IA, vende a alguien que lee tus
- * contratos.
+ * Lo que queda es la primera impresión, que sí importa —este producto se vende
+ * como un gerente para tu empresa y ésa es la pantalla que sale en una demo—
+ * y que no le cuesta nada a nadie, porque nadie está leyendo ahí.
  *
  * ===========================================================================
- * CÓMO SE EVITA QUE MOLESTE, QUE ES TODO EL DISEÑO
+ * Y «TECNOLÓGICO» AQUÍ NO ES CIENCIA FICCIÓN
  * ===========================================================================
- * Esta pantalla se abre todos los días y encima hay texto que se lee. Cuatro
- * decisiones, y cada una está para lo mismo:
+ * Es INSTRUMENTO: una malla fina, un barrido lento y luz que cambia de tono.
+ * Nada de partículas, constelaciones ni mallas en perspectiva — eso es la
+ * estética de «una IA», y este producto no vende una IA: vende a alguien que
+ * lee tus contratos.
  *
- *   ES ENORME Y ESTÁ DESENFOCADO. Sin borde no hay nada que seguir con la
- *   vista. Una forma con contorno definido se convierte en un objeto, y un
- *   objeto que se mueve detrás de un párrafo se lee.
+ * Cómo se evita que canse en los segundos que dura la pantalla:
  *
- *   ES LENTÍSIMO. 23 y 31 segundos por vuelta. Por debajo de ese orden el
- *   movimiento se percibe como movimiento; por encima se percibe como que la
- *   luz de la habitación cambió mientras leías.
+ *   NO HAY BORDES. Todo va desenfocado. Una forma con contorno definido se
+ *   convierte en un objeto, y un objeto que se mueve se sigue con la vista.
  *
- *   NO SE REPITE. Las dos duraciones son primas entre sí, con recorridos
- *   distintos y en sentidos opuestos: la composición no vuelve al mismo sitio
- *   en doce minutos. Un bucle que se nota es un bucle que se mira.
+ *   ES LENTÍSIMO. 23, 31 y 40 segundos por vuelta. Por debajo de ese orden el
+ *   movimiento se percibe como movimiento; por encima, como que la luz de la
+ *   habitación cambió mientras mirabas.
  *
- *   NO USA NINGÚN COLOR CON SIGNIFICADO. Sólo `primary` y `sky`, que son el
- *   producto y lo informativo. Verde, ámbar y rosa quieren decir «en vigor»,
- *   «por vencer» y «vencido» en toda la app; teñir el aire de ámbar sería
- *   decir que algo va mal en una pantalla donde no pasa nada.
+ *   NO SE REPITE. Las duraciones son primas entre sí: la composición no vuelve
+ *   al mismo sitio en doce minutos, y un bucle que se nota es un bucle que se
+ *   mira.
  *
- * Con `prefers-reduced-motion` la regla global de `globals.css` congela las
- * animaciones y esto se queda como lo que ya era sin moverse: un degradado
- * suave. No hay nada que apagar aparte del movimiento.
+ *   NO USA NINGÚN COLOR CON SIGNIFICADO. Sólo `primary` y `sky`. Verde, ámbar
+ *   y rosa quieren decir «en vigor», «por vencer» y «vencido» en toda la app;
+ *   teñir el aire de ámbar sería avisar de algo en una pantalla donde no pasa
+ *   nada.
+ *
+ * `prefers-reduced-motion` lo congela desde la regla global de `globals.css` y
+ * queda un degradado quieto, que es lo que ya era sin moverse.
  */
+
 /**
  * La malla: dos juegos de líneas de un píxel, desvanecidos hacia los bordes.
  *
- * Es lo que hace que el fondo se lea como un INSTRUMENTO y no como una
- * acuarela — y «instrumento» es exactamente lo que este producto es. No lleva
- * ni un color inventado: son las mismas líneas de un píxel del token `primary`,
- * al 5%, que es el umbral por debajo del cual una malla se percibe como textura
- * del papel en vez de como una cuadrícula que se puede contar.
+ * Es lo que hace que esto se lea como un instrumento y no como una acuarela.
+ * Al 5% del token `primary`, que es el umbral por debajo del cual una malla se
+ * percibe como textura del papel en vez de como una cuadrícula que se puede
+ * contar.
  *
  * La máscara elíptica es obligatoria, no un acabado. Una malla que llega al
  * borde de la pantalla dice «aquí termina el lienzo» y convierte el fondo en un
@@ -97,17 +85,19 @@ const MESH: CSSProperties = {
 };
 
 export function AmbientField({
-  busy = false,
   /**
-   * `open` es la pantalla en blanco: la primera que se ve, la que sale en una
-   * demo y la única donde no hay un párrafo que leer. Ahí va el tratamiento
-   * entero. En cuanto hay conversación pasa a `thread` y la malla se queda en
-   * un tercio y el barrido desaparece — nadie lee un texto con una luz
-   * cruzándole por detrás cada diecinueve segundos.
+   * `open` es la pantalla en blanco. Cualquier otra cosa no dibuja nada, y ése
+   * es todo el contrato de este componente.
    */
   mode = 'thread',
-}: { busy?: boolean; mode?: 'open' | 'thread' }) {
-  const open = mode === 'open';
+}: { mode?: 'open' | 'thread' }) {
+  // Desmontado y no escondido: cinco capas desenfocadas con animaciones
+  // infinitas siguen costando GPU aunque estén a opacidad cero, y en una
+  // conversación larga esto estaría corriendo para siempre sin que nadie lo
+  // vea. Que desaparezca de golpe al mandar la primera pregunta no es un
+  // problema: el contenido que entra en su sitio es lo que se está mirando.
+  if (mode !== 'open') return null;
+
   return (
     <div
       aria-hidden
@@ -119,11 +109,12 @@ export function AmbientField({
       {/*
         LA AURORA, AL FONDO DEL TODO.
 
-        Un cónico enorme, girando cuarenta segundos por vuelta y desenfocado
-        hasta que no queda ni una transición dura. Es la capa que hace que esto
-        se lea como luz de habitación y no como «un degradado de fondo»: el
-        color cambia por zonas en vez de por distancia, que es lo que hace un
-        cielo. Va debajo de todo lo demás y nunca se apaga.
+        Un cónico enorme girando cuarenta segundos por vuelta y desenfocado
+        hasta que no queda ni una transición dura. Es la capa que separa
+        «moderno» de «tenía un degradado»: un cónico cambia de color según el
+        ángulo, así que al girar la luz cambia de TONO POR ZONAS en vez de
+        desplazarse — que es lo que hace un cielo y no hace un foco. Una vuelta
+        entera dura más que esta pantalla, así que nadie llega a ver que gira.
       */}
       <div
         className="absolute left-1/2 top-1/2 h-[160vh] w-[160vh] -translate-x-1/2 -translate-y-1/2 animate-aurora rounded-pill opacity-70 blur-[120px] will-change-transform"
@@ -133,74 +124,24 @@ export function AmbientField({
         }}
       />
 
-      {/*
-        LA MALLA, EN TRES INTENSIDADES Y NO EN DOS.
-
-        Ésta es la parte atrevida, y lo que la salva de ser atrevimiento a secas
-        es que no cambia porque sí:
-
-          pantalla en blanco   entera. Es la primera que se ve, la que sale en
-                               una demo y la única sin un párrafo que leer.
-          conversación quieta  a un cuarto. Estás leyendo; el fondo se aparta.
-          conversación activa  a dos tercios. LA HABITACIÓN SE ENCIENDE MIENTRAS
-                               PIENSA, y se apaga sola cuando termina.
-
-        El tercer estado es el que convierte todo esto de decoración en señal, y
-        es la misma idea que `Presence` dicha con la pantalla entera en vez de
-        con un objeto de 36 píxeles. Casi tres segundos de transición: tiene que
-        parecer que la luz sube, nunca que se enciende un interruptor.
-      */}
-      <div
-        style={MESH}
-        className={clsx(
-          'absolute inset-0 transition-opacity duration-[2400ms] ease-out motion-reduce:transition-none',
-          open ? 'opacity-100' : busy ? 'opacity-[0.65]' : 'opacity-[0.25]',
-        )}
-      />
+      <div style={MESH} className="absolute inset-0" />
 
       {/*
         EL BARRIDO. Una banda ancha e inclinada que cruza la malla y luego se
-        ausenta casi la mitad del ciclo — un barrido continuo es un metrónomo, y
-        el ojo aprende un ritmo y a partir de ahí lo espera.
-
-        Existe en dos momentos y en ninguno estorba: en la pantalla en blanco,
-        cada diecinueve segundos; y mientras hay un turno corriendo, EL MISMO
-        recorrido a un tercio del tiempo. Eso es lo que dice «está escaneando»,
-        que es literalmente lo que Cortex hace con los correos y los contratos.
-
-        Leyendo una respuesta terminada no hay ninguno, que es la única
-        condición que este elemento tenía que cumplir.
+        ausenta casi la mitad del ciclo — un barrido continuo es un metrónomo:
+        el ojo aprende el ritmo y a partir de ahí lo espera. Es la pieza que
+        dice «esto está escaneando», que es literalmente lo que Cortex hace con
+        los correos, los contratos y las reuniones.
       */}
-      {(open || busy) && (
-        <div
-          className={clsx(
-            'absolute inset-y-0 left-0 w-[26%] bg-gradient-to-r from-transparent to-transparent blur-2xl will-change-transform motion-reduce:hidden',
-            busy ? 'animate-sweep-fast via-primary/[0.14]' : 'animate-sweep via-primary/[0.09]',
-          )}
-        />
-      )}
+      <div className="absolute inset-y-0 left-0 w-[26%] animate-sweep bg-gradient-to-r from-transparent via-primary/[0.09] to-transparent blur-2xl will-change-transform motion-reduce:hidden" />
 
-      {/*
-        La transición de opacidad dura casi dos segundos a propósito. El turno
-        más corto de este producto son unas décimas, y una luz que se enciende y
-        se apaga a esa velocidad es un parpadeo — justo lo contrario de lo que
-        se quiere decir. Así, un turno rápido apenas la insinúa y una consulta
-        al RUNT de dieciocho segundos la sostiene entera.
-      */}
-      <div
-        className={clsx(
-          'absolute inset-0 transition-opacity duration-[1600ms] ease-out motion-reduce:transition-none',
-          busy ? 'opacity-100' : 'opacity-[0.55]',
-        )}
-      >
-        {/* Arriba a la izquierda, la más grande: es la que da la sensación de
-            que la luz entra por algún sitio. */}
+      {/* Las tres manchas: son las que dan la sensación de que la luz entra por
+          algún sitio, y de que no es de un solo color. La tercera reutiliza el
+          recorrido de la primera con retraso y al revés — una mancha más, y ni
+          un keyframe más. */}
+      <div className={clsx('absolute inset-0 opacity-[0.75]')}>
         <span className="absolute -left-[18%] -top-[28%] h-[62vh] w-[62vh] animate-drift-a rounded-pill bg-primary/[0.16] blur-[90px] will-change-transform" />
-        {/* Abajo a la derecha, en `sky` y más tenue: existe para que la luz no
-            sea de un solo color, que es lo que la volvería un foco. */}
         <span className="absolute -bottom-[26%] -right-[14%] h-[54vh] w-[54vh] animate-drift-b rounded-pill bg-sky/[0.14] blur-[90px] will-change-transform" />
-        {/* La tercera reutiliza el primer recorrido con retraso y al revés: una
-            mancha más, y ni un keyframe más. */}
         <span
           className="absolute -right-[8%] top-[22%] h-[38vh] w-[38vh] animate-drift-a rounded-pill bg-primary/[0.11] blur-[90px] will-change-transform"
           style={{ animationDelay: '-9s', animationDirection: 'reverse' }}
