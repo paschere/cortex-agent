@@ -241,6 +241,49 @@ body {
   }
 }
 
+/* --- The chat's first screen -------------------------------------------
+   Two additions, and the reason neither one is `kb-breathe` reused.
+
+   `chat-sky` is a wash, not an animation: a very faint indigo light falling
+   from the top of the empty state so the first screen of the product is not a
+   flat grey rectangle. It costs one gradient and never moves.
+
+   `cx-glow` is the one looping movement on that screen, and it is deliberately
+   the slowest thing in the app. `kb-breathe` exists a few rules above and was
+   the obvious candidate, but it says something else: at 1.9s and 0.35→1 it is
+   a pulse that reports work happening right now, and a pulse is something you
+   watch. This is ambient light behind the mark — seven seconds, a narrow
+   opacity range and a 5% scale, blurred so there is no edge to track. It
+   should register as "on" out of the corner of the eye and never once pull a
+   look, because this screen is opened every day.
+
+   The entrance is `animate-rise` with per-element delays; nothing new needed.
+   Both of these are flattened by the reduced-motion rule above, and the
+   element that carries `cx-glow` also declares its resting opacity as a normal
+   class so stopping the animation leaves it at rest rather than at frame 0. */
+.chat-sky {
+  background-image: radial-gradient(
+    62% 46% at 50% 0%,
+    rgb(var(--primary) / 0.07) 0%,
+    transparent 72%
+  );
+}
+
+@keyframes cx-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+}
+.cx-glow {
+  animation: cx-glow 7s ease-in-out infinite;
+}
+
 /* Keyboard focus has to survive a design that leans on fills over outlines. */
 :focus-visible {
   outline: 2px solid rgb(var(--primary));
