@@ -1,6 +1,7 @@
 import { CopyButton } from '@/components/connect/ConnectCortex';
 import { Panel } from '@/components/ui/panel';
 import { Field } from '@/components/ui/provenance';
+import { readInsights } from '@/lib/insights';
 import { readJournal } from '@/lib/journal';
 import { getMcpUrl } from '@/lib/mcp-url';
 import { relativeTime } from '@/lib/relative-time';
@@ -24,7 +25,9 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import { DayJournal } from './_components/DayJournal';
+import { Insights } from './_components/Insights';
 import { WaitingIndex } from './_components/WaitingIndex';
 
 /**
@@ -191,6 +194,25 @@ export default async function DashboardPage() {
         <WaitingIndex index={waiting} />
         <DayJournal journal={journal} />
       </div>
+
+      {/*
+        LA TERCERA MITAD: LO QUE NOTÉ.
+        Arriba están la deuda de quien mira y el trabajo de anoche. Faltaba lo
+        único que nadie pidió — una cifra que se movió y la pregunta que deja
+        detrás. Va aquí y no en el chat porque en el chat compite con la
+        respuesta; un hallazgo es algo que Cortex trae, no algo que se busca.
+
+        Y VA EN SU PROPIO `Suspense`, fuera del `Promise.all` de arriba. Cuesta
+        más lecturas que todo lo demás de la pantalla junto (las metas con su
+        histórico, dos barridos de documentos y la lista de clientes), y ésta es
+        la pantalla a la que redirige `/`: meterlo en la misma promesa haría
+        que «tres cosas te esperan» tuviera que esperar a un reparto por
+        cliente de doce meses. Con la frontera aquí, el inicio pinta con lo que
+        ya tenía y los hallazgos llegan cuando estén.
+      */}
+      <Suspense fallback={<InsightsPending />}>
+        <InsightsPanel organizationId={user.organization.id} />
+      </Suspense>
 
       {/* Los prospectos no son una de las cuatro colas —nadie prometió nada, no
           hay nada parado a medias— pero son lo otro que llega solo y espera una
@@ -401,6 +423,41 @@ export default async function DashboardPage() {
         </div>
       </Panel>
     </>
+  );
+}
+
+/**
+ * El panel de hallazgos, con sus lecturas dentro.
+ *
+ * Es un componente de servidor propio y no una promesa más de la página porque
+ * eso es lo que le da a `Suspense` una frontera que suspender. `readInsights`
+ * ya se traga sus tres errores por separado y los devuelve como huecos con
+ * nombre, así que esto no puede tumbar la pantalla.
+ */
+async function InsightsPanel({ organizationId }: { organizationId: string }) {
+  const { insights, gaps } = await readInsights(organizationId);
+  return <Insights insights={insights} gaps={gaps} />;
+}
+
+/**
+ * El hueco mientras llega.
+ *
+ * Dice lo que está pasando en vez de fingir contenido con barras grises. Un
+ * esqueleto promete que va a haber algo, y aquí muchas veces no lo hay: la
+ * respuesta honesta de un espacio nuevo es cero hallazgos, y un esqueleto de
+ * tres tarjetas que se resuelve en una frase de disculpa es peor que la frase.
+ */
+function InsightsPending() {
+  return (
+    <section className="mb-4 rounded-card border border-border bg-surface p-4 shadow-card sm:p-5">
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+        <span className="text-sm font-semibold text-ink">Lo que noté</span>
+      </div>
+      <p className="mt-2 text-sm text-ink-faint" aria-live="polite">
+        Mirando qué se movió…
+      </p>
+    </section>
   );
 }
 
