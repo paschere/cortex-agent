@@ -1,6 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
+import { ChatMarkdown } from '../ChatMarkdown';
 import { type Structural, structuralView } from './registry';
 
 /**
@@ -22,15 +23,43 @@ export function StructuralResult({ result }: { result: unknown }) {
   return <Rendered view={view} />;
 }
 
+/**
+ * LA FRASE DE UNA HERRAMIENTA ES MARKDOWN, Y SE ESTABA PINTANDO EN CRUDO.
+ *
+ * En pantalla se leía, literalmente, `**Vencimientos — próximos 30 días**` con
+ * los asteriscos puestos, y los saltos de línea colapsados en un solo párrafo:
+ * cuarenta renglones de muro donde había un informe con titulares, viñetas y
+ * procedencias en cursiva. No era una decisión de diseño, era un `<p>` con una
+ * cadena dentro.
+ *
+ * Y no es un caso raro: `NOTE_KEYS` recoge `guidance`, `summary`, `note`,
+ * `message` y `markdown` — la última se llama así — y las herramientas de este
+ * repositorio escriben ahí prosa con formato a propósito, porque es lo que el
+ * modelo lee y lo que una persona acaba leyendo si despliega el paso.
+ *
+ * Se renderiza con `ChatMarkdown`, el mismo de las respuestas, para que un
+ * informe no se vea de dos maneras distintas según dónde caiga. Lo único que
+ * cambia es la escala: dentro de un paso desplegado, esto es evidencia y no la
+ * respuesta, así que va un punto más pequeño y en tono apagado.
+ */
+function ToolProse({ text }: { text: string }) {
+  return (
+    <ChatMarkdown
+      content={text}
+      className="prose-p:text-xs prose-p:text-ink-muted prose-li:text-xs prose-li:text-ink-muted prose-headings:text-sm prose-headings:mt-2 prose-strong:text-ink prose-table:text-xs"
+    />
+  );
+}
+
 function Rendered({ view }: { view: NonNullable<Structural> }) {
   if (view.kind === 'note') {
-    return <p className="text-xs leading-relaxed text-ink-muted">{view.text}</p>;
+    return <ToolProse text={view.text} />;
   }
 
   if (view.kind === 'fields') {
     return (
       <div className="space-y-2">
-        {view.note && <p className="text-xs leading-relaxed text-ink-muted">{view.note}</p>}
+        {view.note && <ToolProse text={view.note} />}
         <dl className="grid gap-x-4 gap-y-1.5 sm:grid-cols-[auto_1fr]">
           {view.entries.map(([key, value]) => (
             <div key={key} className="contents">
@@ -45,7 +74,7 @@ function Rendered({ view }: { view: NonNullable<Structural> }) {
 
   return (
     <div className="space-y-2">
-      {view.note && <p className="text-xs leading-relaxed text-ink-muted">{view.note}</p>}
+      {view.note && <ToolProse text={view.note} />}
       {/* Su propio scroll horizontal: una tabla ancha dentro de una burbuja de
           chat no puede empujar la conversación entera de lado. */}
       <div className="overflow-x-auto">

@@ -219,7 +219,7 @@ function TaskRow({
           {invocation.args !== undefined && (
             <div>
               <div className="field-label">Argumentos</div>
-              <pre className={evidence}>{JSON.stringify(invocation.args, null, 2)}</pre>
+              <ArgFields args={invocation.args} fallbackClassName={evidence} />
             </div>
           )}
           {result !== undefined && (
@@ -253,6 +253,77 @@ function TaskRow({
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * LO QUE SE LE PIDIÓ A LA HERRAMIENTA, SIN LLAVES.
+ *
+ * Esto era `JSON.stringify(args, null, 2)`, y en el caso más común de todo el
+ * producto —una herramienta con UN argumento— producía esto:
+ *
+ *     {
+ *       "reportId": "ea5d9703-7ef2-4698-8c32-eec9c9fc095d"
+ *     }
+ *
+ * Tres renglones, dos de ellos puntuación, para enseñar un valor. Y la parte
+ * que de verdad importa —si Cortex entendió la pregunta— quedaba escondida
+ * entre sintaxis que no le dice nada a quien despliega un paso para comprobar
+ * qué le pidió a quién.
+ *
+ * Ahora un objeto plano es una lista de campos: nombre a la izquierda, valor a
+ * la derecha en monoespaciada porque es evidencia —la regla 3 del sistema de
+ * diseño— y recortado a tres renglones, que es donde deja de ser un dato y
+ * empieza a ser un adjunto.
+ *
+ * EL JSON SIGUE AHÍ para todo lo demás, y eso no es una concesión: un argumento
+ * anidado dibujado como una fila plana miente sobre su forma, y la lista de
+ * pasos existe precisamente para poder auditar lo que se pidió. Cuando la forma
+ * no cabe en una fila, el objeto entero es más honesto que un resumen.
+ */
+function ArgFields({ args, fallbackClassName }: { args: unknown; fallbackClassName: string }) {
+  const entries =
+    typeof args === 'object' && args !== null && !Array.isArray(args)
+      ? Object.entries(args as Record<string, unknown>)
+      : null;
+
+  if (entries && entries.length === 0) {
+    // Una herramienta sin argumentos es un hecho, no un hueco: `{}` obliga a
+    // quien lo lee a decidir si eso significa «ninguno» o «no se guardaron».
+    return <p className="mt-1 text-micro text-ink-faint">Sin argumentos.</p>;
+  }
+
+  const flat =
+    entries?.every(([, v]) => v === null || ['string', 'number', 'boolean'].includes(typeof v)) ===
+    true;
+
+  if (!entries || !flat) {
+    return <pre className={fallbackClassName}>{JSON.stringify(args, null, 2)}</pre>;
+  }
+
+  return (
+    <dl className="mt-1 grid gap-x-4 gap-y-1 sm:grid-cols-[auto_1fr]">
+      {entries.map(([key, value]) => (
+        <div key={key} className="contents">
+          <dt className="text-micro uppercase tracking-field text-ink-faint">{key}</dt>
+          <dd
+            className="line-clamp-3 min-w-0 break-all font-mono text-micro text-ink-muted"
+            // El valor entero al pasar por encima: lo recortado sigue estando a
+            // mano sin que un identificador de doscientos caracteres empuje la
+            // fila. Nada de `null` en el atributo, que se escribiría «null».
+            title={value === null ? undefined : String(value)}
+          >
+            {value === null
+              ? '—'
+              : typeof value === 'boolean'
+                ? value
+                  ? 'Sí'
+                  : 'No'
+                : String(value)}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
