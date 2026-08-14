@@ -286,20 +286,81 @@ const COMMITMENT_KIND_LABEL: Record<string, string> = {
   other: 'Compromiso',
 };
 
+/**
+ * Un título de archivo, dicho como lo diría una persona.
+ *
+ * ===========================================================================
+ * EL PROBLEMA, TAL CUAL SE VEÍA
+ * ===========================================================================
+ * La primera tarjeta de la primera pantalla del producto decía, textualmente:
+ *
+ *     «¿En qué quedamos en "Grabación — Aug 12, 2026, 8:57 PM.webm"? Dime
+ *      quién quedó con qué y para cuándo.»
+ *
+ * Tres renglones, y dos de ellos ocupados por el nombre que le puso el
+ * grabador: mes en inglés, hora en formato de doce y la extensión del
+ * contenedor de vídeo. Nadie llama así a una reunión. Y lo peor es que la
+ * frase humana YA ESTABA en la misma tarjeta, en la línea de procedencia, que
+ * decía «de ayer».
+ *
+ * ===========================================================================
+ * QUÉ HACE, Y QUÉ NO SE PERMITE HACER
+ * ===========================================================================
+ * La extensión se cae siempre: en una pregunta escrita en español no hay
+ * ningún caso en que `.webm` o `.pdf` aporte algo.
+ *
+ * Y cuando lo que queda es un nombre AUTOMÁTICO —el que ponen Meet, Zoom,
+ * Teams o el grabador del teléfono, reconocible porque empieza por su palabra
+ * y lleva una fecha dentro— la pregunta pasa a nombrar la reunión por su edad
+ * («la reunión de ayer»), que es como la nombraría cualquiera de los que
+ * estuvieron en ella.
+ *
+ * NO INVENTA NUNCA UN TÍTULO. Si alguien subió «Acta comité de compras», eso
+ * es lo que dice la tarjeta: un nombre puesto a mano es información, y
+ * sustituirlo por «la reunión de ayer» sería tirar la única palabra que
+ * distingue una de otra. Y el nombre real no se pierde en ningún caso — pasa
+ * a la línea de procedencia, que es donde el sistema de diseño manda poner de
+ * dónde salió un dato.
+ */
+const AUTO_RECORDING =
+  /^(grabaci[óo]n|recording|zoom|gmt\d|meet|teams|audio|video|whatsapp|voice)\b/i;
+
+export function humanDocTitle(title: string): string {
+  return title.replace(/\.(webm|mp[34]|m4a|wav|ogg|mov|pdf|docx?|pptx?|txt|md)$/i, '').trim();
+}
+
+/** Si el nombre lo puso una máquina y encima lleva una fecha dentro. */
+function looksAutoNamed(title: string): boolean {
+  const clean = humanDocTitle(title);
+  return AUTO_RECORDING.test(clean) && /\d{1,4}[-/. ]|\d{1,2}:\d{2}/.test(clean);
+}
+
 /** Los dos primeros de cada cosa, cada uno con la frase de su tipo. */
 function groundedByFamily(seeds: OpenerSeeds): Candidate[][] {
   const documents: Candidate[] = [];
   for (const doc of seeds.documents.slice(0, 2)) {
     const meeting = doc.mediaKind === 'meeting' || doc.mediaKind === 'audio';
+    const clean = humanDocTitle(doc.title);
+    const age = ageLabel(doc.createdAt);
+    // Sólo se sustituye cuando hay las dos cosas: un nombre puesto por una
+    // máquina Y una edad que decir. Sin edad no hay con qué nombrarla, y
+    // entonces vale más el nombre feo que ninguno.
+    const named = meeting && looksAutoNamed(doc.title) && age ? `la reunión ${age}` : `«${clean}»`;
     documents.push({
       id: `doc:${doc.id}`,
       // Una reunión no se pregunta como un contrato: de una se quiere el
       // acuerdo y de la otra las obligaciones, y preguntar al revés devuelve
       // una respuesta correcta que no le sirve a nadie.
       text: meeting
-        ? `¿En qué quedamos en «${doc.title}»? Dime quién quedó con qué y para cuándo.`
-        : `Resúmeme «${doc.title}» y dime qué fechas y obligaciones quedan de ahí, citando de dónde sale cada una.`,
-      hint: `${meeting ? 'Reunión' : 'Documento'} en Brain Knowledge · ${ageLabel(doc.createdAt)}`,
+        ? `¿En qué quedamos en ${named}? Dime quién quedó con qué y para cuándo.`
+        : `Resúmeme «${clean}» y dime qué fechas y obligaciones quedan de ahí, citando de dónde sale cada una.`,
+      // El nombre real vive aquí cuando la pregunta dejó de decirlo: la
+      // procedencia es exactamente el sitio donde va lo que el producto no se
+      // inventó, y así nadie pierde de vista QUÉ archivo se va a leer.
+      hint:
+        meeting && named.startsWith('la reunión')
+          ? `${clean} · Brain Knowledge`
+          : `${meeting ? 'Reunión' : 'Documento'} en Brain Knowledge · ${age}`,
       icon: meeting ? 'Mic' : 'FileText',
       tone: meeting ? 'sky' : 'primary',
       kind: 'grounded',

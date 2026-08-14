@@ -117,6 +117,29 @@ const config: Config = {
           from: { opacity: '0' },
           to: { opacity: '1' },
         },
+        /**
+         * EL FONDO DE LA CONVERSACIÓN. Ver `components/chat/AmbientField.tsx`.
+         *
+         * Dos recorridos y no uno: tres manchas con la MISMA animación y
+         * distinta duración acaban cruzándose en un patrón que el ojo aprende,
+         * y en cuanto se aprende se mira. Con dos formas distintas, duraciones
+         * primas entre sí y sentidos opuestos, la composición no se repite en
+         * toda la sesión.
+         *
+         * Sólo `transform`: es lo único que el compositor puede mover sin
+         * volver a rasterizar, y estas capas van con un desenfoque enorme
+         * encima. Animar su opacidad o su tamaño sería repintar media pantalla
+         * sesenta veces por segundo para algo que nadie debe llegar a mirar.
+         */
+        'drift-a': {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0) scale(1)' },
+          '33%': { transform: 'translate3d(6%, 4%, 0) scale(1.12)' },
+          '66%': { transform: 'translate3d(-4%, 7%, 0) scale(0.94)' },
+        },
+        'drift-b': {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0) scale(1)' },
+          '50%': { transform: 'translate3d(-7%, -5%, 0) scale(1.15)' },
+        },
       },
       animation: {
         breathe: 'breathe 3.4s ease-in-out infinite',
@@ -124,6 +147,11 @@ const config: Config = {
         halo: 'halo 2s ease-out infinite',
         blink: 'blink 1.1s ease-in-out infinite',
         veil: 'veil 150ms ease-out',
+        // Primos entre sí a propósito: 23 y 31 segundos no vuelven a coincidir
+        // hasta pasados doce minutos, que es más de lo que dura una sesión de
+        // chat. Y son lentísimos porque esto está detrás de un texto que se lee.
+        'drift-a': 'drift-a 23s ease-in-out infinite',
+        'drift-b': 'drift-b 31s ease-in-out infinite',
       },
       /**
        * THE SCALE, AND WHY THERE WAS NOT ONE.

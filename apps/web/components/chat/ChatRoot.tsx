@@ -7,12 +7,14 @@ import type { WaitingNoticeData } from '@/lib/waiting-shape';
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
-import { Brain, Menu } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
+import { AmbientField } from './AmbientField';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
+import { Presence } from './Presence';
 import { useScreenView } from './ScreenView';
 import { ThreadHistory } from './ThreadHistory';
 import { WaitingNotice } from './WaitingNotice';
@@ -345,7 +347,12 @@ export function ChatRoot({
   );
 
   return (
-    <div className="flex h-full flex-col bg-canvas">
+    <div className="relative flex h-full flex-col overflow-hidden bg-canvas">
+      {/* Detrás de todo, y ligado al turno: ver AmbientField. Va aquí y no en
+          MessageList porque el contenedor de los mensajes es el que scrollea, y
+          una capa absoluta dentro de un scroll se va con el contenido. */}
+      <AmbientField busy={isLoading} />
+
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
         <button
           type="button"
@@ -356,9 +363,12 @@ export function ChatRoot({
           <Menu className="h-5 w-5" />
         </button>
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary ring-1 ring-inset ring-primary/15">
-            <Brain className="h-3.5 w-3.5" />
-          </span>
+          {/* La misma presencia que trabaja abajo, aquí arriba y siempre a la
+              vista. En la cabecera sólo puede saber una cosa —si hay un turno
+              en marcha— y con eso basta: es el punto fijo que dice que hay
+              alguien ahí incluso cuando la conversación está en el turno
+              treinta y el indicador de abajo hace rato que no aparece. */}
+          <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
           <div className="min-w-0 leading-tight">
             <div className="truncate text-sm font-semibold text-ink">
               {activeAgent?.name ?? 'Cortex'}

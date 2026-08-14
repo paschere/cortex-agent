@@ -390,3 +390,68 @@ describe('las herramientas que se prometen existen de verdad', () => {
     expect(orphans).toEqual([]);
   });
 });
+
+/**
+ * EL NOMBRE DEL ARCHIVO NO ES EL NOMBRE DE LA REUNIÓN.
+ *
+ * La primera tarjeta de la primera pantalla del producto decía, entera:
+ * «¿En qué quedamos en "Grabación — Aug 12, 2026, 8:57 PM.webm"?». Tres
+ * renglones, dos ocupados por lo que le puso el grabador — mes en inglés, hora
+ * en formato de doce y la extensión del contenedor de vídeo.
+ *
+ * Lo que se defiende aquí es sobre todo el LÍMITE de ese arreglo: un título que
+ * escribió una persona no se toca jamás. Sustituir «Acta comité de compras» por
+ * «la reunión de ayer» sería tirar la única palabra que distingue una reunión
+ * de otra, y eso es peor que el nombre feo que esto vino a quitar.
+ */
+describe('un nombre de archivo dicho como lo diría una persona', () => {
+  const withDoc = (title: string, mediaKind: 'meeting' | 'text', days = 1) =>
+    buildOpeners(
+      seeds({
+        usableToolIds: ALL_TOOLS,
+        documents: [{ id: 'd1', title, createdAt: daysAgo(days), mediaKind }],
+      }),
+    ).openers[0];
+
+  it('una grabación automática se nombra por cuándo fue, no por su archivo', () => {
+    const card = withDoc('Grabación — Aug 12, 2026, 8:57 PM.webm', 'meeting');
+    expect(card?.text).toContain('la reunión de ayer');
+    expect(card?.text).not.toContain('.webm');
+    expect(card?.text).not.toContain('Aug');
+  });
+
+  it('pero el archivo real no se pierde: baja a la procedencia', () => {
+    const card = withDoc('Grabación — Aug 12, 2026, 8:57 PM.webm', 'meeting');
+    expect(card?.hint).toContain('Grabación — Aug 12, 2026, 8:57 PM');
+    expect(card?.hint).toContain('Brain Knowledge');
+  });
+
+  it('un título puesto a mano se respeta entero', () => {
+    const card = withDoc('Acta comité de compras', 'meeting');
+    expect(card?.text).toContain('«Acta comité de compras»');
+    expect(card?.text).not.toContain('la reunión de');
+  });
+
+  it('la extensión se cae también en un documento normal', () => {
+    const card = withDoc('Contrato Coltrans 2026.pdf', 'text');
+    expect(card?.text).toContain('«Contrato Coltrans 2026»');
+    expect(card?.text).not.toContain('.pdf');
+  });
+
+  it('sin edad que decir vale más el nombre feo que ninguno', () => {
+    const out = buildOpeners(
+      seeds({
+        usableToolIds: ALL_TOOLS,
+        documents: [
+          {
+            id: 'd1',
+            title: 'Grabación 2026-08-13.webm',
+            createdAt: 'no es una fecha',
+            mediaKind: 'meeting',
+          },
+        ],
+      }),
+    );
+    expect(out.openers[0]?.text).toContain('«Grabación 2026-08-13»');
+  });
+});

@@ -54,7 +54,11 @@ function declaredAnimations(): Set<string> {
 
   const config = readFileSync(join(WEB, 'tailwind.config.ts'), 'utf8');
   const block = config.slice(config.indexOf('animation: {'));
-  for (const m of block.slice(0, block.indexOf('},')).matchAll(/^\s{8}([a-z][\w-]*):/gm)) {
+  // Las comillas son opcionales porque un nombre con guion —`drift-a`— no es un
+  // identificador válido de JavaScript y hay que entrecomillarlo. Exigir que la
+  // clave empezara por letra dejaba fuera justo a las que llevan guion, que son
+  // las que más fácil se escriben mal.
+  for (const m of block.slice(0, block.indexOf('},')).matchAll(/^\s{8}'?([a-z][\w-]*)'?:/gm)) {
     if (m[1]) names.add(m[1]);
   }
 

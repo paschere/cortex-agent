@@ -158,13 +158,33 @@ const STEP_MS = 55;
 const CARDS_AT_MS = 120;
 const rise = (delayMs: number) => ({ animationDelay: `${delayMs}ms` });
 
+/**
+ * UNA MANDA Y LAS DEMÁS ACOMPAÑAN.
+ *
+ * Eran seis tarjetas del mismo tamaño, el mismo peso y el mismo color en una
+ * rejilla de dos columnas. Seis cosas idénticas no son seis opciones: son una
+ * pared, y el ojo no tiene por dónde entrar. La primera —que es la que el
+ * ranking de `pickOpeners` ya considera la mejor, sólo que la pantalla no lo
+ * decía— pasa a ocupar el ancho entero, con el texto un paso más grande y la
+ * baldosa más alta. Las demás quedan compactas debajo.
+ *
+ * Y la pregunta pasa de `ink-muted` a `ink`: es el contenido de la tarjeta, no
+ * su pie de foto. Estaba escrita en el tono de lo secundario mientras lo único
+ * secundario que hay ahí —la procedencia— competía con ella en atención.
+ */
 function OpenerCard({
   opener,
   index,
+  lead = false,
+  wide = false,
   onSuggestion,
 }: {
   opener: Opener;
   index: number;
+  /** La primera: ancho completo y un paso más de tipografía. */
+  lead?: boolean;
+  /** Un huérfano al final de una rejilla impar, que ocupa las dos columnas. */
+  wide?: boolean;
   onSuggestion: (text: string) => void;
 }) {
   const Icon = icon(opener.icon);
@@ -174,7 +194,9 @@ function OpenerCard({
       type="button"
       // CSS animation, not framer-motion: globals.css already neutralises it
       // under prefers-reduced-motion.
-      className="animate-rise group relative flex items-start gap-3 overflow-hidden rounded-card border border-border bg-surface p-3.5 text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-pop focus-visible:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none"
+      className={`animate-rise group relative flex items-start gap-3 overflow-hidden rounded-card border border-border bg-surface text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-pop focus-visible:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none ${
+        lead ? 'p-4 sm:col-span-2' : 'p-3.5'
+      } ${wide ? 'sm:col-span-2' : ''}`}
       style={rise(CARDS_AT_MS + index * STEP_MS)}
       onClick={() => onSuggestion(opener.text)}
     >
@@ -186,12 +208,16 @@ function OpenerCard({
         className="pointer-events-none absolute inset-0 bg-primary-soft opacity-0 transition-opacity duration-200 group-hover:opacity-60 motion-reduce:transition-none"
       />
       <span
-        className={`relative grid h-9 w-9 shrink-0 place-items-center rounded-sm ring-1 ring-inset transition-transform duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none ${tone.tile}`}
+        className={`relative grid shrink-0 place-items-center rounded-sm ring-1 ring-inset transition-transform duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none ${
+          lead ? 'h-11 w-11' : 'h-9 w-9'
+        } ${tone.tile}`}
       >
-        <Icon className="h-4 w-4" aria-hidden />
+        <Icon className={lead ? 'h-5 w-5' : 'h-4 w-4'} aria-hidden />
       </span>
       <span className="relative min-w-0 flex-1 pr-5">
-        <span className="block text-sm leading-snug text-ink-muted transition-colors duration-200 group-hover:text-ink motion-reduce:transition-none">
+        <span
+          className={`block leading-snug text-ink ${lead ? 'text-base font-medium' : 'line-clamp-3 text-sm'}`}
+        >
           {opener.text}
         </span>
         {opener.hint ? (
@@ -370,7 +396,16 @@ export function EmptyState({
               <FirstStepCard key={step.id} step={step} index={i} />
             ))
           : cards.map((opener, i) => (
-              <OpenerCard key={opener.id} opener={opener} index={i} onSuggestion={onSuggestion} />
+              <OpenerCard
+                key={opener.id}
+                opener={opener}
+                index={i}
+                lead={i === 0}
+                // El último de una cola impar ocuparía media fila y dejaría un
+                // hueco al lado, que se lee como una tarjeta que faltó cargar.
+                wide={i > 0 && i === cards.length - 1 && cards.length % 2 === 0}
+                onSuggestion={onSuggestion}
+              />
             ))}
         {/*
           Mientras llega la respuesta no se dibujan tarjetas de relleno con
@@ -383,7 +418,12 @@ export function EmptyState({
           ? [0, 1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-[74px] animate-pulse rounded-card border border-border bg-surface-2"
+                // El primero ancho, como la tarjeta que va a ocupar su sitio:
+                // si el hueco no tiene la forma del contenido, la pantalla da
+                // un salto al llegar los datos.
+                className={`animate-pulse rounded-card border border-border bg-surface-2 ${
+                  i === 0 ? 'h-[86px] sm:col-span-2' : 'h-[74px]'
+                }`}
                 style={rise(i * 140)}
               />
             ))
