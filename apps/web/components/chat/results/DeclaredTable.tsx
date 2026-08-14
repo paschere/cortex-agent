@@ -108,9 +108,47 @@ function render(value: unknown, column: TableColumn) {
     return <span className="text-ink-faint">—</span>;
   }
   if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+  if (column.kind === 'date' && typeof value === 'string')
+    return <span className="tabular">{when(value)}</span>;
   // Sin `Intl` ni formateo de moneda aquí a propósito: la herramienta ya
   // devuelve el número como quiere que se lea, con su moneda si la tiene, y
   // reformatearlo desde el navegador es cómo un total en dólares se convierte
   // en uno en pesos sin que nadie lo pida. `money` alinea; no convierte.
   return String(value);
+}
+
+const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/**
+ * Una fecha, legible, SIN convertir nunca un día de calendario en un instante.
+ *
+ * `2026-09-14` se formatea desde la cadena y jamás a través de un `Date`:
+ * parsearlo y volver a formatearlo es cómo un vencimiento del 14 aparece como
+ * el 13 para cualquiera cuyo navegador esté al oeste de Bogotá. Es la misma
+ * regla que ya escribieron `commitments/_components/format.ts` y
+ * `payments/_components/format.ts`, y la razón de que las columnas `date` no se
+ * puedan resolver con un `toLocaleDateString` y ya.
+ *
+ * Un instante completo sí es un instante, y se lee en la hora de Bogotá. Lo que
+ * no se parsea, se devuelve tal cual: una fecha que el formateador no entiende
+ * se enseña como vino, nunca como «Invalid Date».
+ */
+function when(iso: string): string {
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (day) return `${Number(day[3])} ${MONTHS[Number(day[2]) - 1] ?? day[2]} ${day[1]}`;
+
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  try {
+    const parts = new Intl.DateTimeFormat('es-CO', {
+      timeZone: 'America/Bogota',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).formatToParts(at);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+    return `${get('day')} ${get('month').replace('.', '')} ${get('year')}`;
+  } catch {
+    return iso.slice(0, 10);
+  }
 }

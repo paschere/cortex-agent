@@ -33,7 +33,12 @@ import type { CommitmentView } from './types';
  * the one that is reads instantly from across a desk.
  */
 
-const STATE_TONE: Record<CommitmentView['state'], StatusTone> = {
+/**
+ * Exportado porque el chat dibuja la misma lista y tenía que pintar los mismos
+ * colores. Una segunda copia de este mapa es una pantalla donde «vencido» es
+ * rojo y otra donde es ámbar, y a partir de ahí el color deja de significar.
+ */
+export const STATE_TONE: Record<CommitmentView['state'], StatusTone> = {
   in_force: 'emerald',
   due_soon: 'amber',
   overdue: 'rose',
@@ -238,9 +243,7 @@ export function ProposalCard({
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <div className="tabular text-base font-semibold leading-none text-ink">
-            {c.dueLabel}
-          </div>
+          <div className="tabular text-base font-semibold leading-none text-ink">{c.dueLabel}</div>
           <div className="mt-1 text-micro text-ink-faint">{whenPhrase(c.daysLeft)}</div>
         </div>
       </div>
@@ -248,9 +251,7 @@ export function ProposalCard({
       {c.source.quote && (
         <blockquote className="mt-3 rounded-sm border-l-2 border-amber/40 bg-amber-soft/40 px-3 py-2">
           <div className="field-label">Lo que dice el documento</div>
-          <p className="mt-1 font-mono text-xs leading-relaxed text-ink">
-            «{c.source.quote}»
-          </p>
+          <p className="mt-1 font-mono text-xs leading-relaxed text-ink">«{c.source.quote}»</p>
         </blockquote>
       )}
 

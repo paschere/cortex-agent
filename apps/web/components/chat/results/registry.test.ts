@@ -1,8 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { listTools } from '@cortex/agent-tools';
 import { describe, expect, it } from 'vitest';
-import { normalizeToolId, resolveView, structuralView } from './registry';
+import { RICH, TABLE, normalizeToolId, resolveView, structuralView } from './registry';
 
 /**
  * EL ESPEJO, Y POR QUÉ EXISTE DESDE EL PRIMER COMMIT.
@@ -124,3 +125,177 @@ describe('la capa estructural', () => {
     expect(view?.kind === 'table' && view.rows).toHaveLength(50);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Las tablas declaradas, contra el esquema de salida DE VERDAD
+// ---------------------------------------------------------------------------
+
+/**
+ * LA PRUEBA QUE IMPIDE UNA TABLA LLENA DE RAYAS.
+ *
+ * Una entrada de `TABLE` nombra campos: cuál trae las filas, y cuáles se
+ * enseñan. Nombrar uno que no existe NO FALLA en ninguna parte — sale una raya,
+ * en silencio, en la columna de siempre, para todo el que use esa herramienta. Y
+ * una raya es indistinguible de un dato que esa fila no traía, así que ni
+ * siquiera se lee como un fallo: se lee como «no hay».
+ *
+ * Aquí se lee el `outputSchema` real de cada herramienta —se puede, porque esto
+ * corre en Node y no en el navegador, que es la única razón por la que el
+ * registro no puede hacerlo él mismo— y se comprueba campo por campo. Este es el
+ * intercambio completo: el mapa se queda siendo datos puros, escribibles en
+ * sesenta segundos por quien conoce la herramienta y no React, PORQUE hay algo
+ * que verifica esos datos contra la fuente.
+ */
+describe('las tablas declaradas', () => {
+  const BY_ID = new Map(listTools().map((t) => [normalizeToolId(t.id), t]));
+
+  it('declara una herramienta que existe', () => {
+    const unknown = Object.keys(TABLE).filter((id) => !BY_ID.has(id));
+    expect(
+      unknown,
+      'Estas entradas de TABLE no corresponden a ninguna herramienta registrada.',
+    ).toEqual([]);
+  });
+
+  it('nombra en `rows` un campo que de verdad trae un array de filas', () => {
+    const offenders: string[] = [];
+    for (const [id, spec] of Object.entries(TABLE)) {
+      const tool = BY_ID.get(id);
+      if (!tool) continue;
+      const output = shapeOf(tool.outputSchema);
+      if (!output) {
+        offenders.push(`${id}: el outputSchema no es un objeto`);
+        continue;
+      }
+      const rows = output[spec.rows];
+      if (!rows) {
+        offenders.push(`${id}: no hay campo "${spec.rows}" en el outputSchema`);
+        continue;
+      }
+      if (!elementOf(rows)) offenders.push(`${id}: "${spec.rows}" no es un array de objetos`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('nombra en cada columna un campo que existe en la fila', () => {
+    const offenders: string[] = [];
+    for (const [id, spec] of Object.entries(TABLE)) {
+      const tool = BY_ID.get(id);
+      if (!tool) continue;
+      const output = shapeOf(tool.outputSchema);
+      const rows = output?.[spec.rows];
+      const row = rows ? elementOf(rows) : null;
+      if (!row) continue; // ya lo dice la prueba de arriba
+
+      for (const column of spec.columns) {
+        // `a.b` baja un nivel, que es lo único que `DeclaredTable` sabe hacer.
+        const [head, tail] = column.key.split('.', 2);
+        const field = row[head ?? ''];
+        if (!field) {
+          offenders.push(`${id}.${column.key}: "${head}" no existe en la fila`);
+          continue;
+        }
+        if (!tail) continue;
+        const nested = shapeOf(field);
+        if (!nested) {
+          offenders.push(`${id}.${column.key}: "${head}" no es un objeto, no se le puede bajar`);
+        } else if (!nested[tail]) {
+          offenders.push(`${id}.${column.key}: "${tail}" no existe dentro de "${head}"`);
+        }
+      }
+    }
+    expect(
+      offenders,
+      'Cada uno de estos sale como una raya en la tabla, en silencio, para siempre.',
+    ).toEqual([]);
+  });
+
+  it('cabe en el ancho de una conversación y dice algo cuando no hay nada', () => {
+    for (const [id, spec] of Object.entries(TABLE)) {
+      // Seis. Una tabla que no cabe en una burbuja de chat no es una tabla.
+      expect(
+        spec.columns.length,
+        `${id} tiene ${spec.columns.length} columnas`,
+      ).toBeLessThanOrEqual(6);
+      expect(spec.columns.length, `${id} no tiene ninguna columna`).toBeGreaterThan(0);
+      // Dos columnas con la misma clave son la misma columna dos veces, y React
+      // además pierde una de ellas por la key repetida.
+      expect(new Set(spec.columns.map((c) => c.key)).size, `${id} repite una columna`).toBe(
+        spec.columns.length,
+      );
+      // `empty` es una frase que dice QUÉ SIGNIFICA que no haya nada, no una
+      // etiqueta. "Sin resultados" no le sirve a nadie para decidir si volver a
+      // preguntar; el punto final es la prueba barata de que es una frase.
+      expect(
+        spec.empty.length,
+        `${id} tiene un vacío demasiado corto para explicar nada`,
+      ).toBeGreaterThan(30);
+      expect(spec.empty.trim().endsWith('.'), `${id}: "empty" no es una frase`).toBe(true);
+    }
+  });
+
+  it('no declara la misma herramienta en las dos capas', () => {
+    // Una herramienta con vista propia Y tabla declarada es una decisión sin
+    // tomar: `resolveView` elige siempre la vista, y la tabla queda escrita para
+    // nadie hasta que alguien la borre creyendo que hacía algo.
+    const both = Object.keys(TABLE).filter((id) => id in RICH);
+    expect(both).toEqual([]);
+  });
+});
+
+/**
+ * Zod, mirado por dentro con cuidado.
+ *
+ * Se lee `_def.typeName` en vez de usar `instanceof`: en un monorepo con pnpm no
+ * hay ninguna garantía de que el `zod` que cargó el paquete y el que carga esta
+ * prueba sean la MISMA copia, y con dos copias todo `instanceof` da falso y la
+ * prueba pasaría siempre — que es la peor forma en la que puede fallar una
+ * guardia.
+ */
+/** Lo poco que hace falta saber de un nodo de Zod para caminarlo. */
+interface Node {
+  _def?: { typeName?: string; [key: string]: unknown };
+  shape?: Record<string, unknown>;
+}
+
+function node(value: unknown): Node | null {
+  return value && typeof value === 'object' ? (value as Node) : null;
+}
+
+/** Quita envoltorios que no cambian la forma: opcional, nullable, default… */
+function unwrap(schema: unknown): Node | null {
+  let current = node(schema);
+  for (let i = 0; i < 10 && current?._def; i++) {
+    const def = current._def;
+    switch (def.typeName) {
+      case 'ZodOptional':
+      case 'ZodNullable':
+      case 'ZodDefault':
+        current = node(def.innerType);
+        break;
+      case 'ZodEffects':
+        current = node(def.schema);
+        break;
+      case 'ZodBranded':
+      case 'ZodReadonly':
+        current = node(def.type);
+        break;
+      default:
+        return current;
+    }
+  }
+  return current;
+}
+
+/** Los campos de un objeto, o `null` si no lo es. */
+function shapeOf(schema: unknown): Record<string, unknown> | null {
+  const inner = unwrap(schema);
+  return inner?._def?.typeName === 'ZodObject' ? (inner.shape ?? null) : null;
+}
+
+/** Los campos de la fila de un array de objetos, o `null`. */
+function elementOf(schema: unknown): Record<string, unknown> | null {
+  const inner = unwrap(schema);
+  if (inner?._def?.typeName !== 'ZodArray') return null;
+  return shapeOf(inner._def.type);
+}

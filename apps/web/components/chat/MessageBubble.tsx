@@ -1,24 +1,19 @@
 'use client';
 
-import { ProposedActionCard } from '@/components/actions/ProposedActionCard';
-import type { ActionView } from '@/lib/actions-shape';
 import {
   type ExercisedMandate,
   type NoticePlanEntry,
   matchExercised,
 } from '@/lib/mandates/delegation';
-import { type ScreenFrame, normalizeMarks } from '@/lib/screen-marks';
+import type { ScreenFrame } from '@/lib/screen-marks';
 import type { Message, ToolInvocation } from 'ai';
 import { Brain, Check, Copy, RotateCw } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { ChartCard } from './ChartCard';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
 import { DelegatedNotice } from './DelegatedNotice';
 import { FollowUps } from './FollowUps';
-import { ProposalCard, type ProposalResult } from './ProposalCard';
 import { ReasoningTrail } from './ReasoningTrail';
-import { ScreenMarks } from './ScreenMarks';
 import { GlanceNote } from './ScreenView';
 import { SelectionActions } from './SelectionActions';
 import { TaskRows, type TurnMetrics } from './TaskRows';
@@ -80,30 +75,6 @@ function isConfirmationSentinel(v: unknown): v is ConfirmationSentinel {
   return o.__requires_confirmation === true && typeof o.toolId === 'string';
 }
 
-function isProposalTool(toolName: string): boolean {
-  return toolName === 'sales_draft_proposal' || toolName === 'sales.draft_proposal';
-}
-
-/**
- * The turn that ends in something you can say yes to.
- *
- * `actions.propose` returns a drafted email; rendering it as a plain tool card
- * would show the JSON of a message and leave the person to go find where to
- * approve it, which is the exact gap this whole feature exists to close. So the
- * card comes up in the thread, with the text, the recipient and the buttons.
- */
-function isProposedActionTool(toolName: string): boolean {
-  return toolName === 'actions_propose' || toolName === 'actions.propose';
-}
-
-function isProposedActionResult(v: unknown): v is { action: ActionView } {
-  if (!v || typeof v !== 'object' || '__error' in v) return false;
-  const action = (v as { action?: unknown }).action;
-  if (!action || typeof action !== 'object') return false;
-  const a = action as Record<string, unknown>;
-  return typeof a.id === 'string' && typeof a.contentHash === 'string';
-}
-
 /**
  * The turn's thinking, from wherever the SDK put it.
  *
@@ -118,44 +89,6 @@ function reasoningOf(message: Message): string {
     .flatMap((p) => (p.type === 'reasoning' ? [p.reasoning] : []))
     .join('\n\n');
   return fromParts.trim() || (message.reasoning ?? '');
-}
-
-function isChartTool(toolName: string): boolean {
-  return toolName === 'reports_chart' || toolName === 'reports.chart';
-}
-
-/**
- * The turn that pointed at something on the person's screen.
- *
- * Both spellings, like every other check in this file: the AI SDK names a tool
- * with underscores while the id it was declared under keeps its dot, and an
- * archived transcript can hold either.
- */
-function isPointTool(toolName: string): boolean {
-  return toolName === 'screen_point_at' || toolName === 'screen.point_at';
-}
-
-/**
- * The tool returns an id, not a picture — the SVG would otherwise be replayed
- * into the model's context on every later turn of the conversation. `ChartCard`
- * fetches the drawing by that id.
- */
-function chartIdOf(v: unknown): string | null {
-  if (!v || typeof v !== 'object' || '__error' in v) return null;
-  const id = (v as { chartId?: unknown }).chartId;
-  return typeof id === 'string' ? id : null;
-}
-
-function isProposalResult(v: unknown): v is ProposalResult {
-  if (!v || typeof v !== 'object') return false;
-  const o = v as Record<string, unknown>;
-  return (
-    !('__error' in o) &&
-    !('__requires_confirmation' in o) &&
-    typeof o.company === 'object' &&
-    o.company !== null &&
-    Array.isArray(o.roles)
-  );
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -240,88 +173,47 @@ export function MessageBubble({
         </div>
 
         {/*
-          Tool calls now split three ways. A call whose RESULT is something the
-          person acts on — a drafted email, a proposal, a chart — keeps its own
-          card, because those are the turn's output rather than a step toward
-          it. Everything else is a step, and steps are rows: see TaskRows for
-          why twelve of them cannot be twelve cards.
+          Las llamadas se parten en dos. Una cuyo RESULTADO es sobre lo que la
+          persona actúa —un borrador, una propuesta, una cola de aprobaciones—
+          sube a tarjeta, porque es la salida del turno y no un paso hacia ella.
+          Todo lo demás es un paso, y los pasos son renglones: ver `TaskRows`
+          para por qué doce de ellos no pueden ser doce tarjetas.
+
+          QUIÉN ES CUÁL LO DICE `results/registry.tsx`, Y NADIE MÁS AQUÍ. Este
+          archivo ya no conoce el nombre de ninguna herramienta.
         */}
-        {toolInvocations && toolInvocations.length > 0 && (
-          <>
-            {(() => {
-              const cards: React.ReactNode[] = [];
-              const steps: ToolInvocation[] = [];
+        {toolInvocations &&
+          toolInvocations.length > 0 &&
+          (() => {
+            const cards: React.ReactNode[] = [];
+            const steps: ToolInvocation[] = [];
 
-              for (const inv of toolInvocations) {
-                const result =
-                  inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
+            for (const inv of toolInvocations) {
+              const result =
+                inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
 
-                if (
-                  isProposedActionTool(inv.toolName) &&
-                  result !== undefined &&
-                  isProposedActionResult(result)
-                ) {
-                  cards.push(
-                    <ProposedActionCard
-                      key={inv.toolCallId}
-                      action={result.action}
-                      dense
-                      onSettled={onConfirmed}
-                    />,
-                  );
-                  continue;
-                }
-                if (
-                  isProposalTool(inv.toolName) &&
-                  result !== undefined &&
-                  isProposalResult(result)
-                ) {
-                  cards.push(<ProposalCard key={inv.toolCallId} result={result} />);
-                  continue;
-                }
-                if (isPointTool(inv.toolName)) {
-                  // Never a step row, in either direction. With marks it is a
-                  // picture — the turn's output, like a chart. Without them the
-                  // model was told why (see pointAtResult) and said it in the
-                  // answer, and a row reading "Señalar en tu pantalla" under a
-                  // sentence that already explains it is noise about a
-                  // rectangle that does not exist.
-                  //
-                  // Re-validated here rather than trusted: this value crossed a
-                  // stream and, on a reopened conversation, a database row.
-                  const marks = normalizeMarks((result as { marks?: unknown } | undefined)?.marks);
-                  if (marks.length > 0) {
-                    cards.push(
-                      <ScreenMarks key={inv.toolCallId} marks={marks} frame={screenFrame} />,
-                    );
-                  }
-                  continue;
-                }
-                if (isChartTool(inv.toolName)) {
-                  const chartId = chartIdOf(result);
-                  if (chartId) {
-                    cards.push(
-                      <ChartCard
-                        key={inv.toolCallId}
-                        chartId={chartId}
-                        heading={(result as { heading?: string } | undefined)?.heading ?? 'Gráfico'}
-                      />,
-                    );
-                    continue;
-                  }
-                }
-
-                // EL REGISTRO, que es a donde van a parar las cuatro ramas de
-                // arriba en cuanto tenga ocho entradas corriendo en producción.
-                // Hasta entonces convive con ellas: no hay derecho a tocar el
-                // camino que ya funciona para demostrar que el nuevo también.
-                //
-                // Una entrada RICH dibuja tarjeta; una TABLE también, con la
-                // tabla que declara. Todo lo demás sigue siendo un paso — y un
-                // paso ahora se LEE al desplegarlo, porque `TaskRows` pinta el
-                // resultado con la capa estructural en vez del JSON en bruto.
-                const resolved = resolveView(inv.toolName);
-                if (result !== undefined && resolved.as === 'rich') {
+              // EL REGISTRO, Y NADA MÁS. Aquí vivían cuatro ramas `if`
+              // escritas a mano —el borrador, la propuesta, las marcas sobre
+              // la pantalla, el gráfico—, cada una con su predicado doble para
+              // las dos grafías del mismo id. Convivieron con el registro
+              // hasta que éste demostró que escalaba, que era la condición: no
+              // hay derecho a tocar el camino que ya funciona para demostrar
+              // que el nuevo también. Ahora son cuatro entradas del mapa, y
+              // este bucle no sabe el nombre de ninguna herramienta.
+              //
+              // Una entrada RICH dibuja tarjeta; una TABLE también, con la
+              // tabla que declara. Todo lo demás sigue siendo un paso — y un
+              // paso ahora se LEE al desplegarlo, porque `TaskRows` pinta el
+              // resultado con la capa estructural en vez del JSON en bruto.
+              //
+              // El resultado viaja a `resolveView` porque un puñado de vistas
+              // no pueden dibujar sin algo concreto dentro (un gráfico sin
+              // `chartId`), y ésas vuelven a ser un renglón en vez de una
+              // tarjeta vacía. Sigue sin haber ninguna decisión de dominio
+              // aquí: eso lo declara el registro.
+              if (result !== undefined) {
+                const resolved = resolveView(inv.toolName, result);
+                if (resolved.as === 'rich') {
                   const View = resolved.View;
                   cards.push(
                     <View
@@ -329,47 +221,43 @@ export function MessageBubble({
                       result={result}
                       toolCallId={inv.toolCallId}
                       onSettled={onConfirmed}
+                      screenFrame={screenFrame}
                     />,
                   );
                   continue;
                 }
-                if (result !== undefined && resolved.as === 'table') {
+                if (resolved.as === 'table') {
                   cards.push(
                     <DeclaredTable key={inv.toolCallId} spec={resolved.spec} result={result} />,
                   );
                   continue;
                 }
-
-                steps.push(inv);
               }
 
-              return (
-                <>
-                  <TaskRows
-                    invocations={steps}
-                    metrics={metrics ?? null}
-                    isStreaming={isStreaming}
-                  />
-                  {/*
+              steps.push(inv);
+            }
+
+            return (
+              <>
+                <TaskRows invocations={steps} metrics={metrics ?? null} isStreaming={isStreaming} />
+                {/*
                     Tres tarjetas es un turno bien contestado; siete es una
                     pared, que es exactamente lo que `TaskRows` existe para
                     evitar. Por encima de tres, se apilan y solo la primera
                     viene abierta.
                   */}
-                  {cards.length > 0 && <div className="space-y-1.5">{cards.slice(0, 3)}</div>}
-                  {cards.length > 3 && (
-                    <details className="mt-1.5">
-                      <summary className="cursor-pointer text-xs text-ink-muted hover:text-ink">
-                        {cards.length - 3} resultado{cards.length - 3 === 1 ? '' : 's'} más
-                      </summary>
-                      <div className="mt-1.5 space-y-1.5">{cards.slice(3)}</div>
-                    </details>
-                  )}
-                </>
-              );
-            })()}
-          </>
-        )}
+                {cards.length > 0 && <div className="space-y-1.5">{cards.slice(0, 3)}</div>}
+                {cards.length > 3 && (
+                  <details className="mt-1.5">
+                    <summary className="cursor-pointer text-xs text-ink-muted hover:text-ink">
+                      {cards.length - 3} resultado{cards.length - 3 === 1 ? '' : 's'} más
+                    </summary>
+                    <div className="mt-1.5 space-y-1.5">{cards.slice(3)}</div>
+                  </details>
+                )}
+              </>
+            );
+          })()}
 
         {/*
           Lo que se hizo sin preguntar, dicho aquí y no en administración.
