@@ -1,5 +1,6 @@
 'use client';
 
+import type { GridColumn } from '@/lib/result-grid';
 import type { ScreenFrame } from '@/lib/screen-marks';
 import dynamic from 'next/dynamic';
 import type { ComponentType } from 'react';
@@ -209,13 +210,18 @@ function field(value: unknown, key: string): unknown {
 // Capa 2 — tablas declaradas
 // ---------------------------------------------------------------------------
 
-export interface TableColumn {
-  /** Campo de cada fila. Admite `a.b` para bajar un nivel. */
-  key: string;
-  label: string;
-  /** `number` alinea a la derecha y usa cifras tabulares. */
-  kind?: 'text' | 'number' | 'date' | 'money';
-}
+/**
+ * La columna de una tabla declarada es LA MISMA que la de la rejilla que la
+ * pinta, y por eso es un alias y no una copia. Cuando `ResultGrid` aprenda a
+ * hacer algo con un `kind` nuevo, las especificaciones de aquí abajo lo tienen
+ * el mismo día; una segunda definición con los mismos campos es la manera de
+ * que dentro de tres meses una de las dos tenga un `kind` que la otra ignora.
+ *
+ * `key` admite `a.b` para bajar un nivel. `number` y `money` alinean a la
+ * derecha y ponen la cifra en monoespaciada; `money` es además lo ÚNICO que se
+ * totaliza al pie, y la razón está escrita en `lib/result-grid.ts`.
+ */
+export type TableColumn = GridColumn;
 
 export interface TableSpec {
   /** Campo del resultado que trae el array. */
@@ -651,8 +657,13 @@ export function structuralView(result: unknown): Structural {
       .filter(([, v]) => isScalar(v))
       .map(([k]) => k)
       .slice(0, 6);
+    // Las filas van ENTERAS. El corte a cincuenta lo hace `ResultGrid`, y no
+    // por pereza: recortar aquí es recortar ANTES de que nadie pueda ordenar, y
+    // entonces «ordenar por importe» ordena las cincuenta primeras y enseña el
+    // máximo de una muestra como si fuera el máximo. Se pintan cincuenta
+    // igual, y la rejilla dice cuántas hay.
     if (columns.length > 0) {
-      return { kind: 'table', rows: rows.slice(0, 50), columns, note: note ?? null };
+      return { kind: 'table', rows, columns, note: note ?? null };
     }
   }
 

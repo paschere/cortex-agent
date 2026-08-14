@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VISIBLE_ROWS } from '@/lib/result-grid';
 import { listTools } from '@cortex/agent-tools';
 import { describe, expect, it } from 'vitest';
 import { RICH, TABLE, normalizeToolId, resolveView, structuralView } from './registry';
@@ -119,10 +120,17 @@ describe('la capa estructural', () => {
     expect(view?.kind === 'fields' && view.entries).toEqual([['placa', 'ABC123']]);
   });
 
-  it('acota una lista larga en vez de pintar quinientas filas en el hilo', () => {
+  it('entrega la lista entera y deja el corte a quien la pinta', () => {
+    // El corte a cincuenta estaba AQUÍ, y era un corte antes de tiempo: quitaba
+    // las filas antes de que nadie pudiera ordenarlas, con lo que ordenar por
+    // importe ordenaba las cincuenta primeras y enseñaba el máximo de una
+    // muestra como si fuera el máximo. Sigue habiendo cincuenta en pantalla
+    // —`VISIBLE_ROWS` en `lib/result-grid.ts`, con su aviso de cuántas hay—,
+    // pero se ordenan las doscientas y se cortan después.
     const rows = Array.from({ length: 200 }, (_, i) => ({ id: String(i), n: i }));
     const view = structuralView({ rows });
-    expect(view?.kind === 'table' && view.rows).toHaveLength(50);
+    expect(view?.kind === 'table' && view.rows).toHaveLength(200);
+    expect(VISIBLE_ROWS).toBe(50);
   });
 });
 

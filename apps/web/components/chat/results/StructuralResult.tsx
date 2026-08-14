@@ -1,7 +1,7 @@
 'use client';
 
-import { clsx } from 'clsx';
 import { ChatMarkdown } from '../ChatMarkdown';
+import { ResultGrid } from './ResultGrid';
 import { type Structural, structuralView } from './registry';
 
 /**
@@ -72,56 +72,29 @@ function Rendered({ view }: { view: NonNullable<Structural> }) {
     );
   }
 
+  /*
+   * LA MISMA REJILLA QUE LA CAPA DECLARADA, Y ESA ES TODA LA TESIS.
+   *
+   * Aquí había un `<table>` escrito a mano, casi igual al de `DeclaredTable`
+   * pero no igual: otro relleno, la alineación decidida celda a celda en vez de
+   * por columna, y un aviso de corte que la otra no tenía. Ninguna de esas
+   * diferencias la decidió nadie. Lo que separa a esta capa de la declarada es
+   * que aquí NADIE SABE QUÉ ES CADA COLUMNA — y eso se nota en lo que la
+   * rejilla hace con lo que recibe, no en cómo la pinta: sin `kind` no hay
+   * fechas formateadas y no hay ningún total, porque no se puede totalizar lo
+   * que no se sabe qué es.
+   *
+   * `density="inline"` es lo único que cambia: esto vive dentro del chevron de
+   * un paso, y ahí es evidencia y no la respuesta.
+   */
   return (
     <div className="space-y-2">
       {view.note && <ToolProse text={view.note} />}
-      {/* Su propio scroll horizontal: una tabla ancha dentro de una burbuja de
-          chat no puede empujar la conversación entera de lado. */}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[320px] border-collapse text-xs">
-          <thead>
-            <tr className="border-b border-border">
-              {view.columns.map((c) => (
-                <th
-                  key={c}
-                  className="whitespace-nowrap px-2 py-1.5 text-left text-micro font-semibold uppercase tracking-field text-ink-faint"
-                >
-                  {label(c)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {view.rows.map((row, i) => (
-              <tr
-                // Sin id fiable en una forma que no conocemos: el índice es la
-                // única clave honesta, y la lista no se reordena.
-                key={`${i}-${String(row[view.columns[0] ?? ''] ?? '')}`}
-                className="border-b border-border/60 last:border-0"
-              >
-                {view.columns.map((c) => (
-                  <td
-                    key={c}
-                    className={clsx(
-                      'px-2 py-1.5 align-top text-ink',
-                      typeof row[c] === 'number' && 'tabular-nums text-right',
-                    )}
-                  >
-                    {cell(row[c])}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {view.rows.length === 50 && (
-        // Nunca cortar en silencio. Ver cincuenta filas y creer que son todas
-        // es peor que ver cincuenta y saber que hay más.
-        <p className="text-micro text-ink-faint">
-          Se muestran las primeras 50. Pídeme el resto si lo necesitas.
-        </p>
-      )}
+      <ResultGrid
+        columns={view.columns.map((c) => ({ key: c, label: label(c) }))}
+        rows={view.rows}
+        density="inline"
+      />
     </div>
   );
 }
