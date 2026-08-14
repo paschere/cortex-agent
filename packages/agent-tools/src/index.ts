@@ -70,6 +70,13 @@ export * from './documents';
 // restando pagos a facturas confirmadas, y porque un comprobante de pago es un
 // tipo de documento más — el puente lo llama documents/store al confirmar.
 export * from './payments';
+// Metas: el número contra el que se compara todo lo demás (migración 0101). Va
+// DESPUÉS de ./commitments, ./documents, ./payments, ./vehicles y ./actions
+// porque su catálogo de métricas mide exactamente esas cinco cosas y sólo
+// ofrece las que este espacio de trabajo puede calcular hoy — llega a ellas por
+// import directo del módulo hoja, así que la posición de esta línea no decide
+// nada, pero leerla en orden sí cuenta la historia.
+export * from './goals';
 // The tissue between an answer and something done about it: a drafted action
 // waiting on a human. Placed after ./commitments and ./gmail because it reads
 // commitment rows to draft from them and binds gmail.send_message to run.

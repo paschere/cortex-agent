@@ -6,6 +6,7 @@ import { devTaskStatus } from './dev-task-status';
 import { driveSync } from './drive-sync';
 import { errandRun } from './errand-run';
 import { errandSweep } from './errand-sweep';
+import { goalsWatchDispatch, goalsWatchWorkspace } from './goals-watch';
 import { ingestDocument } from './ingest-document';
 import { learningPassDispatch, learningPassWorkspace } from './learning-pass';
 import { meetingImportSweep } from './meeting-import';
@@ -23,6 +24,8 @@ export {
   actionsSweepWorkspace,
   commitmentsWatchDispatch,
   commitmentsWatchWorkspace,
+  goalsWatchDispatch,
+  goalsWatchWorkspace,
   ingestDocument,
   learningPassDispatch,
   learningPassWorkspace,
@@ -52,6 +55,8 @@ export const functions = [
   actionsSweepWorkspace,
   commitmentsWatchDispatch,
   commitmentsWatchWorkspace,
+  goalsWatchDispatch,
+  goalsWatchWorkspace,
   reindexEmbeddings,
   driveSync,
   meetingImportSweep,

@@ -83,6 +83,10 @@ const ALLOWED = new Map<string, string>([
     'Cron. "Which workspaces have deadlines to watch" spans the install; each event then carries one workspace, and every handle inside the per-workspace function is built from it.',
   ],
   [
+    'inngest/functions/goals-watch.ts',
+    'Cron. "Which workspaces have an active goal" spans the install and there is no session behind a cron; the dispatcher selects organization_id off goals and nothing else. Every id rides on its own event, and the per-workspace function builds every handle from it — so one company\'s readings can only ever be computed from that company\'s rows.',
+  ],
+  [
     'inngest/functions/weekly-report.ts',
     'Cron. "Which workspaces have somebody who answers for them" spans the install, and behind a cron there is no session to scope by; the dispatcher selects organization_id off users and nothing else. Each event then carries one workspace and runWeeklyReport takes a single scoped handle, so the parte of one company is structurally unable to read another\'s rows.',
   ],

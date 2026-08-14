@@ -324,6 +324,23 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   payments: tenant(),
   payment_reports: tenant(),
 
+  // --- Metas (migración 0101) -----------------------------------------------
+  // La cifra que alguien fijó, la lectura congelada de cada período cerrado, y
+  // el registro de haberlo avisado. Las tres llevan su propio organization_id
+  // en vez de derivar el inquilino de la meta: el cron barre las lecturas y los
+  // avisos POR ESPACIO Y POR FECHA sin nombrar ninguna meta, que es exactamente
+  // lo que una clasificación `derived` prohibiría — y con razón, porque sin la
+  // columna esa consulta cruzaría inquilinos.
+  //
+  // `goal_readings` es tenant en el sentido más fuerte que tiene el producto,
+  // igual que `usage_counters`: cada fila es un AGREGADO de los datos de un
+  // espacio, así que un filtro que faltara no enseñaría una fila ajena — pondría
+  // las cifras de una empresa en el tablero de otra, donde parecen un número y
+  // no un escape.
+  goals: tenant(),
+  goal_readings: tenant(),
+  goal_notices: tenant(),
+
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first
   // ten minutes. `usage_events` and `usage_counters` are tenant in the strongest
