@@ -268,7 +268,21 @@ export function goalInsight(goal: GoalFact): Insight | null {
   // en pantalla que se vea mal. Una comparación por fecha cuesta nada y
   // convierte un error silencioso en un imposible.
   const readings = [...goal.readings].sort((a, b) => b.periodStart.localeCompare(a.periodStart));
+
+  // LA CONSTANTE ES LA QUE MANDA, Y NO LO ERA.
+  //
+  // `MIN_READINGS` estaba exportada y documentada como la regla —«sin dos
+  // períodos cerrados no hay “frente a”»— pero lo que de verdad la aplicaba era
+  // el destructuring de abajo, que casualmente pide dos. Subirla a tres no
+  // habría cambiado absolutamente nada: una constante que describe una regla sin
+  // ser lo que la impone es peor que no tenerla, porque el siguiente que la
+  // toque creerá que cambió algo.
+  if (readings.length < MIN_READINGS) return null;
+
   const [latest, previous] = readings;
+  // Y ESTA LÍNEA NO SOBRA aunque lo parezca: `noUncheckedIndexedAccess` hace que
+  // las dos posiciones lleguen como `T | undefined`, y es lo que las estrecha.
+  // Borrarla «porque ya lo comprueba la de arriba» rompe el typecheck.
   if (!latest || !previous) return null;
 
   // `unmeasurable` es un hueco, no un incumplimiento. Un período que no se pudo

@@ -5,6 +5,7 @@ import {
   type GoalFact,
   type GoalReadingFact,
   MAX_INSIGHTS,
+  MIN_READINGS,
   MIN_SAMPLE,
   billingInsight,
   concentrationInsight,
@@ -92,6 +93,27 @@ describe('una meta sin con qué compararse no es un hallazgo', () => {
 
   it('sin ninguna lectura, nada', () => {
     expect(goalInsight(goal({ readings: [] }))).toBeNull();
+  });
+
+  /**
+   * QUE LA CONSTANTE SEA LA QUE MANDA.
+   *
+   * `MIN_READINGS` estaba exportada y documentada como la regla, pero lo que la
+   * aplicaba de verdad era el destructuring de dos posiciones — que pide dos por
+   * casualidad. Subirla a tres no habría cambiado nada, y el siguiente que la
+   * tocara habría creído que sí.
+   *
+   * Esto no comprueba un caso: comprueba que el número de arriba GOBIERNA. Con
+   * exactamente `MIN_READINGS` lecturas tiene que haber hallazgo, y con una
+   * menos no — sea cual sea el valor que alguien le ponga mañana.
+   */
+  it('el umbral que manda es la constante, no el número de posiciones que se leen', () => {
+    const periodo = (i: number) => `2026-${String(i + 1).padStart(2, '0')}-01`;
+    const justas = Array.from({ length: MIN_READINGS }, (_, i) =>
+      reading({ periodStart: periodo(i), value: 50 + i }),
+    );
+    expect(goalInsight(goal({ readings: justas }))).not.toBeNull();
+    expect(goalInsight(goal({ readings: justas.slice(0, MIN_READINGS - 1) }))).toBeNull();
   });
 
   it('un período que no se pudo medir no es ninguno de los dos extremos', () => {
