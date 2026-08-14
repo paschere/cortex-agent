@@ -580,11 +580,43 @@ export function Sidebar({
   // until then — otherwise a restored collapsed rail slides shut on every load.
   const [hydrated, setHydrated] = useState(false);
   const { open, setOpen } = useMobileSidebar();
+  const pathname = usePathname();
+
+  /**
+   * EN EL CHAT EL RAIL SE APARTA, Y SE ASOMA CUANDO LO BUSCAS.
+   *
+   * El chat es la superficie principal de este producto y 260px de menú al
+   * lado de una conversación son 260px que no son la conversación. Así que
+   * dentro de `/chat` el rail se queda en iconos con sus contadores —que es lo
+   * único que hay que poder ver de reojo, «tres cosas te esperan»— y se
+   * despliega al acercar el ratón.
+   *
+   * Y AL DESPLEGARSE FLOTA, NO EMPUJA. Es la diferencia con el rail de
+   * ChatGPT, que al abrirse mueve el hilo entero hacia la derecha: estás
+   * leyendo una respuesta, rozas el borde, y el texto se te va de sitio. Aquí
+   * el ancho reservado no cambia nunca —el `<aside>` mide siempre 56px en el
+   * chat— y lo que se expande es una capa por encima del lienzo. La
+   * conversación no se mueve ni un píxel.
+   *
+   * El botón de contraer sigue existiendo fuera del chat, y la preferencia que
+   * guarda se respeta ahí. Dentro del chat no manda: la decisión ya la tomó el
+   * sitio donde estás.
+   */
+  const inChat = pathname.startsWith('/chat');
+  const [peeking, setPeeking] = useState(false);
+  // Fuera del chat manda la preferencia; dentro, el chat.
+  const narrow = inChat ? true : collapsed;
+  const expanded = inChat ? peeking : !collapsed;
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSE_KEY) === 'true');
     setHydrated(true);
   }, []);
+
+  // Salir del chat con el rail asomado lo dejaría abierto sobre otra pantalla.
+  useEffect(() => {
+    if (!inChat) setPeeking(false);
+  }, [inChat]);
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -603,44 +635,65 @@ export function Sidebar({
           `surface-2` sat against a canvas five points away from it and read as a
           rendering artefact rather than as a different place. */}
       <aside
+        onMouseEnter={inChat ? () => setPeeking(true) : undefined}
+        onMouseLeave={inChat ? () => setPeeking(false) : undefined}
+        // El ancho RESERVADO. En el chat no cambia nunca: es lo que hace que
+        // asomarse no mueva la conversación. Fuera del chat sigue siendo el
+        // rail de siempre, con su preferencia.
         className={clsx(
-          'hidden shrink-0 flex-col border-r border-border bg-surface md:flex',
-          hydrated && 'transition-[width] duration-200 motion-reduce:transition-none',
-          collapsed ? 'w-[72px]' : 'w-[260px]',
+          'relative hidden shrink-0 md:flex',
+          hydrated && !inChat && 'transition-[width] duration-200 motion-reduce:transition-none',
+          inChat ? 'w-[56px]' : collapsed ? 'w-[72px]' : 'w-[260px]',
         )}
       >
         <div
           className={clsx(
-            'flex h-14 shrink-0 items-center justify-between px-3',
-            collapsed && 'justify-center px-0',
+            'flex h-full flex-col border-r border-border bg-surface',
+            // En el chat, la capa que se expande va POR ENCIMA del lienzo. Fuera,
+            // el rail ocupa su hueco y nada flota.
+            inChat
+              ? clsx(
+                  'absolute inset-y-0 left-0 z-40',
+                  hydrated &&
+                    'transition-[width,box-shadow] duration-200 motion-reduce:transition-none',
+                  peeking ? 'w-[260px] shadow-pop' : 'w-[56px]',
+                )
+              : 'w-full',
           )}
         >
-          <Brand collapsed={collapsed} />
-          {!collapsed && (
+          <div
+            className={clsx(
+              'flex h-14 shrink-0 items-center justify-between px-3',
+              narrow && !expanded && 'justify-center px-0',
+            )}
+          >
+            <Brand collapsed={narrow && !expanded} />
+            {!narrow && !inChat && (
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                aria-label="Contraer el menú"
+                className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+              >
+                <PanelLeftClose strokeWidth={1.75} className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {collapsed && !inChat && (
             <button
               type="button"
               onClick={toggleCollapsed}
-              aria-label="Contraer el menú"
-              className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+              aria-label="Expandir el menú"
+              className="mx-auto mb-1 rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
             >
-              <PanelLeftClose strokeWidth={1.75} className="h-4 w-4" />
+              <PanelLeftOpen strokeWidth={1.75} className="h-4 w-4" />
             </button>
           )}
+          <div className="min-h-0 flex-1">
+            <SidebarNav role={role} collapsed={!expanded} counts={counts} />
+          </div>
+          <SidebarFooter collapsed={!expanded} counts={counts} />
         </div>
-        {collapsed && (
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label="Expandir el menú"
-            className="mx-auto mb-1 rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
-          >
-            <PanelLeftOpen strokeWidth={1.75} className="h-4 w-4" />
-          </button>
-        )}
-        <div className="min-h-0 flex-1">
-          <SidebarNav role={role} collapsed={collapsed} counts={counts} />
-        </div>
-        <SidebarFooter collapsed={collapsed} counts={counts} />
       </aside>
 
       {/* Mobile: Radix Dialog drawer, always in the expanded layout. */}
