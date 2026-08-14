@@ -19,7 +19,8 @@
     "db:start": "supabase --workdir infra start",
     "db:stop": "supabase --workdir infra stop",
     "db:reset": "supabase --workdir infra db reset",
-    "db:push": "supabase --workdir infra db push"
+    "db:push": "supabase --workdir infra db push",
+    "deploy:migrate": "node scripts/deploy-migrate.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
