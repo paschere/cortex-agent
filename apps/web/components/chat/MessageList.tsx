@@ -6,9 +6,9 @@ import { toolDisplayName } from '@/lib/tool-labels';
 import type { Message } from 'ai';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from './EmptyState';
+import { LiveStatus } from './LiveStatus';
 import { MessageBubble } from './MessageBubble';
 import type { TurnMetrics } from './TaskRows';
-import { TypingIndicator } from './TypingIndicator';
 
 /**
  * What the assistant is busy with, in the user's words.
@@ -279,7 +279,15 @@ export function MessageList({
             // signal, so the dots stand down — unless a tool is in flight, in
             // which case naming it says something the reasoning does not.
             if (!label && hasReasoning(last)) return null;
-            return <TypingIndicator label={label} />;
+            // `counted` cuando hay herramienta: su fila en TaskRows ya lleva el
+            // cronómetro, y dos números para la misma espera es la medición
+            // duplicada que TaskRows rechaza por escrito. Sin herramienta no
+            // cuenta nadie, y ése es justo el silencio que hay que llenar.
+            return label ? (
+              <LiveStatus state="working" label={label} counted />
+            ) : (
+              <LiveStatus state="thinking" label="Pensando…" />
+            );
           })()}
         </div>
       )}

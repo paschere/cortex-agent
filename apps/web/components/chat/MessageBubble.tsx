@@ -7,13 +7,13 @@ import {
 } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
 import type { Message, ToolInvocation } from 'ai';
-import { Brain } from 'lucide-react';
 import { useRef } from 'react';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
 import { DelegatedNotice } from './DelegatedNotice';
 import { FollowUps } from './FollowUps';
 import { MessageActions } from './MessageActions';
+import { Presence } from './Presence';
 import { ReasoningTrail } from './ReasoningTrail';
 import { GlanceNote } from './ScreenView';
 import { SelectionActions } from './SelectionActions';
@@ -152,9 +152,33 @@ export function MessageBubble({
 
   return (
     <div className="group flex items-start gap-3">
-      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary-soft text-primary ring-1 ring-inset ring-primary/15">
-        <Brain className="h-3.5 w-3.5" />
-      </span>
+      {/*
+        LA MISMA PRESENCIA QUE ESTABA TRABAJANDO, YA CALMADA.
+
+        Era un icono de cerebro idéntico en los treinta mensajes de un hilo.
+        Ahora es `Presence`, el mismo objeto que giraba mientras se resolvía
+        este turno: no desaparece un indicador y aparece un avatar, se queda
+        quieto lo que estaba en marcha. Ver Presence.tsx.
+
+        Tres estados y sólo tres, porque son los tres que esta posición puede
+        conocer sin que nadie se los cuente:
+          · escribiendo — hay texto saliendo AHORA en este mensaje;
+          · esperándote — este mensaje contiene una confirmación sin decidir, y
+            se pone en ámbar junto a lo que está parado por tu culpa, que es
+            exactamente donde sirve de algo;
+          · quieto — todo lo demás, que es la inmensa mayoría del historial.
+      */}
+      <Presence
+        size="sm"
+        className="mt-0.5"
+        state={
+          isStreaming && content?.trim()
+            ? 'writing'
+            : confirmationData && conversationId
+              ? 'waiting'
+              : 'resting'
+        }
+      />
 
       <div className="min-w-0 flex-1">
         {/* The margin note comes before the text it annotates, and disappears

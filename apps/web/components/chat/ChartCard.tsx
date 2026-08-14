@@ -82,8 +82,8 @@ export function ChartCard({ chartId, heading }: { chartId: string; heading: stri
       <div className="mt-2 flex items-start gap-2.5 rounded-card border border-border bg-surface-2 px-3.5 py-3 text-xs text-ink-muted shadow-card">
         <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" aria-hidden />
         <span>
-          Este gráfico ya no está disponible. Los que nadie conserva se borran a los 30 días;
-          vuelve a pedirlo y queda otra vez.
+          Este gráfico ya no está disponible. Los que nadie conserva se borran a los 30 días; vuelve
+          a pedirlo y queda otra vez.
         </span>
       </div>
     );
@@ -130,10 +130,7 @@ export function ChartCard({ chartId, heading }: { chartId: string; heading: stri
           // biome-ignore lint/security/noDangerouslySetInnerHtml: produced by our own renderer, which escapes every string; see the header and reports/__tests__/render.test.ts.
           <div className="rp-doc" dangerouslySetInnerHTML={{ __html: payload.html }} />
         ) : (
-          <div
-            className="flex items-center gap-2 py-6 text-xs text-ink-faint"
-            aria-live="polite"
-          >
+          <div className="flex items-center gap-2 py-6 text-xs text-ink-faint" aria-live="polite">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
             Dibujando el gráfico…
           </div>

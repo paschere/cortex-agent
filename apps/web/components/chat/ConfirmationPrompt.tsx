@@ -86,9 +86,7 @@ export function ConfirmationPrompt({
               it is deliberately not `.field-label`. */}
           <div className="text-micro font-semibold text-amber">Confirmación requerida</div>
           <p className="mt-1 text-sm font-semibold text-ink">{summary}</p>
-          <p className="mt-1 text-xs leading-snug text-ink-muted">
-            {confirmationReason(toolId)}
-          </p>
+          <p className="mt-1 text-xs leading-snug text-ink-muted">{confirmationReason(toolId)}</p>
         </div>
       </div>
 

@@ -72,9 +72,7 @@ const MAX_QUOTE = 600;
 
 function todayInBogota(): string {
   // The date input needs `YYYY-MM-DD` in the operator's own day, not UTC's.
-  return new Date(
-    new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }),
-  )
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }))
     .toISOString()
     .slice(0, 10);
 }

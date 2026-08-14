@@ -57,6 +57,75 @@ const config: Config = {
         field: '0.12em',
       },
       /**
+       * EL MOVIMIENTO DE LA PRESENCIA — y por qué vive aquí y no en globals.css.
+       *
+       * Estos cuatro son el vocabulario de un único componente,
+       * `components/chat/Presence.tsx`, que es lo que hay al otro lado de la
+       * conversación. Cada uno responde una pregunta distinta y no son
+       * intercambiables:
+       *
+       *   `breathe`  — «sigo aquí». Late aunque no pase nada. Es lo único que
+       *                corre en reposo y por eso es el más lento y el más
+       *                tenue: un latido que se nota es un latido que cansa a la
+       *                tercera hora, y esta pantalla se abre todos los días.
+       *   `orbit`    — «estoy haciendo algo ahí fuera». Sólo con una herramienta
+       *                en vuelo. Es la única rotación de la app.
+       *   `halo`     — «estoy pensando». Un pulso que se expande y se apaga,
+       *                sin rotar, porque pensar no es ir a ninguna parte.
+       *   `blink`    — «estoy escribiendo». El cursor, y nada más.
+       *
+       * La regla del sistema de diseño («el movimiento contesta una pregunta,
+       * nunca decora») es exactamente lo que impide que sean cinco. Un estado
+       * sin movimiento propio es un estado que no hacía falta distinguir.
+       *
+       * `prefers-reduced-motion` los apaga a los cuatro desde globals.css, que
+       * ya pone `animation-duration: .01ms !important` sobre `*` — por eso son
+       * animaciones CSS y no JavaScript. Y por eso ninguno de los cinco estados
+       * puede depender SÓLO del movimiento para leerse: cada uno cambia también
+       * el color o el trazo, o desaparece para quien pidió que nada se moviera.
+       */
+      keyframes: {
+        breathe: {
+          '0%, 100%': { opacity: '0.55', transform: 'scale(0.88)' },
+          '50%': { opacity: '1', transform: 'scale(1)' },
+        },
+        orbit: {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        },
+        halo: {
+          '0%': { opacity: '0.5', transform: 'scale(0.7)' },
+          '70%, 100%': { opacity: '0', transform: 'scale(1.9)' },
+        },
+        blink: {
+          '0%, 45%': { opacity: '1' },
+          '55%, 100%': { opacity: '0.15' },
+        },
+        /**
+         * El velo de un diálogo al abrirse.
+         *
+         * No pertenece a la presencia: está aquí porque los tres diálogos de la
+         * app (`ScreenView` dos veces, `TeachFlowDialog`) pedían
+         * `data-[state=open]:animate-in fade-in`, que son clases de
+         * `tailwindcss-animate` — UN PLUGIN QUE NO ESTÁ INSTALADO NI DECLARADO.
+         * Llevaban meses abriéndose de golpe, con un `motion-reduce:animate-none`
+         * al lado protegiendo una animación inexistente, y sin un solo error en
+         * ninguna parte. Lo encontró `lib/motion-tokens.test.ts`, que existe
+         * exactamente para esto.
+         */
+        veil: {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+      },
+      animation: {
+        breathe: 'breathe 3.4s ease-in-out infinite',
+        orbit: 'orbit 1.4s linear infinite',
+        halo: 'halo 2s ease-out infinite',
+        blink: 'blink 1.1s ease-in-out infinite',
+        veil: 'veil 150ms ease-out',
+      },
+      /**
        * THE SCALE, AND WHY THERE WAS NOT ONE.
        *
        * This block did not exist, and that single omission is the whole

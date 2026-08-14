@@ -66,7 +66,7 @@ export function TeachFlowDialog({ onCompose }: { onCompose: (text: string) => vo
       </Dialog.Trigger>
 
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/25 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in motion-reduce:animate-none" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/25 backdrop-blur-[2px] data-[state=open]:animate-veil motion-reduce:animate-none" />
         <Dialog.Content className="scroll-slim fixed left-1/2 top-1/2 z-50 max-h-[86vh] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-card bg-canvas p-4 shadow-pop focus:outline-none sm:p-5">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
