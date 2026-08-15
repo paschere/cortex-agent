@@ -128,6 +128,10 @@ export const TOOL_PHRASE: Record<string, string> = {
   // escribe está comprobando de dónde salen las respuestas que recibe, y la
   // herramienta contesta con lo que sabe Y con lo que le falta.
   'company.facts': '¿Qué sabes de nuestra empresa?',
+  // Sin nombre a propósito, y sin puntos suspensivos: la pregunta entera es la
+  // que más se hace y la que enseña que el producto sabe contestarla. Quien
+  // quiera una persona concreta la escribe detrás.
+  'directory.line': '¿Quién le responde a quién?',
   'goals.list': '¿Cómo vamos con las metas?',
   'goals.measure': '¿Cómo va la meta en lo que va del período?',
   'goals.offer_metrics': '¿Qué puedes medir de esta empresa?',

@@ -3,12 +3,16 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   COMPANY_SECTIONS,
+  adaptDirectoryPerson,
+  buildOrgLine,
   hydrateCompanyFacts,
   listCompanyFacts,
+  listDirectory,
   renderCompanyFactsBlock,
 } from '@cortex/agent-tools';
 import { IdCard } from 'lucide-react';
 import { CompanyBoard } from './_components/CompanyBoard';
+import { ReportingLine } from './_components/ReportingLine';
 import type { FactView, SectionView } from './_components/types';
 
 /**
@@ -57,7 +61,10 @@ export default async function CompanyPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  const rows = await hydrateCompanyFacts(db, await listCompanyFacts(db));
+  const [rows, directory] = await Promise.all([
+    hydrateCompanyFacts(db, await listCompanyFacts(db)),
+    listDirectory(db),
+  ]);
 
   const facts: FactView[] = rows.map((r) => ({
     id: r.id,
@@ -103,6 +110,29 @@ export default async function CompanyPage() {
         // social —eso sería devolverle su propia respuesta con un sello— pero
         // sí ahorra teclearlo otra vez en el buscador, y ahí es editable.
         seedName={user.organization.name}
+      />
+
+      {/*
+        DEBAJO DE LA FICHA Y NO DENTRO DE ELLA, y ésa es la decisión.
+
+        La sección «Quién es quién» de arriba la escribe una persona a mano y
+        contesta quién DECIDE qué —incluida la gente que no tiene cuenta—. Este
+        bloque se deriva de `users.manager_id` y contesta quién RESPONDE ante
+        quién entre los que sí la tienen. Se pensó derivar la una de la otra y se
+        descartó por lo mismo que este módulo se negó a contar empleados desde
+        `users`: la jerarquía sólo cubre a quien tiene cuenta, así que venderla
+        como el «Quién es quién» de la empresa sería una cifra exacta con una
+        respuesta falsa. Van juntas y separadas, cada una diciendo lo que es.
+
+        Y no entra en el bloque del prompt: la ficha tiene un presupuesto de
+        4.000 caracteres que se paga en CADA turno de CADA superficie, y una
+        lista de nombres sería lo primero que habría que recortar. Cortex la
+        consulta cuando hace falta, con `directory.line`.
+      */}
+      <ReportingLine
+        line={buildOrgLine(directory.map(adaptDirectoryPerson))}
+        total={directory.length}
+        canEdit={user.role === 'org_admin'}
       />
     </div>
   );

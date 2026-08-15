@@ -10,10 +10,14 @@ import {
   bogotaToday,
   claimNotice,
   deriveState,
+  emailsFor,
+  escalationTarget,
   hydrate,
   listCommitments,
   listNoticesFor,
+  loadManagerMap,
   noticesOwed,
+  orgAdmins,
   recordCalendarError,
   refreshStates,
   settleNotice,
@@ -166,30 +170,54 @@ export const commitmentsWatchWorkspace = inngest.createFunction(
         notices.filter((n) => n.acknowledged_at).map((n) => `${n.commitment_id}#${n.due_on}`),
       );
 
-      const admins = await orgAdmins(db);
-      const recipients = await addressBook(db, rows);
+      // Los dos se resuelven AHORA y no se congelan en la fila: un cambio de
+      // jefe o un administrador nuevo tienen efecto esta misma noche.
+      const [admins, managers] = await Promise.all([orgAdmins(db), loadManagerMap(db)]);
 
-      const plan: PlannedNotice[] = [];
+      const plan: Omit<PlannedNotice, 'recipientEmail'>[] = [];
       for (const row of rows) {
         const owed = noticesOwedFor(row, today, acknowledged);
         for (const noticeKind of owed) {
-          // Escalation goes UP: to the named person, or to the workspace
-          // admins when nobody was named. Resolved now rather than frozen on
-          // the commitment, so a change of manager takes effect immediately.
+          // EL ESCALADO SUBE, Y AHORA SABE POR DÓNDE. Lo nombrado a mano en el
+          // compromiso gana siempre; si no, el jefe del responsable
+          // (`users.manager_id`, migración 0106); y sólo entonces el primer
+          // administrador. El orden entero, con su argumento y sus guardas,
+          // vive en `escalationTarget` — una función pura con pruebas, porque
+          // un escalado que va a la persona equivocada no se ve roto en
+          // ninguna pantalla.
           const to =
             noticeKind === 'escalation'
-              ? (row.escalate_to_user_id ?? admins[0] ?? null)
+              ? escalationTarget({
+                  escalateToUserId: row.escalate_to_user_id,
+                  ownerUserId: row.owner_user_id,
+                  managers,
+                  admins,
+                }).userId
               : (row.owner_user_id ?? admins[0] ?? null);
           plan.push({
             commitmentId: row.id,
             noticeKind,
             dueOn: row.due_on,
             recipientUserId: to,
-            recipientEmail: to ? (recipients.get(to) ?? null) : null,
           });
         }
       }
-      return plan;
+
+      // Las direcciones se buscan SOBRE EL PLAN YA RESUELTO y no sobre las
+      // filas. Antes se armaba una agenda con los responsables, los escalados
+      // nombrados y los administradores, y funcionaba porque esos tres eran
+      // todos los destinatarios posibles. En cuanto un jefe puede serlo, una
+      // agenda construida por adelantado es una lista que hay que acordarse de
+      // ampliar — y olvidarse cuesta un aviso que se registra «sin destinatario
+      // con correo» siendo mentira.
+      const recipients = await emailsFor(
+        db,
+        plan.map((p) => p.recipientUserId).filter(Boolean) as string[],
+      );
+      return plan.map((p) => ({
+        ...p,
+        recipientEmail: p.recipientUserId ? (recipients.get(p.recipientUserId) ?? null) : null,
+      }));
     });
 
     // 4. Claim, then send. The claim is what makes this safe to retry. ------
@@ -352,30 +380,11 @@ function noticesOwedFor(
   });
 }
 
-/** The people an escalation lands on when nobody was named. */
-async function orgAdmins(db: ReturnType<typeof getOrgScopedClient>): Promise<string[]> {
-  const { data } = await db.from('users').select('id').eq('role', 'org_admin').limit(10);
-  return ((data ?? []) as Array<{ id: string }>).map((u) => u.id);
-}
-
-async function addressBook(
-  db: ReturnType<typeof getOrgScopedClient>,
-  rows: CommitmentRow[],
-): Promise<Map<string, string>> {
-  const ids = [
-    ...new Set(
-      rows.flatMap((r) => [r.owner_user_id, r.escalate_to_user_id]).filter(Boolean) as string[],
-    ),
-  ];
-  const { data: admins } = await db.from('users').select('id').eq('role', 'org_admin').limit(10);
-  for (const a of (admins ?? []) as Array<{ id: string }>) ids.push(a.id);
-  if (ids.length === 0) return new Map();
-
-  const { data } = await db
-    .from('users')
-    .select('id, email')
-    .in('id', [...new Set(ids)]);
-  return new Map(
-    ((data ?? []) as Array<{ id: string; email: string }>).map((u) => [u.id, u.email]),
-  );
-}
+// `orgAdmins` y `emailsFor` vivían aquí y se mudaron a
+// packages/agent-tools/src/directory/store.ts, junto a la línea de mando que
+// ahora decide con ellas. La mudanza arregló dos cosas de paso: la consulta de
+// administradores no tenía `order by` —así que `admins[0]`, el último recurso de
+// TODO escalado que nadie nombró, lo elegía el planificador de Postgres— y
+// ninguna de las dos miraba su `error`, de modo que una base caída se leía como
+// «esta empresa no tiene administradores» y el aviso se archivaba como entregado
+// a nadie.

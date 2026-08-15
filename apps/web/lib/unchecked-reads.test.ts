@@ -56,7 +56,12 @@ const BASELINE = new Map<string, number>([
   ['app/(app)/integrations/page.tsx', 5],
   ['lib/guided-setup/store.ts', 5],
   ['inngest/functions/actions-sweep.ts', 4],
-  ['inngest/functions/commitments-watch.ts', 4],
+  // 4 → 1 el 2026-08-14: las tres lecturas de `users` que resolvían el
+  // destinatario de un aviso se mudaron a directory/store.ts y ahora miran su
+  // `error`. Importaba más que la media: una base caída se leía como «esta
+  // empresa no tiene administradores», y el aviso se archivaba como entregado a
+  // nadie.
+  ['inngest/functions/commitments-watch.ts', 1],
   ['lib/dev-tasks/linear-comment.ts', 4],
   ['lib/orchestrator/repository.ts', 4],
   ['app/(app)/conversations/[id]/page.tsx', 3],

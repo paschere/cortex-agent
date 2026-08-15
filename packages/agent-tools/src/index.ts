@@ -83,6 +83,18 @@ export * from './goals';
 // posición de esta línea no decide nada; va junto a ./goals porque son los dos
 // sitios donde una persona declara algo que después juzga o gobierna a Cortex.
 export * from './company';
+// La línea de mando (migración 0106): quién le responde a quién. Va después de
+// ./company porque contesta la otra mitad de la misma pregunta y las dos
+// cabeceras conviene leerlas juntas — «Quién es quién» dice quién DECIDE qué y
+// lo escribe una persona a mano; esto dice quién RESPONDE ante quién y sólo
+// cubre a los que tienen cuenta. Ninguna de las dos es el organigrama, y la
+// diferencia está argumentada en directory/tools.ts.
+//
+// No importa nada de ./commitments a propósito, aunque su primer consumidor sea
+// el vigilante de compromisos: la línea de mando es del directorio, no de los
+// vencimientos, y la dependencia va en el sentido correcto — quien resuelve un
+// escalado llama a `escalationTarget`, no al revés.
+export * from './directory';
 // The tissue between an answer and something done about it: a drafted action
 // waiting on a human. Placed after ./commitments and ./gmail because it reads
 // commitment rows to draft from them and binds gmail.send_message to run.

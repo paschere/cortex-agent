@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
+import { managerMapOf, setManager, wouldCycle } from '@cortex/agent-tools';
 import { absoluteTime } from '../audit/_components/format';
 import { AUDIT_ROW_CAP, fetchRosterActivity, rosterFor, WINDOW_DAYS } from './_lib/user-activity';
 
@@ -20,8 +21,12 @@ interface User {
   email: string;
   name: string | null;
   role: Role;
+  manager_id: string | null;
   created_at: string;
 }
+
+/** Valor del desplegable para «no le responde a nadie». Vacío no viaja bien. */
+const NO_MANAGER = '__nadie__';
 
 /** Roles as a person would name them, not as the column stores them. */
 const ROLE_LABEL: Record<Role, string> = {
@@ -30,21 +35,50 @@ const ROLE_LABEL: Record<Role, string> = {
   member: 'Miembro',
 };
 
+/**
+ * Los dos desplegables de la fila, en una constante y no copiados.
+ *
+ * Son dos controles que tienen que leerse como un solo bloque: en cuanto las
+ * clases se duplican, uno de los dos se queda con el borde viejo y la fila se
+ * parte por una diferencia que nadie sabe de dónde sale.
+ */
+const SELECT_CLASS =
+  'rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10';
+
 const ROLE_TAG: Record<Role, string> = {
   org_admin: 'border-primary/30 bg-primary-soft text-primary-ink',
   team_admin: 'border-sky/40 bg-sky-soft text-sky',
   member: 'border-border bg-surface-2 text-ink-muted',
 };
 
-async function setUserRole(formData: FormData) {
+/**
+ * El rol y el jefe se guardan JUNTOS, en un solo formulario por fila.
+ *
+ * No es un atajo de maquetación: son las dos cosas que definen la posición de
+ * alguien aquí dentro, y dos botones «Guardar» pegados en la misma fila hacen
+ * que uno de los dos se pulse por error y el otro se olvide. Una fila, una
+ * decisión, un guardado.
+ *
+ * Los dos cambios pasan por su propia puerta: el rol por este `update` y el jefe
+ * por `setManager`, que es el ÚNICO sitio del producto que escribe
+ * `users.manager_id` y el que comprueba que las dos personas son de este espacio
+ * y que la línea no se muerde la cola.
+ */
+async function setUserPosition(formData: FormData) {
   'use server';
   const user = await requireSession();
   if (user.role !== 'org_admin') throw new Error('forbidden');
   const userId = formData.get('userId') as string;
   const role = formData.get('role') as Role;
+  const chosen = formData.get('managerId') as string;
+  const managerId = !chosen || chosen === NO_MANAGER ? null : chosen;
+
   const sb = getOrgScopedClient(user.organization.id);
-  await sb.from('users').update({ role }).eq('id', userId);
+  const { error } = await sb.from('users').update({ role }).eq('id', userId);
+  if (error) throw new Error(`No se pudo cambiar el rol: ${error.message}`);
+  await setManager(sb, { userId, managerId });
   revalidatePath('/admin/users');
+  revalidatePath('/company');
 }
 
 export default async function UsersPage() {
@@ -53,11 +87,27 @@ export default async function UsersPage() {
 
   // Two reads for the whole roster — never one per user. See _lib/user-activity.
   const [{ data }, activity] = await Promise.all([
-    sb.from('users').select('id, email, name, role, created_at').order('created_at'),
+    sb.from('users').select('id, email, name, role, manager_id, created_at').order('created_at'),
     fetchRosterActivity(sb),
   ]);
 
   const users: User[] = (data ?? []) as User[];
+  const managers = managerMapOf(users.map((u) => ({ id: u.id, managerId: u.manager_id })));
+  const label = (u: User) => u.name?.trim() || u.email;
+  const unmanaged = users.filter((u) => !u.manager_id).length;
+
+  /**
+   * A quién puede tener de jefe esta persona.
+   *
+   * Las opciones que cerrarían un círculo NO SE OFRECEN, en vez de ofrecerse y
+   * fallar al guardar. Un desplegable que acepta una elección y luego la rechaza
+   * enseña a desconfiar del desplegable; y la regla que decide cuáles caben es
+   * la misma función pura que defiende la base de datos, no una copia.
+   */
+  const options = (u: User) =>
+    users
+      .filter((other) => other.id !== u.id && !wouldCycle(managers, u.id, other.id))
+      .sort((a, b) => label(a).localeCompare(label(b), 'es'));
   const activeCount = users.filter((u) => rosterFor(activity, u.id).lastActive).length;
   const flaggedCount = users.filter((u) => rosterFor(activity, u.id).flagged30d > 0).length;
 
@@ -89,7 +139,7 @@ export default async function UsersPage() {
                   <th className="field-label px-4 py-2.5">Última actividad</th>
                   <th className="field-label px-4 py-2.5">Marcas</th>
                   <th className="field-label px-4 py-2.5">Ingresó</th>
-                  <th className="field-label px-4 py-2.5">Cambiar el rol</th>
+                  <th className="field-label px-4 py-2.5">Rol y a quién le responde</th>
                 </tr>
               </thead>
               <tbody>
@@ -162,17 +212,30 @@ export default async function UsersPage() {
                         {new Date(u.created_at).toLocaleDateString('es-CO')}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <form action={setUserRole} className="flex items-center gap-2">
+                        <form action={setUserPosition} className="flex items-center gap-2">
                           <input type="hidden" name="userId" value={u.id} />
                           <select
                             name="role"
                             defaultValue={u.role}
-                            aria-label={`Rol de ${u.name || u.email}`}
-                            className="rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+                            aria-label={`Rol de ${label(u)}`}
+                            className={SELECT_CLASS}
                           >
                             <option value="member">{ROLE_LABEL.member}</option>
                             <option value="team_admin">{ROLE_LABEL.team_admin}</option>
                             <option value="org_admin">{ROLE_LABEL.org_admin}</option>
+                          </select>
+                          <select
+                            name="managerId"
+                            defaultValue={u.manager_id ?? NO_MANAGER}
+                            aria-label={`A quién le responde ${label(u)}`}
+                            className={SELECT_CLASS}
+                          >
+                            <option value={NO_MANAGER}>A nadie</option>
+                            {options(u).map((other) => (
+                              <option key={other.id} value={other.id}>
+                                {label(other)}
+                              </option>
+                            ))}
                           </select>
                           <Button type="submit" variant="outline">
                             Guardar
@@ -189,8 +252,8 @@ export default async function UsersPage() {
       </Panel>
 
       <p className="mt-2 text-micro leading-relaxed text-ink-faint">
-        La actividad sale de la auditoría de los últimos <span className="tabular">{WINDOW_DAYS}</span>{' '}
-        días
+        La actividad sale de la auditoría de los últimos{' '}
+        <span className="tabular">{WINDOW_DAYS}</span> días
         {activity.capped
           ? ` (con tope de ${AUDIT_ROW_CAP.toLocaleString()} eventos: en semanas cargadas verás un piso, no el total exacto)`
           : ''}
@@ -198,6 +261,32 @@ export default async function UsersPage() {
           ? ` · ${flaggedCount} ${flaggedCount === 1 ? 'persona tiene' : 'personas tienen'} algo marcado`
           : ' · nadie tiene nada marcado'}
         . Abre a una persona para ver su perfil completo.
+      </p>
+
+      {/*
+        LO QUE HACE LA COLUMNA NUEVA, DICHO DONDE SE CAMBIA.
+
+        Poner un jefe no es una etiqueta: cambia a quién le escribe Cortex
+        cuando alguien deja vencer algo. Un admin que no lo sepa está tomando
+        una decisión sobre el correo de otra persona sin saberlo, así que se
+        dice aquí y no en la documentación.
+      */}
+      <p className="mt-1 text-micro leading-relaxed text-ink-faint">
+        A quién le responde cada quien decide{' '}
+        <strong className="font-semibold text-ink-muted">a quién avisa Cortex</strong> cuando
+        alguien deja vencer un compromiso y no contesta. Si el compromiso nombró a alguien, gana
+        ese; si no, el jefe; y si tampoco hay jefe, el primer administrador.{' '}
+        {unmanaged > 0 ? (
+          <>
+            Hoy <span className="tabular">{unmanaged}</span>{' '}
+            {unmanaged === 1 ? 'persona no tiene' : 'personas no tienen'} jefe puesto, así que sus
+            escalados caen todos en el mismo buzón.
+          </>
+        ) : (
+          'Todo el mundo tiene jefe puesto.'
+        )}{' '}
+        La línea se ve entera en «Datos de la empresa», y la ve todo el equipo: nadie puede tener en
+        Cortex un jefe que no pueda ver.
       </p>
     </>
   );
