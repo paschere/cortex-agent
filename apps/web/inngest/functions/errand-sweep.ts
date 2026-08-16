@@ -140,53 +140,70 @@ export const errandSweep = inngest.createFunction(
       return candidates;
     });
 
-    // ── Abandon first, so an errand past saving is not also nudged ─────────
-    const abandoned = await step.run('abandon-lost-errands', async () => {
-      const lost = found.filter((c) => c.silentMs > ABANDON_AFTER_MS);
-      const closed: string[] = [];
-      for (const candidate of lost) {
-        try {
-          const db = getOrgScopedClient(candidate.organizationId);
-          // The freshness guard is repeated in the UPDATE rather than trusted
-          // from the scan: minutes can pass in between, and an errand that
-          // moved in that window is alive and must not be closed.
-          const { data } = await db
-            .from('errands')
-            .update({
-              state: 'failed',
-              finished_at: new Date().toISOString(),
-              closing_note:
-                '**Este encargo dejó de dar señales.**\n\nLlevaba más de dos horas sin avanzar ni ' +
-                'reportar nada, así que lo damos por perdido en vez de dejarlo diciendo que ' +
-                'trabaja. No falló por sí solo y nadie lo detuvo: lo más probable es que se haya ' +
-                'caído la infraestructura que lo movía. Lo que alcanzó a reunir quedó guardado ' +
-                'abajo. Vuelve a encargarlo cuando quieras.',
-              current_run_id: null,
-              claimed_at: null,
-              last_heartbeat_at: new Date().toISOString(),
-            })
-            .eq('id', candidate.id)
-            .in('state', ['queued', 'working', 'blocked', 'watching'])
-            .lt('last_heartbeat_at', new Date(now - ABANDON_AFTER_MS).toISOString())
-            .select('id');
-          if ((data ?? []).length > 0) {
-            closed.push(candidate.id);
-            await db
-              .from('errand_questions')
-              .update({ state: 'withdrawn' })
-              .eq('errand_id', candidate.id)
-              .eq('state', 'open');
-          }
-        } catch (err) {
-          // One workspace's problem must not stop the sweep for the rest.
-          logger.error('errand-sweep: could not close a lost errand', {
-            errandId: candidate.id,
-            error: (err as Error).message,
+    /**
+     * ── Abandon first, so an errand past saving is not also nudged ─────────
+     *
+     * Y SÓLO SI HAY ALGO QUE ABANDONAR, que no es un detalle de estilo.
+     *
+     * Este barrido corre CADA MINUTO —43.200 veces al mes— y este paso corría
+     * con él, incondicionalmente, para comprobar un umbral de DOS HORAS. En una
+     * instalación tranquila eso son ~43.000 ejecuciones de paso al mes gastadas
+     * en filtrar una lista vacía, y en Inngest lo que se factura es el paso, no
+     * el trabajo que hace.
+     *
+     * El filtro es puro y `found` ya viene memoizado del paso anterior, así que
+     * calcularlo aquí fuera no cuesta nada y no cambia ni un comportamiento: si
+     * no hay ningún encargo pasado de las dos horas, no hay paso.
+     */
+    const lost = found.filter((c) => c.silentMs > ABANDON_AFTER_MS);
+    const abandoned =
+      lost.length === 0
+        ? []
+        : await step.run('abandon-lost-errands', async () => {
+            const closed: string[] = [];
+            for (const candidate of lost) {
+              try {
+                const db = getOrgScopedClient(candidate.organizationId);
+                // The freshness guard is repeated in the UPDATE rather than trusted
+                // from the scan: minutes can pass in between, and an errand that
+                // moved in that window is alive and must not be closed.
+                const { data } = await db
+                  .from('errands')
+                  .update({
+                    state: 'failed',
+                    finished_at: new Date().toISOString(),
+                    closing_note:
+                      '**Este encargo dejó de dar señales.**\n\nLlevaba más de dos horas sin avanzar ni ' +
+                      'reportar nada, así que lo damos por perdido en vez de dejarlo diciendo que ' +
+                      'trabaja. No falló por sí solo y nadie lo detuvo: lo más probable es que se haya ' +
+                      'caído la infraestructura que lo movía. Lo que alcanzó a reunir quedó guardado ' +
+                      'abajo. Vuelve a encargarlo cuando quieras.',
+                    current_run_id: null,
+                    claimed_at: null,
+                    last_heartbeat_at: new Date().toISOString(),
+                  })
+                  .eq('id', candidate.id)
+                  .in('state', ['queued', 'working', 'blocked', 'watching'])
+                  .lt('last_heartbeat_at', new Date(now - ABANDON_AFTER_MS).toISOString())
+                  .select('id');
+                if ((data ?? []).length > 0) {
+                  closed.push(candidate.id);
+                  await db
+                    .from('errand_questions')
+                    .update({ state: 'withdrawn' })
+                    .eq('errand_id', candidate.id)
+                    .eq('state', 'open');
+                }
+              } catch (err) {
+                // One workspace's problem must not stop the sweep for the rest.
+                logger.error('errand-sweep: could not close a lost errand', {
+                  errandId: candidate.id,
+                  error: (err as Error).message,
+                });
+              }
+            }
+            return closed;
           });
-        }
-      }
-      return closed;
-    });
 
     const abandonedSet = new Set(abandoned);
     const toNudge = found.filter((c) => !abandonedSet.has(c.id));
