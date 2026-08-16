@@ -370,3 +370,17 @@ body {
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
+
+/* --- La luz que cae desde arriba de una superficie ----------------------
+   Un lavado estático, primo del `chat-sky` de arriba: atmósfera, cero
+   movimiento, cero nodos extra. Lo usan la cabecera del escritorio y el
+   vacío de Brain Knowledge. Vive DENTRO de un panel a propósito: sobre el
+   lienzo abierto un fondo recortado enseña sus bordes — se probó detrás de
+   las cabeceras de página y el filo recto de luz parecía un resaltado. */
+.desk-sky {
+  background-image: radial-gradient(
+    70% 95% at 50% 0%,
+    rgb(var(--primary) / 0.06) 0%,
+    transparent 74%
+  );
+}

@@ -3,7 +3,17 @@
 import { Panel } from '@/components/ui/panel';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
-import { Building2, ChevronRight, Loader2, Lock, Plus } from 'lucide-react';
+import {
+  BookOpen,
+  Building2,
+  ChevronRight,
+  FileUp,
+  FolderPlus,
+  Loader2,
+  Lock,
+  Plus,
+  Quote,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { focusStats } from '../_lib/view';
 import { DigestionPanel, KnowsPanel, useDigest } from './Digestion';
@@ -620,31 +630,107 @@ function SourceLegend({
   );
 }
 
-/** Kept from the old page: what a space is, said once, on a blank workspace. */
+/**
+ * The blank workspace, given a shape.
+ *
+ * The copy was always right; what was wrong was one white card floating in a
+ * thousand pixels of empty canvas. This borrows the pattern that already works
+ * on the chat's first screen: a lit mark, one sentence, ONE primary action —
+ * and under a hairline, the path ahead as a supported vertical list. The three
+ * steps are a real sequence (open a shelf, feed it, ask for the proof), which
+ * is why they read top to bottom and not as a grid of equal choices. They are
+ * drawn as rows, not cards: nothing here is clickable except the button, and a
+ * bordered card that does nothing when touched is a small lie.
+ */
 function FirstRun({ isAdmin, onCreate }: { isAdmin: boolean; onCreate: () => void }) {
   return (
-    <Panel className="px-6 py-10 text-center">
-      <p className="text-base font-bold text-ink">Este cerebro está vacío</p>
-      <p className="mx-auto mt-1.5 max-w-lg text-sm leading-relaxed text-ink-muted">
-        Aquí Cortex guarda lo que la empresa sabe: una tarifa, un instructivo, lo que se dijo en una
-        llamada. Dale el primer documento y podrá citarlo cuando alguien pregunte.
-      </p>
-      <div className="mt-4 flex justify-center">
-        <button
-          type="button"
-          onClick={onCreate}
-          className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Crear el primer espacio
-        </button>
+    <Panel className="overflow-hidden">
+      <div className="desk-sky px-5 pb-8 pt-10 text-center sm:px-6">
+        <span className="relative mx-auto grid h-14 w-14 place-items-center">
+          <span
+            aria-hidden
+            className="absolute -inset-3 rounded-pill bg-primary/25 opacity-60 blur-2xl"
+          />
+          <span className="relative grid h-14 w-14 place-items-center rounded-card bg-surface text-primary shadow-card ring-1 ring-inset ring-primary/15">
+            <BookOpen className="h-6 w-6" aria-hidden />
+          </span>
+        </span>
+        <p className="mt-5 text-lg font-bold tracking-tight text-ink">Este cerebro está vacío</p>
+        <p className="mx-auto mt-2 max-w-lg text-pretty text-sm leading-relaxed text-ink-muted">
+          Aquí Cortex guarda lo que la empresa sabe: una tarifa, un instructivo, lo que se dijo en
+          una llamada. Dale el primer documento y podrá citarlo cuando alguien pregunte.
+        </p>
+        <div className="mt-5 flex justify-center">
+          <button
+            type="button"
+            onClick={onCreate}
+            className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Crear el primer espacio
+          </button>
+        </div>
+        <p className="mx-auto mt-3 max-w-lg text-micro text-ink-faint">
+          {isAdmin
+            ? 'Un espacio propio es solo tuyo. Uno común lo lee toda la empresa.'
+            : 'Un espacio propio es solo tuyo. Para uno común, pídeselo a un administrador.'}
+        </p>
       </div>
-      <p className="mx-auto mt-3 max-w-lg text-micro text-ink-faint">
-        {isAdmin
-          ? 'Un espacio propio es solo tuyo. Uno común lo lee toda la empresa.'
-          : 'Un espacio propio es solo tuyo. Para uno común, pídeselo a un administrador.'}
-      </p>
+
+      <div className="border-t border-border px-4 py-6 sm:px-6">
+        <div className="mx-auto w-full max-w-xl">
+          <p className="field-label mb-3 text-center">Así se llena la memoria</p>
+          <ol className="space-y-1.5">
+            <FirstRunStep
+              icon={<FolderPlus className="h-4 w-4" aria-hidden />}
+              label="Abre un espacio"
+              blurb="Una estantería con nombre: «Contratos», «Tarifas», «Reuniones». Propio o común."
+              delay={0}
+            />
+            <FirstRunStep
+              icon={<FileUp className="h-4 w-4" aria-hidden />}
+              label="Dale lo que la empresa sabe"
+              blurb="Sube un PDF, graba una nota de voz, trae una carpeta de Drive o importa una reunión."
+              delay={90}
+            />
+            <FirstRunStep
+              icon={<Quote className="h-4 w-4" aria-hidden />}
+              label="Pregunta y pide la prueba"
+              blurb="Escribes una pregunta real y ves exactamente qué fragmentos usaría Cortex, con su cita."
+              delay={180}
+            />
+          </ol>
+        </div>
+      </div>
     </Panel>
+  );
+}
+
+/** One step of the path: a tinted tile and two lines, resting on the inset surface. */
+function FirstRunStep({
+  icon,
+  label,
+  blurb,
+  delay,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  blurb: string;
+  delay: number;
+}) {
+  return (
+    <li
+      className="animate-rise flex items-start gap-3 rounded-card bg-surface-2 px-3.5 py-3"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary ring-1 ring-inset ring-primary/15">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 text-left">
+        <span className="block text-sm font-semibold leading-snug text-ink">{label}</span>
+        <span className="mt-0.5 block text-xs leading-snug text-ink-muted">{blurb}</span>
+      </span>
+    </li>
   );
 }
 

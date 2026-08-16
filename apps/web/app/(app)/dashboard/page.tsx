@@ -1,6 +1,5 @@
 import { CopyButton } from '@/components/connect/ConnectCortex';
 import { Panel } from '@/components/ui/panel';
-import { Field } from '@/components/ui/provenance';
 import { readInsights } from '@/lib/insights';
 import { readJournal } from '@/lib/journal';
 import { getMcpUrl } from '@/lib/mcp-url';
@@ -136,48 +135,52 @@ export default async function DashboardPage() {
   const conversations = (convsRes.data ?? []) as unknown as ConversationRow[];
 
   const firstName = (user.name?.trim() || user.email.split('@')[0] || 'hola').split(/\s+/)[0];
+  const todayLabel = new Intl.DateTimeFormat('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'America/Bogota',
+  }).format(new Date());
 
   const mcpUrl = await getMcpUrl();
   const isAdmin = user.role === 'org_admin';
 
   return (
     <>
-      {/* Masthead: the day's figures, read as a form header. */}
-      <Panel className="animate-rise mb-4 p-5 sm:p-6">
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
-          <div className="min-w-0">
-            <div className="field-label">Espacio de trabajo</div>
-            <h1 className="mt-1 text-xl font-extrabold tracking-tight text-ink">
-              Hola, {firstName}
-            </h1>
-            {/* LA FRASE. Va aquí, pegada al saludo y antes que cualquier
-                número, porque es lo único de la pantalla que se lee sin
-                buscarlo. La escribe `summarizeWaiting` a partir de los conteos
-                y de dos hechos —qué se venció y qué lleva más esperando—; ni
-                una palabra sale de un modelo. */}
-            <p
-              className={clsx(
-                'mt-1 text-base font-semibold leading-snug',
-                waiting.total > 0 ? 'text-ink' : 'text-ink-muted',
-              )}
-            >
-              {waiting.sentence}
-            </p>
+      {/* Masthead: el escritorio abre con UNA cosa que manda — la frase. */}
+      <Panel className="animate-rise mb-4 overflow-hidden">
+        <div className="desk-sky px-5 pb-4 pt-5 sm:px-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+            <p className="text-sm font-semibold text-ink-muted">Hola, {firstName}</p>
+            <p className="tabular text-micro text-ink-faint">{todayLabel}</p>
           </div>
-          <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
-            <Field label="Herramientas hoy">{toolCallsToday.toLocaleString()}</Field>
-            <Field label="Prospectos nuevos">
-              <span className={newSignals > 0 ? 'text-amber' : undefined}>
-                {newSignals.toLocaleString()}
-              </span>
-            </Field>
-            <Field label="Por aprobar">
-              <span className={pendingApprovals > 0 ? 'text-amber' : undefined}>
-                {pendingApprovals.toLocaleString()}
-              </span>
-            </Field>
-            <Field label="Rutinas activas">{activeRoutines.toLocaleString()}</Field>
-          </div>
+          {/* LA FRASE, ahora con el cuerpo de un titular. Es lo único de la
+              pantalla que se lee sin buscarlo, así que lleva el tamaño de
+              página entero; el saludo y la fecha la acompañan en chico. La
+              escribe `summarizeWaiting` a partir de los conteos y de dos
+              hechos —qué se venció y qué lleva más esperando—; ni una palabra
+              sale de un modelo. */}
+          <h1
+            className={clsx(
+              'mt-1.5 max-w-3xl text-pretty leading-snug tracking-tight',
+              waiting.total > 0
+                ? 'text-xl font-extrabold text-ink'
+                : 'text-lg font-bold text-ink-muted',
+            )}
+          >
+            {waiting.sentence}
+          </h1>
+        </div>
+        <div className="rule-double" />
+        {/* El pulso: cuatro cifras en celdas partidas por filos de un píxel —
+            la misma retícula que usan las colas de abajo — en vez de cuatro
+            pares etiqueta-número flotando. El ámbar sólo se enciende cuando
+            la cifra pide una mirada. */}
+        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+          <PulseCell label="Herramientas hoy" value={toolCallsToday} />
+          <PulseCell label="Prospectos nuevos" value={newSignals} attention={newSignals > 0} />
+          <PulseCell label="Por aprobar" value={pendingApprovals} attention={pendingApprovals > 0} />
+          <PulseCell label="Rutinas activas" value={activeRoutines} />
         </div>
       </Panel>
 
@@ -189,8 +192,11 @@ export default async function DashboardPage() {
           izquierda, y esa asimetría era todo el problema: una pantalla que sólo
           sabe enumerar deuda de quien mira se lee como alguien que reparte
           tareas, no como alguien que las hace. Las dos columnas cuestan lecturas
-          independientes y ninguna puede tumbar a la otra. */}
-      <div className="mb-4 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+          independientes y ninguna puede tumbar a la otra.
+          El reparto es 5/4 y no mitad y mitad: lo que espera DECISIÓN manda
+          sobre lo que ya se hizo — la jerarquía del escritorio es esa — pero
+          las dos siguen a la misma altura, que es lo que las hace mitades. */}
+      <div className="mb-4 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[5fr_4fr]">
         <WaitingIndex index={waiting} />
         <DayJournal journal={journal} />
       </div>
@@ -332,27 +338,27 @@ export default async function DashboardPage() {
         </Panel>
       </div>
 
-      {/* Quick actions */}
-      <div className="mt-4">
-        <div className="field-label mb-2">Atajos</div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <QuickAction href="/chat" icon={<Sparkles className="h-4 w-4" />} label="Nuevo chat" />
-          <QuickAction
-            href="/pipelines"
-            icon={<Workflow className="h-4 w-4" />}
-            label="Ejecutar un pipeline"
-          />
-          <QuickAction
-            href="/kb"
-            icon={<BookOpen className="h-4 w-4" />}
-            label="Buscar en Brain Knowledge"
-          />
-          <QuickAction
-            href="/schedules"
-            icon={<AlarmClock className="h-4 w-4" />}
-            label="Rutinas"
-          />
-        </div>
+      {/* Atajos: una fila de píldoras, no una rejilla de tarjetas idénticas —
+          son maneras de irse de aquí, no contenido, y no pueden pesar lo mismo
+          que las colas de arriba. */}
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <span className="field-label mr-1">Atajos</span>
+        <QuickAction href="/chat" icon={<Sparkles className="h-3.5 w-3.5" />} label="Nuevo chat" />
+        <QuickAction
+          href="/pipelines"
+          icon={<Workflow className="h-3.5 w-3.5" />}
+          label="Ejecutar un pipeline"
+        />
+        <QuickAction
+          href="/kb"
+          icon={<BookOpen className="h-3.5 w-3.5" />}
+          label="Buscar en Brain Knowledge"
+        />
+        <QuickAction
+          href="/schedules"
+          icon={<AlarmClock className="h-3.5 w-3.5" />}
+          label="Rutinas"
+        />
       </div>
 
       {/* Connect Cortex anywhere — the connector URL lives here because it is the
@@ -532,11 +538,34 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className="group flex items-center gap-2.5 rounded-card border border-border bg-surface px-3.5 py-3 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
+      className="inline-flex items-center gap-1.5 rounded-pill border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:border-primary/25 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transform-none motion-reduce:transition-none"
     >
       <span className="shrink-0 text-primary">{icon}</span>
-      <span className="truncate text-sm font-semibold text-ink">{label}</span>
-      <ArrowRight className="ml-auto h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+      {label}
     </Link>
+  );
+}
+
+/**
+ * Una celda del pulso: la etiqueta que nombra y la cifra en monoespaciada
+ * (regla 3 — es un número que alguien cita). El ámbar sólo cuando la cifra
+ * espera una mirada; un cero ámbar sería una alarma sin incendio.
+ */
+function PulseCell({
+  label,
+  value,
+  attention = false,
+}: {
+  label: string;
+  value: number;
+  attention?: boolean;
+}) {
+  return (
+    <div className="bg-surface px-5 py-3">
+      <div className="field-label">{label}</div>
+      <div className={clsx('stat-num mt-0.5 text-lg', attention ? 'text-amber' : 'text-ink')}>
+        {value.toLocaleString()}
+      </div>
+    </div>
   );
 }
