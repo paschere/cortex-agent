@@ -2,7 +2,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { assertCanWriteToSpace, ensurePersonalSpace, parseDocument } from '@cortex/agent-tools';
+import {
+  assertCanWriteToSpace,
+  ensurePersonalSpace,
+  parseDocument,
+  putFile,
+  removeFiles,
+} from '@cortex/agent-tools';
 import { ForbiddenError, NotFoundError, logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -247,10 +253,16 @@ export async function POST(req: NextRequest) {
     documentId = randomUUID();
     const storagePath = `${user.id}/${documentId}/${safeName(file.name)}`;
 
-    const { error: uploadError } = await db.storage
-      .from('kb-uploads')
-      .upload(storagePath, buffer, { contentType: mime, upsert: false });
-    if (uploadError) {
+    try {
+      // Camino chico (techo de 10MB): va por la capa PostgREST normal, con el
+      // cliente scopeado que le pone el organization_id a la fila.
+      await putFile(db, {
+        bucket: 'kb-uploads',
+        path: storagePath,
+        content: buffer,
+        contentType: mime,
+      });
+    } catch {
       return NextResponse.json({ error: 'No se pudo guardar el archivo.' }, { status: 500 });
     }
 
@@ -267,9 +279,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (insertError) {
-      // Do not leave the object orphaned in the bucket: it would be billed and
+      // Do not leave the file orphaned in app_files: it would take space and be
       // unreachable, with no row that could ever point at it.
-      await db.storage.from('kb-uploads').remove([storagePath]);
+      await removeFiles(db, 'kb-uploads', [storagePath]).catch(() => {});
       return NextResponse.json({ error: 'No se pudo registrar el archivo.' }, { status: 500 });
     }
 

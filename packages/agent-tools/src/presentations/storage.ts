@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { putFile, removeFiles } from '../files/store';
 import type { ToolContext } from '../types';
 
 /**
@@ -26,7 +27,10 @@ import type { ToolContext } from '../types';
  *    random bytes and a 7-day expiry instead of an identity check.
  */
 
-/** Private bucket created in infra/supabase/migrations/0044_presentation_files.sql. */
+/**
+ * El nombre del bucket viejo (0044), conservado como valor de `app_files.bucket`
+ * ahora que los archivos viven en la base (0109) — la copia fue path→path.
+ */
 export const PRESENTATION_BUCKET = 'presentation-files';
 
 /** Long enough that a shared link stays useful for a hiring cycle, short
@@ -100,11 +104,18 @@ export async function storePdf(ctx: ToolContext, input: StoreInput): Promise<Sto
   const storagePath = `presentations/${input.candidateId}/v${input.version ?? 0}-${stamp}.pdf`;
   const expiresAt = new Date(Date.now() + DEFAULT_EXPIRY_DAYS * 86_400_000).toISOString();
 
-  const { error: uploadError } = await ctx.db.storage
-    .from(PRESENTATION_BUCKET)
-    .upload(storagePath, input.bytes, { contentType: 'application/pdf', upsert: true });
-  if (uploadError) {
-    throw new Error(`Could not store the PDF: ${uploadError.message}`);
+  try {
+    // putFile es upsert por (bucket, path) — la misma semántica que tenía el
+    // upload con upsert:true. Un PDF pesa pocos MB, así que el camino PostgREST
+    // normal alcanza de sobra.
+    await putFile(ctx.db, {
+      bucket: PRESENTATION_BUCKET,
+      path: storagePath,
+      content: input.bytes,
+      contentType: 'application/pdf',
+    });
+  } catch (err) {
+    throw new Error(`Could not store the PDF: ${(err as Error).message}`);
   }
 
   const { error: insertError } = await ctx.db.from('presentation_files').insert({
@@ -120,9 +131,9 @@ export async function storePdf(ctx: ToolContext, input: StoreInput): Promise<Sto
   });
   if (insertError) {
     try {
-      await ctx.db.storage.from(PRESENTATION_BUCKET).remove([storagePath]);
+      await removeFiles(ctx.db, PRESENTATION_BUCKET, [storagePath]);
     } catch {
-      // Best effort; the orphaned object is harmless and unreachable.
+      // Best effort; the orphaned file is harmless and unreachable.
     }
     throw new Error(`Could not register the download link: ${insertError.message}`);
   }

@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
+import { mintBlobToken } from '@/lib/blob-token';
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
-  type ToolContext,
   OVER_DOCUMENT_LIMIT_MESSAGE,
+  type ToolContext,
   checkMeter,
   createIntegrationsClient,
   driveGet,
   driveGetBytes,
   driveGetText,
+  getFile,
   isDegraded,
 } from '@cortex/agent-tools';
 import { extractDocumentData } from '@cortex/agent-tools/src/documents/ingest';
@@ -142,16 +144,21 @@ export const ingestDocumentJob: JobHandler = async ({ event, step }) => {
           .update({ transcript_status: 'transcribing', transcript_error: null })
           .eq('id', documentId);
 
-        const { data: signed, error: signError } = await sb.storage
-          .from('kb-uploads')
-          .createSignedUrl(audioPath, AUDIO_SIGNED_URL_TTL_SECONDS);
-        if (signError || !signed?.signedUrl) {
-          throw new Error(`Could not sign the recording for transcription: ${signError?.message}`);
-        }
+        // La URL firmada que antes emitía Storage la emite ahora la propia app:
+        // un token HMAC de vida corta sobre (bucket, path) que
+        // /api/files/blob/[token] verifica y sirve desde app_files. La firma y
+        // la transcripción viven en el mismo paso por la razón de siempre — que
+        // el token no expire entre una y otra.
+        const token = mintBlobToken({
+          bucket: 'kb-uploads',
+          path: audioPath,
+          expiresAt: Date.now() + AUDIO_SIGNED_URL_TTL_SECONDS * 1000,
+        });
+        const base = (process.env.APP_BASE_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
         // Deepgram fetches the audio itself. Downloading it here only to upload
         // the same bytes back would double the transfer and hold the whole file
         // in this function's heap for the length of the call.
-        return await transcribeAudio({ url: signed.signedUrl }, { logger });
+        return await transcribeAudio({ url: `${base}/api/files/blob/${token}` }, { logger });
       });
 
       if (!outcome.ok) {
@@ -206,9 +213,11 @@ export const ingestDocumentJob: JobHandler = async ({ event, step }) => {
         if (doc.source === 'upload') {
           const storagePath = doc.source_ref as string | null;
           if (!storagePath) throw new Error(`Document ${documentId} has no source_ref`);
-          const { data: file } = await sb.storage.from('kb-uploads').download(storagePath);
+          // Documento de texto (techo de 10MB): la capa PostgREST alcanza. El
+          // audio nunca pasa por aquí — lo baja Deepgram por la URL firmada.
+          const file = await getFile(sb, 'kb-uploads', storagePath);
           if (!file) throw new Error('File not found in storage');
-          const buffer = Buffer.from(await file.arrayBuffer());
+          const buffer = Buffer.from(file.content);
           const parsed = await parseDocument(buffer, doc.mime as string);
           text = parsed.text;
           pages = parsed.pages;

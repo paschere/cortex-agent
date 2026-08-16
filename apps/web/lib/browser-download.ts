@@ -1,8 +1,8 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { enqueueJob } from '@/lib/jobs';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { createHash, randomUUID } from 'node:crypto';
 import type { DocumentSink } from '@cortex/agent-tools';
-import { ensurePersonalSpace } from '@cortex/agent-tools';
+import { ensurePersonalSpace, putFile, removeFiles } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
 /**
@@ -38,7 +38,7 @@ import { logger } from '@cortex/core';
  * space afterwards is one click and it is theirs to make.
  */
 
-/** The same ceiling the bucket was created with. The service refuses above it too. */
+/** The ceiling the old bucket had (0013), kept now that files live in app_files. */
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export function browserDocumentSink(): DocumentSink {
@@ -53,12 +53,18 @@ export function browserDocumentSink(): DocumentSink {
     const safeName = file.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${context.userId}/${documentId}/${safeName}`;
 
-    const { error: uploadError } = await db.storage
-      .from('kb-uploads')
-      .upload(storagePath, bytes, { contentType: file.mimeType, upsert: false });
-    if (uploadError) {
+    try {
+      // Camino chico (techo de 10MB): la capa PostgREST normal con el cliente
+      // scopeado. Ver files/store.ts; los grandes van por lib/files-db.ts.
+      await putFile(db, {
+        bucket: 'kb-uploads',
+        path: storagePath,
+        content: bytes,
+        contentType: file.mimeType,
+      });
+    } catch (err) {
       logger.error(
-        { err: uploadError.message, flowId: context.flowId },
+        { err: (err as Error).message, flowId: context.flowId },
         'could not store a document a trámite downloaded',
       );
       return null;
@@ -94,7 +100,7 @@ export function browserDocumentSink(): DocumentSink {
       .single();
 
     if (insertError) {
-      await db.storage.from('kb-uploads').remove([storagePath]);
+      await removeFiles(db, 'kb-uploads', [storagePath]).catch(() => {});
       logger.error(
         { err: insertError.message, flowId: context.flowId },
         'could not register a document a trámite downloaded',

@@ -69,7 +69,7 @@ const BASELINE = new Map<string, number>([
   ['app/api/chat-app/google/route.ts', 3],
   ['app/api/mcp/route.ts', 3],
   ['app/api/whatsapp/bridge/group-mention/route.ts', 3],
-  ['inngest/functions/ingest-document.ts', 3],
+  ['inngest/functions/ingest-document.ts', 2],
   ['inngest/functions/schedule-run.ts', 3],
   ['lib/dev-work-notify.ts', 3],
   ['app/(app)/admin/users/[id]/page.tsx', 2],

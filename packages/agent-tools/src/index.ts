@@ -16,6 +16,9 @@ export * from './tool-error';
 // The workspace boundary. Exported early and from a leaf module (it imports
 // nothing from this package) so anything below can reach it without a cycle.
 export * from './tenancy';
+// La capa de archivos (app_files, migración 0109). Módulo hoja y puro — no
+// registra herramientas — exportado temprano por la misma razón que tenancy.
+export * from './files';
 export * from './model';
 export { writeAuditEvent } from './audit';
 export { consumeToken } from './rate-limit';

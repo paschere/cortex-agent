@@ -1,4 +1,5 @@
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
+import { getFile } from '@cortex/agent-tools/src/files/store';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -95,16 +96,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
     );
   }
 
-  // Bucket declared in infra/supabase/migrations/0044_presentation_files.sql and
-  // mirrored as PRESENTATION_BUCKET in agent-tools' presentations/storage.ts.
-  // Kept as a literal here so a download never drags the whole tool registry
-  // (and its side-effect registrations) into this route's bundle.
-  const { data: file, error: downloadError } = await sb.storage
-    .from('presentation-files')
-    .download(row.storage_path);
-
-  if (downloadError || !file) {
-    console.error('[files/presentation] storage read failed:', downloadError?.message);
+  // Bucket name mirrored as PRESENTATION_BUCKET in agent-tools'
+  // presentations/storage.ts; since migration 0109 it is a value of
+  // `app_files.bucket` rather than a Storage bucket. Kept as a literal here —
+  // and getFile imported from the leaf module rather than the package index —
+  // so a download never drags the whole tool registry (and its side-effect
+  // registrations) into this route's bundle.
+  let file: Awaited<ReturnType<typeof getFile>>;
+  try {
+    file = await getFile(sb, 'presentation-files', row.storage_path);
+  } catch (err) {
+    console.error('[files/presentation] file read failed:', (err as Error).message);
+    return problem('The file behind this link is no longer available.', 404);
+  }
+  if (!file) {
     return problem('The file behind this link is no longer available.', 404);
   }
 
@@ -118,7 +123,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
       if (bumpError) console.error('[files/presentation] counter bump failed:', bumpError.message);
     });
 
-  const bytes = await file.arrayBuffer();
+  const bytes = file.content;
 
   return new NextResponse(bytes, {
     status: 200,

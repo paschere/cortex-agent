@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readBrain } from '@/app/(app)/kb/_lib/brain';
+import { putFileDirect, removeFilesDirect } from '@/lib/files-db';
 import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -33,10 +34,10 @@ const AUDIO_MIME_TYPES = new Set([
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 /**
- * An hour-long call is tens of megabytes compressed. Matches the bucket's own
- * limit set in 0058 — checked here too so the person gets a sentence instead
- * of a storage error, and so an oversized upload is rejected before the bytes
- * are pushed anywhere.
+ * An hour-long call is tens of megabytes compressed. Was the bucket's own
+ * limit (0058) when files lived in Storage; now that they live in app_files
+ * (0109) this check IS the ceiling, and it still rejects an oversized upload
+ * with a sentence before the bytes are pushed anywhere.
  */
 const MAX_AUDIO_SIZE = 200 * 1024 * 1024; // 200MB
 
@@ -156,12 +157,21 @@ export async function POST(req: NextRequest) {
   const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `${session.id}/${documentId}/${safeFileName}`;
 
-  const { error: uploadError } = await sb.storage
-    .from('kb-uploads')
-    .upload(storagePath, buffer, { contentType: mime, upsert: false });
-  if (uploadError) {
+  // Por pg directo y no por la capa PostgREST de agent-tools: este camino
+  // acepta audio de hasta 200MB, que en hex serían 400MB de JSON — ver el
+  // argumento en lib/files-db.ts. La ruta se conserva idéntica a la que usaba
+  // Storage, así que todo lo que la lee (ingest, la mudanza) sigue igual.
+  try {
+    await putFileDirect({
+      organizationId: session.organization.id,
+      bucket: 'kb-uploads',
+      path: storagePath,
+      content: buffer,
+      contentType: mime,
+    });
+  } catch (err) {
     return NextResponse.json(
-      { error: `Storage upload failed: ${uploadError.message}` },
+      { error: `Storage upload failed: ${(err as Error).message}` },
       { status: 500 },
     );
   }
@@ -208,8 +218,8 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (insertError) {
-    // Attempt to clean up orphaned storage object
-    await sb.storage.from('kb-uploads').remove([storagePath]);
+    // Attempt to clean up orphaned file row
+    await removeFilesDirect('kb-uploads', [storagePath]).catch(() => {});
     return NextResponse.json(
       { error: `DB insert failed: ${insertError.message}` },
       { status: 500 },

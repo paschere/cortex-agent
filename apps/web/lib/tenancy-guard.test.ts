@@ -139,6 +139,10 @@ const ALLOWED = new Map<string, string>([
     'Cron. "Which errands anywhere in the install need a look, and which monitors are due" spans every workspace and there is no session behind a cron; the raw handle runs two SELECTs and every write goes through a handle pinned to the errand\'s own workspace.',
   ],
   [
+    'app/api/admin/storage-migrate/route.ts',
+    'El puente de mudanza de Supabase Storage a app_files (0109), y el único sitio donde .storage sobrevive. Storage no sabe de espacios, así que listar los buckets exige el cliente crudo; cada archivo copiado lleva el organization_id resuelto del dato que ya lo conocía, y la ruta muere con Supabase.',
+  ],
+  [
     'app/api/whatsapp/links/route.ts',
     'whatsapp_links is keyed by the phone number install-wide, so "already linked somewhere else" is invisible to a scoped read and would surface as a constraint error instead of an explanation. One read, for that message only; the write is scoped.',
   ],

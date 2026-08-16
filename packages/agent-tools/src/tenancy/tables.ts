@@ -212,6 +212,13 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   vehicle_fines: tenant(),
   vehicle_consults: derived('vehicles', 'vehicle_id'),
   presentation_files: tenant(),
+  // Los archivos del producto, antes en Supabase Storage (migración 0109). La
+  // fila ES el contenido — el PDF de un candidato, el audio de una reunión — o
+  // sea, exactamente la cosa a proteger, así que lleva el espacio encima.
+  // Tenant y no `derived` de la fila que lo describe (kb_documents,
+  // presentation_files) porque un archivo se lee por (bucket, path) sin nombrar
+  // esa fila, que es lo que una clasificación `derived` prohibiría.
+  app_files: tenant(),
 
   // --- Trámites web (migration 0087) ----------------------------------------
   // Errands on third-party portals, taught from a screen recording and replayed
