@@ -82,6 +82,34 @@ if (!dbUrl) {
   process.exit(1);
 }
 
+/**
+ * POR LA CONEXIÓN DE SESIÓN, NUNCA POR EL POOLER DE TRANSACCIONES.
+ *
+ * ===========================================================================
+ * EL FALLO QUE TUMBÓ DOS DESPLIEGUES SEGUIDOS
+ * ===========================================================================
+ * `SUPABASE_DB_URL` en Vercel apunta al pooler en modo transacción (puerto
+ * 6543), porque eso es lo correcto PARA LA APLICACIÓN: cientos de funciones
+ * serverless compartiendo pocas conexiones. Pero el CLI de migraciones usa
+ * sentencias preparadas, y en modo transacción cada consulta puede aterrizar
+ * en un backend distinto que ya tiene una preparada con el mismo nombre:
+ *
+ *     ERROR: prepared statement "lrupsc_1_0" already exists (SQLSTATE 42P05)
+ *
+ * Y es INTERMITENTE — depende de en qué backend caigas—, que es la peor
+ * variante: un despliegue pasó y los dos siguientes fallaron, con el mismo
+ * código y la misma base. Producción se quedó dos arreglos atrás y el dueño
+ * lo descubrió usando el producto, otra vez.
+ *
+ * El modo sesión del mismo pooler (puerto 5432) mantiene tu conexión pegada a
+ * un backend, así que las sentencias preparadas funcionan. Para UNA conexión
+ * que dura lo que dura un `db push`, es exactamente el modo correcto. Sólo se
+ * reescribe el puerto: si la URL ya no es del pooler, se queda como está.
+ */
+const migrateUrl = dbUrl.replace(/:6543\//, ':5432/');
+if (migrateUrl !== dbUrl)
+  log('migrando por la conexión de sesión (:5432), no por el pooler de transacciones.');
+
 log('aplicando las migraciones pendientes en producción…');
 
 const result = spawnSync(
@@ -97,7 +125,7 @@ const result = spawnSync(
     // iniciada ni `infra/.temp`, y no debería necesitarla. La URL ya está en el
     // entorno porque la aplicación la usa.
     '--db-url',
-    dbUrl,
+    migrateUrl,
     // Sin `--include-all` a propósito: aplicar migraciones que quedaron fuera de
     // orden es una decisión que toma una persona mirando, no un build.
   ],
