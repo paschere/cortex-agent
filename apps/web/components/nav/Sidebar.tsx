@@ -754,29 +754,23 @@ export function Sidebar({
    * sitio donde estás.
    *
    * ===========================================================================
-   * SALVO A PARTIR DE 1280px, DONDE EL ARGUMENTO DEJA DE SER CIERTO
+   * SIEMPRE ESTRECHO AQUÍ, Y LO DECIDIÓ EL DUEÑO
    * ===========================================================================
-   * «260px que no son la conversación» supone que la conversación se los iba a
-   * quedar, y no se los queda: el hilo está topado a `max-w-3xl` —768px— en
-   * MessageList y en el compositor. Medido en un portátil de 1440: descontado
-   * el rail de 56px quedan 1384px de lienzo para 768px de hilo, o sea 300px de
-   * margen vacío a cada lado. Ensanchar el rail a 260 deja 1124, que sigue
-   * sobrando: el hilo no se estrecha ni un píxel, sólo se recentra.
+   * Hubo una versión que lo ensanchaba a partir de 1280px, con un argumento que
+   * medía bien y concluía mal: el hilo está topado a 768px, así que ensanchar el
+   * rail no le quita un píxel — sólo lo recentra. Cierto, y da igual.
    *
-   * Y lo que se pagaba a cambio se veía: diez iconos sin una palabra, en
-   * columna, permanentes. Asomarse los nombra, pero hay que descubrir que el
-   * rail se asoma — y nadie pasa el ratón por una columna que ya dio por
-   * decorativa. A 1440px el ahorro era imaginario y el jeroglífico era real.
+   * Lo que ese razonamiento no pesaba es que el chat es la superficie donde se
+   * está TRABAJANDO, y una columna de nombres al lado compite por la atención
+   * aunque no compita por los píxeles. El dueño lo probó y lo dijo en una línea:
+   * en el chat, cerrado siempre. Es su producto y es la clase de cosa que se
+   * decide mirándola, no midiéndola.
    *
-   * Por debajo de 1280 el argumento original vuelve a valer entero y el rail
-   * vuelve a los 56px con su asomo. El corte es una consulta de medios y no un
-   * breakpoint de Tailwind porque aquí gobierna dos booleanos de React, no una
-   * clase; llega después de hidratar, igual que la preferencia de contraer, y
-   * por eso comparte con ella la espera de la animación.
+   * Así que aquí no hay preferencia que valga ni consulta de medios: iconos con
+   * sus contadores, y los nombres a un roce del ratón.
    */
   const inChat = pathname.startsWith('/chat');
   const [peeking, setPeeking] = useState(false);
-  const [roomy, setRoomy] = useState(false);
   /**
    * En el chat: ancho si cabe Y SI NO LO CERRASTE. Fuera del chat manda la
    * preferencia, como siempre.
@@ -793,24 +787,12 @@ export function Sidebar({
    * decisión explícita de la persona gana siempre. Al revés —que el tamaño de
    * la ventana revoque un clic— es lo que acaba de pasar.
    */
-  const chatWide = inChat && roomy && !collapsed;
-  const narrow = inChat ? !chatWide : collapsed;
-  const expanded = inChat ? chatWide || peeking : !collapsed;
+  const narrow = inChat || collapsed;
+  const expanded = inChat ? peeking : !collapsed;
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSE_KEY) === 'true');
     setHydrated(true);
-  }, []);
-
-  // Se re-evalúa al cambiar el tamaño: alguien que parte la pantalla en dos a
-  // media conversación tiene que recuperar sus 200px, no quedarse con la
-  // decisión que se tomó cuando la ventana estaba entera.
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1280px)');
-    const apply = () => setRoomy(mq.matches);
-    apply();
-    mq.addEventListener('change', apply);
-    return () => mq.removeEventListener('change', apply);
   }, []);
 
   // Salir del chat con el rail asomado lo dejaría abierto sobre otra pantalla.
@@ -835,17 +817,15 @@ export function Sidebar({
           `surface-2` sat against a canvas five points away from it and read as a
           rendering artefact rather than as a different place. */}
       <aside
-        onMouseEnter={inChat && !roomy ? () => setPeeking(true) : undefined}
-        onMouseLeave={inChat && !roomy ? () => setPeeking(false) : undefined}
+        onMouseEnter={inChat ? () => setPeeking(true) : undefined}
+        onMouseLeave={inChat ? () => setPeeking(false) : undefined}
         // El ancho RESERVADO. En el chat estrecho no cambia nunca: es lo que
         // hace que asomarse no mueva la conversación. En el chat ancho el rail
         // reserva sus 260px y ya no se asoma nada, porque ya está abierto.
         className={clsx(
           'relative hidden shrink-0 md:flex',
-          hydrated &&
-            !(inChat && !roomy) &&
-            'transition-[width] duration-200 motion-reduce:transition-none',
-          chatWide ? 'w-[260px]' : inChat ? 'w-[56px]' : collapsed ? 'w-[72px]' : 'w-[260px]',
+          hydrated && !inChat && 'transition-[width] duration-200 motion-reduce:transition-none',
+          inChat ? 'w-[56px]' : collapsed ? 'w-[72px]' : 'w-[260px]',
         )}
       >
         <div
@@ -854,7 +834,7 @@ export function Sidebar({
             // En el chat estrecho, la capa que se expande va POR ENCIMA del
             // lienzo. En el chat ancho y fuera del chat, el rail ocupa su hueco
             // y nada flota — no hay nada que flotar, está abierto.
-            inChat && !roomy
+            inChat
               ? clsx(
                   'absolute inset-y-0 left-0 z-40',
                   hydrated &&
@@ -871,7 +851,6 @@ export function Sidebar({
             )}
           >
             <Brand collapsed={narrow && !expanded} />
-            {/* También dentro del chat: ahí es donde faltaba. */}
             {!narrow && (
               <button
                 type="button"
@@ -883,13 +862,7 @@ export function Sidebar({
               </button>
             )}
           </div>
-          {/*
-            Fuera del chat, siempre que esté contraído. Dentro del chat sólo si
-            además CABE abrirlo: por debajo de 1280 el rail es estrecho porque no
-            hay sitio, no porque nadie lo haya cerrado, y un botón que promete
-            ensanchar algo que no cabe es una promesa falsa. Ahí sigue el asomo.
-          */}
-          {collapsed && (!inChat || roomy) && (
+          {collapsed && !inChat && (
             <button
               type="button"
               onClick={toggleCollapsed}
