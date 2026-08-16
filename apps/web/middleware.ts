@@ -32,6 +32,15 @@ const PUBLIC_PATHS = [
   // Inngest Cloud calls this to sync/invoke functions; it authenticates with
   // the INNGEST_SIGNING_KEY, not a session cookie.
   '/api/inngest',
+  // El worker de pg-boss (services/jobs en Railway) ejecuta los trabajos
+  // llamando aquí con un bearer JOBS_SECRET comparado en tiempo constante —
+  // es un servicio, no un navegador, así que no tiene cookie de sesión. Sin
+  // JOBS_SECRET configurado, la ruta responde 404 a todo.
+  '/api/jobs/run',
+  // Los blobs de app_files se autorizan por su propio token HMAC de vida
+  // corta (Deepgram baja el audio desde afuera, sin cookie) — el mismo
+  // trato que /api/files/presentation y por la misma razón.
+  '/api/files/blob',
   // Google Chat posts events here signed with a Bearer JWT from
   // chat@system.gserviceaccount.com — no session cookie exists. The route
   // verifies that signature itself and rejects anything unsigned.

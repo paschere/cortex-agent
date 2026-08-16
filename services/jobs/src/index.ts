@@ -71,6 +71,15 @@ async function invokeApp(job: JobSpec, data: unknown): Promise<void> {
       const body = await res.text().catch(() => '');
       throw new Error(`la app contestó ${res.status} para ${job.name}: ${body.slice(0, 500)}`);
     }
+    // Un 200 no basta: si un middleware o un proxy redirige a una página HTML
+    // (pasó el 16 de agosto de 2026 con el middleware de sesión), fetch sigue
+    // la redirección y "triunfa" contra la pantalla de login. El puente
+    // contesta JSON con `ok` o `skipped`; cualquier otra cosa es un fallo
+    // aunque venga con 200.
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; skipped?: string } | null;
+    if (!body || (body.ok !== true && typeof body.skipped !== 'string')) {
+      throw new Error(`la app contestó 200 para ${job.name} pero no con la forma del puente`);
+    }
   } finally {
     clearTimeout(timer);
   }
