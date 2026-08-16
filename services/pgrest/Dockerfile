@@ -31,7 +31,10 @@ FROM debian:bookworm-slim
 ARG POSTGREST_VERSION=v12.2.12
 ARG TARGETARCH
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates xz-utils \
+# libpq5: el binario de x86-64 es estático y no lo necesita, pero el de
+# aarch64 (donde se ensaya en local) enlaza dinámico contra libpq. Cuesta
+# unos KB y hace que la MISMA imagen corra en las dos arquitecturas.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates xz-utils libpq5 \
   && ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "ubuntu-aarch64" || echo "linux-static-x86-64") \
   && curl -fsSL -o /tmp/pgrst.tar.xz \
     "https://github.com/PostgREST/postgrest/releases/download/${POSTGREST_VERSION}/postgrest-${POSTGREST_VERSION}-${ARCH}.tar.xz" \
