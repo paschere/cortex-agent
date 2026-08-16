@@ -47,7 +47,26 @@ import { logger } from '@cortex/core';
  * sees the next stage start, and long enough that a healthy errand is nudged a
  * dozen times over a forty-minute leg rather than hundreds.
  */
-const CRON = '* * * * *';
+/**
+ * CADA CINCO MINUTOS, Y YA NO CADA UNO.
+ *
+ * Corría cada minuto por una razón buena que ya no aplica: este barrido ERA
+ * como arrancaba un encargo pedido hablando, porque `errands.start` vive en
+ * `agent-tools` y esa biblioteca a propósito no depende de Inngest. Esperar
+ * cinco minutos entre «investígame esto» y que pasara algo era inaceptable.
+ *
+ * Ahora el arranque lo dispara `/api/chat` al terminar el turno —la ruta sí
+ * puede mandar el evento, y es lo que `/api/errands` ya hacía cuando el
+ * encargo nace por la API—, así que esto vuelve a ser lo que su nombre dice:
+ * una RED DE SEGURIDAD. Y una red de seguridad no necesita mirar sesenta veces
+ * por hora.
+ *
+ * Lo que cuesta: si el evento no sale, un encargo puede tardar hasta cinco
+ * minutos en arrancar en vez de uno. Lo que ahorra: ~34.500 ejecuciones de
+ * paso al mes, en un producto donde Inngest factura el paso y más del 99% de
+ * estos no encontraban nada.
+ */
+const CRON = '*/5 * * * *';
 
 /**
  * Silence after which a live errand gets a look.

@@ -26,7 +26,23 @@ import { logger } from '@cortex/core';
  */
 export const scheduleDispatch = inngest.createFunction(
   { id: 'schedule-dispatch' },
-  { cron: '* * * * *' },
+  /**
+   * CADA CINCO MINUTOS.
+   *
+   * Corría cada minuto: 43.200 ejecuciones al mes para preguntar si vencía
+   * algo, y casi siempre no vencía nada. Inngest factura el paso, no el
+   * trabajo, así que eso era la partida más cara de todo el producto.
+   *
+   * Lo que cuesta es honesto y hay que decirlo: una rutina puesta para las
+   * 8:00 puede dispararse a las 8:04. Nada de lo que este producto programa
+   * —un parte semanal, un cobro, un resumen de la mañana— distingue esos
+   * cuatro minutos, y `next_run_at` no se pierde: la reclama la pasada
+   * siguiente, así que nunca se salta una, sólo llega un poco después.
+   *
+   * Si algún día hiciera falta precisión al minuto, la respuesta NO es volver
+   * a este cron: es que quien crea esa rutina programe su propio evento.
+   */
+  { cron: '*/5 * * * *' },
   async ({ step }) => {
     const due = await step.run('claim-due-jobs', async () => {
       const db = getSupabaseServiceClient();

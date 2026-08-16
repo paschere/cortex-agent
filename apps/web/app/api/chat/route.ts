@@ -9,6 +9,8 @@ import {
 import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape';
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import { CITATION_RULE } from '@/lib/citations';
+import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
+import { inngest } from '@/lib/inngest';
 import {
   POINT_AT_DESCRIPTION,
   POINT_AT_TOOL_ID,
@@ -993,6 +995,57 @@ export async function POST(req: NextRequest) {
     },
     onFinish: async ({ text, toolCalls, toolResults, usage }) => {
       clock.finished(usage);
+
+      /**
+       * UN ENCARGO PEDIDO POR CHAT ARRANCA AHORA, NO EN EL PRÓXIMO BARRIDO.
+       *
+       * =====================================================================
+       * POR QUÉ ESTO VIVE AQUÍ Y NO EN LA HERRAMIENTA
+       * =====================================================================
+       * `errands.start` no puede mandar un evento de Inngest: `agent-tools` es
+       * una biblioteca y a propósito no depende de Inngest. Por eso hasta hoy
+       * el ARRANQUE de un encargo pedido hablando dependía del barrido, y el
+       * barrido corría cada minuto sólo para que «investígame esto» no tardara
+       * cinco en empezar. Su propio comentario lo dice.
+       *
+       * Esa función de biblioteca no puede, pero ESTA RUTA SÍ — vive en la app
+       * y ya importa el cliente. Es exactamente lo que hace `/api/errands`
+       * cuando el encargo nace por la API; lo único que faltaba era el mismo
+       * gesto cuando nace hablando.
+       *
+       * Con esto el barrido deja de ser el arranque y pasa a ser red de
+       * seguridad, que es lo que permite bajarlo de cada minuto a cada cinco:
+       * ~34.500 ejecuciones de paso menos al mes, sin un segundo de retraso.
+       *
+       * NO PUEDE TUMBAR EL TURNO. La respuesta ya se entregó cuando esto corre,
+       * y si el evento no sale, el barrido lo recoge en cinco minutos — que es
+       * exactamente lo que pasaba antes de este bloque. Por eso el `catch` se
+       * lo traga en vez de propagarlo.
+       */
+      const startedErrands = (toolResults ?? []).flatMap((r) => {
+        const call = r as { toolName?: string; result?: { errandId?: unknown } };
+        if (call.toolName !== 'errands_start') return [];
+        const id = call.result?.errandId;
+        return typeof id === 'string' && id ? [id] : [];
+      });
+      if (startedErrands.length > 0) {
+        try {
+          await inngest.send(
+            startedErrands.map((errandId) => ({
+              name: EVENT_ERRAND_ADVANCE,
+              data: {
+                errandId,
+                organizationId: user.organization.id,
+                userId: user.id,
+                because: 'created' as const,
+              },
+            })),
+          );
+        } catch (err) {
+          logger.warn?.('No se pudo despertar el encargo; lo recogerá el barrido', { err });
+        }
+      }
+
       let assistantMessageId: string | null = null;
       try {
         const { data: assistantRow } = await db
