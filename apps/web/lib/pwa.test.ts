@@ -78,6 +78,48 @@ describe('la aplicación instalable', () => {
     expect(page).toContain('lang="es-CO"');
   });
 
+  /**
+   * NADA DE ESTO PUEDE ESTAR DETRÁS DEL LOGIN, Y ESTUVO.
+   *
+   * Recién desplegado, en producción: `GET /manifest.webmanifest` devolvía un
+   * 307 a `/login`. El filtro del middleware excluía `_next/static` y
+   * `favicon.ico`, y ninguno de los archivos nuevos. Eso deja la aplicación
+   * instalable completamente inerte —sin botón, sin service worker, sin icono
+   * en iOS— y el único síntoma es un botón que no aparece. Nadie reporta eso.
+   *
+   * Se comprueba contra lo que el MANIFIESTO declara, no contra una segunda
+   * lista escrita a mano: el día que alguien añada un icono, esta prueba falla
+   * hasta que también lo deje pasar.
+   */
+  it('lo que el navegador pide sin sesión no está detrás del login', () => {
+    /**
+     * Se lee SÓLO la lista, no el archivo entero.
+     *
+     * La primera versión de esta prueba buscaba en todo `middleware.ts`, y no
+     * mordía: el comentario que documenta el fallo nombra `icon-512.png`, así
+     * que quitarlo de la lista real seguía «pasando». Una prueba que la
+     * documentación del fallo satisface no prueba nada.
+     */
+    const src = read('middleware.ts');
+    const block = src.slice(src.indexOf('matcher: ['));
+    // Sin las barras de escape: el matcher es una expresión regular y escribe
+    // `icon-192\.png`, que como texto no contiene `icon-192.png`.
+    const matcher = block.slice(0, block.indexOf(']')).replaceAll('\\', '');
+    const publicos = [
+      ...(manifest().icons ?? []).map((i) => i.src),
+      '/manifest.webmanifest',
+      '/sw.js',
+      '/sin-conexion.html',
+    ];
+    const bloqueados = publicos.filter((p) => !matcher.includes(p.replace(/^\//, '')));
+    expect(
+      bloqueados,
+      'El middleware no deja pasar estos archivos, así que el navegador recibe una ' +
+        'redirección a /login en vez del archivo — y la aplicación deja de poder ' +
+        'instalarse, sin ningún error visible.',
+    ).toEqual([]);
+  });
+
   it('el documento se declara en español', () => {
     // Estaba en `lang="en"` con el producto entero en español: un lector de
     // pantalla lo leía con voz inglesa.

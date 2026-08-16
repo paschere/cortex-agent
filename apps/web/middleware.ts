@@ -122,6 +122,55 @@ export async function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
+/**
+ * LO QUE EL NAVEGADOR PIDE ANTES DE QUE HAYA NADIE DENTRO.
+ *
+ * ===========================================================================
+ * EL FALLO QUE ESTO ARREGLA, Y POR QUÉ NO SE VEÍA
+ * ===========================================================================
+ * Recién desplegada la aplicación instalable, en producción:
+ *
+ *     GET /manifest.webmanifest  →  307  →  /login?next=%2Fmanifest.webmanifest
+ *     GET /icon-512.png          →  307
+ *
+ * El filtro excluía `_next/static`, `_next/image` y `favicon.ico`, y ninguno de
+ * los archivos que hacen que una aplicación se pueda instalar. Consecuencias, y
+ * las tres son silenciosas:
+ *
+ *   NO APARECE EL BOTÓN DE INSTALAR. Un navegador que no puede leer el
+ *   manifiesto no ofrece instalar nada, y no dice por qué.
+ *
+ *   EL SERVICE WORKER NO SE REGISTRA. La especificación prohíbe registrar uno
+ *   servido tras una redirección, así que `register('/sw.js')` falla — y falla
+ *   dentro del `catch` que se traga el error a propósito, porque un fallo ahí
+ *   no debía costarle nada a nadie.
+ *
+ *   EL ICONO DE APPLE TAMPOCO CARGA, así que en un iPhone quedaría una captura
+ *   de la página como icono.
+ *
+ * El único síntoma de todo eso es un botón que no sale. Nadie reporta eso.
+ *
+ * ===========================================================================
+ * SE ENUMERAN, NO SE COMODINEA
+ * ===========================================================================
+ * Sería más corto excluir `[^/]+\.png$`. No se hace: este filtro es lo único
+ * que hay entre una petición y una pantalla con la cartera de una empresa
+ * dentro, y un comodín aquí es un agujero que nadie va a releer. Se nombran los
+ * archivos, uno a uno, y `lib/pwa.test.ts` comprueba que TODO lo que el
+ * manifiesto declara esté en esta lista — que es lo que impide que el próximo
+ * icono nuevo vuelva a caer detrás del login sin que nadie se entere.
+ */
+/**
+ * Y VA TODO EN UNA CADENA LITERAL, AUNQUE SE LEA PEOR.
+ *
+ * La primera versión sacaba los nombres a una constante y la interpolaba, que
+ * es bastante más legible y NO COMPILA: Next lee este `matcher` en tiempo de
+ * build SIN EJECUTAR EL MÓDULO, así que un valor calculado le llega vacío y el
+ * build muere con «Invalid segment configuration export detected». No hay una
+ * forma bonita de escribir esto — hay una que funciona.
+ */
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|manifest\\.webmanifest|sw\\.js|sin-conexion\\.html|icon\\.svg|icon-192\\.png|icon-512\\.png|icon-maskable-512\\.png|apple-touch-icon\\.png|favicon\\.ico).*)',
+  ],
 };
