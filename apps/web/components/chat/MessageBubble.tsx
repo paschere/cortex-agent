@@ -121,6 +121,58 @@ function reasoningOf(message: Message): string {
 }
 
 /**
+ * EL CUERPO EN EL ORDEN EN QUE PASÓ.
+ *
+ * ===========================================================================
+ * EL FALLO QUE ESTO ARREGLA
+ * ===========================================================================
+ * El cuerpo pintaba primero TODO el texto y después TODAS las herramientas,
+ * así que una llamada hecha a mitad de la respuesta —«déjame revisar la
+ * cartera» → consulta → «efectivamente, te deben…»— salía al final del
+ * mensaje, después de un texto que ya hablaba de su resultado. El dueño lo
+ * dijo exacto: «el llamado de herramientas siempre queda al final, no cuando
+ * fue invocado en el timeline».
+ *
+ * La cronología SIEMPRE estuvo disponible: el SDK entrega `message.parts` con
+ * texto, razonamiento y llamadas EN EL ORDEN REAL. Este archivo ya la usaba
+ * para el razonamiento (`reasoningOf`) y la tiraba para todo lo demás.
+ *
+ * Devuelve la secuencia de segmentos —texto o tandas de llamadas consecutivas—
+ * o `null` cuando el mensaje no trae partes con llamadas, que es el caso de
+ * toda conversación REABIERTA: la base guarda el texto entero y las llamadas
+ * por separado (`messages.content` + `tool_calls`), así que el entrelazado
+ * original no existe y fingirlo sería inventar una cronología. Para ésas, el
+ * que llama usa el orden menos falso: los pasos ANTES del texto, porque en el
+ * caso típico las herramientas corren primero y la respuesta se escribe con
+ * sus resultados delante.
+ */
+type BodySegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'tools'; invocations: ToolInvocation[] };
+
+function segmentsOf(message: Message): BodySegment[] | null {
+  const parts = (message.parts ?? []) as Array<
+    | { type: 'text'; text: string }
+    | { type: 'tool-invocation'; toolInvocation: ToolInvocation }
+    | { type: string }
+  >;
+  if (!parts.some((part) => part.type === 'tool-invocation')) return null;
+
+  const out: BodySegment[] = [];
+  for (const part of parts) {
+    if (part.type === 'text' && 'text' in part && part.text.trim()) {
+      out.push({ kind: 'text', text: part.text });
+    } else if (part.type === 'tool-invocation' && 'toolInvocation' in part) {
+      const last = out[out.length - 1];
+      if (last?.kind === 'tools') last.invocations.push(part.toolInvocation);
+      else out.push({ kind: 'tools', invocations: [part.toolInvocation] });
+    }
+    // El razonamiento ya lo dibuja ReasoningTrail arriba; aquí se salta.
+  }
+  return out;
+}
+
+/**
  * La hora a la que se dijo, y la fecha entera detrás.
  *
  * A la vista sólo la hora, porque la fecha es una propiedad de la
@@ -405,67 +457,22 @@ export function MessageBubble({
             entirely on the many turns that carry no reasoning. */}
         <ReasoningTrail text={reasoningOf(message)} live={isStreaming && !content?.trim()} />
 
-        <div ref={bodyRef}>
-          {/* `sources` es lo que resuelve las marcas `[^1]` de ESTA respuesta.
-              Es la misma lista que se enseña abajo en `MessageActions`, y no
-              una segunda: la de abajo dice qué se leyó en total y la marca dice
-              de dónde sale esa frase, pero las dos salen del mismo sitio o
-              acabarían contradiciéndose. Ver lib/citations.ts. */}
-          {content && (
-            <ChatMarkdown
-              content={content}
-              isStreaming={isStreaming}
-              {...(brainSources ? { sources: brainSources } : {})}
-            />
-          )}
-        </div>
-
-        {/*
-          Las llamadas se parten en dos. Una cuyo RESULTADO es sobre lo que la
-          persona actúa —un borrador, una propuesta, una cola de aprobaciones—
-          sube a tarjeta, porque es la salida del turno y no un paso hacia ella.
-          Todo lo demás es un paso, y los pasos son renglones: ver `TaskRows`
-          para por qué doce de ellos no pueden ser doce tarjetas.
-
-          QUIÉN ES CUÁL LO DICE `results/registry.tsx`, Y NADIE MÁS AQUÍ. Este
-          archivo ya no conoce el nombre de ninguna herramienta.
-        */}
-        {toolInvocations &&
-          toolInvocations.length > 0 &&
-          (() => {
+        {(() => {
+          /**
+           * Una tanda de llamadas, partida como siempre: lo que sube a tarjeta
+           * (la salida del turno) y lo que es un paso (un renglón). QUIÉN ES
+           * CUÁL lo dice `results/registry.tsx`, y nadie más aquí — este
+           * archivo sigue sin conocer el nombre de ninguna herramienta.
+           */
+          const split = (invs: ToolInvocation[]) => {
             const cards: React.ReactNode[] = [];
             const steps: ToolInvocation[] = [];
-
-            for (const inv of toolInvocations) {
-              // La pregunta no es un paso, y aquí sí se diferencia de la
-              // confirmación: el renglón de una confirmación nombra la
-              // herramienta peligrosa que se paró («Enviar correo»), que es
-              // información; el de una pregunta diría «Preguntarte» justo
-              // encima de la pregunta. Es la única duplicación literal que
-              // TaskRows podría producir, así que se quita aquí.
+            for (const inv of invs) {
+              // La pregunta no es un paso: su renglón diría «Preguntarte»
+              // justo encima de la pregunta. Única duplicación literal posible.
               if (inv === choiceInvocation) continue;
               const result =
                 inv.state === 'result' ? (inv as { result?: unknown }).result : undefined;
-
-              // EL REGISTRO, Y NADA MÁS. Aquí vivían cuatro ramas `if`
-              // escritas a mano —el borrador, la propuesta, las marcas sobre
-              // la pantalla, el gráfico—, cada una con su predicado doble para
-              // las dos grafías del mismo id. Convivieron con el registro
-              // hasta que éste demostró que escalaba, que era la condición: no
-              // hay derecho a tocar el camino que ya funciona para demostrar
-              // que el nuevo también. Ahora son cuatro entradas del mapa, y
-              // este bucle no sabe el nombre de ninguna herramienta.
-              //
-              // Una entrada RICH dibuja tarjeta; una TABLE también, con la
-              // tabla que declara. Todo lo demás sigue siendo un paso — y un
-              // paso ahora se LEE al desplegarlo, porque `TaskRows` pinta el
-              // resultado con la capa estructural en vez del JSON en bruto.
-              //
-              // El resultado viaja a `resolveView` porque un puñado de vistas
-              // no pueden dibujar sin algo concreto dentro (un gráfico sin
-              // `chartId`), y ésas vuelven a ser un renglón en vez de una
-              // tarjeta vacía. Sigue sin haber ninguna decisión de dominio
-              // aquí: eso lo declara el registro.
               if (result !== undefined) {
                 const resolved = resolveView(inv.toolName, result);
                 if (resolved.as === 'rich') {
@@ -488,31 +495,103 @@ export function MessageBubble({
                   continue;
                 }
               }
-
               steps.push(inv);
             }
+            return { cards, steps };
+          };
 
-            return (
+          const segments = segmentsOf(message);
+          const allCards: React.ReactNode[] = [];
+          let body: React.ReactNode;
+
+          if (segments) {
+            /*
+              EN EL ORDEN EN QUE PASÓ. Cada tanda de llamadas se dibuja donde
+              se invocó, entre los trozos de texto que la rodearon. Las
+              TARJETAS son la excepción deliberada: son la salida del turno
+              —un borrador, una cola, una tabla— y el texto suele presentarlas
+              («aquí está el borrador»), así que se izan al final aunque su
+              llamada haya sido a mitad. Un paso es cronología; una tarjeta es
+              el entregable.
+            */
+            const lastText = segments.reduce((acc, seg, i) => (seg.kind === 'text' ? i : acc), -1);
+            body = segments.map((seg, i) => {
+              if (seg.kind === 'text') {
+                return (
+                  <ChatMarkdown
+                    key={`t${i}`}
+                    content={seg.text}
+                    isStreaming={isStreaming && i === lastText}
+                    {...(brainSources ? { sources: brainSources } : {})}
+                  />
+                );
+              }
+              const { cards, steps } = split(seg.invocations);
+              allCards.push(...cards);
+              if (steps.length === 0) return null;
+              return (
+                <TaskRows
+                  key={`s${i}`}
+                  invocations={steps}
+                  metrics={metrics ?? null}
+                  isStreaming={isStreaming}
+                />
+              );
+            });
+          } else {
+            /*
+              Sin partes no hay cronología que respetar — es toda conversación
+              reabierta, donde la base guarda el texto y las llamadas por
+              separado. El orden menos falso: los pasos ANTES del texto, porque
+              en el caso típico las herramientas corren primero y la respuesta
+              se escribe con sus resultados delante. Era al revés, y era el
+              mismo fallo que esto arregla, congelado en el historial.
+            */
+            const { cards, steps } =
+              toolInvocations && toolInvocations.length > 0
+                ? split(toolInvocations)
+                : { cards: [], steps: [] };
+            allCards.push(...cards);
+            body = (
               <>
-                <TaskRows invocations={steps} metrics={metrics ?? null} isStreaming={isStreaming} />
-                {/*
-                    Tres tarjetas es un turno bien contestado; siete es una
-                    pared, que es exactamente lo que `TaskRows` existe para
-                    evitar. Por encima de tres, se apilan y solo la primera
-                    viene abierta.
-                  */}
-                {cards.length > 0 && <div className="space-y-1.5">{cards.slice(0, 3)}</div>}
-                {cards.length > 3 && (
-                  <details className="mt-1.5">
-                    <summary className="cursor-pointer text-xs text-ink-muted hover:text-ink">
-                      {cards.length - 3} resultado{cards.length - 3 === 1 ? '' : 's'} más
-                    </summary>
-                    <div className="mt-1.5 space-y-1.5">{cards.slice(3)}</div>
-                  </details>
+                {steps.length > 0 && (
+                  <TaskRows
+                    invocations={steps}
+                    metrics={metrics ?? null}
+                    isStreaming={isStreaming}
+                  />
+                )}
+                {content && (
+                  <ChatMarkdown
+                    content={content}
+                    isStreaming={isStreaming}
+                    {...(brainSources ? { sources: brainSources } : {})}
+                  />
                 )}
               </>
             );
-          })()}
+          }
+
+          return (
+            <>
+              <div ref={bodyRef}>{body}</div>
+              {/*
+                Tres tarjetas es un turno bien contestado; siete es una pared,
+                que es exactamente lo que `TaskRows` existe para evitar. Por
+                encima de tres, se apilan y sólo la primera viene abierta.
+              */}
+              {allCards.length > 0 && <div className="space-y-1.5">{allCards.slice(0, 3)}</div>}
+              {allCards.length > 3 && (
+                <details className="mt-1.5">
+                  <summary className="cursor-pointer text-xs text-ink-muted hover:text-ink">
+                    {allCards.length - 3} resultado{allCards.length - 3 === 1 ? '' : 's'} más
+                  </summary>
+                  <div className="mt-1.5 space-y-1.5">{allCards.slice(3)}</div>
+                </details>
+              )}
+            </>
+          );
+        })()}
 
         {/*
           Lo que se hizo sin preguntar, dicho aquí y no en administración.
