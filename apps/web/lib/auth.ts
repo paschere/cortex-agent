@@ -1,7 +1,7 @@
+import { encryptToken } from '@cortex/core';
 import { betterAuth } from 'better-auth';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { Pool } from 'pg';
-import { encryptToken } from '@cortex/core';
 import { sendEmail } from './email';
 
 /**
@@ -34,8 +34,7 @@ import { sendEmail } from './email';
  */
 
 const connectionString =
-  process.env.SUPABASE_DB_URL ??
-  'postgresql://placeholder:placeholder@localhost:5432/placeholder';
+  process.env.SUPABASE_DB_URL ?? 'postgresql://placeholder:placeholder@localhost:5432/placeholder';
 
 // Serverless discipline: every lambda instance gets its own Pool, so the pool
 // must stay tiny or Supabase's pooler client limit is exhausted as instances
@@ -51,9 +50,10 @@ const connectionString =
 // ssl config wins over the explicit `ssl` option — so strip sslmode from the
 // URL and pass the ssl object ourselves. Deterministic, no precedence games.
 const isRemoteDb = /sslmode=/.test(connectionString);
-const cleanConnectionString = connectionString.replace(/[?&]sslmode=[^&]*/g, (m) =>
-  m.startsWith('?') ? '?' : '',
-).replace(/\?&/, '?').replace(/\?$/, '');
+const cleanConnectionString = connectionString
+  .replace(/[?&]sslmode=[^&]*/g, (m) => (m.startsWith('?') ? '?' : ''))
+  .replace(/\?&/, '?')
+  .replace(/\?$/, '');
 
 // Exported so the workspace helpers in lib/organization.ts write through the
 // same connection better-auth owns, rather than opening a second pool.
@@ -79,8 +79,7 @@ if (
   throw new Error('BETTER_AUTH_SECRET must be set in production');
 }
 
-const baseURL =
-  process.env.BETTER_AUTH_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000';
+const baseURL = process.env.BETTER_AUTH_URL ?? process.env.APP_BASE_URL ?? 'http://localhost:3000';
 
 /**
  * Every Google scope the agent tools use. Requested at SSO login so one
@@ -241,7 +240,8 @@ export const auth = betterAuth({
           subject: `You've been invited to ${data.organization.name} on Cortex`,
           text: `${data.inviter.user.name || data.inviter.user.email} invited you to join "${data.organization.name}" on Cortex.\n\nAccept the invitation:\n\n${inviteUrl}\n\nThis invitation expires in 48 hours.`,
         });
-        if (!result.sent) console.info(`[auth:dev] invitation link for ${data.email}: ${inviteUrl}`);
+        if (!result.sent)
+          console.info(`[auth:dev] invitation link for ${data.email}: ${inviteUrl}`);
       },
     }),
     // Platform-level administration: list/ban users, revoke sessions,
@@ -271,23 +271,44 @@ export const auth = betterAuth({
           return { data: user };
         },
         after: async (user) => {
-          // Sync to public.users. id is generated server-side via
-          // gen_random_uuid() (see migration 0011); we link by email.
-          await pool.query(
-            `insert into public.users(email, name, role, google_sub)
-             values (
-               $1,
-               $2,
-               case
-                 when not exists (select 1 from public.users) then 'org_admin'::user_role
-                 else 'member'::user_role
-               end,
-               null
-             )
-             on conflict (email) do update
-               set name = coalesce(excluded.name, public.users.name)`,
-            [user.email, user.name],
-          );
+          /**
+           * AQUÍ HABÍA UN INSERT EN `public.users` QUE SÓLO PODÍA FALLAR, Y SE
+           * LLEVABA POR DELANTE EL REGISTRO ENTERO.
+           *
+           * =====================================================================
+           * LO QUE PASABA, MEDIDO
+           * =====================================================================
+           * Decía `on conflict (email)`, y ese único global lo BORRÓ la migración
+           * 0064 para que dos empresas puedan tener cada una su ana@acme.com; lo
+           * reemplazó por `(organization_id, lower(email))`. Contra la base real:
+           *
+           *     ERROR: there is no unique or exclusion constraint matching
+           *            the ON CONFLICT specification
+           *
+           * Y aunque ese `on conflict` se arreglara, la sentencia tampoco pasaba
+           * `organization_id`, que la misma 0064 dejó `not null`. Dos fallos en
+           * una consulta, los dos desde 2024.
+           *
+           * El efecto era el peor posible de leer: la cuenta SÍ se crea —el
+           * gancho revienta después—, así que quien se registraba veía un 500,
+           * creía que no había funcionado, y en realidad ya podía entrar por
+           * /login. Nadie descubre eso solo.
+           *
+           * =====================================================================
+           * POR QUÉ SE BORRA EN VEZ DE ARREGLARSE
+           * =====================================================================
+           * Porque el trabajo ya está hecho, y mejor, en otro sitio:
+           * `lib/session.ts` crea la fila en la primera petición autenticada, con
+           * la organización YA RESUELTA —que aquí todavía no existe— y con el rol
+           * derivado de la membresía del espacio en vez de «¿es el primero de la
+           * tabla?». Su propio comentario explica por qué aquella regla estaba
+           * mal: con registro abierto convertía al primero en administrador y a
+           * todos los demás en miembros permanentes de espacios que son suyos.
+           *
+           * Y aguanta la carrera: una cuenta recién creada dispara varias
+           * peticiones a la vez, el índice único deja pasar un solo INSERT y las
+           * demás leen lo que escribió la ganadora.
+           */
           // First account on a fresh deployment becomes the platform admin
           // (better-auth admin plugin role, distinct from public.users.role).
           await pool.query(
