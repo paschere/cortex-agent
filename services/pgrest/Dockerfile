@@ -1,0 +1,47 @@
+# La API de datos de Cortex fuera de Supabase: PostgREST + un proxy de ruta.
+#
+# ===========================================================================
+# POR QUÉ EXISTE ESTE SERVICIO
+# ===========================================================================
+# Todo el acceso a datos de la app está escrito con supabase-js: cientos de
+# `db.from('tabla').select(...)`. supabase-js no habla con «Supabase»: habla
+# con PostgREST, que es software libre y corre donde sea. Hospedarlo nosotros
+# convierte el éxodo de Supabase en un cambio de TRES variables de entorno en
+# vez de una reescritura de cientos de queries.
+#
+# ===========================================================================
+# POR QUÉ HAY UN CADDY DELANTE
+# ===========================================================================
+# supabase-js construye sus URLs como `{SUPABASE_URL}/rest/v1/...` — ese
+# prefijo lo ponía el gateway de Supabase, no PostgREST, que sirve en la raíz.
+# El Caddy hace exactamente una cosa: quitar `/rest/v1` y pasar el resto.
+# Cambiar el prefijo en supabase-js no se puede (está fijado en el
+# constructor), así que el proxy es el punto correcto — quince líneas de
+# configuración contra tocar una librería ajena.
+#
+# PostgREST se descarga como binario ESTÁTICO del release oficial (por eso el
+# `-static-` en el nombre: no depende de la libc de la imagen), y Caddy es un
+# binario Go igual de portable que se copia de su imagen oficial.
+
+FROM debian:bookworm-slim
+
+ARG POSTGREST_VERSION=v12.2.8
+ARG TARGETARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates xz-utils \
+  && ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "ubuntu-aarch64" || echo "linux-static-x64") \
+  && curl -fsSL -o /tmp/pgrst.tar.xz \
+    "https://github.com/PostgREST/postgrest/releases/download/${POSTGREST_VERSION}/postgrest-${POSTGREST_VERSION}-${ARCH}.tar.xz" \
+  && tar -xJf /tmp/pgrst.tar.xz -C /usr/local/bin postgrest \
+  && rm /tmp/pgrst.tar.xz \
+  && apt-get purge -y curl xz-utils && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
+COPY --from=caddy:2 /usr/bin/caddy /usr/local/bin/caddy
+
+# Rutas desde la raíz del repo: Railway construye con el repositorio entero
+# como contexto (igual que services/whatsapp), no con este directorio.
+COPY services/pgrest/Caddyfile /etc/caddy/Caddyfile
+COPY services/pgrest/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
+CMD ["/usr/local/bin/start.sh"]

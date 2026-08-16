@@ -1,0 +1,24 @@
+# El único trabajo de este proxy: hacer que PostgREST conteste donde
+# supabase-js espera encontrarlo. Ver el Dockerfile para el porqué completo.
+{
+	auto_https off
+}
+
+:{$PORT:8080} {
+	# supabase-js llama {URL}/rest/v1/<tabla>; PostgREST sirve /<tabla>.
+	# handle_path quita el prefijo antes de pasar la petición.
+	handle_path /rest/v1/* {
+		reverse_proxy localhost:3000
+	}
+
+	# El healthcheck de Railway, y una forma humana de saber que está vivo.
+	handle /health {
+		respond "ok" 200
+	}
+
+	# Cualquier otra ruta no existe a propósito: este servicio expone datos,
+	# y una superficie que no se pidió es una superficie que hay que vigilar.
+	handle {
+		respond "no" 404
+	}
+}
