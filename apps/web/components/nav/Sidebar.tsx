@@ -777,10 +777,25 @@ export function Sidebar({
   const inChat = pathname.startsWith('/chat');
   const [peeking, setPeeking] = useState(false);
   const [roomy, setRoomy] = useState(false);
-  // En el chat: ancho si cabe, iconos si no. Fuera del chat manda la preferencia.
-  const chatWide = inChat && roomy;
-  const narrow = inChat ? !roomy : collapsed;
-  const expanded = inChat ? roomy || peeking : !collapsed;
+  /**
+   * En el chat: ancho si cabe Y SI NO LO CERRASTE. Fuera del chat manda la
+   * preferencia, como siempre.
+   *
+   * El `collapsed` estaba fuera de esta cuenta y el resultado era que dentro de
+   * `/chat` el rail no se podía cerrar: a 1440px salía ancho y el botón no
+   * aparecía siquiera —lo tapaba un `!inChat` más abajo—, así que no había
+   * ningún gesto que lo cerrara. Era el resto de cuando el rail SIEMPRE era
+   * estrecho aquí: entonces no había nada que contraer y esconder el botón era
+   * correcto. En cuanto se volvió ancho, esa guarda pasó a quitar la única
+   * salida.
+   *
+   * El orden importa: la anchura de la pantalla decide el DEFECTO, y una
+   * decisión explícita de la persona gana siempre. Al revés —que el tamaño de
+   * la ventana revoque un clic— es lo que acaba de pasar.
+   */
+  const chatWide = inChat && roomy && !collapsed;
+  const narrow = inChat ? !chatWide : collapsed;
+  const expanded = inChat ? chatWide || peeking : !collapsed;
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSE_KEY) === 'true');
@@ -827,7 +842,9 @@ export function Sidebar({
         // reserva sus 260px y ya no se asoma nada, porque ya está abierto.
         className={clsx(
           'relative hidden shrink-0 md:flex',
-          hydrated && !(inChat && !roomy) && 'transition-[width] duration-200 motion-reduce:transition-none',
+          hydrated &&
+            !(inChat && !roomy) &&
+            'transition-[width] duration-200 motion-reduce:transition-none',
           chatWide ? 'w-[260px]' : inChat ? 'w-[56px]' : collapsed ? 'w-[72px]' : 'w-[260px]',
         )}
       >
@@ -854,7 +871,8 @@ export function Sidebar({
             )}
           >
             <Brand collapsed={narrow && !expanded} />
-            {!narrow && !inChat && (
+            {/* También dentro del chat: ahí es donde faltaba. */}
+            {!narrow && (
               <button
                 type="button"
                 onClick={toggleCollapsed}
@@ -865,7 +883,13 @@ export function Sidebar({
               </button>
             )}
           </div>
-          {collapsed && !inChat && (
+          {/*
+            Fuera del chat, siempre que esté contraído. Dentro del chat sólo si
+            además CABE abrirlo: por debajo de 1280 el rail es estrecho porque no
+            hay sitio, no porque nadie lo haya cerrado, y un botón que promete
+            ensanchar algo que no cabe es una promesa falsa. Ahí sigue el asomo.
+          */}
+          {collapsed && (!inChat || roomy) && (
             <button
               type="button"
               onClick={toggleCollapsed}
