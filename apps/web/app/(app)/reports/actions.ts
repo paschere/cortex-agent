@@ -6,8 +6,10 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   buildReport,
+  getRecipe,
   getReport,
   revokeShare,
+  runRecipeAndSave,
   saveReport,
   shareReport,
 } from '@cortex/agent-tools';
@@ -88,10 +90,44 @@ export async function generateReportAction(input: {
   }
 }
 
-export async function shareReportAction(
-  reportId: string,
-  days = 30,
-): Promise<ReportActionResult> {
+/**
+ * Volver a correr un informe a la medida guardado.
+ *
+ * Pasa por `runRecipeAndSave`, que es la misma función que corre la herramienta
+ * del chat y la que correrá una rutina programada, por la misma razón que
+ * `generateReportAction` pasa por `buildReport`: si el botón y el chat armaran
+ * el informe por caminos distintos, las dos superficies empezarían a discrepar
+ * sobre qué es «el informe de cartera» y nadie se enteraría hasta que alguien
+ * comparara dos papeles.
+ *
+ * Produce una FOTOGRAFÍA NUEVA. La anterior no se toca — por eso devuelve un id
+ * distinto y la pantalla navega a él.
+ */
+export async function runRecipeAction(recipeId: string): Promise<ReportActionResult> {
+  try {
+    const user = await requireSession();
+    const db = getOrgScopedClient(user.organization.id);
+    const recipe = await getRecipe(db, recipeId);
+    if (!recipe || recipe.archived_at) {
+      return { ok: false, error: 'Ese informe a la medida ya no existe.' };
+    }
+
+    const ctx = buildToolContext({
+      organizationId: user.organization.id,
+      userId: user.id,
+      agentId: user.id,
+      surface: 'web',
+    });
+
+    const made = await runRecipeAndSave(ctx, recipe);
+    revalidatePath(PATH);
+    return { ok: true, reportId: made.row.id };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo generar el informe.') };
+  }
+}
+
+export async function shareReportAction(reportId: string, days = 30): Promise<ReportActionResult> {
   try {
     const user = await requireSession();
     const ctx = buildToolContext({

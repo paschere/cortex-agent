@@ -111,8 +111,20 @@ export type GeneratedReportKind = (typeof GENERATED_REPORT_KINDS)[number];
  *            gráfico, no tiene consulta que repetir: lo que se guarda es lo
  *            que Cortex dijo ese día, con la conversación como fuente. Ver
  *            `saveAnswerAsReportAction` en la web.
+ *   custom   un informe armado con BLOQUES, según una receta guardada en
+ *            `report_recipes`. Es el único de la lista que sí es una receta y
+ *            aun así no está arriba, y la razón es la que hace que esta lista
+ *            deje de crecer: el asunto del informe no lo dice `kind`, lo dice
+ *            la receta. Un informe nuevo es una fila en esa tabla, no un valor
+ *            nuevo aquí. Ver la cabecera de `recipe.ts` y la migración 0107.
  */
-export const REPORT_KINDS = [...GENERATED_REPORT_KINDS, 'chart', 'weekly', 'answer'] as const;
+export const REPORT_KINDS = [
+  ...GENERATED_REPORT_KINDS,
+  'chart',
+  'weekly',
+  'answer',
+  'custom',
+] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 /** Spanish names, because this is what the report calls itself on screen. */
@@ -123,6 +135,7 @@ export const REPORT_KIND_LABEL: Record<ReportKind, string> = {
   chart: 'Gráfico del chat',
   weekly: 'Parte semanal',
   answer: 'Respuesta guardada',
+  custom: 'A la medida',
 };
 
 export const REPORT_KIND_BLURB: Record<ReportKind, string> = {
@@ -138,6 +151,8 @@ export const REPORT_KIND_BLURB: Record<ReportKind, string> = {
     'Lo que pasó la semana pasada y lo que viene la que entra: qué se venció, qué se cumplió, quién debe qué, qué propuso Cortex y en qué quedó, y a qué nadie contestó. Sale solo cada lunes temprano y no se puede pedir: es el parte de una semana concreta, no una consulta.',
   answer:
     'Una respuesta que salió de una conversación y alguien decidió conservar, con la pregunta que la provocó y la conversación de la que salió. Es la fotografía de lo que Cortex dijo ese día: no se vuelve a calcular, y por eso sigue diciendo lo mismo en noviembre.',
+  custom:
+    'Un informe armado a la medida con los bloques que Cortex sabe calcular: se guarda como receta con nombre, se puede volver a correr, y se puede programar para que llegue solo. Cada corrida es una fotografía nueva; la de julio sigue diciendo en noviembre lo que decía en julio.',
 };
 
 /**

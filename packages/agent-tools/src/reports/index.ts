@@ -22,8 +22,50 @@ import './tools';
 // because it is the one report that is not computed from a kind and some
 // parameters — see the header of `chat-chart.ts`.
 import './chat-chart';
+// …y reports.compose / run / recipes: el informe de lo que sea, armado con
+// bloques. Ver la cabecera de `recipe.ts` para por qué el asunto del informe
+// dejó de vivir en `reports.kind`.
+import './custom';
 
 export { reportsGenerate, reportsList, reportsOpen, reportsShare } from './tools';
+
+export { reportsCompose, reportsRun, reportsRecipes, runRecipeAndSave } from './custom';
+
+export {
+  BLOCKS,
+  BLOCK_IDS,
+  blockIsRestricted,
+  getBlock,
+  isBlockId,
+  runBlock,
+} from './blocks';
+export type { BlockBuildInput, BlockOutput, ReportBlock } from './blocks';
+
+export {
+  MAX_BLOCKS,
+  RECIPE_COLUMNS,
+  REPORT_RECIPES_TABLE,
+  UnknownBlockError,
+  blockCatalog,
+  findRecipeByFingerprint,
+  getRecipe,
+  listRecipes,
+  recipeFingerprint,
+  recipeIsRestricted,
+  recipeSpecSchema,
+  runRecipe,
+  saveRecipe,
+  touchRecipe,
+} from './recipe';
+export type {
+  BlockId,
+  RecipeBlock,
+  RecipeRow,
+  RecipeSpec,
+  RunRecipeInput,
+  SaveRecipeInput,
+  SaveRecipeResult,
+} from './recipe';
 
 export {
   CHAT_CHARTS_TABLE,
@@ -93,6 +135,8 @@ export {
   DEFAULT_SHARE_DAYS,
   REPORTS_TABLE,
   REPORT_COLUMNS,
+  REPORT_SUMMARY_COLUMNS,
+  RestrictedReportError,
   appBaseUrl as reportsAppBaseUrl,
   canonicalize,
   claimWeeklyReport,

@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { clsx } from 'clsx';
-import { Check, Copy, Link2, Link2Off, Loader2 } from 'lucide-react';
+import { Check, Copy, Link2, Link2Off, Loader2, ShieldOff } from 'lucide-react';
 import { useEffect, useState, useTransition } from 'react';
 import { revokeShareAction, shareReportAction } from '../actions';
 
@@ -18,17 +18,31 @@ import { revokeShareAction, shareReportAction } from '../actions';
  * Re-sharing replaces the previous token instead of extending it. "Compartir de
  * nuevo" almost always follows "creo que ese enlace le llegó a quien no era",
  * and silently renewing the old one would leave that person holding a live door.
+ *
+ * ===========================================================================
+ * CUANDO NO HAY BOTÓN
+ * ===========================================================================
+ * Un informe a la medida puede llevar un bloque que nombra a personas del
+ * equipo, y ése no sale por un enlace sin contraseña. La pantalla no enseña el
+ * botón deshabilitado con un tooltip: enseña la razón. Un botón apagado invita
+ * a buscar la forma de encenderlo; una frase que dice por qué cierra la
+ * pregunta y además explica qué SÍ se puede hacer.
+ *
+ * No es esto lo que impide compartirlo — lo impide un CHECK de la 0107 y, antes
+ * de llegar ahí, `shareReport`. Esto es lo que lo explica.
  */
 export function ShareControls({
   reportId,
   initialUrl,
   initialExpiresLabel,
   views,
+  restricted = false,
 }: {
   reportId: string;
   initialUrl: string | null;
   initialExpiresLabel: string | null;
   views: number;
+  restricted?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [url, setUrl] = useState<string | null>(initialUrl);
@@ -79,6 +93,24 @@ export function ShareControls({
       setError('El navegador no dejó copiar. Selecciona el enlace y cópialo a mano.');
     }
   };
+
+  if (restricted) {
+    return (
+      <div className="flex items-start gap-3 rounded-card border border-amber/20 bg-amber-soft p-4">
+        <ShieldOff className="mt-0.5 h-4 w-4 shrink-0 text-amber" aria-hidden />
+        <div>
+          <p className="text-sm font-semibold text-amber">
+            Este informe no sale por enlace público
+          </p>
+          <p className="mt-1 max-w-prose text-xs leading-snug text-ink-muted">
+            Nombra a personas del equipo, y el enlace público no pide contraseña: quien lo tenga, lo
+            abre. Adentro se ve entero — manda el enlace de esta página, que sí pide sesión, o
+            expórtalo y entrégalo a mano.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!url) {
     return (

@@ -249,6 +249,13 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // token through the service client, outside the scoped handle, because a link
   // clicked from WhatsApp carries no session to scope by.
   reports: tenant(),
+  // Una pregunta guardada: qué bloques componen un informe a la medida y con
+  // qué parámetros (migración 0107). Tenant, y no `derived` sobre nada, porque
+  // no cuelga de ninguna fila padre — y porque una receta filtrada de menos no
+  // filtra una fila visible, hace algo peor: deja que un espacio de trabajo
+  // corra contra sus datos la pregunta que otro se molestó en formular, lo que
+  // devuelve un informe perfectamente plausible sobre la empresa equivocada.
+  report_recipes: tenant(),
   // A chart drawn inside a conversation, resolved and stored the moment it was
   // drawn so that keeping it costs no second query (migration 0088). Tenant for
   // exactly the reason above: the row is an aggregate of one workspace's data.

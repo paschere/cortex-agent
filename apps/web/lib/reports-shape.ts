@@ -29,13 +29,24 @@ export type GeneratedReportKind = (typeof GENERATED_REPORT_KINDS)[number];
 
 /**
  * Every kind a STORED report may have — the three above, the chat chart, the
- * parte semanal and a saved answer. None of the last three is a recipe: the
- * chart was drawn from numbers that already existed, the parte belongs to one
- * specific week and is claimed by the Monday cron (migration 0100), and an
- * answer is what Cortex said in one conversation on one day (migration 0103).
- * A "generar" button for any of them would be a button that cannot work.
+ * parte semanal, a saved answer y el informe a la medida. Ninguno de los tres
+ * del medio es una receta: el gráfico se dibujó con cifras que ya existían, el
+ * parte es de una semana concreta y lo reclama el cron del lunes (0100), y una
+ * respuesta es lo que Cortex dijo un día (0103). Un botón «generar» para
+ * cualquiera de ellos sería un botón que no puede funcionar.
+ *
+ * `custom` sí se puede volver a correr, y aun así no está en la lista de
+ * arriba: no se genera desde un selector de tipos, porque de qué trata no lo
+ * dice esta lista sino su receta. Se corre desde la receta, por su id
+ * (migración 0107).
  */
-export const REPORT_KINDS = [...GENERATED_REPORT_KINDS, 'chart', 'weekly', 'answer'] as const;
+export const REPORT_KINDS = [
+  ...GENERATED_REPORT_KINDS,
+  'chart',
+  'weekly',
+  'answer',
+  'custom',
+] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
 
 export const REPORT_KIND_LABEL: Record<ReportKind, string> = {
@@ -45,6 +56,7 @@ export const REPORT_KIND_LABEL: Record<ReportKind, string> = {
   chart: 'Gráfico del chat',
   weekly: 'Parte semanal',
   answer: 'Respuesta guardada',
+  custom: 'A la medida',
 };
 
 /**
@@ -59,6 +71,8 @@ export const REPORT_KIND_PITCH: Record<ReportKind, string> = {
   chart: 'Un gráfico que salió de una conversación y alguien decidió conservar.',
   weekly: 'Lo que pasó la semana pasada y lo que viene. Llega solo cada lunes.',
   answer: 'Una respuesta del chat, tal como se dijo, con la pregunta que la provocó.',
+  custom:
+    'Armado con los bloques que Cortex sabe calcular. Se guarda con nombre y se puede repetir.',
 };
 
 /** Lucide icon names, resolved by the client component's own map. */
@@ -69,6 +83,7 @@ export const REPORT_KIND_ICON: Record<ReportKind, string> = {
   chart: 'ChartNoAxesColumn',
   weekly: 'CalendarDays',
   answer: 'MessageSquareQuote',
+  custom: 'LayoutGrid',
 };
 
 export function isReportKind(value: string): value is ReportKind {

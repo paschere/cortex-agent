@@ -223,9 +223,12 @@ export const TOOL_PHRASE: Record<string, string> = {
   'presentations.pick_candidate': 'Muéstrame quiénes están en la requisición de ',
 
   'reports.chart': 'Gráfica ',
+  'reports.compose': 'Ármame un informe a la medida con ',
   'reports.generate': 'Hazme el informe de ',
   'reports.list': 'Muéstrame los informes guardados',
   'reports.open': 'Ábreme el informe de ',
+  'reports.recipes': 'Muéstrame los informes a la medida que ya tengo',
+  'reports.run': 'Vuelve a correr el informe a la medida ',
   'reports.share': 'Comparte por enlace el informe de ',
 
   'sales.draft_proposal': 'Redáctame una propuesta para ',

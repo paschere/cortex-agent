@@ -188,6 +188,12 @@ export const ERRAND_TOOLS: readonly string[] = [
   // commitments table, and an errand's ceiling should not be spent that way
   // without somebody asking for it. `reports.share` mints a public link, which
   // is an outbound act by any reading.
+  //
+  // `reports.compose`, `reports.run` y `reports.recipes` tampoco están, y por
+  // las dos razones a la vez: correr una receta son hasta seis pasadas sobre la
+  // base en vez de una, y componer una escribe una fila que después aparece en
+  // el estante de /reports como si alguien la hubiera pedido. Un recado que
+  // deja informes detrás no es un recado de sólo lectura.
   'reports.list',
   'reports.open',
 

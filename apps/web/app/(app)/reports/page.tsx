@@ -3,11 +3,12 @@ import { Panel } from '@/components/ui/panel';
 import { REPORT_KIND_LABEL, type ReportKind } from '@/lib/reports-shape';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { listReports, shareIsLive } from '@cortex/agent-tools';
+import { BLOCKS, isBlockId, listRecipes, listReports, shareIsLive } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import { FileBarChart, Link2 } from 'lucide-react';
 import Link from 'next/link';
 import { GenerateReport } from './_components/GenerateReport';
+import { type SavedRecipe, SavedRecipes } from './_components/SavedRecipes';
 import { longDate, monthHeading, stamp } from './_components/format';
 
 /**
@@ -46,12 +47,37 @@ const KIND_TONE: Record<ReportKind, string> = {
   // cosa —, así que comparte el neutro del gráfico: las dos son procedencias,
   // no asuntos.
   answer: 'bg-surface-2 text-ink-muted',
+  // Y el de a la medida menos que ninguno: de qué trata lo dice su receta, no
+  // esta columna. El neutro es la respuesta honesta a «¿de qué color es un
+  // informe que puede ser de cualquier cosa?».
+  custom: 'bg-surface-2 text-ink-muted',
 };
 
 export default async function ReportsPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
-  const rows = await listReports(db, { limit: 60 });
+  const [rows, recipeRows] = await Promise.all([
+    listReports(db, { limit: 60 }),
+    listRecipes(db, { limit: 12 }),
+  ]);
+
+  // Las etiquetas de los bloques se resuelven ACÁ, en el servidor. El
+  // componente que las pinta es de cliente, y cualquier import de
+  // `@cortex/agent-tools` desde uno de ésos arrastra el barril entero hasta
+  // `node:dns` y rompe el build de producción sin que typecheck ni los tests se
+  // enteren — que es exactamente como se rompió una vez. Ver la cabecera de
+  // `lib/reports-shape.ts`.
+  const recipes: SavedRecipe[] = recipeRows.map((r) => {
+    const blocks = r.spec.blocks.map((b) => b.block);
+    return {
+      id: r.id,
+      name: r.name,
+      blocks,
+      blockLabels: blocks.map((b) => (isBlockId(b) ? BLOCKS[b].label : b)),
+      restricted: r.restricted,
+      lastRunLabel: r.last_run_at ? longDate(r.last_run_at.slice(0, 10)) : null,
+    };
+  });
 
   // Grouped in one pass, keeping the query's newest-first order inside each
   // month, so the shelf reads top-down without a second sort anywhere.
@@ -72,6 +98,8 @@ export default async function ReportsPage() {
       />
 
       <GenerateReport />
+
+      <SavedRecipes recipes={recipes} />
 
       {rows.length === 0 ? (
         <Panel className="mt-6 p-8 text-center">

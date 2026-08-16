@@ -100,6 +100,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
               : null
           }
           views={row.share_views ?? 0}
+          restricted={row.restricted ?? false}
         />
       </div>
 

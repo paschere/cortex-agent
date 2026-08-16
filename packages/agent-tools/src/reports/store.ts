@@ -1,9 +1,9 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ToolContext } from '../types';
 import type { ReportDocument, ReportKind } from './document';
 import { REPORT_DOCUMENT_VERSION, validateDocument } from './document';
 import { RENDERER_VERSION } from './render';
-import type { ToolContext } from '../types';
 
 /**
  * Saving a report, and what "saved" is allowed to mean.
@@ -78,7 +78,12 @@ export const REPORTS_TABLE = 'reports';
 export const DEFAULT_SHARE_DAYS = 30;
 
 export const REPORT_COLUMNS =
-  'id, kind, title, subtitle, period_label, period_start, params, document, content_hash, document_version, renderer_version, generated_at, generated_by, conversation_id, client_id, share_token, share_expires_at, share_views, created_at';
+  'id, kind, title, subtitle, period_label, period_start, params, document, content_hash, document_version, renderer_version, generated_at, generated_by, conversation_id, client_id, recipe_id, restricted, share_token, share_expires_at, share_views, created_at';
+
+/** Las mismas columnas menos `document`, para las listas. */
+export const REPORT_SUMMARY_COLUMNS = REPORT_COLUMNS.split(', ')
+  .filter((c) => c !== 'document')
+  .join(', ');
 
 export interface ReportRow {
   id: string;
@@ -97,6 +102,14 @@ export interface ReportRow {
   generated_by: string | null;
   conversation_id: string | null;
   client_id: string | null;
+  /** La receta que lo produjo, sólo en los informes a la medida. */
+  recipe_id: string | null;
+  /**
+   * True cuando el informe nombra a alguien de la empresa. Un informe así se ve
+   * entero adentro y NO se puede compartir por enlace público — lo impide un
+   * CHECK de la 0107, no sólo el código de `shareReport`.
+   */
+  restricted: boolean;
   share_token: string | null;
   share_expires_at: string | null;
   share_views: number;
@@ -207,6 +220,18 @@ export interface SaveReportInput {
   document: ReportDocument;
   params: Record<string, unknown>;
   conversationId?: string | null;
+  /** La receta que lo produjo, en los informes a la medida. */
+  recipeId?: string | null;
+  /**
+   * True cuando el informe nombra a alguien de la empresa.
+   *
+   * Va en la FILA y no en el documento, y la diferencia importa: meter un campo
+   * nuevo dentro de `document` le cambiaría la serialización canónica a todos
+   * los informes ya guardados, y por tanto su `content_hash`, y todos
+   * empezarían a decir «alguien tocó esto» el día del despliegue. La postura de
+   * compartir es un dato sobre el artefacto, no sobre lo que el artefacto dice.
+   */
+  restricted?: boolean;
 }
 
 /**
@@ -238,6 +263,8 @@ export async function saveReport(ctx: ToolContext, input: SaveReportInput): Prom
       generated_at: document.generatedAt,
       generated_by: ctx.userId,
       conversation_id: input.conversationId ?? ctx.conversationId ?? null,
+      recipe_id: input.recipeId ?? null,
+      restricted: input.restricted ?? false,
       share_views: 0,
     })
     .select(REPORT_COLUMNS)
@@ -360,9 +387,7 @@ export async function listReports(
 ): Promise<ReportRow[]> {
   let q = db
     .from(REPORTS_TABLE)
-    .select(
-      'id, kind, title, subtitle, period_label, period_start, params, content_hash, document_version, renderer_version, generated_at, generated_by, conversation_id, client_id, share_token, share_expires_at, share_views, created_at',
-    )
+    .select(REPORT_SUMMARY_COLUMNS)
     .order('generated_at', { ascending: false })
     .limit(Math.min(opts.limit ?? 25, 100));
 
@@ -415,12 +440,45 @@ export interface ShareResult {
 }
 
 /**
+ * Lo que se le dice a alguien que intenta sacar por la puerta lo que no sale.
+ *
+ * Su propia clase porque la respuesta correcta no es «falló»: es «esto en
+ * concreto no, y adentro sí». Quien la atrapa tiene que poder distinguirla de
+ * un fallo de base de datos sin leer el texto del mensaje.
+ */
+export class RestrictedReportError extends Error {
+  constructor(title: string) {
+    super(
+      `«${title}» nombra a personas del equipo, así que no se puede compartir por un enlace público — quien tenga el enlace lo abre sin contraseña, y eso no puede pasarle a una lista de quién debe qué adentro. Adentro se ve entero: manda el enlace de /reports, que sí pide sesión.`,
+    );
+    this.name = 'RestrictedReportError';
+  }
+}
+
+/**
  * Mint (or re-mint) a share link.
  *
  * Re-sharing an already-shared report REPLACES the token rather than extending
  * it. That is the safer default by a distance: "share this again" almost always
  * follows "I think that link went to the wrong person", and silently renewing
  * the old token would leave the wrong person holding a live link.
+ *
+ * ===========================================================================
+ * LO QUE NO SALE
+ * ===========================================================================
+ * Mientras hubo tres informes, «compartir» fue una decisión sin matices: los
+ * tres hablaban de papeles y de terceros y ninguno nombraba a un empleado. Un
+ * informe a la medida sí puede — el bloque `internal_promises` lista quién del
+ * equipo quedó de hacer qué —, y un enlace sin contraseña con esa lista dentro
+ * es una fuga con la forma de un botón.
+ *
+ * Así que la comprobación vive AQUÍ, en la única función que acuña un token, y
+ * no en las dos pantallas que la llaman. Una regla que hay que recordar en cada
+ * sitio donde se comparte es una regla que un tercer sitio se saltará. Y ni
+ * siquiera se confía en esto: la 0107 añade
+ * `check (restricted = false or share_token is null)`, así que una fila
+ * restringida con enlace es un estado que la base no acepta guardar. Esto de
+ * aquí existe para dar la razón en español; el que impide de verdad es el otro.
  */
 export async function shareReport(
   ctx: ToolContext,
@@ -428,6 +486,19 @@ export async function shareReport(
   opts: { days?: number } = {},
 ): Promise<ShareResult> {
   const days = Math.min(Math.max(Math.round(opts.days ?? DEFAULT_SHARE_DAYS), 1), 180);
+
+  // Leer antes de acuñar. Una lectura de más en una operación que pasa una vez
+  // al mes, a cambio de que la regla no dependa de quién llame.
+  const { data: row, error: readError } = await ctx.db
+    .from(REPORTS_TABLE)
+    .select('id, title, restricted')
+    .eq('id', id)
+    .maybeSingle();
+  if (readError) throw new Error(`No se pudo crear el enlace: ${readError.message}`);
+  if (!row) throw new Error('Ese informe no existe en este espacio de trabajo.');
+  const found = row as unknown as { id: string; title: string; restricted: boolean };
+  if (found.restricted) throw new RestrictedReportError(found.title);
+
   const token = mintShareToken();
   const expiresAt = new Date(Date.now() + days * 86_400_000).toISOString();
 
