@@ -70,6 +70,56 @@ function nearestQuestion(messages: Message[], index: number): string | undefined
   return undefined;
 }
 
+/**
+ * ===========================================================================
+ * EL TURNO: LA UNIDAD QUE FALTABA
+ * ===========================================================================
+ * Aquí había un `space-y-6` entre todo. Una pregunta quedaba a la misma
+ * distancia de SU respuesta que de un turno de hace una hora, así que la
+ * maquetación no decía lo primero que tiene que decir de una conversación: qué
+ * va con qué. Treinta mensajes eran treinta cosas sueltas.
+ *
+ * Un turno es una pregunta y todo lo que Cortex contestó debajo, y se dibuja
+ * como un `<article>` con su `h2` — que es lo que además deja saltar de
+ * pregunta en pregunta a quien navega escuchando.
+ *
+ * LA MEDIDA ES LA DECISIÓN, y va con intención: 14px por dentro contra 44px
+ * entre turnos, tres veces más. Nada de rayas: una regla horizontal cruzando la
+ * pantalla cada tres párrafos es el libro de contabilidad que este producto
+ * sustituye, y el carril de cada respuesta ya dice dónde termina.
+ *
+ * Un turno sin pregunta es legal y es de dos clases: el saludo con el que
+ * arranca un hilo y el aviso que entra solo cuando Cortex está mirando una
+ * pestaña compartida. Los dos abren turno propio en vez de colarse al final del
+ * anterior — un aviso pegado a la respuesta de otra pregunta se lee como parte
+ * de ella.
+ */
+interface Turn {
+  key: string;
+  /** Índices en `messages`, que es lo que necesitan los ayudantes de arriba. */
+  at: number[];
+}
+
+export function turnsOf(messages: Pick<Message, 'id' | 'role'>[]): Turn[] {
+  const turns: Turn[] = [];
+  let answered = false;
+  for (const [i, m] of messages.entries()) {
+    const last = turns[turns.length - 1];
+    // Una respuesta seguida de otra respuesta no es la continuación de nada:
+    // `useChat` produce exactamente una por pregunta, así que la segunda sólo
+    // puede ser un saludo o un aviso de vigilancia. Abre turno.
+    const opens = m.role === 'user' || !last || (m.role === 'assistant' && answered);
+    if (opens) {
+      turns.push({ key: m.id, at: [i] });
+      answered = false;
+    } else {
+      last.at.push(i);
+    }
+    if (m.role === 'assistant') answered = true;
+  }
+  return turns;
+}
+
 interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
@@ -264,6 +314,35 @@ export function MessageList({
   }, [messages, isLoading]);
 
   const empty = messages.length === 0 && !isLoading;
+  const turns = useMemo(() => turnsOf(messages), [messages]);
+
+  /*
+    Keep the indicator up while the assistant message exists but has no text
+    yet — during tool calls it is empty, and hiding the indicator the moment it
+    appears is what left the screen looking blank.
+
+    Se calcula aquí, arriba, porque ahora se dibuja DENTRO del último turno y
+    no al final de la lista: ver dónde se monta.
+  */
+  const live = (() => {
+    const last = messages[messages.length - 1];
+    const assistantIsSilent = last?.role === 'assistant' && !last.content?.trim();
+    if (!isLoading || (last?.role === 'assistant' && !assistantIsSilent)) return null;
+    const label = busyLabel(last);
+    // Once the reasoning trail is running it is the better progress signal, so
+    // the dots stand down — unless a tool is in flight, in which case naming it
+    // says something the reasoning does not.
+    if (!label && hasReasoning(last)) return null;
+    // `counted` cuando hay herramienta: su fila en TaskRows ya lleva el
+    // cronómetro, y dos números para la misma espera es la medición duplicada
+    // que TaskRows rechaza por escrito. Sin herramienta no cuenta nadie, y ése
+    // es justo el silencio que hay que llenar.
+    return label ? (
+      <LiveStatus state="working" label={label} counted />
+    ) : (
+      <LiveStatus state="thinking" label="Pensando…" />
+    );
+  })();
 
   return (
     <div ref={ref} className="scroll-slim flex-1 overflow-y-auto">
@@ -272,62 +351,54 @@ export function MessageList({
           <EmptyState agent={agent} onSuggestion={(t) => onSuggestion?.(t)} />
         </div>
       ) : (
-        <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
-          {messages.map((m, i) => {
-            const isLast = i === messages.length - 1;
-            // The picture belongs to the question; the marks belong to the
-            // answer. Walking back to the nearest question is what joins them,
-            // and it is done here rather than by keying frames on the answer's
-            // id because that id does not exist yet when the frame is taken —
-            // it comes back from the server after the turn.
-            const askedWith = frames ? nearestQuestionFrame(messages, i, frames) : undefined;
-            return (
-              <MessageBubble
-                key={m.id}
-                message={m}
-                conversationId={conversationId}
-                onConfirmed={onConfirmed}
-                onRegenerate={isLast && m.role === 'assistant' ? onRegenerate : undefined}
-                isStreaming={isLast && isLoading && m.role === 'assistant'}
-                metrics={isLast ? metrics : null}
-                onCompose={onSuggestion}
-                onAnswer={onAnswer}
-                question={nearestQuestion(messages, i)}
-                storedFollowups={storedFollowups?.[m.id]}
-                glanceAt={glances?.[m.id]}
-                screenFrame={askedWith}
-                delegations={noticePlan[m.id]}
-                brainSources={isLast && freshSources ? freshSources : initialBrainSources?.[m.id]}
-                exercisedMandates={exercised}
-                canRevokeMandates={canRevoke}
-                onMandateRevoked={() => void loadExercised()}
-              />
-            );
-          })}
-          {/*
-            Keep the indicator up while the assistant message exists but has no
-            text yet — during tool calls it is empty, and hiding the indicator
-            the moment it appears is what left the screen looking blank.
-          */}
-          {(() => {
-            const last = messages[messages.length - 1];
-            const assistantIsSilent = last?.role === 'assistant' && !last.content?.trim();
-            if (!isLoading || (last?.role === 'assistant' && !assistantIsSilent)) return null;
-            const label = busyLabel(last);
-            // Once the reasoning trail is running it is the better progress
-            // signal, so the dots stand down — unless a tool is in flight, in
-            // which case naming it says something the reasoning does not.
-            if (!label && hasReasoning(last)) return null;
-            // `counted` cuando hay herramienta: su fila en TaskRows ya lleva el
-            // cronómetro, y dos números para la misma espera es la medición
-            // duplicada que TaskRows rechaza por escrito. Sin herramienta no
-            // cuenta nadie, y ése es justo el silencio que hay que llenar.
-            return label ? (
-              <LiveStatus state="working" label={label} counted />
-            ) : (
-              <LiveStatus state="thinking" label="Pensando…" />
-            );
-          })()}
+        <div className="mx-auto w-full max-w-3xl space-y-11 px-4 py-8 sm:px-6">
+          {turns.map((turn) => (
+            // 14px por dentro contra los 44px de `space-y-11` que separan los
+            // turnos. Ver `turnsOf` para por qué la diferencia es el diseño.
+            <article key={turn.key} className="space-y-3.5">
+              {turn.at.map((i) => {
+                const m = messages[i];
+                if (!m) return null;
+                const isLast = i === messages.length - 1;
+                // The picture belongs to the question; the marks belong to the
+                // answer. Walking back to the nearest question is what joins
+                // them, and it is done here rather than by keying frames on the
+                // answer's id because that id does not exist yet when the frame
+                // is taken — it comes back from the server after the turn.
+                const askedWith = frames ? nearestQuestionFrame(messages, i, frames) : undefined;
+                return (
+                  <MessageBubble
+                    key={m.id}
+                    message={m}
+                    conversationId={conversationId}
+                    onConfirmed={onConfirmed}
+                    onRegenerate={isLast && m.role === 'assistant' ? onRegenerate : undefined}
+                    isStreaming={isLast && isLoading && m.role === 'assistant'}
+                    metrics={isLast ? metrics : null}
+                    onCompose={onSuggestion}
+                    onAnswer={onAnswer}
+                    question={nearestQuestion(messages, i)}
+                    storedFollowups={storedFollowups?.[m.id]}
+                    glanceAt={glances?.[m.id]}
+                    screenFrame={askedWith}
+                    delegations={noticePlan[m.id]}
+                    brainSources={
+                      isLast && freshSources ? freshSources : initialBrainSources?.[m.id]
+                    }
+                    exercisedMandates={exercised}
+                    canRevokeMandates={canRevoke}
+                    onMandateRevoked={() => void loadExercised()}
+                  />
+                );
+              })}
+              {/* El indicador vive DENTRO del turno que está esperando, a los
+                  mismos 14px de la pregunta a los que va a aparecer la
+                  respuesta. Fuera de él caía a 44px, así que la presencia
+                  saltaba de sitio justo en el momento en que su promesa es que
+                  no se sustituye nada: se calma lo que estaba en marcha. */}
+              {turn === turns[turns.length - 1] && live}
+            </article>
+          ))}
         </div>
       )}
     </div>

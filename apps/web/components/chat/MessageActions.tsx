@@ -93,7 +93,10 @@ export function MessageActions({
   }
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-0.5">
+    // El pie de la respuesta: donde termina el carril y donde vive la prueba.
+    // `-ml-1.5` mete los botones redondos medio paso a la izquierda para que su
+    // TEXTO —no su caja— caiga sobre el mismo margen que la prosa de arriba.
+    <div className="-ml-1.5 mt-2.5 flex flex-wrap items-center gap-0.5">
       {/*
         LA PROCEDENCIA NO SE ESCONDE, Y ÉSA ES LA DIFERENCIA CON LAS DEMÁS.
 

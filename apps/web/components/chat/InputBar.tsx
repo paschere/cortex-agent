@@ -705,15 +705,36 @@ export function InputBar({
                 menuOpen && rows.length > 0 ? `composer-option-${activeRow}` : undefined
               }
               aria-autocomplete="list"
-              className="scroll-slim block max-h-[200px] min-h-[24px] w-full resize-none bg-transparent px-4 pt-3.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
+              /*
+                ESCRIBIR ES LA ACCIÓN PRINCIPAL, Y SE ESCRIBÍA MÁS PEQUEÑO QUE
+                EL NOMBRE DEL AGENTE DE AL LADO. `text-base` es el token que el
+                sistema de diseño reserva para el énfasis dentro de una tarjeta;
+                aquí la tarjeta es el compositor y lo enfatizado es lo que
+                estás escribiendo. Todo lo que lo rodea se queda en `text-xs`,
+                que es donde estaba, así que la jerarquía sale de la diferencia
+                y no de añadirle peso a nada.
+              */
+              className="scroll-slim block max-h-[200px] min-h-[26px] w-full resize-none bg-transparent px-4 pt-3.5 text-base text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
             />
 
             <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-1">
               <div className="flex min-w-0 items-center gap-1">
+                {/*
+                  LA PASTILLA DEL AGENTE, DESPUÉS DE QUITARLE UN GRADO.
+
+                  Tenía borde y `font-semibold`: era el control con más peso de
+                  la fila y el único que no hace nada — dice quién contesta y,
+                  en una conversación empezada, ni siquiera se puede cambiar.
+                  Ahora es del mismo material que los iconos de al lado (nada en
+                  reposo, matiz al pasar por encima) y conserva su identidad en
+                  el icono, que sigue en indigo. Lo que se enseña sin borde no
+                  compite con el botón de enviar, que es el único de la fila que
+                  manda algo.
+                */}
                 {pillDisabled ? (
                   <span
                     title="Empieza un chat nuevo para cambiar de agente"
-                    className="inline-flex items-center gap-1.5 rounded-pill bg-surface-2 px-3 py-1.5 text-xs font-medium text-ink-faint"
+                    className="inline-flex items-center gap-1.5 rounded-pill px-2 py-1.5 text-xs font-medium text-ink-faint"
                   >
                     <Bot className="h-3.5 w-3.5" />
                     {activeAgent?.name ?? 'Agente'}
@@ -723,7 +744,7 @@ export function InputBar({
                     <DropdownMenu.Trigger asChild>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors duration-150 hover:border-primary/30 hover:bg-primary-soft hover:text-primary-ink motion-reduce:transition-none"
+                        className="inline-flex items-center gap-1.5 rounded-pill px-2 py-1.5 text-xs font-medium text-ink-muted transition-colors duration-150 hover:bg-primary-soft hover:text-primary-ink data-[state=open]:bg-primary-soft data-[state=open]:text-primary-ink motion-reduce:transition-none"
                       >
                         <Bot className="h-3.5 w-3.5 text-primary" />
                         {activeAgent?.name ?? 'Agente'}
@@ -798,13 +819,17 @@ export function InputBar({
                 {text.length > CHAR_COUNT_THRESHOLD && (
                   <span className="tabular text-micro text-ink-faint">{text.length}</span>
                 )}
+                {/* Un punto más grande que los 32px de todo lo demás de la
+                    fila. Es el único relleno saturado del compositor y ahora
+                    también el único de otro tamaño: la diferencia se ve sin
+                    leer nada, que es lo que se le pide al botón que manda. */}
                 <button
                   type="submit"
                   disabled={disabled || !text.trim()}
                   aria-label="Enviar mensaje"
-                  className="grid h-8 w-8 place-items-center rounded-full bg-primary text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+                  className="grid h-9 w-9 place-items-center rounded-full bg-primary text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
                 >
-                  <ArrowUp size={16} strokeWidth={2.5} />
+                  <ArrowUp size={17} strokeWidth={2.5} />
                 </button>
               </div>
             </div>

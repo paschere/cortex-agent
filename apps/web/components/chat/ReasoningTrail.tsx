@@ -9,9 +9,14 @@ import { useEffect, useRef, useState } from 'react';
  *
  * This is a record of process, not an assertion, and the two must never be
  * confused — so it is set apart from the answer on every axis available:
- * monospaced instead of the prose face, smaller, muted, and hung off a soft
- * hairline down the left. It is folded by default because it must not compete
- * with what Cortex actually says.
+ * monospaced instead of the prose face, smaller, muted. It is folded by default
+ * because it must not compete with what Cortex actually says.
+ *
+ * TENÍA SU PROPIO FILETE A LA IZQUIERDA (`border-l-2 border-border pl-3`) y lo
+ * perdió al aparecer el carril de evidencia: dos verticales a treinta píxeles
+ * una de otra, cada una diciendo lo mismo. El razonamiento es evidencia como
+ * los pasos y las fuentes, así que cuelga del mismo carril que ellos en vez de
+ * dibujarse uno propio. Ver la cabecera de `MessageBubble`.
  *
  * While a turn is still running the fold is the best progress there is: the
  * tail of the reasoning updates live, which beats three dots for telling
@@ -43,7 +48,7 @@ export function ReasoningTrail({ text, live }: { text: string; live?: boolean })
   const tail = lines[lines.length - 1] ?? '';
 
   return (
-    <div className="mb-2 border-l-2 border-border pl-3">
+    <div className="mb-2.5">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

@@ -52,8 +52,16 @@ export function LiveStatus({
     // <output> ya es role="status": quien navega escuchando recibe la frase,
     // que es la única parte de esto que se puede anunciar. La presencia va
     // aria-hidden justamente para no decir lo mismo dos veces.
-    <output className="flex items-center gap-3 py-0.5" aria-live="polite">
-      <Presence state={state} />
+    // EN EL CARRIL, AL PÍXEL. `w-7` y `gap-3 sm:gap-4` son los mismos que la
+    // columna de evidencia de una respuesta, y por eso la presencia deja de
+    // saltar: donde está girando ahora es exactamente donde se va a quedar
+    // quieta al lado de la respuesta. Era `md` y suelta, ocho píxeles más
+    // grande y en otra x — o sea, dos objetos, que es justo lo que Presence.tsx
+    // dice que no puede ser.
+    <output className="flex items-center gap-3 py-0.5 sm:gap-4" aria-live="polite">
+      <span className="grid w-7 shrink-0 place-items-center">
+        <Presence size="sm" state={state} />
+      </span>
       <span className="flex items-baseline gap-2">
         <span className="text-sm font-medium text-ink-muted">{label}</span>
         {elapsed !== null && (

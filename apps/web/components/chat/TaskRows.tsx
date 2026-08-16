@@ -357,7 +357,11 @@ export function TaskRows({
     : null;
 
   return (
-    <div className="mt-2 overflow-hidden rounded-card border border-border bg-surface shadow-card">
+    // SIN SOMBRA, y es un cambio del carril. Los pasos son el aparato de una
+    // respuesta, no la respuesta: una sombra los levanta por encima de la prosa
+    // que están sirviendo. El borde y el fondo bastan para agrupar los
+    // renglones, que es lo único que este contenedor tiene que hacer.
+    <div className="mt-3 overflow-hidden rounded-card border border-border bg-surface">
       {/*
         A screen reader is told what is happening now, in words, and is NOT read
         the whole list every time a row lands — `aria-live` sits on this one

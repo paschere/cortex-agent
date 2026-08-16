@@ -375,6 +375,20 @@ export function ChatRoot({
         >
           <Menu className="h-5 w-5" />
         </button>
+        {/*
+          LA CABECERA TENÍA CINCO COSAS CON EL MISMO PESO — el nombre del
+          agente, el id, el aviso, tres chips de hilo y dos botones—, así que
+          no había ninguna. Ahora tiene tres zonas y una jerarquía dicha con
+          tamaño y con separadores, no con color:
+
+            IDENTIDAD   quién contesta. Es lo único a `text-base`, que es el
+                        token de «el nombre de lo que estás mirando». Debajo,
+                        el id a 11px monoespaciado: es la referencia que alguien
+                        dicta por teléfono, no un subtítulo.
+            AVISO       lo que te espera. Interrumpe en voz baja y va pegado a
+                        la identidad, porque es lo único de aquí que pide algo.
+            NAVEGACIÓN  los hilos y los dos botones, al otro lado de un filete.
+        */}
         <div className="flex min-w-0 items-center gap-2.5">
           {/* La misma presencia que trabaja abajo, aquí arriba y siempre a la
               vista. En la cabecera sólo puede saber una cosa —si hay un turno
@@ -383,7 +397,7 @@ export function ChatRoot({
               treinta y el indicador de abajo hace rato que no aparece. */}
           <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-sm font-semibold text-ink">
+            <div className="truncate text-base font-semibold tracking-[-0.01em] text-ink">
               {activeAgent?.name ?? 'Cortex'}
             </div>
             {/* The conversation id is what a person quotes when they need this
@@ -410,7 +424,23 @@ export function ChatRoot({
           nadie se acuerda de que hay cuatro colas. Ver WaitingNotice.
         */}
         <div className="ml-auto flex min-w-0 shrink items-center gap-1">
-          {waiting && <WaitingNotice waiting={waiting} onAsk={handleSend} />}
+          {/*
+            `waiting.total > 0` y no `waiting`: el objeto existe también cuando
+            no hay nada esperándote, y en ese caso `WaitingNotice` se dibuja a sí
+            mismo como nada —se guarda solo, ver su línea 52—. Colgarle un filete
+            al lado condicionado sólo a que el objeto exista ponía un filete
+            suelto en la cabecera de toda conversación sin cola: un separador
+            separando una cosa de ninguna. Visto en pantalla, no deducido.
+          */}
+          {waiting && waiting.total > 0 && (
+            <>
+              <WaitingNotice waiting={waiting} onAsk={handleSend} />
+              {/* El filete es lo que impide que el aviso se lea como un cuarto
+                  chip de hilo. Son dos cosas distintas pegadas: una te pide
+                  algo, las otras te llevan a otro sitio. */}
+              <span className="mx-1 h-4 w-px shrink-0 bg-border" aria-hidden />
+            </>
+          )}
           <ThreadHistory />
         </div>
       </header>

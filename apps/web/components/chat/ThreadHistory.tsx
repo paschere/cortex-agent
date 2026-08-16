@@ -110,11 +110,21 @@ export function ThreadHistory() {
         })}
       </div>
 
+      {/* El filete separa los hilos —que son destinos— de los dos botones, que
+          son acciones. Sin él, cinco cosas seguidas del mismo tamaño. */}
+      {pinned.length > 0 && (
+        <span className="mx-1 hidden h-4 w-px shrink-0 bg-border lg:block" aria-hidden />
+      )}
+
+      {/* De los dos botones sólo uno CREA algo, y hasta ahora se veían iguales.
+          El matiz es el que le toca por la regla del color: indigo es el
+          producto y sus acciones. No lleva relleno en reposo — un botón lleno
+          de 36px en la cabecera pesaría más que el nombre del agente. */}
       <Link
         href="/chat"
         title="Nuevo chat"
         aria-label="Nuevo chat"
-        className="shrink-0 rounded-full p-2 text-ink-muted transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+        className="shrink-0 rounded-full p-2 text-ink-muted transition-colors duration-150 hover:bg-primary-soft hover:text-primary-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
       >
         <SquarePen strokeWidth={1.75} className="h-[18px] w-[18px]" />
       </Link>

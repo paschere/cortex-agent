@@ -826,7 +826,9 @@ export function GlanceNote({ at }: { at: string }) {
     : when.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <p className="mt-1 flex items-center justify-end gap-1.5 text-micro text-ink-faint">
+    // A la izquierda desde que la pregunta dejó de ser una burbuja alineada a
+    // la derecha: cuelga del margen de su titular. Ver MessageBubble.
+    <p className="mt-1.5 flex items-center gap-1.5 text-micro text-ink-faint">
       <ScanEye className="h-3 w-3 shrink-0" aria-hidden="true" />
       <span>
         Miré tu pestaña compartida

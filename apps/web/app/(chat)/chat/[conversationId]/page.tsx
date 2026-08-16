@@ -82,11 +82,26 @@ export default async function ResumeChatPage({
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .map((m) => {
       const toolInvocations = toToolInvocations(m.tool_calls, m.tool_results);
+      /**
+       * LA HORA VIAJA CON EL MENSAJE, y hasta hoy no viajaba.
+       *
+       * `created_at` estaba en el `select` desde siempre y se tiraba aquí. La
+       * consecuencia no era sólo que la transcripción no tuviera hora: es que
+       * `MessageActions` construye la procedencia de una cita con
+       * `message.createdAt ?? Date.now()`, así que copiar con su fuente una
+       * frase de hace tres semanas la fechaba HOY. Un producto cuya promesa es
+       * que puedes citar esto dentro de dos semanas no puede inventarse la
+       * fecha de la cita.
+       *
+       * Una línea, ninguna consulta nueva.
+       */
+      const createdAt = m.created_at ? new Date(m.created_at as string) : null;
       return {
         id: m.id as string,
         role: m.role as 'user' | 'assistant',
         content: (m.content as string) ?? '',
         ...(toolInvocations ? { toolInvocations } : {}),
+        ...(createdAt && !Number.isNaN(createdAt.getTime()) ? { createdAt } : {}),
       };
     });
 

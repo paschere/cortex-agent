@@ -34,8 +34,40 @@ export function ChatMarkdown({
     <div
       className={clsx(
         'prose prose-sm max-w-none text-ink',
-        'prose-headings:mt-3 prose-headings:font-bold prose-headings:text-ink',
-        'prose-p:my-1.5 prose-p:leading-relaxed prose-li:my-0.5',
+        /*
+          UN SOLO TAMAÑO DE ENCABEZADO DENTRO DE UNA RESPUESTA.
+
+          Eran `font-bold` en la escala del plugin, o sea un `##` a ~16,6px en
+          negrita. Ahora que la pregunta es el titular de su respuesta —19px,
+          semibold, colgada al margen— un encabezado del modelo a 16,6px negrita
+          competía por el mismo papel a dos píxeles de distancia. Se fija en
+          `text-base`, que es el token que el sistema de diseño reserva para «el
+          nombre de lo que estás mirando»: manda dentro de la respuesta y nunca
+          sobre ella. Lo que separa de verdad a los dos es la sangría, no el
+          tamaño — ver MessageBubble.
+        */
+        'prose-headings:mt-5 prose-headings:mb-1.5 prose-headings:text-base',
+        'prose-headings:font-semibold prose-headings:text-ink',
+        /*
+          LA MEDIDA DE LA PROSA, Y POR QUÉ NO ES LA DE LA COLUMNA.
+
+          Medido en pantalla: con el ancho entero del cuerpo, un renglón de una
+          respuesta llegaba a ~110 caracteres. La tipografía lleva un siglo
+          diciendo que el ojo pierde el principio del renglón siguiente por
+          encima de 90, y esta gente lee aquí ocho horas.
+
+          Se limita el PÁRRAFO y el punto de una lista, no el contenedor: una
+          tabla o un bloque de código dentro de una respuesta necesitan el ancho
+          entero, y `prose` lo capa a 65ch si se le deja (por eso el
+          `max-w-none` de arriba, que se queda). Columna de texto estrecha y
+          figuras anchas es lo que hace un documento, y es exactamente lo que
+          esta pantalla dice que es.
+
+          En `ch` y no en píxeles a propósito: la medida se cuenta en
+          caracteres, así que se escribe en caracteres.
+        */
+        'prose-p:my-2.5 prose-p:leading-relaxed prose-p:max-w-[64ch]',
+        'prose-li:my-0.5 prose-li:max-w-[62ch]',
         'prose-strong:text-ink prose-strong:font-semibold',
         'prose-a:text-primary prose-a:no-underline hover:prose-a:underline',
         'prose-code:rounded-sm prose-code:bg-surface-2 prose-code:px-1 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-medium prose-code:text-primary-ink prose-code:before:content-[""] prose-code:after:content-[""]',
