@@ -43,10 +43,7 @@ export async function POST(
   }
 
   if (!process.env.INNGEST_SIGNING_KEY) {
-    return NextResponse.json(
-      { error: 'Background runs are not configured yet' },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: 'Background runs are not configured yet' }, { status: 503 });
   }
 
   try {
@@ -54,6 +51,20 @@ export async function POST(
       name: 'scheduled/job.run',
       data: {
         jobId: job.id as string,
+        // EL ESPACIO DE TRABAJO VA EN EL EVENTO, Y ES OBLIGATORIO.
+        //
+        // `schedule-run.ts` abre la base con un manejador acotado a esta
+        // empresa, así que sin este campo hace `return { skipped: 'no
+        // workspace on the event' }` y no corre nada. Faltaba, y el fallo era
+        // del peor tipo: esta ruta devolvía `{ok: true}`, la pantalla decía que
+        // sí, y la rutina no se ejecutaba. Nadie ve un error porque no hay
+        // ninguno — simplemente no pasa nada.
+        //
+        // El despachador de cada minuto lo manda desde
+        // `job.organization_id`; aquí sale de la sesión, que es la misma
+        // empresa contra la que se acaba de leer el job con el manejador
+        // acotado.
+        organizationId: user.organization.id,
         scheduledFor: new Date().toISOString(),
         manual: true,
       },
