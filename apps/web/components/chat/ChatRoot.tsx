@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { AmbientField } from './AmbientField';
+import { Capabilities } from './Capabilities';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
 import { Presence } from './Presence';
@@ -73,6 +74,14 @@ interface ChatRootProps {
    * para los badges del rail. Ausente no dibuja nada.
    */
   waiting?: WaitingNoticeData;
+  /**
+   * De qué va esta conversación — el título que ya se le puso al hilo.
+   *
+   * Existía en la base y en la pastilla del extremo derecho de la cabecera, que
+   * es donde va lo que se consulta; ahora encabeza la barra, que es donde va lo
+   * que se lee. Ausente en un chat nuevo, que todavía no es «de» nada.
+   */
+  title?: string;
 }
 
 export function ChatRoot({
@@ -85,6 +94,7 @@ export function ChatRoot({
   initialGlances,
   initialBrainSources,
   waiting,
+  title,
 }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
@@ -378,16 +388,27 @@ export function ChatRoot({
         {/*
           LA CABECERA TENÍA CINCO COSAS CON EL MISMO PESO — el nombre del
           agente, el id, el aviso, tres chips de hilo y dos botones—, así que
-          no había ninguna. Ahora tiene tres zonas y una jerarquía dicha con
+          no había ninguna. Ahora tiene cuatro zonas y una jerarquía dicha con
           tamaño y con separadores, no con color:
 
-            IDENTIDAD   quién contesta. Es lo único a `text-base`, que es el
-                        token de «el nombre de lo que estás mirando». Debajo,
-                        el id a 11px monoespaciado: es la referencia que alguien
-                        dicta por teléfono, no un subtítulo.
-            AVISO       lo que te espera. Interrumpe en voz baja y va pegado a
-                        la identidad, porque es lo único de aquí que pide algo.
+            SUJETO      de qué va esta conversación. Es lo único a `text-base`,
+                        que es el token de «el nombre de lo que estás mirando».
+                        Debajo, quién contesta y el id a 11px monoespaciado.
+            PUERTA      qué se le puede pedir. En el centro, que era el vacío.
+            AVISO       lo que te espera. Interrumpe en voz baja.
             NAVEGACIÓN  los hilos y los dos botones, al otro lado de un filete.
+
+          EL TÍTULO SUBIÓ Y EL AGENTE BAJÓ, y es un cambio con motivo. La
+          cabecera anunciaba «Cortex» —lo mismo en las mil conversaciones de
+          esta cuenta— y escondía «Cartera de Coltrans» en una pastilla a mil
+          doscientos píxeles a la derecha, que es donde va lo que se consulta,
+          no lo que se lee. Con una transcripción en pantalla la pregunta
+          «¿quién contesta?» ya la responde cada turno; la que nadie contestaba
+          era «¿qué estoy mirando?». Visto en pantalla con siete mensajes
+          delante, que es la primera vez que alguien miró esto con mensajes.
+
+          La identidad no se pierde: baja al antetítulo, junto al id, que es
+          exactamente el peso que le corresponde a un dato constante.
         */}
         <div className="flex min-w-0 items-center gap-2.5">
           {/* La misma presencia que trabaja abajo, aquí arriba y siempre a la
@@ -398,18 +419,43 @@ export function ChatRoot({
           <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
           <div className="min-w-0 leading-tight">
             <div className="truncate text-base font-semibold tracking-[-0.01em] text-ink">
-              {activeAgent?.name ?? 'Cortex'}
+              {title ?? (conversationId ? 'Conversación' : 'Conversación nueva')}
             </div>
             {/* The conversation id is what a person quotes when they need this
                 exchange looked up later, so it is set as evidence, not prose. */}
-            <div className="font-mono text-micro text-ink-faint">
-              {conversationId ? (
-                <span title={conversationId}>#{conversationId.slice(0, 8)}</span>
-              ) : (
-                'Conversación nueva'
+            <div className="truncate text-micro text-ink-faint">
+              {activeAgent?.name ?? 'Cortex'}
+              {conversationId && (
+                <>
+                  {' · '}
+                  <span className="font-mono" title={conversationId}>
+                    #{conversationId.slice(0, 8)}
+                  </span>
+                </>
               )}
             </div>
           </div>
+        </div>
+
+        {/*
+          LA PUERTA, EN EL HUECO QUE ERA EL PROBLEMA.
+
+          Aquí había mil cuatrocientos píxeles de nada entre el nombre y los dos
+          botones del extremo: la barra más grande de la pantalla sin decir
+          nada. Y al mismo tiempo la queja de fondo era que no se ve todo lo que
+          Cortex sabe hacer. Las dos cosas se contestan con la misma pieza: lo
+          que faltaba no eran opciones —hay decenas de frases curadas detrás del
+          `/`— sino una PUERTA que no exija saber ya que existe. Ver
+          Capabilities.tsx, que explica por qué escribe en vez de mandar.
+
+          `mx-auto` y no `ml-auto`: la puerta se queda en el centro óptico de la
+          barra aunque el título crezca, que es donde el ojo va a buscar cuando
+          no sabe qué pedir. Se esconde por debajo de `md` porque ahí la
+          cabecera ya lleva el botón del menú y el título, y un tercer elemento
+          la parte en dos líneas.
+        */}
+        <div className="mx-auto hidden md:block">
+          <Capabilities agentSlug={agentSlug} onCompose={setDraft} disabled={isLoading} />
         </div>
 
         {/*
@@ -423,7 +469,7 @@ export function ChatRoot({
           tiene que seguir existiendo en el turno treinta, que es cuando ya
           nadie se acuerda de que hay cuatro colas. Ver WaitingNotice.
         */}
-        <div className="ml-auto flex min-w-0 shrink items-center gap-1">
+        <div className="ml-auto flex min-w-0 shrink items-center gap-1 md:ml-0">
           {/*
             `waiting.total > 0` y no `waiting`: el objeto existe también cuando
             no hay nada esperándote, y en ese caso `WaitingNotice` se dibuja a sí

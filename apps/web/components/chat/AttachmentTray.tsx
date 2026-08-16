@@ -91,6 +91,7 @@ export function AttachmentTray({
   conversationId,
   onAsk,
   onPickerReady,
+  children,
 }: {
   conversationId: string;
   onAsk: (question: string) => void;
@@ -104,6 +105,25 @@ export function AttachmentTray({
    * in — dragging and the button — and exactly one set of rules.
    */
   onPickerReady?: (open: () => void) => void;
+  /**
+   * EL COMPOSITOR ENTERO, DENTRO DE LA ZONA DE SOLTAR.
+   *
+   * Antes esto dibujaba una franja punteada permanente encima de la caja de
+   * escribir —«Suelta un archivo y decides si entra a la memoria (PDF, DOCX,
+   * TXT, MD — máx. 10 MB)»— en TODAS las conversaciones y todo el rato. Era una
+   * instrucción que no cambia nunca ocupando una fila entera del sitio con menos
+   * espacio de la pantalla, justo encima de lo único que se mira. Y era la pieza
+   * que más ruido metía en la queja de que el compositor no tiene jerarquía: un
+   * recuadro discontinuo a lo ancho pesa más que el botón de enviar.
+   *
+   * La zona de soltar no desaparece: se hace MÁS GRANDE. Ahora envuelve el
+   * compositor completo, que es donde una persona iba a soltar el archivo de
+   * todos modos, y sólo se dibuja cuando hay algo colgando del cursor. Las dos
+   * puertas siguen siendo una sola regla —el clip abre el mismo diálogo, ver
+   * `onPickerReady`— y los formatos y el tope se cuentan cuando importan: al
+   * arrastrar, y en el error si se rechaza.
+   */
+  children?: React.ReactNode;
 }) {
   const [pending, setPending] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -117,6 +137,15 @@ export function AttachmentTray({
     accept: ACCEPT,
     maxSize: MAX_BYTES,
     multiple: false,
+    // La zona envuelve el compositor entero, así que un clic aquí es un clic en
+    // la caja de escribir y una tecla es una tecla escribiendo. Abrir el
+    // diálogo de archivos es trabajo del clip, que ya lo tiene por
+    // `onPickerReady`. Van en las OPCIONES del hook y no en `getRootProps`:
+    // ahí dentro son props desconocidas y react-dropzone las escupe al DOM,
+    // que es exactamente el aviso de React que apareció en la consola la
+    // primera vez que se escribieron en el sitio equivocado.
+    noClick: true,
+    noKeyboard: true,
     // Nothing is uploaded on drop. The bytes sit in the browser until the
     // person says where they go — an upload that happened first and asked
     // afterwards would already have made the decision it is asking about.
@@ -201,8 +230,8 @@ export function AttachmentTray({
     }
   }
 
-  return (
-    <div className="space-y-1.5">
+  const tray = (
+    <div className={clsx('space-y-1.5', (attachments.length > 0 || pending || error) && 'mb-2')}>
       {attachments.map((a) => (
         <AttachmentRow key={a.id} attachment={a} onAsk={onAsk} />
       ))}
@@ -306,19 +335,36 @@ export function AttachmentTray({
           )}
         </div>
       ) : (
-        <div
-          {...getRootProps({
-            className: clsx(
-              'cursor-pointer rounded-card border border-dashed px-3 py-2.5 text-xs transition-colors duration-150 motion-reduce:transition-none',
-              isDragActive
-                ? 'border-primary bg-primary-soft text-primary-ink'
-                : 'border-border-strong text-ink-faint hover:border-primary/40 hover:bg-primary-soft hover:text-primary-ink',
-            ),
-          })}
-        >
-          <input {...getInputProps()} />
-          {error ??
-            'Suelta un archivo y decides si entra a la memoria (PDF, DOCX, TXT, MD — máx. 10 MB).'}
+        // Un rechazo SÍ ocupa sitio: es lo único que esta zona tiene que decir
+        // por su cuenta, y decirlo callado sería dejar a alguien mirando un
+        // compositor que se tragó su PDF sin explicar por qué.
+        error && (
+          <p role="alert" className="text-xs text-rose">
+            {error}
+          </p>
+        )
+      )}
+    </div>
+  );
+
+  return (
+    <div
+      {...getRootProps({ className: 'relative' })}
+    >
+      <input {...getInputProps()} />
+      {tray}
+      {children}
+      {isDragActive && (
+        // El único momento en que esto se dibuja. Cubre el compositor entero
+        // con la señal y con las reglas —formatos y tope— justo cuando son
+        // relevantes, en vez de recordarlas todo el día.
+        <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center rounded-card border-2 border-dashed border-primary bg-primary-soft/95 px-4 text-center">
+          <div>
+            <p className="text-sm font-semibold text-primary-ink">Suéltalo aquí</p>
+            <p className="mt-0.5 text-micro text-primary-ink/70">
+              Luego decides si entra a la memoria — PDF, DOCX, TXT o MD, hasta 10 MB.
+            </p>
+          </div>
         </div>
       )}
     </div>

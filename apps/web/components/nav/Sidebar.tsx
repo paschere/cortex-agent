@@ -746,23 +746,56 @@ export function Sidebar({
    * Y AL DESPLEGARSE FLOTA, NO EMPUJA. Es la diferencia con el rail de
    * ChatGPT, que al abrirse mueve el hilo entero hacia la derecha: estás
    * leyendo una respuesta, rozas el borde, y el texto se te va de sitio. Aquí
-   * el ancho reservado no cambia nunca —el `<aside>` mide siempre 56px en el
-   * chat— y lo que se expande es una capa por encima del lienzo. La
-   * conversación no se mueve ni un píxel.
+   * el ancho reservado no cambia nunca y lo que se expande es una capa por
+   * encima del lienzo. La conversación no se mueve ni un píxel.
    *
    * El botón de contraer sigue existiendo fuera del chat, y la preferencia que
    * guarda se respeta ahí. Dentro del chat no manda: la decisión ya la tomó el
    * sitio donde estás.
+   *
+   * ===========================================================================
+   * SALVO A PARTIR DE 1280px, DONDE EL ARGUMENTO DEJA DE SER CIERTO
+   * ===========================================================================
+   * «260px que no son la conversación» supone que la conversación se los iba a
+   * quedar, y no se los queda: el hilo está topado a `max-w-3xl` —768px— en
+   * MessageList y en el compositor. Medido en un portátil de 1440: descontado
+   * el rail de 56px quedan 1384px de lienzo para 768px de hilo, o sea 300px de
+   * margen vacío a cada lado. Ensanchar el rail a 260 deja 1124, que sigue
+   * sobrando: el hilo no se estrecha ni un píxel, sólo se recentra.
+   *
+   * Y lo que se pagaba a cambio se veía: diez iconos sin una palabra, en
+   * columna, permanentes. Asomarse los nombra, pero hay que descubrir que el
+   * rail se asoma — y nadie pasa el ratón por una columna que ya dio por
+   * decorativa. A 1440px el ahorro era imaginario y el jeroglífico era real.
+   *
+   * Por debajo de 1280 el argumento original vuelve a valer entero y el rail
+   * vuelve a los 56px con su asomo. El corte es una consulta de medios y no un
+   * breakpoint de Tailwind porque aquí gobierna dos booleanos de React, no una
+   * clase; llega después de hidratar, igual que la preferencia de contraer, y
+   * por eso comparte con ella la espera de la animación.
    */
   const inChat = pathname.startsWith('/chat');
   const [peeking, setPeeking] = useState(false);
-  // Fuera del chat manda la preferencia; dentro, el chat.
-  const narrow = inChat ? true : collapsed;
-  const expanded = inChat ? peeking : !collapsed;
+  const [roomy, setRoomy] = useState(false);
+  // En el chat: ancho si cabe, iconos si no. Fuera del chat manda la preferencia.
+  const chatWide = inChat && roomy;
+  const narrow = inChat ? !roomy : collapsed;
+  const expanded = inChat ? roomy || peeking : !collapsed;
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSE_KEY) === 'true');
     setHydrated(true);
+  }, []);
+
+  // Se re-evalúa al cambiar el tamaño: alguien que parte la pantalla en dos a
+  // media conversación tiene que recuperar sus 200px, no quedarse con la
+  // decisión que se tomó cuando la ventana estaba entera.
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1280px)');
+    const apply = () => setRoomy(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, []);
 
   // Salir del chat con el rail asomado lo dejaría abierto sobre otra pantalla.
@@ -787,23 +820,24 @@ export function Sidebar({
           `surface-2` sat against a canvas five points away from it and read as a
           rendering artefact rather than as a different place. */}
       <aside
-        onMouseEnter={inChat ? () => setPeeking(true) : undefined}
-        onMouseLeave={inChat ? () => setPeeking(false) : undefined}
-        // El ancho RESERVADO. En el chat no cambia nunca: es lo que hace que
-        // asomarse no mueva la conversación. Fuera del chat sigue siendo el
-        // rail de siempre, con su preferencia.
+        onMouseEnter={inChat && !roomy ? () => setPeeking(true) : undefined}
+        onMouseLeave={inChat && !roomy ? () => setPeeking(false) : undefined}
+        // El ancho RESERVADO. En el chat estrecho no cambia nunca: es lo que
+        // hace que asomarse no mueva la conversación. En el chat ancho el rail
+        // reserva sus 260px y ya no se asoma nada, porque ya está abierto.
         className={clsx(
           'relative hidden shrink-0 md:flex',
-          hydrated && !inChat && 'transition-[width] duration-200 motion-reduce:transition-none',
-          inChat ? 'w-[56px]' : collapsed ? 'w-[72px]' : 'w-[260px]',
+          hydrated && !(inChat && !roomy) && 'transition-[width] duration-200 motion-reduce:transition-none',
+          chatWide ? 'w-[260px]' : inChat ? 'w-[56px]' : collapsed ? 'w-[72px]' : 'w-[260px]',
         )}
       >
         <div
           className={clsx(
             'flex h-full flex-col border-r border-border bg-surface',
-            // En el chat, la capa que se expande va POR ENCIMA del lienzo. Fuera,
-            // el rail ocupa su hueco y nada flota.
-            inChat
+            // En el chat estrecho, la capa que se expande va POR ENCIMA del
+            // lienzo. En el chat ancho y fuera del chat, el rail ocupa su hueco
+            // y nada flota — no hay nada que flotar, está abierto.
+            inChat && !roomy
               ? clsx(
                   'absolute inset-y-0 left-0 z-40',
                   hydrated &&

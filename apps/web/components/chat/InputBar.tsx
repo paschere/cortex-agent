@@ -543,19 +543,7 @@ export function InputBar({
     resize();
   }
 
-  return (
-    <div className="shrink-0 px-4 pb-4 pt-1">
-      <div className="mx-auto w-full max-w-3xl">
-        {conversationId && (
-          <div className="mb-2">
-            <AttachmentTray
-              conversationId={conversationId}
-              onAsk={(question) => put(question)}
-              onPickerReady={registerFilePicker}
-            />
-          </div>
-        )}
-
+  const composer = (
         <div className="relative">
           {/*
             Above the box, not inside a menu, and on every turn it is in force.
@@ -695,7 +683,16 @@ export function InputBar({
               onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              placeholder="Pregunta por una llamada, una placa o una rutina. @ para nombrar algo, / para un comando…"
+              /*
+                A 390px la anterior pedía TRES líneas y la caja enseña dos, así
+                que se cortaba a media palabra —«/ para un»— en el sitio donde
+                más caro sale parecer roto. Se acortan las dos pistas y no la
+                invitación: la invitación es lo que le dice a alguien qué clase
+                de cosa preguntar, y las pistas son atajos para quien ya está
+                dentro. Las dos siguen nombradas, que es lo que las hace
+                descubribles.
+              */
+              placeholder="Pregunta por una llamada, una placa o una rutina. @ nombra algo, / comandos"
               disabled={disabled}
               rows={1}
               role="combobox"
@@ -713,8 +710,21 @@ export function InputBar({
                 estás escribiendo. Todo lo que lo rodea se queda en `text-xs`,
                 que es donde estaba, así que la jerarquía sale de la diferencia
                 y no de añadirle peso a nada.
+
+                Y SEGUÍA SIN PARECERLO, PORQUE EL TAMAÑO DE LA LETRA NO ES EL
+                TAMAÑO DEL SITIO. Medido en pantalla: la caja de escribir vacía
+                medía 37px de alto y la fila de controles de debajo, 44. El
+                espacio para lo único que hay que hacer aquí era MENOR que el
+                del andamiaje que lo rodea, y eso se ve antes de leer nada. 64px
+                son dos líneas y media: el hueco dice «cabe una pregunta de
+                verdad, no una palabra» y le da la vuelta a la proporción sin
+                tocar ni un control. Son además los que hacen falta para que a
+                390px quepan las DOS líneas del texto de ayuda, que con 52 se
+                cortaba por la mitad — medido en un teléfono, no calculado. El
+                `max-h` de 200 no cambia: quien escriba un párrafo sigue
+                teniendo el mismo techo.
               */
-              className="scroll-slim block max-h-[200px] min-h-[26px] w-full resize-none bg-transparent px-4 pt-3.5 text-base text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
+              className="scroll-slim block max-h-[200px] min-h-[64px] w-full resize-none bg-transparent px-4 pt-3.5 text-base text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
             />
 
             <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-1">
@@ -777,6 +787,27 @@ export function InputBar({
                   </DropdownMenu.Root>
                 )}
 
+                {/*
+                  EL ÁMBITO SUBE A JUNTARSE CON EL AGENTE, y con eso la fila
+                  deja de ser cinco iconos iguales en hilera.
+
+                  Estaba al final, pegado al botón de enviar, entre cosas con
+                  las que no tiene nada que ver. Pero el ámbito y el agente
+                  contestan la MISMA pregunta —quién responde y con qué
+                  memoria—, y los otros cuatro contestan otra distinta: qué le
+                  estoy dando además de lo que escribo (un archivo, mi voz, un
+                  trámite, mi pantalla). Dos preguntas, dos grupos, un filete en
+                  medio. Es exactamente lo que se hizo en la cabecera, y por lo
+                  mismo: la jerarquía se dice con la agrupación y el tamaño,
+                  nunca con el color.
+
+                  Ninguno cambia de comportamiento ni pierde su sitio: el
+                  ámbito sigue enseñando su franja encima de la caja cuando
+                  está puesto (ver MemoryScope) y la pantalla compartida sigue
+                  teniendo la suya (ver ScreenView). Sólo se reordenan.
+                */}
+                <ScopePicker selected={scope} onChange={onScopeChange} disabled={disabled} />
+
                 <span className="mx-0.5 h-4 w-px shrink-0 bg-border" aria-hidden />
 
                 {openFilePicker && (
@@ -811,8 +842,6 @@ export function InputBar({
                     has to pass to get in here. MIRAR, not GRABAR — the
                     recorder beside it does the other thing. */}
                 {screen && <ScreenViewButton session={screen} disabled={disabled} />}
-
-                <ScopePicker selected={scope} onChange={onScopeChange} disabled={disabled} />
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
@@ -835,6 +864,30 @@ export function InputBar({
             </div>
           </form>
         </div>
+  );
+
+  return (
+    <div className="shrink-0 px-4 pb-4 pt-1">
+      <div className="mx-auto w-full max-w-3xl">
+        {/*
+          EL COMPOSITOR VA DENTRO DE LA BANDEJA, no debajo. La bandeja es la
+          zona de soltar, y la zona de soltar tiene que ser el sitio donde
+          alguien va a soltar un archivo — que es la caja de escribir, no una
+          franja punteada encima de ella. Ver AttachmentTray: la franja
+          permanente que había aquí se cambió por una señal que sólo aparece
+          mientras se arrastra.
+        */}
+        {conversationId ? (
+          <AttachmentTray
+            conversationId={conversationId}
+            onAsk={(question) => put(question)}
+            onPickerReady={registerFilePicker}
+          >
+            {composer}
+          </AttachmentTray>
+        ) : (
+          composer
+        )}
 
         <p className="mt-1.5 text-center text-micro text-ink-faint">
           Cada respuesta trae su fuente: revísala antes de actuar.

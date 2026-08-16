@@ -82,7 +82,17 @@ export function ThreadHistory() {
   });
 
   const recent = conversations.slice(0, 8);
-  const pinned = conversations.slice(0, PINNED);
+  /**
+   * EL HILO EN EL QUE ESTÁS NO ES UN SITIO AL QUE IR, y hasta ahora se dibujaba
+   * como si lo fuera. Desde que la cabecera encabeza con el título de esta
+   * conversación, tenerlo además aquí en pastilla lo decía dos veces en la
+   * misma barra —una vez a la izquierda como sujeto y otra a la derecha como
+   * destino— y gastaba uno de los tres huecos en el único hilo al que nadie
+   * necesita saltar. Fuera de la fila, los tres son tres SITIOS DISTINTOS, que
+   * es lo que la fila prometía. El desplegable sigue enseñándolos todos, con el
+   * actual resaltado, porque allí la lista sí es el archivo de lo que hay.
+   */
+  const pinned = conversations.filter((c) => pathname !== `/chat/${c.id}`).slice(0, PINNED);
 
   return (
     <div className="flex min-w-0 shrink items-center gap-1">

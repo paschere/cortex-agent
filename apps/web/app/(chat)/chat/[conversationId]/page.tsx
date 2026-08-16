@@ -67,7 +67,7 @@ export default async function ResumeChatPage({
   // stays on the same agent instead of defaulting to the first in the list).
   const { data: conv } = await db
     .from('conversations')
-    .select('id, agents(slug)')
+    .select('id, title, agents(slug)')
     .eq('id', conversationId)
     .eq('user_id', user.id)
     .maybeSingle();
@@ -197,6 +197,7 @@ export default async function ResumeChatPage({
       conversationId={conversationId}
       initialMessages={initialMessages}
       initialAgentSlug={convAgentSlug}
+      {...(conv.title ? { title: conv.title as string } : {})}
       initialScope={initialScope}
       waiting={waiting}
       {...(storedFollowups ? { initialFollowups: storedFollowups } : {})}
