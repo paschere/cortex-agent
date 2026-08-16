@@ -2,12 +2,22 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { clsx } from 'clsx';
 import Link from 'next/link';
-import { BarChart3, Zap, AlertTriangle, Users, Timer, CheckCircle2, Cpu } from 'lucide-react';
+import {
+  BarChart3,
+  Zap,
+  AlertTriangle,
+  Users,
+  Timer,
+  CheckCircle2,
+  Cpu,
+  CircleDollarSign,
+} from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
 import { SURFACE_LABEL } from '@/app/api/admin/_lib/audit-filters';
 import { LegendDot, RISK_BAR, SURFACE_BAR } from '../audit/_components/tags';
 import { formatTokens, turnTokens } from '../audit/_components/format';
+import { cacheSavingsUsd, formatUsd, rateFor, stepCostUsd } from '@/lib/model-pricing';
 
 interface AuditEvent {
   user_id: string;
@@ -102,7 +112,26 @@ export default async function UsagePage({
       .limit(5000);
 
   // Fall back to the pre-security column set if migration 0042 has not run here.
-  let res = await run(SELECT_FULL);
+  // El costo se calcula aparte de la auditoría, porque la auditoría solo sabe de
+  // turnos de chat: los encargos y el orquestador llevan sus tokens en sus
+  // propias tablas, y el detalle del caché (que decide si un token de entrada
+  // costó 1x, 0.1x o 1.25x) vive únicamente en turn_latencies.
+  const [resFirst, latRes, errandRes, orchRes] = await Promise.all([
+    run(SELECT_FULL),
+    sb
+      .from('turn_latencies')
+      .select('model, prompt_tokens, completion_tokens, cache, created_at')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(5000),
+    sb.from('errands').select('tokens_spent, created_at').gte('created_at', since).limit(2000),
+    sb
+      .from('orchestration_runs')
+      .select('total_tokens, created_at')
+      .gte('created_at', since)
+      .limit(2000),
+  ]);
+  let res = resFirst;
   if (res.error) res = await run(SELECT_LEGACY);
 
   const rows: AuditEvent[] = ((res.data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
@@ -168,6 +197,109 @@ export default async function UsagePage({
       td.out += usage.tokensOut;
     }
   }
+
+  // -------------------------------------------------------------------------
+  // COSTO ESTIMADO EN DÓLARES. Tres fuentes, tres grados de precisión, y la
+  // página distingue las tres en vez de sumarlas como si fueran iguales:
+  //
+  //   Chat — turn_latencies trae, POR PETICIÓN al modelo, la entrada sin caché,
+  //     lo leído del caché y lo escrito. Es la única superficie donde el costo
+  //     se puede calcular como lo cobra Anthropic.
+  //   Encargos y orquestador — guardan un total (entrada+salida mezcladas, sin
+  //     caché). Se reparte con la proporción entrada/salida observada en el
+  //     chat de la misma ventana y se cobra la entrada a precio pleno: si el
+  //     caché les funciona, el número real es MENOR que este. Estimación
+  //     conservadora, dicha como tal.
+  //   Utilitarios (títulos, extractores, sugerencias, watch) — no persisten
+  //     consumo en ninguna parte. No aparecen aquí; la nota al pie lo dice.
+  // -------------------------------------------------------------------------
+  interface CacheStep {
+    read?: number;
+    written?: number;
+    promptTokens?: number;
+  }
+  interface LatencyRow {
+    model: string;
+    prompt_tokens: number | null;
+    completion_tokens: number | null;
+    cache: CacheStep[] | null;
+    created_at: string;
+  }
+
+  let chatCostUsd = 0;
+  let chatCacheRead = 0;
+  let chatCacheWritten = 0;
+  let chatUncachedInput = 0;
+  let chatSavingsUsd = 0;
+  const latRows = ((latRes.data ?? []) as unknown as LatencyRow[]).filter((r) => r.model);
+  for (const row of latRows) {
+    const rate = rateFor(row.model, row.created_at);
+    if (!rate) continue;
+    const steps = Array.isArray(row.cache) ? row.cache : [];
+    let input = 0;
+    let read = 0;
+    let written = 0;
+    if (steps.length > 0) {
+      for (const s of steps) {
+        input += typeof s.promptTokens === 'number' ? s.promptTokens : 0;
+        read += typeof s.read === 'number' ? s.read : 0;
+        written += typeof s.written === 'number' ? s.written : 0;
+      }
+    } else {
+      // Turno sin detalle de caché (fila vieja): la entrada completa a 1x, que
+      // sobrestima en vez de subestimar.
+      input = row.prompt_tokens ?? 0;
+    }
+    const output = row.completion_tokens ?? 0;
+    chatCostUsd += stepCostUsd(rate, { input, cacheRead: read, cacheWrite: written, output });
+    chatSavingsUsd += cacheSavingsUsd(rate, read);
+    chatUncachedInput += input;
+    chatCacheRead += read;
+    chatCacheWritten += written;
+  }
+  const chatPromptTotal = chatUncachedInput + chatCacheRead + chatCacheWritten;
+  const cacheHitPct =
+    chatPromptTotal > 0 ? Math.round((chatCacheRead / chatPromptTotal) * 100) : null;
+
+  // La proporción de salida del chat, para repartir los totales mezclados de
+  // encargos y orquestador. Si no hubo chat en la ventana, 10% — la forma
+  // típica de un bucle agéntico, donde casi todo el token es prompt releído.
+  const chatBillable = latRows.reduce(
+    (acc, r) => acc + (r.prompt_tokens ?? 0) + (r.completion_tokens ?? 0),
+    0,
+  );
+  const chatOutTokens = latRows.reduce((acc, r) => acc + (r.completion_tokens ?? 0), 0);
+  const outShare = chatBillable > 0 ? chatOutTokens / chatBillable : 0.1;
+
+  const costMixedTotal = (rows2: Array<{ tokens: number; at: string }>) => {
+    let usd = 0;
+    let tokens = 0;
+    for (const r of rows2) {
+      if (r.tokens <= 0) continue;
+      // Los agentes corren en el modelo por defecto del workspace (sonnet-5
+      // desde la migración 0071); estas tablas no guardan el modelo por fila.
+      const rate = rateFor('claude-sonnet-5', r.at);
+      if (!rate) continue;
+      const out = Math.round(r.tokens * outShare);
+      usd += stepCostUsd(rate, { input: r.tokens - out, cacheRead: 0, cacheWrite: 0, output: out });
+      tokens += r.tokens;
+    }
+    return { usd, tokens };
+  };
+
+  const errandCost = costMixedTotal(
+    ((errandRes.data ?? []) as unknown as Array<{ tokens_spent: number; created_at: string }>).map(
+      (r) => ({ tokens: r.tokens_spent ?? 0, at: r.created_at }),
+    ),
+  );
+  const orchCost = costMixedTotal(
+    ((orchRes.data ?? []) as unknown as Array<{ total_tokens: number; created_at: string }>).map(
+      (r) => ({ tokens: r.total_tokens ?? 0, at: r.created_at }),
+    ),
+  );
+
+  const totalCostUsd = chatCostUsd + errandCost.usd + orchCost.usd;
+  const hasCostData = latRows.length > 0 || errandCost.tokens > 0 || orchCost.tokens > 0;
 
   const pct = (arr: number[], p: number) => {
     if (arr.length === 0) return 0;
@@ -411,6 +543,83 @@ export default async function UsagePage({
               </div>
             </>
           )}
+        </Panel>
+
+        {/* Costo estimado en Anthropic */}
+        <Panel className="p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <CircleDollarSign className="h-3.5 w-3.5 text-emerald" />
+              <span className="field-label">Costo estimado · Anthropic (USD)</span>
+            </div>
+            {cacheHitPct !== null && (
+              <span
+                className={clsx(
+                  'rounded-pill border px-2.5 py-0.5 font-mono text-micro font-semibold',
+                  cacheHitPct >= 70
+                    ? 'border-emerald/30 bg-emerald-soft text-emerald'
+                    : cacheHitPct >= 40
+                      ? 'border-amber/30 bg-amber-soft text-amber'
+                      : 'border-rose/30 bg-rose-soft text-rose',
+                )}
+                title="Porcentaje del prompt del chat servido desde el caché de Anthropic. Leer del caché cuesta el 10% de la entrada normal."
+              >
+                caché {cacheHitPct}%
+              </span>
+            )}
+          </div>
+
+          {!hasCostData ? (
+            <div className="flex h-20 items-center justify-center rounded-sm border border-border bg-surface-2 px-4 text-center text-xs text-ink-muted">
+              Ninguna superficie registró consumo con precio en esta ventana.
+            </div>
+          ) : (
+            <>
+              <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {[
+                  { label: 'Total estimado', value: formatUsd(totalCostUsd), strong: true },
+                  { label: 'Chat', value: formatUsd(chatCostUsd), strong: false },
+                  { label: 'Encargos', value: formatUsd(errandCost.usd), strong: false },
+                  { label: 'Orquestador', value: formatUsd(orchCost.usd), strong: false },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-sm border border-border bg-surface-2 p-3">
+                    <div
+                      className={clsx(
+                        'stat-num text-lg leading-tight',
+                        s.strong ? 'text-emerald' : 'text-ink',
+                      )}
+                    >
+                      {s.value}
+                    </div>
+                    <div className="field-label mt-1">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {chatPromptTotal > 0 && (
+                <div className="rounded-sm border border-border bg-surface-2 p-3 text-xs leading-relaxed text-ink-muted">
+                  El caché le ahorró al chat{' '}
+                  <span className="font-mono font-semibold text-emerald">
+                    {formatUsd(chatSavingsUsd)}
+                  </span>{' '}
+                  en esta ventana: de {formatTokens(chatPromptTotal)} tokens de prompt,{' '}
+                  {formatTokens(chatCacheRead)} se leyeron del caché al 10% del precio
+                  {chatCacheWritten > 0 && (
+                    <> y {formatTokens(chatCacheWritten)} se escribieron al 125%</>
+                  )}
+                  .
+                </div>
+              )}
+            </>
+          )}
+
+          <p className="mt-3 text-micro leading-relaxed text-ink-faint">
+            Estimado con precios de lista (Sonnet 5: $2/$10 por millón hasta el 31 de agosto,
+            luego $3/$15). El chat se calcula con el detalle real del caché; encargos y
+            orquestador guardan solo totales, así que su cifra es techo, no piso. Las llamadas
+            utilitarias (títulos, extractores, sugerencias) no registran consumo y no aparecen
+            aquí — la cifra autoritativa está en la consola de Anthropic.
+          </p>
         </Panel>
 
         <div className="grid gap-4 lg:grid-cols-2">
