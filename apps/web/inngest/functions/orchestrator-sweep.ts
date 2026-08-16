@@ -1,4 +1,5 @@
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { type LifecycleDb, interruptRun } from '@/lib/orchestrator/lifecycle';
 import { STALE_AFTER_MS, staleCutoffIso } from '@/lib/orchestrator/liveness';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
@@ -53,59 +54,62 @@ interface SilentRun {
   organizationId: string;
 }
 
+/** El cuerpo, extraído a la firma de la cola nueva; `event` no se usa. */
+export const orchestratorSweepJob: JobHandler = async ({ step }) => {
+  const closed = await step.run('close-silent-runs', async () => {
+    const now = Date.now();
+    const cutoffIso = staleCutoffIso(now);
+
+    const raw = getSupabaseServiceClient();
+    const { data, error } = await raw
+      .from('orchestration_runs')
+      .select('id, organization_id')
+      .in('status', ['planning', 'running'])
+      .lt('last_heartbeat_at', cutoffIso)
+      .order('last_heartbeat_at', { ascending: true })
+      .limit(MAX_PER_PASS);
+
+    if (error) throw new Error(`Could not scan for silent runs: ${error.message}`);
+
+    const candidates: SilentRun[] = ((data ?? []) as Record<string, unknown>[])
+      .map((row) => ({
+        id: row.id as string,
+        organizationId: (row.organization_id as string | null) ?? '',
+      }))
+      .filter((row) => row.id && row.organizationId);
+
+    const done: string[] = [];
+    for (const candidate of candidates) {
+      try {
+        // Scoped to the run's own workspace, and the freshness guard is
+        // re-applied inside the UPDATE: a run that beat once between the scan
+        // and this write is alive and matches nothing.
+        const db = getOrgScopedClient(candidate.organizationId) as unknown as LifecycleDb;
+        if (await interruptRun(db, candidate.id, { now, cutoffIso })) done.push(candidate.id);
+      } catch (err) {
+        // One workspace's problem must not stop the sweep for the rest.
+        logger.error('orchestrator-sweep: could not close a silent run', {
+          runId: candidate.id,
+          error: (err as Error).message,
+        });
+      }
+    }
+
+    if (done.length > 0) {
+      logger.info(
+        `orchestrator-sweep: closed ${done.length} run(s) silent for more than ${
+          STALE_AFTER_MS / 60_000
+        } minutes`,
+      );
+    }
+    return { scanned: candidates.length, closed: done.length };
+  });
+
+  return closed;
+};
+
 export const orchestratorSweep = inngest.createFunction(
   { id: 'orchestrator-sweep' },
   { cron: CRON },
-  async ({ step }) => {
-    const closed = await step.run('close-silent-runs', async () => {
-      const now = Date.now();
-      const cutoffIso = staleCutoffIso(now);
-
-      const raw = getSupabaseServiceClient();
-      const { data, error } = await raw
-        .from('orchestration_runs')
-        .select('id, organization_id')
-        .in('status', ['planning', 'running'])
-        .lt('last_heartbeat_at', cutoffIso)
-        .order('last_heartbeat_at', { ascending: true })
-        .limit(MAX_PER_PASS);
-
-      if (error) throw new Error(`Could not scan for silent runs: ${error.message}`);
-
-      const candidates: SilentRun[] = ((data ?? []) as Record<string, unknown>[])
-        .map((row) => ({
-          id: row.id as string,
-          organizationId: (row.organization_id as string | null) ?? '',
-        }))
-        .filter((row) => row.id && row.organizationId);
-
-      const done: string[] = [];
-      for (const candidate of candidates) {
-        try {
-          // Scoped to the run's own workspace, and the freshness guard is
-          // re-applied inside the UPDATE: a run that beat once between the scan
-          // and this write is alive and matches nothing.
-          const db = getOrgScopedClient(candidate.organizationId) as unknown as LifecycleDb;
-          if (await interruptRun(db, candidate.id, { now, cutoffIso })) done.push(candidate.id);
-        } catch (err) {
-          // One workspace's problem must not stop the sweep for the rest.
-          logger.error('orchestrator-sweep: could not close a silent run', {
-            runId: candidate.id,
-            error: (err as Error).message,
-          });
-        }
-      }
-
-      if (done.length > 0) {
-        logger.info(
-          `orchestrator-sweep: closed ${done.length} run(s) silent for more than ${
-            STALE_AFTER_MS / 60_000
-          } minutes`,
-        );
-      }
-      return { scanned: candidates.length, closed: done.length };
-    });
-
-    return closed;
-  },
+  async (ctx) => orchestratorSweepJob(ctx as unknown as JobContext),
 );

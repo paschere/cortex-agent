@@ -58,6 +58,17 @@ export {
   cosine,
 } from './rank';
 export { resetToolVectorCache, TOOL_EMBEDDINGS_TABLE } from './store';
+export {
+  type StickyCombineInput,
+  type StickyCombineResult,
+  STICKY_TOOL_BUDGET,
+  combineStickySelection,
+} from './sticky';
+export {
+  type SaveStickyToolIdsInput,
+  loadStickyToolIds,
+  saveStickyToolIds,
+} from './sticky-store';
 
 /**
  * Families that make sense on any turn and are therefore never ranked.

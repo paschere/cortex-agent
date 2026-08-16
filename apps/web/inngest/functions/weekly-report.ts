@@ -1,4 +1,5 @@
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { runWeeklyReport } from '@/lib/weekly-report';
 import { addDays, bogotaToday, mondayOf } from '@cortex/agent-tools';
@@ -53,72 +54,77 @@ const WEEKLY_CRON = '0 12 * * 1';
 // Despachador
 // ---------------------------------------------------------------------------
 
+/** El cuerpo, extraído a la firma de la cola nueva; `event` no se usa. */
+export const weeklyReportDispatchJob: JobHandler = async ({ step }) => {
+  // Sin alcance, y sólo aquí. «Qué espacios de trabajo hay» cruza la
+  // instalación y detrás de un cron no hay sesión. Cada id que se lee viaja en
+  // su propio evento y la función de abajo construye todos sus handles a
+  // partir de ese id, así que el parte de una empresa sólo puede leer y
+  // escribir filas de esa empresa.
+  //
+  // Se leen los ADMINISTRADORES y no las organizaciones: un espacio sin nadie
+  // que responda por él no tiene a quién rendirle cuentas, y generar un
+  // informe que nadie va a recibir sólo produce filas.
+  const workspaces = await step.run('find-workspaces', async (): Promise<string[]> => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db
+      .from('users')
+      .select('organization_id')
+      .eq('role', 'org_admin')
+      .limit(20_000);
+    if (error) {
+      throw new Error(`No se pudieron leer los espacios de trabajo: ${error.message}`);
+    }
+    const seen = new Set<string>();
+    for (const row of (data ?? []) as Array<{ organization_id: string | null }>) {
+      if (row.organization_id) seen.add(row.organization_id);
+    }
+    return [...seen];
+  });
+
+  if (workspaces.length > 0) {
+    await step.sendEvent(
+      'weekly-report-per-workspace',
+      workspaces.map((organizationId) => ({
+        name: 'reports/weekly.workspace' as const,
+        data: { organizationId },
+      })),
+    );
+  }
+  return { dispatched: workspaces.length };
+};
+
 export const weeklyReportDispatch = inngest.createFunction(
   { id: 'weekly-report-dispatch' },
   { cron: WEEKLY_CRON },
-  async ({ step }) => {
-    // Sin alcance, y sólo aquí. «Qué espacios de trabajo hay» cruza la
-    // instalación y detrás de un cron no hay sesión. Cada id que se lee viaja en
-    // su propio evento y la función de abajo construye todos sus handles a
-    // partir de ese id, así que el parte de una empresa sólo puede leer y
-    // escribir filas de esa empresa.
-    //
-    // Se leen los ADMINISTRADORES y no las organizaciones: un espacio sin nadie
-    // que responda por él no tiene a quién rendirle cuentas, y generar un
-    // informe que nadie va a recibir sólo produce filas.
-    const workspaces = await step.run('find-workspaces', async (): Promise<string[]> => {
-      const db = getSupabaseServiceClient();
-      const { data, error } = await db
-        .from('users')
-        .select('organization_id')
-        .eq('role', 'org_admin')
-        .limit(20_000);
-      if (error) {
-        throw new Error(`No se pudieron leer los espacios de trabajo: ${error.message}`);
-      }
-      const seen = new Set<string>();
-      for (const row of (data ?? []) as Array<{ organization_id: string | null }>) {
-        if (row.organization_id) seen.add(row.organization_id);
-      }
-      return [...seen];
-    });
-
-    if (workspaces.length > 0) {
-      await step.sendEvent(
-        'weekly-report-per-workspace',
-        workspaces.map((organizationId) => ({
-          name: 'reports/weekly.workspace' as const,
-          data: { organizationId },
-        })),
-      );
-    }
-    return { dispatched: workspaces.length };
-  },
+  async (ctx) => weeklyReportDispatchJob(ctx as unknown as JobContext),
 );
 
 // ---------------------------------------------------------------------------
 // Un espacio de trabajo
 // ---------------------------------------------------------------------------
 
+export const weeklyReportWorkspaceJob: JobHandler = async ({ event, step }) => {
+  const organizationId = event.data.organizationId as string | undefined;
+  if (!organizationId) return { skipped: 'no workspace on the event' };
+
+  // El día se fija UNA vez y viaja por todos los pasos. Si una corrida cruza
+  // la medianoche en Bogotá —un reintento a las 23:59, un despliegue lento—,
+  // sin esto un paso podría reclamar una semana y el siguiente reportar otra.
+  const today = bogotaToday();
+  const weekStart = addDays(mondayOf(today), -7);
+
+  const result = await step.run('build-claim-send', async () => {
+    const db = getOrgScopedClient(organizationId);
+    return runWeeklyReport({ db, today, weekStart });
+  });
+
+  logger.info({ organizationId, ...result }, 'weekly report finished');
+  return { organizationId, ...result };
+};
+
 export const weeklyReportWorkspace = inngest.createFunction(
   { id: 'weekly-report-workspace', concurrency: { limit: 5 } },
   { event: 'reports/weekly.workspace' },
-  async ({ event, step }) => {
-    const organizationId = event.data.organizationId as string | undefined;
-    if (!organizationId) return { skipped: 'no workspace on the event' };
-
-    // El día se fija UNA vez y viaja por todos los pasos. Si una corrida cruza
-    // la medianoche en Bogotá —un reintento a las 23:59, un despliegue lento—,
-    // sin esto un paso podría reclamar una semana y el siguiente reportar otra.
-    const today = bogotaToday();
-    const weekStart = addDays(mondayOf(today), -7);
-
-    const result = await step.run('build-claim-send', async () => {
-      const db = getOrgScopedClient(organizationId);
-      return runWeeklyReport({ db, today, weekStart });
-    });
-
-    logger.info({ organizationId, ...result }, 'weekly report finished');
-    return { organizationId, ...result };
-  },
+  async (ctx) => weeklyReportWorkspaceJob(ctx as unknown as JobContext),
 );

@@ -7,6 +7,7 @@ import {
 } from '@/lib/dev-tasks/contract';
 import { commentOnIssue } from '@/lib/dev-tasks/linear-comment';
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 
@@ -78,6 +79,78 @@ function statusComment(status: DevTaskStatus, row: TaskRow, ev: DevTaskStatusEve
   }
 }
 
+/** El cuerpo, extraído a la firma de la cola nueva. */
+export const devTaskStatusJob: JobHandler = async ({ event, step }) => {
+  const ev = event.data as unknown as DevTaskStatusEvent;
+  if (!ev?.taskId || !isDevTaskStatus(ev.status)) {
+    logger.error(`dev-task-status: malformed event (status="${String(ev?.status)}")`);
+    return { skipped: 'malformed event' };
+  }
+  const status = ev.status;
+
+  // The executor reports by task id alone, and it may run in a sandbox that
+  // never saw a workspace. Reading the workspace off the task row is the one
+  // unforgeable way to get it: one unscoped lookup by primary key, and every
+  // handle after it is pinned to what came back.
+  const organizationId = await step.run('resolve-workspace', async () => {
+    const raw = getSupabaseServiceClient();
+    const { data } = await raw
+      .from('dev_tasks')
+      .select('organization_id')
+      .eq('id', ev.taskId)
+      .maybeSingle();
+    return (data?.organization_id as string | undefined) ?? null;
+  });
+  if (!organizationId) return { skipped: 'task not found' };
+
+  const row = await step.run('load-task', async (): Promise<TaskRow | null> => {
+    const db = getOrgScopedClient(organizationId);
+    const { data, error } = await db
+      .from('dev_tasks')
+      .select('id, external_id, external_identifier, status, repository_key, pr_url')
+      .eq('id', ev.taskId)
+      .maybeSingle();
+    if (error) throw new Error(`Could not load dev task ${ev.taskId}: ${error.message}`);
+    return (data as TaskRow | null) ?? null;
+  });
+
+  if (!row) return { skipped: 'task not found' };
+  // A late report from an attempt that was already closed out (cancelled by a
+  // human, or failed and retried) must not resurrect the row or comment again.
+  if (TERMINAL_STATUSES.includes(row.status) && row.status !== status) {
+    return { skipped: `task is already ${row.status}` };
+  }
+  if (row.status === status && !ev.prUrl && !ev.summary && !ev.error) {
+    return { skipped: 'no change' };
+  }
+
+  await step.run('persist', async () => {
+    const db = getOrgScopedClient(organizationId);
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = { status, updated_at: now };
+    if (ev.branchName) patch.branch_name = ev.branchName;
+    if (ev.prUrl) patch.pr_url = ev.prUrl;
+    if (ev.summary) patch.summary = clip(ev.summary);
+    if (ev.error) patch.error = clip(ev.error);
+    if (typeof ev.attempt === 'number') patch.attempt_count = ev.attempt;
+    if (status === 'running') patch.started_at = now;
+    if (TERMINAL_STATUSES.includes(status)) patch.finished_at = now;
+
+    const { error } = await db.from('dev_tasks').update(patch).eq('id', row.id);
+    if (error) throw new Error(`Could not update dev task ${row.id}: ${error.message}`);
+  });
+
+  // Commenting is courtesy and never fails the run — see linear-comment.ts.
+  await step.run('notify-linear', async () => {
+    const body = statusComment(status, row, ev);
+    if (!body) return { commented: false };
+    return { commented: await commentOnIssue(row.external_id, body, organizationId) };
+  });
+
+  logger.info(`dev-task-status: ${row.external_identifier} → ${status}`);
+  return { taskId: row.id, status };
+};
+
 export const devTaskStatus = inngest.createFunction(
   // Capped at the account's plan limit, not at what this function could take.
   // Inngest validates concurrency at sync time and rejects the *whole* app when
@@ -87,74 +160,5 @@ export const devTaskStatus = inngest.createFunction(
   // are status comments posted back to Linear; five at a time is ample.
   { id: 'dev-task-status', concurrency: { limit: 5 } },
   { event: EVENT_TASK_STATUS },
-  async ({ event, step }) => {
-    const ev = event.data as unknown as DevTaskStatusEvent;
-    if (!ev?.taskId || !isDevTaskStatus(ev.status)) {
-      logger.error(`dev-task-status: malformed event (status="${String(ev?.status)}")`);
-      return { skipped: 'malformed event' };
-    }
-    const status = ev.status;
-
-    // The executor reports by task id alone, and it may run in a sandbox that
-    // never saw a workspace. Reading the workspace off the task row is the one
-    // unforgeable way to get it: one unscoped lookup by primary key, and every
-    // handle after it is pinned to what came back.
-    const organizationId = await step.run('resolve-workspace', async () => {
-      const raw = getSupabaseServiceClient();
-      const { data } = await raw
-        .from('dev_tasks')
-        .select('organization_id')
-        .eq('id', ev.taskId)
-        .maybeSingle();
-      return (data?.organization_id as string | undefined) ?? null;
-    });
-    if (!organizationId) return { skipped: 'task not found' };
-
-    const row = await step.run('load-task', async (): Promise<TaskRow | null> => {
-      const db = getOrgScopedClient(organizationId);
-      const { data, error } = await db
-        .from('dev_tasks')
-        .select('id, external_id, external_identifier, status, repository_key, pr_url')
-        .eq('id', ev.taskId)
-        .maybeSingle();
-      if (error) throw new Error(`Could not load dev task ${ev.taskId}: ${error.message}`);
-      return (data as TaskRow | null) ?? null;
-    });
-
-    if (!row) return { skipped: 'task not found' };
-    // A late report from an attempt that was already closed out (cancelled by a
-    // human, or failed and retried) must not resurrect the row or comment again.
-    if (TERMINAL_STATUSES.includes(row.status) && row.status !== status) {
-      return { skipped: `task is already ${row.status}` };
-    }
-    if (row.status === status && !ev.prUrl && !ev.summary && !ev.error) {
-      return { skipped: 'no change' };
-    }
-
-    await step.run('persist', async () => {
-      const db = getOrgScopedClient(organizationId);
-      const now = new Date().toISOString();
-      const patch: Record<string, unknown> = { status, updated_at: now };
-      if (ev.branchName) patch.branch_name = ev.branchName;
-      if (ev.prUrl) patch.pr_url = ev.prUrl;
-      if (ev.summary) patch.summary = clip(ev.summary);
-      if (ev.error) patch.error = clip(ev.error);
-      if (typeof ev.attempt === 'number') patch.attempt_count = ev.attempt;
-      if (status === 'running') patch.started_at = now;
-      if (TERMINAL_STATUSES.includes(status)) patch.finished_at = now;
-
-      const { error } = await db.from('dev_tasks').update(patch).eq('id', row.id);
-      if (error) throw new Error(`Could not update dev task ${row.id}: ${error.message}`);
-    });
-
-    // Commenting is courtesy and never fails the run — see linear-comment.ts.
-    await step.run('notify-linear', async () => {
-      const body = statusComment(status, row, ev);
-      if (!body) return { commented: false };
-      return { commented: await commentOnIssue(row.external_id, body, organizationId) };
-    });
-
-    logger.info(`dev-task-status: ${row.external_identifier} → ${status}`);
-    return { taskId: row.id, status };
-  },
+  async (ctx) => devTaskStatusJob(ctx as unknown as JobContext),
 );

@@ -1,4 +1,5 @@
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { utilityModel } from '@cortex/agent-tools';
 import {
@@ -69,127 +70,132 @@ interface RecentMessage {
 // Dispatcher
 // ---------------------------------------------------------------------------
 
+/** El cuerpo, extraído a la firma de la cola nueva; `event` no se usa. */
+export const memoryDeriveDispatchJob: JobHandler = async ({ step }) => {
+  // Unscoped, and only here: "who did anything yesterday" spans every
+  // workspace, and there is no session behind a cron. The audit row names the
+  // workspace the activity happened in, and it is carried on the event so the
+  // per-person function below reads and writes inside that one workspace only.
+  const people = await step.run(
+    'find-active-people',
+    async (): Promise<Array<{ userId: string; organizationId: string }>> => {
+      const db = getSupabaseServiceClient();
+      const since = new Date(Date.now() - DAY_MS).toISOString();
+      // Somebody who did nothing yesterday has nothing new to learn from, and
+      // the point of scanning audit (rather than every user row) is that a
+      // workspace of dormant accounts costs nothing to skip.
+      const { data, error } = await db
+        .from('audit_events')
+        .select('user_id, organization_id')
+        .gte('created_at', since)
+        .limit(5000);
+      if (error) throw new Error(`Failed to scan recent activity: ${error.message}`);
+      const seen = new Map<string, { userId: string; organizationId: string }>();
+      for (const row of (data ?? []) as Array<{ user_id: string; organization_id: string }>) {
+        if (!seen.has(row.user_id)) {
+          seen.set(row.user_id, { userId: row.user_id, organizationId: row.organization_id });
+        }
+      }
+      return [...seen.values()];
+    },
+  );
+
+  if (people.length > 0) {
+    await step.sendEvent(
+      'derive-per-user',
+      people.map(({ userId, organizationId }) => ({
+        name: 'memory/derive.user' as const,
+        data: { userId, organizationId },
+      })),
+    );
+  }
+  return { dispatched: people.length };
+};
+
 export const memoryDeriveDispatch = inngest.createFunction(
   { id: 'memory-derive-dispatch' },
   { cron: DERIVE_CRON },
-  async ({ step }) => {
-    // Unscoped, and only here: "who did anything yesterday" spans every
-    // workspace, and there is no session behind a cron. The audit row names the
-    // workspace the activity happened in, and it is carried on the event so the
-    // per-person function below reads and writes inside that one workspace only.
-    const people = await step.run(
-      'find-active-people',
-      async (): Promise<Array<{ userId: string; organizationId: string }>> => {
-        const db = getSupabaseServiceClient();
-        const since = new Date(Date.now() - DAY_MS).toISOString();
-        // Somebody who did nothing yesterday has nothing new to learn from, and
-        // the point of scanning audit (rather than every user row) is that a
-        // workspace of dormant accounts costs nothing to skip.
-        const { data, error } = await db
-          .from('audit_events')
-          .select('user_id, organization_id')
-          .gte('created_at', since)
-          .limit(5000);
-        if (error) throw new Error(`Failed to scan recent activity: ${error.message}`);
-        const seen = new Map<string, { userId: string; organizationId: string }>();
-        for (const row of (data ?? []) as Array<{ user_id: string; organization_id: string }>) {
-          if (!seen.has(row.user_id)) {
-            seen.set(row.user_id, { userId: row.user_id, organizationId: row.organization_id });
-          }
-        }
-        return [...seen.values()];
-      },
-    );
-
-    if (people.length > 0) {
-      await step.sendEvent(
-        'derive-per-user',
-        people.map(({ userId, organizationId }) => ({
-          name: 'memory/derive.user' as const,
-          data: { userId, organizationId },
-        })),
-      );
-    }
-    return { dispatched: people.length };
-  },
+  async (ctx) => memoryDeriveDispatchJob(ctx as unknown as JobContext),
 );
 
 // ---------------------------------------------------------------------------
 // One person
 // ---------------------------------------------------------------------------
 
+export const memoryDeriveUserJob: JobHandler = async ({ event, step }) => {
+  const userId = event.data.userId as string;
+  const organizationId = event.data.organizationId as string | undefined;
+  if (!userId) return { skipped: 'no user id' };
+  if (!organizationId) return { skipped: 'no workspace on the event' };
+
+  const proposed = await step.run('propose', async () => {
+    const db = getOrgScopedClient(organizationId);
+
+    const { data: prefs } = await db
+      .from('user_preferences')
+      .select('timezone, memories_derived_at')
+      .eq('user_id', userId)
+      .maybeSingle();
+    const timezone = (prefs?.timezone as string | null) ?? 'America/Bogota';
+    const highWater = prefs?.memories_derived_at as string | null;
+    const languageSince = new Date(
+      Math.max(
+        Date.now() - FIRST_RUN_WINDOW_DAYS * DAY_MS,
+        highWater ? new Date(highWater).getTime() : 0,
+      ),
+    ).toISOString();
+
+    const existing = await listMemories(db, userId);
+    // Every status, so a rejected sentence is never proposed twice and an
+    // archived one is not re-offered as a discovery.
+    const known = existing.map((m) => m.content);
+    if (existing.filter((m) => m.status === 'suggested').length >= MAX_SUGGESTIONS_PER_RUN) {
+      return { candidates: 0, written: 0, reason: 'queue already full' };
+    }
+
+    const [audit, recent] = await Promise.all([
+      loadAuditSignals(organizationId, userId),
+      loadRecentMessages(organizationId, userId, languageSince),
+    ]);
+
+    const candidates: MemoryCandidate[] = [
+      ...behaviouralCandidates(audit, timezone),
+      ...(await languageCandidates(recent)),
+    ];
+
+    const usable = usableCandidates(candidates, known, MAX_SUGGESTIONS_PER_RUN);
+    let written = 0;
+    for (const candidate of usable) {
+      const id = await rememberMemory(db, {
+        userId,
+        content: candidate.content,
+        kind: candidate.kind,
+        source: candidate.source,
+        status: 'suggested',
+        conversationId: candidate.conversationId ?? null,
+        note: candidate.note,
+      });
+      if (id) written += 1;
+    }
+
+    await db
+      .from('user_preferences')
+      .upsert(
+        { user_id: userId, memories_derived_at: new Date().toISOString() },
+        { onConflict: 'user_id' },
+      )
+      .then(undefined, () => undefined);
+
+    return { candidates: candidates.length, written };
+  });
+
+  return proposed;
+};
+
 export const memoryDeriveUser = inngest.createFunction(
   { id: 'memory-derive-user', concurrency: { limit: 5 } },
   { event: 'memory/derive.user' },
-  async ({ event, step }) => {
-    const userId = event.data.userId as string;
-    const organizationId = event.data.organizationId as string | undefined;
-    if (!userId) return { skipped: 'no user id' };
-    if (!organizationId) return { skipped: 'no workspace on the event' };
-
-    const proposed = await step.run('propose', async () => {
-      const db = getOrgScopedClient(organizationId);
-
-      const { data: prefs } = await db
-        .from('user_preferences')
-        .select('timezone, memories_derived_at')
-        .eq('user_id', userId)
-        .maybeSingle();
-      const timezone = (prefs?.timezone as string | null) ?? 'America/Bogota';
-      const highWater = prefs?.memories_derived_at as string | null;
-      const languageSince = new Date(
-        Math.max(
-          Date.now() - FIRST_RUN_WINDOW_DAYS * DAY_MS,
-          highWater ? new Date(highWater).getTime() : 0,
-        ),
-      ).toISOString();
-
-      const existing = await listMemories(db, userId);
-      // Every status, so a rejected sentence is never proposed twice and an
-      // archived one is not re-offered as a discovery.
-      const known = existing.map((m) => m.content);
-      if (existing.filter((m) => m.status === 'suggested').length >= MAX_SUGGESTIONS_PER_RUN) {
-        return { candidates: 0, written: 0, reason: 'queue already full' };
-      }
-
-      const [audit, recent] = await Promise.all([
-        loadAuditSignals(organizationId, userId),
-        loadRecentMessages(organizationId, userId, languageSince),
-      ]);
-
-      const candidates: MemoryCandidate[] = [
-        ...behaviouralCandidates(audit, timezone),
-        ...(await languageCandidates(recent)),
-      ];
-
-      const usable = usableCandidates(candidates, known, MAX_SUGGESTIONS_PER_RUN);
-      let written = 0;
-      for (const candidate of usable) {
-        const id = await rememberMemory(db, {
-          userId,
-          content: candidate.content,
-          kind: candidate.kind,
-          source: candidate.source,
-          status: 'suggested',
-          conversationId: candidate.conversationId ?? null,
-          note: candidate.note,
-        });
-        if (id) written += 1;
-      }
-
-      await db
-        .from('user_preferences')
-        .upsert(
-          { user_id: userId, memories_derived_at: new Date().toISOString() },
-          { onConflict: 'user_id' },
-        )
-        .then(undefined, () => undefined);
-
-      return { candidates: candidates.length, written };
-    });
-
-    return proposed;
-  },
+  async (ctx) => memoryDeriveUserJob(ctx as unknown as JobContext),
 );
 
 // ---------------------------------------------------------------------------

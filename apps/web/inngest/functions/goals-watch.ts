@@ -1,6 +1,7 @@
 import { sendEmail } from '@/lib/email';
 import { renderGoalNoticeEmail } from '@/lib/goal-notice-email';
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   type GoalReadingRow,
@@ -82,41 +83,44 @@ const WATCH_CRON = '30 11 * * *';
 // Dispatcher
 // ---------------------------------------------------------------------------
 
+/** El cuerpo, extraído a la firma de la cola nueva; `event` no se usa. */
+export const goalsWatchDispatchJob: JobHandler = async ({ step }) => {
+  // Sin alcance, y sólo aquí. «Qué espacios tienen metas» cruza la instalación
+  // entera y no hay sesión detrás de un cron. Cada id que sale de aquí viaja
+  // en su propio evento, y la función de abajo construye todos sus handles a
+  // partir de ese id — así que el vigilante de una empresa sólo puede leer y
+  // escribir las filas de esa empresa.
+  const workspaces = await step.run('find-workspaces', async (): Promise<string[]> => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db
+      .from('goals')
+      .select('organization_id')
+      .eq('state', 'active')
+      .limit(20_000);
+    if (error) throw error;
+    const seen = new Set<string>();
+    for (const row of (data ?? []) as Array<{ organization_id: string | null }>) {
+      if (row.organization_id) seen.add(row.organization_id);
+    }
+    return [...seen];
+  });
+
+  if (workspaces.length > 0) {
+    await step.sendEvent(
+      'goals-per-workspace',
+      workspaces.map((organizationId) => ({
+        name: 'goals/watch.workspace' as const,
+        data: { organizationId },
+      })),
+    );
+  }
+  return { dispatched: workspaces.length };
+};
+
 export const goalsWatchDispatch = inngest.createFunction(
   { id: 'goals-watch-dispatch' },
   { cron: WATCH_CRON },
-  async ({ step }) => {
-    // Sin alcance, y sólo aquí. «Qué espacios tienen metas» cruza la instalación
-    // entera y no hay sesión detrás de un cron. Cada id que sale de aquí viaja
-    // en su propio evento, y la función de abajo construye todos sus handles a
-    // partir de ese id — así que el vigilante de una empresa sólo puede leer y
-    // escribir las filas de esa empresa.
-    const workspaces = await step.run('find-workspaces', async (): Promise<string[]> => {
-      const db = getSupabaseServiceClient();
-      const { data, error } = await db
-        .from('goals')
-        .select('organization_id')
-        .eq('state', 'active')
-        .limit(20_000);
-      if (error) throw error;
-      const seen = new Set<string>();
-      for (const row of (data ?? []) as Array<{ organization_id: string | null }>) {
-        if (row.organization_id) seen.add(row.organization_id);
-      }
-      return [...seen];
-    });
-
-    if (workspaces.length > 0) {
-      await step.sendEvent(
-        'goals-per-workspace',
-        workspaces.map((organizationId) => ({
-          name: 'goals/watch.workspace' as const,
-          data: { organizationId },
-        })),
-      );
-    }
-    return { dispatched: workspaces.length };
-  },
+  async (ctx) => goalsWatchDispatchJob(ctx as unknown as JobContext),
 );
 
 // ---------------------------------------------------------------------------
@@ -132,159 +136,161 @@ interface PlannedNotice {
   previousDisplay: string | null;
 }
 
+export const goalsWatchWorkspaceJob: JobHandler = async ({ event, step }) => {
+  const organizationId = event.data.organizationId as string | undefined;
+  if (!organizationId) return { skipped: 'no workspace on the event' };
+
+  // Se calcula una vez y se lleva por todos los pasos. Si una ejecución cruza
+  // la medianoche en Bogotá, todos los pasos siguen de acuerdo sobre qué día
+  // estaban decidiendo — de otro modo un aviso se reclamaría para una fecha y
+  // se reportaría contra otra.
+  const today = bogotaToday();
+
+  // 1. Congelar lo que ya cerró ------------------------------------------
+  const frozen = await step.run('freeze-readings', async () => {
+    const db = getOrgScopedClient(organizationId);
+    const goals = await listGoals(db, { state: 'active', limit: 200 });
+
+    let recorded = 0;
+    let already = 0;
+    let unknown = 0;
+    for (const goal of goals) {
+      const spec = metricByKey(goal.metric_key);
+      if (!spec) {
+        // Una meta cuya métrica ya no está en el catálogo. No se borra ni se
+        // inventa un número: se salta, y el histórico que tenga se queda tal
+        // cual. La pantalla lo dice.
+        unknown += 1;
+        continue;
+      }
+      const period = lastClosedPeriod(goal.cadence, today);
+      const result = await measureAndRecord(db, goal, period, spec);
+      if (result.outcome === 'recorded') recorded += 1;
+      else already += 1;
+    }
+    return { goals: goals.length, recorded, already, unknown };
+  });
+
+  // 2. Qué avisos debe hoy este espacio -----------------------------------
+  const planned = await step.run('plan-notices', async (): Promise<PlannedNotice[]> => {
+    const db = getOrgScopedClient(organizationId);
+    const goals = await listGoals(db, { state: 'active', limit: 200 });
+    const plan: PlannedNotice[] = [];
+
+    for (const goal of goals) {
+      const period = lastClosedPeriod(goal.cadence, today);
+      const reading = await readingFor(db, goal.id, period.start);
+      if (!reading) continue;
+
+      // El último veredicto MEDIBLE anterior, no el del período de al lado:
+      // un mes sin datos no puede tragarse el correo que cierra el lazo.
+      const previousStatus = await lastMeasuredStatus(db, goal.id, period.start);
+      for (const noticeClass of goalNoticesOwed({ status: reading.status, previousStatus })) {
+        plan.push({
+          goalId: goal.id,
+          readingId: reading.id,
+          periodStart: period.start,
+          periodLabel: period.label,
+          noticeClass,
+          previousDisplay: await previousReadingDisplay(db, goal.id, period.start),
+        });
+      }
+    }
+    return plan;
+  });
+
+  // 3. Reclamar y mandar. La reclamación es lo que hace esto reintentable. -
+  const sent = await step.run('send-notices', async () => {
+    const db = getOrgScopedClient(organizationId);
+    let delivered = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    const goals = await hydrateGoals(db, await listGoals(db, { state: 'active', limit: 200 }));
+    const byId = new Map(goals.map((g) => [g.id, g]));
+    const admins = await orgAdmins(db);
+    const book = await addressBook(db, [
+      ...new Set([...goals.map((g) => g.created_by), ...admins]),
+    ]);
+
+    for (const item of planned) {
+      const goal = byId.get(item.goalId);
+      if (!goal) {
+        skipped += 1;
+        continue;
+      }
+
+      // A quien fijó la meta, o a los administradores si ese usuario ya no
+      // tiene correo. Se resuelve ahora y no se congela en la meta, para que
+      // un cambio de responsable surta efecto inmediatamente.
+      const to = book.get(goal.created_by) ? goal.created_by : (admins[0] ?? null);
+      const email = to ? (book.get(to) ?? null) : null;
+
+      const claim = await claimGoalNotice(db, {
+        goalId: item.goalId,
+        readingId: item.readingId,
+        periodStart: item.periodStart,
+        noticeClass: item.noticeClass,
+        sentOn: today,
+        recipientUserId: to,
+        recipientEmail: email,
+      });
+      // Alguien ya lo dijo, en este período y de esta clase. Ese es todo el
+      // punto del libro de avisos; se sigue sin decir nada.
+      if (claim.outcome === 'taken' || !claim.id) {
+        skipped += 1;
+        continue;
+      }
+
+      if (!email) {
+        // Se suelta la reclamación en vez de cerrarla en falso: dejarla haría
+        // que este incumplimiento no se avisara NUNCA, por un problema que se
+        // arregla poniéndole un correo a alguien.
+        await releaseGoalNotice(db, claim.id);
+        failed += 1;
+        continue;
+      }
+
+      const reading = await readingFor(db, item.goalId, item.periodStart);
+      if (!reading) {
+        await releaseGoalNotice(db, claim.id);
+        skipped += 1;
+        continue;
+      }
+
+      const mail = renderGoalNoticeEmail({
+        goal,
+        reading,
+        noticeClass: item.noticeClass,
+        periodLabel: item.periodLabel,
+        previousDisplay: item.previousDisplay,
+      });
+      const outcome = await sendEmail({
+        to: email,
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html,
+      });
+
+      await settleGoalNotice(db, {
+        id: claim.id,
+        delivered: outcome.sent,
+        note: outcome.sent ? null : (outcome.reason ?? 'No se pudo enviar'),
+      });
+      if (outcome.sent) delivered += 1;
+      else failed += 1;
+    }
+    return { planned: planned.length, delivered, skipped, failed };
+  });
+
+  logger.info({ organizationId, today, frozen, notices: sent }, 'goals watch finished');
+  return { organizationId, today, frozen, notices: sent };
+};
+
 export const goalsWatchWorkspace = inngest.createFunction(
   { id: 'goals-watch-workspace', concurrency: { limit: 5 } },
   { event: 'goals/watch.workspace' },
-  async ({ event, step }) => {
-    const organizationId = event.data.organizationId as string | undefined;
-    if (!organizationId) return { skipped: 'no workspace on the event' };
-
-    // Se calcula una vez y se lleva por todos los pasos. Si una ejecución cruza
-    // la medianoche en Bogotá, todos los pasos siguen de acuerdo sobre qué día
-    // estaban decidiendo — de otro modo un aviso se reclamaría para una fecha y
-    // se reportaría contra otra.
-    const today = bogotaToday();
-
-    // 1. Congelar lo que ya cerró ------------------------------------------
-    const frozen = await step.run('freeze-readings', async () => {
-      const db = getOrgScopedClient(organizationId);
-      const goals = await listGoals(db, { state: 'active', limit: 200 });
-
-      let recorded = 0;
-      let already = 0;
-      let unknown = 0;
-      for (const goal of goals) {
-        const spec = metricByKey(goal.metric_key);
-        if (!spec) {
-          // Una meta cuya métrica ya no está en el catálogo. No se borra ni se
-          // inventa un número: se salta, y el histórico que tenga se queda tal
-          // cual. La pantalla lo dice.
-          unknown += 1;
-          continue;
-        }
-        const period = lastClosedPeriod(goal.cadence, today);
-        const result = await measureAndRecord(db, goal, period, spec);
-        if (result.outcome === 'recorded') recorded += 1;
-        else already += 1;
-      }
-      return { goals: goals.length, recorded, already, unknown };
-    });
-
-    // 2. Qué avisos debe hoy este espacio -----------------------------------
-    const planned = await step.run('plan-notices', async (): Promise<PlannedNotice[]> => {
-      const db = getOrgScopedClient(organizationId);
-      const goals = await listGoals(db, { state: 'active', limit: 200 });
-      const plan: PlannedNotice[] = [];
-
-      for (const goal of goals) {
-        const period = lastClosedPeriod(goal.cadence, today);
-        const reading = await readingFor(db, goal.id, period.start);
-        if (!reading) continue;
-
-        // El último veredicto MEDIBLE anterior, no el del período de al lado:
-        // un mes sin datos no puede tragarse el correo que cierra el lazo.
-        const previousStatus = await lastMeasuredStatus(db, goal.id, period.start);
-        for (const noticeClass of goalNoticesOwed({ status: reading.status, previousStatus })) {
-          plan.push({
-            goalId: goal.id,
-            readingId: reading.id,
-            periodStart: period.start,
-            periodLabel: period.label,
-            noticeClass,
-            previousDisplay: await previousReadingDisplay(db, goal.id, period.start),
-          });
-        }
-      }
-      return plan;
-    });
-
-    // 3. Reclamar y mandar. La reclamación es lo que hace esto reintentable. -
-    const sent = await step.run('send-notices', async () => {
-      const db = getOrgScopedClient(organizationId);
-      let delivered = 0;
-      let skipped = 0;
-      let failed = 0;
-
-      const goals = await hydrateGoals(db, await listGoals(db, { state: 'active', limit: 200 }));
-      const byId = new Map(goals.map((g) => [g.id, g]));
-      const admins = await orgAdmins(db);
-      const book = await addressBook(db, [
-        ...new Set([...goals.map((g) => g.created_by), ...admins]),
-      ]);
-
-      for (const item of planned) {
-        const goal = byId.get(item.goalId);
-        if (!goal) {
-          skipped += 1;
-          continue;
-        }
-
-        // A quien fijó la meta, o a los administradores si ese usuario ya no
-        // tiene correo. Se resuelve ahora y no se congela en la meta, para que
-        // un cambio de responsable surta efecto inmediatamente.
-        const to = book.get(goal.created_by) ? goal.created_by : (admins[0] ?? null);
-        const email = to ? (book.get(to) ?? null) : null;
-
-        const claim = await claimGoalNotice(db, {
-          goalId: item.goalId,
-          readingId: item.readingId,
-          periodStart: item.periodStart,
-          noticeClass: item.noticeClass,
-          sentOn: today,
-          recipientUserId: to,
-          recipientEmail: email,
-        });
-        // Alguien ya lo dijo, en este período y de esta clase. Ese es todo el
-        // punto del libro de avisos; se sigue sin decir nada.
-        if (claim.outcome === 'taken' || !claim.id) {
-          skipped += 1;
-          continue;
-        }
-
-        if (!email) {
-          // Se suelta la reclamación en vez de cerrarla en falso: dejarla haría
-          // que este incumplimiento no se avisara NUNCA, por un problema que se
-          // arregla poniéndole un correo a alguien.
-          await releaseGoalNotice(db, claim.id);
-          failed += 1;
-          continue;
-        }
-
-        const reading = await readingFor(db, item.goalId, item.periodStart);
-        if (!reading) {
-          await releaseGoalNotice(db, claim.id);
-          skipped += 1;
-          continue;
-        }
-
-        const mail = renderGoalNoticeEmail({
-          goal,
-          reading,
-          noticeClass: item.noticeClass,
-          periodLabel: item.periodLabel,
-          previousDisplay: item.previousDisplay,
-        });
-        const outcome = await sendEmail({
-          to: email,
-          subject: mail.subject,
-          text: mail.text,
-          html: mail.html,
-        });
-
-        await settleGoalNotice(db, {
-          id: claim.id,
-          delivered: outcome.sent,
-          note: outcome.sent ? null : (outcome.reason ?? 'No se pudo enviar'),
-        });
-        if (outcome.sent) delivered += 1;
-        else failed += 1;
-      }
-      return { planned: planned.length, delivered, skipped, failed };
-    });
-
-    logger.info({ organizationId, today, frozen, notices: sent }, 'goals watch finished');
-    return { organizationId, today, frozen, notices: sent };
-  },
+  async (ctx) => goalsWatchWorkspaceJob(ctx as unknown as JobContext),
 );
 
 // ---------------------------------------------------------------------------

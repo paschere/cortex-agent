@@ -1,10 +1,7 @@
 import { loadErrand } from '@/lib/errands/repository';
-import { inngest } from '@/lib/inngest';
-import { EVENT_RUN_CANCELLED } from '@/lib/orchestrator/contract';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type ErrandDb, closeErrand, withdrawOpenQuestions } from '@cortex/agent-tools';
-import { logger } from '@cortex/core';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -20,8 +17,9 @@ export const dynamic = 'force-dynamic';
  * in the engine refuses to move an errand that is not live, so no further leg
  * can be commissioned no matter which worker wakes up next. The LEG currently
  * running is an orchestrator run, and that stops the way orchestrator runs
- * always have — cancelled on the row, then cancelled at its next step boundary
- * by the `orchestrator/run.cancelled` event.
+ * always have — cancelled on the row, which the executor re-reads between
+ * phases and before starting each sub-agent. (The `orchestrator/run.cancelled`
+ * event died with Inngest's `cancelOn`; the row was always the authority.)
  *
  * So a sub-agent already inside a tool call finishes that call. A request
  * already sent cannot be un-sent, and pretending otherwise would just move the
@@ -67,9 +65,9 @@ export async function POST(
 
   let settling = false;
   if (runId) {
-    // Row first, then the event: the row is the authority and the event only
-    // makes the stop land at the next step instead of the next wave. Exactly
-    // the order app/api/orchestrator/[id]/cancel uses.
+    // La fila es toda la señal: el executor la relee entre fases y antes de
+    // arrancar cada sub-agente (lib/orchestrator/executor.ts), así que no hay
+    // evento que mandar. Exactamente lo que hace app/api/orchestrator/[id]/cancel.
     const { data } = await db
       .from('orchestration_runs')
       .update({ status: 'cancelled', finished_at: new Date().toISOString() })
@@ -77,23 +75,6 @@ export async function POST(
       .in('status', ['planning', 'running'])
       .select('id');
     settling = (data ?? []).length > 0;
-
-    if (settling) {
-      try {
-        await inngest.send({
-          name: EVENT_RUN_CANCELLED,
-          data: { runId, organizationId: user.organization.id },
-        });
-      } catch (err) {
-        // The row already says cancelled, and the executor re-reads it between
-        // phases. The event only makes it land sooner.
-        logger.error('errands: could not signal the running leg to stop', {
-          errandId: id,
-          runId,
-          error: (err as Error).message,
-        });
-      }
-    }
   }
 
   return NextResponse.json({ ok: true, settling });

@@ -1,12 +1,9 @@
-import { inngest } from '@/lib/inngest';
-import { EVENT_RUN_CANCELLED } from '@/lib/orchestrator/contract';
 import { emit } from '@/lib/orchestrator/events';
 import { type LifecycleDb, settleUnfinishedTasks } from '@/lib/orchestrator/lifecycle';
 import { loadRun } from '@/lib/orchestrator/repository';
 import { isTerminal } from '@/lib/orchestrator/types';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { logger } from '@cortex/core';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -15,20 +12,17 @@ export const dynamic = 'force-dynamic';
 /**
  * Ask a run to stop.
  *
- * STILL COOPERATIVE, AND STILL SAID OUT LOUD. Two things now stop a run and
- * neither of them can reach into a sub-agent that is mid-tool-call:
+ * STILL COOPERATIVE, AND STILL SAID OUT LOUD. La fila es la única señal: aquí
+ * se escribe `cancelled`, y el executor la relee entre fases Y antes de
+ * arrancar cada sub-agente (lib/orchestrator/executor.ts). El evento
+ * `orchestrator/run.cancelled` murió con el `cancelOn` de Inngest — pg-boss no
+ * tiene cancelación por evento, y no hace falta: el chequeo por tarea corta
+ * antes de lo que aquel evento cortaba (el siguiente paso ≈ la siguiente ola).
  *
- *   1. the row is written `cancelled` here, and every phase of the executor
- *      re-reads it before starting the next thing;
- *   2. `orchestrator/run.cancelled` cancels the Inngest function, which lands
- *      at its next STEP boundary rather than its next wave.
- *
- * The second is what changed when execution moved off `after()`, and it makes
- * the stop land sooner — but "sooner" is not "instantly", and the API says so:
- * the response reports `settling` while sub-agents that were already working
- * finish what they were in the middle of. There is no way to un-send a tool
- * call that is already running, and pretending otherwise would be a lie the
- * interface would then have to repeat.
+ * "Antes" no es "al instante", y la API lo dice: la respuesta reporta
+ * `settling` mientras los sub-agentes que ya estaban dentro de una herramienta
+ * terminan ese paso. Una llamada ya enviada no se puede devolver, y fingir lo
+ * contrario sería una mentira que la interfaz tendría que repetir.
  */
 export async function POST(
   _req: Request,
@@ -66,21 +60,6 @@ export async function POST(
   // that survives the cancel and finishes a moment later overwrites its own row
   // with the real result, which is the better outcome, so it is left to win.
   const settled = await settleUnfinishedTasks(db as unknown as LifecycleDb, id, 'cancelled');
-
-  try {
-    await inngest.send({
-      name: EVENT_RUN_CANCELLED,
-      data: { runId: id, organizationId: user.organization.id },
-    });
-  } catch (err) {
-    // Best-effort: the row is already `cancelled`, which every phase of the
-    // executor checks before it starts anything. The event only makes the stop
-    // land at the next step instead of the next wave.
-    logger.error('orchestrator: could not broadcast the cancellation', {
-      runId: id,
-      error: (err as Error).message,
-    });
-  }
 
   return NextResponse.json({ status: 'cancelled', cancelled: true, settling: settled > 0 });
 }

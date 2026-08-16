@@ -1,6 +1,6 @@
 import { claimDelivery, supabaseDeliveryLedger } from '@/lib/dev-tasks/claim';
 import { type DevTaskIntakeEvent, EVENT_TASK_INTAKE } from '@/lib/dev-tasks/contract';
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -145,15 +145,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     repoHint: repoHintOf(data),
   };
 
-  try {
-    await inngest.send({ name: EVENT_TASK_INTAKE, data: payload });
-  } catch (err) {
+  // `enqueueJob` nunca lanza; devuelve false cuando no pudo encolar.
+  const queued = await enqueueJob(EVENT_TASK_INTAKE, payload as unknown as Record<string, unknown>);
+  if (!queued) {
     // Give the claim back, otherwise Linear's retry looks like a duplicate and
     // the issue is silently never picked up.
     await ledger.release(deliveryId).catch(() => undefined);
-    logger.error('linear-webhook: could not enqueue the intake', {
-      error: (err as Error).message,
-    });
+    logger.error('linear-webhook: could not enqueue the intake');
     return NextResponse.json({ error: 'enqueue failed' }, { status: 500 });
   }
 

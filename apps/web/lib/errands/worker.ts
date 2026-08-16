@@ -1,5 +1,5 @@
 import 'server-only';
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { noteErrandAsked, noteErrandFinished } from '@/lib/notifications/producers';
 import { EVENT_RUN_STARTED } from '@/lib/orchestrator/contract';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -348,19 +348,16 @@ async function launchLeg(
   const runId = data.id as string;
   await attachRun(edb, { errandId: view.id, legId, runId });
 
-  try {
-    await inngest.send({
-      name: EVENT_RUN_STARTED,
-      data: {
-        runId,
-        organizationId,
-        userId,
-        objective,
-        concurrency: 3,
-        toolAllowlist,
-      },
-    });
-  } catch (err) {
+  // `enqueueJob` nunca lanza; false = ninguna cola aceptó el trabajo.
+  const queued = await enqueueJob(EVENT_RUN_STARTED, {
+    runId,
+    organizationId,
+    userId,
+    objective,
+    concurrency: 3,
+    toolAllowlist,
+  });
+  if (!queued) {
     // The run row exists and nothing will pick it up. Close the leg here
     // rather than leave the errand watching a run that will never move; the
     // sweep would get there eventually, but this failure is visible now.
@@ -381,7 +378,7 @@ async function launchLeg(
       tokens: 0,
       tokensSpent: view.tokensSpent,
     });
-    return { did: 'launch_leg', again: true, detail: (err as Error).message };
+    return { did: 'launch_leg', again: true, detail: 'could not enqueue the run' };
   }
 
   return { did: 'launch_leg', again: false, detail: runId };

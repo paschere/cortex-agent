@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   type ToolContext,
@@ -55,62 +56,61 @@ type PrepareOutcome =
   /** Unrecoverable for this document — the row is already marked failed. */
   | { ok: false; terminal: true; reason: string };
 
-export const ingestDocument = inngest.createFunction(
-  { id: 'ingest-document', retries: 3 },
-  { event: 'kb/document.ingest' },
-  async ({ event, step }) => {
-    const { documentId } = event.data as { documentId: string };
+/**
+ * El cuerpo, extraído a la firma de la cola nueva. Los reintentos (3) los da
+ * el manifiesto del worker; el diseño resumable por pasos persiste cada lote
+ * en la base, así que un reintento de pg-boss reejecuta la función entera pero
+ * sólo compra lo que aún no está escrito.
+ */
+export const ingestDocumentJob: JobHandler = async ({ event, step }) => {
+  const { documentId } = event.data as { documentId: string };
 
-    // THE WORKSPACE COMES FROM THE DOCUMENT, NOT FROM THE EVENT. Ingestion is
-    // triggered from four places (upload, Drive import, Drive sync, the
-    // create-document tool) and will be triggered from a fifth eventually. If
-    // the sender had to put the workspace on the event, one of them would
-    // eventually not, and the job would have to either guess or fail. Reading it
-    // off the row is unforgeable and cannot be forgotten: one unscoped lookup of
-    // a single row by primary key, and every handle after it is pinned.
-    const organizationId = await step.run('resolve-workspace', async () => {
-      const raw = getSupabaseServiceClient();
-      const { data } = await raw
-        .from('kb_documents')
-        .select('organization_id')
-        .eq('id', documentId)
-        .maybeSingle();
-      return (data?.organization_id as string | undefined) ?? null;
-    });
-    if (!organizationId) return { ok: false as const, error: `Document ${documentId} not found` };
+  // THE WORKSPACE COMES FROM THE DOCUMENT, NOT FROM THE EVENT. Ingestion is
+  // triggered from four places (upload, Drive import, Drive sync, the
+  // create-document tool) and will be triggered from a fifth eventually. If
+  // the sender had to put the workspace on the event, one of them would
+  // eventually not, and the job would have to either guess or fail. Reading it
+  // off the row is unforgeable and cannot be forgotten: one unscoped lookup of
+  // a single row by primary key, and every handle after it is pinned.
+  const organizationId = await step.run('resolve-workspace', async () => {
+    const raw = getSupabaseServiceClient();
+    const { data } = await raw
+      .from('kb_documents')
+      .select('organization_id')
+      .eq('id', documentId)
+      .maybeSingle();
+    return (data?.organization_id as string | undefined) ?? null;
+  });
+  if (!organizationId) return { ok: false as const, error: `Document ${documentId} not found` };
 
-    const sb = getOrgScopedClient(organizationId);
+  const sb = getOrgScopedClient(organizationId);
 
-    // Fetch the document row
-    const doc = await step.run('load-doc', async () => {
-      const { data, error } = await sb
-        .from('kb_documents')
-        .select('*')
-        .eq('id', documentId)
-        .single();
-      if (error || !data) throw new Error(`Document ${documentId} not found`);
-      return data;
-    });
+  // Fetch the document row
+  const doc = await step.run('load-doc', async () => {
+    const { data, error } = await sb.from('kb_documents').select('*').eq('id', documentId).single();
+    if (error || !data) throw new Error(`Document ${documentId} not found`);
+    return data;
+  });
 
-    // Mark as ingesting
-    await step.run('mark-ingesting', async () => {
-      await sb.from('kb_documents').update({ status: 'ingesting' }).eq('id', documentId);
-    });
+  // Mark as ingesting
+  await step.run('mark-ingesting', async () => {
+    await sb.from('kb_documents').update({ status: 'ingesting' }).eq('id', documentId);
+  });
 
-    // Terminal failure for a source: mark the row failed and stop WITHOUT
-    // throwing (so inngest does not retry an unrecoverable document).
-    const failAndStop = async (message: string) => {
-      await sb
-        .from('kb_documents')
-        .update({ status: 'failed', error_message: message })
-        .eq('id', documentId);
-      return { ok: false as const, error: message };
-    };
+  // Terminal failure for a source: mark the row failed and stop WITHOUT
+  // throwing (so inngest does not retry an unrecoverable document).
+  const failAndStop = async (message: string) => {
+    await sb
+      .from('kb_documents')
+      .update({ status: 'failed', error_message: message })
+      .eq('id', documentId);
+    return { ok: false as const, error: message };
+  };
 
-    // Same contract as before the rewrite: whatever else happens, the row stops
-    // claiming to be mid-ingestion and carries a sentence someone can read. The
-    // throw is preserved so Inngest still counts the attempt.
-    try {
+  // Same contract as before the rewrite: whatever else happens, the row stops
+  // claiming to be mid-ingestion and carries a sentence someone can read. The
+  // throw is preserved so Inngest still counts the attempt.
+  try {
     // -----------------------------------------------------------------------
     // 1. Source -> chunk ROWS, inside a step, with only a count coming back out
     // -----------------------------------------------------------------------
@@ -224,9 +224,7 @@ export const ingestDocument = inngest.createFunction(
             .maybeSingle();
           const ownerUserId = syncState?.owner_user_id as string | null | undefined;
           if (!ownerUserId) {
-            return terminal(
-              `No Google Drive owner configured for collection ${doc.collection_id}`,
-            );
+            return terminal(`No Google Drive owner configured for collection ${doc.collection_id}`);
           }
 
           const ctx: Pick<ToolContext, 'integrations' | 'signal'> = {
@@ -473,14 +471,19 @@ export const ingestDocument = inngest.createFunction(
     });
 
     return { ...settled, extraction };
-    } catch (err) {
-      await sb
-        .from('kb_documents')
-        .update({ status: 'failed', error_message: (err as Error).message })
-        .eq('id', documentId);
-      throw err;
-    }
-  },
+  } catch (err) {
+    await sb
+      .from('kb_documents')
+      .update({ status: 'failed', error_message: (err as Error).message })
+      .eq('id', documentId);
+    throw err;
+  }
+};
+
+export const ingestDocument = inngest.createFunction(
+  { id: 'ingest-document', retries: 3 },
+  { event: 'kb/document.ingest' },
+  async (ctx) => ingestDocumentJob(ctx as unknown as JobContext),
 );
 
 /** Narrowing helper so the branches above read as prose. */

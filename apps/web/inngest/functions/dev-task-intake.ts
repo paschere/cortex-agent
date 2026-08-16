@@ -9,6 +9,7 @@ import {
 import { commentOnIssue } from '@/lib/dev-tasks/linear-comment';
 import { resolveRepository } from '@/lib/dev-tasks/repository';
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 
@@ -64,121 +65,128 @@ type IntakeOutcome =
   | { kind: 'ignored'; reason: string }
   | { kind: 'accepted'; taskId: string; repository: DevTaskRepository; attempt: number };
 
+/** El cuerpo, extraído a la firma de la cola nueva. */
+export const devTaskIntakeJob: JobHandler = async ({ event, step }) => {
+  const intake = event.data as unknown as DevTaskIntakeEvent;
+
+  const outcome = await step.run('resolve-and-create', async (): Promise<IntakeOutcome> => {
+    const resolution = await resolveRepository({
+      directiveKey: intake.repoHint?.from === 'description' ? intake.repoHint.key : null,
+      labelKey: intake.repoHint?.from === 'label' ? intake.repoHint.key : null,
+      projectId: intake.issue.projectId,
+      teamKey: intake.issue.teamKey,
+    });
+    if (!resolution.ok) {
+      await commentOnIssue(
+        intake.issue.id,
+        rejectionComment(resolution.reason, resolution.available),
+      );
+      return { kind: 'rejected', reason: resolution.reason };
+    }
+
+    const repo = resolution.repository;
+    // The repository the issue named is what says whose delivery this is;
+    // everything the intake writes lands in that workspace.
+    const db = getOrgScopedClient(repo.organizationId);
+    const { data, error } = await db
+      .from('dev_tasks')
+      .insert({
+        source: intake.source,
+        external_id: intake.issue.id,
+        external_identifier: intake.issue.identifier,
+        external_url: intake.issue.url,
+        title: intake.issue.title,
+        description: intake.issue.description,
+        repository_id: repo.id,
+        repository_key: repo.key,
+        requester_name: intake.requester.name,
+        requester_email: intake.requester.email,
+        requester_external_id: intake.requester.externalId,
+        status: 'queued',
+        attempt_count: 1,
+        trigger_context: {
+          via: intake.via,
+          action: intake.action,
+          repoResolvedVia: resolution.via,
+          teamKey: intake.issue.teamKey,
+          projectId: intake.issue.projectId,
+        },
+      })
+      .select('id, attempt_count')
+      .single();
+
+    if (error) {
+      if (error.code === PG_UNIQUE_VIOLATION) {
+        // Someone re-assigned or re-labelled while a run is live. Deliberately
+        // silent on Linear: the human already sees the earlier "picked this
+        // up" comment, and a second one would read like progress.
+        return { kind: 'ignored', reason: 'a task for this issue is already open' };
+      }
+      throw new Error(`Could not create the dev task: ${error.message}`);
+    }
+
+    await commentOnIssue(
+      intake.issue.id,
+      acknowledgementComment(repo, intake.via),
+      repo.organizationId,
+    );
+    return {
+      kind: 'accepted',
+      taskId: data.id as string,
+      repository: repo,
+      attempt: (data.attempt_count as number | null) ?? 1,
+    };
+  });
+
+  if (outcome.kind === 'accepted') {
+    const queued: DevTaskQueuedEvent = {
+      taskId: outcome.taskId,
+      source: intake.source,
+      attempt: outcome.attempt,
+      maxAttempts: 3,
+      repository: outcome.repository,
+      issue: intake.issue,
+      requester: intake.requester,
+    };
+    await step.sendEvent('queue-for-executor', {
+      name: EVENT_TASK_QUEUED,
+      // La interfaz no tiene index signature; el cast es solo de tipos.
+      data: queued as unknown as Record<string, unknown>,
+    });
+  }
+
+  await step.run('settle-delivery', async () => {
+    // The delivery ledger row was written by the webhook before any workspace
+    // was known (migration 0064 § 10), so it is settled on the raw client and
+    // stamped with the workspace only once the intake resolved one. A
+    // rejected delivery keeps a null workspace and is visible to no tenant.
+    const raw = getSupabaseServiceClient();
+    const ledger = supabaseDeliveryLedger(raw);
+    await ledger.settle(intake.deliveryId, {
+      outcome: outcome.kind === 'accepted' ? 'accepted' : outcome.kind,
+      taskId: outcome.kind === 'accepted' ? outcome.taskId : null,
+      reason: outcome.kind === 'accepted' ? null : outcome.reason,
+    });
+    if (outcome.kind === 'accepted') {
+      await raw
+        .from('dev_task_events')
+        .update({ organization_id: outcome.repository.organizationId })
+        .eq('id', intake.deliveryId);
+    }
+  });
+
+  logger.info(
+    `dev-task-intake: ${intake.issue.identifier} → ${outcome.kind}${
+      outcome.kind === 'accepted' ? ` (${outcome.repository.key})` : ` (${outcome.reason})`
+    }`,
+  );
+  return outcome.kind === 'accepted'
+    ? { status: 'accepted', taskId: outcome.taskId }
+    : { status: outcome.kind, reason: outcome.reason };
+};
+
 export const devTaskIntake = inngest.createFunction(
   { id: 'dev-task-intake', concurrency: { limit: 5 } },
   { event: EVENT_TASK_INTAKE },
-  async ({ event, step }) => {
-    const intake = event.data as unknown as DevTaskIntakeEvent;
-
-    const outcome = await step.run('resolve-and-create', async (): Promise<IntakeOutcome> => {
-      const resolution = await resolveRepository({
-        directiveKey: intake.repoHint?.from === 'description' ? intake.repoHint.key : null,
-        labelKey: intake.repoHint?.from === 'label' ? intake.repoHint.key : null,
-        projectId: intake.issue.projectId,
-        teamKey: intake.issue.teamKey,
-      });
-      if (!resolution.ok) {
-        await commentOnIssue(
-          intake.issue.id,
-          rejectionComment(resolution.reason, resolution.available),
-        );
-        return { kind: 'rejected', reason: resolution.reason };
-      }
-
-      const repo = resolution.repository;
-      // The repository the issue named is what says whose delivery this is;
-      // everything the intake writes lands in that workspace.
-      const db = getOrgScopedClient(repo.organizationId);
-      const { data, error } = await db
-        .from('dev_tasks')
-        .insert({
-          source: intake.source,
-          external_id: intake.issue.id,
-          external_identifier: intake.issue.identifier,
-          external_url: intake.issue.url,
-          title: intake.issue.title,
-          description: intake.issue.description,
-          repository_id: repo.id,
-          repository_key: repo.key,
-          requester_name: intake.requester.name,
-          requester_email: intake.requester.email,
-          requester_external_id: intake.requester.externalId,
-          status: 'queued',
-          attempt_count: 1,
-          trigger_context: {
-            via: intake.via,
-            action: intake.action,
-            repoResolvedVia: resolution.via,
-            teamKey: intake.issue.teamKey,
-            projectId: intake.issue.projectId,
-          },
-        })
-        .select('id, attempt_count')
-        .single();
-
-      if (error) {
-        if (error.code === PG_UNIQUE_VIOLATION) {
-          // Someone re-assigned or re-labelled while a run is live. Deliberately
-          // silent on Linear: the human already sees the earlier "picked this
-          // up" comment, and a second one would read like progress.
-          return { kind: 'ignored', reason: 'a task for this issue is already open' };
-        }
-        throw new Error(`Could not create the dev task: ${error.message}`);
-      }
-
-      await commentOnIssue(
-        intake.issue.id,
-        acknowledgementComment(repo, intake.via),
-        repo.organizationId,
-      );
-      return {
-        kind: 'accepted',
-        taskId: data.id as string,
-        repository: repo,
-        attempt: (data.attempt_count as number | null) ?? 1,
-      };
-    });
-
-    if (outcome.kind === 'accepted') {
-      const queued: DevTaskQueuedEvent = {
-        taskId: outcome.taskId,
-        source: intake.source,
-        attempt: outcome.attempt,
-        maxAttempts: 3,
-        repository: outcome.repository,
-        issue: intake.issue,
-        requester: intake.requester,
-      };
-      await step.sendEvent('queue-for-executor', { name: EVENT_TASK_QUEUED, data: queued });
-    }
-
-    await step.run('settle-delivery', async () => {
-      // The delivery ledger row was written by the webhook before any workspace
-      // was known (migration 0064 § 10), so it is settled on the raw client and
-      // stamped with the workspace only once the intake resolved one. A
-      // rejected delivery keeps a null workspace and is visible to no tenant.
-      const raw = getSupabaseServiceClient();
-      const ledger = supabaseDeliveryLedger(raw);
-      await ledger.settle(intake.deliveryId, {
-        outcome: outcome.kind === 'accepted' ? 'accepted' : outcome.kind,
-        taskId: outcome.kind === 'accepted' ? outcome.taskId : null,
-        reason: outcome.kind === 'accepted' ? null : outcome.reason,
-      });
-      if (outcome.kind === 'accepted') {
-        await raw
-          .from('dev_task_events')
-          .update({ organization_id: outcome.repository.organizationId })
-          .eq('id', intake.deliveryId);
-      }
-    });
-
-    logger.info(
-      `dev-task-intake: ${intake.issue.identifier} → ${outcome.kind}${
-        outcome.kind === 'accepted' ? ` (${outcome.repository.key})` : ` (${outcome.reason})`
-      }`,
-    );
-    return outcome.kind === 'accepted'
-      ? { status: 'accepted', taskId: outcome.taskId }
-      : { status: outcome.kind, reason: outcome.reason };
-  },
+  async (ctx) => devTaskIntakeJob(ctx as unknown as JobContext),
 );

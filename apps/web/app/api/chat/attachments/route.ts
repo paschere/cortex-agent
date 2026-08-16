@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { assertCanWriteToSpace, ensurePersonalSpace, parseDocument } from '@cortex/agent-tools';
@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
     // apps/web/inngest/functions/ingest-document.ts, and the event carries the
     // document id and nothing else so the worker reads the workspace off the
     // row rather than trusting the sender.
-    await inngest.send({ name: 'kb/document.ingest', data: { documentId } });
+    await enqueueJob('kb/document.ingest', { documentId });
   }
 
   const { data: attachment, error: attachError } = await db

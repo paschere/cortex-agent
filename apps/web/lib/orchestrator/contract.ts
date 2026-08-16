@@ -17,12 +17,12 @@
  *                               from another workspace simply finds nothing to
  *                               claim.
  *
- *   orchestrator/run.cancelled  Sent by the cancel endpoint AFTER it has
- *                               written `cancelled` to the row. The executor
- *                               declares `cancelOn` for it, so a run stops at
- *                               its next step boundary instead of only between
- *                               waves. The row is still the authority; the
- *                               event only makes the stop land sooner.
+ *   orchestrator/run.cancelled  YA NO EXISTE. Era el complemento del `cancelOn`
+ *                               de Inngest, y pg-boss no tiene cancelación por
+ *                               evento. La fila siempre fue la autoridad: el
+ *                               endpoint de cancelar escribe `cancelled` y el
+ *                               executor la relee entre fases y antes de
+ *                               arrancar cada sub-agente (executor.ts).
  *
  * Nothing here imports server-only: the route, the executor and the tests all
  * read these names from one place.
@@ -30,9 +30,6 @@
 
 /** Sent by POST /api/orchestrator; consumed by orchestrator-run. */
 export const EVENT_RUN_STARTED = 'orchestrator/run.started' as const;
-
-/** Sent by POST /api/orchestrator/[id]/cancel; cancels the running function. */
-export const EVENT_RUN_CANCELLED = 'orchestrator/run.cancelled' as const;
 
 export interface OrchestratorRunStartedEvent {
   runId: string;

@@ -1,5 +1,6 @@
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { ERRAND_STALE_MS } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
@@ -100,154 +101,161 @@ interface Candidate {
   silentMs: number;
 }
 
+/**
+ * El cuerpo, extraído a un handler con la firma de la cola nueva para que
+ * pg-boss e Inngest (durante la transición) ejecuten exactamente la misma
+ * lógica. `event` no se usa: el barrido decide todo releyendo la base.
+ */
+export const errandSweepJob: JobHandler = async ({ step }) => {
+  const now = Date.now();
+
+  const found = await step.run('scan', async () => {
+    const raw = getSupabaseServiceClient();
+
+    const [fresh, live, due] = await Promise.all([
+      // Never started. Picked up immediately — see NUDGE_AFTER_MS.
+      raw
+        .from('errands')
+        .select('id, organization_id, user_id, last_heartbeat_at')
+        .eq('state', 'queued')
+        .order('created_at', { ascending: true })
+        .limit(MAX_PER_PASS),
+      raw
+        .from('errands')
+        .select('id, organization_id, user_id, last_heartbeat_at')
+        .in('state', ['queued', 'working', 'blocked'])
+        .lt('last_heartbeat_at', new Date(now - NUDGE_AFTER_MS).toISOString())
+        .order('last_heartbeat_at', { ascending: true })
+        .limit(MAX_PER_PASS),
+      raw
+        .from('errands')
+        .select('id, organization_id, user_id, last_heartbeat_at')
+        .eq('state', 'watching')
+        .lt('next_check_at', new Date(now).toISOString())
+        .order('next_check_at', { ascending: true })
+        .limit(MAX_PER_PASS),
+    ]);
+
+    if (fresh.error) throw new Error(`Could not scan queued errands: ${fresh.error.message}`);
+    if (live.error) throw new Error(`Could not scan live errands: ${live.error.message}`);
+    if (due.error) throw new Error(`Could not scan due monitors: ${due.error.message}`);
+
+    const seen = new Set<string>();
+    const candidates: Candidate[] = [];
+    for (const row of [...(fresh.data ?? []), ...(live.data ?? []), ...(due.data ?? [])] as Record<
+      string,
+      unknown
+    >[]) {
+      const id = row.id as string;
+      const organizationId = (row.organization_id as string | null) ?? '';
+      if (!id || !organizationId || seen.has(id)) continue;
+      seen.add(id);
+      const beat = new Date((row.last_heartbeat_at as string) ?? 0).getTime();
+      candidates.push({
+        id,
+        organizationId,
+        userId: (row.user_id as string | null) ?? null,
+        silentMs: Number.isFinite(beat) ? now - beat : Number.POSITIVE_INFINITY,
+      });
+    }
+    return candidates;
+  });
+
+  /**
+   * ── Abandon first, so an errand past saving is not also nudged ─────────
+   *
+   * Y SÓLO SI HAY ALGO QUE ABANDONAR, que no es un detalle de estilo.
+   *
+   * Este barrido corre CADA MINUTO —43.200 veces al mes— y este paso corría
+   * con él, incondicionalmente, para comprobar un umbral de DOS HORAS. En una
+   * instalación tranquila eso son ~43.000 ejecuciones de paso al mes gastadas
+   * en filtrar una lista vacía, y en Inngest lo que se factura es el paso, no
+   * el trabajo que hace.
+   *
+   * El filtro es puro y `found` ya viene memoizado del paso anterior, así que
+   * calcularlo aquí fuera no cuesta nada y no cambia ni un comportamiento: si
+   * no hay ningún encargo pasado de las dos horas, no hay paso.
+   */
+  const lost = found.filter((c) => c.silentMs > ABANDON_AFTER_MS);
+  const abandoned =
+    lost.length === 0
+      ? []
+      : await step.run('abandon-lost-errands', async () => {
+          const closed: string[] = [];
+          for (const candidate of lost) {
+            try {
+              const db = getOrgScopedClient(candidate.organizationId);
+              // The freshness guard is repeated in the UPDATE rather than trusted
+              // from the scan: minutes can pass in between, and an errand that
+              // moved in that window is alive and must not be closed.
+              const { data } = await db
+                .from('errands')
+                .update({
+                  state: 'failed',
+                  finished_at: new Date().toISOString(),
+                  closing_note:
+                    '**Este encargo dejó de dar señales.**\n\nLlevaba más de dos horas sin avanzar ni ' +
+                    'reportar nada, así que lo damos por perdido en vez de dejarlo diciendo que ' +
+                    'trabaja. No falló por sí solo y nadie lo detuvo: lo más probable es que se haya ' +
+                    'caído la infraestructura que lo movía. Lo que alcanzó a reunir quedó guardado ' +
+                    'abajo. Vuelve a encargarlo cuando quieras.',
+                  current_run_id: null,
+                  claimed_at: null,
+                  last_heartbeat_at: new Date().toISOString(),
+                })
+                .eq('id', candidate.id)
+                .in('state', ['queued', 'working', 'blocked', 'watching'])
+                .lt('last_heartbeat_at', new Date(now - ABANDON_AFTER_MS).toISOString())
+                .select('id');
+              if ((data ?? []).length > 0) {
+                closed.push(candidate.id);
+                await db
+                  .from('errand_questions')
+                  .update({ state: 'withdrawn' })
+                  .eq('errand_id', candidate.id)
+                  .eq('state', 'open');
+              }
+            } catch (err) {
+              // One workspace's problem must not stop the sweep for the rest.
+              logger.error('errand-sweep: could not close a lost errand', {
+                errandId: candidate.id,
+                error: (err as Error).message,
+              });
+            }
+          }
+          return closed;
+        });
+
+  const abandonedSet = new Set(abandoned);
+  const toNudge = found.filter((c) => !abandonedSet.has(c.id));
+
+  if (toNudge.length > 0) {
+    await step.sendEvent(
+      'nudge',
+      toNudge.map((candidate) => ({
+        name: EVENT_ERRAND_ADVANCE,
+        data: {
+          errandId: candidate.id,
+          organizationId: candidate.organizationId,
+          userId: candidate.userId,
+          because: 'sweep',
+        },
+      })),
+    );
+  }
+
+  if (abandoned.length > 0) {
+    logger.info(`errand-sweep: wrote off ${abandoned.length} errand(s) past ${ERRAND_STALE_MS}ms`);
+  }
+
+  return { scanned: found.length, nudged: toNudge.length, abandoned: abandoned.length };
+};
+
 export const errandSweep = inngest.createFunction(
   { id: 'errand-sweep' },
   { cron: CRON },
-  async ({ step }) => {
-    const now = Date.now();
-
-    const found = await step.run('scan', async () => {
-      const raw = getSupabaseServiceClient();
-
-      const [fresh, live, due] = await Promise.all([
-        // Never started. Picked up immediately — see NUDGE_AFTER_MS.
-        raw
-          .from('errands')
-          .select('id, organization_id, user_id, last_heartbeat_at')
-          .eq('state', 'queued')
-          .order('created_at', { ascending: true })
-          .limit(MAX_PER_PASS),
-        raw
-          .from('errands')
-          .select('id, organization_id, user_id, last_heartbeat_at')
-          .in('state', ['queued', 'working', 'blocked'])
-          .lt('last_heartbeat_at', new Date(now - NUDGE_AFTER_MS).toISOString())
-          .order('last_heartbeat_at', { ascending: true })
-          .limit(MAX_PER_PASS),
-        raw
-          .from('errands')
-          .select('id, organization_id, user_id, last_heartbeat_at')
-          .eq('state', 'watching')
-          .lt('next_check_at', new Date(now).toISOString())
-          .order('next_check_at', { ascending: true })
-          .limit(MAX_PER_PASS),
-      ]);
-
-      if (fresh.error) throw new Error(`Could not scan queued errands: ${fresh.error.message}`);
-      if (live.error) throw new Error(`Could not scan live errands: ${live.error.message}`);
-      if (due.error) throw new Error(`Could not scan due monitors: ${due.error.message}`);
-
-      const seen = new Set<string>();
-      const candidates: Candidate[] = [];
-      for (const row of [
-        ...(fresh.data ?? []),
-        ...(live.data ?? []),
-        ...(due.data ?? []),
-      ] as Record<string, unknown>[]) {
-        const id = row.id as string;
-        const organizationId = (row.organization_id as string | null) ?? '';
-        if (!id || !organizationId || seen.has(id)) continue;
-        seen.add(id);
-        const beat = new Date((row.last_heartbeat_at as string) ?? 0).getTime();
-        candidates.push({
-          id,
-          organizationId,
-          userId: (row.user_id as string | null) ?? null,
-          silentMs: Number.isFinite(beat) ? now - beat : Number.POSITIVE_INFINITY,
-        });
-      }
-      return candidates;
-    });
-
-    /**
-     * ── Abandon first, so an errand past saving is not also nudged ─────────
-     *
-     * Y SÓLO SI HAY ALGO QUE ABANDONAR, que no es un detalle de estilo.
-     *
-     * Este barrido corre CADA MINUTO —43.200 veces al mes— y este paso corría
-     * con él, incondicionalmente, para comprobar un umbral de DOS HORAS. En una
-     * instalación tranquila eso son ~43.000 ejecuciones de paso al mes gastadas
-     * en filtrar una lista vacía, y en Inngest lo que se factura es el paso, no
-     * el trabajo que hace.
-     *
-     * El filtro es puro y `found` ya viene memoizado del paso anterior, así que
-     * calcularlo aquí fuera no cuesta nada y no cambia ni un comportamiento: si
-     * no hay ningún encargo pasado de las dos horas, no hay paso.
-     */
-    const lost = found.filter((c) => c.silentMs > ABANDON_AFTER_MS);
-    const abandoned =
-      lost.length === 0
-        ? []
-        : await step.run('abandon-lost-errands', async () => {
-            const closed: string[] = [];
-            for (const candidate of lost) {
-              try {
-                const db = getOrgScopedClient(candidate.organizationId);
-                // The freshness guard is repeated in the UPDATE rather than trusted
-                // from the scan: minutes can pass in between, and an errand that
-                // moved in that window is alive and must not be closed.
-                const { data } = await db
-                  .from('errands')
-                  .update({
-                    state: 'failed',
-                    finished_at: new Date().toISOString(),
-                    closing_note:
-                      '**Este encargo dejó de dar señales.**\n\nLlevaba más de dos horas sin avanzar ni ' +
-                      'reportar nada, así que lo damos por perdido en vez de dejarlo diciendo que ' +
-                      'trabaja. No falló por sí solo y nadie lo detuvo: lo más probable es que se haya ' +
-                      'caído la infraestructura que lo movía. Lo que alcanzó a reunir quedó guardado ' +
-                      'abajo. Vuelve a encargarlo cuando quieras.',
-                    current_run_id: null,
-                    claimed_at: null,
-                    last_heartbeat_at: new Date().toISOString(),
-                  })
-                  .eq('id', candidate.id)
-                  .in('state', ['queued', 'working', 'blocked', 'watching'])
-                  .lt('last_heartbeat_at', new Date(now - ABANDON_AFTER_MS).toISOString())
-                  .select('id');
-                if ((data ?? []).length > 0) {
-                  closed.push(candidate.id);
-                  await db
-                    .from('errand_questions')
-                    .update({ state: 'withdrawn' })
-                    .eq('errand_id', candidate.id)
-                    .eq('state', 'open');
-                }
-              } catch (err) {
-                // One workspace's problem must not stop the sweep for the rest.
-                logger.error('errand-sweep: could not close a lost errand', {
-                  errandId: candidate.id,
-                  error: (err as Error).message,
-                });
-              }
-            }
-            return closed;
-          });
-
-    const abandonedSet = new Set(abandoned);
-    const toNudge = found.filter((c) => !abandonedSet.has(c.id));
-
-    if (toNudge.length > 0) {
-      await step.sendEvent(
-        'nudge',
-        toNudge.map((candidate) => ({
-          name: EVENT_ERRAND_ADVANCE,
-          data: {
-            errandId: candidate.id,
-            organizationId: candidate.organizationId,
-            userId: candidate.userId,
-            because: 'sweep',
-          },
-        })),
-      );
-    }
-
-    if (abandoned.length > 0) {
-      logger.info(
-        `errand-sweep: wrote off ${abandoned.length} errand(s) past ${ERRAND_STALE_MS}ms`,
-      );
-    }
-
-    return { scanned: found.length, nudged: toNudge.length, abandoned: abandoned.length };
-  },
+  // El contexto de Inngest trae más campos y su `step` memoiza, pero la firma
+  // que este handler usa (run/sendEvent/sleep) es idéntica; el cast sólo borra
+  // esa diferencia de tipos, no de comportamiento.
+  async (ctx) => errandSweepJob(ctx as unknown as JobContext),
 );

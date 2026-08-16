@@ -1,4 +1,5 @@
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   MEET_READONLY_SCOPE,
@@ -70,61 +71,64 @@ interface UserSweepResult {
   failed: number;
 }
 
+/** El cuerpo, extraído a la firma de la cola nueva; `event` no se usa. */
+export const meetingImportSweepJob: JobHandler = async ({ step }) => {
+  // Only accounts that actually granted the Meet scope. Asking Google on
+  // behalf of someone who never granted it earns a 403 per user per run and
+  // teaches the log to cry wolf.
+  // Unscoped on purpose: "who in the whole install connected Google with the
+  // Meet scope" is not a question about one workspace, and there is no session
+  // behind a cron. Each row names the workspace that granted the scope, and
+  // every handle in the per-user sweep below is built from THAT — so a
+  // transcript can only ever land in the space of the workspace whose Google
+  // account read it.
+  const connected = await step.run('load-connected-users', async (): Promise<Connected[]> => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db
+      .from('integrations')
+      .select('user_id, organization_id, scopes')
+      .eq('provider', 'google')
+      .contains('scopes', [MEET_READONLY_SCOPE]);
+    if (error) throw new Error(`Failed to load Google integrations: ${error.message}`);
+    const seen = new Map<string, Connected>();
+    for (const row of data ?? []) {
+      const userId = row.user_id as string;
+      if (!seen.has(userId)) {
+        seen.set(userId, { userId, organizationId: row.organization_id as string });
+      }
+    }
+    return [...seen.values()];
+  });
+
+  const results: UserSweepResult[] = [];
+
+  for (const { userId, organizationId } of connected) {
+    const result = await step
+      .run(`sweep-${userId}`, async () => sweepUser(userId, organizationId))
+      .catch((err: unknown) => {
+        // Swallowed on purpose: one user's expired token must not abort the
+        // batch, and Inngest has already recorded the step's own failure.
+        logger.error('meeting-import: user sweep failed', {
+          userId,
+          error: (err as Error).message,
+        });
+        return { userId, considered: 0, imported: 0, skipped: 0, failed: 1 };
+      });
+    results.push(result);
+  }
+
+  return {
+    ok: true,
+    users: results.length,
+    imported: results.reduce((sum, r) => sum + r.imported, 0),
+    results,
+  };
+};
+
 export const meetingImportSweep = inngest.createFunction(
   { id: 'meeting-import-sweep' },
   { cron: '*/30 * * * *' },
-  async ({ step }) => {
-    // Only accounts that actually granted the Meet scope. Asking Google on
-    // behalf of someone who never granted it earns a 403 per user per run and
-    // teaches the log to cry wolf.
-    // Unscoped on purpose: "who in the whole install connected Google with the
-    // Meet scope" is not a question about one workspace, and there is no session
-    // behind a cron. Each row names the workspace that granted the scope, and
-    // every handle in the per-user sweep below is built from THAT — so a
-    // transcript can only ever land in the space of the workspace whose Google
-    // account read it.
-    const connected = await step.run('load-connected-users', async (): Promise<Connected[]> => {
-      const db = getSupabaseServiceClient();
-      const { data, error } = await db
-        .from('integrations')
-        .select('user_id, organization_id, scopes')
-        .eq('provider', 'google')
-        .contains('scopes', [MEET_READONLY_SCOPE]);
-      if (error) throw new Error(`Failed to load Google integrations: ${error.message}`);
-      const seen = new Map<string, Connected>();
-      for (const row of data ?? []) {
-        const userId = row.user_id as string;
-        if (!seen.has(userId)) {
-          seen.set(userId, { userId, organizationId: row.organization_id as string });
-        }
-      }
-      return [...seen.values()];
-    });
-
-    const results: UserSweepResult[] = [];
-
-    for (const { userId, organizationId } of connected) {
-      const result = await step
-        .run(`sweep-${userId}`, async () => sweepUser(userId, organizationId))
-        .catch((err: unknown) => {
-          // Swallowed on purpose: one user's expired token must not abort the
-          // batch, and Inngest has already recorded the step's own failure.
-          logger.error('meeting-import: user sweep failed', {
-            userId,
-            error: (err as Error).message,
-          });
-          return { userId, considered: 0, imported: 0, skipped: 0, failed: 1 };
-        });
-      results.push(result);
-    }
-
-    return {
-      ok: true,
-      users: results.length,
-      imported: results.reduce((sum, r) => sum + r.imported, 0),
-      results,
-    };
-  },
+  async (ctx) => meetingImportSweepJob(ctx as unknown as JobContext),
 );
 
 async function sweepUser(userId: string, organizationId: string): Promise<UserSweepResult> {

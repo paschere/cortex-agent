@@ -1,4 +1,5 @@
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { logger } from '@cortex/core';
 
@@ -29,30 +30,33 @@ import { logger } from '@cortex/core';
  */
 const PURGE_CRON = '40 8 * * *';
 
+/** El cuerpo, extraído a la firma de la cola nueva; `event` no se usa. */
+export const turnContextPurgeJob: JobHandler = async ({ step }) => {
+  return await step.run('sweep', async () => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db.rpc('turn_context_purge');
+    if (error) {
+      // Thrown rather than swallowed: unlike the capture itself, a sweep that
+      // silently stops running is a retention promise silently broken, and
+      // que la cola lo reintente (y al final grite) is the correct outcome.
+      throw new Error(`turn_context_purge failed: ${error.message}`);
+    }
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { redacted: number; deleted: number }
+      | undefined;
+    const result = {
+      redacted: Number(row?.redacted ?? 0),
+      deleted: Number(row?.deleted ?? 0),
+    };
+    logger.info('turn context retention sweep', result);
+    return result;
+  });
+};
+
 export const turnContextPurge = inngest.createFunction(
   { id: 'turn-context-purge' },
   [{ event: 'turn-context/purge' }, { cron: PURGE_CRON }],
-  async ({ step }) => {
-    return await step.run('sweep', async () => {
-      const db = getSupabaseServiceClient();
-      const { data, error } = await db.rpc('turn_context_purge');
-      if (error) {
-        // Thrown rather than swallowed: unlike the capture itself, a sweep that
-        // silently stops running is a retention promise silently broken, and
-        // Inngest retrying it (and eventually shouting) is the correct outcome.
-        throw new Error(`turn_context_purge failed: ${error.message}`);
-      }
-      const row = (Array.isArray(data) ? data[0] : data) as
-        | { redacted: number; deleted: number }
-        | undefined;
-      const result = {
-        redacted: Number(row?.redacted ?? 0),
-        deleted: Number(row?.deleted ?? 0),
-      };
-      logger.info('turn context retention sweep', result);
-      return result;
-    });
-  },
+  async (ctx) => turnContextPurgeJob(ctx as unknown as JobContext),
 );
 
 /**
@@ -69,17 +73,19 @@ export const turnContextPurge = inngest.createFunction(
  * sweep that errored must not be able to stop quoted material from being
  * stripped on schedule. That is the one of the two with a promise attached.
  */
+export const turnLatencyPurgeJob: JobHandler = async ({ step }) => {
+  return await step.run('sweep', async () => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db.rpc('turn_latency_purge');
+    if (error) throw new Error(`turn_latency_purge failed: ${error.message}`);
+    const deleted = Number((Array.isArray(data) ? data[0] : data) ?? 0);
+    logger.info('turn latency retention sweep', { deleted });
+    return { deleted };
+  });
+};
+
 export const turnLatencyPurge = inngest.createFunction(
   { id: 'turn-latency-purge' },
   [{ event: 'turn-latency/purge' }, { cron: '50 8 * * *' }],
-  async ({ step }) => {
-    return await step.run('sweep', async () => {
-      const db = getSupabaseServiceClient();
-      const { data, error } = await db.rpc('turn_latency_purge');
-      if (error) throw new Error(`turn_latency_purge failed: ${error.message}`);
-      const deleted = Number((Array.isArray(data) ? data[0] : data) ?? 0);
-      logger.info('turn latency retention sweep', { deleted });
-      return { deleted };
-    });
-  },
+  async (ctx) => turnLatencyPurgeJob(ctx as unknown as JobContext),
 );

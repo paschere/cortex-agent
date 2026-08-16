@@ -1,4 +1,4 @@
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -42,38 +42,36 @@ export async function POST(
     );
   }
 
-  if (!process.env.INNGEST_SIGNING_KEY) {
+  // Durante la transición valen las dos colas: el worker de pg-boss si está
+  // configurado, o Inngest como respaldo (es exactamente el orden que sigue
+  // `enqueueJob`). Sin ninguna de las dos, decirlo aquí con un 503 es mejor
+  // que encolar hacia el vacío y devolver `{ok: true}`.
+  if (!process.env.JOBS_WORKER_URL && !process.env.INNGEST_SIGNING_KEY) {
     return NextResponse.json({ error: 'Background runs are not configured yet' }, { status: 503 });
   }
 
-  try {
-    await inngest.send({
-      name: 'scheduled/job.run',
-      data: {
-        jobId: job.id as string,
-        // EL ESPACIO DE TRABAJO VA EN EL EVENTO, Y ES OBLIGATORIO.
-        //
-        // `schedule-run.ts` abre la base con un manejador acotado a esta
-        // empresa, así que sin este campo hace `return { skipped: 'no
-        // workspace on the event' }` y no corre nada. Faltaba, y el fallo era
-        // del peor tipo: esta ruta devolvía `{ok: true}`, la pantalla decía que
-        // sí, y la rutina no se ejecutaba. Nadie ve un error porque no hay
-        // ninguno — simplemente no pasa nada.
-        //
-        // El despachador de cada minuto lo manda desde
-        // `job.organization_id`; aquí sale de la sesión, que es la misma
-        // empresa contra la que se acaba de leer el job con el manejador
-        // acotado.
-        organizationId: user.organization.id,
-        scheduledFor: new Date().toISOString(),
-        manual: true,
-      },
-    });
-  } catch (err) {
-    return NextResponse.json(
-      { error: `Could not queue the run: ${(err as Error).message}` },
-      { status: 502 },
-    );
+  const queued = await enqueueJob('scheduled/job.run', {
+    jobId: job.id as string,
+    // EL ESPACIO DE TRABAJO VA EN EL EVENTO, Y ES OBLIGATORIO.
+    //
+    // `schedule-run.ts` abre la base con un manejador acotado a esta
+    // empresa, así que sin este campo hace `return { skipped: 'no
+    // workspace on the event' }` y no corre nada. Faltaba, y el fallo era
+    // del peor tipo: esta ruta devolvía `{ok: true}`, la pantalla decía que
+    // sí, y la rutina no se ejecutaba. Nadie ve un error porque no hay
+    // ninguno — simplemente no pasa nada.
+    //
+    // El despachador lo manda desde `job.organization_id`; aquí sale de la
+    // sesión, que es la misma empresa contra la que se acaba de leer el job
+    // con el manejador acotado.
+    organizationId: user.organization.id,
+    scheduledFor: new Date().toISOString(),
+    manual: true,
+  });
+  if (!queued) {
+    // Una rutina manual es la única encolada donde la persona está mirando:
+    // aquí sí se reporta el fallo en vez de confiar en un barrido.
+    return NextResponse.json({ error: 'Could not queue the run' }, { status: 502 });
   }
 
   return NextResponse.json({ ok: true });

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readBrain } from '@/app/(app)/kb/_lib/brain';
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { assertCanWriteToSpace, ensurePersonalSpace, getVisibleSpace } from '@cortex/agent-tools';
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  await inngest.send({ name: 'kb/document.ingest', data: { documentId } });
+  await enqueueJob('kb/document.ingest', { documentId });
 
   return NextResponse.json({ document: doc }, { status: 201 });
 }

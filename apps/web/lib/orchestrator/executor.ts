@@ -523,6 +523,17 @@ async function executeTask(args: {
   dependencyResults: Array<{ seq: number; title: string; text: string }>;
 }): Promise<TaskOutcome> {
   const { db, runId, task } = args;
+
+  // Sin el `cancelOn` de Inngest la cancelación es 100% cooperativa, así que
+  // el estado se pregunta también AQUÍ y no sólo al abrir la ola: dentro de una
+  // ola los sub-agentes arrancan según se liberan cupos, y este SELECT de una
+  // columna es barato comparado con el turno de modelo que evita. Una tarea
+  // que se rehúsa a arrancar queda `pending`; `settleUnfinishedTasks` (que el
+  // cancel ya ejecutó) o el barrido la dejan contada como corresponde.
+  if (!(await stillLive(db, runId))) {
+    return { seq: task.seq, status: 'skipped', text: '', tokens: 0 };
+  }
+
   const startedAt = new Date().toISOString();
 
   const catalogueIds = new Set(args.catalogue.map((t) => t.id));

@@ -1,7 +1,7 @@
 import { buildToolContext } from '@/lib/agent';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { listErrands } from '@/lib/errands/repository';
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { ERRAND_KINDS, commissionErrand } from '@cortex/agent-tools';
@@ -84,23 +84,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const errandId = outcome.errand.id;
 
-  try {
-    await inngest.send({
-      name: EVENT_ERRAND_ADVANCE,
-      data: {
-        errandId,
-        organizationId: user.organization.id,
-        userId: user.id,
-        because: 'created',
-      },
-    });
-  } catch (err) {
-    // The row exists and nothing will pick it up for a minute. Unlike the
-    // orchestrator, this is NOT fatal: the sweep looks at every queued errand
-    // on its next pass, so a failed send costs latency rather than the errand.
+  // `enqueueJob` nunca lanza. Si devuelve false la fila ya existe y el barrido
+  // recoge todo encargo en cola en su siguiente pasada: un encolado fallido
+  // cuesta latencia, no el encargo.
+  const queued = await enqueueJob(EVENT_ERRAND_ADVANCE, {
+    errandId,
+    organizationId: user.organization.id,
+    userId: user.id,
+    because: 'created',
+  });
+  if (!queued) {
     logger.error('errands: could not queue the first step; the sweep will pick it up', {
       errandId,
-      error: (err as Error).message,
     });
   }
 

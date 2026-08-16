@@ -1,4 +1,4 @@
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { createHash, randomUUID } from 'node:crypto';
 import type { DocumentSink } from '@cortex/agent-tools';
@@ -104,7 +104,7 @@ export function browserDocumentSink(): DocumentSink {
 
     // From here it is an ordinary document and nothing downstream knows or
     // needs to know that a robot fetched it.
-    await inngest.send({ name: 'kb/document.ingest', data: { documentId } });
+    await enqueueJob('kb/document.ingest', { documentId });
     return { documentId, title };
   };
 }

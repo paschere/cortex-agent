@@ -23,6 +23,7 @@ import {
   stopSandbox,
 } from '@/lib/dev-tasks/sandbox';
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler, JobStep } from '@/lib/jobs';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   type CheckOutcome,
@@ -85,7 +86,12 @@ const POLL_INTERVAL = '20s';
 /** Bounded so a wedged suite fails the run rather than polling forever. */
 const MAX_POLLS = 60;
 
-type StepApi = Parameters<Parameters<typeof inngest.createFunction>[2]>[0]['step'];
+/**
+ * Antes se derivaba del contexto de Inngest; ahora es la firma del shim de la
+ * cola (run/sendEvent/sleep), que es todo lo que estos helpers usan. El
+ * contexto de Inngest la satisface vía el cast del adaptador de abajo.
+ */
+type StepApi = JobStep;
 
 interface RunContext {
   task: DevTask;
@@ -102,6 +108,102 @@ interface RunReport {
   prUrl: string | null;
   error: string | null;
 }
+
+/** El cuerpo, extraído a la firma de la cola nueva. */
+export const devTaskRunJob: JobHandler = async ({ event, step }) => {
+  const queued = event.data as unknown as DevTaskQueuedEvent;
+  const taskId = queued?.taskId;
+  if (!taskId) return { skipped: 'event carried no taskId' };
+  // Put on the event by the intake, off the repository row it resolved. Every
+  // database handle in this function is pinned to it, so a task id from
+  // another workspace simply finds nothing to claim.
+  const organizationId = queued.repository?.organizationId;
+  if (!organizationId) return { skipped: 'event carried no workspace' };
+
+  const budget = budgetFromEnv(process.env);
+  // Captured inside a step so replays see the same instant; a bare Date.now()
+  // out here would make the wall-clock budget non-deterministic.
+  const startedAtMs = await step.run('started-at', async () => Date.now());
+
+  const claim = await step.run('claim', async () => {
+    const db = getOrgScopedClient(organizationId) as unknown as ClaimDbClient;
+    return claimDevTask(db, taskId);
+  });
+
+  if (!claim.claimed) {
+    if (claim.reason === 'attempts_exhausted') {
+      await report(step, 'exhausted', {
+        taskId,
+        status: 'failed',
+        error:
+          'Every permitted attempt for this task has been used. Have a look at why the ' +
+          'earlier runs failed before assigning it to me again.',
+      });
+    }
+    logger.info(`dev-task-run: ${taskId} not claimable (${claim.reason})`);
+    return { skipped: claim.reason };
+  }
+
+  const task = claim.task;
+  const branch = buildBranchName(task.external_identifier, task.title);
+
+  // The allowlist is re-read from the database rather than trusted from the
+  // event: the event is a message that could be stale or replayed, while
+  // dev_repositories is the authority on what Cortex may touch right now.
+  const repository = await step.run('verify-allowlist', async () =>
+    verifyRepository(organizationId, task),
+  );
+  if ('error' in repository) {
+    await report(step, 'rejected', {
+      taskId,
+      status: 'failed',
+      attempt: task.attempt_count,
+      error: repository.error,
+    });
+    return { failed: repository.error };
+  }
+
+  await report(step, 'running', {
+    taskId,
+    status: 'running',
+    branchName: branch,
+    attempt: task.attempt_count,
+  });
+
+  const ctx: RunContext = { task, repository, branch, attempt: task.attempt_count };
+
+  try {
+    const outcome = await execute(step, ctx, budget, startedAtMs);
+    await report(step, 'outcome', {
+      taskId,
+      status: outcome.status,
+      attempt: ctx.attempt,
+      branchName: outcome.branchName ?? undefined,
+      prUrl: outcome.prUrl ?? undefined,
+      summary: outcome.summary || undefined,
+      error: outcome.error ?? undefined,
+    });
+    return { status: outcome.status, prUrl: outcome.prUrl };
+  } catch (err) {
+    const message = (err as Error).message.slice(0, 4000);
+    logger.error(`dev-task-run: ${task.external_identifier} failed — ${message}`);
+    await report(step, 'crash', {
+      taskId,
+      status: 'failed',
+      attempt: ctx.attempt,
+      branchName: branch,
+      error: message,
+    });
+    return { status: 'failed', error: message };
+  } finally {
+    // The VM is the most expensive thing this run holds. Stop it on every
+    // path, including the ones that threw.
+    await step.run('stop-sandbox', async () => {
+      await stopSandbox(taskId);
+      return { stopped: true };
+    });
+  }
+};
 
 export const devTaskRun = inngest.createFunction(
   {
@@ -121,100 +223,7 @@ export const devTaskRun = inngest.createFunction(
     retries: 0,
   },
   { event: EVENT_TASK_QUEUED },
-  async ({ event, step }) => {
-    const queued = event.data as unknown as DevTaskQueuedEvent;
-    const taskId = queued?.taskId;
-    if (!taskId) return { skipped: 'event carried no taskId' };
-    // Put on the event by the intake, off the repository row it resolved. Every
-    // database handle in this function is pinned to it, so a task id from
-    // another workspace simply finds nothing to claim.
-    const organizationId = queued.repository?.organizationId;
-    if (!organizationId) return { skipped: 'event carried no workspace' };
-
-    const budget = budgetFromEnv(process.env);
-    // Captured inside a step so replays see the same instant; a bare Date.now()
-    // out here would make the wall-clock budget non-deterministic.
-    const startedAtMs = await step.run('started-at', async () => Date.now());
-
-    const claim = await step.run('claim', async () => {
-      const db = getOrgScopedClient(organizationId) as unknown as ClaimDbClient;
-      return claimDevTask(db, taskId);
-    });
-
-    if (!claim.claimed) {
-      if (claim.reason === 'attempts_exhausted') {
-        await report(step, 'exhausted', {
-          taskId,
-          status: 'failed',
-          error:
-            'Every permitted attempt for this task has been used. Have a look at why the ' +
-            'earlier runs failed before assigning it to me again.',
-        });
-      }
-      logger.info(`dev-task-run: ${taskId} not claimable (${claim.reason})`);
-      return { skipped: claim.reason };
-    }
-
-    const task = claim.task;
-    const branch = buildBranchName(task.external_identifier, task.title);
-
-    // The allowlist is re-read from the database rather than trusted from the
-    // event: the event is a message that could be stale or replayed, while
-    // dev_repositories is the authority on what Cortex may touch right now.
-    const repository = await step.run('verify-allowlist', async () =>
-      verifyRepository(organizationId, task),
-    );
-    if ('error' in repository) {
-      await report(step, 'rejected', {
-        taskId,
-        status: 'failed',
-        attempt: task.attempt_count,
-        error: repository.error,
-      });
-      return { failed: repository.error };
-    }
-
-    await report(step, 'running', {
-      taskId,
-      status: 'running',
-      branchName: branch,
-      attempt: task.attempt_count,
-    });
-
-    const ctx: RunContext = { task, repository, branch, attempt: task.attempt_count };
-
-    try {
-      const outcome = await execute(step, ctx, budget, startedAtMs);
-      await report(step, 'outcome', {
-        taskId,
-        status: outcome.status,
-        attempt: ctx.attempt,
-        branchName: outcome.branchName ?? undefined,
-        prUrl: outcome.prUrl ?? undefined,
-        summary: outcome.summary || undefined,
-        error: outcome.error ?? undefined,
-      });
-      return { status: outcome.status, prUrl: outcome.prUrl };
-    } catch (err) {
-      const message = (err as Error).message.slice(0, 4000);
-      logger.error(`dev-task-run: ${task.external_identifier} failed — ${message}`);
-      await report(step, 'crash', {
-        taskId,
-        status: 'failed',
-        attempt: ctx.attempt,
-        branchName: branch,
-        error: message,
-      });
-      return { status: 'failed', error: message };
-    } finally {
-      // The VM is the most expensive thing this run holds. Stop it on every
-      // path, including the ones that threw.
-      await step.run('stop-sandbox', async () => {
-        await stopSandbox(taskId);
-        return { stopped: true };
-      });
-    }
-  },
+  async (ctx) => devTaskRunJob(ctx as unknown as JobContext),
 );
 
 // ---------------------------------------------------------------------------
@@ -522,7 +531,11 @@ async function conclude(params: {
 
 /** Emit a status event. The only channel through which task state changes. */
 async function report(step: StepApi, id: string, data: DevTaskStatusEvent): Promise<void> {
-  await step.sendEvent(`status-${id}`, { name: EVENT_TASK_STATUS, data });
+  await step.sendEvent(`status-${id}`, {
+    name: EVENT_TASK_STATUS,
+    // La interfaz no tiene index signature; el cast es solo de tipos.
+    data: data as unknown as Record<string, unknown>,
+  });
 }
 
 /**

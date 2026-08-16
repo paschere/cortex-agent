@@ -1,9 +1,6 @@
 import { inngest } from '@/lib/inngest';
-import {
-  EVENT_RUN_CANCELLED,
-  EVENT_RUN_STARTED,
-  type OrchestratorRunStartedEvent,
-} from '@/lib/orchestrator/contract';
+import type { JobContext, JobHandler } from '@/lib/jobs';
+import { EVENT_RUN_STARTED, type OrchestratorRunStartedEvent } from '@/lib/orchestrator/contract';
 import {
   DEFAULT_CONCURRENCY,
   type RunOptions,
@@ -71,6 +68,80 @@ import { logger } from '@cortex/core';
  */
 const MAX_WAVES = 16;
 
+/**
+ * El cuerpo, extraído a la firma de la cola nueva.
+ *
+ * LA CANCELACIÓN YA NO DEPENDE DE NINGÚN EVENTO. `cancelOn` era de Inngest y
+ * pg-boss no tiene equivalente, así que el evento `orchestrator/run.cancelled`
+ * desapareció con él. La fila sigue siendo la autoridad — el endpoint de
+ * cancelar escribe `cancelled` y el executor la relee entre fases Y AHORA
+ * TAMBIÉN antes de arrancar cada sub-agente (ver `executeTask` en
+ * lib/orchestrator/executor.ts), que es una frontera más fina que la que
+ * `cancelOn` daba (el siguiente paso ≈ la siguiente ola).
+ */
+export const orchestratorRunJob: JobHandler = async ({ event, step }) => {
+  const started = event.data as unknown as OrchestratorRunStartedEvent;
+  const runId = started?.runId;
+  if (!runId) return { skipped: 'event carried no runId' };
+  // Put on the event by the route, off the session it had in hand. Every
+  // database handle in this function is pinned to it, so a run id from
+  // another workspace simply finds nothing to claim, and no step ever needs a
+  // session — there isn't one out here.
+  const organizationId = started.organizationId;
+  const userId = started.userId;
+  if (!organizationId || !userId) return { skipped: 'event carried no workspace or person' };
+
+  const opts: RunOptions = {
+    runId,
+    organizationId,
+    userId,
+    objective: started.objective ?? '',
+    concurrency: started.concurrency ?? DEFAULT_CONCURRENCY,
+    // Present only when the caller narrowed the catalogue — an errand does
+    // (read-only tools only, see packages/agent-tools/src/errands/boundary.ts); a person
+    // launching from /orchestrator does not.
+    toolAllowlist: started.toolAllowlist,
+  };
+
+  // Layer two of the single-flight guard, and the one that also refuses a run
+  // a person cancelled between the send and the pick-up.
+  const claim = await step.run('claim', async () =>
+    claimRun(getOrgScopedClient(organizationId) as unknown as LifecycleDb, runId),
+  );
+  if (!claim.claimed) {
+    logger.info(`orchestrator-run: ${runId} not claimable (${claim.reason})`);
+    return { skipped: claim.reason };
+  }
+
+  try {
+    const plan = await step.run('plan', async () => planRun(opts));
+    if (plan.stopped) return { stopped: 'before planning' };
+
+    for (let wave = 0; wave < MAX_WAVES; wave += 1) {
+      const outcome = await step.run(`wave-${wave}`, async () => runWave(opts));
+      if (outcome.stopped) return { stopped: `during wave ${wave}` };
+      // Nothing ran and nothing is waiting: the graph is walked.
+      if (outcome.remaining === 0) break;
+      if (outcome.executed === 0 && outcome.skipped === 0) {
+        // Tasks are pending but none became ready — a shape the normalised
+        // DAG should make impossible. Stop rather than spin.
+        logger.error(`orchestrator-run: ${runId} stalled with ${outcome.remaining} pending`);
+        break;
+      }
+    }
+
+    const finished = await step.run('synthesize', async () => synthesizeRun(opts));
+    return { status: finished.status, totalTokens: finished.totalTokens };
+  } catch (err) {
+    const message = (err as Error).message;
+    // Outside a step on purpose: the ending has to be written even when a step
+    // is what failed, and this call is idempotent against somebody having
+    // ended the run already.
+    await failRun({ runId, organizationId }, message);
+    return { status: 'failed', error: message.slice(0, 500) };
+  }
+};
+
 export const orchestratorRun = inngest.createFunction(
   {
     id: 'orchestrator-run',
@@ -88,74 +159,7 @@ export const orchestratorRun = inngest.createFunction(
       { limit: 5 },
     ],
     retries: 0,
-    // Cancellation was cooperative and stayed cooperative — the executor still
-    // re-reads the row between phases — but this makes it land at the next step
-    // boundary instead of only at the next wave, which on a run whose current
-    // wave has ten minutes left is the difference between "stopping" and
-    // "stopped". The row remains the authority; this only makes it bite sooner.
-    cancelOn: [{ event: EVENT_RUN_CANCELLED, if: 'async.data.runId == event.data.runId' }],
   },
   { event: EVENT_RUN_STARTED },
-  async ({ event, step }) => {
-    const started = event.data as unknown as OrchestratorRunStartedEvent;
-    const runId = started?.runId;
-    if (!runId) return { skipped: 'event carried no runId' };
-    // Put on the event by the route, off the session it had in hand. Every
-    // database handle in this function is pinned to it, so a run id from
-    // another workspace simply finds nothing to claim, and no step ever needs a
-    // session — there isn't one out here.
-    const organizationId = started.organizationId;
-    const userId = started.userId;
-    if (!organizationId || !userId) return { skipped: 'event carried no workspace or person' };
-
-    const opts: RunOptions = {
-      runId,
-      organizationId,
-      userId,
-      objective: started.objective ?? '',
-      concurrency: started.concurrency ?? DEFAULT_CONCURRENCY,
-      // Present only when the caller narrowed the catalogue — an errand does
-      // (read-only tools only, see packages/agent-tools/src/errands/boundary.ts); a person
-      // launching from /orchestrator does not.
-      toolAllowlist: started.toolAllowlist,
-    };
-
-    // Layer two of the single-flight guard, and the one that also refuses a run
-    // a person cancelled between the send and the pick-up.
-    const claim = await step.run('claim', async () =>
-      claimRun(getOrgScopedClient(organizationId) as unknown as LifecycleDb, runId),
-    );
-    if (!claim.claimed) {
-      logger.info(`orchestrator-run: ${runId} not claimable (${claim.reason})`);
-      return { skipped: claim.reason };
-    }
-
-    try {
-      const plan = await step.run('plan', async () => planRun(opts));
-      if (plan.stopped) return { stopped: 'before planning' };
-
-      for (let wave = 0; wave < MAX_WAVES; wave += 1) {
-        const outcome = await step.run(`wave-${wave}`, async () => runWave(opts));
-        if (outcome.stopped) return { stopped: `during wave ${wave}` };
-        // Nothing ran and nothing is waiting: the graph is walked.
-        if (outcome.remaining === 0) break;
-        if (outcome.executed === 0 && outcome.skipped === 0) {
-          // Tasks are pending but none became ready — a shape the normalised
-          // DAG should make impossible. Stop rather than spin.
-          logger.error(`orchestrator-run: ${runId} stalled with ${outcome.remaining} pending`);
-          break;
-        }
-      }
-
-      const finished = await step.run('synthesize', async () => synthesizeRun(opts));
-      return { status: finished.status, totalTokens: finished.totalTokens };
-    } catch (err) {
-      const message = (err as Error).message;
-      // Outside a step on purpose: the ending has to be written even when a step
-      // is what failed, and this call is idempotent against somebody having
-      // ended the run already.
-      await failRun({ runId, organizationId }, message);
-      return { status: 'failed', error: message.slice(0, 500) };
-    }
-  },
+  async (ctx) => orchestratorRunJob(ctx as unknown as JobContext),
 );

@@ -1,6 +1,6 @@
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { loadErrand } from '@/lib/errands/repository';
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type ErrandDb, answerQuestion } from '@cortex/agent-tools';
@@ -75,22 +75,18 @@ export async function POST(
     );
   }
 
-  try {
-    await inngest.send({
-      name: EVENT_ERRAND_ADVANCE,
-      data: {
-        errandId: id,
-        organizationId: user.organization.id,
-        userId: errand.userId ?? user.id,
-        because: 'answered',
-      },
-    });
-  } catch (err) {
-    // The answer is saved and the errand is back to `working`; the sweep will
-    // pick it up within a couple of minutes. Latency, not loss.
+  // `enqueueJob` nunca lanza. La respuesta ya está guardada y el encargo volvió
+  // a `working`; si el encolado falla el barrido lo recoge en un par de
+  // minutos. Latencia, no pérdida.
+  const queued = await enqueueJob(EVENT_ERRAND_ADVANCE, {
+    errandId: id,
+    organizationId: user.organization.id,
+    userId: errand.userId ?? user.id,
+    because: 'answered',
+  });
+  if (!queued) {
     logger.error('errands: could not resume after an answer; the sweep will', {
       errandId: id,
-      error: (err as Error).message,
     });
   }
 

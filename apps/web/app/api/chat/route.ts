@@ -10,7 +10,7 @@ import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import { CITATION_RULE } from '@/lib/citations';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
-import { inngest } from '@/lib/inngest';
+import { enqueueJobs } from '@/lib/jobs';
 import {
   POINT_AT_DESCRIPTION,
   POINT_AT_TOOL_ID,
@@ -38,6 +38,7 @@ import {
   TurnContextRecorder,
   callExternalTool,
   checkMeter,
+  combineStickySelection,
   customToolDef,
   familiesFrom,
   fetchEnabledCustomTools,
@@ -49,8 +50,10 @@ import {
   kbSearch,
   listVisibleSpaces,
   loadOverrides,
+  loadStickyToolIds,
   readWorkspacePlan,
   runTool,
+  saveStickyToolIds,
   selectToolsForTurn,
   toolErrorDetail,
   toolErrorMessage,
@@ -547,10 +550,15 @@ export async function POST(req: NextRequest) {
     //
     // Per-user MCP failures must never break the turn, so that fetch is
     // best-effort.
-    const [deniedPatterns, externalServers, customRows] = await Promise.all([
+    const [deniedPatterns, externalServers, customRows, stickyIds] = await Promise.all([
       deniedToolPatterns(db, user.id),
       fetchEnabledExternalTools(db, user.id).catch(() => []),
       fetchEnabledCustomTools(db).catch(() => []),
+      // Lo ya ofrecido en esta conversación, para que la lista de este turno
+      // conserve el prefijo de los anteriores — ver el combine más abajo y la
+      // cabecera de tool-selection/sticky.ts. Nunca lanza; fallar aquí cuesta
+      // una reescritura de caché, no el turno.
+      loadStickyToolIds(db, conversationId),
     ]);
 
     const registryCandidates: Candidate[] = filterTools(agent.allowedTools)
@@ -619,7 +627,7 @@ export async function POST(req: NextRequest) {
       tools: allCandidates,
       query: recentText,
     });
-    return { selection, allCandidates };
+    return { selection, allCandidates, stickyIds };
   })().finally(closeSelection);
 
   // The transcript. Fired alongside the two above and joined with them: it
@@ -648,7 +656,7 @@ export async function POST(req: NextRequest) {
   // see lib/chat-attachments.ts.
   const loadingAttachments = loadTurnAttachments(db, conversationId);
 
-  const [ragBlockResolved, { selection, allCandidates }, dbMessages, turnAttachments] =
+  const [ragBlockResolved, { selection, allCandidates, stickyIds }, dbMessages, turnAttachments] =
     await Promise.all([retrieving, selecting, loadingHistory, loadingAttachments]);
   // Taken from the resolved value rather than left to the closure's assignment,
   // so the block is provably finished before anything downstream reads it.
@@ -662,10 +670,39 @@ export async function POST(req: NextRequest) {
   // only ever removes: nothing here can offer a tool the agent's grants and the
   // team deny-list did not already allow.
   const mutedFamilies = new Set(overrides.mutedFamilies);
-  const selectedTools =
-    mutedFamilies.size === 0
-      ? selection.tools
-      : selection.tools.filter((t) => !mutedFamilies.has(t.family));
+  const dropMuted = (list: Candidate[]) =>
+    mutedFamilies.size === 0 ? list : list.filter((t) => !mutedFamilies.has(t.family));
+
+  // ESTABILIZAR ANTES DE DECLARAR. El caché de prompts de Anthropic es un
+  // prefijo y las herramientas se serializan antes del system prompt, así que
+  // una lista que cambia entre turnos de la misma conversación invalida el
+  // prefijo entero y convierte cada turno en una ESCRITURA al 125 % en vez de
+  // una lectura al 10 % — que es exactamente lo que medía turn_latencies. La
+  // selección semántica sigue decidiendo QUÉ entra; esto sólo decide DÓNDE va:
+  // lo ya ofrecido conserva su posición y lo nuevo se agrega al final. Política
+  // completa (tope, congelación, cola transitoria) en la cabecera de
+  // packages/agent-tools/src/tool-selection/sticky.ts.
+  //
+  // Los candidatos van filtrados por mute igual que la selección: una familia
+  // silenciada a mitad de conversación deja de materializarse aunque esté en la
+  // lista persistida (y recupera su posición si la des-silencian).
+  const sticky = combineStickySelection({
+    previousIds: stickyIds,
+    offered: dropMuted(selection.tools),
+    candidates: dropMuted(allCandidates),
+    // Las familias sin indexar duran un turno por diseño (el backfill las hace
+    // rankeables al siguiente), así que viajan en la cola y no quedan pegadas.
+    transientFamilies: new Set(selection.unrankedFamilies),
+    // Un turno en el que la selección no midió nada manda el catálogo entero;
+    // ofrecerlo sí, persistirlo no — congelaría el presupuesto sin criterio.
+    freeze: selection.reason === 'no-query' || selection.reason === 'embedding-unavailable',
+  });
+  const selectedTools = sticky.tools;
+  if (sticky.changed) {
+    // Sin await: la respuesta no depende de esta escritura, y perderla cuesta
+    // una reescritura de caché en el próximo turno, no el turno.
+    void saveStickyToolIds(db, { conversationId, userId: user.id, ids: sticky.persistIds });
+  }
   logger.debug('chat tool selection', {
     reason: selection.reason,
     offered: selectedTools.length,
@@ -882,16 +919,23 @@ export async function POST(req: NextRequest) {
 
   // Shared with Google Chat and MCP so a person's standing instructions cannot
   // apply on one surface and silently not on another. See lib/system-prompt.ts.
+  //
+  // SIN `sections` EN ESTA SUPERFICIE, Y ES A PROPÓSITO. Esos bloques (el
+  // filtro de espacios, los fragmentos de Brain Knowledge, los adjuntos, la
+  // nota de pantalla con su timestamp) cambian en cada turno, y el breakpoint
+  // del caché de prompts se marca al FINAL del system (ver markCacheBreakpoint
+  // en packages/agent-tools/src/model.ts): un byte volátil aquí invalidaba el
+  // prefijo entero — tools incluidas — y cada turno pagaba una ESCRITURA de
+  // caché al 125 % en vez de una lectura al 10 %. Ahora el system queda con lo
+  // estable de la conversación (prompt del agente, ficha de la empresa,
+  // memorias) y lo volátil viaja pegado al último mensaje, después del
+  // breakpoint — ver `turnBlocks` más abajo.
   const { system, memories, memoryBlock, companyBlock } = await clock.span(
     'prompt',
     buildSystemPrompt({
       organizationId: user.organization.id,
       userId: user.id,
       basePrompt: agent.systemPrompt,
-      // The attachment block is deliberately NOT folded into `ragBlock`: an
-      // ephemeral file must not look like something that lives in the brain, or
-      // the answer cites a document nobody can open. See lib/chat-attachments.ts.
-      sections: [scopeBlock, ragBlock, attachmentBlock, glance && screenBlock(glance.takenAt)],
     }),
   );
 
@@ -959,6 +1003,42 @@ export async function POST(req: NextRequest) {
    * the picture is part of the question, not a separate turn, and a model that
    * receives it as its own message has to guess which question it belongs to.
    */
+  // LO VOLÁTIL DEL TURNO, DESPUÉS DEL BREAKPOINT. Estos bloques vivían en el
+  // system prompt y cambiaban en cada turno (los fragmentos dependen de la
+  // última pregunta; la nota de pantalla lleva un timestamp), así que rompían
+  // el prefijo del caché por delante del breakpoint — ver la nota sobre
+  // `buildSystemPrompt` arriba. Van encima de la pregunta, que es como los
+  // describía este archivo desde siempre («pasted above the question»), y como
+  // el historial del próximo turno se relee de la tabla `messages` — donde la
+  // pregunta se guardó limpia, más arriba — no se acumulan turno tras turno.
+  //
+  // El bloque de adjuntos sigue deliberadamente separado de `ragBlock`: un
+  // archivo efímero no debe parecer algo que vive en el cerebro, o la
+  // respuesta cita un documento que nadie puede abrir. Ver lib/chat-attachments.ts.
+  //
+  // Después de pesar el turno (los `recorder.part` de arriba ya cuentan estos
+  // bloques bajo 'knowledge' y compañía; sumarlos también a 'question' los
+  // contaría dos veces) y antes del fotograma, que debe seguir siendo lo
+  // último que se agrega.
+  const turnBlocks = [
+    scopeBlock,
+    ragBlock,
+    attachmentBlock,
+    glance ? screenBlock(glance.takenAt) : '',
+  ]
+    .filter((b): b is string => typeof b === 'string' && b.trim().length > 0)
+    .join('\n\n');
+  if (turnBlocks) {
+    const last = coreMessages[coreMessages.length - 1];
+    // `buildTurnMessages` garantiza que la conversación termina en mensaje de
+    // usuario; el guard es por si esa garantía se moviera algún día.
+    if (last && last.role === 'user' && typeof last.content === 'string') {
+      coreMessages = [
+        ...coreMessages.slice(0, -1),
+        { ...last, content: `${turnBlocks}\n\n${last.content}` },
+      ];
+    }
+  }
   if (glance) coreMessages = attachScreenFrame(coreMessages, glance);
 
   // Everything before this line is Cortex's own work, and it is the only part
@@ -1029,21 +1109,19 @@ export async function POST(req: NextRequest) {
         return typeof id === 'string' && id ? [id] : [];
       });
       if (startedErrands.length > 0) {
-        try {
-          await inngest.send(
-            startedErrands.map((errandId) => ({
-              name: EVENT_ERRAND_ADVANCE,
-              data: {
-                errandId,
-                organizationId: user.organization.id,
-                userId: user.id,
-                because: 'created' as const,
-              },
-            })),
-          );
-        } catch (err) {
-          logger.warn?.('No se pudo despertar el encargo; lo recogerá el barrido', { err });
-        }
+        // `enqueueJobs` nunca lanza: si la cola parpadea, el barrido recoge el
+        // encargo en cinco minutos — exactamente el contrato de siempre.
+        await enqueueJobs(
+          startedErrands.map((errandId) => ({
+            name: EVENT_ERRAND_ADVANCE,
+            data: {
+              errandId,
+              organizationId: user.organization.id,
+              userId: user.id,
+              because: 'created' as const,
+            },
+          })),
+        );
       }
 
       let assistantMessageId: string | null = null;

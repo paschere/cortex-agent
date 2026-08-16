@@ -1,4 +1,4 @@
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { EVENT_RUN_STARTED } from '@/lib/orchestrator/contract';
 import { DEFAULT_CONCURRENCY } from '@/lib/orchestrator/executor';
 import { listRuns } from '@/lib/orchestrator/repository';
@@ -66,23 +66,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const runId = data.id as string;
 
-  try {
-    await inngest.send({
-      name: EVENT_RUN_STARTED,
-      data: {
-        runId,
-        organizationId: user.organization.id,
-        userId: user.id,
-        objective: parsed.data.objective,
-        concurrency: parsed.data.concurrency ?? DEFAULT_CONCURRENCY,
-      },
-    });
-  } catch (err) {
+  // `enqueueJob` nunca lanza; false = no se pudo encolar en ninguna cola.
+  const queued = await enqueueJob(EVENT_RUN_STARTED, {
+    runId,
+    organizationId: user.organization.id,
+    userId: user.id,
+    objective: parsed.data.objective,
+    concurrency: parsed.data.concurrency ?? DEFAULT_CONCURRENCY,
+  });
+  if (!queued) {
     // The row exists but nothing will ever pick it up. Close it here rather
     // than leave a run in `planning` for the sweep to bury fifteen minutes from
     // now — this is the one failure the request itself can see and explain.
-    const message = (err as Error).message;
-    logger.error('orchestrator: could not queue the run', { runId, error: message });
+    logger.error('orchestrator: could not queue the run', { runId });
     await db
       .from('orchestration_runs')
       .update({

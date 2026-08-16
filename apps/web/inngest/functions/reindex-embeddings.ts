@@ -1,4 +1,5 @@
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getSupabaseServiceClient } from '@/lib/supabase/service';
 import { embedInBatches, embeddingModelId } from '@cortex/agent-tools/src/kb/embedder';
 import { recordEmbeddingUsage } from '@cortex/agent-tools/src/kb/embedding-usage';
@@ -91,6 +92,161 @@ interface PendingChunk {
   kb_documents: { organization_id: string | null } | null;
 }
 
+/**
+ * El cuerpo, extraído a la firma de la cola nueva. La concurrencia 1 (un solo
+ * drenador; dos comprarían las mismas 128 filas dos veces) y los 3 reintentos
+ * los fija el manifiesto del worker.
+ */
+export const reindexEmbeddingsJob: JobHandler = async ({ step }) => {
+  const sb = getSupabaseServiceClient();
+  const modelId = embeddingModelId();
+
+  // "No vector, or a vector from a model we no longer use." Both are work, and
+  // both are invisible to search until this job clears them.
+  const staleFilter = `embedding.is.null,embedding_model.is.null,embedding_model.neq.${modelId}`;
+
+  const pending = await step.run('count-pending', async () => {
+    const { count, error } = await sb
+      .from('kb_chunks')
+      .select('id', { count: 'exact', head: true })
+      .or(staleFilter);
+    if (error) throw new Error(`Could not count unvectorised chunks: ${error.message}`);
+    return count ?? 0;
+  });
+
+  if (pending === 0) return { pending: 0, embedded: 0, model: modelId };
+
+  logger.info({ pending, model: modelId }, 'kb-reindex: starting');
+
+  let embedded = 0;
+  let halted: string | null = null;
+
+  for (let batch = 0; batch < MAX_BATCHES_PER_RUN; batch++) {
+    const result = await step.run(`embed-batch-${batch}`, async () => {
+      // Re-queried every batch rather than paginated: rows leave the result
+      // set precisely because they were just embedded, so "the first 128 that
+      // are still stale" is always the right next page, and a batch that
+      // failed half-way is simply still there, minus what it finished.
+      const { data, error } = await sb
+        .from('kb_chunks')
+        .select(
+          'id, document_id, chunk_index, content, tokens, metadata, kb_documents!inner(organization_id)',
+        )
+        .or(staleFilter)
+        .order('id', { ascending: true })
+        .limit(BATCH_SIZE);
+      if (error) throw new Error(`Could not read unvectorised chunks: ${error.message}`);
+
+      const rows = (data ?? []) as unknown as PendingChunk[];
+      if (rows.length === 0) return { done: 0, halted: null as string | null };
+
+      let written = 0;
+      const run = await embedInBatches(
+        rows.map((r) => r.content),
+        async ({ start, vectors, usage }) => {
+          const slice = rows.slice(start, start + vectors.length);
+          // One upsert per PAID REQUEST, awaited before the next request goes
+          // out. Every not-null column is carried through so the conflicting
+          // rows keep their content, position and metadata exactly as they
+          // were — only the two embedding columns are new.
+          const { error: writeError } = await sb.from('kb_chunks').upsert(
+            slice.map((row, i) => ({
+              id: row.id,
+              document_id: row.document_id,
+              chunk_index: row.chunk_index,
+              content: row.content,
+              tokens: row.tokens,
+              metadata: row.metadata ?? {},
+              embedding: vectors[i],
+              embedding_model: usage.modelId,
+            })),
+            { onConflict: 'id' },
+          );
+          if (writeError) throw new Error(`Could not store embeddings: ${writeError.message}`);
+          written += slice.length;
+
+          // Attribute the spend to whoever's documents were embedded. A batch
+          // can span workspaces, so it is split rather than charged to
+          // whichever one happened to sort first.
+          const perOrg = new Map<string, number>();
+          for (const row of slice) {
+            const org = row.kb_documents?.organization_id;
+            if (org) perOrg.set(org, (perOrg.get(org) ?? 0) + 1);
+          }
+          for (const [organizationId, texts] of perOrg) {
+            await recordEmbeddingUsage(sb, {
+              organizationId,
+              source: 'reindex',
+              usage: {
+                ...usage,
+                texts,
+                // The provider bills the request once; splitting the token
+                // count by share of the batch keeps the workspace totals
+                // honest without inventing a second request.
+                tokens: Math.round((usage.tokens * texts) / Math.max(1, slice.length)),
+                requests: 1,
+              },
+            });
+          }
+        },
+      );
+
+      if (run.failure) {
+        // A missing key, a rejected key or an exhausted quota is not a
+        // transient fault: retrying burns the function's retry budget to be
+        // told the same thing, floods the log with the same sentence, and —
+        // against a spent quota — spends money to learn nothing. Report it and
+        // stop; the cron finds the work again once ops acts. Rate limits and
+        // outages still throw, because those a retry can genuinely fix.
+        if (!run.failure.retryable) return { done: written, halted: run.failure.reason };
+        throw new Error(run.failure.reason);
+      }
+
+      return { done: written, halted: null as string | null };
+    });
+
+    embedded += result.done;
+    if (result.halted) {
+      halted = result.halted;
+      break;
+    }
+    if (result.done === 0) break;
+    logger.info({ embedded, of: pending }, 'kb-reindex: batch complete');
+  }
+
+  // A document is only searchable again once EVERY one of its chunks carries a
+  // vector from the model search is asking questions with, so this runs after
+  // the batches rather than per batch — and takes the model, so a document
+  // still holding a previous provider's vectors is not called ready.
+  const readied = await step.run('mark-documents-ready', async () => {
+    const { data, error } = await sb.rpc('kb_mark_reindexed_documents', {
+      p_embedding_model: modelId,
+    });
+    if (error) throw new Error(`Could not settle document status: ${error.message}`);
+    return (data as number | null) ?? 0;
+  });
+
+  const remaining = await step.run('count-remaining', async () => {
+    const { count } = await sb
+      .from('kb_chunks')
+      .select('id', { count: 'exact', head: true })
+      .or(staleFilter);
+    return count ?? 0;
+  });
+
+  // Hand the tail to a fresh run. Cheaper than a long-running loop and it
+  // keeps every invocation inside the same bounded shape.
+  if (remaining > 0 && !halted) {
+    await step.sendEvent('continue-reindex', {
+      name: 'kb/embeddings.reindex',
+      data: { continued: true },
+    });
+  }
+
+  logger.info({ embedded, readied, remaining, halted, model: modelId }, 'kb-reindex: finished');
+  return { pending, embedded, documentsReady: readied, remaining, halted, model: modelId };
+};
+
 export const reindexEmbeddings = inngest.createFunction(
   {
     id: 'kb-reindex-embeddings',
@@ -101,153 +257,5 @@ export const reindexEmbeddings = inngest.createFunction(
     retries: 3,
   },
   [{ event: 'kb/embeddings.reindex' }, { cron: REINDEX_CRON }],
-  async ({ step }) => {
-    const sb = getSupabaseServiceClient();
-    const modelId = embeddingModelId();
-
-    // "No vector, or a vector from a model we no longer use." Both are work, and
-    // both are invisible to search until this job clears them.
-    const staleFilter = `embedding.is.null,embedding_model.is.null,embedding_model.neq.${modelId}`;
-
-    const pending = await step.run('count-pending', async () => {
-      const { count, error } = await sb
-        .from('kb_chunks')
-        .select('id', { count: 'exact', head: true })
-        .or(staleFilter);
-      if (error) throw new Error(`Could not count unvectorised chunks: ${error.message}`);
-      return count ?? 0;
-    });
-
-    if (pending === 0) return { pending: 0, embedded: 0, model: modelId };
-
-    logger.info({ pending, model: modelId }, 'kb-reindex: starting');
-
-    let embedded = 0;
-    let halted: string | null = null;
-
-    for (let batch = 0; batch < MAX_BATCHES_PER_RUN; batch++) {
-      const result = await step.run(`embed-batch-${batch}`, async () => {
-        // Re-queried every batch rather than paginated: rows leave the result
-        // set precisely because they were just embedded, so "the first 128 that
-        // are still stale" is always the right next page, and a batch that
-        // failed half-way is simply still there, minus what it finished.
-        const { data, error } = await sb
-          .from('kb_chunks')
-          .select(
-            'id, document_id, chunk_index, content, tokens, metadata, kb_documents!inner(organization_id)',
-          )
-          .or(staleFilter)
-          .order('id', { ascending: true })
-          .limit(BATCH_SIZE);
-        if (error) throw new Error(`Could not read unvectorised chunks: ${error.message}`);
-
-        const rows = (data ?? []) as unknown as PendingChunk[];
-        if (rows.length === 0) return { done: 0, halted: null as string | null };
-
-        let written = 0;
-        const run = await embedInBatches(
-          rows.map((r) => r.content),
-          async ({ start, vectors, usage }) => {
-            const slice = rows.slice(start, start + vectors.length);
-            // One upsert per PAID REQUEST, awaited before the next request goes
-            // out. Every not-null column is carried through so the conflicting
-            // rows keep their content, position and metadata exactly as they
-            // were — only the two embedding columns are new.
-            const { error: writeError } = await sb.from('kb_chunks').upsert(
-              slice.map((row, i) => ({
-                id: row.id,
-                document_id: row.document_id,
-                chunk_index: row.chunk_index,
-                content: row.content,
-                tokens: row.tokens,
-                metadata: row.metadata ?? {},
-                embedding: vectors[i],
-                embedding_model: usage.modelId,
-              })),
-              { onConflict: 'id' },
-            );
-            if (writeError) throw new Error(`Could not store embeddings: ${writeError.message}`);
-            written += slice.length;
-
-            // Attribute the spend to whoever's documents were embedded. A batch
-            // can span workspaces, so it is split rather than charged to
-            // whichever one happened to sort first.
-            const perOrg = new Map<string, number>();
-            for (const row of slice) {
-              const org = row.kb_documents?.organization_id;
-              if (org) perOrg.set(org, (perOrg.get(org) ?? 0) + 1);
-            }
-            for (const [organizationId, texts] of perOrg) {
-              await recordEmbeddingUsage(sb, {
-                organizationId,
-                source: 'reindex',
-                usage: {
-                  ...usage,
-                  texts,
-                  // The provider bills the request once; splitting the token
-                  // count by share of the batch keeps the workspace totals
-                  // honest without inventing a second request.
-                  tokens: Math.round((usage.tokens * texts) / Math.max(1, slice.length)),
-                  requests: 1,
-                },
-              });
-            }
-          },
-        );
-
-        if (run.failure) {
-          // A missing key, a rejected key or an exhausted quota is not a
-          // transient fault: retrying burns the function's retry budget to be
-          // told the same thing, floods the log with the same sentence, and —
-          // against a spent quota — spends money to learn nothing. Report it and
-          // stop; the cron finds the work again once ops acts. Rate limits and
-          // outages still throw, because those a retry can genuinely fix.
-          if (!run.failure.retryable) return { done: written, halted: run.failure.reason };
-          throw new Error(run.failure.reason);
-        }
-
-        return { done: written, halted: null as string | null };
-      });
-
-      embedded += result.done;
-      if (result.halted) {
-        halted = result.halted;
-        break;
-      }
-      if (result.done === 0) break;
-      logger.info({ embedded, of: pending }, 'kb-reindex: batch complete');
-    }
-
-    // A document is only searchable again once EVERY one of its chunks carries a
-    // vector from the model search is asking questions with, so this runs after
-    // the batches rather than per batch — and takes the model, so a document
-    // still holding a previous provider's vectors is not called ready.
-    const readied = await step.run('mark-documents-ready', async () => {
-      const { data, error } = await sb.rpc('kb_mark_reindexed_documents', {
-        p_embedding_model: modelId,
-      });
-      if (error) throw new Error(`Could not settle document status: ${error.message}`);
-      return (data as number | null) ?? 0;
-    });
-
-    const remaining = await step.run('count-remaining', async () => {
-      const { count } = await sb
-        .from('kb_chunks')
-        .select('id', { count: 'exact', head: true })
-        .or(staleFilter);
-      return count ?? 0;
-    });
-
-    // Hand the tail to a fresh run. Cheaper than a long-running loop and it
-    // keeps every invocation inside the same bounded shape.
-    if (remaining > 0 && !halted) {
-      await step.sendEvent('continue-reindex', {
-        name: 'kb/embeddings.reindex',
-        data: { continued: true },
-      });
-    }
-
-    logger.info({ embedded, readied, remaining, halted, model: modelId }, 'kb-reindex: finished');
-    return { pending, embedded, documentsReady: readied, remaining, halted, model: modelId };
-  },
+  async (ctx) => reindexEmbeddingsJob(ctx as unknown as JobContext),
 );

@@ -114,14 +114,17 @@ function bodyRewriter(mode: ThinkingMode) {
  * `system` → `messages`, so one mark at the end of `system` covers both the
  * tool definitions and the instructions, which is the whole static head.
  *
- * THE CATCH, AND IT IS SPECIFIC TO THIS PRODUCT. Cortex picks tools per turn by
- * semantic relevance, so the `tools` array is NOT guaranteed stable — and a
- * changed tool list moves the prefix and misses the cache. Within one
- * conversation the selection usually holds (consecutive questions are about the
- * same thing), so hits are common but not certain. That is still the right
- * trade: a write costs 1.25× and a read 0.1×, so it pays from roughly one hit
- * in three. Where it does not pay is a workspace whose every turn jumps subject
- * — worth watching in `cache_read_input_tokens` before assuming a saving.
+ * THE CATCH, AND IT IS SPECIFIC TO THIS PRODUCT — NOW HANDLED UPSTREAM. Cortex
+ * picks tools per turn by semantic relevance, so the `tools` array used to move
+ * between turns of one conversation and drag the whole prefix with it: medido
+ * en turn_latencies (7 días), 384k tokens escritos al caché contra 212k leídos.
+ * La lista es hoy ESTABLE Y CRECIENTE dentro de una conversación — lo ya
+ * ofrecido conserva su posición, lo nuevo entra por el final — ver
+ * tool-selection/sticky.ts. Por la misma razón el chat ya no mete bloques
+ * volátiles (fragmentos de RAG, timestamps de pantalla) en `system`: viajan en
+ * el último mensaje, después de esta marca. Si `cache_read_input_tokens` vuelve
+ * a caer por debajo de las escrituras, lo primero que hay que sospechar es un
+ * byte nuevo que cambie por turno delante del breakpoint.
  *
  * Messages are deliberately NOT marked. The tail grows every turn, so a mark
  * there would write a new entry each time and read almost none of it back.

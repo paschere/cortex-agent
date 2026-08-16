@@ -1,6 +1,7 @@
 import { EVENT_ERRAND_ADVANCE, type ErrandAdvanceEvent } from '@/lib/errands/contract';
 import { advanceErrand } from '@/lib/errands/worker';
 import { inngest } from '@/lib/inngest';
+import type { JobContext, JobHandler } from '@/lib/jobs';
 import { logger } from '@cortex/core';
 
 /**
@@ -65,6 +66,37 @@ import { logger } from '@cortex/core';
  */
 const MAX_CHAINED_STEPS = 12;
 
+/**
+ * El cuerpo, extraído a la firma de la cola nueva. En pg-boss la exclusión por
+ * encargo la da el lease de packages/agent-tools/src/errands/lifecycle.ts (la
+ * segunda capa de siempre) más el `singletonKeyFrom: 'errandId'` del
+ * manifiesto; la concurrencia global la fija el worker.
+ */
+export const errandRunJob: JobHandler = async ({ event, step }) => {
+  const advance = event.data as unknown as ErrandAdvanceEvent;
+  const errandId = advance?.errandId;
+  const organizationId = advance?.organizationId;
+  if (!errandId || !organizationId) {
+    return { skipped: 'event carried no errand or workspace' };
+  }
+
+  const done: string[] = [];
+
+  for (let n = 0; n < MAX_CHAINED_STEPS; n += 1) {
+    const result = await step.run(`advance-${n}`, async () =>
+      advanceErrand({ errandId, organizationId }),
+    );
+    done.push(`${result.did}${result.detail ? `:${result.detail}` : ''}`);
+    if (!result.again) return { errandId, steps: done };
+  }
+
+  logger.error('errand-run: hit the chained-step ceiling without settling', {
+    errandId,
+    steps: done.length,
+  });
+  return { errandId, steps: done, stopped: 'chain ceiling' };
+};
+
 export const errandRun = inngest.createFunction(
   {
     id: 'errand-run',
@@ -78,28 +110,5 @@ export const errandRun = inngest.createFunction(
     retries: 0,
   },
   { event: EVENT_ERRAND_ADVANCE },
-  async ({ event, step }) => {
-    const advance = event.data as unknown as ErrandAdvanceEvent;
-    const errandId = advance?.errandId;
-    const organizationId = advance?.organizationId;
-    if (!errandId || !organizationId) {
-      return { skipped: 'event carried no errand or workspace' };
-    }
-
-    const done: string[] = [];
-
-    for (let n = 0; n < MAX_CHAINED_STEPS; n += 1) {
-      const result = await step.run(`advance-${n}`, async () =>
-        advanceErrand({ errandId, organizationId }),
-      );
-      done.push(`${result.did}${result.detail ? `:${result.detail}` : ''}`);
-      if (!result.again) return { errandId, steps: done };
-    }
-
-    logger.error('errand-run: hit the chained-step ceiling without settling', {
-      errandId,
-      steps: done.length,
-    });
-    return { errandId, steps: done, stopped: 'chain ceiling' };
-  },
+  async (ctx) => errandRunJob(ctx as unknown as JobContext),
 );

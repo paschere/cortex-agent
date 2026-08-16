@@ -1,5 +1,6 @@
 import { type DriveContext, crawlSubtree, normalizeGdriveMime } from '@/app/api/kb/drive/_lib';
 import { inngest } from '@/lib/inngest';
+import { type JobContext, type JobHandler, enqueueJob } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { type ToolContext, createIntegrationsClient, driveGet } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
@@ -47,139 +48,142 @@ function revisionOf(file: DriveChangeFile): string {
 // owns the space, and the per-collection step builds its client from that, so a
 // Drive change can only ever create, update or delete documents inside the
 // workspace whose folder was being watched.
-export const driveSync = inngest.createFunction(
-  { id: 'drive-sync-all' },
-  { cron: '*/10 * * * *' },
-  async ({ step }) => {
-    const states = await step.run('load-sync-states', async () => {
-      const db = getSupabaseServiceClient();
-      const { data, error } = await db
-        .from('gdrive_sync_state')
-        .select('collection_id, organization_id, page_token, owner_user_id, tracked_folder_ids')
-        .not('owner_user_id', 'is', null);
-      if (error) throw new Error(`Failed to load gdrive_sync_state: ${error.message}`);
-      return data ?? [];
-    });
+/** El cuerpo, extraído a la firma de la cola nueva; `event` no se usa. */
+export const driveSyncJob: JobHandler = async ({ step }) => {
+  const states = await step.run('load-sync-states', async () => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db
+      .from('gdrive_sync_state')
+      .select('collection_id, organization_id, page_token, owner_user_id, tracked_folder_ids')
+      .not('owner_user_id', 'is', null);
+    if (error) throw new Error(`Failed to load gdrive_sync_state: ${error.message}`);
+    return data ?? [];
+  });
 
-    const results: { collectionId: string; ok: boolean; error?: string }[] = [];
+  const results: { collectionId: string; ok: boolean; error?: string }[] = [];
 
-    for (const state of states) {
-      const collectionId = state.collection_id as string;
-      const organizationId = state.organization_id as string;
-      const ownerUserId = state.owner_user_id as string;
+  for (const state of states) {
+    const collectionId = state.collection_id as string;
+    const organizationId = state.organization_id as string;
+    const ownerUserId = state.owner_user_id as string;
 
-      // Per-collection isolation: never let one collection abort the batch.
-      const result = await step
-        .run(`sync-${collectionId}`, async () => {
-          const db = getOrgScopedClient(organizationId);
-          const integrations = createIntegrationsClient(db, ownerUserId, logger);
-          const ctx: DriveContext = { integrations, signal: undefined };
+    // Per-collection isolation: never let one collection abort the batch.
+    const result = await step
+      .run(`sync-${collectionId}`, async () => {
+        const db = getOrgScopedClient(organizationId);
+        const integrations = createIntegrationsClient(db, ownerUserId, logger);
+        const ctx: DriveContext = { integrations, signal: undefined };
 
-          let trackedFolderIds = ((state.tracked_folder_ids as string[] | null) ?? []).slice();
-          const trackedSet = new Set(trackedFolderIds);
+        let trackedFolderIds = ((state.tracked_folder_ids as string[] | null) ?? []).slice();
+        const trackedSet = new Set(trackedFolderIds);
 
-          // Build the collection's known source_ref set (existing gdrive docs) so a
-          // file that already has a row is recognized even if its parent left the
-          // tracked set. Map fileId -> { id, source_revision }.
-          const { data: existingDocs, error: docsErr } = await db
-            .from('kb_documents')
-            .select('id, source_ref, source_revision')
-            .eq('collection_id', collectionId)
-            .eq('source', 'gdrive');
-          if (docsErr) throw new Error(`Failed to load kb_documents: ${docsErr.message}`);
+        // Build the collection's known source_ref set (existing gdrive docs) so a
+        // file that already has a row is recognized even if its parent left the
+        // tracked set. Map fileId -> { id, source_revision }.
+        const { data: existingDocs, error: docsErr } = await db
+          .from('kb_documents')
+          .select('id, source_ref, source_revision')
+          .eq('collection_id', collectionId)
+          .eq('source', 'gdrive');
+        if (docsErr) throw new Error(`Failed to load kb_documents: ${docsErr.message}`);
 
-          const docByRef = new Map<string, { id: string; source_revision: string | null }>();
-          for (const d of existingDocs ?? []) {
-            const ref = d.source_ref as string | null;
-            if (ref) {
-              docByRef.set(ref, {
-                id: d.id as string,
-                source_revision: (d.source_revision as string | null) ?? null,
+        const docByRef = new Map<string, { id: string; source_revision: string | null }>();
+        for (const d of existingDocs ?? []) {
+          const ref = d.source_ref as string | null;
+          if (ref) {
+            docByRef.set(ref, {
+              id: d.id as string,
+              source_revision: (d.source_revision as string | null) ?? null,
+            });
+          }
+        }
+
+        // Drain the Changes API from the stored page_token until newStartPageToken.
+        let pageToken: string = state.page_token as string;
+        let newStartPageToken: string | undefined;
+
+        do {
+          const params: Record<string, string> = {
+            pageToken,
+            pageSize: '1000',
+            includeRemoved: 'true',
+            spaces: 'drive',
+            supportsAllDrives: 'true',
+            includeItemsFromAllDrives: 'true',
+            fields:
+              'newStartPageToken,nextPageToken,changes(removed,fileId,file(id,name,mimeType,parents,modifiedTime,trashed,md5Checksum))',
+          };
+          const page = await driveGet<ChangesResponse>(ctx as ToolContext, '/changes', params);
+
+          for (const change of page.changes ?? []) {
+            try {
+              await applyChange({
+                db,
+                ctx,
+                collectionId,
+                ownerUserId,
+                change,
+                trackedSet,
+                trackedFolderIds,
+                docByRef,
+              });
+            } catch (fileErr) {
+              // Per-file isolation: mark the doc failed (if known) but keep draining.
+              const ref = change.fileId;
+              const doc = docByRef.get(ref);
+              if (doc) {
+                await db
+                  .from('kb_documents')
+                  .update({ status: 'failed', error_message: (fileErr as Error).message })
+                  .eq('id', doc.id);
+              }
+              logger.error('drive-sync: change failed', {
+                collectionId,
+                fileId: ref,
+                error: (fileErr as Error).message,
               });
             }
           }
 
-          // Drain the Changes API from the stored page_token until newStartPageToken.
-          let pageToken: string = state.page_token as string;
-          let newStartPageToken: string | undefined;
+          newStartPageToken = page.newStartPageToken;
+          pageToken = page.nextPageToken ?? '';
+        } while (!newStartPageToken && pageToken);
 
-          do {
-            const params: Record<string, string> = {
-              pageToken,
-              pageSize: '1000',
-              includeRemoved: 'true',
-              spaces: 'drive',
-              supportsAllDrives: 'true',
-              includeItemsFromAllDrives: 'true',
-              fields:
-                'newStartPageToken,nextPageToken,changes(removed,fileId,file(id,name,mimeType,parents,modifiedTime,trashed,md5Checksum))',
-            };
-            const page = await driveGet<ChangesResponse>(ctx as ToolContext, '/changes', params);
+        // Re-read the (possibly mutated) tracked array for persistence.
+        trackedFolderIds = Array.from(trackedSet);
 
-            for (const change of page.changes ?? []) {
-              try {
-                await applyChange({
-                  db,
-                  ctx,
-                  collectionId,
-                  ownerUserId,
-                  change,
-                  trackedSet,
-                  trackedFolderIds,
-                  docByRef,
-                });
-              } catch (fileErr) {
-                // Per-file isolation: mark the doc failed (if known) but keep draining.
-                const ref = change.fileId;
-                const doc = docByRef.get(ref);
-                if (doc) {
-                  await db
-                    .from('kb_documents')
-                    .update({ status: 'failed', error_message: (fileErr as Error).message })
-                    .eq('id', doc.id);
-                }
-                logger.error('drive-sync: change failed', {
-                  collectionId,
-                  fileId: ref,
-                  error: (fileErr as Error).message,
-                });
-              }
-            }
+        // Persist the new cursor + tracked set + last_synced_at.
+        const { error: updErr } = await db
+          .from('gdrive_sync_state')
+          .update({
+            page_token: newStartPageToken ?? pageToken,
+            tracked_folder_ids: trackedFolderIds,
+            last_synced_at: new Date().toISOString(),
+          })
+          .eq('collection_id', collectionId);
+        if (updErr) throw new Error(`Failed to persist gdrive_sync_state: ${updErr.message}`);
 
-            newStartPageToken = page.newStartPageToken;
-            pageToken = page.nextPageToken ?? '';
-          } while (!newStartPageToken && pageToken);
-
-          // Re-read the (possibly mutated) tracked array for persistence.
-          trackedFolderIds = Array.from(trackedSet);
-
-          // Persist the new cursor + tracked set + last_synced_at.
-          const { error: updErr } = await db
-            .from('gdrive_sync_state')
-            .update({
-              page_token: newStartPageToken ?? pageToken,
-              tracked_folder_ids: trackedFolderIds,
-              last_synced_at: new Date().toISOString(),
-            })
-            .eq('collection_id', collectionId);
-          if (updErr) throw new Error(`Failed to persist gdrive_sync_state: ${updErr.message}`);
-
-          return { collectionId, ok: true };
-        })
-        .catch((err: unknown) => {
-          // Swallow per-collection errors so the batch continues.
-          logger.error('drive-sync: collection sync failed', {
-            collectionId,
-            error: (err as Error).message,
-          });
-          return { collectionId, ok: false, error: (err as Error).message };
+        return { collectionId, ok: true };
+      })
+      .catch((err: unknown) => {
+        // Swallow per-collection errors so the batch continues.
+        logger.error('drive-sync: collection sync failed', {
+          collectionId,
+          error: (err as Error).message,
         });
+        return { collectionId, ok: false, error: (err as Error).message };
+      });
 
-      results.push(result);
-    }
+    results.push(result);
+  }
 
-    return { ok: true, collections: results.length, results };
-  },
+  return { ok: true, collections: results.length, results };
+};
+
+export const driveSync = inngest.createFunction(
+  { id: 'drive-sync-all' },
+  { cron: '*/10 * * * *' },
+  async (ctx) => driveSyncJob(ctx as unknown as JobContext),
 );
 
 /** Mutates trackedSet in place when a tracked folder moves. */
@@ -261,7 +265,7 @@ async function applyChange(args: {
       throw new Error(`Failed to insert kb_documents row: ${error?.message ?? 'unknown error'}`);
     }
     docByRef.set(fileId, { id: doc.id as string, source_revision: revision });
-    await inngest.send({ name: 'kb/document.ingest', data: { documentId: doc.id as string } });
+    await enqueueJob('kb/document.ingest', { documentId: doc.id as string });
     return;
   }
 
@@ -280,5 +284,5 @@ async function applyChange(args: {
     .eq('id', existing.id);
   if (updErr) throw new Error(`Failed to update kb_documents row: ${updErr.message}`);
   existing.source_revision = revision;
-  await inngest.send({ name: 'kb/document.ingest', data: { documentId: existing.id } });
+  await enqueueJob('kb/document.ingest', { documentId: existing.id });
 }

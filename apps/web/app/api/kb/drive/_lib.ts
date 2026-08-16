@@ -1,5 +1,5 @@
 import 'server-only';
-import { inngest } from '@/lib/inngest';
+import { enqueueJob } from '@/lib/jobs';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   type ToolContext,
@@ -225,10 +225,7 @@ export async function createGdriveDocument(
     throw new Error(`Failed to insert kb_documents row: ${error?.message ?? 'unknown error'}`);
   }
 
-  await inngest.send({
-    name: 'kb/document.ingest',
-    data: { documentId: doc.id as string },
-  });
+  await enqueueJob('kb/document.ingest', { documentId: doc.id as string });
 
   return doc;
 }
