@@ -130,8 +130,8 @@ function rowClass(collapsed: boolean, active: boolean): string {
     'motion-reduce:transition-none',
     collapsed ? 'justify-center' : 'gap-2.5 px-2.5',
     active
-      ? 'bg-primary-soft font-semibold text-primary-ink'
-      : 'font-medium text-ink-muted hover:bg-surface-2 hover:text-ink',
+      ? 'bg-primary/25 font-semibold text-white'
+      : 'font-medium text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
   );
 }
 
@@ -226,14 +226,14 @@ function NavRow({
       <span className="relative shrink-0">
         <Icon
           strokeWidth={1.75}
-          className={clsx('h-4 w-4', active ? 'text-primary' : 'text-ink-faint')}
+          className={clsx('h-4 w-4', active ? 'text-white' : 'text-rail-ink-faint')}
         />
         {collapsed && badge > 0 && (
           <span
             aria-hidden="true"
             className={clsx(
               'absolute -right-1.5 -top-1.5 min-w-[15px] rounded-full px-1 text-center text-micro font-bold leading-[15px] tabular-nums',
-              active ? 'bg-primary text-white' : 'bg-ink-muted text-white',
+              active ? 'bg-primary text-white' : 'bg-rail-2 text-rail-ink',
             )}
           >
             {badge > 9 ? '9+' : badge}
@@ -252,7 +252,7 @@ function NavRow({
                 aria-hidden="true"
                 className={clsx(
                   'shrink-0 text-micro tabular-nums',
-                  active ? 'text-primary-ink' : 'text-ink-muted',
+                  active ? 'text-white/80' : 'text-rail-ink-muted',
                 )}
               >
                 {badge > 99 ? '99+' : badge}
@@ -286,7 +286,7 @@ function Chevron({
       aria-expanded={open}
       aria-controls={controls}
       aria-label={label}
-      className="shrink-0 rounded-full p-1 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+      className="shrink-0 rounded-full p-1 text-rail-ink-faint transition-colors duration-150 hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
     >
       <ChevronRight
         strokeWidth={1.75}
@@ -411,7 +411,7 @@ function DisclosureRow({
     >
       <Icon
         strokeWidth={1.75}
-        className={clsx('h-4 w-4 shrink-0', active ? 'text-primary' : 'text-ink-faint')}
+        className={clsx('h-4 w-4 shrink-0', active ? 'text-white' : 'text-rail-ink-faint')}
       />
       {!collapsed && (
         <>
@@ -436,7 +436,7 @@ function DisclosureRow({
             aria-hidden="true"
             strokeWidth={1.75}
             className={clsx(
-              'h-3.5 w-3.5 shrink-0 text-ink-faint transition-transform duration-150 motion-reduce:transition-none',
+              'h-3.5 w-3.5 shrink-0 text-rail-ink-faint transition-transform duration-150 motion-reduce:transition-none',
               open && 'rotate-90',
             )}
           />
@@ -480,14 +480,14 @@ function SearchRow({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?:
       aria-keyshortcuts="Meta+K Control+K"
       className={rowClass(collapsed, false)}
     >
-      <Search strokeWidth={1.75} className="h-4 w-4 shrink-0 text-ink-faint" />
+      <Search strokeWidth={1.75} className="h-4 w-4 shrink-0 text-rail-ink-faint" />
       {!collapsed && (
         <>
           <span className="flex-1 text-left">Buscar</span>
           {/* No aria-hidden needed: the button carries an explicit aria-label so
               nothing inside is announced, and aria-keyshortcuts is the honest
               way to tell a screen reader about ⌘K. */}
-          <span className="shrink-0 font-mono text-micro text-ink-faint">{modKey}K</span>
+          <span className="shrink-0 font-mono text-micro text-rail-ink-faint">{modKey}K</span>
         </>
       )}
     </button>
@@ -497,7 +497,7 @@ function SearchRow({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?:
 /** The name of a block of destinations. Never a button — the group above folds. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-2.5 pb-1 pt-3 text-micro font-semibold uppercase tracking-field text-ink-faint">
+    <div className="px-2.5 pb-1 pt-3 text-micro font-semibold uppercase tracking-field text-rail-ink-faint">
       {children}
     </div>
   );
@@ -512,7 +512,7 @@ function Brand({ collapsed }: { collapsed: boolean }) {
       {/* One line. The maker's line moved to the foot of the rail: it is a
           signature, and a signature does not belong at the top of a column
           whose first job is to get somebody to their work. */}
-      {!collapsed && <span className="text-base font-semibold text-ink">Cortex</span>}
+      {!collapsed && <span className="text-base font-semibold text-rail-ink">Cortex</span>}
     </div>
   );
 }
@@ -648,7 +648,7 @@ function SidebarNav({
             rail.rest.map((section, i) => (
               <div key={section.id}>
                 {collapsed ? (
-                  i > 0 && <div className="mx-2 my-2 border-t border-border" />
+                  i > 0 && <div className="mx-2 my-2 border-t border-rail-border" />
                 ) : (
                   <SectionLabel>{section.label}</SectionLabel>
                 )}
@@ -697,7 +697,7 @@ function SidebarFooter({
 }) {
   const pathname = usePathname();
   return (
-    <div className="shrink-0 border-t border-border px-3 pb-3 pt-2">
+    <div className="shrink-0 border-t border-rail-border px-3 pb-3 pt-2">
       <div className="flex flex-col gap-px">
         {FOOTER.map((item) => (
           <NavRow
@@ -711,7 +711,7 @@ function SidebarFooter({
         ))}
       </div>
       {!collapsed && (
-        <div className="px-2.5 pt-2 text-micro text-ink-faint">
+        <div className="px-2.5 pt-2 text-micro text-rail-ink-faint">
           Cortex <span className="text-border-strong">·</span> by Vertix
         </div>
       )}
@@ -830,7 +830,7 @@ export function Sidebar({
       >
         <div
           className={clsx(
-            'flex h-full flex-col border-r border-border bg-surface',
+            'flex h-full flex-col border-r border-rail-border bg-rail',
             // En el chat estrecho, la capa que se expande va POR ENCIMA del
             // lienzo. En el chat ancho y fuera del chat, el rail ocupa su hueco
             // y nada flota — no hay nada que flotar, está abierto.
@@ -856,7 +856,7 @@ export function Sidebar({
                 type="button"
                 onClick={toggleCollapsed}
                 aria-label="Contraer el menú"
-                className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+                className="rounded-full p-1.5 text-rail-ink-faint transition-colors duration-150 hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
               >
                 <PanelLeftClose strokeWidth={1.75} className="h-4 w-4" />
               </button>
@@ -867,7 +867,7 @@ export function Sidebar({
               type="button"
               onClick={toggleCollapsed}
               aria-label="Expandir el menú"
-              className="mx-auto mb-1 rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+              className="mx-auto mb-1 rounded-full p-1.5 text-rail-ink-faint transition-colors duration-150 hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
             >
               <PanelLeftOpen strokeWidth={1.75} className="h-4 w-4" />
             </button>
@@ -883,7 +883,7 @@ export function Sidebar({
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm md:hidden" />
-          <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-border bg-surface shadow-pop outline-none md:hidden">
+          <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-rail-border bg-rail shadow-pop outline-none md:hidden">
             <div className="flex h-14 shrink-0 items-center justify-between px-3">
               <Dialog.Title asChild>
                 <div>
@@ -892,7 +892,7 @@ export function Sidebar({
               </Dialog.Title>
               <Dialog.Close
                 aria-label="Cerrar el menú"
-                className="rounded-full p-1.5 text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+                className="rounded-full p-1.5 text-rail-ink-faint transition-colors duration-150 hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
               >
                 <X strokeWidth={1.75} className="h-4 w-4" />
               </Dialog.Close>

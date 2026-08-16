@@ -16,6 +16,14 @@ const config: Config = {
     extend: {
       colors: {
         canvas: rgb('--canvas'),
+        rail: {
+          DEFAULT: rgb('--rail'),
+          2: rgb('--rail-2'),
+          border: rgb('--rail-border'),
+          ink: rgb('--rail-ink'),
+          'ink-muted': rgb('--rail-ink-muted'),
+          'ink-faint': rgb('--rail-ink-faint'),
+        },
         surface: rgb('--surface'),
         'surface-2': rgb('--surface-2'),
         border: rgb('--border'),
