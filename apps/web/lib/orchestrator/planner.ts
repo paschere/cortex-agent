@@ -1,5 +1,6 @@
 import 'server-only';
 import { type AnyTool, NO_THINKING, chatModel } from '@cortex/agent-tools';
+import { logger } from '@cortex/core';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { normalizeDependencies } from './graph';
@@ -98,17 +99,70 @@ export async function planObjective(opts: {
   tools: AnyTool[];
   model?: string | null;
 }): Promise<PlanResult> {
-  const { object, usage } = await generateObject({
-    model: chatModel(opts.model),
-    schema: PlanSchema,
-    system: SYSTEM,
-    prompt: `OBJECTIVE\n${opts.objective}\n\nTOOL CATALOGUE (${opts.tools.length} tools)\n${catalogue(opts.tools)}\n\nPlan it.`,
-    // Shape-constrained call with an explicit schema: extended thinking buys
-    // little here and its tokens count against maxTokens, which would truncate
-    // the plan itself. See NO_THINKING in packages/agent-tools/src/model.ts.
-    experimental_providerMetadata: NO_THINKING,
-    maxTokens: 4096,
-  });
+  const prompt = `OBJECTIVE\n${opts.objective}\n\nTOOL CATALOGUE (${opts.tools.length} tools)\n${catalogue(opts.tools)}\n\nPlan it.`;
+
+  /**
+   * PLANIFICAR, Y SI SALE MAL, VOLVER A INTENTARLO UNA VEZ Y CONTAR QUÉ PASÓ.
+   *
+   * ===========================================================================
+   * EL FALLO QUE ESTO ATIENDE
+   * ===========================================================================
+   * En producción, un objetivo real terminó así después de veintidós segundos:
+   *
+   *     «No object generated: response did not match schema.»
+   *
+   * Cero subagentes, cero herramientas, y esa frase —en inglés, de la SDK— es
+   * literalmente todo lo que vio la persona. En un producto en español, sobre
+   * una espera de veintidós segundos, eso no es un mensaje de error: es un
+   * callejón. No dice si fue culpa del objetivo, de un tope de tokens o de un
+   * mal día del modelo, así que no hay ninguna acción que tomar después.
+   *
+   * ===========================================================================
+   * TRES COSAS, Y LA TERCERA ES LA QUE MÁS VALE
+   * ===========================================================================
+   * UN REINTENTO. `generateObject` obliga al modelo a una forma exacta y
+   * fallar una vez es un suceso ordinario — a veces contesta en prosa, a veces
+   * corta el JSON. Reintentar es lo primero que haría una persona y hasta hoy
+   * no lo hacía nadie: el turno moría al primer intento.
+   *
+   * MÁS TECHO. 4.096 tokens para hasta ocho tareas con su brief completo, sus
+   * dependencias y su lista de herramientas es justo, y un JSON cortado a la
+   * mitad falla EXACTAMENTE con este mensaje. Subirlo no arregla la causa si es
+   * otra, pero descarta la más barata de descartar.
+   *
+   * Y SOBRE TODO: SE GUARDA LO QUE EL MODELO ESCRIBIÓ DE VERDAD.
+   * `NoObjectGeneratedError` trae `text`, `finishReason` y `usage`, y hasta hoy
+   * se tiraban los tres. Sin poder reproducir el fallo —cada intento cuesta
+   * dinero— eso era quedarse a ciegas. Ahora la próxima vez que pase, el
+   * registro dice si el JSON venía cortado (`finishReason: 'length'`), si el
+   * modelo contestó en prosa, o si es otra cosa. Un fallo que no se puede
+   * reproducir tiene que explicarse solo.
+   */
+  const attempt = async () =>
+    generateObject({
+      model: chatModel(opts.model),
+      schema: PlanSchema,
+      system: SYSTEM,
+      prompt,
+      // Shape-constrained call with an explicit schema: extended thinking buys
+      // little here and its tokens count against maxTokens, which would truncate
+      // the plan itself. See NO_THINKING in packages/agent-tools/src/model.ts.
+      experimental_providerMetadata: NO_THINKING,
+      maxTokens: 8192,
+    });
+
+  let object: Awaited<ReturnType<typeof attempt>>['object'];
+  let usage: Awaited<ReturnType<typeof attempt>>['usage'];
+  try {
+    ({ object, usage } = await attempt());
+  } catch (first) {
+    describeFailure(first, 'primer intento');
+    try {
+      ({ object, usage } = await attempt());
+    } catch (second) {
+      throw new Error(describeFailure(second, 'segundo intento'));
+    }
+  }
 
   const raw = object.tasks.slice(0, MAX_TASKS);
   const deps = normalizeDependencies(raw.map((t) => t.dependsOn ?? []));
@@ -148,4 +202,62 @@ function sanitizeTools(requested: string[], known: Set<string>): string[] {
     }
   }
   return [...out];
+}
+
+/**
+ * QUÉ PASÓ DE VERDAD CUANDO EL PLAN NO SALIÓ.
+ *
+ * `NoObjectGeneratedError` de la SDK trae tres cosas que su mensaje no dice y
+ * que son justo las que distinguen las causas posibles:
+ *
+ *   `finishReason: 'length'`  el JSON venía CORTADO por el tope de tokens. Es
+ *                             la causa más probable de «did not match schema»
+ *                             en un esquema grande, y la única que se arregla
+ *                             subiendo un número.
+ *   `text`                    lo que el modelo escribió de verdad. Si es prosa
+ *                             —«necesito saber quiénes son tus competidores»—
+ *                             el problema es el objetivo, no el esquema.
+ *   `usage`                   cuánto llegó a gastar antes de morir.
+ *
+ * Se registran los tres y se devuelve una frase que una persona pueda leer. La
+ * de la SDK, «No object generated: response did not match schema», es correcta
+ * y no le sirve a nadie: está en inglés, nombra un concepto interno y no dice
+ * qué hacer después.
+ */
+function describeFailure(err: unknown, which: string): string {
+  const e = err as {
+    text?: unknown;
+    finishReason?: unknown;
+    usage?: unknown;
+    message?: unknown;
+  };
+  const finishReason = typeof e.finishReason === 'string' ? e.finishReason : null;
+  const text = typeof e.text === 'string' ? e.text : null;
+
+  logger.warn('El planificador del orquestador no devolvió un plan', {
+    which,
+    finishReason,
+    usage: e.usage,
+    message: typeof e.message === 'string' ? e.message : String(err),
+    // Recortado: esto va a un registro, no a un archivo. Con el principio y el
+    // final se distingue un JSON cortado de una respuesta en prosa, que es la
+    // única pregunta que este registro tiene que contestar.
+    textHead: text?.slice(0, 400) ?? null,
+    textTail: text && text.length > 400 ? text.slice(-200) : null,
+  });
+
+  if (finishReason === 'length') {
+    return (
+      'El plan se cortó por lo largo antes de terminar de escribirse. ' +
+      'Prueba con un objetivo más acotado, o divídelo en dos.'
+    );
+  }
+  if (text && text.trim().length > 0) {
+    return (
+      'No pude convertir esto en un plan: el modelo contestó con una explicación ' +
+      'en vez de con tareas. Suele pasar cuando al objetivo le falta un dato para ' +
+      'poder empezar. Reescríbelo diciendo con qué contamos.'
+    );
+  }
+  return 'No pude armar un plan para este objetivo. Vuelve a intentarlo, o reescríbelo más concreto.';
 }
