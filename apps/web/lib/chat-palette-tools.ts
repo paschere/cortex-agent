@@ -1,7 +1,7 @@
 /**
  * LAS HERRAMIENTAS DEL CATÁLOGO, DICHAS COMO LAS DIRÍA UNA PERSONA.
  *
- * El registro tiene ~135 herramientas y todas traen una descripción en INGLÉS
+ * El registro tiene ~150 herramientas y todas traen una descripción en INGLÉS
  * escrita para el modelo: «Search the user's Gmail with a Gmail query string
  * (e.g. "from:foo subject:bar newer_than:30d")». Eso no es una fila de menú, es
  * documentación de una API. Y `toolActionLabel` — que es lo que usa la pantalla
@@ -65,7 +65,11 @@ export const TOOL_PHRASE: Record<string, string> = {
   'clients.link': 'Cuelga esto del cliente ',
   'clients.overview': 'Dame el panorama completo del cliente ',
   'clients.register': 'Registra al cliente ',
-  'clients.search': 'Busca al cliente ',
+  // Con el NIT dicho: la herramienta busca por nombre, por NIT, por dominio de
+  // correo o por la dirección de alguien que trabaja ahí, y quien tiene el NIT
+  // delante —una factura, una remesa— es justo quien no sabe el nombre exacto
+  // con el que quedó registrado el cliente.
+  'clients.search': 'Busca al cliente o el NIT ',
 
   'commitments.confirm_extracted': 'Confirma los vencimientos que sacaste del documento ',
   'commitments.due_soon': '¿Qué se nos vence pronto?',
@@ -81,11 +85,19 @@ export const TOOL_PHRASE: Record<string, string> = {
 
   'documents.confirm': 'Confirma lo que leíste del documento ',
   'documents.correction_stats': '¿Qué campos de los documentos toca corregir siempre?',
-  'documents.extract': 'Léelo y sácale los datos al documento ',
+  'documents.extract': 'Léeme este documento y sácale los datos: ',
   'documents.pending_review': 'Muéstrame los documentos leídos que faltan por confirmar',
-  'documents.records': 'Búscame los documentos confirmados de ',
+  // «Documentos confirmados» es cómo lo llamamos nosotros. Nadie llega pidiendo
+  // un documento confirmado: llega pidiendo las facturas de un cliente o las
+  // guías con el plazo vencido. Los seis tipos no caben en una línea, así que
+  // van los tres que se piden a diario — los otros los encuentra el buscador de
+  // la puerta por el resumen del grupo, que sí los nombra enteros.
+  'documents.records': 'Búscame las facturas, guías o declaraciones de ',
   'documents.reject': 'Descarta la lectura del documento ',
-  'documents.totals': 'Súmame los documentos de ',
+  // La pregunta que trae la descripción de la herramienta («cuánto le
+  // facturamos a Coltrans en julio») y no «súmame los documentos», que es la
+  // implementación dicha en voz alta.
+  'documents.totals': '¿Cuánto le hemos facturado a ',
 
   'errands.answer': 'Respóndele al encargo: ',
   'errands.start': 'Investígame ',
@@ -203,7 +215,10 @@ export const TOOL_PHRASE: Record<string, string> = {
 
   'payroll.client_report': 'Dame el costo del equipo puesto en el cliente ',
   'payroll.cost_projection': 'Proyéctame lo que va a costar el equipo en ',
-  'payroll.employee_profile': 'Dame el perfil de ',
+  // «El perfil de » a secas se lee, en el mismo menú donde está «Dame el
+  // panorama completo del cliente », como si fuera la ficha de una empresa. Es
+  // la de una persona, y trae su sueldo.
+  'payroll.employee_profile': 'Dame el perfil de nómina de ',
   'payroll.expenses_report': 'Dame el informe de gastos de ',
   'payroll.payroll_stats': '¿Cuánto nos ha costado la nómina?',
   'payroll.team_assignments': '¿Quién está asignado a cada cliente?',

@@ -35,6 +35,7 @@ import {
   ChevronDown,
   CircleCheck,
   Clock3,
+  Coins,
   FileText,
   FlaskConical,
   FolderOpen,
@@ -49,8 +50,10 @@ import {
   MessageSquare,
   MessagesSquare,
   Mic,
+  Network,
   PlugZap,
   Power,
+  Receipt,
   Search,
   Send,
   Server,
@@ -60,6 +63,7 @@ import {
   SquareKanban,
   Table2,
   Target,
+  Telescope,
   TrendingUp,
   TriangleAlert,
   Type,
@@ -174,6 +178,13 @@ export interface UsageMeta {
   distinctTools: number;
 }
 
+/**
+ * Los nombres que nombran `FamilyMeta.icon` y `CapabilityGroup.icon`. Un nombre
+ * que no esté aquí NO rompe nada: cae a `Wrench` en silencio, que es como
+ * «Acciones propuestas» (`Send`) y «Lo que espera tu permiso» (`ShieldAlert`)
+ * llevaban tiempo dibujadas con una llave inglesa sin que nadie lo notara. Si
+ * añades un icono a la taxonomía, añádelo también aquí y en `Capabilities.tsx`.
+ */
 const ICONS: Record<string, typeof Wrench> = {
   AlarmClock,
   BarChart3,
@@ -182,6 +193,7 @@ const ICONS: Record<string, typeof Wrench> = {
   Building2,
   CalendarDays,
   Car,
+  Coins,
   FileText,
   FolderOpen,
   GitBranch,
@@ -192,12 +204,17 @@ const ICONS: Record<string, typeof Wrench> = {
   MessageSquare,
   MessagesSquare,
   Mic,
+  Network,
+  Receipt,
+  Send,
   Server,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   SquareKanban,
   Table2,
   Target,
+  Telescope,
   TrendingUp,
   Type,
   Users,

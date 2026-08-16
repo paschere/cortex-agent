@@ -73,6 +73,34 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'amber',
     icon: 'Handshake',
   },
+  payments: {
+    name: 'Pagos y cartera',
+    blurb:
+      'Lo que de verdad entró, dicho por el banco, por el sistema contable, por un comprobante o a mano. La cartera se calcula restándoselo a las facturas que alguien confirmó, cada moneda por su lado; cuando dos fuentes no coinciden, el pago queda en disputa y sale de todas las cifras hasta que una persona decida.',
+    tone: 'emerald',
+    icon: 'Coins',
+  },
+  documents: {
+    name: 'Documentos leídos',
+    blurb:
+      'Facturas, guías, declaraciones de aduana, certificados de origen, contratos, pólizas y comprobantes de pago leídos a campos que se pueden sumar, sin perder las palabras de donde salió cada dato. Nada entra en una cifra hasta que una persona lo confirma.',
+    tone: 'amber',
+    icon: 'Receipt',
+  },
+  errands: {
+    name: 'Encargos',
+    blurb:
+      'Investigaciones que le dejas encargadas y siguen solas mientras haces otra cosa: tienen tope de gasto, te preguntan cuando se atascan y nada de lo que sale de la empresa se manda sin que alguien lo apruebe.',
+    tone: 'primary',
+    icon: 'Telescope',
+  },
+  directory: {
+    name: 'Línea de mando',
+    blurb:
+      'Quién le responde a quién entre los que tienen cuenta en Cortex, y a quién hay que subirle un asunto cuando el de siempre no contesta. No es el organigrama de la empresa: eso vive en «Quién es quién», dentro de los datos de la empresa.',
+    tone: 'primary',
+    icon: 'Network',
+  },
   payroll: {
     name: 'Nómina',
     blurb:
@@ -300,6 +328,25 @@ export const CAPABILITY_GROUPS: CapabilityGroup[] = [
     icon: 'Handshake',
   },
   {
+    // Justo detrás de «Clientes y negocios» y no al final: lo que un cliente
+    // debe es la segunda cosa que se pregunta de un cliente, y hasta ahora las
+    // diecisiete herramientas de esta columna —cartera incluida— caían en
+    // «Otras herramientas», que es donde se guarda lo que no se ha pensado.
+    // «¿Cuánto nos deben?» es la pregunta más de empresa que contesta el
+    // producto y estaba en el cajón de sastre.
+    id: 'billing',
+    // Cartera Y papeles, no sólo facturación: aquí no viven únicamente las
+    // facturas. Viven las guías, las declaraciones de aduana, los certificados
+    // de origen, los contratos y las pólizas, porque el motor que los lee es el
+    // mismo y porque la cartera se calcula justo sobre ellos. «Papeles» es como
+    // se llaman en una oficina de aquí.
+    name: 'Cartera y papeles',
+    blurb:
+      'Cuánto nos deben y a cuántos días, qué entró y de quién, y los papeles de donde sale cada cifra: facturas, guías, declaraciones de aduana, contratos y pólizas. Ninguna cifra cuenta hasta que una persona confirmó el documento, y la respuesta siempre dice cuántos quedaron por revisar.',
+    tone: 'emerald',
+    icon: 'Coins',
+  },
+  {
     id: 'comms',
     name: 'Escribir y responder',
     blurb:
@@ -352,17 +399,37 @@ export const CAPABILITY_GROUPS: CapabilityGroup[] = [
   {
     id: 'vehicles',
     name: 'Vehículos y trámites',
+    // El nombre prometía trámites y no había ni uno: los `browser.*` —los
+    // trámites de verdad, los que entran a un portal y radican— estaban en
+    // «Información pública», que es donde va lo que NO toca nada. Radicar en el
+    // RUNT o en la DIAN con la clave de la empresa no es información pública.
     blurb:
-      'SOAT y RTM desde el RUNT, comparendos desde el SIMIT, y todo lo que se vence con fecha: contratos, pólizas, plazos de aduana y pagos.',
+      'SOAT y RTM desde el RUNT, comparendos desde el SIMIT, todo lo que se vence con fecha —contratos, pólizas, plazos de aduana y pagos— y las vueltas aprendidas en portales ajenos: entra, llena el formulario y radica.',
     tone: 'emerald',
     icon: 'Car',
   },
   {
     id: 'auto',
     name: 'Automatización',
-    blurb: 'Procedimientos que cualquiera puede ejecutar y rutinas que corren solas.',
+    blurb:
+      'Encargos que investigan solos mientras haces otra cosa, procedimientos que cualquiera del equipo puede ejecutar y rutinas que corren según su horario.',
     tone: 'primary',
     icon: 'Workflow',
+  },
+  {
+    // La empresa mirándose a sí misma. Las dos herramientas que estrenó esta
+    // semana —la ficha y la línea de mando— caían en «Otras herramientas», que
+    // para un producto que se vende como «un gerente para tu empresa» es el
+    // peor sitio posible. Y con ellas va la memoria (`cortex.remember` y
+    // `cortex.forget`), que estaba fichada en «Automatización» sin ser ni un
+    // procedimiento ni una rutina: enseñarle algo a Cortex sobre esta empresa
+    // es exactamente lo mismo que hacen las otras dos.
+    id: 'company',
+    name: 'Tu empresa',
+    blurb:
+      'Quién es esta empresa —identidad, NIT, cómo cobra, quién decide y lo que Cortex no debe hacer por su cuenta—, quién le responde a quién cuando hay que subirle un asunto a alguien, y la memoria que le vas dejando para no repetirle lo mismo cada semana.',
+    tone: 'primary',
+    icon: 'Building2',
   },
   {
     id: 'external',
@@ -411,6 +478,12 @@ const FAMILY_GROUP: Record<string, string> = {
   growth: 'clients',
   sales: 'clients',
   presentations: 'clients',
+  payments: 'billing',
+  // Con los pagos y no con «Documentos y memoria»: lo que lee este módulo no es
+  // documentación, son cifras con un papel detrás. La cartera se calcula
+  // restándole los pagos a las facturas que salieron de aquí, así que separar
+  // las dos mitades obligaría a buscar en dos sitios la misma conversación.
+  documents: 'billing',
   gmail: 'comms',
   actions: 'comms',
   outlook: 'comms',
@@ -438,11 +511,18 @@ const FAMILY_GROUP: Record<string, string> = {
   // truck off the road, and the person who cares about one cares about the
   // other. The watcher being automatic is an implementation detail to them.
   commitments: 'vehicles',
+  // Los trámites aprendidos van donde el nombre del grupo ya los prometía. En
+  // «Información pública» eran una mentira de dos filas: `browser.submit_flow`
+  // radica algo en un portal con la clave de la empresa, que es lo contrario de
+  // «lo único que no toca nada interno».
+  browser: 'vehicles',
   pipeline: 'auto',
   schedule: 'auto',
-  cortex: 'auto',
+  errands: 'auto',
+  company: 'company',
+  directory: 'company',
+  cortex: 'company',
   web: 'external',
-  browser: 'external',
   security: 'control',
   // Con seguridad y no con «Escribir y responder», donde está `actions`: lo que
   // hay aquí no es algo que Cortex redactó, es algo que la barrera detuvo. Se

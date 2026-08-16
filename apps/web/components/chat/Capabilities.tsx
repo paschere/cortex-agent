@@ -7,13 +7,18 @@ import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import {
   BookOpen,
+  Boxes,
+  Building2,
   CalendarDays,
   Car,
+  Coins,
+  GitBranch,
   Globe,
   Handshake,
   Mail,
   MessagesSquare,
   Search,
+  Server,
   ShieldCheck,
   Sparkles,
   Target,
@@ -59,20 +64,37 @@ import { useMemo, useState } from 'react';
  * siendo la de siempre: aquéllos repiten lo que ya preguntaste, esto propone lo
  * que todavía no sabías que podías preguntar.
  *
- * UN DIÁLOGO Y NO UN DESPLEGABLE. Setenta y siete frases en diez familias es un
- * sitio al que se entra, no una lista que se ojea: hace falta espacio para leer
- * de qué va cada familia antes de elegir. El desplegable además roba las
- * flechas y el tabulador, y aquí hay dos columnas que recorrer.
+ * UN DIÁLOGO Y NO UN DESPLEGABLE. Ochenta frases largas en una docena de
+ * familias es un sitio al que se entra, no una lista que se ojea: hace falta
+ * espacio para leer de qué va cada familia antes de elegir. El desplegable
+ * además roba las flechas y el tabulador, y aquí hay dos columnas que recorrer.
+ *
+ * CUÁNTAS FAMILIAS CABEN. Trece, que son todas las que hay con todo conectado:
+ * cada fila del índice mide 36px y la columna tiene 476 disponibles. Medido en
+ * pantalla al añadir «Cartera y papeles» y «Tu empresa». Si algún día entra la
+ * decimoséptima, el índice empieza a hacer scroll y hay que repensarlo — no
+ * añadir la fila y confiar en que se vea.
  */
 
+/**
+ * Sólo hacen falta los iconos de los GRUPOS —la puerta no dibuja familias—,
+ * pero tienen que estar TODOS: un nombre que falte cae a `Wrench` en silencio,
+ * y así llevaban «Tus servidores MCP» (`Server`) y «Herramientas propias»
+ * (`Boxes`) dibujadas con una llave inglesa desde que se abrió la puerta.
+ */
 const ICONS: Record<string, typeof Wrench> = {
   BookOpen,
+  Boxes,
+  Building2,
   CalendarDays,
   Car,
+  Coins,
+  GitBranch,
   Globe,
   Handshake,
   Mail,
   MessagesSquare,
+  Server,
   ShieldCheck,
   Target,
   Wallet,
@@ -133,7 +155,7 @@ export function Capabilities({
 
   /**
    * BUSCAR ATRAVIESA LAS FAMILIAS. Quien escribe «cliente» no sabe —ni tiene
-   * por qué saber— en cuál de las diez lo guardamos, así que el filtro mira
+   * por qué saber— en cuál de todas lo guardamos, así que el filtro mira
    * todas y las que se quedan sin coincidencias desaparecen del índice en vez
    * de quedarse ahí para ser pulsadas y no dar nada.
    *
@@ -263,7 +285,7 @@ export function Capabilities({
             </p>
           ) : (
             <div className="flex min-h-0 flex-1">
-              {/* EL ÍNDICE. Diez familias es demasiado para una rejilla de
+              {/* EL ÍNDICE. Una docena de familias es demasiado para una rejilla de
                   tarjetas —se convierte en una pared que hay que leer entera—
                   y muy poco para un buscador solo. Una columna se recorre con
                   la vista de arriba abajo en un segundo. */}
