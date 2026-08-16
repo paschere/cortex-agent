@@ -361,7 +361,26 @@ export function EmptyState({
     // lados — o sea, deja la marca y el titular por encima del borde superior,
     // donde no se puede llegar con el dedo. En un teléfono con seis tarjetas eso
     // pasa. `safe` centra sólo mientras quepa y a partir de ahí ancla arriba.
-    <div className="chat-sky relative flex flex-1 flex-col items-center px-4 py-8 text-center [justify-content:safe_center] sm:px-6 sm:py-10">
+    /*
+      ANCLADO ABAJO, NO CENTRADO. Y `chat-sky` se fue.
+
+      Centrado dejaba ~350px de vacío entre la última tarjeta y el compositor:
+      en una pantalla de 900px el contenido flotaba en mitad de la nada y la
+      caja de texto —lo único que alguien va a tocar aquí— quedaba huérfana al
+      fondo. El recorrido correcto de la vista es marca → titular → sugerencias
+      → escribir, y termina donde se escribe: así que el bloque se apoya en el
+      compositor en vez de flotar lejos de él.
+
+      `safe flex-end` y no `flex-end` a secas, por la misma razón por la que
+      antes era `safe center`: cuando el contenido no cabe —seis tarjetas en un
+      teléfono— un anclaje normal empuja la marca por encima del borde del
+      scroll, donde no se llega. `safe` ancla al principio en cuanto desborda.
+
+      Y `chat-sky` sobraba: era un tercer lavado de índigo encima de la luz de
+      `AmbientField`, en la misma pantalla y del mismo color. Dos gradientes
+      superpuestos no son el doble de atmósfera, son barro.
+    */
+    <div className="relative flex flex-1 flex-col items-center px-4 pb-6 pt-8 text-center [justify-content:safe_flex-end] sm:px-6 sm:pt-10">
       <div className="animate-rise mb-7 flex flex-col items-center">
         <Mark />
         <h2 className="mt-5 text-balance text-lg font-bold tracking-tight text-ink sm:text-xl">
@@ -390,7 +409,19 @@ export function EmptyState({
         </p>
       ) : null}
 
-      <div className="grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
+      {/*
+        UNA COLUMNA CUANDO SON LOS PRIMEROS PASOS, DOS CUANDO SON SUGERENCIAS.
+
+        Los primeros pasos son TRES, y tres en una rejilla de dos columnas deja
+        una huérfana sola a la izquierda con un hueco al lado — que no se lee
+        como «tres cosas», se lee como una tarjeta que no cargó. Además no son
+        alternativas entre las que elegir una: son tres cosas que hay que hacer,
+        y una columna es la forma de una lista de tareas.
+
+        Las sugerencias sí son alternativas —eliges una y descartas cinco— y
+        para eso la rejilla es correcta; ahí el huérfano ya lo resuelve `wide`.
+      */}
+      <div className={`grid w-full max-w-3xl grid-cols-1 gap-2 ${blank ? '' : 'sm:grid-cols-2'}`}>
         {blank
           ? (data?.firstSteps ?? []).map((step, i) => (
               <FirstStepCard key={step.id} step={step} index={i} />

@@ -1,8 +1,5 @@
 'use client';
 
-import { clsx } from 'clsx';
-import type { CSSProperties } from 'react';
-
 /**
  * EL FONDO DE LA PANTALLA EN BLANCO, Y DE NINGUNA OTRA.
  *
@@ -62,28 +59,6 @@ import type { CSSProperties } from 'react';
  * queda un degradado quieto, que es lo que ya era sin moverse.
  */
 
-/**
- * La malla: dos juegos de líneas de un píxel, desvanecidos hacia los bordes.
- *
- * Es lo que hace que esto se lea como un instrumento y no como una acuarela.
- * Al 5% del token `primary`, que es el umbral por debajo del cual una malla se
- * percibe como textura del papel en vez de como una cuadrícula que se puede
- * contar.
- *
- * La máscara elíptica es obligatoria, no un acabado. Una malla que llega al
- * borde de la pantalla dice «aquí termina el lienzo» y convierte el fondo en un
- * objeto; desvanecida, la habitación no tiene paredes visibles.
- */
-const MESH: CSSProperties = {
-  backgroundImage: [
-    'linear-gradient(to right, rgb(var(--primary) / 0.05) 1px, transparent 1px)',
-    'linear-gradient(to bottom, rgb(var(--primary) / 0.05) 1px, transparent 1px)',
-  ].join(','),
-  backgroundSize: '46px 46px',
-  WebkitMaskImage: 'radial-gradient(ellipse 78% 62% at 50% 38%, #000 25%, transparent 78%)',
-  maskImage: 'radial-gradient(ellipse 78% 62% at 50% 38%, #000 25%, transparent 78%)',
-};
-
 export function AmbientField({
   /**
    * `open` es la pantalla en blanco. Cualquier otra cosa no dibuja nada, y ése
@@ -107,46 +82,44 @@ export function AmbientField({
       className="pointer-events-none absolute inset-0 overflow-hidden"
     >
       {/*
-        LA AURORA, AL FONDO DEL TODO.
+        UNA SOLA LUZ, Y NADA MÁS.
 
-        Un cónico enorme girando cuarenta segundos por vuelta y desenfocado
-        hasta que no queda ni una transición dura. Es la capa que separa
-        «moderno» de «tenía un degradado»: un cónico cambia de color según el
-        ángulo, así que al girar la luz cambia de TONO POR ZONAS en vez de
-        desplazarse — que es lo que hace un cielo y no hace un foco. Una vuelta
-        entera dura más que esta pantalla, así que nadie llega a ver que gira.
+        =====================================================================
+        LO QUE HABÍA AQUÍ Y POR QUÉ SE FUE
+        =====================================================================
+        Había cuatro capas: una aurora cónica girando, una malla de líneas de
+        un píxel, un barrido inclinado que cruzaba cada diecinueve segundos y
+        tres manchas a la deriva. Cada una tenía su argumento y el conjunto
+        estaba mal — lo dijo el dueño al verlo y tenía razón: en pantalla, una
+        malla con un lavado azul degradado ES el fondo genérico de cualquier
+        SaaS de 2015. No importa que la malla se llamara «instrumento» en un
+        comentario; lo que llega a los ojos es la plantilla.
+
+        Y era el único sitio del producto donde se gastaba atrevimiento en algo
+        que nadie usa. Esta pantalla existe para que alguien escriba la primera
+        pregunta: todo lo que compita con esa caja de texto está de más.
+
+        Queda UNA luz difusa arriba, del color del producto, que se mueve tan
+        despacio que no se percibe como movimiento sino como que la habitación
+        cambió mientras mirabas. Es lo mínimo que distingue «hay alguien aquí»
+        de «esto está apagado», y no dibuja ninguna forma que se pueda seguir
+        con la vista.
+
+        (Chanel: antes de salir de casa, mírate al espejo y quítate un
+        accesorio. Aquí sobraban tres.)
       */}
-      <div
-        className="absolute left-1/2 top-1/2 h-[160vh] w-[160vh] -translate-x-1/2 -translate-y-1/2 animate-aurora rounded-pill opacity-70 blur-[120px] will-change-transform"
-        style={{
-          background:
-            'conic-gradient(from 0deg, rgb(var(--primary) / 0.16), rgb(var(--sky) / 0.10) 90deg, rgb(var(--primary) / 0.05) 190deg, rgb(var(--sky) / 0.14) 280deg, rgb(var(--primary) / 0.16) 360deg)',
-        }}
+      <div /*
+          Y VA ABAJO, DETRÁS DEL CONTENIDO, NO ARRIBA.
+
+          Estaba en `-top-[30vh]`, iluminando el tercio superior — que en esta
+          pantalla es EXACTAMENTE la parte vacía, porque el bloque se apoya en
+          el compositor. Una luz encima de un vacío es lo que hace que algo se
+          lea como «degradado de portada»; la misma luz detrás de la marca y las
+          tarjetas se lee como que el contenido está iluminado, y deja el aire
+          de arriba como lo que es: aire.
+        */
+        className="absolute -bottom-[25vh] left-1/2 h-[80vh] w-[110vh] -translate-x-1/2 animate-drift-a rounded-pill bg-primary/[0.09] blur-[110px] will-change-transform"
       />
-
-      <div style={MESH} className="absolute inset-0" />
-
-      {/*
-        EL BARRIDO. Una banda ancha e inclinada que cruza la malla y luego se
-        ausenta casi la mitad del ciclo — un barrido continuo es un metrónomo:
-        el ojo aprende el ritmo y a partir de ahí lo espera. Es la pieza que
-        dice «esto está escaneando», que es literalmente lo que Cortex hace con
-        los correos, los contratos y las reuniones.
-      */}
-      <div className="absolute inset-y-0 left-0 w-[26%] animate-sweep bg-gradient-to-r from-transparent via-primary/[0.09] to-transparent blur-2xl will-change-transform motion-reduce:hidden" />
-
-      {/* Las tres manchas: son las que dan la sensación de que la luz entra por
-          algún sitio, y de que no es de un solo color. La tercera reutiliza el
-          recorrido de la primera con retraso y al revés — una mancha más, y ni
-          un keyframe más. */}
-      <div className={clsx('absolute inset-0 opacity-[0.75]')}>
-        <span className="absolute -left-[18%] -top-[28%] h-[62vh] w-[62vh] animate-drift-a rounded-pill bg-primary/[0.16] blur-[90px] will-change-transform" />
-        <span className="absolute -bottom-[26%] -right-[14%] h-[54vh] w-[54vh] animate-drift-b rounded-pill bg-sky/[0.14] blur-[90px] will-change-transform" />
-        <span
-          className="absolute -right-[8%] top-[22%] h-[38vh] w-[38vh] animate-drift-a rounded-pill bg-primary/[0.11] blur-[90px] will-change-transform"
-          style={{ animationDelay: '-9s', animationDirection: 'reverse' }}
-        />
-      </div>
     </div>
   );
 }

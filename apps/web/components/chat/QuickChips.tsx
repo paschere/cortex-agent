@@ -46,7 +46,24 @@ export function QuickChips({
       // biome-ignore lint/a11y/useSemanticElements: `role="group"` con nombre es lo que es — un puñado de botones emparentados. `<fieldset>` es de un formulario y aquí no se rellena nada.
       role="group"
       aria-label="Lo que más preguntas"
-      className="scroll-slim mb-2 flex items-center gap-1.5 overflow-x-auto pb-0.5"
+      /*
+        EL BORDE SE DESVANECE, PARA QUE EL CORTE SIGNIFIQUE «HAY MÁS».
+
+        Esta fila siempre ha scrolleado, pero en pantalla el último chip se
+        cortaba a media palabra contra un borde duro — «¿Qué» y se acabó. Un
+        recorte limpio no se lee como «sigue a la derecha», se lee como un
+        elemento roto, y nadie arrastra algo que cree que está mal dibujado.
+
+        Se resuelve con una máscara y no con un degradado encima: un degradado
+        tendría que pintar el color del fondo, y aquí detrás hay una luz que se
+        mueve — cualquier color fijo se vería como un parche. La máscara borra,
+        así que funciona sobre lo que sea que haya debajo.
+
+        Sólo se desvanece la derecha: a la izquierda no hay nada que insinuar
+        hasta que se arrastra, y `mask-image` con dos extremos recortaría el
+        primer chip desde el primer momento, que es peor que el problema.
+      */
+      className="scroll-slim mb-2 flex items-center gap-1.5 overflow-x-auto pb-0.5 [mask-image:linear-gradient(to_right,#000_calc(100%_-_2.5rem),transparent)]"
     >
       {shortcuts.map((shortcut) => (
         <button
