@@ -25,11 +25,14 @@
 
 FROM debian:bookworm-slim
 
-ARG POSTGREST_VERSION=v12.2.8
+# La 12.2.x es la serie que corre Supabase hoy: mismo dialecto exacto que las
+# queries del producto llevan años ejercitando. Subir de major es una decisión
+# aparte, con sus release notes leídas — no un efecto colateral de un deploy.
+ARG POSTGREST_VERSION=v12.2.12
 ARG TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates xz-utils \
-  && ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "ubuntu-aarch64" || echo "linux-static-x64") \
+  && ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "ubuntu-aarch64" || echo "linux-static-x86-64") \
   && curl -fsSL -o /tmp/pgrst.tar.xz \
     "https://github.com/PostgREST/postgrest/releases/download/${POSTGREST_VERSION}/postgrest-${POSTGREST_VERSION}-${ARCH}.tar.xz" \
   && tar -xJf /tmp/pgrst.tar.xz -C /usr/local/bin postgrest \
