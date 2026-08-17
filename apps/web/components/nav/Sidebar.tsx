@@ -25,7 +25,7 @@ import {
 } from '@/lib/nav-usage';
 import { type PanelId, panelForHref } from '@/lib/panels/shape';
 import { waitingTotal } from '@/lib/waiting-shape';
-import type { Role } from '@cortex/core';
+import type { ActiveOrganization, Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
@@ -34,6 +34,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useId, useState } from 'react';
 import { useCommandMenu } from './CommandMenuContext';
 import { useMobileSidebar } from './MobileSidebarContext';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 // CORTO ARRIBA, COMPLETO DEBAJO.
 //
@@ -690,14 +691,51 @@ function SidebarNav({
  */
 function SidebarFooter({
   collapsed,
+  organization,
+  onWorkspaceMenu,
   onNavigate,
 }: {
   collapsed: boolean;
+  /**
+   * El espacio de trabajo activo, para el selector. Opcional porque llega
+   * desde el layout y no todo el que dibuje un rail tiene por qué tener una
+   * sesión resuelta en la mano; sin él, el pie es el de siempre.
+   */
+  organization?: ActiveOrganization;
+  /** Que el selector tiene el menú abierto. Sólo le importa al rail del chat. */
+  onWorkspaceMenu?: (open: boolean) => void;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   return (
     <div className="shrink-0 border-t border-rail-border px-3 pb-3 pt-2">
+      {/*
+        EL SELECTOR DE ESPACIO VA AQUÍ, Y SE ELIGIÓ CONTRA DOS ALTERNATIVAS.
+
+        · NO EN `Topbar`, que era el sitio evidente: la barra superior no se
+          monta en `/chat` (ver `AppShell`), y el chat es la pantalla principal
+          del producto. Un selector que no existe en la pantalla donde se pasa
+          el día no es un selector.
+        · NO ARRIBA, junto a la marca: esa cabecera es «Cortex», la identidad
+          del producto, y el nombre del inquilino compitiendo con ella a la
+          misma altura convierte dos cosas distintas en una sola columna de
+          nombres. Además comparte fila con el botón de contraer.
+
+        Aquí, en cambio, está FUERA de la zona que scrollea —igual que Plan y
+        Ajustes, y por la misma razón: «¿en qué empresa estoy?» tiene que poder
+        contestarse sin mover nada— y al lado de las otras dos filas que hablan
+        de este espacio y no del producto. Contraído se queda en la inicial,
+        que es lo mismo que hacen las demás filas con su icono.
+      */}
+      {organization && (
+        <div className="pb-2">
+          <WorkspaceSwitcher
+            active={organization}
+            collapsed={collapsed}
+            onOpenChange={onWorkspaceMenu}
+          />
+        </div>
+      )}
       <div className="flex flex-col gap-px">
         {FOOTER.map((item) => (
           <NavRow
@@ -722,10 +760,13 @@ function SidebarFooter({
 export function Sidebar({
   role,
   counts = NO_COUNTS,
+  organization,
 }: {
   role?: Role;
   /** What is waiting on this person, counted by the layout that renders us. */
   counts?: NavCounts;
+  /** El espacio de trabajo activo. Baja hasta el pie, donde está el selector. */
+  organization?: ActiveOrganization;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   // The preference arrives after hydration, so the width animation stays off
@@ -772,6 +813,18 @@ export function Sidebar({
   const inChat = pathname.startsWith('/chat');
   const [peeking, setPeeking] = useState(false);
   /**
+   * El menú del espacio de trabajo, abierto.
+   *
+   * Cuenta como «asomado» aunque el ratón ya no esté encima: el desplegable se
+   * dibuja en un portal FUERA del rail, así que ir hacia él dispara el
+   * `onMouseLeave` de la columna y, sin esto, el rail se encogía debajo de su
+   * propio menú —dejando el nombre del inquilino tapado justo mientras alguien
+   * elige a cuál irse—. No toca `peeking`, que sigue siendo sólo lo que dice el
+   * ratón: al cerrarse el menú, la columna se queda abierta si el cursor volvió
+   * a entrar y se cierra si no.
+   */
+  const [workspaceMenu, setWorkspaceMenu] = useState(false);
+  /**
    * En el chat: ancho si cabe Y SI NO LO CERRASTE. Fuera del chat manda la
    * preferencia, como siempre.
    *
@@ -788,7 +841,7 @@ export function Sidebar({
    * la ventana revoque un clic— es lo que acaba de pasar.
    */
   const narrow = inChat || collapsed;
-  const expanded = inChat ? peeking : !collapsed;
+  const expanded = inChat ? peeking || workspaceMenu : !collapsed;
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSE_KEY) === 'true');
@@ -839,7 +892,7 @@ export function Sidebar({
                   'absolute inset-y-0 left-0 z-40',
                   hydrated &&
                     'transition-[width,box-shadow] duration-200 motion-reduce:transition-none',
-                  peeking ? 'w-[260px] shadow-pop' : 'w-[56px]',
+                  expanded ? 'w-[260px] shadow-pop' : 'w-[56px]',
                 )
               : 'w-full',
           )}
@@ -875,7 +928,11 @@ export function Sidebar({
           <div className="min-h-0 flex-1">
             <SidebarNav role={role} collapsed={!expanded} counts={counts} />
           </div>
-          <SidebarFooter collapsed={!expanded} />
+          <SidebarFooter
+            collapsed={!expanded}
+            organization={organization}
+            onWorkspaceMenu={setWorkspaceMenu}
+          />
         </div>
       </aside>
 
@@ -903,7 +960,7 @@ export function Sidebar({
                   which is what the disclosure buttons used to break. */}
               <SidebarNav role={role} collapsed={false} counts={counts} onNavigate={closeDrawer} />
             </div>
-            <SidebarFooter collapsed={false} onNavigate={closeDrawer} />
+            <SidebarFooter collapsed={false} organization={organization} onNavigate={closeDrawer} />
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

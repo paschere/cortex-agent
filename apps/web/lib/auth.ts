@@ -3,6 +3,7 @@ import { betterAuth } from 'better-auth';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { Pool } from 'pg';
 import { sendEmail } from './email';
+import { WORKSPACE_LIMIT } from './workspace-limits';
 
 /**
  * Server-side better-auth instance — Cortex SaaS edition.
@@ -230,7 +231,7 @@ export const auth = betterAuth({
         member: { modelName: 'ba_member' },
         invitation: { modelName: 'ba_invitation' },
       },
-      organizationLimit: 5,
+      organizationLimit: WORKSPACE_LIMIT,
       membershipLimit: 100,
       invitationExpiresIn: 60 * 60 * 48, // 48 hours
       sendInvitationEmail: async (data) => {

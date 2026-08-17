@@ -9,6 +9,16 @@ import { useState, useTransition } from 'react';
 /**
  * Inviting the rest of the company, from inside the product.
  *
+ * VIVE AQUÍ Y NO EN `onboarding/_components/` PORQUE INVITAR NO ES UN PASO DEL
+ * ARRANQUE. Mientras vivió allí, el formulario sólo existía mientras el paso
+ * «trae a tu equipo» estuviera sin hacer: en cuanto entraba la segunda persona,
+ * la única forma de invitar a la tercera desaparecía del producto entero, y
+ * /plan lo tapaba con un enlace de vuelta al onboarding. Una carpeta `_components`
+ * es privada por convención y no se importa desde otra ruta, así que la mudanza
+ * es lo que permite que esto salga también en «Personas», que es donde alguien
+ * va cuando quiere agregar a alguien. El componente no cambió: cinco props
+ * puras, y la comprobación de asientos sigue siendo de la ruta.
+ *
  * There was no way to do this anywhere in Cortex before now: better-auth has had
  * `inviteMember` and an invitation email wired since migration 0052, and nothing
  * ever called it — so "invita a tu equipo" was a sentence on the signup screen
@@ -140,9 +150,8 @@ export function InviteTeam({
 
       {sent.length > 0 && (
         <p className="mt-2 text-xs text-emerald">
-          Invitación enviada a{' '}
-          <span className="font-mono">{sent[sent.length - 1]}</span>. Le llega un enlace que dura
-          48 horas.
+          Invitación enviada a <span className="font-mono">{sent[sent.length - 1]}</span>. Le llega
+          un enlace que dura 48 horas.
         </p>
       )}
       {err && <p className="mt-2 text-xs leading-relaxed text-rose">{err}</p>}

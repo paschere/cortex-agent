@@ -103,8 +103,8 @@ function MeterBlock({ entitlement }: { entitlement: Entitlement }) {
           again. */}
       {limit !== null && perSeat !== null && (
         <p className="tabular mt-2 text-xs text-ink-faint">
-          {count(perSeat)} por persona × {count(seats)}{' '}
-          {seats === 1 ? 'persona' : 'personas'} = {count(limit)}
+          {count(perSeat)} por persona × {count(seats)} {seats === 1 ? 'persona' : 'personas'} ={' '}
+          {count(limit)}
         </p>
       )}
 
@@ -157,6 +157,9 @@ export default async function PlanPage({
   ]);
 
   const { plan, seats } = usage;
+  // Invitar y ver los pendientes es de quien administra el espacio; ver la
+  // cuenta del mes es de todo el equipo. Ver la nota del pie del panel de abajo.
+  const canManageTeam = user.role === 'org_admin';
   const unlimited = plan.perSeat.answers === null && plan.perSeat.documents === null;
   const others = plans.filter((p) => p.selfServe && p.code !== plan.code);
   // The three reasons the billing basis can be above today's headcount, said in
@@ -191,7 +194,9 @@ export default async function PlanPage({
           icon={<Receipt className="h-4 w-4" />}
           right={
             plan.priceCopPerSeat > 0 ? (
-              <span className="tabular text-ink">{cop(plan.priceCopPerSeat)} por persona / mes</span>
+              <span className="tabular text-ink">
+                {cop(plan.priceCopPerSeat)} por persona / mes
+              </span>
             ) : unlimited ? (
               'Acordado contigo'
             ) : (
@@ -237,9 +242,7 @@ export default async function PlanPage({
             </div>
           )}
 
-          {seatNote && (
-            <p className="mt-2 text-xs leading-relaxed text-ink-muted">{seatNote}</p>
-          )}
+          {seatNote && <p className="mt-2 text-xs leading-relaxed text-ink-muted">{seatNote}</p>}
 
           {/* Said plainly, because the public page says it plainly too. */}
           {plan.priceCopPerSeat > 0 && (
@@ -277,20 +280,52 @@ export default async function PlanPage({
             <MeterBlock key={meter} entitlement={usage.meters[meter]} />
           ))}
         </div>
+        {/*
+          EL ENLACE APUNTABA A /onboarding, Y ERA UN PARCHE.
+
+          Invitar sólo existía como paso del arranque, y ese paso se da por hecho
+          en cuanto entra la segunda persona: quien pulsaba aquí llegaba a una
+          pantalla donde el formulario ya no estaba. Ahora invitar vive en
+          «Personas», junto a la gente y junto a la lista de pendientes.
+
+          Y los pendientes se enlazan en vez de repetirse: esta pantalla dice
+          CUÁNTOS ocupan asiento, que es lo suyo, y quién es cada uno se ve
+          —y se cancela— donde se administra la gente.
+
+          Sólo para quien administra: /plan lo ve todo el equipo y /admin/users
+          responde 404 a los demás (admin/layout.tsx). Un enlace que lleva a una
+          pantalla que no existe para ti es peor que no ofrecer nada.
+        */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-3.5">
           <div className="flex items-center gap-2 text-xs text-ink-muted">
             <Users className="h-3.5 w-3.5 text-ink-faint" />
             <span className="tabular text-ink">{count(seats.members)}</span> personas
             {seats.pending > 0 && (
               <span className="text-ink-faint">
-                (<span className="tabular">{count(seats.pending)}</span> por aceptar la invitación,
-                que todavía no suman cupo)
+                (
+                {canManageTeam ? (
+                  <Link href="/admin/users" className="text-primary hover:underline">
+                    <span className="tabular">{count(seats.pending)}</span> por aceptar la
+                    invitación
+                  </Link>
+                ) : (
+                  <>
+                    <span className="tabular">{count(seats.pending)}</span> por aceptar la
+                    invitación
+                  </>
+                )}
+                : ocupan asiento y todavía no suman cupo)
               </span>
             )}
           </div>
-          <Link href="/onboarding" className="text-xs font-semibold text-primary hover:underline">
-            Invitar a alguien
-          </Link>
+          {canManageTeam && (
+            <Link
+              href="/admin/users"
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              Invitar a alguien
+            </Link>
+          )}
         </div>
       </Panel>
 
@@ -378,7 +413,10 @@ export default async function PlanPage({
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {others.map((other) => (
-                <div key={other.code} className="rounded-card border border-border bg-surface-2 p-4">
+                <div
+                  key={other.code}
+                  className="rounded-card border border-border bg-surface-2 p-4"
+                >
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-sm font-semibold text-ink">{other.name}</span>
                     <span className="tabular text-sm text-ink">

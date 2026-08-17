@@ -1,11 +1,8 @@
+import { InviteTeam } from '@/components/team/InviteTeam';
 import { PageHeader } from '@/components/ui/page-header';
 import { IconChip, Panel, PanelHead } from '@/components/ui/panel';
 import { reviewGuidedSetup } from '@/lib/guided-setup/store';
-import {
-  GOAL_FIRST_QUESTION,
-  type OnboardingGoal,
-  type OnboardingStepId,
-} from '@/lib/plan-shape';
+import { GOAL_FIRST_QUESTION, type OnboardingGoal, type OnboardingStepId } from '@/lib/plan-shape';
 import { requireSession } from '@/lib/session';
 import { chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -25,7 +22,6 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { DismissGuide } from './_components/DismissGuide';
 import { GoalPicker } from './_components/GoalPicker';
-import { InviteTeam } from './_components/InviteTeam';
 
 export const dynamic = 'force-dynamic';
 
@@ -168,9 +164,9 @@ export default async function OnboardingPage() {
           <Panel className="border-primary/20 bg-primary-soft/40 p-4">
             <p className="text-sm leading-relaxed text-primary-ink">
               Ahora mismo Cortex no sabe nada de{' '}
-              <span className="font-semibold">{user.organization.name}</span>. No es que esté
-              vacío el panel: es que todavía no le has dado de dónde responder. Los dos primeros
-              pasos de abajo lo arreglan.
+              <span className="font-semibold">{user.organization.name}</span>. No es que esté vacío
+              el panel: es que todavía no le has dado de dónde responder. Los dos primeros pasos de
+              abajo lo arreglan.
             </p>
           </Panel>
         )}
@@ -323,8 +319,8 @@ export default async function OnboardingPage() {
                 </div>
                 <p className="mt-2 text-xs leading-relaxed text-ink-muted">
                   Cuéntale cómo trabajan — qué se les vence, qué revisan cada semana, qué
-                  procedimiento siguen — y te propone qué dejar configurado. Nada se crea sin que
-                  lo apruebes, y todo se puede deshacer.
+                  procedimiento siguen — y te propone qué dejar configurado. Nada se crea sin que lo
+                  apruebes, y todo se puede deshacer.
                 </p>
               </div>
               <Link
@@ -343,13 +339,10 @@ export default async function OnboardingPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5 pt-3">
           <p className="max-w-xl text-xs leading-relaxed text-ink-muted">
             Estás en el plan <span className="font-semibold text-ink">{plan.name}</span>. Se mide
-            por respuestas y documentos, no por tokens, y puedes ver de dónde sale cada cifra
-            cuando quieras.
+            por respuestas y documentos, no por tokens, y puedes ver de dónde sale cada cifra cuando
+            quieras.
           </p>
-          <Link
-            href="/plan"
-            className="text-xs font-semibold text-primary hover:underline"
-          >
+          <Link href="/plan" className="text-xs font-semibold text-primary hover:underline">
             Ver plan y consumo
           </Link>
         </div>

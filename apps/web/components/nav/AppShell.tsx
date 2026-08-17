@@ -57,7 +57,11 @@ export async function AppShell({
       <CommandMenuProvider role={user.role}>
         <PanelProvider>
           <div className="flex h-screen overflow-hidden bg-canvas">
-            <Sidebar role={user.role} counts={counts} />
+            {/* `user.organization` baja hasta el pie del rail para que el
+                selector de espacio pinte el nombre con el HTML y no medio
+                segundo después: el shell ya lo sabe, y el dato de en qué
+                empresa estás no puede llegar más tarde que sus cifras. */}
+            <Sidebar role={user.role} counts={counts} organization={user.organization} />
             {children}
             <PanelHost />
           </div>

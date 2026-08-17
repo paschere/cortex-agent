@@ -1,16 +1,28 @@
-import Link from 'next/link';
-import { clsx } from 'clsx';
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
-import { revalidatePath } from 'next/cache';
-import { ChevronRight, Flag, Users } from 'lucide-react';
+import { InviteTeam } from '@/components/team/InviteTeam';
+import { PendingInvitations } from '@/components/team/PendingInvitations';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
+import { Panel, PanelHead } from '@/components/ui/panel';
 import { relativeTime } from '@/lib/relative-time';
-import { managerMapOf, setManager, wouldCycle } from '@cortex/agent-tools';
+import { requireSession } from '@/lib/session';
+import { mustReadList } from '@/lib/supabase/read';
+import { getOrgScopedClient } from '@/lib/supabase/service';
+import { listPendingInvitations } from '@/lib/team/invitations';
+import {
+  managerMapOf,
+  readSeats,
+  readWorkspacePlan,
+  setManager,
+  wouldCycle,
+} from '@cortex/agent-tools';
+import { clsx } from 'clsx';
+import { ChevronRight, Flag, UserPlus, Users } from 'lucide-react';
+import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
 import { absoluteTime } from '../audit/_components/format';
-import { AUDIT_ROW_CAP, fetchRosterActivity, rosterFor, WINDOW_DAYS } from './_lib/user-activity';
+import { countdown } from './_lib/countdown';
+import { AUDIT_ROW_CAP, WINDOW_DAYS, fetchRosterActivity, rosterFor } from './_lib/user-activity';
+import { cancelInvitationAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,13 +97,32 @@ export default async function UsersPage() {
   const user = await requireSession();
   const sb = getOrgScopedClient(user.organization.id);
 
-  // Two reads for the whole roster — never one per user. See _lib/user-activity.
-  const [{ data }, activity] = await Promise.all([
+  /**
+   * INVITAR VIVE AQUÍ DESDE AHORA, Y NO SÓLO EN EL ONBOARDING.
+   *
+   * Antes el formulario salía únicamente mientras el paso «trae a tu equipo»
+   * estuviera sin hacer, así que en cuanto entraba la segunda persona la única
+   * forma de invitar a la tercera desaparecía del producto entero. Ésta es la
+   * pantalla donde está la gente, así que es donde se agrega gente.
+   *
+   * Los asientos son los de verdad —`readSeats`, el mismo cálculo que defiende
+   * `POST /api/team/invite`— y no una cuenta aparte: un formulario que dice que
+   * caben tres personas y una ruta que rechaza la segunda es peor que no decir
+   * nada.
+   */
+  const { plan, contractedSeats } = await readWorkspacePlan(sb);
+
+  // Cuatro lecturas para toda la pantalla, nunca una por persona. Ver _lib/user-activity.
+  const [roster, activity, seats, invitations] = await Promise.all([
     sb.from('users').select('id, email, name, role, manager_id, created_at').order('created_at'),
     fetchRosterActivity(sb),
+    readSeats(sb, user.organization.id, plan, contractedSeats),
+    listPendingInvitations(sb, user.organization.id),
   ]);
 
-  const users: User[] = (data ?? []) as User[];
+  // `mustReadList` y no `?? []`: con el estado vacío reescrito abajo, una base
+  // caída diría «todavía no hay nadie registrado» en un espacio lleno de gente.
+  const users: User[] = mustReadList<User>(roster, 'las personas de este espacio');
   const managers = managerMapOf(users.map((u) => ({ id: u.id, managerId: u.manager_id })));
   const label = (u: User) => u.name?.trim() || u.email;
   const unmanaged = users.filter((u) => !u.manager_id).length;
@@ -115,17 +146,76 @@ export default async function UsersPage() {
     <>
       <PageHeader
         title="Personas"
-        subtitle={`${users.length} en la organización · ${activeCount} con actividad en los últimos ${WINDOW_DAYS} días`}
+        subtitle={`${users.length} en la organización · ${activeCount} con actividad en los últimos ${WINDOW_DAYS} días${
+          invitations.length > 0
+            ? ` · ${invitations.length} ${invitations.length === 1 ? 'invitación' : 'invitaciones'} sin aceptar`
+            : ''
+        }`}
         icon={<Users className="h-5 w-5" />}
       />
+
+      <Panel className="mb-5">
+        <PanelHead title="Invitar a alguien" icon={<UserPlus className="h-4 w-4" />} />
+        <div className="px-5 pb-5 pt-3">
+          <InviteTeam
+            seatsUsed={seats.used}
+            seatsMaximum={seats.maximum}
+            perSeatAnswers={plan.perSeat.answers}
+            priceCopPerSeat={plan.priceCopPerSeat}
+            canInvite={user.role === 'org_admin'}
+          />
+        </div>
+
+        {/*
+          Las pendientes van pegadas al formulario y no en un panel aparte porque
+          son su consecuencia: lo que acabas de enviar sale justo debajo, y el
+          asiento que ocupa se ve en la misma cifra de arriba.
+        */}
+        <div className="border-t border-border">
+          <div className="flex items-baseline justify-between gap-3 px-5 pt-3.5">
+            <span className="text-xs font-semibold text-ink">Invitaciones pendientes</span>
+            {invitations.length > 0 && (
+              <span className="tabular text-micro text-ink-faint">
+                {invitations.length} en espera
+              </span>
+            )}
+          </div>
+          <PendingInvitations
+            cancelInvitation={cancelInvitationAction}
+            invitations={invitations.map((invitation) => ({
+              id: invitation.id,
+              email: invitation.email,
+              role: invitation.role,
+              expired: invitation.expired,
+              // `countdown` ya dice «vencido» sola cuando la fecha pasó; el
+              // prefijo se pone sólo cuando todavía falta, para que la vencida
+              // no se lea «vence vencido».
+              expiresLabel: invitation.expired
+                ? 'vencida'
+                : `vence ${countdown(invitation.expiresAt)}`,
+              expiresTitle: absoluteTime(invitation.expiresAt),
+            }))}
+          />
+        </div>
+      </Panel>
 
       <Panel className="overflow-hidden">
         {users.length === 0 ? (
           <div className="px-4 py-12 text-center">
             <Users className="mx-auto mb-3 h-6 w-6 text-ink-faint" />
             <p className="text-sm font-semibold text-ink">Todavía no hay nadie registrado</p>
+            {/*
+              LO QUE DECÍA ANTES ERA FALSO: «las personas aparecen aquí la primera
+              vez que entran a Cortex con su cuenta de Google». Ni es la única
+              forma de entrar —hay correo y contraseña— ni es la que trae a nadie
+              a ESTE espacio: quien se registra por su cuenta crea el suyo. A este
+              espacio se entra aceptando una invitación, que es justo lo que hay
+              en el panel de arriba. Un estado vacío que explica mal cómo se llena
+              deja a alguien esperando algo que no va a pasar solo.
+            */}
             <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
-              Las personas aparecen aquí la primera vez que entran a Cortex con su cuenta de Google.
+              A este espacio se entra por invitación. Escribe un correo arriba: le llega un enlace
+              que dura 48 horas y, en cuanto lo acepte, la persona aparece en esta tabla.
             </p>
           </div>
         ) : (

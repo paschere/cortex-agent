@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import type { ActiveOrganization, OrgRole } from '@cortex/core';
 import { pool } from './auth';
+import { WORKSPACE_LIMIT } from './workspace-limits';
 
 /**
  * Workspace resolution for the multi-tenant surface.
@@ -139,7 +140,8 @@ async function createWorkspace(
   const tieBreak = createHash('sha256').update(baUserId).digest('hex');
 
   for (let attempt = 0; attempt < 4; attempt++) {
-    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${tieBreak.slice(attempt * 6, attempt * 6 + 6)}`;
+    const slug =
+      attempt === 0 ? baseSlug : `${baseSlug}-${tieBreak.slice(attempt * 6, attempt * 6 + 6)}`;
     const { rows } = await pool.query<{ id: string; slug: string | null }>(
       `insert into public.ba_organization (id, name, slug, "createdAt")
        values ($1, $2, $3, now())
@@ -228,10 +230,10 @@ export async function setActiveOrganization(
 ): Promise<ActiveOrganization | null> {
   const membership = await findMembership(baUserId, organizationId);
   if (!membership) return null;
-  await pool.query(
-    `update public.ba_session set "activeOrganizationId" = $2 where "userId" = $1`,
-    [baUserId, organizationId],
-  );
+  await pool.query(`update public.ba_session set "activeOrganizationId" = $2 where "userId" = $1`, [
+    baUserId,
+    organizationId,
+  ]);
   return membership;
 }
 
@@ -246,4 +248,62 @@ export async function listMemberships(baUserId: string): Promise<ActiveOrganizat
     [baUserId],
   );
   return rows.map(toActiveOrganization);
+}
+
+/**
+ * Un espacio de trabajo MÁS, creado a propósito.
+ *
+ * ===========================================================================
+ * POR QUÉ NO SIRVE `createWorkspace`
+ * ===========================================================================
+ * Aquella deriva el id de un hash del id de cuenta (`firstWorkspaceId`) y eso no
+ * es un detalle: es lo que convierte la carrera de la primera petición —una
+ * cuenta nueva dispara la página, sus datos y una precarga a la vez, y las tres
+ * encuentran «sin membresía»— en una sola fila. Con ids aleatorios, cada una
+ * ganaba su propio INSERT y la cuenta terminaba con tres espacios idénticos.
+ * Observado, no hipotético.
+ *
+ * Aquí la carrera no existe: no hay tres peticiones concurrentes descubriendo lo
+ * mismo, hay una persona que escribió un nombre y pulsó un botón. Un id derivado
+ * sería justo lo contrario de lo que hace falta —sólo permitiría UNO— así que
+ * este camino usa un id aleatorio, y por eso está separado en vez de ser una
+ * bandera del otro.
+ *
+ * El tope se comprueba aquí y no sólo en better-auth porque la respuesta tiene
+ * que ser una frase en español que diga cuántos hay y cuántos caben, no un error
+ * de librería. Se comprueba ANTES de escribir nada.
+ */
+export async function createAdditionalWorkspace(
+  baUserId: string,
+  name: string,
+): Promise<{ ok: true; workspace: ActiveOrganization } | { ok: false; reason: 'limit' }> {
+  const mine = await listMemberships(baUserId);
+  if (mine.length >= WORKSPACE_LIMIT) return { ok: false, reason: 'limit' };
+
+  const workspaceName = name.trim().slice(0, 120) || 'Espacio sin nombre';
+  const baseSlug = slugify(workspaceName);
+  const orgId = randomUUID();
+
+  // Los slugs son únicos en TODA la instalación, así que dos empresas que se
+  // llaman igual chocan. Se reintenta con sufijo aleatorio —y aquí sí puede ser
+  // aleatorio, porque no hay carrera que desempatar— y al agotarse se cae a un
+  // slug que no puede chocar, en vez de negarle a alguien su espacio por un
+  // nombre que ya usó un desconocido.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${randomUUID().slice(0, 6)}`;
+    const { rows } = await pool.query<{ id: string; slug: string | null }>(
+      `insert into public.ba_organization (id, name, slug, "createdAt")
+       values ($1, $2, $3, now())
+       on conflict do nothing
+       returning id, slug`,
+      [orgId, workspaceName, slug],
+    );
+    if (!rows[0]) continue;
+    await claimOwnership(orgId, baUserId);
+    return {
+      ok: true,
+      workspace: { id: orgId, name: workspaceName, slug: rows[0].slug, role: 'owner' },
+    };
+  }
+  throw new Error('could not create an additional workspace');
 }
