@@ -87,8 +87,7 @@ export const INDUSTRIES: readonly [Industry, ...Industry[]] = [
     answer: {
       question: '¿el WGY482 puede salir mañana?',
       lead: 'El vehículo sí; el conductor asignado no.',
-      rest:
-        'La licencia de quien está programado figura vencida en el RUNT, y el SOAT y la RTM del tractocamión están vigentes. Si lo despachas mañana viernes, ten en cuenta que el cliente no recibe sábados: descargaría el lunes.',
+      rest: 'La licencia de quien está programado figura vencida en el RUNT, y el SOAT y la RTM del tractocamión están vigentes. Si lo despachas mañana viernes, ten en cuenta que el cliente no recibe sábados: descargaría el lunes.',
       sources: [
         {
           source: 'RUNT',
@@ -133,8 +132,7 @@ export const INDUSTRIES: readonly [Industry, ...Industry[]] = [
     answer: {
       question: '¿cuánto le facturamos en julio y qué quedó pendiente?',
       lead: 'En julio se le facturaron $18.400.000 en tres facturas.',
-      rest:
-        'Dos quedaron pagadas. La de honorarios de julio, por $6.900.000, sigue pendiente y el cliente pidió cruzarla contra el anticipo de junio antes de girar.',
+      rest: 'Dos quedaron pagadas. La de honorarios de julio, por $6.900.000, sigue pendiente y el cliente pidió cruzarla contra el anticipo de junio antes de girar.',
       sources: [
         {
           source: 'Factura FV-2214',
@@ -178,8 +176,7 @@ export const INDUSTRIES: readonly [Industry, ...Industry[]] = [
     answer: {
       question: '¿qué le prometimos a la interventoría sobre el andén de la torre 3?',
       lead: 'Que queda fundido antes de la entrega de la torre 3, y que el mayor valor lo asume la obra.',
-      rest:
-        'Está en el acta del comité de la semana 12, lo repetiste en el comité del 31 de julio y la interventoría lo dio por aceptado por correo al día siguiente.',
+      rest: 'Está en el acta del comité de la semana 12, lo repetiste en el comité del 31 de julio y la interventoría lo dio por aceptado por correo al día siguiente.',
       sources: [
         {
           source: 'Acta de comité · semana 12',
@@ -222,8 +219,7 @@ export const INDUSTRIES: readonly [Industry, ...Industry[]] = [
     answer: {
       question: '¿por qué nos glosaron esta cuenta y qué respondimos la vez pasada?',
       lead: 'La glosaron por soporte incompleto: falta la autorización previa.',
-      rest:
-        'Es la misma causal de mayo. Esa vez la respuesta adjuntó la autorización y el reporte de la atención, y la glosa se levantó. La tarifa del anexo, por si la necesitas para la respuesta, también está citada abajo.',
+      rest: 'Es la misma causal de mayo. Esa vez la respuesta adjuntó la autorización y el reporte de la atención, y la glosa se levantó. La tarifa del anexo, por si la necesitas para la respuesta, también está citada abajo.',
       sources: [
         {
           source: 'Correo de la EPS',
@@ -267,8 +263,7 @@ export const INDUSTRIES: readonly [Industry, ...Industry[]] = [
     answer: {
       question: '¿qué plazo pide este contrato para dar el preaviso?',
       lead: 'Sesenta días calendario, por escrito.',
-      rest:
-        'No calculo la fecha límite: la cláusula fija el plazo y el correo del cliente fija el inicio de la vigencia, así que te propongo la fecha abajo para que la confirmes tú antes de que quede en el calendario de nadie.',
+      rest: 'No calculo la fecha límite: la cláusula fija el plazo y el correo del cliente fija el inicio de la vigencia, así que te propongo la fecha abajo para que la confirmes tú antes de que quede en el calendario de nadie.',
       sources: [
         {
           source: 'Contrato de prestación · cláusula 14',
@@ -312,8 +307,7 @@ export const INDUSTRIES: readonly [Industry, ...Industry[]] = [
     answer: {
       question: '¿quién responde por el calentador del 704, el propietario o el arrendatario?',
       lead: 'El propietario.',
-      rest:
-        'El contrato deja al arrendatario sólo las reparaciones locativas, y tanto la administradora como el grupo del edificio dan por sentado que el calentador entró con el inmueble, no con el inquilino.',
+      rest: 'El contrato deja al arrendatario sólo las reparaciones locativas, y tanto la administradora como el grupo del edificio dan por sentado que el calentador entró con el inmueble, no con el inquilino.',
       sources: [
         {
           source: 'Contrato de arrendamiento · cláusula 8',

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { AnswerCard } from './AnswerCard';
+import { HeroStage } from './HeroStage';
 import { IndustrySwitch } from './IndustrySwitch';
-import { NeuralField } from './NeuralField';
+import { Interactive } from './Interactive';
 import { INDUSTRIES } from './industries';
 
 /**
@@ -75,12 +76,18 @@ function Masthead() {
   );
 }
 
+/**
+ * El hero cinematográfico: viewport completo, SIEMPRE oscuro (identidad de la
+ * landing, no un tema), con la escena de partículas detrás — una persona
+ * conectándose con la IA — y el contenido superpuesto sobre un scrim que
+ * garantiza la legibilidad. El titular sigue siendo el LCP: es HTML del
+ * servidor y no espera un byte de three.js.
+ */
 function Hero() {
-  const example = INDUSTRIES[0];
   return (
-    <section className="lp-wrap lp-hero">
-      <div className="lp-hero__grid">
-        <div>
+    <section className="lp-hero">
+      <div className="lp-wrap lp-hero__inner">
+        <div className="lp-hero__copy">
           <p className="lp-marker lp-arrive">Un asistente por persona</p>
           <h1
             className="lp-display lp-hero__display lp-arrive mt-4"
@@ -106,8 +113,30 @@ function Hero() {
             </Link>
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
 
-        <div className="lp-arrive" style={{ animationDelay: '0.12s' }}>
+/**
+ * La tarjeta demo que antes vivía en el hero, tal cual, en su propia sección:
+ * la primera cosa que se encuentra quien baja de la escena es una respuesta
+ * real con sus fuentes abiertas.
+ */
+function DemoAnswer() {
+  const example = INDUSTRIES[0];
+  return (
+    <section className="lp-section lp-demo" aria-label="Una respuesta de ejemplo">
+      <div className="lp-wrap lp-demo__grid">
+        <div className="lp-head" data-reveal>
+          <p className="lp-marker">Así se ve una respuesta</p>
+          <h2 className="lp-h2">Con la frase, el documento y el minuto</h2>
+          <p className="lp-lead">
+            Esto no es una maqueta de marketing: es la forma exacta en la que Cortex contesta, con
+            cada fuente abierta debajo para que se pueda verificar.
+          </p>
+        </div>
+        <div data-reveal>
           <AnswerCard answer={example.answer} tag={example.tag} animate />
         </div>
       </div>
@@ -119,7 +148,7 @@ function Objection() {
   return (
     <section className="lp-section lp-section--tint">
       <div className="lp-wrap">
-        <div className="lp-head">
+        <div className="lp-head" data-reveal>
           <p className="lp-marker">La objeción</p>
           <h2 className="lp-h2">«Ya usamos ChatGPT»</h2>
           <p className="lp-lead">
@@ -129,7 +158,7 @@ function Objection() {
           </p>
         </div>
 
-        <div className="lp-versus">
+        <div className="lp-versus" data-reveal-group>
           <div className="lp-card lp-card--muted">
             <p className="lp-card__kicker">Un asistente genérico</p>
             <p className="lp-quote lp-quote--said">
@@ -154,7 +183,7 @@ function Objection() {
           </div>
         </div>
 
-        <div className="lp-cost">
+        <div className="lp-cost" data-reveal-group>
           <div className="lp-cost__item">
             <p className="lp-cost__n">Le preguntas al que se acuerda</p>
             <p className="lp-small mt-1.5">
@@ -184,7 +213,7 @@ function Industries() {
   return (
     <section className="lp-section" id="industrias">
       <div className="lp-wrap">
-        <div className="lp-head">
+        <div className="lp-head" data-reveal>
           <p className="lp-marker">El mecanismo es uno; los ejemplos son tuyos</p>
           <h2 className="lp-h2">Elige a qué te dedicas</h2>
           <p className="lp-lead">
@@ -194,7 +223,9 @@ function Industries() {
           </p>
         </div>
 
-        <IndustrySwitch />
+        <div data-reveal>
+          <IndustrySwitch />
+        </div>
       </div>
     </section>
   );
@@ -210,7 +241,7 @@ function HowItWorks() {
   return (
     <section className="lp-section lp-section--tint" id="como-funciona">
       <div className="lp-wrap">
-        <div className="lp-head">
+        <div className="lp-head" data-reveal>
           <p className="lp-marker">Cómo funciona</p>
           <h2 className="lp-h2">Se alimenta solo. Nadie tiene que subir nada.</h2>
           <p className="lp-lead">
@@ -219,7 +250,7 @@ function HowItWorks() {
           </p>
         </div>
 
-        <div className="lp-steps">
+        <div className="lp-steps" data-reveal-group>
           <div className="lp-card lp-step">
             <p className="lp-step__when">Una vez</p>
             <h3 className="lp-h3">Conectas las fuentes</h3>
@@ -272,7 +303,7 @@ function Trust() {
   return (
     <section className="lp-section" id="confianza">
       <div className="lp-wrap">
-        <div className="lp-head">
+        <div className="lp-head" data-reveal>
           <p className="lp-marker">Por qué se le puede creer</p>
           <h2 className="lp-h2">Preferimos una respuesta incómoda a una inventada.</h2>
           <p className="lp-lead">
@@ -282,7 +313,7 @@ function Trust() {
           </p>
         </div>
 
-        <div className="lp-trust">
+        <div className="lp-trust" data-reveal-group>
           <div className="lp-card lp-trust__item">
             <h3 className="lp-h3">Cita en vez de afirmar</h3>
             <p>
@@ -364,7 +395,7 @@ function Control() {
   return (
     <section className="lp-section lp-section--tint" id="control">
       <div className="lp-wrap">
-        <div className="lp-head">
+        <div className="lp-head" data-reveal>
           <p className="lp-marker">Control</p>
           <h2 className="lp-h2">
             Que cada quien tenga asistente no significa que todos vean todo.
@@ -375,7 +406,7 @@ function Control() {
           </p>
         </div>
 
-        <div className="lp-control">
+        <div className="lp-control" data-reveal-group>
           <div className="lp-card lp-control__item">
             <h3 className="lp-h3">Cada persona alcanza lo suyo</h3>
             <p>
@@ -433,7 +464,7 @@ function Pricing() {
   return (
     <section className="lp-section lp-section--brand" id="planes">
       <div className="lp-wrap">
-        <div className="lp-head">
+        <div className="lp-head" data-reveal>
           <p className="lp-marker">Planes</p>
           <h2 className="lp-h2">Se cobra por persona, porque es un asistente por persona.</h2>
           <p className="lp-lead">
@@ -582,7 +613,7 @@ function Pricing() {
 function Close() {
   return (
     <section className="lp-section">
-      <div className="lp-wrap lp-close">
+      <div className="lp-wrap lp-close" data-reveal>
         <h2 className="lp-h2">El primer día ya contesta.</h2>
         <p className="lp-lead mt-4">
           No hay que entrenar nada ni escribir instrucciones. Conectas las fuentes por la mañana y
@@ -619,20 +650,26 @@ function Footer() {
 export function Landing() {
   return (
     <div className="lp">
-      {/* El fondo: un organismo de partículas que respira, responde al cursor
-          y se transforma con el scroll. Es decoración con reglas — no se monta
-          si el visitante pidió quietud (queda un gradiente estático) y todo el
-          HTML de la página vive encima, intacto e indexable. */}
-      <NeuralField />
+      {/* La escena del hero: la persona conectándose con la IA, fija detrás
+          del primer viewport. El HTML entero vive encima, intacto e
+          indexable; con prefers-reduced-motion la misma escena queda quieta
+          y sin WebGL queda su fondo de reposo. */}
+      <HeroStage />
+      {/* El cerebro de las reacciones del resto de la página: revelado por
+          scroll, tilt de tarjetas, botones magnéticos, glow ambiental. No
+          pinta nada y con reduced-motion no hace nada. */}
+      <Interactive />
       <Masthead />
       <main>
         <Hero />
-        <Objection />
-        <Industries />
-        <HowItWorks />
-        <Trust />
-        <Control />
-        {/*
+        <div className="lp-after">
+          <DemoAnswer />
+          <Objection />
+          <Industries />
+          <HowItWorks />
+          <Trust />
+          <Control />
+          {/*
           LOS PRECIOS ESTÁN EN PAUSA, NO BORRADOS.
 
           La sección `Pricing` sigue entera unas líneas más abajo — las tarifas,
@@ -647,8 +684,9 @@ export function Landing() {
           es la promesa. Mientras tanto la página pide lo único que sí puede
           cumplir: entrar o abrir una cuenta.
         */}
-        {/* <Pricing /> */}
-        <Close />
+          {/* <Pricing /> */}
+          <Close />
+        </div>
       </main>
       <Footer />
     </div>

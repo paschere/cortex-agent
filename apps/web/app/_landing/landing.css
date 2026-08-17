@@ -150,48 +150,110 @@ html:has(.lp) body {
   position: relative;
   background: rgb(var(--lp-canvas));
   color: rgb(var(--lp-ink));
-  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
+
+  /* --- Tokens del hero: SIEMPRE oscuro ---------------------------------
+     Decisión deliberada de identidad, no un tema: el primer viewport es una
+     escena nocturna con tinte índigo profundo, en claro y en oscuro por
+     igual. Por eso estos tokens no viven en el bloque de dark-mode: no
+     cambian nunca. Los colores de la escena WebGL (HeroScene) son estos
+     mismos valores. */
+  --lph-bg: 7 8 22;
+  --lph-bg-deep: 5 6 18;
+  --lph-ink: 237 239 251;
+  --lph-ink-muted: 178 183 214;
+  --lph-brand: 149 141 255;
+  --lph-brand-bright: 187 181 255;
 }
 
 /* ==========================================================================
-   El fondo vivo (.lp-field)
+   La escena del hero (.lph-stage)
    ==========================================================================
-   La capa 0 de la página: el organismo de partículas de NeuralField, fijo a la
-   ventana y sin recibir un solo evento — el HTML entero queda encima con
-   z-index 1 y sigue siendo lo que era. El gradiente se pinta SIEMPRE, canvas o
-   no canvas: es el estado de reposo de la misma luz indigo, así que quien pidió
-   `prefers-reduced-motion` (el canvas nunca se monta) o llega sin WebGL recibe
-   una página terminada, no un hueco. El canvas aparece encima en un fundido
-   corto cuando su primer frame ya existe, para que nunca se vea llegar tarde. */
+   La capa 0 del primer viewport: la persona conectándose con la IA, fija a la
+   ventana y sin recibir un solo evento. El fondo oscuro con sus tintes de luz
+   se pinta SIEMPRE, canvas o no canvas: es el reposo de la misma composición
+   (el resplandor de la derecha es donde vive el núcleo), así que sin WebGL la
+   página queda terminada, no rota. El canvas aparece con un fundido cuando su
+   primer frame existe — el titular, que es el LCP, nunca lo espera. Al hacer
+   scroll la escena se queda atrás con un fade (opacidad inline desde
+   HeroStage) y el resto de la landing fluye encima, opaca. */
 
-.lp-field {
+.lph-stage {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(52% 44% at 68% 28%, rgb(var(--lp-brand) / 0.09) 0%, transparent 70%),
-    radial-gradient(42% 38% at 20% 74%, rgb(var(--lp-brand) / 0.05) 0%, transparent 72%);
+  background: radial-gradient(42% 38% at 74% 38%, rgb(var(--lph-brand) / 0.16) 0%, transparent 70%),
+    radial-gradient(36% 44% at 44% 64%, rgb(var(--lph-brand) / 0.07) 0%, transparent 72%),
+    linear-gradient(180deg, rgb(var(--lph-bg-deep)) 0%, rgb(9 10 28) 100%);
 }
 
-.lp-field canvas {
+@media (max-width: 767px) {
+  .lph-stage {
+    background: radial-gradient(
+        52% 30% at 74% 26%,
+        rgb(var(--lph-brand) / 0.16) 0%,
+        transparent 70%
+      ), radial-gradient(46% 40% at 34% 62%, rgb(var(--lph-brand) / 0.07) 0%, transparent 72%),
+      linear-gradient(180deg, rgb(var(--lph-bg-deep)) 0%, rgb(9 10 28) 100%);
+  }
+}
+
+.lph-stage__scene {
+  position: absolute;
+  inset: 0;
+}
+
+.lph-stage canvas {
   opacity: 0;
-  transition: opacity 900ms ease-out;
+  transition: opacity 800ms ease-out;
 }
 
-.lp-field--on canvas {
+.lph-stage--on canvas {
   opacity: 1;
 }
 
-/* El contenido, encima del fondo. El masthead ya es sticky con su z-index. */
+/* El contenido, encima de la escena. */
 .lp > main,
 .lp > .lp-foot {
   position: relative;
   z-index: 1;
+}
+
+/* Todo lo que viene después del hero corre sobre fondo propio y opaco: es lo
+   que "tapa" la escena fija cuando el visitante baja. */
+.lp-after {
+  position: relative;
+  background: rgb(var(--lp-canvas));
+}
+
+/* El glow ambiental: una luz radial que sigue al cursor con retraso (las
+   variables las pone Interactive con un solo listener + rAF). La habitación
+   nota dónde está la mano; nada más. */
+.lp-live .lp-after::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    560px circle at var(--amb-x, 50%) var(--amb-y, -9999px),
+    rgb(var(--lp-brand) / 0.07) 0%,
+    transparent 70%
+  );
+}
+
+.lp-after > section {
+  position: relative;
+  z-index: 1;
+}
+
+.lp-foot {
+  background: rgb(var(--lp-canvas));
 }
 
 .lp :focus-visible {
@@ -303,7 +365,7 @@ html:has(.lp) body {
    might check, quote or copy. Rule 3 of the design system, and on this page it
    is the argument rather than the styling. */
 .lp-data {
-  font-family: var(--font-mono), ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums lining-nums slashed-zero;
   letter-spacing: -0.015em;
 }
@@ -322,7 +384,7 @@ html:has(.lp) body {
 }
 
 .lp-marker::before {
-  content: '';
+  content: "";
   width: 18px;
   height: 2px;
   border-radius: 2px;
@@ -400,10 +462,7 @@ html:has(.lp) body {
   font-weight: 650;
   text-decoration: none;
   border: 1px solid transparent;
-  transition:
-    transform 150ms ease-out,
-    background-color 150ms ease-out,
-    border-color 150ms ease-out,
+  transition: transform 150ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out,
     box-shadow 150ms ease-out;
 }
 
@@ -445,13 +504,27 @@ html:has(.lp) body {
    Masthead
    ========================================================================== */
 
+/* Superpuesto al hero oscuro, transparente: la escena llega hasta el borde
+   superior de la ventana y el masthead flota encima con tinta clara. Ya no es
+   sticky — se va con el hero, y el cierre de la página repite las dos CTAs. */
 .lp-top {
-  position: sticky;
+  position: absolute;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 30;
-  background: rgb(var(--lp-canvas) / 0.86);
-  backdrop-filter: saturate(1.4) blur(12px);
-  border-bottom: 1px solid rgb(var(--lp-line) / 0.8);
+}
+
+.lp-top .lp-mark {
+  color: rgb(var(--lph-ink));
+}
+
+.lp-top .lp-btn--plain {
+  color: rgb(var(--lph-ink-muted));
+}
+
+.lp-top .lp-btn--plain:hover {
+  color: rgb(var(--lph-ink));
 }
 
 .lp-top__row {
@@ -499,33 +572,97 @@ html:has(.lp) body {
    Hero
    ========================================================================== */
 
+/* Viewport completo, siempre oscuro, con la escena fija detrás. En móvil el
+   texto ancla abajo (la escena vive arriba: figura abajo-izquierda, núcleo
+   arriba-derecha); en escritorio se centra a la izquierda, dejando el centro
+   y la derecha para la figura, el río y el núcleo. */
 .lp-hero {
-  padding-block: 52px 76px;
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  align-items: flex-end;
+  padding-block: 108px 56px;
 }
 
 @media (min-width: 1024px) {
   .lp-hero {
-    padding-block: 76px 108px;
+    align-items: center;
+    padding-block: 96px 72px;
   }
 }
 
-.lp-hero__grid {
-  display: grid;
-  gap: 44px;
-  align-items: start;
+/* El scrim: legibilidad AAA del texto sobre la escena sin apagarla. Tres
+   gradientes — techo (masthead), esquina del texto y piso (CTAs en móvil). */
+.lp-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(var(--lph-bg-deep) / 0.55) 0%, transparent 20%),
+    linear-gradient(
+      97deg,
+      rgb(var(--lph-bg-deep) / 0.8) 0%,
+      rgb(var(--lph-bg-deep) / 0.38) 36%,
+      transparent 60%
+    ),
+    linear-gradient(
+      0deg,
+      rgb(var(--lph-bg-deep) / 0.82) 0%,
+      rgb(var(--lph-bg-deep) / 0.32) 30%,
+      transparent 52%
+    );
+}
+
+/* En pantallas angostas la figura pasa por detrás del texto: el piso del
+   scrim sube y se oscurece para que el titular gane siempre. */
+@media (max-width: 1023px) {
+  .lp-hero::before {
+    background: linear-gradient(180deg, rgb(var(--lph-bg-deep) / 0.55) 0%, transparent 18%),
+      linear-gradient(
+        0deg,
+        rgb(var(--lph-bg-deep) / 0.92) 0%,
+        rgb(var(--lph-bg-deep) / 0.72) 34%,
+        rgb(var(--lph-bg-deep) / 0.3) 56%,
+        transparent 72%
+      );
+  }
+}
+
+.lp-hero__inner {
+  position: relative;
+  width: 100%;
+}
+
+.lp-hero__copy {
+  max-width: 34rem;
 }
 
 @media (min-width: 1024px) {
-  .lp-hero__grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.04fr);
-    gap: 56px;
-    align-items: center;
+  .lp-hero__copy {
+    max-width: 31rem;
   }
+}
+
+.lp-hero .lp-marker {
+  color: rgb(var(--lph-brand-bright));
+}
+
+.lp-hero .lp-marker::before {
+  background: rgb(var(--lph-brand));
+}
+
+.lp-hero__display {
+  color: rgb(var(--lph-ink));
+  font-size: clamp(2.25rem, 4.6vw, 3.7rem);
 }
 
 .lp-hero__display em {
   font-style: normal;
-  color: rgb(var(--lp-brand-ink));
+  color: rgb(var(--lph-brand-bright));
+}
+
+.lp-hero .lp-lead {
+  color: rgb(var(--lph-ink-muted));
 }
 
 .lp-hero__lead {
@@ -540,8 +677,32 @@ html:has(.lp) body {
   margin-top: 28px;
 }
 
-.lp-hero__note {
-  margin-top: 14px;
+/* Botones sobre el hero oscuro: el primario es la luz del núcleo (lavanda
+   encendida con tinta oscura — 6:1) y el fantasma es vidrio. El masthead
+   comparte el primario porque flota sobre la misma escena. */
+.lp-hero .lp-btn--primary,
+.lp-top .lp-btn--primary {
+  background: rgb(var(--lph-brand));
+  color: rgb(var(--lph-bg-deep));
+  box-shadow: 0 0 0 1px rgb(var(--lph-brand) / 0.35), 0 10px 34px -8px rgb(var(--lph-brand) / 0.5);
+}
+
+.lp-hero .lp-btn--primary:hover,
+.lp-top .lp-btn--primary:hover {
+  background: rgb(var(--lph-brand-bright));
+}
+
+.lp-hero .lp-btn--ghost {
+  background: rgb(255 255 255 / 0.06);
+  border-color: rgb(255 255 255 / 0.22);
+  color: rgb(var(--lph-ink));
+  box-shadow: none;
+  backdrop-filter: blur(6px);
+}
+
+.lp-hero .lp-btn--ghost:hover {
+  background: rgb(255 255 255 / 0.1);
+  border-color: rgb(255 255 255 / 0.38);
 }
 
 /* The pieces of the hero arrive in the order the product produces them: the
@@ -618,7 +779,7 @@ html:has(.lp) body {
 }
 
 .lp-answer__q::before {
-  content: '';
+  content: "";
   flex: none;
   width: 3px;
   border-radius: 3px;
@@ -782,10 +943,7 @@ html:has(.lp) body {
   font-size: 13.5px;
   font-weight: 620;
   cursor: pointer;
-  transition:
-    background-color 140ms ease-out,
-    border-color 140ms ease-out,
-    color 140ms ease-out,
+  transition: background-color 140ms ease-out, border-color 140ms ease-out, color 140ms ease-out,
     transform 140ms ease-out;
 }
 
@@ -795,7 +953,7 @@ html:has(.lp) body {
   transform: translateY(-1px);
 }
 
-.lp-tab[aria-selected='true'] {
+.lp-tab[aria-selected="true"] {
   background: rgb(var(--lp-brand));
   border-color: rgb(var(--lp-brand));
   color: rgb(var(--lp-on-brand));
@@ -1214,4 +1372,117 @@ html:has(.lp) body {
 
 .lp-foot a:hover {
   color: rgb(var(--lp-ink));
+}
+
+/* ==========================================================================
+   La demo reubicada — la tarjeta que antes vivía en el hero
+   ========================================================================== */
+
+.lp-demo__grid {
+  display: grid;
+  gap: 36px;
+  align-items: center;
+}
+
+@media (min-width: 1024px) {
+  .lp-demo__grid {
+    grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+    gap: 56px;
+  }
+}
+
+/* ==========================================================================
+   La página que reacciona
+   ==========================================================================
+   Todo lo de este bloque cuelga de `.lp-live`, la clase que Interactive
+   agrega SOLO cuando hay JS y el visitante no pidió quietud. Sin ella — sin
+   JS, o con prefers-reduced-motion — nada de esto existe y la página llega
+   entera y quieta desde el primer frame. Esa es la regla del design system:
+   quien pidió quietud recibe quietud, no una versión "suave".
+   ========================================================================== */
+
+/* --- Revelado por scroll: un settle corto, escalonado, una sola vez ------ */
+
+.lp-live [data-reveal] {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 500ms ease-out var(--rv-d, 0ms), transform 550ms
+    cubic-bezier(0.22, 1, 0.36, 1) var(--rv-d, 0ms);
+}
+
+.lp-live [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* --- Tilt + brillo especular + borde-linterna en tarjetas ----------------
+   `lp-tilt` también lo pone Interactive. --rx/--ry/--lx/--ly llegan del
+   único rAF global. El brillo es un tinte de marca (visible sobre superficie
+   clara y oscura) y el borde se enciende justo donde está el cursor. */
+
+.lp-live .lp-tilt {
+  position: relative;
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lp-live .lp-tilt.is-tilt {
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 90ms ease-out;
+  z-index: 2;
+}
+
+.lp-live .lp-tilt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    320px circle at var(--lx, 50%) var(--ly, 50%),
+    rgb(var(--lp-brand) / 0.1) 0%,
+    transparent 62%
+  );
+  opacity: 0;
+  transition: opacity 240ms ease-out;
+}
+
+.lp-live .lp-tilt::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: radial-gradient(
+    240px circle at var(--lx, 50%) var(--ly, 50%),
+    rgb(var(--lp-brand) / 0.65) 0%,
+    transparent 70%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 240ms ease-out;
+}
+
+.lp-live .lp-tilt.is-tilt::before,
+.lp-live .lp-tilt.is-tilt::after {
+  opacity: 1;
+}
+
+/* --- CTAs magnéticos -----------------------------------------------------
+   Cerca del cursor el botón se corre 2–4px hacia él y su glow sube; al salir
+   vuelve con un ease elástico sutil. --mx/--my vienen del mismo rAF. */
+
+.lp-live .lp-btn--primary {
+  transition: transform 480ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 150ms ease-out,
+    border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+.lp-live .lp-btn--primary.is-near {
+  transform: translate(var(--mx, 0px), var(--my, 0px));
+  transition: transform 90ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out,
+    box-shadow 150ms ease-out;
+  box-shadow: 0 0 0 1px rgb(var(--lp-brand) / 0.4), 0 12px 38px -8px rgb(var(--lp-brand) / 0.6);
 }
