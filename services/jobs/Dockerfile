@@ -25,6 +25,15 @@ FROM node:20-slim
 WORKDIR /repo
 ENV NODE_ENV=production
 
+# pg_dump 18 para el backup diario (LOCAL_JOBS en el manifiesto). Del
+# repositorio PGDG porque bookworm trae el cliente 15, y un pg_dump más viejo
+# que el servidor (Postgres 18 en Railway) se niega a volcar — con razón.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg \
+  && echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+  && apt-get update && apt-get install -y --no-install-recommends postgresql-client-18 \
+  && apt-get purge -y curl gnupg && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/services/jobs/node_modules ./services/jobs/node_modules
 COPY --from=build /repo/services/jobs/dist ./services/jobs/dist

@@ -101,3 +101,23 @@ export const JOBS: JobSpec[] = [
 export function queueNameFor(jobName: string): string {
   return jobName.replace(/[^a-zA-Z0-9_-]/g, '-');
 }
+
+/**
+ * TRABAJOS LOCALES: los que el worker ejecuta ÉL MISMO, sin llamar a la app.
+ *
+ * Separados de JOBS a propósito: el test espejo de la app
+ * (apps/web/lib/jobs-registry.test.ts) exige que cada nombre de JOBS tenga un
+ * handler en Vercel, y estos no lo tienen ni deben tenerlo — el backup de la
+ * base corre AL LADO de la base, con pg_dump, por la red privada de Railway.
+ * Mandarlo por HTTP a un serverless sería sacar gigas por el camino largo
+ * para volverlos a entrar.
+ *
+ * EL BACKUP EXISTE PORQUE EL ÉXODO LO DEBÍA: Supabase hacía copias solas;
+ * este Postgres de Railway es ahora el único hogar de TODO (datos, archivos,
+ * cola) y hasta hoy no tenía ninguna. Diario a la 1:15am de Colombia, formato
+ * custom de pg_dump (comprimido, restaurable con pg_restore), al volumen
+ * /backups del worker, conservando los últimos 14.
+ */
+export const LOCAL_JOBS: JobSpec[] = [
+  { name: 'db/backup', cron: '15 6 * * *', retryLimit: 2, concurrency: 1 },
+];

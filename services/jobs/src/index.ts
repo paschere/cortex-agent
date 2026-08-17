@@ -27,9 +27,12 @@
  *   PORT          — lo pone Railway.
  */
 
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import http from 'node:http';
+import { join } from 'node:path';
 import PgBoss from 'pg-boss';
-import { JOBS, JOB_EXPIRE_SECONDS, queueNameFor, type JobSpec } from './manifest.js';
+import { JOBS, JOB_EXPIRE_SECONDS, LOCAL_JOBS, queueNameFor, type JobSpec } from './manifest.js';
 
 const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args);
 
@@ -47,7 +50,11 @@ const APP_URL = requiredEnv('APP_URL').replace(/\/$/, '');
 const JOBS_SECRET = requiredEnv('JOBS_SECRET');
 const PORT = Number(process.env.PORT ?? 8080);
 
-const byQueue = new Map<string, JobSpec>(JOBS.map((j) => [queueNameFor(j.name), j]));
+// Los locales también entran al mapa: /enqueue puede dispararlos a mano
+// («haz un backup ya»), y siguen ejecutándose localmente por su work().
+const byQueue = new Map<string, JobSpec>(
+  [...JOBS, ...LOCAL_JOBS].map((j) => [queueNameFor(j.name), j]),
+);
 
 /**
  * Ejecutar = llamar a la app. El timeout del fetch queda por debajo del
@@ -84,6 +91,56 @@ async function invokeApp(job: JobSpec, data: unknown): Promise<void> {
     clearTimeout(timer);
   }
 }
+
+/** Dónde viven las copias. En Railway es un volumen; en local, un directorio. */
+const BACKUP_DIR = process.env.BACKUP_DIR ?? '/backups';
+const BACKUP_KEEP = 14;
+
+/**
+ * La copia de seguridad de la base, hecha AQUÍ porque aquí está la base.
+ *
+ * pg_dump en formato custom (-Fc): comprimido y restaurable por partes con
+ * pg_restore, que es lo que uno quiere a las 3am de un mal día. Se excluye el
+ * esquema de la cola (pgboss): son trabajos en tránsito, no datos — y meterlos
+ * haría que dos copias nunca coincidan aunque el negocio no haya cambiado.
+ * Después de escribir, se podan las más viejas que las últimas BACKUP_KEEP.
+ */
+function runBackup(): { file: string; bytes: number; kept: number } {
+  mkdirSync(BACKUP_DIR, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 17);
+  const file = join(BACKUP_DIR, `cortex-${stamp}.dump`);
+  const r = spawnSync(
+    'pg_dump',
+    [DATABASE_URL, '--format=custom', '--exclude-schema=pgboss', `--file=${file}`],
+    { encoding: 'utf8', timeout: 15 * 60 * 1000 },
+  );
+  if (r.status !== 0) {
+    rmSync(file, { force: true });
+    throw new Error(`pg_dump falló: ${r.stderr?.slice(0, 500) || r.error?.message || r.status}`);
+  }
+  const bytes = statSync(file).size;
+  if (bytes < 10_000) {
+    // Un dump de menos de 10KB de una base con 114 tablas no es una copia:
+    // es un error con extensión .dump. Mejor fallar y que pg-boss reintente.
+    throw new Error(`el dump quedó sospechosamente chico (${bytes} bytes)`);
+  }
+  const all = readdirSync(BACKUP_DIR)
+    .filter((f) => f.startsWith('cortex-') && f.endsWith('.dump'))
+    .sort();
+  for (const old of all.slice(0, Math.max(0, all.length - BACKUP_KEEP))) {
+    rmSync(join(BACKUP_DIR, old), { force: true });
+  }
+  return { file, bytes, kept: Math.min(all.length, BACKUP_KEEP) };
+}
+
+/** Trabajos que este proceso resuelve solo, sin viajar a la app. */
+const LOCAL_HANDLERS: Record<string, () => Promise<unknown>> = {
+  'db/backup': async () => {
+    const out = runBackup();
+    log(`backup listo: ${out.file} (${(out.bytes / 1024 / 1024).toFixed(1)} MB, ${out.kept} conservados)`);
+    return out;
+  },
+};
 
 async function main() {
   const boss = new PgBoss({
@@ -127,7 +184,35 @@ async function main() {
       await boss.schedule(queue, job.cron, {}, { tz: 'Etc/UTC' });
     }
   }
-  log(`colas listas: ${JOBS.length} trabajos, ${JOBS.filter((j) => j.cron).length} crons.`);
+  // Los trabajos locales usan la misma cola (reintentos y cron gratis) pero
+  // su handler corre aquí mismo — ver LOCAL_JOBS en el manifiesto.
+  for (const job of LOCAL_JOBS) {
+    const queue = queueNameFor(job.name);
+    const handler = LOCAL_HANDLERS[job.name];
+    if (!handler) {
+      console.error(`trabajo local sin handler: ${job.name} — no se programa.`);
+      continue;
+    }
+    await boss.createQueue(queue, {
+      name: queue,
+      retryLimit: job.retryLimit,
+      retryDelay: 120,
+      retryBackoff: true,
+      expireInSeconds: JOB_EXPIRE_SECONDS,
+    });
+    await boss.work(queue, { batchSize: 1 }, async (jobs) => {
+      for (const j of jobs) {
+        log(`→ ${job.name} (local)`, j.id);
+        await handler();
+        log(`✓ ${job.name} (local)`, j.id);
+      }
+    });
+    if (job.cron) await boss.schedule(queue, job.cron, {}, { tz: 'Etc/UTC' });
+  }
+
+  log(
+    `colas listas: ${JOBS.length} trabajos, ${JOBS.filter((j) => j.cron).length} crons, ${LOCAL_JOBS.length} locales.`,
+  );
 
   // -------------------------------------------------------------------------
   // La puerta de entrada: la app encola aquí lo que antes era inngest.send().
@@ -139,7 +224,26 @@ async function main() {
     };
 
     if (req.method === 'GET' && req.url === '/health') {
-      return reply(200, { ok: true, jobs: JOBS.length });
+      // El último backup a la vista: que «¿tenemos copias?» se conteste con
+      // un curl y no con una excavación de logs.
+      let lastBackup: { file: string; mb: number; at: string } | null = null;
+      try {
+        const files = readdirSync(BACKUP_DIR)
+          .filter((f) => f.startsWith('cortex-') && f.endsWith('.dump'))
+          .sort();
+        const newest = files[files.length - 1];
+        if (newest) {
+          const st = statSync(join(BACKUP_DIR, newest));
+          lastBackup = {
+            file: newest,
+            mb: Number((st.size / 1024 / 1024).toFixed(1)),
+            at: st.mtime.toISOString(),
+          };
+        }
+      } catch {
+        // Sin volumen (local, primer arranque): el health no se cae por eso.
+      }
+      return reply(200, { ok: true, jobs: JOBS.length, lastBackup });
     }
 
     if (req.method !== 'POST' || req.url !== '/enqueue') return reply(404, { error: 'no' });
