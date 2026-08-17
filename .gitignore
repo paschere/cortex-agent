@@ -23,3 +23,8 @@ infra/supabase/.temp
 
 .vercel
 .env*
+
+# Salida de compilación de un experimento de pruebas e2e con su propio directorio.
+# El mecanismo (NEXT_DIST_DIR) ya no está en next.config.mjs; la línea se queda
+# para que lo que quedó en disco no se cuele en un commit por descuido.
+.next-e2e
