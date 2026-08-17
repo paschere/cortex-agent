@@ -1,11 +1,15 @@
 import { Instrument_Serif } from 'next/font/google';
 import Link from 'next/link';
 import { Fragment } from 'react';
+import { AuditLedger } from './AuditLedger';
+import { DayTimeline } from './DayTimeline';
 import { HeroSequence } from './HeroSequence';
 import { IndustrySwitch } from './IndustrySwitch';
+import { IntegrationsOrbit } from './IntegrationsOrbit';
 import { Interactive } from './Interactive';
 import { LiveDemo } from './LiveDemo';
 import { ScrollStory } from './ScrollStory';
+import { WhatsAppShowcase } from './WhatsAppShowcase';
 
 /**
  * La voz de los titulares. Instrument Serif — editorial, con itálicas de
@@ -469,8 +473,10 @@ function HowItWorks() {
 }
 
 function Trust() {
+  // Teñida (antes clara): con la órbita clara delante y la noche de la
+  // auditoría detrás, el tinte mantiene la alternancia de superficies.
   return (
-    <section className="lp-section" id="confianza">
+    <section className="lp-section lp-section--tint" id="confianza">
       <div className="lp-wrap">
         <div className="lp-head" data-reveal>
           <p className="lp-marker">Por qué se le puede creer</p>
@@ -563,8 +569,10 @@ function Trust() {
 }
 
 function Control() {
+  // Clara (antes teñida): es la sección que respira entre las dos noches —
+  // la auditoría arriba y el cierre abajo.
   return (
-    <section className="lp-section lp-section--tint" id="control">
+    <section className="lp-section" id="control">
       <div className="lp-wrap">
         <div className="lp-head" data-reveal>
           <p className="lp-marker">Control</p>
@@ -862,9 +870,20 @@ export function Landing() {
         <div className="lp-after">
           <CapabilityBand />
           <Objection />
+          {/* El orden de las secciones alterna superficie clara y teñida, con
+              dos noches reservadas — la auditoría y el cierre — separadas por
+              Control para que la oscuridad nunca se repita seguida. La
+              narrativa: contesta (hero) → conoce tu empresa (objeción) →
+              trabaja solo (un día) → donde ya estás (WhatsApp) → tu oficio →
+              cómo funciona → a qué se conecta → por qué creerle → todo queda
+              escrito → quién ve qué → empieza hoy. */}
+          <DayTimeline />
+          <WhatsAppShowcase />
           <Industries />
           <HowItWorks />
+          <IntegrationsOrbit />
           <Trust />
+          <AuditLedger />
           <Control />
           {/*
           LOS PRECIOS ESTÁN EN PAUSA, NO BORRADOS.
