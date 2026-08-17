@@ -5,14 +5,25 @@ import { Loader2, ShieldQuestion } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 /**
- * THE CAPTCHA, HANDED TO A PERSON.
+ * EL MOMENTO EN QUE UN TRÁMITE LLAMA A UNA PERSONA.
  *
- * A trámite replays with no model in the loop, so when a portal stops to ask
- * «¿eres un robot?» there is nobody in the loop to answer. The browser service
- * now keeps that tab alive for a few minutes instead of destroying it; this is
- * the window onto it. Somebody ticks the box and the errand carries on from the
- * step it stopped at, in the same session — which is the only place the unlock
- * counts for anything.
+ * Dos motivos, y sólo dos, porque son las dos únicas cosas que una grabación no
+ * puede grabar:
+ *
+ *   bot-check     el portal preguntó si somos un robot. La respuesta es un
+ *                 ACTO — hay que mirar la pantalla y hacer clic — así que este
+ *                 componente pinta la pestaña y manda coordenadas.
+ *   input-needed  el trámite llegó a un paso `pause` que él mismo declara: el
+ *                 código que acaba de llegar al celular. La respuesta es un
+ *                 TEXTO, y no hace falta ver nada; pedirle a alguien que mire
+ *                 una foto de un formulario para teclear seis dígitos sería
+ *                 ceremonia.
+ *
+ * A trámite replays with no model in the loop, so when a portal stops there is
+ * nobody in the loop to answer. El servicio de navegador sostiene esa pestaña
+ * unos minutos en vez de destruirla; esto es la ventana hacia ella. Alguien
+ * contesta y el trámite sigue desde el paso donde se quedó, en la MISMA sesión
+ * — que es el único sitio donde la respuesta vale algo.
  *
  * A PICTURE AND A CLICK, NOT A REMOTE DESKTOP. It polls a screenshot and sends
  * coordinates. That is unglamorous and it is the right amount of machinery: a
@@ -39,6 +50,23 @@ export interface ChallengeHandoff {
   sessionId: string;
   fromIndex: number;
   expiresAt: string;
+  /**
+   * La fila que recuerda esta pausa (migración 0111). Cuando está, retomar
+   * pasa por ella y no por la sesión a pelo: cerrarla es un UPDATE condicional,
+   * así que dos personas contestando lo mismo producen UNA reanudación, y lo
+   * que el trámite baje después queda archivado en el cerebro.
+   *
+   * Opcional porque el servicio puede haber sostenido la pestaña sin que la
+   * fila se alcanzara a escribir. Ahí se retoma por la ruta de sesión, que
+   * funciona igual de bien para lo único que puede pasar en ese caso: que
+   * alguien esté mirando esta pantalla ahora mismo.
+   */
+  checkpointId?: string | null;
+  reason?: 'bot-check' | 'input-needed';
+  /** La pregunta, en las palabras de quien enseñó el trámite. */
+  ask?: string | null;
+  /** El slot que llena la respuesta. Null en un captcha. */
+  fills?: string | null;
 }
 
 /** How often the picture is refreshed while nobody is doing anything. */
@@ -56,9 +84,11 @@ export function ChallengeHelper({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [answer, setAnswer] = useState('');
   const [msLeft, setMsLeft] = useState(() => Date.parse(handoff.expiresAt) - Date.now());
 
   const expired = msLeft <= 0;
+  const asksForText = handoff.reason === 'input-needed';
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/browser/session/${handoff.sessionId}`);
@@ -74,15 +104,19 @@ export function ChallengeHelper({
   // First picture, then a slow poll. Stopped once the session is gone or the
   // errand has been handed back: polling a dead tab is a request per two
   // seconds that can only ever return the same error.
+  // Sólo para el captcha. Una pregunta de texto no necesita ver la pestaña, y
+  // una foto cada dos segundos y medio de un formulario que nadie va a tocar es
+  // una petición por nada mientras la persona busca su celular.
   useEffect(() => {
+    if (asksForText) return;
     void refresh();
-  }, [refresh]);
+  }, [refresh, asksForText]);
 
   useEffect(() => {
-    if (error || resuming || expired) return;
+    if (asksForText || error || resuming || expired) return;
     const t = setInterval(() => void refresh(), IDLE_POLL_MS);
     return () => clearInterval(t);
-  }, [refresh, error, resuming, expired]);
+  }, [refresh, error, resuming, expired, asksForText]);
 
   useEffect(() => {
     const t = setInterval(() => setMsLeft(Date.parse(handoff.expiresAt) - Date.now()), 1_000);
@@ -129,17 +163,31 @@ export function ChallengeHelper({
   }
 
   async function resume() {
+    if (asksForText && answer.trim().length === 0) {
+      setError('Escribe el dato que te está pidiendo antes de seguir.');
+      return;
+    }
     setResuming(true);
     setError(null);
     try {
-      const res = await fetch(`/api/browser/session/${handoff.sessionId}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ kind: 'continue', fromIndex: handoff.fromIndex }),
-      });
+      // Por la fila si la hay — cierra la pausa de forma atómica y archiva lo
+      // que baje — y por la sesión a pelo si no. Ver el comentario de
+      // `checkpointId`.
+      const res = handoff.checkpointId
+        ? await fetch(`/api/browser/checkpoints/${handoff.checkpointId}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ answer: answer.trim() }),
+          })
+        : await fetch(`/api/browser/session/${handoff.sessionId}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ kind: 'continue', fromIndex: handoff.fromIndex }),
+          });
       const payload = (await res.json().catch(() => null)) as {
         ok?: boolean;
         error?: string;
+        message?: string;
         failure?: { label?: string; error?: string };
       } | null;
       if (!res.ok) {
@@ -149,12 +197,14 @@ export function ChallengeHelper({
       }
       onFinished(
         payload?.ok
-          ? { ok: true, message: 'El trámite terminó.' }
+          ? { ok: true, message: payload.message ?? 'El trámite terminó.' }
           : {
               ok: false,
-              message: payload?.failure?.label
-                ? `Se detuvo en «${payload.failure.label}».`
-                : 'Volvió a fallar después de la verificación.',
+              message:
+                payload?.message ??
+                (payload?.failure?.label
+                  ? `Se detuvo en «${payload.failure.label}».`
+                  : 'Volvió a fallar después de la pausa.'),
             },
       );
     } catch {
@@ -174,12 +224,16 @@ export function ChallengeHelper({
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-ink">
-            El portal quiere comprobar que no eres un robot
+            {asksForText
+              ? (handoff.ask ?? 'El trámite necesita un dato tuyo')
+              : 'El portal quiere comprobar que no eres un robot'}
           </div>
           <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
             {expired
-              ? 'El navegador ya se cerró, así que esta verificación se quedó sin resolver.'
-              : 'Resuélvelo aquí abajo y Cortex sigue con el trámite desde donde se quedó. El navegador se queda abierto un rato; nada de lo que hagas aquí se guarda.'}
+              ? 'El navegador ya se cerró, así que esta pausa se quedó sin resolver.'
+              : asksForText
+                ? 'Escríbelo aquí y Cortex sigue con el trámite desde donde se quedó, en la misma sesión. No se guarda en ninguna parte: sirve una sola vez.'
+                : 'Resuélvelo aquí abajo y Cortex sigue con el trámite desde donde se quedó. El navegador se queda abierto un rato; nada de lo que hagas aquí se guarda.'}
           </p>
         </div>
         <span
@@ -209,6 +263,26 @@ export function ChallengeHelper({
           <p className="rounded-card bg-surface-2 px-4 py-3 text-xs leading-relaxed text-ink-muted">
             La sesión se cerró sola. Vuelve a ejecutar el trámite para intentarlo otra vez.
           </p>
+        ) : asksForText ? (
+          <label className="block">
+            <span className="text-xs font-semibold text-ink-muted">
+              {handoff.fills ? `El dato: ${handoff.fills}` : 'Tu respuesta'}
+            </span>
+            <input
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              maxLength={300}
+              autoFocus
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              disabled={resuming}
+              placeholder="Por ejemplo, 483920"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void resume();
+              }}
+              className="mt-1.5 w-full rounded-pill border border-border bg-surface-2 px-3.5 py-2 text-sm tabular-nums text-ink placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
+            />
+          </label>
         ) : view ? (
           <div className="relative overflow-hidden rounded-card border border-border">
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: the target is a captcha widget in a cross-origin frame; there is nothing to give keyboard focus to. The text field below is the keyboard path. */}
@@ -234,7 +308,7 @@ export function ChallengeHelper({
           </div>
         )}
 
-        {!expired && !error && (
+        {!expired && !error && !asksForText && (
           <>
             {/* The keyboard path. Some challenges want letters from an image, and
                 a click alone cannot give them. */}
@@ -292,6 +366,20 @@ export function ChallengeHelper({
               </button>
             </div>
           </>
+        )}
+
+        {!expired && asksForText && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => void resume()}
+              disabled={resuming}
+              className="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition-colors duration-150 hover:bg-primary-strong disabled:cursor-not-allowed disabled:bg-ink-faint"
+            >
+              {resuming && <Loader2 className="h-4 w-4 animate-spin" />}
+              {resuming ? 'Siguiendo con el trámite…' : 'Listo, sigue'}
+            </button>
+          </div>
         )}
       </div>
     </div>

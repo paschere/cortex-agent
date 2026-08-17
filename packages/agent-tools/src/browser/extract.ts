@@ -3,7 +3,8 @@ import { generateText } from 'ai';
 import { z } from 'zod';
 import { utilityModel } from '../model';
 import { addSpend, spendOf } from './cost';
-import { enforceSecrets } from './redact';
+import { enforceSecrets, pauseForOneTimeCodes } from './redact';
+import { auditSlots } from './slots';
 import { type Step, type Variable, stepSchema, variableSchema } from './types';
 import { EMPTY_SPEND, type ModelSpend } from './types';
 
@@ -114,7 +115,16 @@ Un trámite grabado que sólo sepa repetir exactamente lo mismo no sirve para na
 En la duda, márcalo como variable: una variable de más se corrige en un segundo; una constante equivocada obliga a volver a enseñar el trámite.
 
 CONTRASEÑAS
-Si ves un campo que se muestra con puntos o asteriscos, o cuyo rótulo habla de contraseña, clave, usuario, PIN, token o código de verificación: NO transcribas lo que se escribió. Pon {"kind":"secret","field":"clave"} con un nombre corto para el campo. Nunca escribas los caracteres, ni siquiera parcialmente, ni siquiera si se alcanzan a leer.
+Si ves un campo que se muestra con puntos o asteriscos, o cuyo rótulo habla de contraseña, clave, usuario, PIN o token: NO transcribas lo que se escribió. Pon {"kind":"secret","field":"clave"} con un nombre corto para el campo. Nunca escribas los caracteres, ni siquiera parcialmente, ni siquiera si se alcanzan a leer.
+
+CÓDIGOS DE UN SOLO USO — no son contraseñas
+Un campo cuyo rótulo hable de código de verificación, código de seguridad, OTP, doble factor o «el código que te llegó al celular» NO es una credencial: cambia cada vez y no se puede guardar. Trátalo como un DATO QUE CAMBIA — {"kind":"template","text":"{{codigo_de_verificacion}}"} — y declara la variable con "type":"code". Cortex se encarga de parar el trámite ahí y pedírselo a una persona en el momento. Tampoco transcribas los dígitos que se vean.
+
+ARCHIVOS QUE SE ADJUNTAN
+Si la persona sube un archivo (un botón «Examinar», «Adjuntar», «Seleccionar archivo», o un recuadro donde se arrastra), el paso es {"action":"upload"} y su valor es {"kind":"file","from":"{{documento}}"} con un nombre que describa QUÉ documento es — {{certificado}}, {{rut}}, {{factura}} — y la variable declarada con "type":"file". Nunca pongas el nombre del archivo que se ve en la grabación: ése era el de ese día, y el trámite existe para repetirse con otro.
+
+DE QUÉ ES CADA DATO
+Toda variable lleva "type", y no es decoración: es lo que convierte lo que salga de otra parte en lo que la casilla acepta. Usa "nit" para un NIT (se manda sin el dígito de verificación), "plate" para una placa, "date" para una fecha, "money" para un monto, "number" para un número, "email" para un correo, "code" para un código de un solo uso, "file" para un archivo, y "text" para todo lo demás.
 
 LECTURA Y ESCRITURA
 "effect" es "read" si el trámite sólo consulta o descarga algo, y "write" si envía, radica, paga, acepta o modifica algo en el sistema del tercero. Ante la duda, "write".
@@ -191,19 +201,19 @@ function parseJson(raw: string): unknown {
  */
 function audit(proposal: Proposal): string[] {
   const warnings: string[] = [];
-  const declared = new Set(proposal.variables.map((v) => v.name));
-  const used = new Set<string>();
 
   for (const step of proposal.steps) {
-    if (step.value?.kind === 'template') {
-      for (const match of step.value.text.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)) {
-        if (match[1]) used.add(match[1]);
-      }
-    }
-    if (step.action !== 'goto' && step.action !== 'wait_for' && step.targets.length === 0) {
+    // `pause` acts on nobody: it stops and asks a person. Demanding a locator
+    // for it would flag every trámite with a code as broken.
+    if (
+      step.action !== 'goto' &&
+      step.action !== 'wait_for' &&
+      step.action !== 'pause' &&
+      step.targets.length === 0
+    ) {
       warnings.push(`El paso «${step.label}» no tiene ninguna forma de encontrar su elemento.`);
     }
-    if (step.targets.length === 1 && step.action !== 'goto') {
+    if (step.targets.length === 1 && step.action !== 'goto' && step.action !== 'pause') {
       warnings.push(
         `«${step.label}» tiene una sola forma de encontrarse; si el portal cambia, ese paso se rompe primero.`,
       );
@@ -222,13 +232,16 @@ function audit(proposal: Proposal): string[] {
     }
   }
 
-  for (const name of used) {
-    if (!declared.has(name))
-      warnings.push(`El paso usa {{${name}}} pero esa variable no está declarada.`);
+  // Los huecos contra lo declarado, en la misma función que lo comprueba en
+  // todos los demás sitios: `auditSlots` sabe de plantillas, de referencias de
+  // archivo y de los slots que llena una parada, y este archivo tenía una copia
+  // que sólo sabía de la primera.
+  const slots = auditSlots(proposal.variables, proposal.steps);
+  for (const name of slots.undeclared) {
+    warnings.push(`El paso usa {{${name}}} pero esa variable no está declarada.`);
   }
-  for (const name of declared) {
-    if (!used.has(name))
-      warnings.push(`La variable «${name}» está declarada pero ningún paso la usa.`);
+  for (const name of slots.unused) {
+    warnings.push(`La variable «${name}» está declarada pero ningún paso la usa.`);
   }
   if (proposal.variables.length === 0) {
     warnings.push(
@@ -411,9 +424,26 @@ export async function extractFlowFromRecording(input: {
   // The last line of defence on credentials, applied before the proposal is
   // returned to the browser, let alone stored. See redact.ts.
   const guarded = enforceSecrets(parsed.data.steps as Step[]);
-  const proposal: Proposal = alignFirstGoto({ ...parsed.data, steps: guarded.steps });
+  // A code the bank sends is not a credential and cannot be stored, so the step
+  // that types it gets the pause that asks for it — inserted here rather than
+  // left as a note on the review screen, because a person who has just recorded
+  // a bank login has no reason to know what a `pause` step is. See redact.ts.
+  const paused = pauseForOneTimeCodes(guarded.steps);
+  const proposal: Proposal = alignFirstGoto({
+    ...parsed.data,
+    steps: paused.steps,
+    // The slot the pause fills has to be declared, or the flow types the
+    // literal `{{codigo}}` into the portal. `type: 'code'` is what keeps it out
+    // of every row this run writes.
+    variables: withCodeSlots(parsed.data.variables as Variable[], paused.added, paused.steps),
+  });
 
   const warnings = audit(proposal);
+  if (paused.added.length > 0) {
+    warnings.push(
+      'Este trámite pide un código de verificación. Lo dejé como una parada: cuando lo corras, Cortex se detiene ahí y te lo pregunta —en el chat o en esta pantalla— y sigue solo apenas contestes. Ese código no se guarda en ninguna parte, porque sirve una sola vez.',
+    );
+  }
   if (guarded.redacted > 0) {
     warnings.push(
       `Detecté ${guarded.redacted} campo(s) de credencial en la grabación. No guardé lo que se tecleó: hay que vincular una credencial cifrada para que el trámite pueda ejecutarse.`,
@@ -431,6 +461,40 @@ export async function extractFlowFromRecording(input: {
     ok: true,
     result: { proposal, spend, warnings: [...warnings, ...proposal.notes] },
   };
+}
+
+/**
+ * Declare the slots the inserted pauses fill, without touching the ones the
+ * model already found.
+ *
+ * A pause that fills an undeclared slot is worse than no pause: the run stops,
+ * somebody types the code, and the `fill` step after it types the literal
+ * `{{codigo_de_verificacion}}` into the portal because nothing ever declared
+ * that hole. `auditSlots` would catch it on the review screen as a warning; a
+ * warning about a field the person cannot fix is a warning they learn to skip.
+ */
+function withCodeSlots(existing: Variable[], added: string[], steps: Step[]): Variable[] {
+  if (added.length === 0) return existing;
+  const known = new Set(existing.map((v) => v.name));
+  const labelOf = (name: string) =>
+    steps.find((s) => s.action === 'pause' && s.extractAs === name)?.label ?? name;
+
+  const fresh: Variable[] = added
+    .filter((name) => !known.has(name))
+    .map((name) => ({
+      name,
+      label: labelOf(name),
+      example: '',
+      required: true,
+      type: 'code' as const,
+    }));
+
+  // And any the model happened to declare itself get the type corrected: it
+  // read a picture and had no way to know this one is single-use.
+  return [
+    ...existing.map((v) => (added.includes(v.name) ? { ...v, type: 'code' as const } : v)),
+    ...fresh,
+  ];
 }
 
 /** Re-exported so the API route can validate an edited proposal the same way. */

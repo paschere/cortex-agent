@@ -10,6 +10,7 @@ import type {
   StepOutcome,
   StepValue,
   Target,
+  UploadPayload,
 } from './types';
 
 /**
@@ -83,8 +84,34 @@ export function resolveValue(
     // length is a leak, a first character is a bigger one.
     return { text: secrets[value.field] ?? '', preview: '***' };
   }
+  // A file reference is not text that goes anywhere near a form field; it is
+  // read by the `upload` case, which needs it whole. What the audit trail sees
+  // is the reference, which names a document and reveals nothing about it.
+  if (value.kind === 'file') {
+    const from = renderTemplate(value.from, inputs);
+    return { text: from, preview: from.slice(0, 80) };
+  }
   const text = value.kind === 'template' ? renderTemplate(value.text, inputs) : value.text;
   return { text, preview: text.length > 80 ? `${text.slice(0, 80)}…` : text };
+}
+
+/**
+ * The run stopped because the trámite said a person has to do this bit.
+ *
+ * A control-flow signal, not an error, and it is a class of its own so the
+ * `catch` in `replay` can tell it apart from a step that genuinely failed — a
+ * pause that fell through to `fail()` would be gathering captcha evidence
+ * about a page nobody has a problem with.
+ */
+class PauseRequested extends Error {
+  constructor(
+    readonly index: number,
+    readonly ask: string,
+    readonly fills: string | null,
+  ) {
+    super('the trámite stopped to ask a person');
+    this.name = 'PauseRequested';
+  }
 }
 
 async function performStep(
@@ -128,6 +155,12 @@ async function performStep(
   if (step.action === 'wait_for') {
     await settle(page, step, stepDeadline);
     return { matchedTarget: null, matchedRank: null, preview: null };
+  }
+
+  // Before any element is looked for: a pause acts on nobody, and resolving a
+  // locator for it would be waiting for something that is not there.
+  if (step.action === 'pause') {
+    throw new PauseRequested(index, step.label, step.extractAs ?? null);
   }
 
   const found = await resolveTarget(page, step.targets, stepDeadline);
@@ -199,6 +232,18 @@ async function performStep(
       output.download = await readDownload(download);
       break;
     }
+    case 'upload': {
+      const file = fileFor(step, index, request, output);
+      await locator.setInputFiles(
+        {
+          name: file.filename,
+          mimeType: file.mimeType,
+          buffer: Buffer.from(file.base64, 'base64'),
+        },
+        { timeout: remaining() },
+      );
+      break;
+    }
     default:
       throw new Error(`unknown action ${String(step.action)}`);
   }
@@ -258,6 +303,59 @@ async function settle(page: Page, step: Step, deadline: number): Promise<void> {
     if (arrived) return;
   }
   await page.waitForLoadState('networkidle', { timeout: 3_000 }).catch(() => undefined);
+}
+
+/**
+ * The bytes an `upload` step attaches.
+ *
+ * TWO SOURCES, AND ONLY ONE OF THEM IS RESOLVED HERE.
+ *
+ * `download` means "the file this same run already fetched", and it is the
+ * whole point of a chained trámite: bajar el certificado en el portal A y
+ * subirlo en el portal B, without the bytes ever leaving this container, and
+ * without Postgres being asked to hold a 6MB PDF in between. It is resolved
+ * here because here is the only place those bytes exist.
+ *
+ * Everything else was resolved by Cortex before the request was sent, keyed by
+ * step index — see `ReplayRequest.files`. This service does not know what a
+ * document id is, does not have a database, and must not learn.
+ *
+ * Throws rather than skipping. An `<input type=file>` has no partial success:
+ * submitting a form with the attachment missing produces a filing that was
+ * accepted and is wrong, which is discovered a week later by whoever rejects
+ * it. Failing here fails the step, which is visible now.
+ */
+function fileFor(
+  step: Step,
+  index: number,
+  request: ReplayRequest,
+  output: Record<string, unknown>,
+): UploadPayload {
+  const from = step.value?.kind === 'file' ? renderTemplate(step.value.from, request.inputs) : '';
+
+  if (from === 'download') {
+    const downloaded = output.download as Record<string, unknown> | undefined;
+    if (!downloaded) {
+      throw new Error('this step attaches the file the trámite downloads, and nothing was downloaded yet');
+    }
+    if (typeof downloaded.refused === 'string') {
+      throw new Error(`the file this step attaches was not brought back: ${downloaded.refused}`);
+    }
+    const base64 = typeof downloaded.base64 === 'string' ? downloaded.base64 : '';
+    if (!base64) throw new Error('the file this step attaches came back empty');
+    return {
+      filename: typeof downloaded.filename === 'string' ? downloaded.filename : 'archivo',
+      mimeType:
+        typeof downloaded.mimeType === 'string' ? downloaded.mimeType : 'application/octet-stream',
+      base64,
+    };
+  }
+
+  const supplied = request.files?.[String(index)];
+  if (!supplied || !supplied.base64) {
+    throw new Error(`no file was supplied for "${step.label}"`);
+  }
+  return supplied;
 }
 
 /** Guessed from the name, because portals routinely lie in the header. */
@@ -425,6 +523,26 @@ export async function replay(
         ),
       );
     } catch (err) {
+      // THE TRÁMITE ASKED FOR A PERSON. Not a failure, and returned before
+      // anything gathers evidence about a page that has nothing wrong with it.
+      //
+      // `fromIndex` is the NEXT step: the pause itself has done its job by
+      // being reached, and replaying it on resume would stop the run again on
+      // the answer it just received.
+      if (err instanceof PauseRequested) {
+        steps.push(
+          outcome(step, index, page.url(), null, null, null, true, Date.now() - stepStart, 'paused'),
+        );
+        return {
+          ok: false,
+          runId: request.runId,
+          durationMs: Date.now() - startedAt,
+          steps,
+          output,
+          pause: { index: err.index, ask: err.ask, fills: err.fills },
+        };
+      }
+
       const message = (err as Error).message ?? 'the step failed';
       // An optional step that could not be found is not a failure -- that is
       // what optional means. A cookie banner appears once and never again.

@@ -7,6 +7,19 @@ import { assertProposalOnly, errandToolAllowlist } from '@cortex/agent-tools';
 import { canStartLeg, exhaustedNote } from '@cortex/agent-tools';
 import { MAX_MONITOR_CHECKS } from '@cortex/agent-tools';
 import { ERRAND_KIND_SPECS, toolsFor } from '@cortex/agent-tools';
+// Trámites web: the browser side of an errand — which flows may run unattended,
+// and the pause a captcha or an OTP leaves behind. See migration 0111.
+import {
+  type Checkpoint,
+  checkpointSecondsLeft,
+  closeCheckpoint,
+  createHttpTransport,
+  isCheckpointLive,
+  linkCheckpointQuestion,
+  listErrandFlows,
+  openCheckpointForErrand,
+  resumeFlow,
+} from '@cortex/agent-tools';
 import {
   type ErrandDb,
   acceptBrief,
@@ -185,6 +198,21 @@ export async function advanceErrand(input: {
     const loaded = await loadSnapshot(db, input.errandId, input.organizationId);
     if (!loaded) return { did: 'nothing', again: false, detail: 'not_found' };
 
+    // -----------------------------------------------------------------------
+    // A TRÁMITE OF THIS ERRAND IS PARKED, WAITING FOR A PERSON.
+    //
+    // Checked BEFORE `decideNext`, and that ordering is the whole point: the
+    // tab behind a checkpoint lives minutes, so getting the question out — or
+    // the answer in — beats everything else the machine might have wanted to
+    // do, including reading a leg that has already finished. The assessment is
+    // still there afterwards; the browser session would not be.
+    // -----------------------------------------------------------------------
+    const parked = await openCheckpointForErrand(db, input.errandId).catch(() => null);
+    if (parked) {
+      const settled = await handleParkedTramite(db, edb, loaded, input.organizationId, parked);
+      if (settled) return settled;
+    }
+
     const transition = decideNext(loaded.snapshot, Date.now());
 
     switch (transition.do) {
@@ -317,8 +345,15 @@ async function launchLeg(
 
   // THE LINE. Applied before the run row exists, so an errand can never
   // commission work with a tool that acts outward. See boundary.ts.
-  const toolAllowlist = toolsFor(view.kind);
-  assertProposalOnly(toolAllowlist);
+  //
+  // The admission is read HERE, per leg, rather than cached anywhere: an
+  // administrator revoking a trámite's unattended permission must take effect
+  // on the next leg of an errand already running, not on the next errand. A
+  // workspace with nothing admitted gets `[]`, which admits no tools at all,
+  // which is byte-for-byte the behaviour before trámites existed.
+  const admission = { admittedFlows: await admittedTramites(db) };
+  const toolAllowlist = toolsFor(view.kind, admission);
+  assertProposalOnly(toolAllowlist, admission);
 
   const { data, error } = await db
     .from('orchestration_runs')
@@ -664,4 +699,212 @@ async function modelFor(db: SupabaseClient): Promise<string | null> {
 /** Exported for the boundary test: the toolset any errand leg may be handed. */
 export function legToolset(): string[] {
   return errandToolAllowlist();
+}
+
+/**
+ * The trámites this workspace has said may run with nobody watching.
+ *
+ * Never throws: a database hiccup here must read as "nothing is admitted",
+ * which is the safe answer and the one the product had before this existed. An
+ * error that widened the door instead would be the worst possible direction to
+ * fail in.
+ */
+async function admittedTramites(db: SupabaseClient): Promise<string[]> {
+  try {
+    return (await listErrandFlows(db)).map((f) => f.slug);
+  } catch (err) {
+    logger.warn('errands: could not read which trámites may run unattended', {
+      error: (err as Error).message,
+    });
+    return [];
+  }
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  UN TRÁMITE SE PARÓ A PEDIR UN CÓDIGO, Y EL ENCARGO NO SE MUERE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Called by the advance loop before it decides anything else. A leg whose
+ * trámite parked at a captcha or an OTP has left a checkpoint row (migration
+ * 0111) pointing at a browser tab that is still open, and the errand has to do
+ * with it exactly what it does with any other thing it cannot decide alone:
+ * stop, ask, and keep everything it already has.
+ *
+ * ── WHY IT REUSES `askAndTell` AND INVENTS NOTHING ────────────────────────
+ *
+ * The question goes into `errand_questions`, under the one-open-question index,
+ * announced in the conversation and on the bell — the same two channels, the
+ * same deduplication, the same answer paths (`errands.answer`, the screen, the
+ * route). Nothing about a captcha justifies a second question store, and a
+ * second one would mean a second place to look for "why is this stuck".
+ *
+ * What IS trámite-specific is one line of the question: for a bot check the
+ * answer is not words but an act, so the text carries the link to the screen
+ * where the tab can be seen and clicked.
+ *
+ * ── THE HONEST LIMIT, SAID IN THE QUESTION ITSELF ─────────────────────────
+ *
+ * The tab lives minutes, not hours. So the question says how long is left. An
+ * errand that asked «dame el código» and went silent for a day, then failed
+ * because a session expired, would be a worse experience than one that never
+ * offered to try — and a deadline stated up front is the difference between a
+ * person answering now and a person answering eventually.
+ */
+/**
+ * What to do about a parked trámite, in the three states it can be in.
+ *
+ * Returns null when there is nothing to do here and the ordinary machine should
+ * carry on — which is the case while the question is sitting open, because a
+ * blocked errand is already correctly doing nothing.
+ */
+async function handleParkedTramite(
+  db: SupabaseClient,
+  edb: ErrandDb,
+  loaded: Loaded,
+  organizationId: string,
+  checkpoint: Checkpoint,
+): Promise<AdvanceResult | null> {
+  const questions = await loadQuestions(db, loaded.row.view.id);
+  const asked = checkpoint.errandQuestionId
+    ? questions.find((q) => q.id === checkpoint.errandQuestionId)
+    : undefined;
+
+  // Nobody has been asked yet.
+  if (!asked) {
+    return askForTheCheckpoint(db, edb, loaded, organizationId, checkpoint);
+  }
+
+  // Asked, and still waiting. `decideNext` already returns `nothing/blocked`
+  // for this, so falling through would produce the same answer — but only
+  // because a question exists, which is a coincidence this branch does not
+  // rely on.
+  if (asked.state === 'open') {
+    return { did: 'nothing', again: false, detail: 'a trámite is waiting for a person' };
+  }
+
+  // Withdrawn: somebody cancelled or the question was lost. The tab is no use
+  // to anybody now, so it is released rather than left to time out.
+  if (asked.state !== 'answered' || !asked.answer) {
+    await closeCheckpoint(db, checkpoint.id, 'cancelled');
+    return null;
+  }
+
+  return resumeTheTramite(db, loaded, organizationId, checkpoint, asked.answer);
+}
+
+/**
+ * They answered. Hand the code over and let the trámite finish.
+ *
+ * ── WHAT HAPPENS TO THE RESULT, AND WHY IT IS `findings` ──────────────────
+ *
+ * The certificate the trámite came back with is filed in Brain Knowledge by
+ * the ordinary sink, exactly as it would be from the chat, and what the errand
+ * keeps is a LINE SAYING SO — the flow, the document, the id. That line goes
+ * into `findings`, which is the errand's memory between legs and what
+ * `composeObjective` hands the next sub-agent. So the next leg opens knowing
+ * that the certificate exists and what its id is, which is precisely what it
+ * needs to pass into the `file` slot of the trámite that uploads it.
+ *
+ * Nothing here decides the errand is finished. A trámite completing is one
+ * fact among the ones a leg produces, and the assessment that reads the leg is
+ * still the thing that decides what the errand does about it.
+ */
+async function resumeTheTramite(
+  db: SupabaseClient,
+  loaded: Loaded,
+  organizationId: string,
+  checkpoint: Checkpoint,
+  answer: string,
+): Promise<AdvanceResult> {
+  const view = loaded.row.view;
+  const userId = loaded.row.userId;
+  if (!userId) {
+    await closeCheckpoint(db, checkpoint.id, 'cancelled');
+    return { did: 'nothing', again: true, detail: 'the paused trámite has no owner left' };
+  }
+
+  const outcome = await resumeFlow({
+    db,
+    organizationId,
+    actor: { id: userId, role: 'member' },
+    checkpointId: checkpoint.id,
+    answer,
+    transport: createHttpTransport(logger),
+    logger,
+  }).catch((err: unknown) => {
+    logger.error('errands: could not resume a paused trámite', {
+      errandId: view.id,
+      error: (err as Error).message,
+    });
+    return null;
+  });
+
+  const line = outcome
+    ? `TRÁMITE WEB — ${outcome.ok ? 'terminado' : 'no pudo terminar'} después de la pausa: ${outcome.message}${describeDownload(outcome.output)}`
+    : 'TRÁMITE WEB — se recibió la respuesta pero no se pudo retomar la sesión del navegador.';
+
+  await db
+    .from('errands')
+    .update({ findings: carryForward(view.findings, line)?.slice(0, FINDINGS_STORE_LIMIT) })
+    .eq('id', view.id);
+
+  return { did: 'assess_leg', again: true, detail: outcome?.ok ? 'trámite resumed' : 'trámite failed' };
+}
+
+/**
+ * The one sentence about a downloaded file that the next leg needs.
+ *
+ * The id and not the contents: the document is already indexed in Brain
+ * Knowledge, so anything that wants to READ it can search for it, and what a
+ * next leg needs in order to ATTACH it is exactly this string.
+ */
+function describeDownload(output: Record<string, unknown>): string {
+  const download = output.download as { filename?: string; documentId?: string } | undefined;
+  if (!download?.documentId) return '';
+  return ` El archivo «${download.filename ?? 'descargado'}» quedó guardado en Brain Knowledge; para adjuntarlo en otro trámite se pasa como "doc:${download.documentId}".`;
+}
+
+async function askForTheCheckpoint(
+  db: SupabaseClient,
+  edb: ErrandDb,
+  loaded: Loaded,
+  organizationId: string,
+  checkpoint: Checkpoint,
+): Promise<AdvanceResult> {
+  const view = loaded.row.view;
+
+  // The tab is gone. Not a question — there is nothing left to answer — so it
+  // is closed out and the errand goes back to ordinary work, which will
+  // re-run the trámite from the top if it still needs it.
+  if (!isCheckpointLive(checkpoint)) {
+    await closeCheckpoint(db, checkpoint.id, 'expired');
+    return { did: 'nothing', again: true, detail: 'the paused trámite expired' };
+  }
+
+  const minutes = Math.max(1, Math.round(checkpointSecondsLeft(checkpoint) / 60));
+  const why =
+    checkpoint.reason === 'bot-check'
+      ? `El portal se detuvo a comprobar que no somos un robot, y eso no lo puedo resolver yo. La sesión sigue abierta con todo lo que el trámite ya llevaba hecho, y la puedes desbloquear desde Trámites web. Tengo unos ${minutes} minuto(s) antes de que el navegador cierre la pestaña; si se vence no se pierde nada, sólo toca volver a arrancarlo.`
+      : `Es un dato que sólo tú tienes en este momento y que no se puede guardar de antemano. La sesión sigue abierta con todo lo que el trámite ya llevaba hecho; contéstame aquí mismo y sigo. Tengo unos ${minutes} minuto(s) antes de que el navegador cierre la pestaña.`;
+
+  await askAndTell(db, edb, {
+    errandId: view.id,
+    organizationId,
+    userId: loaded.row.userId,
+    conversationId: view.conversationId,
+    request: view.request,
+    leg: view.legsUsed,
+    question: checkpoint.ask,
+    why,
+    options: [],
+  });
+
+  // Cosmetic if it fails, and deliberately not awaited into the outcome: the
+  // question is already stored and answerable. This just lets whoever answers
+  // find the tab it belongs to.
+  const open = (await loadQuestions(db, view.id)).find((q) => q.state === 'open');
+  if (open) await linkCheckpointQuestion(db, checkpoint.id, open.id).catch(() => undefined);
+
+  return { did: 'assess_leg', again: false, detail: 'a trámite is waiting for a person' };
 }

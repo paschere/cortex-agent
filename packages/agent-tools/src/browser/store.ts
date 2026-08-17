@@ -16,7 +16,7 @@ import type { FailureKind, Flow, ModelSpend, Step, StepOutcome, Variable } from 
 
 const FLOW_COLUMNS = `
   id, organization_id, slug, name, description, start_url, host, effect, status, source,
-  credential_id, login_required, variables, steps, version, verified_at, verified_run_id,
+  credential_id, login_required, errand_allowed, variables, steps, version, verified_at, verified_run_id,
   repairs_in_window, repair_window_started_at, last_run_at, last_run_status, last_error,
   recording_frames, extraction_cost_usd, created_by, created_at, updated_at
 `;
@@ -35,7 +35,15 @@ export function rowToFlow(row: Record<string, unknown>): Flow {
     source: (row.source as Flow['source']) ?? 'recording',
     credentialId: (row.credential_id as string | null) ?? null,
     loginRequired: Boolean(row.login_required),
-    variables: (row.variables as Variable[]) ?? [],
+    errandAllowed: Boolean(row.errand_allowed),
+    // `type` defaults in the schema and is backfilled by migration 0111, but a
+    // row read straight out of Postgres is plain jsonb and nothing has applied
+    // that default to it. Normalised here, in the one function that turns a row
+    // into a Flow, so every consumer sees a slot that knows what it holds.
+    variables: (((row.variables as Variable[]) ?? []) as Variable[]).map((v) => ({
+      ...v,
+      type: v.type ?? 'text',
+    })),
     steps: (row.steps as Step[]) ?? [],
     version: (row.version as number) ?? 1,
     verifiedAt: (row.verified_at as string | null) ?? null,
@@ -247,6 +255,39 @@ export async function markNeedsLogin(
     .from('browser_flows')
     .update({ login_required: true, last_error: why, updated_at: new Date().toISOString() })
     .eq('id', flowId);
+}
+
+/**
+ * Let this trámite run inside an errand, or take that back.
+ *
+ * Its own function, and not a field of a general flow update, because it is
+ * the one property of a flow that widens what an UNATTENDED run may do. The
+ * caller checks the actor is an admin (`isAdmin`, access.ts); the `read`-only
+ * half is checked by the table itself (migration 0111), so it holds even for a
+ * caller who forgot.
+ */
+export async function setErrandAllowed(
+  db: SupabaseClient,
+  flowId: string,
+  allowed: boolean,
+): Promise<void> {
+  const { error } = await db
+    .from('browser_flows')
+    .update({ errand_allowed: allowed, updated_at: new Date().toISOString() })
+    .eq('id', flowId);
+  if (error) throw new Error(error.message);
+}
+
+/** Every trámite this workspace has admitted into unattended errands. */
+export async function listErrandFlows(db: SupabaseClient): Promise<Flow[]> {
+  const { data } = await db
+    .from('browser_flows')
+    .select(FLOW_COLUMNS)
+    .eq('errand_allowed', true)
+    .eq('status', 'ready')
+    .eq('effect', 'read')
+    .limit(100);
+  return ((data as Record<string, unknown>[]) ?? []).map(rowToFlow);
 }
 
 export async function markBroken(db: SupabaseClient, flowId: string, why: string): Promise<void> {

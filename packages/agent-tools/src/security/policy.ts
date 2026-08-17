@@ -250,6 +250,12 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // the company's credentials, on a system nobody here can roll back. Nothing
   // in the verb 'submit' would have said so.
   'browser.submit_flow': { blastRadius: 'external_send', deliversContent: true },
+  // Retomar un trámite que se paró a pedir un código no es una consulta: es el
+  // resto de ESE trámite, que puede terminar radicando algo. Se clasifica como
+  // lo más fuerte que la pausa pueda estar sosteniendo, porque quien la retoma
+  // no sabe —y esta tabla tampoco— cuál de las dos era. El verbo 'resume' no
+  // está en WRITE_VERBS y se leería como una lectura.
+  'browser.resume_flow': { blastRadius: 'external_send' },
   // Sheets can be shared outside; an external address in the payload says so.
   'gsheets.append_row': { blastRadius: 'internal_write', deliversContent: true },
   // A calendar write is internal bookkeeping; the invite email is a side effect

@@ -71,7 +71,7 @@ export interface FlowRunOutcome {
    * la campana, porque hay una pestaña abierta esperando a una persona.
    */
   failureKind?: 'transient' | 'legitimate' | 'site-changed' | 'needs-login' | 'needs-human' | null;
-  pendingQuestion?: 'credential' | null;
+  pendingQuestion?: 'credential' | 'input' | 'unlock' | null;
   /** La corrida, para que el aviso apunte a un hecho y no a un trámite. */
   runId?: string | null;
   /**

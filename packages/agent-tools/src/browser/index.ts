@@ -41,10 +41,48 @@ export {
   type CredentialSummary,
 } from './credentials';
 export {
+  closeCheckpoint,
+  defaultAsk as defaultCheckpointAsk,
+  expireStaleCheckpoints,
+  getCheckpoint,
+  isLive as isCheckpointLive,
+  linkQuestion as linkCheckpointQuestion,
+  listOpenCheckpoints,
+  openCheckpoint,
+  openCheckpointForErrand,
+  secondsLeft as checkpointSecondsLeft,
+  type Checkpoint,
+} from './checkpoint';
+export {
+  resumeFlow,
   runFlow,
+  type ResumeOptions as BrowserResumeOptions,
   type RunOptions as BrowserRunOptions,
   type RunOutcome as BrowserRunOutcome,
 } from './execute';
+export {
+  auditSlots,
+  callerSlots,
+  fillSlots,
+  holesIn,
+  normaliseSlot,
+  runnableSlots,
+  slotComplaint,
+  type SlotFill,
+} from './slots';
+export {
+  ALLOWED_UPLOAD_EXTENSIONS,
+  consumesDocument,
+  extensionOf,
+  MAX_UPLOAD_BYTES,
+  parseFileRef,
+  planUploads,
+  renderRef,
+  resolveUpload,
+  resolveUploads,
+  type FileRef,
+  type UploadPayload,
+} from './uploads';
 export {
   alignFirstGoto,
   extractFlowFromRecording,
@@ -67,6 +105,8 @@ export { runReasoned, type ReasonedResult } from './reasoned';
 export {
   enforceSecrets,
   looksLikeCredentialField,
+  looksLikeOneTimeCode,
+  pauseForOneTimeCodes,
   redactValue,
   REDACTED as BROWSER_REDACTED,
   safeInputs,
@@ -77,6 +117,7 @@ export {
   getFlow,
   getFlowBySlug,
   latestRunPerFlow,
+  listErrandFlows,
   listFlows,
   listRuns,
   listRunSteps,
@@ -84,19 +125,26 @@ export {
   markVerified,
   MAX_REPAIRS_PER_WINDOW,
   repairsExhausted,
+  setErrandAllowed,
   writeVersion,
   type NewFlow,
   type RunRow,
 } from './store';
 export {
+  HANDOFF_REASONS,
+  SLOT_TYPES,
   STEP_ACTIONS,
   stepSchema,
   TARGET_KINDS,
   variableSchema,
+  type BrowserHandoff,
   type Flow,
   type FlowEffect,
   type FlowStatus,
+  type HandoffReason,
   type PageSnapshot,
+  type PauseRequest,
+  type SlotType,
   type Step,
   type StepOutcome,
   type StepValue,
@@ -104,6 +152,12 @@ export {
   type Variable,
 } from './types';
 
-// Registers browser.list_flows, browser.run_flow and browser.submit_flow as a
-// side effect of being imported. Last, so everything above is initialised first.
-export { browserListFlows, browserRunFlow, browserSubmitFlow } from './tools';
+// Registers browser.list_flows, browser.run_flow, browser.submit_flow and
+// browser.resume_flow as a side effect of being imported. Last, so everything
+// above is initialised first.
+export {
+  browserListFlows,
+  browserResumeFlow,
+  browserRunFlow,
+  browserSubmitFlow,
+} from './tools';

@@ -218,8 +218,70 @@ export const STEP_ACTIONS = [
   'wait_for',
   'extract',
   'download',
+  'upload',
+  'pause',
 ] as const;
 export type StepAction = (typeof STEP_ACTIONS)[number];
+
+/**
+ * De qué es cada dato que el trámite pide. Espejo de `SLOT_TYPES`.
+ *
+ * No es decoración: es la regla de normalización que convierte lo que salga de
+ * un Drive en lo que la casilla del portal acepta. Ver browser/slots.ts.
+ */
+export const SLOT_TYPES = [
+  'text',
+  'number',
+  'money',
+  'date',
+  'nit',
+  'plate',
+  'email',
+  'code',
+  'file',
+] as const;
+export type SlotType = (typeof SLOT_TYPES)[number];
+
+export interface FlowVariable {
+  name: string;
+  label: string;
+  example: string;
+  required: boolean;
+  /**
+   * Opcional en el espejo y NO en el esquema, a propósito. Todo trámite
+   * enseñado antes de que este campo existiera tiene variables sin él, y
+   * `variableSchema` les pone 'text' al leerlas — que es exactamente lo que
+   * siempre quisieron decir. Exigirlo aquí obligaría a cada pantalla a
+   * inventarse un valor para una fila vieja.
+   */
+  type?: SlotType;
+}
+
+/** Lo que la pantalla dice de cada tipo, en una palabra. */
+export const SLOT_TYPE_LABEL: Record<SlotType, string> = {
+  text: 'Texto',
+  number: 'Número',
+  money: 'Monto',
+  date: 'Fecha',
+  nit: 'NIT',
+  plate: 'Placa',
+  email: 'Correo',
+  code: 'Código de un solo uso',
+  file: 'Archivo',
+};
+
+/** Y por qué importa, para quien esté revisando un trámite recién enseñado. */
+export const SLOT_TYPE_HINT: Record<SlotType, string> = {
+  text: 'Se manda tal cual.',
+  number: 'Se le quitan puntos y espacios.',
+  money: 'Se manda en pesos, sin $ ni puntos.',
+  date: 'Se manda como aaaa-mm-dd, aunque te la den en dd/mm/aaaa.',
+  nit: 'Se manda sin el dígito de verificación; casi todos los portales lo piden aparte.',
+  plate: 'Se manda en mayúsculas y sin espacios ni guiones.',
+  email: 'Se manda en minúsculas.',
+  code: 'El que llega por SMS. No se guarda en ninguna parte: el trámite se para y lo pide en el momento.',
+  file: 'Un documento del cerebro. Se pasa como «doc:id», no como texto.',
+};
 
 export const TARGET_KINDS = [
   'testid',
@@ -261,6 +323,8 @@ export const ACTION_LABEL: Record<StepAction, string> = {
   wait_for: 'Esperar',
   extract: 'Leer',
   download: 'Descargar desde',
+  upload: 'Adjuntar archivo en',
+  pause: 'Parar y preguntarle a una persona',
 };
 
 export const TARGET_LABEL: Record<TargetKind, string> = {
@@ -303,7 +367,7 @@ export interface FlowSummary {
    * `api/browser/flows` como `loginRequired && !credentialId`.
    */
   needsCredential: boolean;
-  variables: { name: string; label: string; example: string; required: boolean }[];
+  variables: FlowVariable[];
   stepCount: number;
   /** Qué produce y dónde llega. See migration 0093. */
   delivery: FlowDelivery;
@@ -327,7 +391,9 @@ export interface ProposedStep {
   value?:
     | { kind: 'literal'; text: string }
     | { kind: 'template'; text: string }
-    | { kind: 'secret'; field: string };
+    | { kind: 'secret'; field: string }
+    /** Un archivo, nombrado y no cargado. Ver browser/uploads.ts. */
+    | { kind: 'file'; from: string };
   url?: string;
   expect?: string;
   landmarks: string[];
@@ -340,7 +406,7 @@ export interface Proposal {
   description: string;
   startUrl: string;
   effect: FlowEffect;
-  variables: { name: string; label: string; example: string; required: boolean }[];
+  variables: FlowVariable[];
   steps: ProposedStep[];
   notes: string[];
 }

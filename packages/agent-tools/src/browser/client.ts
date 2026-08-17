@@ -24,7 +24,35 @@ export interface ReplayCall {
   inputs: Record<string, string>;
   /** Decrypted for exactly this call. Never logged, never persisted. */
   secrets: Record<string, string>;
+  /**
+   * The files this run's `upload` steps will attach, keyed by STEP INDEX.
+   *
+   * Keyed by index rather than by the reference string so that neither side
+   * has to render `{{holes}}` and agree with the other about the result. The
+   * service resolves nothing here: it is handed bytes and a step number.
+   *
+   * A step whose reference is `download` is deliberately absent — those bytes
+   * only exist inside the run that is about to happen, and the service takes
+   * them from the file it just fetched. See uploads.ts.
+   */
+  files?: Record<string, { filename: string; mimeType: string; base64: string }>;
   timeoutMs?: number;
+}
+
+/**
+ * Carrying on in a tab a person just unlocked.
+ *
+ * `inputs` is the whole point of this call existing separately from a replay:
+ * it carries the ONE value the pause was waiting for — the code the bank
+ * texted — merged into the inputs the run already had. Everything else about
+ * the run (the steps, the credentials, the files) is still held by the
+ * service, next to the tab it belongs to.
+ */
+export interface ResumeCall {
+  sessionId: string;
+  fromIndex: number;
+  /** Merged over the original run's inputs. Usually one key. */
+  inputs?: Record<string, string>;
 }
 
 export interface ActCall {
@@ -45,6 +73,8 @@ export interface ActResult {
 export interface BrowserTransport {
   configured(): boolean;
   replay(call: ReplayCall): Promise<TransportResult<ReplayResponse>>;
+  /** Carry on in a tab held open at a pause. See `ResumeCall`. */
+  resume(call: ResumeCall): Promise<TransportResult<ReplayResponse>>;
   openSession(
     startUrl: string,
   ): Promise<TransportResult<{ sessionId: string; snapshot: PageSnapshot }>>;
@@ -142,6 +172,15 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
     // several of them slow. The ceiling still has to exist so a hung site
     // cannot hold a chat turn open forever.
     replay: (c) => call<ReplayResponse>('/replay', 'POST', c, 200_000),
+    // The same generous ceiling as a replay: what happens after the captcha is
+    // the REST of the errand, which is most of it.
+    resume: (c) =>
+      call<ReplayResponse>(
+        `/session/${encodeURIComponent(c.sessionId)}/continue`,
+        'POST',
+        { fromIndex: c.fromIndex, inputs: c.inputs ?? {} },
+        200_000,
+      ),
     openSession: (startUrl) =>
       call<{ sessionId: string; snapshot: PageSnapshot }>('/session', 'POST', { startUrl }, 60_000),
     act: (c) =>

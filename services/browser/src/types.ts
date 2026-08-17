@@ -34,7 +34,14 @@ export interface Target {
 export type StepValue =
   | { kind: 'literal'; text: string }
   | { kind: 'template'; text: string }
-  | { kind: 'secret'; field: string };
+  | { kind: 'secret'; field: string }
+  /**
+   * A file, named rather than carried. `from` is resolved by Cortex before the
+   * request arrives — see `ReplayRequest.files` — EXCEPT for the one value this
+   * service resolves itself, `download`, which means "the file this run has
+   * already fetched".
+   */
+  | { kind: 'file'; from: string };
 
 export type StepAction =
   | 'goto'
@@ -46,7 +53,17 @@ export type StepAction =
   | 'press'
   | 'wait_for'
   | 'extract'
-  | 'download';
+  | 'download'
+  /** Put a file into an `<input type=file>`. The counterpart of `download`. */
+  | 'upload'
+  /**
+   * Stop and wait for a person, in this tab.
+   *
+   * The only step that is not an instruction to the site. It exists for the
+   * two moments a portal genuinely needs a human and a recording cannot supply
+   * one: the code the bank texts, and the captcha.
+   */
+  | 'pause';
 
 export interface Step {
   action: StepAction;
@@ -67,6 +84,12 @@ export interface Step {
   extractAs?: string;
 }
 
+export interface UploadPayload {
+  filename: string;
+  mimeType: string;
+  base64: string;
+}
+
 export interface ReplayRequest {
   runId: string;
   startUrl: string;
@@ -75,6 +98,14 @@ export interface ReplayRequest {
   inputs: Record<string, string>;
   /** Credential fields, decrypted for exactly this call. */
   secrets: Record<string, string>;
+  /**
+   * Files for this run's `upload` steps, KEYED BY STEP INDEX as a string.
+   *
+   * Keyed by index rather than by the reference the step carries, so neither
+   * side has to render `{{holes}}` and agree with the other about the result.
+   * This service resolves nothing: it is handed bytes and a step number.
+   */
+  files?: Record<string, UploadPayload>;
   timeoutMs?: number;
 }
 
@@ -181,14 +212,29 @@ export interface ReplayResponse {
     snapshot: PageSnapshot;
   };
   /**
+   * THE RUN STOPPED ON PURPOSE, AT A `pause` STEP.
+   *
+   * `ok` is false because the run did not finish, and `failure` is ABSENT
+   * because nothing went wrong. Cortex keys off exactly that difference: no
+   * classification, no repair, no flow marked broken.
+   */
+  pause?: {
+    index: number;
+    /** The question, in the words of whoever taught the trámite. */
+    ask: string;
+    /** The input key the answer fills, or null when the answer is an act. */
+    fills: string | null;
+  };
+  /**
    * THE BROWSER IS STILL OPEN AND WAITING FOR A PERSON.
    *
-   * Present only when the run stopped at a bot check. Normally a replay owns
-   * its context and destroys it on the way out — that is what makes this
-   * service stateless and cheap. A challenge is the one failure where throwing
-   * the tab away is the wrong move: whatever the portal wants (a checkbox, a
-   * set of traffic lights) has to happen IN THIS TAB, in this session, with
-   * these cookies. Reopening later means arriving at the same challenge again.
+   * Present when the run stopped at a bot check, or at a `pause` step it
+   * declared. Normally a replay owns its context and destroys it on the way out
+   * — that is what makes this service stateless and cheap. These are the two
+   * stops where throwing the tab away is the wrong move: whatever the portal
+   * wants (a checkbox, a set of traffic lights, the code that just arrived) has
+   * to happen IN THIS TAB, in this session, with these cookies. Reopening later
+   * means arriving at the same challenge again.
    *
    * So the context survives, keyed by `sessionId`, and is swept like any other
    * idle session if nobody comes. `fromIndex` is the step to resume at, so the
@@ -196,9 +242,11 @@ export interface ReplayResponse {
    */
   handoff?: {
     sessionId: string;
-    reason: 'bot-check';
+    reason: 'bot-check' | 'input-needed';
     fromIndex: number;
     /** When the sweeper will take the tab away, so the screen can say so. */
     expiresAt: string;
+    ask?: string;
+    fills?: string | null;
   };
 }

@@ -1,8 +1,12 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { getCheckpoint, isLive, secondsLeft } from './checkpoint';
 import { createHttpTransport } from './client';
-import { runFlow } from './execute';
+import { producesDocument } from './download';
+import { resumeFlow, runFlow } from './execute';
+import { callerSlots } from './slots';
 import { getFlowBySlug, listFlows } from './store';
+import { consumesDocument } from './uploads';
 
 /**
  * The three tools that let somebody say "sácame el certificado de tradición de
@@ -47,13 +51,38 @@ const inputsField = z
   .record(z.string().max(300))
   .default({})
   .describe(
-    'Los datos que cambian entre una ejecución y otra, por nombre de variable: {"placa":"ABC123"}. Nunca contraseñas: esas van cifradas en la credencial del trámite.',
+    'Los datos que cambian entre una ejecución y otra, por nombre de variable: {"placa":"ABC123"}. ' +
+      'Puedes traerlos de donde sea — de una hoja de Drive, de un documento, del resultado de otra ' +
+      'herramienta — y no tienes que arreglarles el formato: el NIT con puntos y guion, la fecha en ' +
+      'dd/mm/aaaa y la placa con espacios se normalizan solas al formato que pide el portal. ' +
+      'Para una variable de tipo archivo pasa una referencia: "doc:<id del documento>" (el id que ' +
+      'devuelve una descarga anterior en result.download.documentId, o el de un archivo del cerebro). ' +
+      'Nunca contraseñas: esas van cifradas en la credencial del trámite, y nunca códigos de ' +
+      'verificación: esos los pide el trámite en el momento.',
   );
+
+/**
+ * How a flow's slots are described to the planner.
+ *
+ * The type is included and it is not decoration: the model composing «lee el
+ * NIT en el Drive y sácame el certificado» has to know that the thing it is
+ * looking for is a NIT and not a name, and that the box for it takes a file
+ * rather than text. It is the difference between a plan and a guess.
+ */
+function describeSlots(flow: import('./types').Flow) {
+  return callerSlots(flow.variables, flow.steps).map((v) => ({
+    name: v.name,
+    label: v.label,
+    example: v.example,
+    type: v.type ?? 'text',
+    required: v.required,
+  }));
+}
 
 export const browserListFlows = registerTool({
   id: 'browser.list_flows',
   description:
-    "List the trámites this workspace has taught Cortex to do on other people's portals — sacar un certificado, consultar un estado, descargar un paz y salvo, radicar una solicitud — with what each one does, which site it runs on (RUNT, SIMIT, DIAN, Cámara de Comercio, a customer's supplier portal), what data it needs, and whether it consults or submits. Call this FIRST whenever the request means going into an external website: «sácame el certificado de tradición», «consúltame eso en el portal», «descárgame el paz y salvo», «radica la solicitud». Only trámites proven to reproduce are listed.",
+    "List the trámites this workspace has taught Cortex to do on other people's portals — sacar un certificado, consultar un estado, descargar un paz y salvo, subir un documento a un portal, radicar una solicitud — with what each one does, which site it runs on (RUNT, SIMIT, DIAN, Cámara de Comercio, a customer's supplier portal), WHAT DATA EACH ONE NEEDS AND OF WHAT KIND (a NIT, a plate, a date, a FILE), whether it brings a file back, whether it puts one in, and whether it consults or submits. Call this FIRST whenever the request means going into an external website: «sácame el certificado de tradición», «consúltame eso en el portal», «descárgame el paz y salvo», «súbele el certificado al portal del cliente», «radica la solicitud». It is also the tool that tells you HOW TO CHAIN TWO OF THEM: a trámite that downloads returns a document id, and a trámite whose slot is of type `file` takes that id, so «baja el certificado en la DIAN y súbelo al portal del cliente» is two calls and not an impossibility. Only trámites proven to reproduce are listed.",
   inputSchema: z.object({}),
   outputSchema: z.object({
     flows: z.array(
@@ -64,7 +93,21 @@ export const browserListFlows = registerTool({
         site: z.string(),
         effect: z.enum(['read', 'write']),
         needsApproval: z.boolean(),
-        variables: z.array(z.object({ name: z.string(), label: z.string(), example: z.string() })),
+        variables: z.array(
+          z.object({
+            name: z.string(),
+            label: z.string(),
+            example: z.string(),
+            type: z.string(),
+            required: z.boolean(),
+          }),
+        ),
+        /** Brings a file back and files it in Brain Knowledge. */
+        producesFile: z.boolean(),
+        /** Puts a file into the site. One of its slots is of type `file`. */
+        needsFile: z.boolean(),
+        /** Will stop mid-way and ask a person for a code, or for a captcha. */
+        asksForAHuman: z.boolean(),
         lastRunAt: z.string().nullable(),
         lastRunStatus: z.string().nullable(),
       }),
@@ -73,7 +116,14 @@ export const browserListFlows = registerTool({
   }),
   rateLimit: { perMinute: 30 },
   handler: async (_input, ctx) => {
-    const flows = (await listFlows(ctx.db)).filter((f) => f.status === 'ready');
+    const ready = (await listFlows(ctx.db)).filter((f) => f.status === 'ready');
+    // Unattended, the catalogue shows only what may actually be run there.
+    // Listing a trámite a leg is not allowed to touch would have the planner
+    // build a plan around it and discover the refusal three steps later, having
+    // spent a leg on it — and «no puedo» from a tool that was just advertised
+    // reads as a bug rather than as a permission.
+    const flows =
+      ctx.surface === 'schedule' ? ready.filter((f) => f.errandAllowed) : ready;
     return {
       flows: flows.map((f) => ({
         slug: f.slug,
@@ -82,14 +132,22 @@ export const browserListFlows = registerTool({
         site: f.host,
         effect: f.effect,
         needsApproval: f.effect === 'write',
-        variables: f.variables.map((v) => ({ name: v.name, label: v.label, example: v.example })),
+        variables: describeSlots(f),
+        producesFile: producesDocument(f.steps),
+        needsFile: consumesDocument(f.steps),
+        asksForAHuman: f.steps.some((s) => s.action === 'pause'),
         lastRunAt: f.lastRunAt,
         lastRunStatus: f.lastRunStatus,
       })),
       guidance:
         flows.length === 0
-          ? 'Todavía no hay trámites web aprendidos y probados. Se enseñan en Trámites web, grabando la pestaña una vez.'
-          : 'Usa browser.run_flow para los de tipo read y browser.submit_flow para los de tipo write (esos piden aprobación).',
+          ? ctx.surface === 'schedule' && ready.length > 0
+            ? 'Hay trámites aprendidos, pero ninguno está habilitado para correr sin nadie mirando. Dilo así y sigue con lo que sí puedas hacer; un administrador los habilita desde Trámites.'
+            : 'Todavía no hay trámites web aprendidos y probados. Se enseñan en Trámites web, grabando la pestaña una vez.'
+          : 'Usa browser.run_flow para los de tipo read y browser.submit_flow para los de tipo write (esos piden aprobación). ' +
+            'Para encadenar: corre primero el que trae el archivo, toma el result.download.documentId que devuelve, y pásalo ' +
+            'como "doc:<ese id>" en la variable de tipo file del segundo. Si un trámite dice asksForAHuman, en algún punto se ' +
+            'va a detener a pedir un código o una verificación; eso no es una falla y se retoma con browser.resume_flow.',
     };
   },
 });
@@ -102,12 +160,38 @@ const runOutput = z.object({
   seconds: z.number(),
   message: z.string(),
   guidance: z.string(),
+  /**
+   * The trámite is parked mid-way waiting for a person, and this is where to
+   * come back to. Null on every other outcome.
+   *
+   * Handed to the model rather than kept internal because the model is the one
+   * holding the conversation in which the person is about to say «me llegó
+   * 483920», and it needs something to attach that to.
+   */
+  pausedAt: z.string().nullable(),
+  /** What the person has to supply, verbatim, when `pausedAt` is set. */
+  asks: z.string().nullable(),
 });
+
+/**
+ * Everything a paused run needs to say, assembled once.
+ *
+ * A pause reaches the model through three different tools (run, submit,
+ * resume), and a person who is told three different things about the same
+ * captcha concludes there are three problems.
+ */
+function pausedFields(outcome: {
+  checkpoint?: { id: string; ask: string; reason: string; fills: string | null };
+}): { pausedAt: string | null; asks: string | null } {
+  const cp = outcome.checkpoint;
+  if (!cp) return { pausedAt: null, asks: null };
+  return { pausedAt: cp.id, asks: cp.ask };
+}
 
 export const browserRunFlow = registerTool({
   id: 'browser.run_flow',
   description:
-    "Do a learned trámite that only CONSULTS or DOWNLOADS from somebody else's portal — sacar un certificado, descargar un paz y salvo o un extracto, consultar un estado, un radicado o una placa. This is the tool for «sácame el certificado», «consulta eso en el portal», «bájame el documento de la página» once browser.list_flows shows a trámite that matches. Replays the saved steps in a real browser with no model in the loop, so it takes seconds and costs nothing. Refuses any trámite that submits something to the third party; use browser.submit_flow for those.",
+    "Do a learned trámite that only CONSULTS or DOWNLOADS from somebody else's portal — sacar un certificado, descargar un paz y salvo o un extracto, consultar un estado, un radicado o una placa. This is the tool for «sácame el certificado», «consulta eso en el portal», «bájame el documento de la página» once browser.list_flows shows a trámite that matches. Feed its slots from ANYWHERE — a NIT read out of a Drive sheet with gdrive.read_doc, a plate from vehicles.list, a figure another tool just returned — without reformatting them: a NIT with dots and a check digit, a date in dd/mm/aaaa and a plate with a space all arrive at the portal in the shape its box wants. When it downloads something, the file is filed in Brain Knowledge and its id comes back in result.download.documentId, which is exactly what a second trámite's `file` slot takes — that is how «baja el certificado y súbelo al portal del cliente» is done. Replays the saved steps in a real browser with no model in the loop, so it takes seconds and costs nothing. If the portal stops to ask for a code or a captcha the run does not die: it parks, returns `pausedAt`, and you put the question to the person and come back with browser.resume_flow. Refuses any trámite that submits something to the third party; use browser.submit_flow for those.",
   inputSchema: z.object({ flow: flowRef, inputs: inputsField }),
   outputSchema: runOutput,
   rateLimit: { perMinute: 10 },
@@ -121,6 +205,8 @@ export const browserRunFlow = registerTool({
         seconds: 0,
         message: `No tengo un trámite probado que se llame «${input.flow}».`,
         guidance: 'Llama a browser.list_flows para ver cuáles hay.',
+        pausedAt: null,
+        asks: null,
       };
     }
     if (flow.effect === 'write') {
@@ -132,6 +218,40 @@ export const browserRunFlow = registerTool({
         message: `«${flow.name}» no es una consulta: radica o envía algo en ${flow.host}.`,
         guidance:
           'Usa browser.submit_flow, que pide aprobación de una persona antes de escribir en un sitio ajeno.',
+        pausedAt: null,
+        asks: null,
+      };
+    }
+
+    // -----------------------------------------------------------------------
+    // THE PER-FLOW ADMISSION, APPLIED WHERE THE FLOW IS FINALLY KNOWN.
+    //
+    // `boundary.ts` says the correct way to let an errand near this tool is to
+    // admit flows one by one rather than the family. The allow-list can only
+    // name TOOL ids, so the second half of that rule has to be enforced here —
+    // the only place that has both the surface and the row.
+    //
+    // `surface: 'schedule'` is what the whole product means by "nobody is
+    // watching": an errand's legs run under it, and so does a routine. A
+    // trámite nobody has admitted does not run there, however read-only it
+    // looks, because "read-only" is a property of the recording and the
+    // recording was made by a person who was not thinking about this.
+    // -----------------------------------------------------------------------
+    if (ctx.surface === 'schedule' && !flow.errandAllowed) {
+      return {
+        ok: false,
+        flow: flow.slug,
+        result: {},
+        seconds: 0,
+        message:
+          `«${flow.name}» no está habilitado para correr solo, sin nadie mirando. Corre bien ` +
+          'cuando alguien lo pide en el chat o desde Trámites.',
+        guidance:
+          'No lo reintentes: es un permiso, no una falla. Dile a la persona que un administrador ' +
+          'puede habilitarlo para trabajos desatendidos desde la pantalla de Trámites, y sigue con ' +
+          'lo que sí puedas hacer.',
+        pausedAt: null,
+        asks: null,
       };
     }
 
@@ -154,7 +274,8 @@ export const browserRunFlow = registerTool({
       message: outcome.message,
       guidance: outcome.ok
         ? documentGuidance(outcome.output)
-        : failureGuidance(outcome.failureKind),
+        : failureGuidance(outcome.failureKind, outcome.checkpoint?.id),
+      ...pausedFields(outcome),
     };
   },
 });
@@ -162,7 +283,7 @@ export const browserRunFlow = registerTool({
 export const browserSubmitFlow = registerTool({
   id: 'browser.submit_flow',
   description:
-    "Do a learned trámite that WRITES on somebody else's portal — radicar una solicitud, presentar o declarar algo ante la DIAN, enviar un formulario, aceptar o pagar. This is the tool for «radica el trámite», «presenta la solicitud en el portal», «manda el formulario». It acts with the company's identity on a system nobody here controls, so it always requires a human approval before it runs. For lookups and downloads use browser.run_flow instead.",
+    "Do a learned trámite that WRITES on somebody else's portal — radicar una solicitud, presentar o declarar algo ante la DIAN, SUBIR UN ARCHIVO a a customer's supplier portal, enviar un formulario, aceptar o pagar. This is the tool for «radica el trámite», «presenta la solicitud en el portal», «súbele el certificado al portal del cliente», «adjunta el RUT y manda el formulario». When the trámite has a slot of type `file`, pass it the id of a document as \"doc:<id>\" — the id a previous browser.run_flow returned in result.download.documentId, or the id of anything already in Brain Knowledge, which is what a file imported from Drive or generated as a report already is. It acts with the company's identity on a system nobody here controls, so it always requires a human approval before it runs, and it will not run at all in an unattended job. For lookups and downloads use browser.run_flow instead.",
   inputSchema: z.object({ flow: flowRef, inputs: inputsField }),
   outputSchema: runOutput,
   // The gate. Read before the input is even looked at -- see the header note.
@@ -178,6 +299,8 @@ export const browserSubmitFlow = registerTool({
         seconds: 0,
         message: `No tengo un trámite probado que se llame «${input.flow}».`,
         guidance: 'Llama a browser.list_flows para ver cuáles hay.',
+        pausedAt: null,
+        asks: null,
       };
     }
 
@@ -200,7 +323,83 @@ export const browserSubmitFlow = registerTool({
       message: outcome.message,
       guidance: outcome.ok
         ? `Quedó radicado en ${flow.host}. Dile a la persona exactamente qué se envió y con qué número, si el portal dio uno.`
-        : failureGuidance(outcome.failureKind),
+        : failureGuidance(outcome.failureKind, outcome.checkpoint?.id),
+      ...pausedFields(outcome),
+    };
+  },
+});
+
+export const browserResumeFlow = registerTool({
+  id: 'browser.resume_flow',
+  description:
+    'Give a trámite that stopped mid-way the one thing it was waiting for, so it carries on in the SAME browser session without repeating anything. Use it the moment the person answers a question a trámite asked — «me llegó 483920», «el código es 77341», «ya resolví el captcha», «listo, ya lo desbloqueé» — after browser.run_flow or browser.submit_flow came back with `pausedAt`. This is what makes a portal with two-factor authentication or a captcha doable at all: the session, the cookies and the half-filled form are still open on the other side, and this hands over the code and lets it finish. It expires in minutes, so use it as soon as the person answers; if it has expired, say so plainly and offer to start the trámite again.',
+  inputSchema: z.object({
+    pausedAt: z
+      .string()
+      .uuid()
+      .describe('El identificador que devolvió el trámite en pausedAt cuando se detuvo.'),
+    answer: z
+      .string()
+      .trim()
+      .max(300)
+      .default('')
+      .describe(
+        'Lo que dijo la persona: el código que le llegó, tal cual. Déjalo vacío sólo cuando la pausa era una verificación de «no soy un robot» que alguien resolvió en la pantalla.',
+      ),
+  }),
+  outputSchema: runOutput,
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    const checkpoint = await getCheckpoint(ctx.db, input.pausedAt);
+    if (!checkpoint) {
+      return {
+        ok: false,
+        flow: '',
+        result: {},
+        seconds: 0,
+        message: 'Ese trámite en pausa ya no existe.',
+        guidance: 'Ofrécele volver a arrancar el trámite desde el principio.',
+        pausedAt: null,
+        asks: null,
+      };
+    }
+    if (!isLive(checkpoint)) {
+      return {
+        ok: false,
+        flow: '',
+        result: {},
+        seconds: 0,
+        message:
+          'Se venció la sesión: el navegador sólo puede sostener la pestaña abierta unos minutos ' +
+          'y ya la cerró.',
+        guidance:
+          'Dile eso mismo sin adornarlo y ofrécele arrancar el trámite otra vez; son unos segundos ' +
+          'y esta vez conviene que esté pendiente del código.',
+        pausedAt: null,
+        asks: null,
+      };
+    }
+
+    const outcome = await resumeFlow({
+      db: ctx.db,
+      organizationId: ctx.organizationId,
+      actor: { id: ctx.userId, role: 'member' },
+      checkpointId: input.pausedAt,
+      answer: input.answer ?? '',
+      transport: createHttpTransport(ctx.logger, ctx.signal),
+      logger: ctx.logger,
+    });
+
+    return {
+      ok: outcome.ok,
+      flow: '',
+      result: outcome.output,
+      seconds: Math.round(outcome.durationMs / 100) / 10,
+      message: outcome.message,
+      guidance: outcome.ok
+        ? documentGuidance(outcome.output)
+        : `${failureGuidance(outcome.failureKind, outcome.checkpoint?.id)} Quedaban ${secondsLeft(checkpoint)} segundos de sesión cuando lo intenté.`,
+      ...pausedFields(outcome),
     };
   },
 });
@@ -221,12 +420,29 @@ function documentGuidance(output: Record<string, unknown>): string {
     return `Dile a la persona qué se obtuvo, y que el archivo no se pudo traer: ${download.refused}. El trámite en sí sí funcionó.`;
   }
   if (download?.documentId) {
-    return `Dile a la persona qué se obtuvo y que el archivo «${download.filename}» quedó guardado en su espacio personal de Brain Knowledge, listo para consultarlo o citarlo. No pegues el contenido del archivo.`;
+    return (
+      `Dile a la persona qué se obtuvo y que el archivo «${download.filename}» quedó guardado en su ` +
+      'espacio personal de Brain Knowledge, listo para consultarlo o citarlo. No pegues el contenido ' +
+      `del archivo. Si lo que sigue es llevarlo a otro portal, ese archivo se pasa como "doc:${download.documentId}" ` +
+      'en la variable de tipo file del trámite que lo sube.'
+    );
   }
   return 'Dile a la persona qué se obtuvo. Si hay una descarga, está en result.download.';
 }
 
-function failureGuidance(kind: string | undefined): string {
+function failureGuidance(kind: string | undefined, pausedAt?: string): string {
+  // A parked trámite is answered before it is explained. This branch is first
+  // because `needs-human` covers both "somebody has to do this bit" and "this
+  // site refuses robots", and only one of them has a way forward.
+  if (pausedAt) {
+    return (
+      'El trámite NO falló: se detuvo a pedir algo que sólo una persona tiene en este momento, y la ' +
+      'sesión sigue abierta con todo lo que ya llevaba hecho. Pídeselo AHORA, con las palabras que ' +
+      'trae `asks`, y en cuanto conteste llama a browser.resume_flow con ese pausedAt y lo que dijo. ' +
+      'No vuelvas a correr el trámite desde cero: eso pierde lo andado y va a parar en el mismo sitio. ' +
+      'Dura pocos minutos, así que no lo dejes para después del siguiente tema.'
+    );
+  }
   if (kind === 'needs-login') {
     return 'No falló: falta la cuenta con la que se entra a ese portal. Dile a la persona exactamente eso y que se vincula desde Trámites; no lo reintentes, la respuesta va a ser la misma.';
   }

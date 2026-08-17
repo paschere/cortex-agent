@@ -180,7 +180,40 @@ export class BrowserWorker {
       const page = await context.newPage();
       await page.goto(request.startUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
       const result = await replay(page, request, this.config);
-      if (!result.ok) this.runsFailed += 1;
+      // A pause is not a failed run. It is the trámite doing exactly what it
+      // was taught to do at the step where a portal needs a person.
+      if (!result.ok && !result.pause) this.runsFailed += 1;
+
+      // ---------------------------------------------------------------------
+      // The trámite declared this stop itself. Same machinery as a bot check —
+      // the tab survives, keyed by session — because the reason is the same:
+      // the code goes into THIS form, in THIS session, with these cookies.
+      // ---------------------------------------------------------------------
+      if (result.pause) {
+        if (this.sessions.size < this.config.maxConcurrent) {
+          const sessionId = this.newSessionId();
+          this.sessions.set(sessionId, { context, page, touchedAt: Date.now(), request });
+          handedOff = true;
+          logger.info(
+            { runId: request.runId, sessionId, stepIndex: result.pause.index },
+            'the trámite stopped to ask a person; holding the tab open',
+          );
+          return {
+            ...result,
+            handoff: {
+              sessionId,
+              reason: 'input-needed',
+              // The step AFTER the pause: reaching it was the whole job.
+              fromIndex: result.pause.index + 1,
+              expiresAt: new Date(Date.now() + this.config.sessionIdleMs).toISOString(),
+              ask: result.pause.ask,
+              fills: result.pause.fills,
+            },
+          };
+        }
+        logger.warn({ runId: request.runId }, 'a trámite asked for a person, and there was no room to wait');
+        return result;
+      }
 
       if (!result.ok && result.failure && (await looksLikeAChallenge(page))) {
         // Room is checked here rather than earlier because a handoff converts a
@@ -293,7 +326,11 @@ export class BrowserWorker {
    * page, the same half-filled form — which is the entire reason the tab was
    * kept instead of reopened.
    */
-  async continueSession(sessionId: string, fromIndex: number): Promise<ReplayResponse> {
+  async continueSession(
+    sessionId: string,
+    fromIndex: number,
+    extraInputs: Record<string, string> = {},
+  ): Promise<ReplayResponse> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new UnknownSession();
     session.touchedAt = Date.now();
@@ -306,21 +343,88 @@ export class BrowserWorker {
       .slice(fromIndex)
       .filter((s, i) => !(i === 0 && s.action === 'goto'));
 
+    // WHAT THE PERSON JUST SAID, FOLDED IN AS AN ORDINARY INPUT.
+    //
+    // This is the whole mechanism behind an OTP. The pause step asked for
+    // `codigo`; the answer arrives here; from this line on the `fill` step
+    // holding `{{codigo}}` is indistinguishable from one whose value was
+    // supplied before the run ever started. No special case downstream.
+    const inputs = { ...original.inputs, ...extraInputs };
+
+    // The file map is keyed by index into the WHOLE step list, and the list
+    // being replayed now starts at `fromIndex`. Rebased rather than passed
+    // through, or an upload after a captcha would attach the wrong document —
+    // silently, which on a form that files something is the worst way to be
+    // wrong.
+    const files: Record<string, import('./types').UploadPayload> = {};
+    const dropped = remaining.length === original.steps.slice(fromIndex).length ? 0 : 1;
+    for (const [key, payload] of Object.entries(original.files ?? {})) {
+      const rebased = Number(key) - fromIndex - dropped;
+      if (rebased >= 0) files[String(rebased)] = payload;
+    }
+
     this.sessions.delete(sessionId);
+    let keptOpen = false;
     try {
-      const result = await replay(session.page, { ...original, steps: remaining }, this.config);
-      if (!result.ok) this.runsFailed += 1;
+      const result = await replay(
+        session.page,
+        { ...original, steps: remaining, inputs, files },
+        this.config,
+      );
+      if (!result.ok && !result.pause) this.runsFailed += 1;
+
       // Indices came out counted against the sliced list; the caller knows the
       // whole errand, so they are put back on its scale before leaving here.
-      return {
+      const shift = fromIndex + dropped;
+      const rebased: ReplayResponse = {
         ...result,
-        steps: result.steps.map((s) => ({ ...s, index: s.index + fromIndex })),
+        steps: result.steps.map((s) => ({ ...s, index: s.index + shift })),
         ...(result.failure
-          ? { failure: { ...result.failure, index: result.failure.index + fromIndex } }
+          ? { failure: { ...result.failure, index: result.failure.index + shift } }
+          : {}),
+        ...(result.pause
+          ? { pause: { ...result.pause, index: result.pause.index + shift } }
           : {}),
       };
+
+      // A SECOND PAUSE IN THE SAME ERRAND. A bank that asks for a code after
+      // the login and again before it releases the certificate is not exotic,
+      // it is Tuesday. Closing the tab here would make the second question
+      // unanswerable and throw away everything the first answer bought, so the
+      // session is put back — under a NEW id, because the old one was consumed
+      // by the call that got us here and handing it back would let a retry of
+      // that call resume the same tab twice.
+      if (rebased.pause) {
+        if (this.sessions.size < this.config.maxConcurrent) {
+          const nextId = this.newSessionId();
+          this.sessions.set(nextId, {
+            context: session.context,
+            page: session.page,
+            touchedAt: Date.now(),
+            // The ORIGINAL request with the answer already folded in, so a
+            // third pause resumes with both answers rather than re-asking the
+            // first.
+            request: { ...original, inputs },
+          });
+          keptOpen = true;
+          return {
+            ...rebased,
+            handoff: {
+              sessionId: nextId,
+              reason: 'input-needed',
+              fromIndex: rebased.pause.index + 1,
+              expiresAt: new Date(Date.now() + this.config.sessionIdleMs).toISOString(),
+              ask: rebased.pause.ask,
+              fills: rebased.pause.fills,
+            },
+          };
+        }
+        logger.warn({ runId: original.runId }, 'a resumed trámite asked again, and there was no room to wait');
+      }
+
+      return rebased;
     } finally {
-      await session.context.close().catch(() => undefined);
+      if (!keptOpen) await session.context.close().catch(() => undefined);
     }
   }
 

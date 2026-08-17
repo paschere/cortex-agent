@@ -32,7 +32,7 @@
  *     person wrote down is not an errand; an errand is one Cortex works out.
  */
 
-import { ERRAND_TOOLS } from './boundary';
+import { type Admission, errandToolAllowlist } from './boundary';
 import type { ErrandKind } from './shape';
 
 export interface ErrandKindSpec {
@@ -153,7 +153,14 @@ export function isMonitorCadence(minutes: number): boolean {
  * lists that drift, and the thing that actually keeps the promise is that the
  * list contains nothing that can send. What differs between kinds is the BRIEF,
  * which is where the difference belongs.
+ *
+ * `admission` widens it by exactly two ids, and only for a workspace that has
+ * marked at least one trámite as safe to run unattended. It is a property of
+ * the WORKSPACE and not of the kind, which is why it is a parameter here
+ * rather than a fourth column of the specs above — a workspace that has taught
+ * Cortex to pull a certificate wants that available to every kind of errand,
+ * and a workspace that has not gets what it always got.
  */
-export function toolsFor(_kind: ErrandKind): string[] {
-  return [...ERRAND_TOOLS];
+export function toolsFor(_kind: ErrandKind, admission?: Admission): string[] {
+  return errandToolAllowlist(admission);
 }

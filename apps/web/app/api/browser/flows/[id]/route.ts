@@ -8,6 +8,7 @@ import {
   listGrants,
   listRunSteps,
   listRuns,
+  setErrandAllowed,
   writeAuditEvent,
 } from '@cortex/agent-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -164,6 +165,8 @@ export async function GET(
       source: flow.source,
       hasCredential: Boolean(flow.credentialId),
       credentialId: flow.credentialId,
+      /** Puede correr dentro de un encargo, sin nadie mirando. Ver 0111. */
+      errandAllowed: flow.errandAllowed,
       variables: flow.variables,
       steps: flow.steps,
       lastError: flow.lastError,
@@ -223,13 +226,87 @@ export async function PATCH(
   const flow = await getFlow(db, id);
   if (!flow) return NextResponse.json({ error: 'Ese trámite no existe.' }, { status: 404 });
 
-  const body = (await req.json().catch(() => ({}))) as { delivery?: Partial<FlowDelivery> };
-  if (!body.delivery) {
+  const body = (await req.json().catch(() => ({}))) as {
+    delivery?: Partial<FlowDelivery>;
+    errandAllowed?: boolean;
+  };
+  if (!body.delivery && body.errandAllowed === undefined) {
     return NextResponse.json({ error: 'No venía nada que cambiar.' }, { status: 400 });
   }
 
-  const delivery = await writeDelivery(db, id, body.delivery);
-  return NextResponse.json({ ok: true, delivery });
+  // ---------------------------------------------------------------------------
+  // DEJAR QUE ESTE TRÁMITE CORRA SIN NADIE MIRANDO (migración 0111).
+  //
+  // La única propiedad de un trámite que ensancha lo que puede hacer una
+  // corrida DESATENDIDA, así que va con su propia puerta y no con las cuatro
+  // columnas de entrega:
+  //
+  //   * ADMINISTRADOR. Es el mismo criterio que para borrarlo: un trámite corre
+  //     con una credencial de la empresa que quien lo habilita puede no tener
+  //     permiso de ver, y decidir que una máquina la gaste sola es al menos
+  //     tan serio como decidir su destino.
+  //   * SÓLO CONSULTAS. La tabla lo vuelve a comprobar con un CHECK (0111), así
+  //     que esto es la frase, no la defensa. Radicar algo pasa por Aprobaciones
+  //     esté marcado o no.
+  //   * SÓLO PROBADOS. Un trámite PROPUESTO es una hipótesis leída de un vídeo.
+  //     Soltarla en un encargo nocturno es la peor combinación posible: nadie
+  //     mirando, y nadie que haya visto nunca que funcione.
+  // ---------------------------------------------------------------------------
+  if (body.errandAllowed !== undefined) {
+    if (session.role !== 'org_admin') {
+      return NextResponse.json(
+        {
+          error:
+            'Sólo un administrador puede habilitar un trámite para que corra solo, sin nadie mirando.',
+        },
+        { status: 403 },
+      );
+    }
+    if (body.errandAllowed && flow.effect !== 'read') {
+      return NextResponse.json(
+        {
+          error: `«${flow.name}» radica o envía algo en ${flow.host}, así que no puede correr solo. Eso pasa siempre por una aprobación.`,
+        },
+        { status: 409 },
+      );
+    }
+    if (body.errandAllowed && flow.status !== 'ready') {
+      return NextResponse.json(
+        {
+          error: `«${flow.name}» todavía está propuesto: nadie lo ha visto funcionar. Córrelo una vez y, si sale bien, lo habilitas.`,
+        },
+        { status: 409 },
+      );
+    }
+    await setErrandAllowed(db, id, body.errandAllowed);
+    // Auditado como `high` aunque sea un booleano: lo que cambia es quién puede
+    // gastar la identidad de la empresa en un portal ajeno sin que nadie mire,
+    // y esa es una decisión que alguien tiene que poder responder después.
+    await writeAuditEvent({
+      db,
+      userId: session.id,
+      toolId: 'browser.set_errand_allowed',
+      input: { flow: flow.slug, allowed: body.errandAllowed },
+      status: 'ok',
+      latencyMs: 0,
+      surface: 'web',
+      riskLevel: 'high',
+      decision: 'allowed',
+      riskReason: body.errandAllowed
+        ? `Habilitó «${flow.name}» para que corra dentro de encargos, sin nadie mirando, en ${flow.host}.`
+        : `Le quitó a «${flow.name}» el permiso de correr dentro de encargos.`,
+      metadata: { flowId: id, slug: flow.slug, host: flow.host },
+    }).catch(() => undefined);
+  }
+
+  const delivery = body.delivery
+    ? await writeDelivery(db, id, body.delivery)
+    : await readDelivery(db, id);
+  return NextResponse.json({
+    ok: true,
+    delivery,
+    errandAllowed: body.errandAllowed ?? flow.errandAllowed,
+  });
 }
 
 /**

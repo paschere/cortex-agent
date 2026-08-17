@@ -96,11 +96,21 @@ export async function POST(
     // Not a failure: the run stopped and asked for something. The screen can
     // read this to offer binding a credential instead of reporting a defeat.
     pendingQuestion: outcome.pendingQuestion ?? null,
-    // The portal stopped to ask whether we are a robot and the browser is
-    // STILL OPEN on that page, for a few minutes, waiting for a person. Passed
-    // straight through and never stored: the tab it points at is swept long
-    // before any row about it would stop being true. See BrowserHandoff.
+    // The portal stopped to ask whether we are a robot, or the trámite itself
+    // reached a step that asks for a code, and the browser is STILL OPEN on
+    // that page for a few minutes. `handoff` is the TAB — passed straight
+    // through, never stored, because it is swept long before any row about it
+    // would stop being true.
     handoff: outcome.handoff ?? null,
+    // `pausedAt` is the ROW that remembers the tab (migration 0111). It is the
+    // one to come back with: POST /api/browser/checkpoints/[id] closes it
+    // atomically, types the answer into the slot the pause named, and files
+    // whatever the rest of the trámite downloads. `asks` is the question in
+    // the words the person who taught it chose.
+    pausedAt: outcome.checkpoint?.id ?? null,
+    asks: outcome.checkpoint?.ask ?? null,
+    /** El slot que llena la respuesta. Null en un captcha: se contesta con el ratón. */
+    fills: outcome.checkpoint?.fills ?? null,
     repaired: outcome.repaired ?? false,
     version: outcome.newVersion ?? flow.version,
     // So the screen can say "y te lo mandé al correo" instead of leaving the

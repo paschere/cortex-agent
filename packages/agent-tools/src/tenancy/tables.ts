@@ -238,6 +238,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   browser_flow_grants: derived('browser_flows', 'flow_id'),
   browser_flow_runs: tenant(),
   browser_flow_run_steps: derived('browser_flow_runs', 'run_id'),
+  // Un trámite parado esperando a una persona (migración 0111). `tenant` y no
+  // `derived` del trámite: la consulta que de verdad se hace es «¿qué hay
+  // parado en este espacio de trabajo?» — la hace la pantalla y la hace el
+  // barrido que vence los viejos — y ninguna de las dos nombra un flow.
+  browser_flow_checkpoints: tenant(),
 
   // --- Commitments (migration 0069) -----------------------------------------
   // Dated promises and the notices already sent about them. Both carry their

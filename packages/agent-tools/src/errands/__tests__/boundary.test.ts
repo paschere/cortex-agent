@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { filterTools } from '../../index';
 import {
   ERRAND_TOOLS,
+  ERRAND_TRAMITE_TOOLS,
   OutboundToolRefused,
   assertProposalOnly,
   errandToolAllowlist,
@@ -170,6 +171,100 @@ describe('the errand boundary', () => {
     expect(errandToolAllowlist()).not.toContain('gmail.send_message');
   });
 
+  it('still lets an errand do its actual job', () => {
+    // The negative tests above are satisfiable by an empty list. This one says
+    // the boundary did not achieve safety by achieving nothing.
+    for (const needed of ['web.search', 'web.scrape', 'kb.search']) {
+      expect(isErrandTool(needed)).toBe(true);
+    }
+    expect(filterTools([...ERRAND_TOOLS]).length).toBeGreaterThan(15);
+  });
+});
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  LOS TRÁMITES WEB, ADMITIDOS DE A UNO
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `boundary.ts` escribió, antes de que existiera la función, cuál sería el
+ * movimiento correcto: NO meter `browser.run_flow` en `ERRAND_TOOLS`, sino
+ * admitir flujos marcados uno por uno. Estas pruebas son sobre esa distinción,
+ * que es fácil de perder en un diff apurado — meter la herramienta en la lista
+ * de siempre haría pasar el caso feliz y volaría la línea entera.
+ */
+describe('un encargo y los trámites web', () => {
+  it('sigue sin tener la herramienta en la lista de siempre', () => {
+    // Lo que hace que un espacio de trabajo que nunca abrió esta puerta tenga
+    // un encargo idéntico al de antes.
+    expect(isErrandTool('browser.run_flow')).toBe(false);
+    expect(errandToolAllowlist()).not.toContain('browser.run_flow');
+    expect(() => assertProposalOnly(['web.search', 'browser.run_flow'])).toThrow(
+      OutboundToolRefused,
+    );
+  });
+
+  it('sin ningún trámite marcado, admitir no admite nada', () => {
+    // El caso que decide si esto es un permiso o un interruptor. Una lista
+    // vacía de flujos tiene que comportarse exactamente como no pasar nada.
+    const none = { admittedFlows: [] };
+    expect(errandToolAllowlist(none)).toEqual(errandToolAllowlist());
+    expect(() => assertProposalOnly(['browser.run_flow'], none)).toThrow(OutboundToolRefused);
+  });
+
+  it('con un trámite marcado, admite exactamente dos ids', () => {
+    const admitted = { admittedFlows: ['certificado-dian'] };
+    const widened = errandToolAllowlist(admitted);
+    const added = widened.filter((id) => !ERRAND_TOOLS.includes(id));
+    expect(added.sort()).toEqual(['browser.list_flows', 'browser.run_flow']);
+    expect(() => assertProposalOnly(widened, admitted)).not.toThrow();
+  });
+
+  it('nunca admite el que escribe en el portal ajeno, marcado o no', () => {
+    // La única cosa que este archivo entero existe para decir: una corrida
+    // desatendida no radica nada. `browser.submit_flow` además lleva
+    // `requiresConfirmation`, así que el propio ejecutor lo saltaría — pero
+    // que algo más lo pararía nunca ha sido razón para ofrecerlo.
+    const admitted = { admittedFlows: ['radicar-dian', 'otro'] };
+    expect(errandToolAllowlist(admitted)).not.toContain('browser.submit_flow');
+    expect(() => assertProposalOnly(['browser.submit_flow'], admitted)).toThrow(
+      OutboundToolRefused,
+    );
+    expect(ERRAND_TRAMITE_TOOLS).not.toContain('browser.submit_flow');
+  });
+
+  it('la puerta abierta no se lleva por delante nada más', () => {
+    // Admitir un trámite no puede ser una forma indirecta de admitir un correo.
+    const admitted = { admittedFlows: ['certificado-dian'] };
+    expect(() => assertProposalOnly(['gmail.send_message'], admitted)).toThrow(
+      OutboundToolRefused,
+    );
+    expect(() => assertProposalOnly(['errands.start'], admitted)).toThrow(OutboundToolRefused);
+  });
+
+  it('los dos ids que admite existen de verdad en el registro', () => {
+    // Mismo argumento que para la lista principal: un id inventado parece una
+    // capacidad, no coincide con nada y esconde que nunca existió.
+    const known = new Set(filterTools(['*']).map((t) => t.id));
+    expect(ERRAND_TRAMITE_TOOLS.filter((id) => !known.has(id))).toEqual([]);
+  });
+
+  it('el catálogo viaja con el ejecutor, porque uno sin el otro no sabe qué correr', () => {
+    // `run_flow` recibe un slug. Un sub-agente con el ejecutor y sin el
+    // catálogo tiene que inventarse uno.
+    expect(ERRAND_TRAMITE_TOOLS).toContain('browser.list_flows');
+  });
+
+  it('cada tipo de encargo recibe lo mismo, admitido o no', () => {
+    const admitted = { admittedFlows: ['certificado-dian'] };
+    for (const kind of ['research_compare', 'gather_sources', 'monitor_change'] as const) {
+      expect(() => assertProposalOnly(toolsFor(kind, admitted), admitted)).not.toThrow();
+      expect(toolsFor(kind, admitted)).toContain('browser.run_flow');
+      expect(toolsFor(kind)).not.toContain('browser.run_flow');
+    }
+  });
+});
+
+describe('lo que queda del guardarraíl', () => {
   it('still lets an errand do its actual job', () => {
     // The negative tests above are satisfiable by an empty list. This one says
     // the boundary did not achieve safety by achieving nothing.

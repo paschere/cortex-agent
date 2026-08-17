@@ -14,7 +14,9 @@
  */
 
 export {
+  type Admission,
   ERRAND_TOOLS,
+  ERRAND_TRAMITE_TOOLS,
   ERRAND_BOUNDARY_NOTICE,
   OUTBOUND_VERBS,
   OutboundToolRefused,

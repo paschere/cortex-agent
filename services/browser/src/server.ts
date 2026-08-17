@@ -39,7 +39,17 @@ import type { ReplayRequest } from './types';
  * string is a secret in somebody's access log.
  */
 
-const MAX_BODY_BYTES = 2 * 1024 * 1024;
+/**
+ * 32MB, and the number is the upload ceiling rather than a round guess.
+ *
+ * It was 2MB while a request body was a step list and a password. A replay may
+ * now carry the files an `upload` step attaches, base64-encoded: 10MB of PDF is
+ * about 13.4MB on the wire, and a trámite that attaches two of them is a real
+ * thing — a filing with the certificate and the RUT. 32MB leaves room for that
+ * plus the steps, and still bounds what one unauthenticated curl can make this
+ * container allocate, which is the reason the cap exists at all.
+ */
+const MAX_BODY_BYTES = 32 * 1024 * 1024;
 
 function secretsMatch(presented: string, expected: string): boolean {
   // Hashed first so both sides are always 32 bytes: `timingSafeEqual` throws on
@@ -135,6 +145,7 @@ async function handle(
         steps: body.steps,
         inputs: body.inputs ?? {},
         secrets: body.secrets ?? {},
+        files: body.files ?? {},
         timeoutMs: body.timeoutMs,
       });
       json(res, 200, result);
@@ -212,9 +223,20 @@ async function handle(
 
     const continueMatch = /^\/session\/([A-Za-z0-9_]+)\/continue$/.exec(path);
     if (req.method === 'POST' && continueMatch?.[1]) {
-      const body = (await readBody(req)) as { fromIndex?: number };
+      const body = (await readBody(req)) as {
+        fromIndex?: number;
+        inputs?: Record<string, unknown>;
+      };
       const from = Number.isInteger(body?.fromIndex) ? Number(body?.fromIndex) : 0;
-      json(res, 200, await worker.continueSession(continueMatch[1], Math.max(0, from)));
+      // Only strings, only a handful, and capped. This is the one place a value
+      // enters a run after it started, and what arrives is whatever a person
+      // typed into a box — so it is narrowed here rather than trusted to have
+      // been narrowed by whoever called.
+      const inputs: Record<string, string> = {};
+      for (const [key, value] of Object.entries(body?.inputs ?? {}).slice(0, 8)) {
+        if (typeof value === 'string') inputs[key.slice(0, 40)] = value.slice(0, 300);
+      }
+      json(res, 200, await worker.continueSession(continueMatch[1], Math.max(0, from), inputs));
       return;
     }
 

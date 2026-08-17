@@ -11,13 +11,25 @@ import {
   currentDocumentSink,
   separateDownload,
 } from './download';
+import {
+  type Checkpoint,
+  closeCheckpoint,
+  defaultAsk,
+  getCheckpoint,
+  isLive,
+  openCheckpoint,
+  secondsLeft,
+} from './checkpoint';
 import { safeInputs } from './redact';
 import { refineFromDom, refinementNote } from './refine';
 import type { Repairer } from './repair';
 import { modelRepairer } from './repair';
+import { fillSlots, runnableSlots, slotComplaint } from './slots';
+import { consumesDocument, resolveUploads } from './uploads';
 import {
   countRepair,
   finishRun,
+  getFlow,
   markBroken,
   markNeedsLogin,
   markVerified,
@@ -94,6 +106,16 @@ export interface RunOptions {
    * but not kept.
    */
   documentSink?: DocumentSink;
+  /**
+   * The errand this run belongs to, when it belongs to one.
+   *
+   * Only ever used for ONE thing: stamping a checkpoint so that a trámite
+   * which stops at a captcha can be found again from the errand that was
+   * running it. Nothing about the run's behaviour changes — the boundary that
+   * decides what an errand may run at all is applied long before this, in
+   * boundary.ts and in the tool.
+   */
+  errandId?: string | null;
 }
 
 export interface RunOutcome {
@@ -111,14 +133,30 @@ export interface RunOutcome {
   /**
    * The run did not fail so much as stop and ask something. Nothing is wrong
    * with the flow, nothing was retried, and the answer is a person's to give.
+   *
+   *   credential  which account should Cortex use on this portal
+   *   input       the trámite reached a `pause` step and wants one value —
+   *               the code the bank just texted
+   *   unlock      the portal asked whether we are a robot; somebody has to
+   *               look at the tab and say so
    */
-  pendingQuestion?: 'credential';
+  pendingQuestion?: 'credential' | 'input' | 'unlock';
   /**
    * The portal stopped to ask whether we are a person, and the tab is still
    * open waiting for one. Only ever set alongside `failureKind: 'needs-human'`,
    * and only for a few minutes — see `BrowserHandoff`.
    */
   handoff?: BrowserHandoff;
+  /**
+   * The written form of that pause (migration 0111), when it could be written.
+   *
+   * `handoff` is the tab; this is the row that remembers it. A caller that has
+   * this can come back to the trámite from a different screen, a different
+   * process, or an errand that was not watching — which is the whole
+   * difference between a captcha somebody happened to be looking at and one
+   * that gets solved.
+   */
+  checkpoint?: Checkpoint;
 }
 
 /**
@@ -207,10 +245,18 @@ function credentialQuestion(flow: Flow, alsoNeedsSteps: boolean): string {
   return `«${flow.name}» empieza después de iniciar sesión en ${site}, y la grabación arrancó cuando ya estabas adentro: no tiene los pasos del ingreso. Enséñamelo otra vez cerrando sesión primero, de modo que la grabación incluya el ingreso, y vincúlale la credencial de esa cuenta.`;
 }
 
-function missingVariables(flow: Flow, inputs: Record<string, string>): string[] {
-  return flow.variables
-    .filter((v) => v.required && !(inputs[v.name] ?? '').trim())
-    .map((v) => v.label);
+/**
+ * How a pause is put to a person, and where the words come from.
+ *
+ * The `pause` step's own label is the question, because the person who taught
+ * the trámite is the one who knows what the portal is about to ask for — «el
+ * código de seis dígitos que llega al celular registrado». A sentence written
+ * here instead would be generic on every portal and right on none.
+ */
+function pauseAsk(flow: Flow, ask: string): string {
+  const trimmed = ask.trim();
+  if (!trimmed) return `«${flow.name}» necesita un dato tuyo para seguir en ${flow.host}.`;
+  return trimmed;
 }
 
 /**
@@ -236,7 +282,7 @@ function promoteDrift(steps: Step[], outcomes: StepOutcome[]): { steps: Step[]; 
 }
 
 export async function runFlow(options: RunOptions): Promise<RunOutcome> {
-  const { db, flow, inputs, transport, logger, actor } = options;
+  const { db, flow, transport, logger, actor } = options;
   const startedAt = Date.now();
   const empty = { output: {}, steps: [] as StepOutcome[], spend: EMPTY_SPEND };
 
@@ -245,15 +291,30 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
     return { ok: false, runId: null, message: access.reason, durationMs: 0, ...empty };
   }
 
-  const missing = missingVariables(flow, inputs);
-  if (missing.length > 0) {
-    return {
-      ok: false,
-      runId: null,
-      message: `Me falta ${missing.join(', ')} para hacer este trámite.`,
-      durationMs: 0,
-      ...empty,
-    };
+  // ---------------------------------------------------------------------------
+  // The slots, before anything else costs anything.
+  //
+  // Normalisation happens HERE and not at the call sites, so that a plate typed
+  // by a person, a NIT read out of a Drive sheet and a date pulled off an
+  // extracted invoice all arrive at the portal in the shape its box wants. See
+  // slots.ts for why a mis-shaped value is the expensive failure rather than
+  // the noisy one.
+  // ---------------------------------------------------------------------------
+  // `runnableSlots` and not `flow.variables`: a slot a `pause` step fills is
+  // dictated by a person while the tab is already open, so it is not REQUIRED
+  // up front — but it is still accepted, because a caller who already has the
+  // code should not be asked for it again.
+  const fill = fillSlots(runnableSlots(flow.variables, flow.steps), options.inputs ?? {});
+  const complaint = slotComplaint(fill, flow.name);
+  if (complaint) {
+    return { ok: false, runId: null, message: complaint, durationMs: 0, ...empty };
+  }
+  const inputs = fill.inputs;
+  if (fill.unknown.length > 0) {
+    logger.info(
+      { flowId: flow.id, ignored: fill.unknown },
+      'browser flow was offered data it has no slot for; ignored',
+    );
   }
 
   if (!transport.configured()) {
@@ -298,14 +359,39 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
     }
   }
 
-  const variableNames = flow.variables.map((v) => v.name);
+  // ---------------------------------------------------------------------------
+  // The files, before the browser opens.
+  //
+  // Read now rather than mid-run so that «no encuentro ese documento» costs a
+  // sentence instead of half an errand: a portal that has already been logged
+  // into, navigated and half-filled is an expensive place to discover the
+  // attachment is missing, and on a flow that WRITES it is also a place you
+  // cannot safely leave things.
+  // ---------------------------------------------------------------------------
+  let files: Record<string, { filename: string; mimeType: string; base64: string }> = {};
+  if (consumesDocument(flow.steps)) {
+    const resolved = await resolveUploads(db, actor.id, flow.steps, inputs);
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        runId: null,
+        message: resolved.why,
+        durationMs: Date.now() - startedAt,
+        ...empty,
+      };
+    }
+    files = resolved.files;
+  }
+
   const runId = await startRun(db, {
     organizationId: options.organizationId,
     flowId: flow.id,
     flowVersion: flow.version,
     mode: 'replay',
     trigger: options.trigger,
-    inputs: safeInputs(inputs, variableNames),
+    // The declared variables and not just their names: that is what tells this
+    // call which slots are one-use codes and must not be written down.
+    inputs: safeInputs(inputs, flow.variables),
     startedBy: actor.id,
   });
 
@@ -315,6 +401,7 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
     steps: flow.steps,
     inputs,
     secrets,
+    files,
   });
 
   if (!replayed.ok) {
@@ -340,6 +427,27 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
 
   const result = replayed.data;
   await recordSteps(db, runId, result.steps);
+
+  // -------------------------------------------------------------------------
+  // It stopped on purpose, at a step that says a person has to do this bit.
+  //
+  // BEFORE the failure branch, and that ordering is the whole safety of the
+  // feature: a pause carries no `failure`, so falling through would reach
+  // "falló sin decir por qué", mark the run failed, and eventually mark a
+  // perfectly good trámite broken. A trámite that asks is not a trámite that
+  // is wrong.
+  // -------------------------------------------------------------------------
+  if (result.pause) {
+    return await park(options, {
+      runId,
+      inputs,
+      pause: result.pause,
+      handoff: result.handoff,
+      steps: result.steps,
+      output: result.output,
+      durationMs: result.durationMs,
+    });
+  }
 
   // -------------------------------------------------------------------------
   // It worked.
@@ -519,6 +627,25 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
   // so the only thing standing between it and a paid rewrite of a working flow
   // is that classify.ts named it `needs-human` one rule earlier.
   if (verdict.kind !== 'site-changed') {
+    // The portal wants a person and the browser kept the tab. That is not a
+    // failure to report and forget — it is the same pause a `pause` step
+    // declares, arrived at by surprise, so it is written down the same way and
+    // becomes findable from anywhere. The service declines to hold a tab when
+    // it has no room, and then this stays a plain failure with a sentence
+    // rather than an offer that cannot be honoured.
+    if (verdict.kind === 'needs-human' && result.handoff) {
+      const parked = await park(options, {
+        runId,
+        inputs,
+        pause: null,
+        handoff: result.handoff,
+        steps: result.steps,
+        output: result.output,
+        durationMs: result.durationMs,
+        message: verdict.reason,
+      });
+      return { ...parked, failureKind: 'needs-human' };
+    }
     return {
       ok: false,
       runId,
@@ -528,10 +655,6 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
       output: result.output,
       durationMs: result.durationMs,
       spend: EMPTY_SPEND,
-      // Carried out only when the browser really did keep the tab. The service
-      // declines to hold one when it has no room, and then this is a plain
-      // failure with a sentence rather than an offer that cannot be honoured.
-      ...(verdict.kind === 'needs-human' && result.handoff ? { handoff: result.handoff } : {}),
     };
   }
 
@@ -578,6 +701,324 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
     reason: verdict.reason,
   });
   return repaired;
+}
+
+// ---------------------------------------------------------------------------
+// Stopping to ask, and coming back
+// ---------------------------------------------------------------------------
+
+/**
+ * Write the pause down and report it as a question rather than a defeat.
+ *
+ * ── WHY THE RUN ROW IS CLOSED AND THE FLOW IS NOT TOUCHED ────────────────
+ *
+ * The run stopped, so leaving its row `running` would have the sweep close it
+ * later as a run that went silent — which is the shape of a crash, not of a
+ * trámite waiting politely. It is closed as `failed` with `needs-human`,
+ * which is the vocabulary that already exists for exactly this and the one
+ * verdict `execute` guarantees never buys a repair.
+ *
+ * The FLOW, on the other hand, is left completely alone: no `markBroken`, no
+ * `last_error`, and `noteRun` records the run without a fault. A portal asking
+ * for a code every time is a portal working as designed, and a trámite that
+ * got demoted to «roto» once a month for doing its job correctly would be
+ * re-taught by somebody, needlessly, within the week.
+ */
+async function park(
+  options: RunOptions,
+  input: {
+    runId: string;
+    inputs: Record<string, string>;
+    pause: import('./types').PauseRequest | null;
+    handoff: BrowserHandoff | undefined;
+    steps: StepOutcome[];
+    output: Record<string, unknown>;
+    durationMs: number;
+    /** Overrides the pause's own question. Used by the bot-check path. */
+    message?: string;
+  },
+): Promise<RunOutcome> {
+  const { db, flow, logger } = options;
+  const reason: BrowserHandoff['reason'] = input.pause ? 'input-needed' : 'bot-check';
+  const ask = input.pause
+    ? pauseAsk(flow, input.pause.ask)
+    : (input.message ?? defaultAsk('bot-check'));
+
+  await finishRun(db, input.runId, {
+    status: 'failed',
+    failureKind: 'needs-human',
+    error: ask,
+    durationMs: input.durationMs,
+    spend: EMPTY_SPEND,
+  });
+  await noteRun(db, flow.id, 'needs-human', null);
+
+  // No tab, no resumption. Said plainly instead of offering a button: the
+  // service refuses to hold a tab when it is at capacity, and an unanswerable
+  // question is worse than an honest "no pude".
+  if (!input.handoff) {
+    return {
+      ok: false,
+      runId: input.runId,
+      message:
+        `${ask} No alcancé a dejar la sesión abierta —el navegador estaba lleno—, así que hay ` +
+        'que volver a arrancar el trámite cuando puedas atenderlo.',
+      failureKind: 'needs-human',
+      steps: input.steps,
+      output: input.output,
+      durationMs: input.durationMs,
+      spend: EMPTY_SPEND,
+    };
+  }
+
+  const handoff: BrowserHandoff = {
+    ...input.handoff,
+    reason,
+    ask,
+    fills: input.pause?.fills ?? null,
+  };
+
+  const checkpoint = await openCheckpoint(db, {
+    organizationId: options.organizationId,
+    flowId: flow.id,
+    runId: input.runId,
+    handoff,
+    // Redacted on the way in, exactly as they were on the way to the run row.
+    // Whatever this pause is waiting for is, by definition, not among them.
+    inputs: safeInputs(input.inputs, flow.variables),
+    errandId: options.errandId ?? null,
+    createdBy: options.actor.id,
+  }).catch((err: unknown) => {
+    logger.error(
+      { err: (err as Error).message, flowId: flow.id },
+      'browser flow paused but the checkpoint could not be written',
+    );
+    return null;
+  });
+
+  return {
+    ok: false,
+    runId: input.runId,
+    message: ask,
+    failureKind: 'needs-human',
+    pendingQuestion: input.pause ? 'input' : 'unlock',
+    steps: input.steps,
+    output: input.output,
+    durationMs: input.durationMs,
+    spend: EMPTY_SPEND,
+    handoff,
+    ...(checkpoint ? { checkpoint } : {}),
+  };
+}
+
+export interface ResumeOptions {
+  db: SupabaseClient;
+  organizationId: string;
+  actor: Actor;
+  checkpointId: string;
+  /**
+   * What the person said. Typed into the slot the pause named; ignored when
+   * the pause was a bot check, whose answer was the clicking itself.
+   */
+  answer: string;
+  transport: BrowserTransport;
+  logger: Logger;
+  documentSink?: DocumentSink;
+}
+
+/**
+ * Carry on where the pause left off.
+ *
+ * ── THE CHECKPOINT IS CLOSED BEFORE THE TAB IS TOUCHED ──────────────────
+ *
+ * A conditional UPDATE with `state = 'open'` in the WHERE clause, and only the
+ * caller that wins it goes on to resume. Two people answering the same
+ * question — which happens the moment a question reaches both a chat and a
+ * screen — would otherwise both call `/continue`, and the second one arrives
+ * at a session the first one already consumed. One 404 and one plain sentence
+ * about a session that is gone, over a trámite that in fact completed.
+ */
+export async function resumeFlow(options: ResumeOptions): Promise<RunOutcome> {
+  const { db, transport, logger } = options;
+  const startedAt = Date.now();
+  const empty = { output: {}, steps: [] as StepOutcome[], spend: EMPTY_SPEND };
+
+  const checkpoint = await getCheckpoint(db, options.checkpointId);
+  if (!checkpoint) {
+    return {
+      ok: false,
+      runId: null,
+      message: 'Ese trámite en pausa ya no existe.',
+      durationMs: 0,
+      ...empty,
+    };
+  }
+
+  const flow = await getFlow(db, checkpoint.flowId);
+  if (!flow) {
+    return {
+      ok: false,
+      runId: checkpoint.runId,
+      message: 'El trámite que estaba en pausa ya no está en este espacio de trabajo.',
+      durationMs: 0,
+      ...empty,
+    };
+  }
+
+  // Same gate as starting one. A pause does not transfer the right to run a
+  // trámite to whoever happens to hold its id.
+  const access = await canRunFlow(db, options.actor, flow);
+  if (!access.allowed) {
+    return { ok: false, runId: checkpoint.runId, message: access.reason, durationMs: 0, ...empty };
+  }
+
+  if (!isLive(checkpoint)) {
+    await closeCheckpoint(db, checkpoint.id, 'expired');
+    return {
+      ok: false,
+      runId: checkpoint.runId,
+      message:
+        `Se venció la sesión de «${flow.name}»: el navegador sólo puede sostener la pestaña unos ` +
+        'minutos, y ya la cerró. Hay que volver a arrancar el trámite; no se perdió nada, sólo el tiempo.',
+      failureKind: 'needs-human',
+      durationMs: 0,
+      ...empty,
+    };
+  }
+
+  if (checkpoint.reason === 'input-needed' && !options.answer.trim()) {
+    return {
+      ok: false,
+      runId: checkpoint.runId,
+      message: checkpoint.ask,
+      failureKind: 'needs-human',
+      pendingQuestion: 'input',
+      durationMs: 0,
+      ...empty,
+    };
+  }
+
+  const claimed = await closeCheckpoint(db, checkpoint.id, 'resumed');
+  if (!claimed) {
+    return {
+      ok: false,
+      runId: checkpoint.runId,
+      message: `Alguien más ya retomó «${flow.name}» hace un momento.`,
+      durationMs: 0,
+      ...empty,
+    };
+  }
+
+  // The one value the pause was waiting for, normalised by its declared slot
+  // exactly as it would have been on the way in — a code with a space in the
+  // middle is what a phone shows and not what the box takes.
+  const extra: Record<string, string> = {};
+  if (checkpoint.fills) {
+    const slot = flow.variables.find((v) => v.name === checkpoint.fills);
+    extra[checkpoint.fills] = slot
+      ? (fillSlots([slot], { [slot.name]: options.answer }).inputs[slot.name] ?? '')
+      : options.answer.trim();
+  }
+
+  const resumed = await transport.resume({
+    sessionId: checkpoint.sessionId,
+    fromIndex: checkpoint.fromIndex,
+    inputs: extra,
+  });
+
+  const runId = checkpoint.runId;
+
+  if (!resumed.ok) {
+    if (runId) await noteRun(db, flow.id, 'failed', resumed.reason);
+    return {
+      ok: false,
+      runId,
+      message: `${resumed.reason} (Quedaban ${secondsLeft(checkpoint)} segundos de sesión.)`,
+      failureKind: 'transient',
+      durationMs: Date.now() - startedAt,
+      ...empty,
+    };
+  }
+
+  const result = resumed.data;
+  if (runId) await recordSteps(db, runId, result.steps);
+
+  if (result.ok) {
+    const carried = separateDownload(result.output);
+    result.output = carried.output;
+    const filed = carried.file
+      ? await fileDownload(
+          {
+            db,
+            organizationId: options.organizationId,
+            actor: options.actor,
+            flow,
+            inputs: checkpoint.inputs,
+            transport,
+            logger,
+            trigger: 'manual',
+            documentSink: options.documentSink,
+          },
+          carried.file,
+          runId ?? checkpoint.id,
+        ).catch(() => null)
+      : null;
+    if (filed && carried.summary) {
+      result.output = {
+        ...result.output,
+        download: { ...carried.summary, documentId: filed.documentId },
+      };
+    }
+
+    if (runId) {
+      await finishRun(db, runId, {
+        status: 'succeeded',
+        result: result.output,
+        durationMs: result.durationMs,
+        spend: EMPTY_SPEND,
+      });
+    }
+    await noteRun(db, flow.id, 'succeeded', null);
+
+    return {
+      ok: true,
+      runId,
+      message: 'Listo, seguí desde donde iba y el trámite terminó.',
+      output: result.output,
+      steps: result.steps,
+      durationMs: result.durationMs,
+      spend: EMPTY_SPEND,
+    };
+  }
+
+  // It failed after the pause. NO REPAIR AND NO `markBroken` on this path: the
+  // step list that ran here is a slice of the flow, the indices were re-based
+  // by the service, and the page underneath was driven by a person for a
+  // moment. That is not evidence a portal was redesigned, and letting a model
+  // rewrite a working trámite on it is how the trámite dies.
+  const why =
+    result.failure?.error ??
+    'El trámite no pudo terminar después de la pausa y el navegador no dijo por qué.';
+  if (runId) {
+    await finishRun(db, runId, {
+      status: 'failed',
+      failureKind: 'transient',
+      error: why,
+      durationMs: result.durationMs,
+      spend: EMPTY_SPEND,
+    });
+  }
+  await noteRun(db, flow.id, 'failed', why);
+  return {
+    ok: false,
+    runId,
+    message: `Retomé «${flow.name}» pero no pudo terminar: ${why}`,
+    failureKind: 'transient',
+    steps: result.steps,
+    output: result.output,
+    durationMs: result.durationMs,
+    spend: EMPTY_SPEND,
+  };
 }
 
 async function repairFlow(

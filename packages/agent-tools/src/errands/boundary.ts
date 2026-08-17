@@ -69,24 +69,54 @@
  * `assertExecutable` at the moment of execution, so what runs is byte-identical
  * to what a person read and approved. Anything less is an approval in name.
  *
- * ── WHERE THE TAUGHT BROWSER WILL PLUG IN, AND WHY IT IS NOT HERE YET ─────
+ * ── THE TAUGHT BROWSER, AND HOW IT WAS LET IN ─────────────────────────────
  *
  * `browser.run_flow` (migration 0087, services/browser) replays an errand a
  * person performed once — log into the portal, fill the form, come back with
- * the certificate. It is the single biggest thing missing from this list, and
- * it is deliberately absent for now:
+ * the certificate. It was the single biggest thing missing from this list, and
+ * it was deliberately absent, for a reason that has not gone away: a taught
+ * flow is not automatically read-only. "Sácame el certificado" is fine; the
+ * same recording mechanism can just as easily submit a declaration or accept
+ * terms. Admitting the whole family would put the line back in the hands of
+ * whoever made the recording.
  *
- *   * it belongs to another workstream that is still building it, and this
- *     module must not depend on its shape;
- *   * a taught flow is not automatically read-only. "Sácame el certificado" is
- *     fine; the same mechanism can just as easily submit a declaration or
- *     accept terms. Admitting the whole family here would put the line back in
- *     the hands of whoever recorded the flow.
+ * This file said, before the feature existed, what the correct move would be:
  *
- * When it lands, the correct move is NOT to add `'browser.run_flow'` to
- * `ERRAND_TOOLS`. It is to admit individual flows that are marked read-only at
- * the flow level, granted to this workspace, and named one by one — the same
- * exact-ids-only rule this file already applies to tools, one level down.
+ *     NOT to add 'browser.run_flow' to ERRAND_TOOLS. To admit individual flows
+ *     that are marked read-only at the flow level, granted to this workspace,
+ *     and named one by one — the same exact-ids-only rule this file already
+ *     applies to tools, one level down.
+ *
+ * That is exactly what happened, and it is four things rather than one because
+ * a single check is a single thing to get wrong:
+ *
+ *   1. `ERRAND_TOOLS` STILL DOES NOT CONTAIN IT. `isErrandTool('browser.run_flow')`
+ *      is false, the boundary test asserts it, and the default
+ *      `assertProposalOnly` still refuses it. Nothing about the ordinary path
+ *      changed.
+ *
+ *   2. `ERRAND_TRAMITE_TOOLS` is a SEPARATE list, admitted only by a caller
+ *      that passes the ids of flows this workspace has explicitly marked. An
+ *      empty set of admitted flows admits no tools — so a workspace that has
+ *      never opened this door has an errand that is byte-for-byte as
+ *      restricted as before.
+ *
+ *   3. THE MARK IS PER FLOW AND PER WORKSPACE: `browser_flows.errand_allowed`
+ *      (migration 0111), false by default, set by an administrator, and
+ *      refused by a CHECK constraint on any flow whose effect is `write`. The
+ *      table enforces the read-only half, so a screen that forgot to filter
+ *      cannot grant it.
+ *
+ *   4. THE TOOL CHECKS AGAIN AT CALL TIME, against `ctx.surface === 'schedule'`
+ *      — see browser/tools.ts. An unattended run that somehow reached the tool
+ *      with an unadmitted slug is refused there too, with a sentence.
+ *
+ * `browser.submit_flow` is NOT in the second list and never will be. It writes
+ * on somebody else's system with the company's identity, it carries
+ * `requiresConfirmation`, and the ONE thing this whole file exists to say is
+ * that an unattended run does not do that. An errand that concludes something
+ * must be filed says so in its deliverable and stops; the filing goes through
+ * /approvals, where a person reads it first.
  */
 
 /** Thrown when something tries to give an errand a tool that can act outward. */
@@ -207,9 +237,49 @@ export const ERRAND_TOOLS: readonly string[] = [
 
 const ALLOWED = new Set(ERRAND_TOOLS);
 
-/** Is this tool id one an errand may be handed? */
+/**
+ * The taught browser, admitted ONE FLOW AT A TIME.
+ *
+ * Two ids, and they come as a pair for a reason that is not convenience:
+ * `browser.run_flow` takes a slug, and a sub-agent that has the runner without
+ * the catalogue has to invent one. `list_flows` is a plain read — it returns
+ * names, sites and slots, nothing about a portal and no credential — so
+ * granting it alongside costs nothing and removes the only way this tool fails
+ * confusingly.
+ *
+ * `browser.submit_flow` is absent and stays absent. See the header.
+ */
+export const ERRAND_TRAMITE_TOOLS: readonly string[] = ['browser.list_flows', 'browser.run_flow'];
+
+/**
+ * Is this tool id one an errand may be handed?
+ *
+ * UNCHANGED, and deliberately blind to the trámite tools: this answers "is it
+ * in the ordinary allow-list", which is the question every existing caller and
+ * every existing test is asking. A trámite tool is admitted by a caller that
+ * NAMES the flows it is admitting, which is a different question with a
+ * different function.
+ */
 export function isErrandTool(toolId: string): boolean {
   return ALLOWED.has(toolId);
+}
+
+/**
+ * Which flows this workspace has said may run unattended.
+ *
+ * Passed as ids rather than read from a database because this module has no
+ * database and must not grow one — the same reason `BrowserTransport` is an
+ * interface. The caller (apps/web/lib/errands/worker.ts) reads
+ * `browser_flows.errand_allowed` and hands the answer down.
+ */
+export interface Admission {
+  /** Slugs or ids of flows marked `errand_allowed`. Empty admits nothing. */
+  admittedFlows: readonly string[];
+}
+
+function allowedFor(admission?: Admission): Set<string> {
+  if (!admission || admission.admittedFlows.length === 0) return ALLOWED;
+  return new Set([...ERRAND_TOOLS, ...ERRAND_TRAMITE_TOOLS]);
 }
 
 /**
@@ -219,9 +289,15 @@ export function isErrandTool(toolId: string): boolean {
  * sending tool has misunderstood what an errand is, and quietly dropping it
  * would let that misunderstanding ship and surface later as "why didn't it
  * send the email".
+ *
+ * `admission` is the ONE thing that widens it, it widens it by exactly two
+ * ids, and it only does so when at least one flow was actually admitted — so
+ * the default call, with no second argument, behaves exactly as it did before
+ * trámites existed.
  */
-export function assertProposalOnly(toolIds: readonly string[]): void {
-  const refused = [...new Set(toolIds)].filter((id) => !ALLOWED.has(id));
+export function assertProposalOnly(toolIds: readonly string[], admission?: Admission): void {
+  const allowed = allowedFor(admission);
+  const refused = [...new Set(toolIds)].filter((id) => !allowed.has(id));
   if (refused.length > 0) throw new OutboundToolRefused(refused);
 }
 
@@ -229,8 +305,9 @@ export function assertProposalOnly(toolIds: readonly string[]): void {
  * The allow-list as the orchestrator wants it. A copy, so a caller cannot
  * mutate the constant and widen the line for the rest of the process.
  */
-export function errandToolAllowlist(): string[] {
-  return [...ERRAND_TOOLS];
+export function errandToolAllowlist(admission?: Admission): string[] {
+  if (!admission || admission.admittedFlows.length === 0) return [...ERRAND_TOOLS];
+  return [...ERRAND_TOOLS, ...ERRAND_TRAMITE_TOOLS];
 }
 
 /**

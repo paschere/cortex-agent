@@ -85,8 +85,13 @@ export interface FlowRunNote {
   /** La frase que ya produce el motor. Nunca contiene una credencial. */
   message: string;
   failureKind?: 'transient' | 'legitimate' | 'site-changed' | 'needs-login' | 'needs-human' | null;
-  /** El motor se paró a pedir una credencial. No es un fallo. */
-  pendingQuestion?: 'credential' | null;
+  /**
+   * El motor se paró a pedir algo. No es un fallo, y CUÁL de las tres cosas
+   * decide qué dice el aviso: pedir la clave del portal manda a vincular una
+   * cuenta y no corre prisa; pedir un código o resolver un captcha tiene una
+   * pestaña abierta detrás que se cierra en minutos.
+   */
+  pendingQuestion?: 'credential' | 'input' | 'unlock' | null;
   /** True si el resultado ya salió por correo, por Chat o a la conversación. */
   deliveredElsewhere: boolean;
   /**
@@ -120,6 +125,32 @@ export async function noteFlowRun(db: SupabaseClient, note: FlowRunNote): Promis
   // Se paró a pedir algo que sólo una persona puede dar: la clave del portal, o
   // el «demuestra que eres humano» que abre el propio portal. Es el caso que
   // más caro sale callar — hay una pestaña abierta esperando y se cierra sola.
+  // El trámite llegó hasta el sitio donde hace falta una persona AHORA: un
+  // código que acaba de llegar al celular, o un «no soy un robot». La pestaña
+  // sigue abierta y se cierra sola, así que este aviso es el que menos puede
+  // esperar de todos los que produce este archivo.
+  if (note.pendingQuestion === 'input' || note.pendingQuestion === 'unlock') {
+    await quietly(
+      db,
+      {
+        userId: note.userId,
+        kind: 'flow_needs_person',
+        title:
+          note.pendingQuestion === 'input'
+            ? `El trámite «${name}» te está pidiendo un dato`
+            : `El trámite «${name}» pide una verificación`,
+        body: `${short(note.message, 300)} Contéstale desde Trámites o desde el chat; la sesión sigue abierta pero dura pocos minutos.`,
+        href,
+        source,
+        // Sin agrupar con las de credencial: son dos cosas distintas que hacer
+        // y fundirlas escondería la que tiene reloj.
+        groupKey: `flow_waiting:${note.flow.id}`,
+      },
+      'un trámite',
+    );
+    return;
+  }
+
   if (note.pendingQuestion === 'credential' || note.failureKind === 'needs-login') {
     await quietly(
       db,

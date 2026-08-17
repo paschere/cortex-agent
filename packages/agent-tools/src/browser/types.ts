@@ -75,6 +75,26 @@ export const stepValueSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('literal'), text: z.string().max(4000) }),
   z.object({ kind: z.literal('template'), text: z.string().max(4000) }),
   z.object({ kind: z.literal('secret'), field: z.string().min(1).max(80) }),
+  /**
+   * A FILE, NAMED RATHER THAN CARRIED.
+   *
+   * `from` is a reference, resolved at run time, and it is deliberately the
+   * same little language everywhere a file is passed between steps of a
+   * trámite (see `parseFileRef` in uploads.ts):
+   *
+   *   `download`        whatever THIS run downloaded a few steps ago. The
+   *                     bytes never leave the browser service: bajar en el
+   *                     portal A y subir en el portal B, dentro de un flujo.
+   *   `doc:<uuid>`      a Brain Knowledge document — which is what a file
+   *                     bajado de Drive, subido a mano o traído por otro
+   *                     trámite already is by the time anything can name it.
+   *   `file:<b>/<path>` a raw app_files row, for a generated report.
+   *   `{{slot}}`        a hole, filled from the run's inputs with one of the
+   *                     three above. This is what makes an upload TEACHABLE:
+   *                     the flow says "sube el archivo que te pasen aquí" and
+   *                     the encargo decides which one every time it runs.
+   */
+  z.object({ kind: z.literal('file'), from: z.string().min(1).max(300) }),
 ]);
 export type StepValue = z.infer<typeof stepValueSchema>;
 
@@ -89,6 +109,31 @@ export const STEP_ACTIONS = [
   'wait_for',
   'extract',
   'download',
+  /**
+   * Put a file into the site's `<input type=file>`.
+   *
+   * The counterpart of `download`, and the step that turns a trámite from
+   * "tráeme el certificado" into "llévalo al otro portal". Its `value` is a
+   * `file`, which names WHERE the bytes come from rather than carrying them:
+   * see `fileSourceSchema`.
+   */
+  'upload',
+  /**
+   * Stop, ask a person one thing, and carry on in the SAME tab.
+   *
+   * This is the only step that is not an instruction to the site. It exists for
+   * the two moments a portal genuinely needs a human and no amount of recording
+   * can supply one — the code the bank just texted, and the captcha — and it is
+   * a STEP rather than a failure because those two moments are part of the
+   * procedure, not accidents of it. A person teaching the trámite knows where
+   * they happen and can say so.
+   *
+   * `label` is the question. `extractAs` is the slot the answer fills, so the
+   * `fill` step that follows can type `{{codigo}}` as if it had always been an
+   * input. Absent `extractAs`, the pause is a "do it yourself in the tab" —
+   * which is what a captcha is.
+   */
+  'pause',
 ] as const;
 export type StepAction = (typeof STEP_ACTIONS)[number];
 
@@ -111,6 +156,55 @@ export const stepSchema = z.object({
 });
 export type Step = z.infer<typeof stepSchema>;
 
+/**
+ * WHAT KIND OF THING A SLOT HOLDS.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY A TYPE AND NOT JUST A LABEL
+ * ---------------------------------------------------------------------------
+ * A variable used to be a name and a sentence, which is enough when a person
+ * is typing into a form and reading the label as they do it. It stops being
+ * enough the moment the value comes from somewhere else — a cell of a Drive
+ * sheet, an extraction off a document, another trámite's result — because then
+ * NOBODY READS THE LABEL. What arrives is whatever the previous step produced:
+ * `900.123.456-7` when the portal wants `9001234567`, `15/03/2026` when it
+ * wants `2026-03-15`, `abc 123` when it wants `ABC123`.
+ *
+ * A portal does not say "that NIT has a check digit in it". It says "no se
+ * encontró información", and the trámite is recorded as a legitimate refusal —
+ * the one verdict that means "stop, do not retry, the answer will be the same".
+ * So a mis-shaped input does not fail loudly, it fails CONVINCINGLY, which is
+ * the expensive kind.
+ *
+ * The type is therefore not documentation. It is the normalisation rule in
+ * slots.ts, applied to every value before it reaches a browser, and the thing
+ * that lets an errand fill a slot from a source that never saw the form.
+ *
+ *   text     anything. No normalisation, the honest default.
+ *   number   digits, with the thousands separators of a Colombian keyboard off
+ *   money    a number; the portal is given digits, never `$` and never `COP`
+ *   date     normalised to YYYY-MM-DD from the d/m/y a person writes here
+ *   nit      digits only, check digit dropped — portals ask for them apart
+ *   plate    upper case, no spaces or dashes
+ *   email    trimmed and lower-cased
+ *   code     A ONE-USE SECRET: the OTP a bank texts. Never stored in a run's
+ *            inputs and never rendered — see `safeInputs`. This is the type a
+ *            `pause` step fills.
+ *   file     not text at all: a reference to a document. See `StepValue.file`.
+ */
+export const SLOT_TYPES = [
+  'text',
+  'number',
+  'money',
+  'date',
+  'nit',
+  'plate',
+  'email',
+  'code',
+  'file',
+] as const;
+export type SlotType = (typeof SLOT_TYPES)[number];
+
 export const variableSchema = z.object({
   name: z
     .string()
@@ -120,6 +214,13 @@ export const variableSchema = z.object({
   label: z.string().min(1).max(120),
   example: z.string().max(200).default(''),
   required: z.boolean().default(true),
+  /**
+   * Defaults to `text` rather than being required, and that is a compatibility
+   * decision with a name: every flow taught before this field existed has
+   * variables without it, and `text` is exactly what they have always meant.
+   * Migration 0111 backfills the column so the two readings agree on disk too.
+   */
+  type: z.enum(SLOT_TYPES).default('text'),
 });
 export type Variable = z.infer<typeof variableSchema>;
 
@@ -147,6 +248,20 @@ export interface Flow {
    * the recording. See migration 0091.
    */
   loginRequired: boolean;
+  /**
+   * An administrator has said this trámite may run INSIDE AN ERRAND, with
+   * nobody watching. False by default and never inferred.
+   *
+   * This is the per-flow half of the rule `errands/boundary.ts` states for
+   * tools: exact ids only, no wildcards, widening is a diff somebody defends.
+   * A taught flow is not read-only by construction — the same recording
+   * mechanism that fetches a certificate can file a declaration — so admitting
+   * the whole `browser.run_flow` family into an unattended run would put the
+   * line in the hands of whoever made the recording. Migration 0111 also
+   * refuses the flag on any flow whose effect is `write`, in the table, so a
+   * screen that forgot to filter cannot grant it.
+   */
+  errandAllowed: boolean;
   variables: Variable[];
   steps: Step[];
   version: number;
@@ -243,23 +358,69 @@ export interface ReplayResponse {
     snapshot: PageSnapshot;
   };
   /**
-   * The browser is still open, on a bot check, waiting for a person.
+   * The run stopped on purpose at a `pause` step. NOT a failure — see the note
+   * on `PauseRequest`. Always accompanied by a `handoff` when the service had
+   * room to keep the tab; without one the errand cannot be resumed and the
+   * pause degrades into an honest "no pude, hacía falta una persona".
+   */
+  pause?: PauseRequest;
+  /**
+   * The browser is still open, waiting for a person — at a bot check, or at a
+   * `pause` step the trámite itself declared.
    *
-   * NOT PERSISTED ANYWHERE, deliberately. The tab behind it is swept after a
-   * few minutes of nobody coming, so a row in the database would outlive the
-   * thing it points at — and a button offering to unlock a session that no
-   * longer exists is worse than no button. It is handed to whoever asked for
-   * the run and used, or lost, right there.
+   * ── WHY THERE ARE NOW TWO LIFETIMES AND NOT ONE ─────────────────────────
+   * This object still describes A TAB, and a tab is swept after a few idle
+   * minutes. That has not changed and cannot: the cookies, the half-filled
+   * form and the challenge all live in a Chromium context in one container.
+   *
+   * What changed is that a checkpoint ROW may now outlive it (migration 0111).
+   * The two are not the same fact and the row says so — it carries its own
+   * `expires_at`, and reading a checkpoint whose tab is gone yields
+   * `expired`, not an offer. A stale button is worse than no button, and the
+   * way to keep that true once the pause can last longer than the tab is to
+   * store when the tab dies, not to pretend it does not.
    */
   handoff?: BrowserHandoff;
 }
 
+/**
+ * Somebody has to do this bit, and the trámite knew that in advance.
+ *
+ * A pause is reported with `ok: false` because the run did not finish, and
+ * with NO `failure` because nothing went wrong. Everything downstream keys off
+ * that distinction: no classification, no repair, no `broken`, no `last_error`
+ * — and, in an errand, no failed leg. It is the same shape as an errand's own
+ * question, one level down.
+ */
+export interface PauseRequest {
+  /** Index of the `pause` step in the flow's list. */
+  index: number;
+  /** The question, in the words the person who taught the trámite chose. */
+  ask: string;
+  /**
+   * The slot the answer fills, or null when the answer is not a value at all
+   * but an act performed in the tab — which is what a captcha is.
+   */
+  fills: string | null;
+}
+
+export const HANDOFF_REASONS = ['bot-check', 'input-needed'] as const;
+export type HandoffReason = (typeof HANDOFF_REASONS)[number];
+
 export interface BrowserHandoff {
   sessionId: string;
-  reason: 'bot-check';
+  reason: HandoffReason;
   /** The step to carry on from, so nothing already done is repeated. */
   fromIndex: number;
   expiresAt: string;
+  /**
+   * What to put to the person. Present for both reasons: a bot check gets a
+   * sentence written here rather than at three call sites, because the screen,
+   * the chat and the errand all have to say the same thing.
+   */
+  ask?: string;
+  /** The slot the answer fills. Null for a bot check. */
+  fills?: string | null;
 }
 
 /**

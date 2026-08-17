@@ -66,6 +66,8 @@ interface Detail {
     recordingFrames: number;
     extractionCostUsd: number;
     delivery: FlowDelivery;
+    /** Puede correr dentro de un encargo, sin nadie mirando. Ver 0111. */
+    errandAllowed: boolean;
   };
   runs: {
     id: string;
@@ -330,6 +332,10 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
       costUsd: number;
       modelCalls: number;
       handoff: ChallengeHandoff | null;
+      /** La fila que recuerda la pausa (0111), cuando se pudo escribir. */
+      pausedAt: string | null;
+      asks: string | null;
+      fills: string | null;
     };
     setResult(
       `${payload.message} (${secs(payload.seconds)}, ${
@@ -341,7 +347,18 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
     // Only when the browser really did keep the tab: the service declines to
     // hold one when it is out of room, and then this is an ordinary failure
     // with a sentence rather than an offer that cannot be honoured.
-    if (payload.handoff) setHandoff(payload.handoff);
+    //
+    // La fila viaja junto al handoff para que retomar cierre la pausa de forma
+    // atómica y archive lo que el trámite baje después. Ver la ruta de
+    // checkpoints.
+    if (payload.handoff) {
+      setHandoff({
+        ...payload.handoff,
+        checkpointId: payload.pausedAt,
+        ask: payload.asks ?? payload.handoff.ask ?? null,
+        fills: payload.fills ?? payload.handoff.fills ?? null,
+      });
+    }
     setRunning(false);
     void load();
     onChanged();
@@ -567,6 +584,14 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
 
           <Delivery flowId={flow.id} initial={detail.flow.delivery} onSaved={onChanged} />
 
+          <Unattended
+            flowId={flow.id}
+            initial={detail.flow.errandAllowed}
+            effect={flow.effect}
+            status={flow.status}
+            onSaved={onChanged}
+          />
+
           <Remove flow={flow} removal={detail.removal} onRemoved={onChanged} />
         </>
       )}
@@ -616,6 +641,85 @@ function Delivery({
       <div className="mt-3">
         <DeliveryFields value={value} onChange={(next) => void change(next)} saving={state} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * DEJAR QUE ESTE TRÁMITE CORRA SOLO, DENTRO DE UN ENCARGO.
+ *
+ * Un interruptor y una frase, y la frase es la mitad importante. Lo que se está
+ * concediendo no es «correr sin confirmar»: es que una máquina use la identidad
+ * de la empresa en un portal ajeno a las tres de la mañana, sin que nadie lea
+ * el resultado hasta la mañana siguiente. Quien lo activa tiene que poder leer
+ * eso antes de tocarlo.
+ *
+ * No aparece para los trámites que radican ni para los que todavía están
+ * propuestos. No es que la pantalla los esconda por pudor: el servidor los
+ * rechaza (ruta PATCH) y la tabla también (CHECK de 0111). Ofrecer un
+ * interruptor que el servidor va a negar es enseñarle a alguien que el producto
+ * miente.
+ */
+function Unattended({
+  flowId,
+  initial,
+  effect,
+  status,
+  onSaved,
+}: {
+  flowId: string;
+  initial: boolean;
+  effect: FlowSummary['effect'];
+  status: FlowSummary['status'];
+  onSaved: () => void;
+}) {
+  const [allowed, setAllowed] = useState(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  if (effect !== 'read' || status !== 'ready') return null;
+
+  async function toggle() {
+    const next = !allowed;
+    setSaving(true);
+    setError(null);
+    const response = await fetch(`/api/browser/flows/${flowId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ errandAllowed: next }),
+    });
+    if (response.ok) {
+      setAllowed(next);
+      onSaved();
+    } else {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      setError(payload?.error ?? 'No pude cambiarlo.');
+    }
+    setSaving(false);
+  }
+
+  return (
+    <div className="border-t border-border p-5">
+      <h3 className="field-label">Cuando nadie está mirando</h3>
+      <label className="mt-3 flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={allowed}
+          disabled={saving}
+          onChange={() => void toggle()}
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border text-primary focus:ring-primary/20"
+        />
+        <span className="min-w-0 text-xs leading-relaxed text-ink-muted">
+          <span className="font-semibold text-ink">
+            Cortex puede correr este trámite por su cuenta dentro de un encargo.
+          </span>{' '}
+          Sin esto, sólo corre cuando alguien lo pide. Actívalo únicamente si te parece bien que
+          entre a ese portal con la cuenta de la empresa sin que nadie esté leyendo el resultado en
+          el momento. Nunca aplica a los trámites que radican o envían algo: ésos pasan siempre por
+          una aprobación.
+        </span>
+      </label>
+      {error && <p className="mt-2 text-xs text-rose">{error}</p>}
     </div>
   );
 }
