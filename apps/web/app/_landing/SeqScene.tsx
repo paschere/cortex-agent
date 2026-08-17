@@ -626,7 +626,6 @@ const FIGURE_VERT = /* glsl */ `
   uniform float uPointerK;
   uniform float uInvite;
   uniform float uInviteK;
-  uniform float uInviteR;
 
   attribute float aSeed;
   varying float vI;
@@ -656,19 +655,30 @@ const FIGURE_VERT = /* glsl */ `
     float glow;
     p = seqPos(p, aSeed, uTime, glow);
 
-    float handGlow = smoothstep(0.5, 0.06, distance(position.xy, uHand)) *
+    // El brazo como cápsula en espacio unitario de la silueta (hombro→
+    // mano): fuera de ella ni el glow de la mano ni el shimmer existen —
+    // jamás torso ni cabeza.
+    vec2 armA = vec2(0.065, 0.733);
+    vec2 ab = uHand - armA;
+    float armH = clamp(dot(position.xy - armA, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+    float armMask = smoothstep(0.06, 0.028, distance(position.xy, armA + ab * armH));
+
+    float handGlow = smoothstep(0.3, 0.05, distance(position.xy, uHand)) * armMask *
       (0.55 + 0.45 * sin(uTime * 2.6)) * (1.0 + 1.6 * uReach) * (1.0 - uBang);
 
-    // La respuesta a la llamada (fase 0): un frente de luz converge hacia
-    // la mano — el shimmer recorre el brazo cuando la IA invita.
+    // La respuesta a la llamada (fase 0): una banda angosta de luz que
+    // recorre el brazo hombro→mano. σ ≈ 10% del largo del brazo: un
+    // pulso que viaja, no un baño.
     float inv = 0.0;
     if (uInviteK > 0.001) {
-      float front = (1.0 - uInvite) * uInviteR;
-      float dh = distance(position.xy, uHand);
-      inv = exp(-pow((dh - front) / (uInviteR * 0.24), 2.0)) * uInviteK;
+      inv = exp(-pow((armH - uInvite) / 0.10, 2.0)) * armMask * uInviteK;
     }
 
-    vI = (0.62 + 0.48 * fract(aSeed * 7.31) + handGlow * 0.9 + g * 0.35 + glow + inv) * uMood;
+    // El mismo tope que en la figura real: la luz de la mano ilumina, no
+    // borra; el margen crece con el reach real (> 0.25).
+    float lit = min(handGlow * 0.9 + inv, 0.55 + 1.7 * max(uReach - 0.25, 0.0));
+
+    vI = (0.62 + 0.48 * fract(aSeed * 7.31) + lit + g * 0.35 + glow) * uMood;
 
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     // Niebla de profundidad: lo lejano se atenúa, el campo respira aire.
@@ -694,16 +704,17 @@ const BODY_VERT = /* glsl */ `
   uniform mat4 uBindInv;
   uniform mat4 uXform;
   uniform vec3 uHand;
+  uniform vec3 uShoulder;
   uniform vec3 uPointer;
   uniform float uPointerK;
   uniform float uInvite;
   uniform float uInviteK;
-  uniform float uInviteR;
 
   attribute vec4 aSkinIndex;
   attribute vec4 aSkinWeight;
   attribute float aSeed;
   attribute float aTone;
+  attribute float aArm;
   varying float vI;
 
   ${SEQ_GLSL}
@@ -740,25 +751,39 @@ const BODY_VERT = /* glsl */ `
     float g = smoothstep(1.2, 0.1, d) * uPointerK;
     p.xy += (uPointer.xy - p.xy) * g * 0.06;
 
+    // La pertenencia al brazo derecho (peso de skinning de RightArm/
+    // RightForeArm/RightHand, horneado al muestrear): fuera del brazo,
+    // ni el glow de la mano ni el shimmer existen — la cadera que la mano
+    // roza en reposo no puede quemarse.
+    float armMask = smoothstep(0.2, 0.65, aArm);
+
     // La energía se concentra en la mano que alcanza — y sube con el reach.
-    float handGlow = smoothstep(1.1, 0.1, distance(p, uHand)) *
+    float handGlow = smoothstep(0.6, 0.08, distance(p, uHand)) * armMask *
       (0.55 + 0.45 * sin(uTime * 2.6)) * (1.0 + 1.6 * uReach) * (1.0 - uBang);
 
-    // La respuesta a la llamada (fase 0): un frente de luz converge hacia
-    // la mano — el shimmer recorre el brazo cuando la IA invita.
+    // La respuesta a la llamada (fase 0): una banda angosta de luz que
+    // recorre el brazo hombro→mano por su eje. σ ≈ 10% del largo del
+    // brazo — un pulso que viaja, no un gradiente que inunda.
     float inv = 0.0;
     if (uInviteK > 0.001) {
-      float front = (1.0 - uInvite) * uInviteR;
-      float dh = distance(p, uHand);
-      inv = exp(-pow((dh - front) / (uInviteR * 0.24), 2.0)) * uInviteK;
+      vec3 ab = uHand - uShoulder;
+      float h = clamp(dot(p - uShoulder, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+      inv = exp(-pow((h - uInvite) / 0.10, 2.0)) * armMask * uInviteK;
     }
+
+    // El tope de luz de la mano: glow + shimmer iluminan, no borran — la
+    // mano en reposo cuelga junto a la cadera y sin tope el apilado aditivo
+    // de sus partículas densas la volvía una mancha quemada sobre el cuerpo.
+    // El margen crece con el reach real (> 0.25): el clímax del contacto
+    // conserva su brillo.
+    float lit = min(handGlow * 0.9 + inv, 0.55 + 1.7 * max(uReach - 0.25, 0.0));
 
     float glow;
     p = seqPos(p, aSeed, uTime, glow);
 
     float tw = 0.86 + 0.14 * sin(uTime * (1.4 + fract(aSeed * 3.3) * 1.6) + aSeed * 61.0);
 
-    vI = ((0.6 + 0.5 * fract(aSeed * 7.31)) * tw * aTone + handGlow * 0.9 + g * 0.35 + glow + inv)
+    vI = ((0.6 + 0.5 * fract(aSeed * 7.31)) * tw * aTone + lit + g * 0.35 + glow)
       * uAppear * uMood;
 
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
@@ -1158,9 +1183,6 @@ function FigureFallback({
       uPointerK: { value: 0 },
       uInvite: { value: 0 },
       uInviteK: { value: 0 },
-      // La silueta vive en espacio unitario (altura ≈ 1): el frente del
-      // shimmer parte a media figura de la mano.
-      uInviteR: { value: 0.5 },
       uColDeep: { value: COL_DEEP },
       uColMid: { value: COL_MID },
       uColHot: { value: COL_HOT },
@@ -1245,6 +1267,24 @@ function FigureReal({ mobile, layout, live, seqU, register, anchor, onFigureRead
     if (!skeleton.boneTexture) skeleton.computeBoneTexture();
     const boneTex = skeleton.boneTexture as THREE.DataTexture;
 
+    // La pertenencia al brazo derecho, horneada del skinning: la suma de
+    // pesos sobre RightArm/RightForeArm/RightHand (y dedos). El shimmer de
+    // invitación vive SOLO donde aArm ≈ 1 — el torso queda en cero.
+    const armBoneIdx = new Set<number>();
+    skeleton.bones.forEach((b, i) => {
+      if (/Right(Arm|ForeArm|Hand)/.test(b.name)) armBoneIdx.add(i);
+    });
+    const armW = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      let a = 0;
+      for (let j = 0; j < 4; j++) {
+        if (armBoneIdx.has(sampled.skinIndex[i * 4 + j] ?? -1))
+          a += sampled.skinWeight[i * 4 + j] ?? 0;
+      }
+      armW[i] = a;
+    }
+    geo.setAttribute('aArm', new THREE.BufferAttribute(armW, 1));
+
     const bbox = new THREE.Box3().setFromObject(root);
     const modelH = Math.max(1e-6, bbox.max.y - bbox.min.y);
     const minY = bbox.min.y;
@@ -1269,11 +1309,11 @@ function FigureReal({ mobile, layout, live, seqU, register, anchor, onFigureRead
       uBindInv: { value: first.bindMatrixInverse },
       uXform: { value: new THREE.Matrix4() },
       uHand: { value: new THREE.Vector3() },
+      uShoulder: { value: new THREE.Vector3() },
       uPointer: { value: new THREE.Vector3(999, 999, 0) },
       uPointerK: { value: 0 },
       uInvite: { value: 0 },
       uInviteK: { value: 0 },
-      uInviteR: { value: 1 },
       uColDeep: { value: COL_DEEP },
       uColMid: { value: COL_MID },
       uColHot: { value: COL_HOT },
@@ -1348,6 +1388,7 @@ function FigureReal({ mobile, layout, live, seqU, register, anchor, onFigureRead
       qParent: new THREE.Quaternion(),
       qLocal: new THREE.Quaternion(),
       hand: new THREE.Vector3(),
+      shoulder: new THREE.Vector3(),
       appear: 0,
     }),
     [],
@@ -1411,15 +1452,17 @@ function FigureReal({ mobile, layout, live, seqU, register, anchor, onFigureRead
     // 4. La textura de huesos, al día.
     built.skeleton.update();
 
-    // 5. La mano real ancla el río y el glow.
+    // 5. La mano real ancla el río y el glow; el hombro, el arranque del
+    //    shimmer de respuesta (la banda viaja hombro→mano por ese eje).
     if (built.handBone) {
       s.hand.setFromMatrixPosition(built.handBone.matrixWorld).applyMatrix4(s.layoutMat);
       anchor.hand = s.hand;
       built.u.uHand.value.copy(s.hand);
     }
-
-    // El radio del shimmer de respuesta: parte a media figura de la mano.
-    built.u.uInviteR.value = layout.body.height * 0.45;
+    if (built.armBone) {
+      s.shoulder.setFromMatrixPosition(built.armBone.matrixWorld).applyMatrix4(s.layoutMat);
+      built.u.uShoulder.value.copy(s.shoulder);
+    }
     built.u.uAppear.value = s.appear;
   });
 
@@ -1935,11 +1978,12 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
     if (fig) {
       fig.uTime.value = t;
       fig.uDpr.value = dpr;
-      // El shimmer de respuesta: el frente viaja hacia la mano a mitad de
-      // la llamada, cuando los zarcillos ya están en camino.
+      // El shimmer de respuesta: la banda recorre el brazo hombro→mano a
+      // mitad de la llamada, cuando los zarcillos ya están en camino.
+      // 0.45 ilumina sin quemar: la figura sigue azul con una vena de luz.
       fig.uInvite.value = clamp01((callT - 0.25) / 0.55);
       fig.uInviteK.value =
-        0.9 * smooth01((callT - 0.22) / 0.15) * (1 - smooth01((callT - 0.85) / 0.15)) * idleK;
+        0.45 * smooth01((callT - 0.22) / 0.15) * (1 - smooth01((callT - 0.85) / 0.15)) * idleK;
     }
 
     // Cámara con vida: la escena se inclina 2–3° hacia el cursor; el efecto
