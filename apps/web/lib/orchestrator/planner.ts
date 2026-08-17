@@ -1,5 +1,5 @@
 import 'server-only';
-import { type AnyTool, NO_THINKING, chatModel } from '@cortex/agent-tools';
+import { type AnyTool, chatModel } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { generateObject } from 'ai';
 import { z } from 'zod';
@@ -138,17 +138,33 @@ export async function planObjective(opts: {
    * modelo contestó en prosa, o si es otra cosa. Un fallo que no se puede
    * reproducir tiene que explicarse solo.
    */
-  const attempt = async () =>
+  /**
+   * CON PENSAMIENTO, A PROPÓSITO — antes iba apagado y ESO era el fallo.
+   *
+   * Este archivo mandaba NO_THINKING para ahorrar tokens en una llamada «de
+   * forma fija». Resultó ser la causa del fallo que este mismo archivo
+   * documenta: con el pensamiento desactivado, Sonnet 5 a veces escribe la
+   * respuesta estructurada como TEXTO en vez de emitir el objeto — es un modo
+   * de fallo documentado por Anthropic para thinking-off, y «contestó con una
+   * explicación en vez de con tareas» dos veces seguidas (17-08-2026, run
+   * 623d3e7d) es su firma exacta. Con pensamiento adaptativo el modelo respeta
+   * el esquema; el techo sube porque esos tokens cuentan contra maxTokens.
+   *
+   * Y si aún así contesta prosa, el segundo intento NO repite la misma moneda
+   * cargada: le devuelve al modelo su propia explicación y le exige convertirla
+   * en tareas. Una «explicación» sobre competidores casi siempre CONTIENE el
+   * plan — solo que en el formato equivocado — y pedir la conversión es más
+   * barato y más fiable que rezar para que el segundo volado caiga distinto.
+   */
+  const attempt = async (proseFromLastTry?: string) =>
     generateObject({
       model: chatModel(opts.model),
       schema: PlanSchema,
       system: SYSTEM,
-      prompt,
-      // Shape-constrained call with an explicit schema: extended thinking buys
-      // little here and its tokens count against maxTokens, which would truncate
-      // the plan itself. See NO_THINKING in packages/agent-tools/src/model.ts.
-      experimental_providerMetadata: NO_THINKING,
-      maxTokens: 8192,
+      prompt: proseFromLastTry
+        ? `${prompt}\n\nTU RESPUESTA ANTERIOR (prosa, no un plan):\n${proseFromLastTry.slice(0, 6000)}\n\nEsa respuesta explica en vez de planear. Conviértela AHORA en la lista de tareas del esquema. Si crees que falta un dato, no lo pidas: planea una tarea que lo OBTENGA con las herramientas del catálogo (búsqueda web, cerebro de la empresa, CRM…).`
+        : prompt,
+      maxTokens: 16384,
     });
 
   let object: Awaited<ReturnType<typeof attempt>>['object'];
@@ -157,8 +173,9 @@ export async function planObjective(opts: {
     ({ object, usage } = await attempt());
   } catch (first) {
     describeFailure(first, 'primer intento');
+    const prose = proseOf(first);
     try {
-      ({ object, usage } = await attempt());
+      ({ object, usage } = await attempt(prose ?? undefined));
     } catch (second) {
       throw new Error(describeFailure(second, 'segundo intento'));
     }
@@ -224,6 +241,16 @@ function sanitizeTools(requested: string[], known: Set<string>): string[] {
  * y no le sirve a nadie: está en inglés, nombra un concepto interno y no dice
  * qué hacer después.
  */
+/** La prosa que el modelo escribió cuando debía escribir el objeto, si la hay. */
+function proseOf(err: unknown): string | null {
+  const e = err as { text?: unknown; finishReason?: unknown };
+  // Un JSON cortado por el tope NO es prosa: reintentarlo «convirtiéndolo» solo
+  // le pediría al modelo que complete un texto truncado. Ese caso reintenta
+  // limpio y su remedio real es el techo de tokens, ya subido.
+  if (e.finishReason === 'length') return null;
+  return typeof e.text === 'string' && e.text.trim().length > 0 ? e.text : null;
+}
+
 function describeFailure(err: unknown, which: string): string {
   const e = err as {
     text?: unknown;
