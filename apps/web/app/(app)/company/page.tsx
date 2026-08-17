@@ -57,6 +57,12 @@ import type { FactView, SectionView } from './_components/types';
 
 export const dynamic = 'force-dynamic';
 
+// Las acciones de esta pantalla heredan este techo. Hace falta por UNA:
+// `proposeFromDocument` sube un archivo, lo parsea y se lo pasa a un modelo,
+// y el minuto es el mismo que ya tiene `/api/chat/attachments` para el mismo
+// trabajo. Renderizar la página sigue tardando lo de siempre.
+export const maxDuration = 60;
+
 export default async function CompanyPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);

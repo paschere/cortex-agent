@@ -6,11 +6,12 @@ import { Panel, PanelHead } from '@/components/ui/panel';
 import { Provenance } from '@/components/ui/provenance';
 import { COMPANY_FACTS_BUDGET } from '@/lib/company-facts-shape';
 import { clsx } from 'clsx';
-import { Check, Plus, Search, Sparkles, X } from 'lucide-react';
-import { useMemo, useState, useTransition } from 'react';
+import { Check, FileUp, Plus, Search, Sparkles, X } from 'lucide-react';
+import { useMemo, useRef, useState, useTransition } from 'react';
+import { COMPANY_DOC_ACCEPT, COMPANY_DOC_MAX_BYTES } from '../_lib/from-file';
 import type { FactAlternative, Proposal, ProposedFact } from '../_lib/proposal';
 import { isBulkAcceptable, weighSelection } from '../_lib/proposal';
-import { acceptFacts, proposeFacts } from '../actions';
+import { acceptFacts, proposeFacts, proposeFromDocument } from '../actions';
 import type { ActionResult, FactView, SectionView } from './types';
 
 /**
@@ -79,6 +80,14 @@ export function ProposalPanel({ facts, sections, seedName, onFillManually, onRes
   const [chosen, setChosen] = useState<Record<string, number>>({});
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  /**
+   * `reading` distingue las dos esperas que comparten `busy`: buscar en la web
+   * y leer un documento subido. La segunda puede tardar —hay un modelo leyendo
+   * treinta mil caracteres— y el botón tiene que decir qué está pasando, no un
+   * genérico «cargando».
+   */
+  const [reading, setReading] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [, startTransition] = useTransition();
 
   const names = useMemo(() => Object.fromEntries(sections.map((s) => [s.key, s.name])), [sections]);
@@ -117,6 +126,42 @@ export function ProposalPanel({ facts, sections, seedName, onFillManually, onRes
       setChosen({});
       // NADA VIENE MARCADO. Marcar por defecto convierte «revisa esto» en
       // «confirma esto», y son dos preguntas distintas.
+      setPicked(new Set());
+    });
+  }
+
+  /**
+   * Leer un documento subido. Desemboca EXACTAMENTE donde `search()`: el mismo
+   * `setProposal`, el mismo panel, la misma revisión campo por campo. La única
+   * diferencia visible es el chip: estos valores llegan con el nombre del
+   * archivo, los de la web con el dominio.
+   */
+  function readFile(file: File) {
+    // El servidor vuelve a comprobar tipo y tamaño; esto sólo ahorra subir
+    // 60 MB para recibir la misma frase.
+    if (file.size > COMPANY_DOC_MAX_BYTES) {
+      setError('El archivo pasa de 10 MB.');
+      return;
+    }
+    setBusy(true);
+    setReading(true);
+    setError(null);
+    startTransition(async () => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('name', name);
+      const outcome = await proposeFromDocument(form);
+      setBusy(false);
+      setReading(false);
+      if (!outcome.ok || !outcome.proposal) {
+        setError(outcome.error ?? 'No se pudo leer el documento.');
+        return;
+      }
+      setProposal(outcome.proposal);
+      setNotes(outcome.notes ?? []);
+      setChosen({});
+      // Igual que en la búsqueda: NADA viene marcado. Que el documento lo haya
+      // subido la propia persona no convierte «revisa esto» en «confirma esto».
       setPicked(new Set());
     });
   }
@@ -162,8 +207,9 @@ export function ProposalPanel({ facts, sections, seedName, onFillManually, onRes
       <div className="px-5 pb-4 pt-2">
         <p className="text-xs leading-relaxed text-ink-muted">
           Escribe el nombre de la empresa y Cortex busca el resto en tus documentos, en tus propios
-          datos y en la web. No guarda nada: te propone, con de dónde salió cada cosa, y tú apruebas
-          lo que sea cierto.
+          datos y en la web — o súbele un documento (la cámara de comercio, el RUT, un contrato) y
+          lo saca de ahí. No guarda nada en la ficha: te propone, con de dónde salió cada cosa, y tú
+          apruebas lo que sea cierto.
         </p>
 
         <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -200,9 +246,51 @@ export function ProposalPanel({ facts, sections, seedName, onFillManually, onRes
             className="px-3 py-2 text-xs"
           >
             <Search className="h-3.5 w-3.5" aria-hidden />
-            {busy ? 'Buscando…' : 'Buscar'}
+            {busy && !reading ? 'Buscando…' : 'Buscar'}
           </Button>
         </div>
+
+        {/* LA OTRA PUERTA AL MISMO PANEL. El nombre de arriba sigue haciendo
+            falta —es el desempate entre las dos empresas que nombra cualquier
+            contrato—, así que el botón se apaga sin él y el texto dice por qué. */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <input
+            ref={fileInput}
+            type="file"
+            accept={COMPANY_DOC_ACCEPT}
+            className="hidden"
+            aria-hidden
+            tabIndex={-1}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              // Se limpia el input para que subir el MISMO archivo otra vez
+              // vuelva a disparar el onChange — corregir y reintentar es el
+              // caso normal, no el raro.
+              e.target.value = '';
+              if (file) readFile(file);
+            }}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => fileInput.current?.click()}
+            disabled={busy || name.trim().length < 2}
+            className="px-3 py-1.5 text-xs"
+          >
+            <FileUp className="h-3.5 w-3.5" aria-hidden />
+            {reading ? 'Leyendo el documento…' : 'Subir un documento de la empresa'}
+          </Button>
+          <span className="text-micro text-ink-faint">
+            PDF, DOCX, TXT o MD, hasta 10 MB.
+            {name.trim().length < 2 && ' Primero escribe el nombre de la empresa, arriba.'}
+          </span>
+        </div>
+        {reading && (
+          <output className="mt-1.5 block text-micro leading-relaxed text-ink-faint">
+            Guardando el archivo y leyéndolo entero. Puede tardar un momento; no cierres la
+            pantalla.
+          </output>
+        )}
 
         {error && (
           <output className="mt-3 block rounded-card border border-rose/30 bg-rose/5 px-4 py-3 text-sm text-ink">

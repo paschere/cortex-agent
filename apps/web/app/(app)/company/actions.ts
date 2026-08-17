@@ -1,5 +1,6 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -8,14 +9,18 @@ import {
   UnknownCompanySectionError,
   deleteCompanyFact,
   listCompanyFacts,
+  parseDocument,
+  putFile,
   writeCompanyFact,
 } from '@cortex/agent-tools';
 import { NotFoundError, type UUID, ValidationError } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import type { ActionResult, ProposeResult } from './_components/types';
+import { describeUploadProblem } from './_lib/from-file';
 import { gatherCandidates } from './_lib/gather';
 import { selectProposal } from './_lib/proposal';
+import { readCompanyDocument } from './_lib/read-document';
 
 /**
  * Lo que la pantalla puede escribir: guardar un hecho y borrarlo.
@@ -199,6 +204,120 @@ export async function proposeFacts(input: unknown): Promise<ProposeResult> {
     return { ok: true, proposal, notes: gathered.notes };
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo buscar la información de la empresa.') };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// «Sácalo de este documento»
+// ---------------------------------------------------------------------------
+
+/** Dónde quedan guardados los documentos que se suben aquí, en `app_files`. */
+const COMPANY_DOCS_BUCKET = 'company-docs';
+
+function safeName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+/**
+ * SUBE UN ARCHIVO, LO LEE, Y PROPONE. TAMPOCO ESCRIBE NADA.
+ *
+ * Es el hermano de `proposeFacts` y desemboca en el MISMO sitio: devuelve un
+ * `ProposeResult`, la pantalla lo pinta en el mismo panel de revisión, y cada
+ * valor que sobreviva entra por `saveFact`/`acceptFacts` con su control de rol
+ * y su presupuesto. Un documento subido no abre un flujo aparte — es una fuente
+ * más, con `kind: 'document'` en el chip.
+ *
+ * Lo único que esta acción deja detrás es EL ARCHIVO, en `app_files` bajo el
+ * bucket `company-docs`, scopeado a la organización por el cliente de siempre.
+ * Guardarlo no es un efecto secundario descuidado: es lo que permite volver a
+ * mirar de dónde salió un dato meses después de aceptarlo.
+ *
+ * ADMIN, por lo mismo que `proposeFacts`: sólo un admin puede aceptar lo que
+ * salga, y a cualquier otro esto le devolvería una lista con la que no puede
+ * hacer nada. Y el nombre de la empresa se exige por lo mismo que allá: un
+ * contrato nombra a DOS empresas, y el nombre tecleado es el desempate.
+ */
+export async function proposeFromDocument(form: FormData): Promise<ProposeResult> {
+  const user = await requireSession();
+  if (user.role !== 'org_admin')
+    return {
+      ok: false,
+      error:
+        'Sólo un administrador puede rellenar la ficha, así que sólo él puede leer un documento para eso.',
+    };
+
+  const file = form.get('file');
+  const name = String(form.get('name') ?? '').trim();
+
+  if (!(file instanceof File)) return { ok: false, error: 'Falta el archivo.' };
+  if (name.length < 2 || name.length > 120)
+    return {
+      ok: false,
+      error:
+        'Escribe primero el nombre de la empresa: es lo que separa tu NIT del de la otra empresa que sale en el documento.',
+    };
+
+  const problem = describeUploadProblem(file.type, file.size);
+  if (problem) return { ok: false, error: problem };
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  let text: string;
+  let pages: number | undefined;
+  try {
+    const parsed = await parseDocument(buffer, file.type.split(';')[0]?.trim().toLowerCase() ?? '');
+    text = parsed.text;
+    pages = parsed.pages;
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error && err.message
+          ? `No se pudo leer el archivo: ${err.message}`
+          : 'No se pudo leer el archivo.',
+    };
+  }
+
+  if (text.trim().length === 0)
+    return {
+      ok: false,
+      error: 'El archivo no tiene texto que Cortex pueda leer. Si es un escaneo, todavía no.',
+    };
+
+  const db = getOrgScopedClient(user.organization.id);
+  const notes: string[] = [];
+
+  // El archivo se guarda ANTES de extraer, para que un fallo del modelo no se
+  // lleve también el documento. Y si es el guardado el que falla, la extracción
+  // sigue y la nota lo dice: son dos resultados independientes y la pantalla
+  // no debe fundirlos en un solo error.
+  try {
+    await putFile(db, {
+      bucket: COMPANY_DOCS_BUCKET,
+      path: `${user.id}/${randomUUID()}/${safeName(file.name)}`,
+      content: buffer,
+      contentType: file.type.split(';')[0]?.trim().toLowerCase() ?? 'application/octet-stream',
+    });
+  } catch {
+    notes.push('No pude guardar el archivo para después; lo leí igual.');
+  }
+
+  try {
+    const [written, read] = await Promise.all([
+      listCompanyFacts(db),
+      readCompanyDocument({ db, typedName: name, fileName: file.name, text, pages }),
+    ]);
+
+    const proposal = selectProposal(read.candidates, {
+      written: written.map((r) => ({ section: r.section, label: r.label, value: r.value })),
+      sectionNames: Object.fromEntries(COMPANY_SECTIONS.map((s) => [s.key, s.name])),
+      sectionOrder: COMPANY_SECTIONS.map((s) => s.key),
+      suggested: Object.fromEntries(COMPANY_SECTIONS.map((s) => [s.key, [...s.suggested]])),
+    });
+
+    return { ok: true, proposal, notes: [...notes, ...read.notes] };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo sacar nada del documento.') };
   }
 }
 
