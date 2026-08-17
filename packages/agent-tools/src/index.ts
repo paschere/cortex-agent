@@ -20,6 +20,10 @@ export * from './tenancy';
 // registra herramientas — exportado temprano por la misma razón que tenancy.
 export * from './files';
 export * from './model';
+// Reparar lo que un modelo devuelve con la forma correcta dentro de la forma
+// equivocada. Módulo hoja y puro; va junto a ./model porque es conocimiento
+// sobre cómo contesta el proveedor, no sobre ningún dominio del producto.
+export * from './structured';
 export { writeAuditEvent } from './audit';
 export { consumeToken } from './rate-limit';
 export { createIntegrationsClient } from './integrations';

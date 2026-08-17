@@ -1,5 +1,5 @@
 import 'server-only';
-import { NO_THINKING, chatModel } from '@cortex/agent-tools';
+import { NO_THINKING, chatModel, repairStructured } from '@cortex/agent-tools';
 import { ERRAND_KIND_SPECS } from '@cortex/agent-tools';
 import type { ErrandKind, ErrandSource } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
@@ -108,6 +108,8 @@ export async function triageRequest(input: {
     const { object, usage } = await generateObject({
       model: chatModel(input.model),
       schema: TriageSchema,
+      // Ver structured.ts: el envoltorio llega mal, el contenido bien.
+      experimental_repairText: repairStructured(['ready', 'brief', 'question', 'options']),
       system: TRIAGE_SYSTEM,
       prompt: [
         `KIND OF ERRAND: ${spec.label} — ${spec.blurb}`,
@@ -282,6 +284,14 @@ export async function assessLeg(input: AssessInput): Promise<AssessOutcome> {
     const { object, usage } = await generateObject({
       model: chatModel(input.model),
       schema: AssessSchema,
+      // Ver structured.ts: el envoltorio llega mal, el contenido bien.
+      experimental_repairText: repairStructured([
+        'verdict',
+        'deliverable',
+        'question',
+        'options',
+        'sources',
+      ]),
       system: ASSESS_SYSTEM,
       prompt: sections.join('\n\n'),
       // Headroom for a full comparison table plus its reading. A short cap

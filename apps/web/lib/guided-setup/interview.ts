@@ -12,7 +12,7 @@ import {
   type SetupKind,
   normalizeProposal,
 } from '@/lib/guided-setup-shape';
-import { NO_THINKING, chatModel } from '@cortex/agent-tools';
+import { NO_THINKING, chatModel, repairStructured } from '@cortex/agent-tools';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import type { Turn } from './store';
@@ -66,7 +66,9 @@ import type { Turn } from './store';
  */
 const ItemSchema = z.object({
   kind: z.enum(SETUP_KINDS),
-  title: z.string().describe('Cómo lo llamaría la persona. Es también el nombre de lo que se crea.'),
+  title: z
+    .string()
+    .describe('Cómo lo llamaría la persona. Es también el nombre de lo que se crea.'),
   rationale: z.string().describe('Por qué, citando lo que la persona dijo. Una o dos frases.'),
 
   dueOn: z.string().optional().describe('Vencimiento: la fecha exacta, YYYY-MM-DD.'),
@@ -84,7 +86,9 @@ const ItemSchema = z.object({
       z.object({
         title: z.string(),
         detail: z.string(),
-        checkpoint: z.boolean().describe('true si aquí una persona tiene que decidir antes de seguir.'),
+        checkpoint: z
+          .boolean()
+          .describe('true si aquí una persona tiene que decidir antes de seguir.'),
       }),
     )
     .optional()
@@ -228,6 +232,8 @@ export async function askNext(
   const { object } = await generateObject({
     model: chatModel(),
     schema: AskSchema,
+    // Ver structured.ts: el envoltorio llega mal, el contenido bien.
+    experimental_repairText: repairStructured(['note', 'enough', 'question', 'unlocks']),
     system,
     prompt: `LA CONVERSACIÓN HASTA AHORA\n\n${transcriptText(turns)}\n\n¿Te falta algo?`,
     experimental_providerMetadata: NO_THINKING,
@@ -254,10 +260,7 @@ export interface Proposal {
 }
 
 /** El turno de proponer. Todo lo que salga de aquí pasa por el catálogo. */
-export async function propose(
-  turns: readonly Turn[],
-  ctx: InterviewContext,
-): Promise<Proposal> {
+export async function propose(turns: readonly Turn[], ctx: InterviewContext): Promise<Proposal> {
   const system = [
     voice(ctx),
     '',
@@ -289,6 +292,8 @@ export async function propose(
   const { object } = await generateObject({
     model: chatModel(),
     schema: ProposeSchema,
+    // Ver structured.ts: el envoltorio llega mal, el contenido bien.
+    experimental_repairText: repairStructured(['summary', 'items', 'handoffs', 'outOfScope']),
     system,
     prompt: `LA CONVERSACIÓN COMPLETA\n\n${transcriptText(turns)}\n\nArma la propuesta.`,
     experimental_providerMetadata: NO_THINKING,

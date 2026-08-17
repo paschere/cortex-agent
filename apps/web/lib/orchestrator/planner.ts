@@ -1,5 +1,5 @@
 import 'server-only';
-import { type AnyTool, chatModel } from '@cortex/agent-tools';
+import { type AnyTool, chatModel, repairStructured } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 import { generateObject } from 'ai';
 import { z } from 'zod';
@@ -139,22 +139,36 @@ export async function planObjective(opts: {
    * reproducir tiene que explicarse solo.
    */
   /**
-   * CON PENSAMIENTO, A PROPÓSITO — antes iba apagado y ESO era el fallo.
+   * NO ES LA CONFIGURACIÓN DE PENSAMIENTO. SE MIDIÓ.
    *
-   * Este archivo mandaba NO_THINKING para ahorrar tokens en una llamada «de
-   * forma fija». Resultó ser la causa del fallo que este mismo archivo
-   * documenta: con el pensamiento desactivado, Sonnet 5 a veces escribe la
-   * respuesta estructurada como TEXTO en vez de emitir el objeto — es un modo
-   * de fallo documentado por Anthropic para thinking-off, y «contestó con una
-   * explicación en vez de con tareas» dos veces seguidas (17-08-2026, run
-   * 623d3e7d) es su firma exacta. Con pensamiento adaptativo el modelo respeta
-   * el esquema; el techo sube porque esos tokens cuentan contra maxTokens.
+   * Este bloque decía que el fallo venía de tener el pensamiento apagado y que
+   * encenderlo lo arreglaba. Las dos mitades eran falsas, y la segunda encima
+   * nunca llegó a ocurrir: `chatModel()` resuelve a `thinkingProvider`, que con
+   * `REASONING_VISIBLE = false` manda `thinking: {type:'disabled'}`. O sea que
+   * el arreglo que este comentario describía lo cancelaba la capa de modelo sin
+   * decir nada, y el planificador llevaba desde entonces corriendo con lo mismo
+   * que decía haber cambiado.
    *
-   * Y si aún así contesta prosa, el segundo intento NO repite la misma moneda
-   * cargada: le devuelve al modelo su propia explicación y le exige convertirla
-   * en tareas. Una «explicación» sobre competidores casi siempre CONTIENE el
-   * plan — solo que en el formato equivocado — y pedir la conversión es más
-   * barato y más fiable que rezar para que el segundo volado caiga distinto.
+   * El 17-08-2026 se dejó de suponer. Seis llamadas por configuración, tres
+   * objetivos distintos, contra la API real:
+   *
+   *     thinking disabled                      0/6
+   *     thinking adaptive + summarized + max   0/6
+   *
+   * La configuración que en su día pareció buena acertaba tres de tres sobre UN
+   * objetivo y cero sobre los otros dos: era sobreajuste a un prompt. Y
+   * `display:'off'`, que habría permitido pensar sin enseñar el razonamiento, no
+   * existe — la API devuelve 400 y sólo acepta `summarized` u `omitted`.
+   *
+   * Lo que sí es constante es que el CONTENIDO llega bien y sólo el envoltorio
+   * viene mal, así que el arreglo está en `experimental_repairText` (abajo) y no
+   * en una bandera del proveedor. Con el reparador: 6/6 en las dos
+   * configuraciones. Si alguien vuelve a leer este fallo, que no empiece por
+   * cambiar cómo piensa el modelo: ya se probó tres veces.
+   *
+   * El reintento se queda. Sigue cubriendo el otro fallo real —el JSON cortado
+   * por el tope— y le devuelve al modelo su propia respuesta cuando de verdad
+   * contestó en prosa.
    */
   const attempt = async (proseFromLastTry?: string) =>
     generateObject({
@@ -165,6 +179,11 @@ export async function planObjective(opts: {
         ? `${prompt}\n\nTU RESPUESTA ANTERIOR (prosa, no un plan):\n${proseFromLastTry.slice(0, 6000)}\n\nEsa respuesta explica en vez de planear. Conviértela AHORA en la lista de tareas del esquema. Si crees que falta un dato, no lo pidas: planea una tarea que lo OBTENGA con las herramientas del catálogo (búsqueda web, cerebro de la empresa, CRM…).`
         : prompt,
       maxTokens: 16384,
+      // Ver packages/agent-tools/src/structured.ts. Sonnet 5 devuelve el plan
+      // completo como CADENA dentro de `tasks` — el contenido bien, el
+      // envoltorio mal — y sin esto el turno muere después de veinte segundos
+      // con un plan correcto en la mano.
+      experimental_repairText: repairStructured(['tasks']),
     });
 
   let object: Awaited<ReturnType<typeof attempt>>['object'];
@@ -280,6 +299,27 @@ function describeFailure(err: unknown, which: string): string {
     );
   }
   if (text && text.trim().length > 0) {
+    // LA DIFERENCIA IMPORTA PORQUE UNA DE LAS DOS FRASES CULPA A QUIEN PREGUNTA.
+    //
+    // «Contestó con una explicación» sólo es cierto si el modelo escribió PROSA.
+    // Cuando lo que devolvió es JSON —bien formado, con el plan dentro, y sólo
+    // mal envuelto— el fallo es nuestro, y hasta hoy se le decía a la persona
+    // que reescribiera un objetivo que no tenía nada de malo. Eso es peor que un
+    // mensaje inútil: manda a alguien a arreglar algo que no está roto, y con el
+    // reparador de `structured.ts` puesto este caso ya casi no debería ocurrir.
+    let looksLikeJson = false;
+    try {
+      JSON.parse(text);
+      looksLikeJson = true;
+    } catch {
+      looksLikeJson = text.trim().startsWith('{') || text.trim().startsWith('[');
+    }
+    if (looksLikeJson) {
+      return (
+        'El modelo devolvió el plan en un formato que no pude leer. No es culpa del ' +
+        'objetivo: vuelve a intentarlo y, si se repite, avísanos.'
+      );
+    }
     return (
       'No pude convertir esto en un plan: el modelo contestó con una explicación ' +
       'en vez de con tareas. Suele pasar cuando al objetivo le falta un dato para ' +
