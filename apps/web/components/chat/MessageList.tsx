@@ -5,7 +5,7 @@ import { type ExercisedMandate, planNotices } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
 import { toolDisplayName } from '@/lib/tool-labels';
 import type { Message } from 'ai';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from './EmptyState';
 import { LiveStatus } from './LiveStatus';
 import { MessageBubble } from './MessageBubble';
@@ -118,6 +118,54 @@ export function turnsOf(messages: Pick<Message, 'id' | 'role'>[]): Turn[] {
     if (m.role === 'assistant') answered = true;
   }
   return turns;
+}
+
+/**
+ * ===========================================================================
+ * QUIÉN MANDA EN EL SCROLL, Y POR QUÉ HAY QUE DECIDIRLO DOS VECES
+ * ===========================================================================
+ * El contenedor que scrollea es el `<div>` de abajo, así que la decisión vive
+ * aquí y no en `ChatRoot`. Y son DOS decisiones distintas que estaban escritas
+ * como una sola, que es de donde salía el defecto:
+ *
+ *   ATERRIZAR. Abrir un hilo guardado tiene que dejar la vista en el final. Lo
+ *   último dicho es lo que se vino a leer; el principio de una conversación de
+ *   hace tres semanas no es el sitio donde empieza nadie.
+ *
+ *   SEGUIR. Mientras llegan tokens, la vista acompaña — PERO SÓLO si la persona
+ *   estaba abajo. Si subió a releer, un token nuevo no puede arrastrarla.
+ *
+ * La regla que había cubría la segunda y no la primera: «pega al fondo si ya
+ * estás cerca del fondo». Al montar un hilo largo `scrollTop` es 0, así que la
+ * distancia al fondo es la conversación entera y la condición daba falso — la
+ * vista se quedaba arriba y había que bajar a mano cada vez. La otra mitad de
+ * la condición, `messages.length <= 1`, sólo salvaba al hilo recién abierto.
+ *
+ * `landed` es lo que separa las dos: falso hasta que este hilo se ancló una
+ * vez. Un aterrizaje no compite con nadie —nadie ha tenido tiempo de scrollear
+ * todavía— así que no mira la distancia y no se anima.
+ */
+
+/** Cuánto puede haberse alejado alguien del fondo y seguir contando como «ahí». */
+const STUCK_TO_BOTTOM_PX = 160;
+
+export type ScrollIntent = 'land' | 'follow' | 'stay';
+
+/**
+ * Qué hacer con la vista, dado dónde está y si este hilo ya aterrizó.
+ *
+ * Pura y exportada porque es la única parte de esto que se puede equivocar en
+ * silencio: las tres respuestas se ven idénticas en una captura de pantalla, y
+ * la que falla —`stay` cuando tocaba `land`— no rompe nada, sólo deja a alguien
+ * leyendo el principio de su conversación. Ver `MessageList.test.ts`.
+ */
+export function scrollIntent(
+  view: { scrollHeight: number; scrollTop: number; clientHeight: number },
+  opts: { landed: boolean },
+): ScrollIntent {
+  if (!opts.landed) return 'land';
+  const below = view.scrollHeight - view.scrollTop - view.clientHeight;
+  return below < STUCK_TO_BOTTOM_PX ? 'follow' : 'stay';
 }
 
 interface MessageListProps {
@@ -304,13 +352,63 @@ export function MessageList({
     };
   }, [isLoading, conversationId, messages]);
 
-  useEffect(() => {
+  /**
+   * ¿Ya se ancló este hilo en su final? Un ref y no un estado: cambia dentro
+   * del efecto que lo lee y no tiene que redibujar nada.
+   */
+  const landed = useRef(false);
+  const threadShown = useRef(conversationId);
+
+  /**
+   * Cambiar de hilo es aterrizar otra vez: sin esto, el hilo nuevo hereda el
+   * `landed` del anterior y vuelve a abrirse por arriba.
+   *
+   * De un hilo SIN id a uno con id, no. Ése no es otro hilo: es el mismo, al
+   * que el primer turno le acaba de dar dirección — `ChatRoot` cambia la barra
+   * del navegador sin desmontar nada, a propósito. Tratarlo como un hilo nuevo
+   * arrastraría al fondo a quien estuviera releyendo justo en ese instante, que
+   * es exactamente lo que el resto de esto promete no hacer.
+   */
+  useLayoutEffect(() => {
+    const before = threadShown.current;
+    threadShown.current = conversationId;
+    if (before && conversationId && before !== conversationId) landed.current = false;
+  }, [conversationId]);
+
+  /**
+   * `useLayoutEffect` y no `useEffect`, que es la mitad del arreglo: corre
+   * después de que el DOM está puesto y ANTES de que el navegador pinte, así
+   * que el hilo aparece ya en su final en vez de aparecer arriba y saltar. Con
+   * `useEffect` el salto es visible aunque el destino sea el mismo, y con un
+   * `scrollIntoView` animado se ve además el recorrido entero.
+   *
+   * Lo que mide la vista se lee del DOM, no de las props, así que `messages` y
+   * `isLoading` no aparecen dentro: SON el disparador. `messages` cambia de
+   * identidad en cada token —que es justo cuando hay que reevaluar— y su
+   * longitud no, así que depender de `messages.length` haría que el
+   * seguimiento durante el streaming dejara de correr.
+   */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ver arriba — las dos son el disparador, no valores que el efecto lea.
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 160;
-    if (nearBottom || messages.length <= 1) {
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    const intent = scrollIntent(el, { landed: landed.current });
+    if (intent === 'stay') return;
+    if (intent === 'land') {
+      // Asignación directa y no `scrollTo`: es un salto, no un viaje, y ni
+      // siquiera llega a pintarse en el sitio de partida.
+      el.scrollTop = el.scrollHeight;
+      landed.current = true;
+      return;
     }
+    // Seguir SÍ se anima, porque acompaña contenido que está llegando — salvo
+    // que la persona haya pedido que las cosas dejen de moverse. Se lee al
+    // vuelo en vez de en el render, como en `_landing/LiveDemo.tsx`: lo que
+    // importa es la preferencia en el instante del desplazamiento.
+    const still =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+    el.scrollTo({ top: el.scrollHeight, behavior: still ? 'auto' : 'smooth' });
   }, [messages, isLoading]);
 
   const empty = messages.length === 0 && !isLoading;

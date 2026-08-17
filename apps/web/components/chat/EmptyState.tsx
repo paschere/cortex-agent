@@ -147,6 +147,30 @@ const BLANK_COPY = {
 const OPENERS_STALE_MS = 5 * 60 * 1000;
 
 /**
+ * EL LATIDO TIENE FINAL, Y ÉSTE ES.
+ *
+ * Los cuatro huecos que pulsan mientras llegan las sugerencias no tenían tope:
+ * `fetch` no caduca solo, así que una petición que se quedaba colgada —proxy
+ * que no cierra, red que se cae con la conexión abierta, servidor que acepta y
+ * no contesta— dejaba `isLoading` en verdadero para siempre y la primera
+ * pantalla del producto pulsando indefinidamente. No es un caso de laboratorio:
+ * es lo que se ve al abrir el chat con el teléfono cambiando de wifi a datos.
+ *
+ * Seis segundos, y el número sale de lo que hay al otro lado: `/api/chat/openers`
+ * son nueve lecturas ACOTADAS a Supabase —todas por índice y con `limit` de un
+ * dígito— lanzadas en paralelo, más una constante compilada. Eso contesta en
+ * décimas incluso con la conexión fría; seis segundos es un margen tan ancho
+ * que sólo se agota cuando algo está de verdad atascado, y no tan ancho como
+ * para que alguien se quede mirando huecos hasta aburrirse.
+ *
+ * Se corta la PETICIÓN y no sólo el dibujo, que es la diferencia entre resolver
+ * esto y taparlo: al abortar, react-query pasa a error, los huecos desaparecen
+ * y aparece el aviso de abajo — la misma salida que ya tenía el error de red,
+ * porque para quien está mirando es exactamente el mismo hecho.
+ */
+const OPENERS_TIMEOUT_MS = 6_000;
+
+/**
  * La escalera de entrada, en un sitio y no repartida por seis `style`.
  *
  * Primero la marca, después el aviso, después las tarjetas de una en una y al
@@ -323,6 +347,28 @@ function ComposerNote({ grounded, delayMs }: { grounded: number; delayMs: number
   );
 }
 
+/**
+ * Se intentó y no hay tarjetas. Ni una sola palabra de error, porque puede que
+ * no lo haya: un espacio con integraciones conectadas pero sin nada que citar
+ * todavía devuelve una lista vacía y no le pasa nada malo. Lo único que este
+ * renglón tiene que hacer es señalar el sitio donde sí se puede empezar —la
+ * caja de texto de abajo, que manda igual con sugerencias o sin ellas.
+ *
+ * Cuando además hubo un fallo (red, o el tope de seis segundos), el aviso ámbar
+ * de arriba ya lo dijo; esto sigue siendo verdad en los dos casos y no repite.
+ */
+function NoOpeners() {
+  return (
+    <p
+      className="animate-rise mt-5 max-w-xl text-balance text-center text-micro leading-snug text-ink-faint"
+      style={rise(60)}
+    >
+      <PenLine className="mr-1.5 inline h-3 w-3 -translate-y-px" aria-hidden />
+      Hoy no tengo sugerencias que valgan la pena. Escríbeme abajo y arrancamos por ahí.
+    </p>
+  );
+}
+
 export function EmptyState({
   agent,
   onSuggestion,
@@ -339,7 +385,12 @@ export function EmptyState({
   const openers = useQuery<OpenersResponse>({
     queryKey: ['chat-openers', slug],
     queryFn: async () => {
-      const res = await fetch(`/api/chat/openers?agent=${encodeURIComponent(slug)}`);
+      const res = await fetch(`/api/chat/openers?agent=${encodeURIComponent(slug)}`, {
+        // El tope va aquí, en la petición, y no en un temporizador que sólo
+        // apague los huecos: una respuesta que llega a los cuarenta segundos y
+        // repuebla la pantalla es peor que ninguna. Ver `OPENERS_TIMEOUT_MS`.
+        signal: AbortSignal.timeout(OPENERS_TIMEOUT_MS),
+      });
       if (!res.ok) throw new Error('openers');
       return (await res.json()) as OpenersResponse;
     },
@@ -354,6 +405,21 @@ export function EmptyState({
   const blank = data?.blank ?? false;
   const cards = data?.openers ?? [];
   const grounded = cards.filter((o) => o.kind === 'grounded').length;
+
+  /**
+   * Ya no se está esperando y no hay nada que ofrecer.
+   *
+   * Las tres maneras de llegar aquí terminan en la misma pantalla porque para
+   * quien está mirando son el mismo hecho —hoy no hay tarjetas—: la petición
+   * falló, la cortó el tope de seis segundos, o llegó bien y venía vacía. Lo
+   * que las distingue es el aviso ámbar de arriba, que sólo sale en las dos
+   * primeras; ninguna de las tres deja huecos latiendo.
+   *
+   * Se mira `isLoading` y no `isPending`: con el navegador sin red react-query
+   * deja la consulta PAUSADA —pendiente pero sin ir a buscar nada— y esperar a
+   * que se resuelva sería otra vez el latido eterno, sólo que por otra puerta.
+   */
+  const nothingToSuggest = !openers.isLoading && !blank && cards.length === 0;
 
   return (
     // `safe center` y no `justify-center`: el contenedor de arriba es el que
@@ -463,6 +529,8 @@ export function EmptyState({
 
       {!blank && cards.length > 0 ? (
         <ComposerNote grounded={grounded} delayMs={CARDS_AT_MS + cards.length * STEP_MS + 60} />
+      ) : nothingToSuggest ? (
+        <NoOpeners />
       ) : null}
     </div>
   );
