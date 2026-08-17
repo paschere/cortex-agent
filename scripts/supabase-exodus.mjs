@@ -69,38 +69,91 @@ try {
 await check.end();
 
 // ---------------------------------------------------------------------------
-// 1. Dump de datos con el CLI de Supabase (trae su propio pg_dump, así que la
-//    versión del cliente local no importa). Solo datos: el esquema ya llegó
-//    por migraciones, que es la única forma en que un esquema debe viajar.
+// 1. Dump de datos con pg_dump 18 vía Docker. No con el CLI de Supabase: su
+//    1.219 embebe pg_dump 15 y el servidor de Supabase corre PG 17 —
+//    «server version mismatch» y adiós. La imagen postgres:18 ya está local
+//    (es la base del ensayo del éxodo).
+//
+//    SOLO el esquema public, y eso es deliberado: ahí vive todo el producto,
+//    better-auth incluido (migración 0011). Los esquemas auth/storage de
+//    Supabase son de GoTrue y de un Storage que ya nadie usa (los archivos
+//    viajan dentro de public.app_files desde la 0109), y supabase_migrations
+//    ya existe en el destino porque las migraciones llegaron por db push.
 // ---------------------------------------------------------------------------
 const dir = mkdtempSync(join(tmpdir(), 'cortex-exodus-'));
 const dumpPath = join(dir, 'data.sql');
-console.log('[1/3] volcando datos de Supabase…');
+console.log('[1/3] volcando datos de Supabase (pg_dump 18 en Docker)…');
 const dump = spawnSync(
-  'pnpm',
-  ['exec', 'supabase', 'db', 'dump', '--db-url', src, '--data-only', '-f', dumpPath],
-  { cwd: root, stdio: 'inherit', encoding: 'utf8' },
+  'docker',
+  [
+    'run',
+    '--rm',
+    'postgres:18',
+    'pg_dump',
+    src,
+    '--data-only',
+    '--schema=public',
+    '--no-owner',
+    '--no-privileges',
+  ],
+  { cwd: root, stdio: ['ignore', 'pipe', 'inherit'], encoding: 'buffer', maxBuffer: 1024 * 1024 * 1024 },
 );
-if (dump.status !== 0) {
+if (dump.status !== 0 || !dump.stdout?.length) {
   console.error('El dump falló; no se tocó nada.');
   process.exit(dump.status ?? 1);
 }
+const { writeFileSync } = await import('node:fs');
+writeFileSync(dumpPath, dump.stdout);
+console.log(`      ${(dump.stdout.length / 1024 / 1024).toFixed(1)} MB volcados.`);
 
 // ---------------------------------------------------------------------------
 // 2. Carga en Railway. session_replication_role=replica apaga triggers y
 //    validación de FK durante la carga — el dump ya viene consistente y el
 //    orden de las tablas no tiene por qué respetar el grafo de FKs.
 // ---------------------------------------------------------------------------
-console.log('[2/3] cargando en Railway…');
-const load = new Client({ connectionString: dst, ssl: { rejectUnauthorized: false } });
-await load.connect();
+console.log('[2/3] cargando en Railway (psql 18 en Docker)…');
+// psql y no el driver de node: el dump viene con COPY ... FROM stdin, que es
+// protocolo que el cliente de node no habla y psql sí. Los -c y el -f corren
+// EN LA MISMA SESIÓN, así que el session_replication_role=replica (apagar
+// triggers y FKs durante la carga; el dump ya es consistente) sigue vigente
+// cuando entra el archivo.
 try {
-  await load.query('set session_replication_role = replica');
-  await load.query(readFileSync(dumpPath, 'utf8'));
-  await load.query('set session_replication_role = default');
+  const load = spawnSync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '-v',
+      `${dir}:/exodo:ro`,
+      'postgres:18',
+      'psql',
+      dst,
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      'set session_replication_role = replica',
+      // Vaciar public en el destino antes de cargar: las migraciones dejan
+      // seeds (la organización de cuarentena, los agentes de plantilla) que
+      // el dump trae de nuevo con los MISMOS ids — la verdad es el origen,
+      // no el seed. Esto además hace el éxodo repetible: si la carga se cae
+      // a mitad, se corre otra vez y ya.
+      '-c',
+      `do $$ declare r record; begin
+         for r in select tablename from pg_tables where schemaname = 'public' loop
+           execute format('truncate table public.%I cascade', r.tablename);
+         end loop;
+       end $$`,
+      '-f',
+      '/exodo/data.sql',
+    ],
+    { cwd: root, stdio: ['ignore', 'ignore', 'inherit'], encoding: 'utf8' },
+  );
+  if (load.status !== 0) {
+    console.error('La carga falló. El destino puede quedar a medias: bórralo y repite (el origen está intacto).');
+    process.exit(load.status ?? 1);
+  }
   console.log('      datos cargados.');
 } finally {
-  await load.end();
   rmSync(dir, { recursive: true, force: true });
 }
 
