@@ -115,20 +115,14 @@ function Masthead() {
  * buscador ni un lector de pantalla, y la regla global de reduced-motion
  * colapsa la animación al estado final.
  */
+// «Un asistente… que ya se sabe la empresa» obligaba a releer: doble
+// «empresa» y un reflexivo que no todo el mundo parsea a la primera. El
+// titular nuevo es la acción entera del producto en cuatro palabras — y la
+// ventana de abajo la demuestra al segundo siguiente.
 const TITLE_WORDS: Array<{ t: string; em?: boolean }> = [
-  { t: 'Un' },
-  { t: 'asistente' },
-  { t: 'para' },
-  { t: 'cada' },
-  { t: 'persona' },
-  { t: 'de' },
-  { t: 'tu' },
-  { t: 'empresa,' },
-  { t: 'que' },
-  { t: 'ya', em: true },
-  { t: 'se', em: true },
-  { t: 'sabe', em: true },
-  { t: 'la', em: true },
+  { t: 'Pregúntale' },
+  { t: 'a', em: true },
+  { t: 'tu', em: true },
   { t: 'empresa.', em: true },
 ];
 
@@ -138,7 +132,7 @@ function HeroIntro() {
   return (
     <div className="lp-wrap">
       <div className="lp-hero__copy">
-        <p className="lp-marker lp-arrive">Un asistente por persona</p>
+        <p className="lp-marker lp-arrive">La IA que ya leyó tu empresa</p>
         <h1 className="lp-display lp-hero__display mt-4">
           {TITLE_WORDS.map((w, i) => (
             <Fragment key={`${i}-${w.t}`}>
@@ -213,7 +207,7 @@ function Hero() {
       intro={<HeroIntro />}
       tagline={
         <p className="lp-seq__tagline">
-          Un asistente para cada persona de tu empresa, <em>que ya se sabe la empresa.</em>
+          La IA que <em>ya leyó tu empresa</em> — y contesta con la fuente.
         </p>
       }
       final={<HeroFinal />}
@@ -832,7 +826,7 @@ function Footer() {
             <span className="lp-mark__word">Cortex</span>
           </span>
           <p className="lp-foot__line">
-            Un asistente para cada persona de tu empresa, que dice de dónde salió cada respuesta.
+            La IA que ya leyó tu empresa, y que dice de dónde salió cada respuesta.
           </p>
         </div>
         <nav className="lp-foot__col" aria-label="Producto">
