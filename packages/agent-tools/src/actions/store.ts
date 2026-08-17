@@ -1,6 +1,7 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { isUniqueViolation } from '../commitments/store';
+import type { ActionEscalationVia } from './escalation';
 import {
   ACTION_COLUMNS,
   type ActionKind,
@@ -167,10 +168,7 @@ export async function getAction(db: SupabaseClient, id: string): Promise<ActionR
  * says "recordatorio para 7f3c-…" cannot be read; one that says "recordatorio
  * para Ana Gómez" can.
  */
-export async function hydrateOwners(
-  db: SupabaseClient,
-  rows: ActionRow[],
-): Promise<ActionRow[]> {
+export async function hydrateOwners(db: SupabaseClient, rows: ActionRow[]): Promise<ActionRow[]> {
   const ids = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
   if (ids.length === 0) return rows;
   const { data } = await db.from('users').select('id, name, email').in('id', ids);
@@ -295,10 +293,7 @@ export interface RevisionRow {
   after_input: MessagePayload;
 }
 
-export async function listRevisions(
-  db: SupabaseClient,
-  actionId: string,
-): Promise<RevisionRow[]> {
+export async function listRevisions(db: SupabaseClient, actionId: string): Promise<RevisionRow[]> {
   const { data } = await db
     .from('action_revisions')
     .select('id, action_id, edited_by, edited_at, from_hash, to_hash, before_input, after_input')
@@ -387,7 +382,14 @@ export async function peekAction(
   id: string,
 ): Promise<Pick<
   ActionRow,
-  'id' | 'user_id' | 'tool_id' | 'expires_at' | 'state' | 'decided_at' | 'decided_via' | 'content_hash'
+  | 'id'
+  | 'user_id'
+  | 'tool_id'
+  | 'expires_at'
+  | 'state'
+  | 'decided_at'
+  | 'decided_via'
+  | 'content_hash'
 > | null> {
   const { data } = await db
     .from('actions')
@@ -458,4 +460,60 @@ export async function recordOutcome(
     // Only ever moves an action ON from waiting. A closed loop does not reopen
     // because a sweep ran again.
     .eq('outcome', 'awaiting');
+}
+
+// ---------------------------------------------------------------------------
+// El escalado
+// ---------------------------------------------------------------------------
+
+export interface MarkEscalatedInput {
+  id: string;
+  /** A quién se le avisó. NO pasa a poder aprobar: ver el comentario de abajo. */
+  toUserId: string;
+  via: ActionEscalationVia;
+  now?: Date;
+}
+
+/**
+ * Dejar constancia de que este escalado ya salió, y que no salga otra vez.
+ *
+ * EL `is('escalated_at', null)` ES LA MITAD DE ESTA FUNCIÓN. Un barrido no corre
+ * una vez: Inngest reintenta pasos, un despliegue reinicia uno a la mitad, y dos
+ * corridas simultáneas del mismo espacio son un martes normal. La versión
+ * leer-y-luego-escribir pasa todas las pruebas que se hagan sobre un Map y
+ * manda dos correos idénticos al mismo jefe en cuanto haya concurrencia de
+ * verdad, porque las dos lecturas ven `escalated_at` nulo. Aquí la que pierde no
+ * casa con ninguna fila y devuelve `false`, y quien llama no manda nada.
+ *
+ * Por eso el aviso se manda ANTES de llamar aquí, no después: si el correo falla,
+ * la fila se queda sin marcar y mañana se vuelve a intentar. Un rastro que dice
+ * «escalado» sin que nadie haya recibido nada es la única forma de que este
+ * módulo mienta, y es peor que un día de retraso.
+ *
+ * `user_id` NO SE TOCA, ni aquí ni en ninguna parte. Aprobar sigue siendo
+ * exclusivo del dueño porque el correo sale de su Gmail firmado con su nombre
+ * (ver `actions.user_id` en la migración 0077). Esto es un aviso, no un traspaso.
+ */
+export async function markEscalated(
+  db: SupabaseClient,
+  input: MarkEscalatedInput,
+): Promise<boolean> {
+  const now = (input.now ?? new Date()).toISOString();
+  const { data, error } = await db
+    .from('actions')
+    .update({
+      escalated_at: now,
+      escalated_to: input.toUserId,
+      escalated_via: input.via,
+      updated_at: now,
+    })
+    .eq('id', input.id)
+    // Sigue esperando de verdad: una aprobada o descartada entre que se leyó la
+    // cola y se mandó el aviso ya no necesita que nadie se entere.
+    .eq('state', 'proposed')
+    .is('escalated_at', null)
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
 }

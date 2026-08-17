@@ -184,7 +184,11 @@ export const messagePayloadSchema = z.object({
   to: z.array(z.string().email()).min(1).max(10).describe('Recipients, in order'),
   cc: z.array(z.string().email()).max(10).optional(),
   subject: z.string().min(1).max(300),
-  body: z.string().min(1).max(20_000).describe('The message, as plain text, exactly as it will be sent'),
+  body: z
+    .string()
+    .min(1)
+    .max(20_000)
+    .describe('The message, as plain text, exactly as it will be sent'),
   threadId: z
     .string()
     .optional()
@@ -278,7 +282,7 @@ export function isApprovable(
 
 /** Every column an actions read selects. One constant, so nothing drifts. */
 export const ACTION_COLUMNS =
-  'id, user_id, agent_id, conversation_id, kind, tool_id, tool_input, content_hash, recipient, subject, origin_kind, origin_id, rationale, client_id, state, expires_at, decided_at, decided_by, decided_via, dismissed_reason, executed_at, execution_status, execution_error, execution_result, thread_id, outcome, outcome_at, outcome_note, edited_count, created_at, updated_at';
+  'id, user_id, agent_id, conversation_id, kind, tool_id, tool_input, content_hash, recipient, subject, origin_kind, origin_id, rationale, client_id, state, expires_at, decided_at, decided_by, decided_via, dismissed_reason, executed_at, execution_status, execution_error, execution_result, thread_id, outcome, outcome_at, outcome_note, edited_count, escalated_at, escalated_to, escalated_via, created_at, updated_at';
 
 export interface ActionRow {
   id: string;
@@ -310,6 +314,15 @@ export interface ActionRow {
   outcome_at: string | null;
   outcome_note: string | null;
   edited_count: number;
+  /**
+   * El rastro del aviso que subió un escalón (migración 0113). Los tres van
+   * juntos o los tres van nulos, y NINGUNO cambia quién puede aprobar: escalar
+   * es avisarle al jefe que esto lleva parado, no transferirle la decisión.
+   * `escalated_to` puede quedarse en null si esa cuenta se borra.
+   */
+  escalated_at: string | null;
+  escalated_to: string | null;
+  escalated_via: 'manager' | 'admin' | null;
   created_at: string;
   updated_at: string;
   /** Joined in by callers that need to name a person, never stored. */

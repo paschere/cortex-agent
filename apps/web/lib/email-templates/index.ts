@@ -39,6 +39,8 @@ export { renderRoutineResultEmail } from './routine-result';
 export type { RoutineResultEmailInput } from './routine-result';
 export { renderApprovalRequestEmail } from './approval-request';
 export type { ApprovalRequestEmailInput } from './approval-request';
+export { renderApprovalEscalationEmail } from './approval-escalation';
+export type { ApprovalEscalationEmailInput } from './approval-escalation';
 export { renderDevTaskEmail } from './dev-task-result';
 export type { DevTaskEmailCheck, DevTaskEmailInput } from './dev-task-result';
 export { renderCommitmentNoticeEmail } from './commitment-notice';

@@ -1,18 +1,29 @@
 import { buildToolContext } from '@/lib/agent';
+import { sendEmail } from '@/lib/email';
+import { renderApprovalEscalationEmail } from '@/lib/email-templates';
+import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
+import { mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
+  ACTION_KIND_LABEL,
   type ActionRow,
   type CommitmentRow,
+  MAX_ESCALATIONS_PER_RUN,
   REMINDER_COOLDOWN_MS,
   bogotaToday,
   draftOwnerReminder,
+  escalationHoursFrom,
+  escalationsDue,
   findReply,
   getCommitment,
   gmailReadThread,
   listActions,
   listCommitments,
+  loadManagerMap,
+  markEscalated,
+  orgAdmins,
   outcomeNoteForResolution,
   planOwnerReminders,
   proposeAction,
@@ -20,8 +31,9 @@ import {
   recordOutcome,
   runTool,
   silenceIsFinal,
+  writeAuditEvent,
 } from '@cortex/agent-tools';
-import { logger } from '@cortex/core';
+import { type UUID, logger } from '@cortex/core';
 
 /**
  * The part that makes proposed actions a product rather than a chat feature:
@@ -81,6 +93,24 @@ const MAX_PROPOSALS_PER_RUN = 15;
 /** How many executed actions one run follows up on. Each costs a Gmail read. */
 const MAX_FOLLOW_UPS_PER_RUN = 40;
 
+/**
+ * Cuántas horas parada tiene que llevar una propuesta antes de avisarle al jefe
+ * del dueño. `APPROVAL_ESCALATION_HOURS`, 48 por defecto.
+ *
+ * EL 48 SALE DE LOS NÚMEROS DE ESTE ARCHIVO, no del gusto: la propuesta vive 7
+ * días (`PROPOSAL_TTL_MS`) y este barrido corre UNA VEZ AL DÍA, a las 06:30 de
+ * Bogotá. 48 h le dejan al dueño DOS MAÑANAS COMPLETAS para contestar lo suyo
+ * sin que nadie por encima se entere —una sola no basta: quien propuso el lunes
+ * por la tarde y viaja el martes recibiría un escalado por no abrir el correo en
+ * un día hábil— y todavía dejan CINCO DÍAS entre el aviso y el vencimiento, que
+ * es el margen que hace que escalar sirva para algo.
+ *
+ * El parseo defensivo (basura → 48, fuera de rango → recortado, con el techo por
+ * debajo de los 7 días para que nadie apague el escalado sin querer) vive en
+ * `escalationHoursFrom`, que es pura y tiene pruebas.
+ */
+const ESCALATION_AFTER_MS = escalationHoursFrom(process.env.APPROVAL_ESCALATION_HOURS) * 3_600_000;
+
 // ---------------------------------------------------------------------------
 // Dispatcher
 // ---------------------------------------------------------------------------
@@ -95,13 +125,19 @@ export const actionsSweepDispatchJob: JobHandler = async ({ step }) => {
   const workspaces = await step.run('find-workspaces', async (): Promise<string[]> => {
     const db = getSupabaseServiceClient();
     const seen = new Set<string>();
-    // Two sources: somewhere to propose from, and something already sent that
-    // is still waiting on an answer.
-    const [{ data: commitments }, { data: awaiting }] = await Promise.all([
+    // Three sources: somewhere to propose from, something already sent that is
+    // still waiting on an answer, y algo propuesto que nadie ha contestado.
+    // La tercera se añadió con el paso 3: una acción propuesta desde el chat
+    // (`origin_kind='manual'`) en un espacio sin compromisos ni envíos no
+    // aparecía en ninguna de las otras dos, así que era exactamente la clase de
+    // fila que se quedaba parada para siempre — y el escalado no la habría
+    // visto nunca porque este espacio no recibía evento.
+    const [{ data: commitments }, { data: awaiting }, { data: proposed }] = await Promise.all([
       db.from('commitments').select('organization_id').limit(20_000),
       db.from('actions').select('organization_id').eq('outcome', 'awaiting').limit(20_000),
+      db.from('actions').select('organization_id').eq('state', 'proposed').limit(20_000),
     ]);
-    for (const row of [...(commitments ?? []), ...(awaiting ?? [])] as Array<{
+    for (const row of [...(commitments ?? []), ...(awaiting ?? []), ...(proposed ?? [])] as Array<{
       organization_id: string | null;
     }>) {
       if (row.organization_id) seen.add(row.organization_id);
@@ -257,7 +293,14 @@ export const actionsSweepWorkspaceJob: JobHandler = async ({ event, step }) => {
     return { closed: count, checked: open.length };
   });
 
-  return { proposed, closed };
+  // 3. Lo que lleva parado y nadie ha contestado --------------------------
+  // Un tercer paso, y separado con la misma disciplina que los otros dos: si
+  // esto falla —una línea de mando rota, un correo que no sale, Google Chat
+  // caído— no puede costarle al espacio ni las propuestas del paso 1 ni el
+  // cierre del ciclo del paso 2, que son la parte que alguien está esperando.
+  const escalated = await step.run('escalate-stale', async () => escalateStale(organizationId));
+
+  return { proposed, closed, escalated };
 };
 
 export const actionsSweepWorkspace = inngest.createFunction(
@@ -336,4 +379,214 @@ async function closeOne(
   }
 
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Escalación por línea de mando
+// ---------------------------------------------------------------------------
+
+/**
+ * Avisarle al jefe de lo que lleva N horas parado en la cola de su gente.
+ *
+ * ===========================================================================
+ * EL HUECO QUE ESTO TAPA
+ * ===========================================================================
+ * El paso 1 propone y el paso 2 cierra lo que ya se envió. Entre los dos no
+ * había NADA, y ese hueco era el modo de fallo entero de esta función: una
+ * propuesta que nadie mira se queda quieta sus siete días y expira sin que se
+ * entere un alma. La fila existe, el barrido corrió las siete mañanas, todos los
+ * registros dicen «ok», y la factura sigue sin cobrarse. Un silencio que no deja
+ * rastro es indistinguible de un «no hacía falta».
+ *
+ * ===========================================================================
+ * ESCALAR ES AVISAR, NO TRANSFERIR. `user_id` NO SE TOCA
+ * ===========================================================================
+ * `claimAction` sólo deja aprobar al dueño de la fila, y así se queda: el correo
+ * sale de SU Gmail y va firmado con SU nombre, de modo que «lo aprobó su jefe»
+ * sería una firma falsificada con traza de auditoría. Lo que hace este paso es
+ * mandarle al jefe un «esto lleva N horas sin moverse», y el propio correo le
+ * dice que no es él quien lo aprueba — sin esa frase, el jefe entra a Cortex, no
+ * encuentra ningún botón y concluye que el producto está roto.
+ *
+ * ===========================================================================
+ * LA OTRA COLA NO SE ESCALA, Y ES A PROPÓSITO
+ * ===========================================================================
+ * `public.mcp_pending_actions` (0033/0047) es la otra cola de aprobaciones de
+ * este producto, y expira a los QUINCE MINUTOS (`APPROVAL_TTL_MS`,
+ * apps/web/lib/approval-email.ts). Un barrido diario NO PUEDE escalar algo que
+ * muere en quince minutos: cuando este cron mira la tabla, todo lo que había
+ * expiró hace horas, y lo único que se conseguiría es mandarle al jefe un correo
+ * sobre una llamada que ya nadie puede aprobar. Eso es ruido puro y encima
+ * desprestigia el canal: un jefe con tres avisos inútiles no abre el cuarto, que
+ * era el que importaba. Esa cola ya responde al silencio como toca a su escala
+ * —correo y DM de Google Chat a la vez, para alcanzar la superficie que la
+ * persona tenga abierta AHORA— y si hay que mejorarla se mejora ahí, en
+ * segundos, no aquí con un cron diario.
+ *
+ * ===========================================================================
+ * EL AVISO PRIMERO, LA MARCA DESPUÉS
+ * ===========================================================================
+ * `markEscalated` se llama SÓLO si el correo salió, y lleva `escalated_at is
+ * null` en su WHERE para que dos corridas simultáneas manden un aviso y no dos.
+ * El orden importa en la dirección que importa: si el correo falla, la fila se
+ * queda sin marcar y mañana se reintenta. Un rastro que dice «escalado» sin que
+ * nadie haya recibido nada es la única forma de que esto mienta, y mentir es
+ * peor que llegar un día tarde.
+ */
+async function escalateStale(organizationId: string) {
+  const db = getOrgScopedClient(organizationId);
+
+  const open = await listActions(db, { states: ['proposed'], limit: 500 });
+  if (open.length === 0) return { escalated: 0 };
+
+  // Los dos se resuelven AHORA y no se congelan en ninguna fila: un cambio de
+  // jefe o un administrador nuevo tienen efecto esta misma mañana. Mismo
+  // razonamiento que commitments-watch, y el `order by` de `orgAdmins` es lo que
+  // impide que el último recurso lo elija el planificador de Postgres.
+  const [admins, managers] = await Promise.all([orgAdmins(db), loadManagerMap(db)]);
+
+  const due = escalationsDue({
+    actions: open,
+    now: new Date(),
+    afterMs: ESCALATION_AFTER_MS,
+    managers,
+    admins,
+    limit: MAX_ESCALATIONS_PER_RUN,
+  });
+  if (due.length === 0) return { escalated: 0, waiting: open.length };
+
+  // Nombres y direcciones de todos los implicados en una sola consulta: los
+  // dueños para poder nombrarlos en el texto, los jefes para poder escribirles.
+  const byId = new Map(open.map((a) => [a.id, a]));
+  const peopleIds = [
+    ...new Set(due.flatMap((e) => [e.toUserId, byId.get(e.actionId)?.user_id ?? ''])),
+  ].filter(Boolean);
+  // `mustReadList` y no una desestructuración a secas: quedarse con las filas
+  // sin mirar el error convierte una base caída en un mapa vacío, o sea «ningún
+  // jefe tiene correo», o sea CERO ESCALADOS Y NINGUNA FILA MARCADA — un barrido
+  // verde que no avisó a nadie y que tampoco deja rastro de no haber avisado. Es
+  // la forma de fallo que documenta lib/unchecked-reads.test.ts, y aquí el
+  // silencio es justo lo único que este paso existe para impedir. Levantar rompe
+  // el paso, que se reintenta; los otros dos ya corrieron en sus propios pasos.
+  const people = mustReadList<{ id: string; name: string | null; email: string }>(
+    await db.from('users').select('id, name, email').in('id', peopleIds),
+    'las direcciones de la línea de mando',
+  );
+  const person = new Map(people.map((u) => [u.id, u]));
+
+  let escalated = 0;
+  let unreachable = 0;
+  for (const item of due) {
+    const action = byId.get(item.actionId);
+    const manager = person.get(item.toUserId);
+    const owner = action ? person.get(action.user_id) : undefined;
+    // Un jefe sin correo en su fila de directorio se salta SIN marcar la acción,
+    // para que mañana —cuando alguien le ponga la dirección— se vuelva a
+    // intentar. Marcarla ahora sería archivar como avisado a quien no recibió.
+    if (!action || !manager?.email) {
+      unreachable += 1;
+      continue;
+    }
+
+    const ownerLabel = owner?.name?.trim() || owner?.email || 'quien la tiene asignada';
+    const mail = renderApprovalEscalationEmail({
+      managerFirstName: manager.name?.trim().split(' ')[0] ?? null,
+      ownerLabel,
+      kindLabel: ACTION_KIND_LABEL[action.kind] ?? action.kind,
+      recipient: action.recipient,
+      subject: action.subject,
+      rationale: action.rationale,
+      hoursWaiting: item.hoursWaiting,
+      expiresAt: action.expires_at,
+      via: item.via,
+    });
+
+    try {
+      const sent = await sendEmail({
+        to: manager.email,
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html,
+      });
+      // El correo es el canal que decide. Si no salió, NO se marca la fila.
+      if (!sent.sent) {
+        unreachable += 1;
+        logger.warn('actions-sweep: no se pudo escalar por correo', {
+          organizationId,
+          actionId: action.id,
+          reason: sent.reason,
+        });
+        continue;
+      }
+
+      // Segundo canal, no reemplazo, igual que en las aprobaciones: quien vive
+      // en Chat no debería tener que fijarse en un correo. Sin tarjeta a
+      // propósito —el jefe no puede aprobar nada, así que un botón sería
+      // mentira— y `sendChatDm` es un no-op para quien nunca enlazó Chat.
+      const chat = await sendChatDm({
+        organizationId,
+        userId: item.toUserId,
+        text: toChatText(
+          [
+            `⏳ **Lleva ${item.hoursWaiting} horas sin aprobarse**`,
+            '',
+            `${mail.subject}`,
+            '',
+            `Responsable: ${ownerLabel}. Sólo ${ownerLabel} puede aprobarlo — el correo sale de su Gmail. Te aviso para que lo puedas mover.`,
+          ].join('\n'),
+        ),
+      });
+      if (!chat.sent && chat.reason !== 'not linked') {
+        logger.debug('actions-sweep: DM de escalado no entregado', {
+          actionId: action.id,
+          reason: chat.reason,
+        });
+      }
+
+      // La marca va la última y es condicional. Si la pierde (otra corrida se
+      // adelantó), lo peor que pasó es un correo duplicado; si fuera al revés,
+      // lo que se perdería es el aviso entero.
+      const marked = await markEscalated(db, {
+        id: action.id,
+        toUserId: item.toUserId,
+        via: item.via,
+      });
+      if (!marked) continue;
+      escalated += 1;
+
+      // La auditoría se escribe bajo el DUEÑO y no bajo el jefe: es su acción y
+      // es su rastro el que tiene que poder explicar por qué salió un correo
+      // por encima de su cabeza. A quién se le avisó va en los metadatos.
+      await writeAuditEvent({
+        db,
+        userId: action.user_id as UUID,
+        agentId: (action.agent_id ?? undefined) as UUID | undefined,
+        toolId: '__approval_escalation',
+        input: { actionId: action.id, hoursWaiting: item.hoursWaiting },
+        status: 'ok',
+        latencyMs: 0,
+        surface: 'schedule',
+        decision: 'allowed',
+        riskReason: `Nadie contestó esta aprobación en ${item.hoursWaiting} horas.`,
+        metadata: {
+          actionId: action.id,
+          kind: action.kind,
+          escalatedTo: item.toUserId,
+          via: item.via,
+          hoursWaiting: item.hoursWaiting,
+          chatDm: chat.sent,
+        },
+      });
+    } catch (err) {
+      // Una fila mala no puede costarle al espacio las demás escalaciones.
+      unreachable += 1;
+      logger.warn('actions-sweep: falló una escalación', {
+        organizationId,
+        actionId: action.id,
+        error: (err as Error).message,
+      });
+    }
+  }
+
+  return { escalated, considered: due.length, unreachable, waiting: open.length };
 }

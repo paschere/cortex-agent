@@ -1,12 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import { type Tables, createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
-import {
-  type ActionRow,
-  type MessagePayload,
-  assertExecutable,
-  fingerprint,
-} from '../shape';
+import { createOrgScopedClient } from '../../tenancy/scoped-client';
+import { type ActionRow, type MessagePayload, assertExecutable, fingerprint } from '../shape';
 import { claimAction, editContent, listRevisions, proposeAction, recordExecution } from '../store';
 
 /**
@@ -75,6 +70,9 @@ function seed(over: Partial<ActionRow> = {}): ActionRow {
     outcome_at: null,
     outcome_note: null,
     edited_count: 0,
+    escalated_at: null,
+    escalated_to: null,
+    escalated_via: null,
     created_at: '2026-08-01T11:00:00.000Z',
     updated_at: '2026-08-01T11:00:00.000Z',
     ...over,
@@ -163,7 +161,7 @@ describe('nothing runs without an approval', () => {
     expect((tables.actions?.[0] as { state: string }).state).toBe('proposed');
   });
 
-  it('refuses an approval from somebody who is not the action\'s owner', async () => {
+  it("refuses an approval from somebody who is not the action's owner", async () => {
     const claimed = await claimAction(db, {
       id: ACTION,
       userId: BEN,

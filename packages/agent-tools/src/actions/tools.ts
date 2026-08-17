@@ -4,7 +4,6 @@ import { bogotaToday } from '../commitments/shape';
 import { getCommitment } from '../commitments/store';
 import { registerTool } from '../index';
 import { draftCollectionNotice } from './draft';
-import { listActions, proposeAction } from './store';
 import {
   ACTION_KINDS,
   type ActionKind,
@@ -13,6 +12,7 @@ import {
   actionSchema,
   adaptAction,
 } from './shape';
+import { listActions, proposeAction } from './store';
 
 /** The one thing an action ever does. See gmail/send-message.ts for why. */
 const ACTION_TOOL_ID = 'gmail.send_message';
@@ -63,7 +63,9 @@ export const actionsPropose = registerTool({
       .describe('One sentence naming the fact this came out of, shown under the draft'),
     originKind: z
       .enum(ORIGIN_KINDS)
-      .describe('commitment: derived from a watched deadline. email_thread: from a Gmail thread. manual: the user asked outright.'),
+      .describe(
+        'commitment: derived from a watched deadline. email_thread: from a Gmail thread. manual: the user asked outright.',
+      ),
     originId: z
       .string()
       .max(200)

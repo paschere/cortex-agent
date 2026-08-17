@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import { type Tables, createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
+import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import { fingerprint } from '../shape';
 import { claimAction, editContent, getAction, listActions, listRevisions } from '../store';
 import { recentlyActedOrigins } from '../sweep';
@@ -143,14 +143,14 @@ describe('a workspace only ever sees its own actions', () => {
     expect(theirs.map((a) => a.id)).toEqual([ACTION_GLOBEX]);
   });
 
-  it('finds nothing when filtering by the other workspace\'s origin', async () => {
+  it("finds nothing when filtering by the other workspace's origin", async () => {
     // The plausible-looking near miss: same tool, same kind, same recipient.
     const byOrigin = await listActions(globex, {});
     expect(byOrigin.every((a) => a.origin_id === 'commitment-globex')).toBe(true);
   });
 });
 
-describe('a workspace cannot act on another workspace\'s action', () => {
+describe("a workspace cannot act on another workspace's action", () => {
   it('cannot read it by id', async () => {
     expect(await getAction(globex, ACTION_ACME)).toBeNull();
     expect(await getAction(acme, ACTION_ACME)).not.toBeNull();
@@ -195,7 +195,7 @@ describe('a workspace cannot act on another workspace\'s action', () => {
     expect(await listRevisions(acme, ACTION_ACME)).toHaveLength(1);
   });
 
-  it('does not let one workspace\'s sweep see the other\'s recent activity', async () => {
+  it("does not let one workspace's sweep see the other's recent activity", async () => {
     const since = new Date('2026-07-01T00:00:00.000Z');
     expect([...(await recentlyActedOrigins(acme, since))]).toEqual(['commitment-acme']);
     expect([...(await recentlyActedOrigins(globex, since))]).toEqual(['commitment-globex']);

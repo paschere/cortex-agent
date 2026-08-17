@@ -78,10 +78,7 @@ export function planOwnerReminders(input: {
  * proposal somebody dismissed yesterday is a decision, and re-offering it this
  * morning would be arguing with them.
  */
-export async function recentlyActedOrigins(
-  db: SupabaseClient,
-  since: Date,
-): Promise<Set<string>> {
+export async function recentlyActedOrigins(db: SupabaseClient, since: Date): Promise<Set<string>> {
   const { data } = await db
     .from('actions')
     .select('origin_id')

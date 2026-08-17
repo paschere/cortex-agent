@@ -56,6 +56,9 @@ function row(over: Partial<ActionRow> = {}): ActionRow {
     outcome_at: null,
     outcome_note: null,
     edited_count: 0,
+    escalated_at: null,
+    escalated_to: null,
+    escalated_via: null,
     created_at: '2026-08-01T11:00:00.000Z',
     updated_at: '2026-08-01T12:00:00.000Z',
     ...over,
@@ -154,10 +157,14 @@ describe('isApprovable', () => {
   });
 
   it('is false once the window has passed — expiry revokes, it never executes', () => {
-    expect(isApprovable({ state: 'proposed', expires_at: '2026-07-30T00:00:00Z' }, now)).toBe(false);
+    expect(isApprovable({ state: 'proposed', expires_at: '2026-07-30T00:00:00Z' }, now)).toBe(
+      false,
+    );
   });
 
   it('is false for anything already decided', () => {
-    expect(isApprovable({ state: 'approved', expires_at: '2026-08-05T00:00:00Z' }, now)).toBe(false);
+    expect(isApprovable({ state: 'approved', expires_at: '2026-08-05T00:00:00Z' }, now)).toBe(
+      false,
+    );
   });
 });

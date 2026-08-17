@@ -52,6 +52,7 @@ export {
   hydrateOwners,
   listActions,
   listRevisions,
+  markEscalated,
   peekAction,
   proposeAction,
   recordExecution,
@@ -62,10 +63,30 @@ export type {
   EditContentInput,
   EditOutcome,
   ListActionsOptions,
+  MarkEscalatedInput,
   ProposeActionInput,
   ProposeOutcome,
   RevisionRow,
 } from './store';
+
+// Escalación por línea de mando (migración 0113): qué aprobación lleva tanto
+// tiempo parada que ya hay que avisarle al jefe del dueño, y a quién. Puro, sin
+// base ni reloj, porque un escalado que va a la persona equivocada no se ve roto
+// en ninguna pantalla. Lee `escalationTarget` de ./directory; no lo reimplementa.
+export {
+  APPROVAL_ESCALATION_DEFAULT_HOURS,
+  MAX_ESCALATIONS_PER_RUN,
+  MAX_ESCALATION_HOURS,
+  MIN_ESCALATION_HOURS,
+  escalationHoursFrom,
+  escalationsDue,
+} from './escalation';
+export type {
+  ActionEscalationVia,
+  EscalatableAction,
+  EscalationDue,
+  EscalationsDueInput,
+} from './escalation';
 
 export { addressOf, findReply, outcomeNoteForResolution, silenceIsFinal } from './follow-up';
 export type { ReplyVerdict, ThreadMessage } from './follow-up';
