@@ -264,6 +264,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'vehicles.recently_changed': '¿Qué cambió en la flota desde la última vez?',
   'vehicles.register': 'Registra el vehículo de placa ',
 
+  'web.news': 'Busca noticias recientes sobre ',
   'web.scrape': 'Ábreme y resúmeme esta página: ',
   'web.search': 'Busca en internet ',
 };
