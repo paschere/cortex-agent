@@ -86,8 +86,7 @@ async function dripStreamingTurn(page: Page, opts: { conversationId?: string } =
           typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
         const path = new URL(href, window.location.origin).pathname;
         const method = (
-          init?.method ??
-          (typeof input === 'object' && 'method' in input ? input.method : 'GET')
+          init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET')
         ).toUpperCase();
 
         if (path !== '/api/chat' || method !== 'POST') return original(input, init);
@@ -151,7 +150,7 @@ async function markChatSubtree(page: Page) {
 function chatSurvived(page: Page): Promise<boolean> {
   return page.evaluate(() => {
     const probe = (window as unknown as { __probe?: Element }).__probe;
-    return Boolean(probe && probe.isConnected && probe === document.querySelector('textarea'));
+    return Boolean(probe?.isConnected && probe === document.querySelector('textarea'));
   });
 }
 

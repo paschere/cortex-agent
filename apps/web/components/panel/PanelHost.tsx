@@ -55,12 +55,13 @@ import {
  * ruta y se lleva por delante lo que se está escribiendo. Queda enlazable y
  * sobrevive a un refresco sin que el router se entere de nada.
  *
- * UN DETALLE HONESTO: en una conversación nueva, la primera respuesta hace que
- * `ChatRoot` reescriba la dirección a `/chat/<id>` y esa escritura no conserva
- * la consulta. El panel sigue abierto —su estado está aquí, no en la URL—, pero
- * el enlace deja de llevar el panel hasta que se vuelve a abrir. Es una línea
- * de dirección menos exacta durante un rato, y la alternativa era que este
- * archivo le pusiera condiciones a `ChatRoot`.
+ * LAS DOS ESCRITURAS SE CRUZAN, Y NO SE PISAN. En una conversación nueva, la
+ * primera respuesta hace que `ChatRoot` reescriba la dirección a `/chat/<id>` a
+ * mitad de stream. Esa línea conserva `window.location.search` en lugar de
+ * descartarlo, así que el `?panel=` de aquí sobrevive y el enlace sigue
+ * describiendo la pantalla entera. Cada uno escribe su mitad —`ChatRoot` el
+ * camino, esto la consulta— y ninguno tiene que saber del otro.
+ * `e2e/panel.spec.ts` lo vigila con un turno goteado.
  */
 
 interface PanelContextValue {
