@@ -12,6 +12,7 @@ import {
   getVisibleDocument,
   getVisibleSpace,
   rateHit,
+  removeFiles,
   searchSpaces,
 } from '@cortex/agent-tools';
 import { ForbiddenError, NotFoundError } from '@cortex/core';
@@ -30,6 +31,8 @@ import type {
 } from './_components/types';
 import { TINY_FRAGMENT_TOKENS } from './_components/types';
 import { intakeOf } from './_lib/brain';
+import { KB_BUCKET, blobPathsOf, normalizeBatchIds } from './_lib/deletion';
+import type { BatchDeleteResult, BatchRejection } from './_lib/deletion';
 
 const PATH = '/kb';
 
@@ -131,23 +134,106 @@ export async function moveDocument(
   }
 }
 
+/**
+ * Borra un documento tras la misma regla que la acción pública: lo subió esta
+ * persona, o puede escribir en el espacio donde vive. Devuelve las rutas de
+ * 'kb-uploads' que la fila dejaba huérfanas, para que el caller las barra.
+ *
+ * La ruta del binario se lee ANTES de borrar la fila — después ya no hay
+ * quién la recuerde.
+ */
+async function destroyDocument(
+  db: ReturnType<typeof getOrgScopedClient>,
+  userId: string,
+  documentId: string,
+): Promise<{ ok: true; blobPaths: string[] } | { ok: false; reason: string }> {
+  try {
+    const doc = await getVisibleDocument(db, userId, documentId);
+    if (doc.uploadedBy !== userId) {
+      await assertCanWriteToSpace(db, userId, doc.space.id);
+    }
+    const { data: row, error: readError } = await db
+      .from('kb_documents')
+      .select('source, source_ref, media_path')
+      .eq('id', documentId)
+      .maybeSingle();
+    const { error } = await db.from('kb_documents').delete().eq('id', documentId);
+    if (error) throw error;
+    // Si la lectura de la ruta falló, lo único que se pierde es la limpieza
+    // del blob — que ya es best-effort. La suerte del documento la decide el
+    // delete de arriba, no esta lectura.
+    return {
+      ok: true,
+      blobPaths: !readError && row ? blobPathsOf(row as Parameters<typeof blobPathsOf>[0]) : [],
+    };
+  } catch (err) {
+    return { ok: false, reason: describe(err, 'No se pudo quitar el documento.') };
+  }
+}
+
+/**
+ * Limpieza best-effort de los binarios de documentos YA borrados. Si esto
+ * falla, el borrado no se revierte y el caller no se entera: un blob huérfano
+ * es basura inofensiva que una pasada posterior puede barrer; un documento
+ * medio borrado es un estado mentiroso que alguien tendría que explicar.
+ */
+async function sweepBlobs(
+  db: ReturnType<typeof getOrgScopedClient>,
+  paths: string[],
+): Promise<void> {
+  if (paths.length === 0) return;
+  try {
+    await removeFiles(db, KB_BUCKET, paths);
+  } catch {
+    // Documentado arriba: el huérfano se queda, el borrado ya contó.
+  }
+}
+
 export async function deleteDocument(documentId: string): Promise<SimpleActionResult> {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  try {
-    const doc = await getVisibleDocument(db, user.id, documentId);
-    if (doc.uploadedBy !== user.id) {
-      await assertCanWriteToSpace(db, user.id, doc.space.id);
-    }
-    const { error } = await db.from('kb_documents').delete().eq('id', documentId);
-    if (error) throw error;
-  } catch (err) {
-    return { ok: false, error: describe(err, 'No se pudo quitar el documento.') };
-  }
+  const result = await destroyDocument(db, user.id, documentId);
+  if (!result.ok) return { ok: false, error: result.reason };
 
+  await sweepBlobs(db, result.blobPaths);
   revalidatePath(PATH);
   return { ok: true };
+}
+
+/**
+ * Borrado en lote, parcial y honesto: cada documento se juzga con la misma
+ * regla que el borrado individual, los permitidos se borran y los demás
+ * vuelven con su razón. Nunca todo-o-nada — que dos documentos ajenos colados
+ * en la selección cancelen los ocho tuyos sería castigar al que sí podía.
+ */
+export async function deleteDocuments(
+  documentIds: string[],
+): Promise<BatchDeleteResult | { ok: false; error: string }> {
+  const user = await requireSession();
+  const batch = normalizeBatchIds(documentIds);
+  if (!batch.ok) return batch;
+
+  const db = getOrgScopedClient(user.organization.id);
+  const rechazados: BatchRejection[] = [];
+  const blobPaths: string[] = [];
+  let borrados = 0;
+
+  for (const id of batch.ids) {
+    const result = await destroyDocument(db, user.id, id);
+    if (result.ok) {
+      borrados += 1;
+      blobPaths.push(...result.blobPaths);
+    } else {
+      rechazados.push({ id, reason: result.reason });
+    }
+  }
+
+  // Una sola barrida y una sola revalidación al final: cien revalidaciones de
+  // la misma ruta no dicen nada que una no diga.
+  await sweepBlobs(db, blobPaths);
+  if (borrados > 0) revalidatePath(PATH);
+  return { ok: true, borrados, rechazados };
 }
 
 /* ------------------------------------------------------------- the bench */

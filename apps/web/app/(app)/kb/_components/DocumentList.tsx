@@ -6,7 +6,8 @@ import { clsx } from 'clsx';
 import { AudioLines, FolderSearch, Loader2, ScanText, Upload, Video } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { deleteDocument, moveDocument } from '../actions';
+import { describeOutcome } from '../_lib/deletion';
+import { deleteDocument, deleteDocuments, moveDocument } from '../actions';
 import { clock, num, plural, shortDate } from './format';
 import { usePrefersReducedMotion } from './motion';
 import type { DigestStage, SpaceKind } from './types';
@@ -134,6 +135,17 @@ export function DocumentList({
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState<string | null>(null);
 
+  // ------------------------------------------------------- modo selección
+  // Quién puede borrar cada documento (su dueño, o quien escribe en el
+  // espacio) solo lo sabe el servidor: aquí se deja seleccionar todo y el
+  // resultado parcial que vuelve dice la verdad — «8 borrados, 2 se
+  // quedaron» — en vez de fingir en el cliente un permiso que no consta.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmingBatch, setConfirmingBatch] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
+  const [batchNote, setBatchNote] = useState<{ text: string; failed: boolean } | null>(null);
+
   const { data: docs = [], isLoading } = useQuery({
     queryKey: ['kb-docs', spaceId],
     queryFn: () => fetchDocs(spaceId),
@@ -214,6 +226,52 @@ export function DocumentList({
     router.refresh();
   }
 
+  // Un refetch puede quitar filas debajo de la selección (otro borró, o un
+  // documento cambió de espacio). Lo seleccionado se poda a lo que sigue en
+  // pantalla, para que «Borrar N» nunca prometa más de lo que se ve.
+  useEffect(() => {
+    setSelected((prev) => {
+      const alive = new Set(docs.map((d) => d.id));
+      const next = new Set([...prev].filter((id) => alive.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [docs]);
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function stopSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
+    setConfirmingBatch(false);
+  }
+
+  async function removeSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setBatchBusy(true);
+    const res = await deleteDocuments(ids);
+    setBatchBusy(false);
+    setConfirmingBatch(false);
+    if (!res.ok) {
+      setBatchNote({ text: res.error, failed: true });
+      return;
+    }
+    setBatchNote({
+      text: describeOutcome(res.borrados, res.rechazados),
+      failed: res.borrados === 0 && res.rechazados.length > 0,
+    });
+    stopSelecting();
+    qc.invalidateQueries({ queryKey: ['kb-docs', spaceId] });
+    router.refresh();
+  }
+
   if (isLoading) {
     return (
       <p className="flex items-center gap-1.5 py-2 text-xs text-ink-faint">
@@ -232,8 +290,61 @@ export function DocumentList({
     );
   }
 
+  const allSelected = selected.size === docs.length && docs.length > 0;
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {selecting ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setSelected(allSelected ? new Set() : new Set(docs.map((d) => d.id)))}
+              className="rounded-pill border border-border px-2.5 py-1 text-micro font-semibold text-ink-muted transition-colors hover:border-primary/40 hover:text-primary"
+            >
+              {allSelected ? 'Quitar la selección' : 'Seleccionar todos'}
+            </button>
+            <span className="tabular text-micro text-ink-faint">
+              {num(selected.size)} de {num(docs.length)}
+            </span>
+            <button
+              type="button"
+              onClick={stopSelecting}
+              className="ml-auto rounded-pill px-2.5 py-1 text-micro font-semibold text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink"
+            >
+              Cancelar
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setSelecting(true);
+              setBatchNote(null);
+              // El confirmador individual que hubiera quedado abierto no debe
+              // seguir ofreciendo un botón rojo debajo de un checkbox.
+              setConfirming(null);
+            }}
+            className="ml-auto rounded-pill border border-border px-2.5 py-1 text-micro font-semibold text-ink-muted transition-colors hover:border-primary/40 hover:text-primary"
+          >
+            Seleccionar
+          </button>
+        )}
+      </div>
+
+      {batchNote && (
+        <p
+          className={clsx(
+            'rounded-card border px-3 py-2 text-xs',
+            batchNote.failed
+              ? 'border-rose/30 bg-rose-soft text-rose'
+              : 'border-border bg-surface-2 text-ink-muted',
+          )}
+        >
+          {batchNote.text}
+        </p>
+      )}
+
       {GROUPS.map((group) => {
         const members = docs.filter((d) => group.stages.includes(stageOf(d)));
         if (members.length === 0) return null;
@@ -257,6 +368,9 @@ export function DocumentList({
                   hit={found?.has(d.id) ?? false}
                   register={(el) => register(d.id, el)}
                   {...(onOpenFragments ? { onOpenFragments } : {})}
+                  selecting={selecting}
+                  selected={selected.has(d.id)}
+                  onToggleSelected={toggleSelected}
                   confirming={confirming === d.id}
                   onConfirm={(id) => setConfirming(id)}
                   onMove={move}
@@ -269,6 +383,64 @@ export function DocumentList({
           </section>
         );
       })}
+
+      {selecting && selected.size > 0 && (
+        <div className="sticky bottom-2 z-10 rounded-card border border-border bg-surface px-3.5 py-3 shadow-pop">
+          {confirmingBatch ? (
+            <div>
+              <p className="text-xs leading-relaxed text-ink">
+                Borrar{' '}
+                <b>
+                  {selected.size === 1
+                    ? 'este documento'
+                    : `estos ${num(selected.size)} documentos`}
+                </b>{' '}
+                también olvida sus fragmentos indexados: las respuestas que los citaban dejan de
+                citarlos. No se puede deshacer.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={removeSelected}
+                  disabled={batchBusy}
+                  className="inline-flex items-center gap-1.5 rounded-card bg-rose px-3 py-1 text-micro font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                >
+                  {batchBusy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {batchBusy ? 'Borrando…' : 'Borrarlos'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingBatch(false)}
+                  disabled={batchBusy}
+                  className="rounded-card px-2.5 py-1 text-micro font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-60"
+                >
+                  Dejarlos
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="tabular text-xs text-ink">
+                {plural(selected.size, 'documento seleccionado', 'documentos seleccionados')}
+              </span>
+              <button
+                type="button"
+                onClick={() => setConfirmingBatch(true)}
+                className="ml-auto rounded-pill bg-rose px-3 py-1 text-micro font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                Borrar {plural(selected.size, 'documento', 'documentos')}
+              </button>
+              <button
+                type="button"
+                onClick={stopSelecting}
+                className="rounded-pill px-2.5 py-1 text-micro font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -283,6 +455,9 @@ function Row({
   hit,
   register,
   onOpenFragments,
+  selecting,
+  selected,
+  onToggleSelected,
   confirming,
   onConfirm,
   onMove,
@@ -301,6 +476,10 @@ function Row({
   hit: boolean;
   register: (el: HTMLLIElement | null) => void;
   onOpenFragments?: (documentId: string) => void;
+  /** Modo selección: la fila entera es un checkbox y las acciones se guardan. */
+  selecting: boolean;
+  selected: boolean;
+  onToggleSelected: (id: string) => void;
   confirming: boolean;
   onConfirm: (id: string | null) => void;
   onMove: (doc: Doc, targetId: string) => void;
@@ -319,20 +498,35 @@ function Row({
   const provenance = provenanceOf(d);
 
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: en modo selección la tarjeta entera es solo un blanco de click más grande; el camino de teclado ya existe y es el checkbox, que es un control de verdad.
     <li
       ref={register}
+      onClick={selecting ? () => onToggleSelected(d.id) : undefined}
       className={clsx(
         '-mx-2 px-2 py-2.5 transition-colors duration-1000',
-        fresh
-          ? 'bg-emerald-soft'
-          : pointed
-            ? 'bg-primary-soft'
-            : hit
-              ? 'bg-amber-soft'
-              : 'bg-transparent',
+        selecting && 'cursor-pointer',
+        selecting && selected
+          ? 'bg-primary-soft'
+          : fresh
+            ? 'bg-emerald-soft'
+            : pointed
+              ? 'bg-primary-soft'
+              : hit
+                ? 'bg-amber-soft'
+                : 'bg-transparent',
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        {selecting && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelected(d.id)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Seleccionar ${d.title}`}
+            className="mt-1 h-4 w-4 shrink-0 accent-primary"
+          />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="min-w-0 truncate text-sm font-medium text-ink">{d.title}</span>
@@ -434,7 +628,7 @@ function Row({
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className={clsx('flex shrink-0 items-center gap-1.5', selecting && 'hidden')}>
           {/* Only what is actually in memory has fragments to look at. A
               document still being read has none, and offering the link would
               lead to an empty screen that looks like a fault. */}
