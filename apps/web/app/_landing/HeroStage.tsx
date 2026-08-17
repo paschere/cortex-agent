@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * La puerta de entrada al hero cinematográfico — y la que decide cómo corre.
@@ -50,10 +50,16 @@ export function HeroStage() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [frozen, setFrozen] = useState(false);
   const [ready, setReady] = useState(false);
+  const [figureReady, setFigureReady] = useState(false);
   const [paused, setPaused] = useState(false);
   const [pulseSignal, setPulseSignal] = useState(0);
   const pulsed = useRef(false);
   const sceneRef = useRef<HTMLDivElement>(null);
+  // Identidad estable: estos callbacks bajan hasta efectos que montan y
+  // desmontan recursos de la escena; una lambda nueva por render los haría
+  // churnear con cada estado de este componente.
+  const handleReady = useCallback(() => setReady(true), []);
+  const handleFigureReady = useCallback(() => setFigureReady(true), []);
 
   useEffect(() => {
     const rm = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -67,12 +73,14 @@ export function HeroStage() {
   }, []);
 
   // Congelar: con reduced-motion se dejan pasar unos frames (para que la
-  // composición quede dibujada) y el loop se apaga del todo.
+  // composición quede dibujada) y el loop se apaga del todo. Se espera a que
+  // la figura exista — el humano llega por red (GLB) y congelar antes dejaría
+  // la escena quieta sin persona; con un tope por si la descarga se eterniza.
   useEffect(() => {
     if (!frozen || !ready) return;
-    const id = window.setTimeout(() => setPaused(true), 350);
+    const id = window.setTimeout(() => setPaused(true), figureReady ? 450 : 9000);
     return () => window.clearTimeout(id);
-  }, [frozen, ready]);
+  }, [frozen, ready, figureReady]);
 
   // Pausa: pestaña oculta o hero ya scrolleado fuera de vista.
   const hiddenRef = useRef(false);
@@ -142,7 +150,8 @@ export function HeroStage() {
             frozen={frozen}
             paused={paused}
             pulseSignal={pulseSignal}
-            onReady={() => setReady(true)}
+            onReady={handleReady}
+            onFigureReady={handleFigureReady}
           />
         ) : null}
       </div>

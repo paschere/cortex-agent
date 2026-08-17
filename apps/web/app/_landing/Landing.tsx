@@ -1,9 +1,28 @@
+import { Instrument_Serif } from 'next/font/google';
 import Link from 'next/link';
+import { Fragment } from 'react';
 import { AnswerCard } from './AnswerCard';
 import { HeroStage } from './HeroStage';
 import { IndustrySwitch } from './IndustrySwitch';
 import { Interactive } from './Interactive';
+import { ScrollStory } from './ScrollStory';
 import { INDUSTRIES } from './industries';
+
+/**
+ * La voz de los titulares. Instrument Serif — editorial, con itálicas de
+ * verdad para los acentos — contra el canvas oscuro del hero y el claro del
+ * resto. La landing gana una tercera voz tipográfica: serif para lo que se
+ * AFIRMA, Manrope para lo que se explica, JetBrains Mono para lo que se
+ * puede verificar. `next/font` la sirve self-hosted en el build: cero CDN,
+ * cero CSP, cero layout shift (fallback métrico automático).
+ */
+const displaySerif = Instrument_Serif({
+  weight: '400',
+  style: ['normal', 'italic'],
+  subsets: ['latin'],
+  variable: '--lp-font-display',
+  display: 'swap',
+});
 
 /**
  * The public page.
@@ -83,19 +102,52 @@ function Masthead() {
  * garantiza la legibilidad. El titular sigue siendo el LCP: es HTML del
  * servidor y no espera un byte de three.js.
  */
+/**
+ * El titular, palabra por palabra: el revelado cinético se hace en el
+ * servidor (spans con su delay ya puesto), así que no cuesta un byte de JS.
+ * El texto es EXACTAMENTE el mismo — los spans no cambian lo que lee un
+ * buscador ni un lector de pantalla, y la regla global de reduced-motion
+ * colapsa la animación al estado final.
+ */
+const TITLE_WORDS: Array<{ t: string; em?: boolean }> = [
+  { t: 'Un' },
+  { t: 'asistente' },
+  { t: 'para' },
+  { t: 'cada' },
+  { t: 'persona' },
+  { t: 'de' },
+  { t: 'tu' },
+  { t: 'empresa,' },
+  { t: 'que' },
+  { t: 'ya', em: true },
+  { t: 'se', em: true },
+  { t: 'sabe', em: true },
+  { t: 'la', em: true },
+  { t: 'empresa.', em: true },
+];
+
 function Hero() {
   return (
     <section className="lp-hero">
       <div className="lp-wrap lp-hero__inner">
         <div className="lp-hero__copy">
           <p className="lp-marker lp-arrive">Un asistente por persona</p>
-          <h1
-            className="lp-display lp-hero__display lp-arrive mt-4"
-            style={{ animationDelay: '0.05s' }}
-          >
-            Un asistente para cada persona de tu empresa, que <em>ya se sabe la empresa</em>.
+          <h1 className="lp-display lp-hero__display mt-4">
+            {TITLE_WORDS.map((w, i) => (
+              <Fragment key={`${i}-${w.t}`}>
+                <span className="lp-wb">
+                  <span
+                    className="lp-w"
+                    style={{ animationDelay: `${(0.08 + i * 0.055).toFixed(3)}s` }}
+                  >
+                    {w.em ? <em>{w.t}</em> : w.t}
+                  </span>
+                </span>
+                {i === TITLE_WORDS.length - 1 ? null : ' '}
+              </Fragment>
+            ))}
           </h1>
-          <p className="lp-lead lp-hero__lead lp-arrive" style={{ animationDelay: '0.1s' }}>
+          <p className="lp-lead lp-hero__lead lp-arrive" style={{ animationDelay: '0.6s' }}>
             No es un chatbot al que hay que explicarle todo. Cortex ya leyó los correos, los
             contratos, las actas de las reuniones y los grupos de WhatsApp que le habilitaste.
             Preguntas en español y contesta diciendo de dónde lo sacó: el documento, el día y, si
@@ -103,8 +155,10 @@ function Hero() {
           </p>
           {/* Las dos únicas puertas que hay. «Ver los planes» apuntaba a
               #planes, que ya no se dibuja: un ancla a una sección ausente deja
-              a alguien mirando el final de la página sin saber qué pasó. */}
-          <div className="lp-hero__cta lp-arrive" style={{ animationDelay: '0.15s' }}>
+              a alguien mirando el final de la página sin saber qué pasó.
+              El delay de la CTA cierra la entrada: su animationend dispara el
+              pulso del núcleo (HeroStage lo escucha). */}
+          <div className="lp-hero__cta lp-arrive" style={{ animationDelay: '0.85s' }}>
             <Link href="/signup" className="lp-btn lp-btn--primary">
               Crear cuenta
             </Link>
@@ -115,6 +169,47 @@ function Hero() {
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * La cinta de capacidades: la costura entre la escena nocturna y la página
+ * clara. Un loop lento en CSS puro — texto, no logos de terceros — que se
+ * pausa al pasar el cursor y desaparece como animación con reduced-motion.
+ * Todo lo que dice existe en el producto hoy.
+ */
+const CAPABILITIES = [
+  'Lee el correo',
+  'Entiende contratos',
+  'Recoge las reuniones',
+  'Contesta por WhatsApp',
+  'Persigue la cartera',
+  'Consulta RUNT y SIMIT',
+  'Vigila vencimientos',
+  'Arma informes con cifras',
+  'Cruza el CRM',
+  'Prepara tus reuniones',
+  'Pide aprobación antes de enviar',
+  'Cita la fuente de cada dato',
+];
+
+function CapabilityBand() {
+  const row = (hidden: boolean) => (
+    <ul className="lp-band__row" aria-hidden={hidden || undefined}>
+      {CAPABILITIES.map((c) => (
+        <li key={c} className="lp-band__item">
+          {c}
+        </li>
+      ))}
+    </ul>
+  );
+  return (
+    <div className="lp-band" aria-label="Lo que Cortex hace">
+      <div className="lp-band__track">
+        {row(false)}
+        {row(true)}
+      </div>
+    </div>
   );
 }
 
@@ -130,7 +225,9 @@ function DemoAnswer() {
       <div className="lp-wrap lp-demo__grid">
         <div className="lp-head" data-reveal>
           <p className="lp-marker">Así se ve una respuesta</p>
-          <h2 className="lp-h2">Con la frase, el documento y el minuto</h2>
+          <h2 className="lp-h2">
+            Con la frase, el documento y <em>el minuto</em>
+          </h2>
           <p className="lp-lead">
             Esto no es una maqueta de marketing: es la forma exacta en la que Cortex contesta, con
             cada fuente abierta debajo para que se pueda verificar.
@@ -236,64 +333,119 @@ function Industries() {
  * The order matters less than the cadence: one of them you do once, one you do
  * daily, and one happens whether you are looking or not — which is the actual
  * argument.
+ *
+ * En escritorio los tres pasos se recorren con scroll mientras un visual fijo
+ * (una "ventana" del producto) cambia de estado con cada paso — ScrollStory
+ * pone la maquinaria, este archivo pone todo el contenido. En pantallas
+ * angostas o con reduced-motion, el CSS lo devuelve a la lista estática de
+ * tarjetas de siempre.
  */
+
+/** El visual fijo: tres estados de la misma ventana, uno por paso. */
+function StoryVisual() {
+  return (
+    <div className="lp-story__panel" aria-hidden="true">
+      <div className="lp-story__bar">
+        <span className="lp-story__pip" />
+        <span className="lp-story__who">Cortex</span>
+        <span className="lp-story__mode lp-data" />
+      </div>
+      <div className="lp-story__stage">
+        <div className="lp-story__scene lp-story__scene--a">
+          <p className="lp-story__label">Fuentes conectadas</p>
+          <div className="lp-story__chips">
+            <span className="lp-story__chip">Gmail</span>
+            <span className="lp-story__chip">Outlook</span>
+            <span className="lp-story__chip">Google Drive</span>
+            <span className="lp-story__chip">Google Meet</span>
+            <span className="lp-story__chip">WhatsApp</span>
+            <span className="lp-story__chip">Google Chat</span>
+            <span className="lp-story__chip">HubSpot</span>
+            <span className="lp-story__chip">Archivos y audios</span>
+          </div>
+          <p className="lp-story__foot lp-data">Drive cada 10 min · reuniones cada 30</p>
+        </div>
+        <div className="lp-story__scene lp-story__scene--b">
+          <p className="lp-story__q">«¿El cliente recibe entregas los sábados?»</p>
+          <p className="lp-story__a">
+            Los sábados no recibe: quedó en la <strong>cláusula 9</strong> del contrato marco y lo
+            repitió el jefe de bodega en la llamada del jueves.
+          </p>
+          <p className="lp-story__cite lp-data">Contrato marco · cláusula 9 · 31 jul, min 12:04</p>
+        </div>
+        <div className="lp-story__scene lp-story__scene--c">
+          <p className="lp-story__label lp-story__label--amber">Aviso · 6:00 a. m.</p>
+          <p className="lp-story__a">
+            La póliza de cumplimiento vence en <strong className="lp-data">21 días</strong>. Nadie
+            la ha renovado.
+          </p>
+          <p className="lp-story__foot">La fecha salió del contrato y la confirmó una persona.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HowItWorks() {
   return (
     <section className="lp-section lp-section--tint" id="como-funciona">
       <div className="lp-wrap">
         <div className="lp-head" data-reveal>
           <p className="lp-marker">Cómo funciona</p>
-          <h2 className="lp-h2">Se alimenta solo. Nadie tiene que subir nada.</h2>
+          <h2 className="lp-h2">
+            Se alimenta solo. <em>Nadie tiene que subir nada.</em>
+          </h2>
           <p className="lp-lead">
             La memoria de tu empresa ya existe: está repartida entre el correo, Drive, las reuniones
             y los chats. Cortex se conecta a donde ya está y la sigue leyendo.
           </p>
         </div>
 
-        <div className="lp-steps" data-reveal-group>
-          <div className="lp-card lp-step">
-            <p className="lp-step__when">Una vez</p>
-            <h3 className="lp-h3">Conectas las fuentes</h3>
-            <p>
-              Google Workspace o Microsoft 365, Drive, las transcripciones de Google Meet y los
-              grupos de WhatsApp que decidas habilitar — uno por uno, nunca todos por defecto. Toma
-              una tarde y no se repite.
-            </p>
-            <div className="lp-srcs-row">
-              <span className="lp-pill">Gmail</span>
-              <span className="lp-pill">Outlook</span>
-              <span className="lp-pill">Google Drive</span>
-              <span className="lp-pill">Google Meet</span>
-              <span className="lp-pill">WhatsApp</span>
-              <span className="lp-pill">Google Chat</span>
-              <span className="lp-pill">HubSpot</span>
-              <span className="lp-pill">Archivos y audios</span>
-            </div>
-          </div>
-
-          <div className="lp-card lp-step">
-            <p className="lp-step__when">Todos los días</p>
-            <h3 className="lp-h3">Preguntas en español</h3>
-            <p>
-              Desde Cortex, desde Google Chat o desde el mismo grupo de WhatsApp donde ya trabajan.
-              Lo nuevo entra por su cuenta: Drive se revisa{' '}
-              <span className="lp-data">cada 10 minutos</span> y las reuniones se recogen{' '}
-              <span className="lp-data">cada 30</span>, así que preguntar por lo de esta mañana
-              funciona.
-            </p>
-          </div>
-
-          <div className="lp-card lp-step">
-            <p className="lp-step__when">Sin que preguntes</p>
-            <h3 className="lp-h3">Te avisa antes de que algo se venza</h3>
-            <p>
-              Un contrato, una póliza, una tecnomecánica. Cuando Cortex lee una fecha te la propone;
-              cuando la confirmas, queda vigilada. El aviso sale a las{' '}
-              <span className="lp-data">6:00 a. m.</span>, hora de Bogotá, con la anticipación que
-              ese tipo de vencimiento merece, y si nadie responde vuelve a insistir.
-            </p>
-          </div>
-        </div>
+        <ScrollStory
+          visual={<StoryVisual />}
+          steps={[
+            <Fragment key="conectar">
+              <p className="lp-step__when">Una vez</p>
+              <h3 className="lp-h3">Conectas las fuentes</h3>
+              <p>
+                Google Workspace o Microsoft 365, Drive, las transcripciones de Google Meet y los
+                grupos de WhatsApp que decidas habilitar — uno por uno, nunca todos por defecto.
+                Toma una tarde y no se repite.
+              </p>
+              <div className="lp-srcs-row lp-story__pills">
+                <span className="lp-pill">Gmail</span>
+                <span className="lp-pill">Outlook</span>
+                <span className="lp-pill">Google Drive</span>
+                <span className="lp-pill">Google Meet</span>
+                <span className="lp-pill">WhatsApp</span>
+                <span className="lp-pill">Google Chat</span>
+                <span className="lp-pill">HubSpot</span>
+                <span className="lp-pill">Archivos y audios</span>
+              </div>
+            </Fragment>,
+            <Fragment key="preguntar">
+              <p className="lp-step__when">Todos los días</p>
+              <h3 className="lp-h3">Preguntas en español</h3>
+              <p>
+                Desde Cortex, desde Google Chat o desde el mismo grupo de WhatsApp donde ya
+                trabajan. Lo nuevo entra por su cuenta: Drive se revisa{' '}
+                <span className="lp-data">cada 10 minutos</span> y las reuniones se recogen{' '}
+                <span className="lp-data">cada 30</span>, así que preguntar por lo de esta mañana
+                funciona.
+              </p>
+            </Fragment>,
+            <Fragment key="avisar">
+              <p className="lp-step__when">Sin que preguntes</p>
+              <h3 className="lp-h3">Te avisa antes de que algo se venza</h3>
+              <p>
+                Un contrato, una póliza, una tecnomecánica. Cuando Cortex lee una fecha te la
+                propone; cuando la confirmas, queda vigilada. El aviso sale a las{' '}
+                <span className="lp-data">6:00 a. m.</span>, hora de Bogotá, con la anticipación que
+                ese tipo de vencimiento merece, y si nadie responde vuelve a insistir.
+              </p>
+            </Fragment>,
+          ]}
+        />
       </div>
     </section>
   );
@@ -305,7 +457,9 @@ function Trust() {
       <div className="lp-wrap">
         <div className="lp-head" data-reveal>
           <p className="lp-marker">Por qué se le puede creer</p>
-          <h2 className="lp-h2">Preferimos una respuesta incómoda a una inventada.</h2>
+          <h2 className="lp-h2">
+            Preferimos una respuesta incómoda a una <em>inventada</em>.
+          </h2>
           <p className="lp-lead">
             Un asistente que se equivoca con seguridad es peor que no tener asistente, porque nadie
             vuelve a revisar lo que dice. Estas cuatro reglas son las que hacen que valga la pena
@@ -398,7 +552,7 @@ function Control() {
         <div className="lp-head" data-reveal>
           <p className="lp-marker">Control</p>
           <h2 className="lp-h2">
-            Que cada quien tenga asistente no significa que todos vean todo.
+            Que cada quien tenga asistente no significa que <em>todos vean todo</em>.
           </h2>
           <p className="lp-lead">
             Es la primera pregunta que hace cualquiera que entienda el producto, y tiene que tener
@@ -610,11 +764,20 @@ function Pricing() {
   );
 }
 
+/**
+ * El cierre rima con el hero: la página empieza de noche y termina de noche.
+ * Mismo índigo profundo, mismo grano, misma luz lavanda — pero sin repetir el
+ * organismo de partículas: aquí la luz es un gradiente quieto y lo que manda
+ * es la CTA grande. El footer vive dentro de la misma noche, en columnas.
+ */
 function Close() {
   return (
-    <section className="lp-section">
+    <section className="lp-night">
       <div className="lp-wrap lp-close" data-reveal>
-        <h2 className="lp-h2">El primer día ya contesta.</h2>
+        <p className="lp-marker">Empieza hoy</p>
+        <h2 className="lp-h2 lp-night__title">
+          El primer día <em>ya contesta</em>.
+        </h2>
         <p className="lp-lead mt-4">
           No hay que entrenar nada ni escribir instrucciones. Conectas las fuentes por la mañana y
           en la tarde alguien de tu equipo le pregunta algo que hasta hoy sólo sabía otra persona —
@@ -636,12 +799,32 @@ function Close() {
 function Footer() {
   return (
     <footer className="lp-foot">
-      <div className="lp-wrap lp-foot__row">
-        <p className="lp-fine">Cortex · Hecho en Colombia</p>
-        <nav className="flex gap-5" aria-label="Enlaces">
+      <div className="lp-wrap lp-foot__grid">
+        <div className="lp-foot__brand">
+          <span className="lp-mark">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icon.png" alt="" width={24} height={24} />
+            <span className="lp-mark__word">Cortex</span>
+          </span>
+          <p className="lp-foot__line">
+            Un asistente para cada persona de tu empresa, que dice de dónde salió cada respuesta.
+          </p>
+        </div>
+        <nav className="lp-foot__col" aria-label="Producto">
+          <p className="lp-foot__h">Producto</p>
+          <a href="#como-funciona">Cómo funciona</a>
+          <a href="#industrias">Para tu oficio</a>
+          <a href="#confianza">Por qué creerle</a>
+          <a href="#control">Control y permisos</a>
+        </nav>
+        <nav className="lp-foot__col" aria-label="Cuenta">
+          <p className="lp-foot__h">Cuenta</p>
           <Link href="/login">Iniciar sesión</Link>
           <Link href="/signup">Crear cuenta</Link>
         </nav>
+      </div>
+      <div className="lp-wrap lp-foot__base">
+        <p className="lp-fine">Cortex · Hecho en Colombia</p>
       </div>
     </footer>
   );
@@ -649,7 +832,7 @@ function Footer() {
 
 export function Landing() {
   return (
-    <div className="lp">
+    <div className={`lp ${displaySerif.variable}`}>
       {/* La escena del hero: la persona conectándose con la IA, fija detrás
           del primer viewport. El HTML entero vive encima, intacto e
           indexable; con prefers-reduced-motion la misma escena queda quieta
@@ -663,6 +846,7 @@ export function Landing() {
       <main>
         <Hero />
         <div className="lp-after">
+          <CapabilityBand />
           <DemoAnswer />
           <Objection />
           <Industries />

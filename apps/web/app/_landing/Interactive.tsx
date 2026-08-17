@@ -83,7 +83,9 @@ export function Interactive() {
     cleanups.push(() => io.disconnect());
 
     /* --- Tarjetas interactivas (tilt + linterna) ------------------------ */
-    for (const card of root.querySelectorAll<HTMLElement>('.lp-card, .lp-answer, .lp-cost__item')) {
+    for (const card of root.querySelectorAll<HTMLElement>(
+      '.lp-card, .lp-answer, .lp-cost__item, .lp-story__panel',
+    )) {
       card.classList.add('lp-tilt');
     }
 

@@ -61,6 +61,10 @@ const PUBLIC_PATHS = [
   // too. They are public images by nature.
   '/icon.png',
   '/apple-icon.png',
+  // Los assets 3D de la landing (el humano de partículas del hero). La
+  // landing es pública; sin esta línea el GLB rebotaba a /login y el hero
+  // caía siempre al respaldo procedural.
+  '/models',
   // Presentation PDFs are authorized by their own unguessable, expiring token
   // (the link is opened from Claude/email where no cookie exists — see the
   // route's header comment for the trade-off).
