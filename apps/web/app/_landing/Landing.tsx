@@ -1,12 +1,11 @@
 import { Instrument_Serif } from 'next/font/google';
 import Link from 'next/link';
 import { Fragment } from 'react';
-import { AnswerCard } from './AnswerCard';
-import { HeroStage } from './HeroStage';
+import { HeroSequence } from './HeroSequence';
 import { IndustrySwitch } from './IndustrySwitch';
 import { Interactive } from './Interactive';
+import { LiveDemo } from './LiveDemo';
 import { ScrollStory } from './ScrollStory';
-import { INDUSTRIES } from './industries';
 
 /**
  * La voz de los titulares. Instrument Serif — editorial, con itálicas de
@@ -96,11 +95,14 @@ function Masthead() {
 }
 
 /**
- * El hero cinematográfico: viewport completo, SIEMPRE oscuro (identidad de la
- * landing, no un tema), con la escena de partículas detrás — una persona
- * conectándose con la IA — y el contenido superpuesto sobre un scrim que
- * garantiza la legibilidad. El titular sigue siendo el LCP: es HTML del
- * servidor y no espera un byte de three.js.
+ * El hero cinematográfico, ahora una SECUENCIA dirigida por el scroll: el
+ * humano de partículas alcanza el núcleo de la IA, lo toca, el contacto es un
+ * big bang, del estallido nace el wordmark CORTEX y la secuencia culmina en
+ * el producto real — la ventana viva del chat escribiéndose sola. Toda la
+ * maquinaria (pin, progreso, WebGL) vive en HeroSequence/SeqScene; este
+ * archivo pone SOLO el contenido, que el servidor renderiza completo: sin JS
+ * o con reduced-motion no hay pin ni timeline y esto es un hero normal con la
+ * conversación terminada. El titular sigue siendo el LCP.
  */
 /**
  * El titular, palabra por palabra: el revelado cinético se hace en el
@@ -126,49 +128,92 @@ const TITLE_WORDS: Array<{ t: string; em?: boolean }> = [
   { t: 'empresa.', em: true },
 ];
 
-function Hero() {
+/** La fase del alcance: titular serif, lead y CTAs. También el hero entero
+ * cuando no hay secuencia (sin JS, reduced-motion, sin WebGL). */
+function HeroIntro() {
   return (
-    <section className="lp-hero">
-      <div className="lp-wrap lp-hero__inner">
-        <div className="lp-hero__copy">
-          <p className="lp-marker lp-arrive">Un asistente por persona</p>
-          <h1 className="lp-display lp-hero__display mt-4">
-            {TITLE_WORDS.map((w, i) => (
-              <Fragment key={`${i}-${w.t}`}>
-                <span className="lp-wb">
-                  <span
-                    className="lp-w"
-                    style={{ animationDelay: `${(0.08 + i * 0.055).toFixed(3)}s` }}
-                  >
-                    {w.em ? <em>{w.t}</em> : w.t}
-                  </span>
+    <div className="lp-wrap">
+      <div className="lp-hero__copy">
+        <p className="lp-marker lp-arrive">Un asistente por persona</p>
+        <h1 className="lp-display lp-hero__display mt-4">
+          {TITLE_WORDS.map((w, i) => (
+            <Fragment key={`${i}-${w.t}`}>
+              <span className="lp-wb">
+                <span
+                  className="lp-w"
+                  style={{ animationDelay: `${(0.08 + i * 0.055).toFixed(3)}s` }}
+                >
+                  {w.em ? <em>{w.t}</em> : w.t}
                 </span>
-                {i === TITLE_WORDS.length - 1 ? null : ' '}
-              </Fragment>
-            ))}
-          </h1>
-          <p className="lp-lead lp-hero__lead lp-arrive" style={{ animationDelay: '0.6s' }}>
-            No es un chatbot al que hay que explicarle todo. Cortex ya leyó los correos, los
-            contratos, las actas de las reuniones y los grupos de WhatsApp que le habilitaste.
-            Preguntas en español y contesta diciendo de dónde lo sacó: el documento, el día y, si
-            salió de una grabación, el minuto.
-          </p>
-          {/* Las dos únicas puertas que hay. «Ver los planes» apuntaba a
-              #planes, que ya no se dibuja: un ancla a una sección ausente deja
-              a alguien mirando el final de la página sin saber qué pasó.
-              El delay de la CTA cierra la entrada: su animationend dispara el
-              pulso del núcleo (HeroStage lo escucha). */}
-          <div className="lp-hero__cta lp-arrive" style={{ animationDelay: '0.85s' }}>
-            <Link href="/signup" className="lp-btn lp-btn--primary">
-              Crear cuenta
-            </Link>
-            <Link href="/login" className="lp-btn lp-btn--ghost">
-              Iniciar sesión
-            </Link>
-          </div>
+              </span>
+              {i === TITLE_WORDS.length - 1 ? null : ' '}
+            </Fragment>
+          ))}
+        </h1>
+        <p className="lp-lead lp-hero__lead lp-arrive" style={{ animationDelay: '0.6s' }}>
+          No es un chatbot al que hay que explicarle todo. Cortex ya leyó los correos, los
+          contratos, las actas de las reuniones y los grupos de WhatsApp que le habilitaste.
+          Preguntas en español y contesta diciendo de dónde lo sacó: el documento, el día y, si
+          salió de una grabación, el minuto.
+        </p>
+        {/* Las dos únicas puertas que hay, disponibles desde el primer frame:
+            nadie está obligado a ver la película entera para entrar. */}
+        <div className="lp-hero__cta lp-arrive" style={{ animationDelay: '0.85s' }}>
+          <Link href="/signup" className="lp-btn lp-btn--primary">
+            Crear cuenta
+          </Link>
+          <Link href="/login" className="lp-btn lp-btn--ghost">
+            Iniciar sesión
+          </Link>
         </div>
       </div>
-    </section>
+    </div>
+  );
+}
+
+/** La culminación de la secuencia: del mito al producto. Copy corto a la
+ * izquierda, la ventana viva del chat a la derecha. */
+function HeroFinal() {
+  return (
+    <div className="lp-wrap lp-hero__grid">
+      <div className="lp-hero__final-copy">
+        {/* La cartela de cierre de la secuencia es el marker del hero final:
+            del mito al producto, en cuatro palabras. */}
+        <p className="lp-marker">esto es Cortex</p>
+        <p className="lp-h2 lp-hero__final-title">
+          Preguntas. Contesta. <em>Y dice de dónde lo sacó.</em>
+        </p>
+        <p className="lp-lead lp-hero__final-lead">
+          Tres preguntas reales, contestadas con cifras y con su fuente: el documento, el día y el
+          minuto. Pasa el cursor por una cita y mira de qué paso salió.
+        </p>
+        <div className="lp-hero__cta">
+          <Link href="/signup" className="lp-btn lp-btn--primary">
+            Crear cuenta
+          </Link>
+          <Link href="/login" className="lp-btn lp-btn--ghost">
+            Iniciar sesión
+          </Link>
+        </div>
+      </div>
+      <div className="lp-hero__demo">
+        <LiveDemo />
+      </div>
+    </div>
+  );
+}
+
+function Hero() {
+  return (
+    <HeroSequence
+      intro={<HeroIntro />}
+      tagline={
+        <p className="lp-seq__tagline">
+          Un asistente para cada persona de tu empresa, <em>que ya se sabe la empresa.</em>
+        </p>
+      }
+      final={<HeroFinal />}
+    />
   );
 }
 
@@ -210,34 +255,6 @@ function CapabilityBand() {
         {row(true)}
       </div>
     </div>
-  );
-}
-
-/**
- * La tarjeta demo que antes vivía en el hero, tal cual, en su propia sección:
- * la primera cosa que se encuentra quien baja de la escena es una respuesta
- * real con sus fuentes abiertas.
- */
-function DemoAnswer() {
-  const example = INDUSTRIES[0];
-  return (
-    <section className="lp-section lp-demo" aria-label="Una respuesta de ejemplo">
-      <div className="lp-wrap lp-demo__grid">
-        <div className="lp-head" data-reveal>
-          <p className="lp-marker">Así se ve una respuesta</p>
-          <h2 className="lp-h2">
-            Con la frase, el documento y <em>el minuto</em>
-          </h2>
-          <p className="lp-lead">
-            Esto no es una maqueta de marketing: es la forma exacta en la que Cortex contesta, con
-            cada fuente abierta debajo para que se pueda verificar.
-          </p>
-        </div>
-        <div data-reveal>
-          <AnswerCard answer={example.answer} tag={example.tag} animate />
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -833,21 +850,17 @@ function Footer() {
 export function Landing() {
   return (
     <div className={`lp ${displaySerif.variable}`}>
-      {/* La escena del hero: la persona conectándose con la IA, fija detrás
-          del primer viewport. El HTML entero vive encima, intacto e
-          indexable; con prefers-reduced-motion la misma escena queda quieta
-          y sin WebGL queda su fondo de reposo. */}
-      <HeroStage />
       {/* El cerebro de las reacciones del resto de la página: revelado por
           scroll, tilt de tarjetas, botones magnéticos, glow ambiental. No
           pinta nada y con reduced-motion no hace nada. */}
       <Interactive />
       <Masthead />
       <main>
+        {/* La secuencia: alcance → contacto/big bang → nace CORTEX → el
+            producto (la ventana viva). Ver HeroSequence para la maquinaria. */}
         <Hero />
         <div className="lp-after">
           <CapabilityBand />
-          <DemoAnswer />
           <Objection />
           <Industries />
           <HowItWorks />
