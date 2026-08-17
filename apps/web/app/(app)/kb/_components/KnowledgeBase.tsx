@@ -25,12 +25,14 @@ import { SpaceDialog } from './SpaceDialog';
 import { SpaceTools } from './SpaceTools';
 import { Analysis } from './analysis/Analysis';
 import { MemoryBench } from './bench/MemoryBench';
+import { ConstellationView } from './constellation/ConstellationView';
 import { BrainField, type FieldFlare } from './field/BrainField';
 import { type FieldSeed, LOBE_NAME } from './field/field-math';
 import { num, plural } from './format';
 import { FragmentReader } from './reader/FragmentReader';
 import type {
   BrainStats,
+  ConstellationData,
   FragmentHealth,
   IntakeKey,
   KnowledgeShape,
@@ -75,6 +77,7 @@ export function KnowledgeBase({
   health,
   shape,
   stale,
+  constellation,
   isAdmin,
   viewerName,
 }: {
@@ -83,6 +86,9 @@ export function KnowledgeBase({
   health: FragmentHealth | null;
   shape: KnowledgeShape | null;
   stale: StaleDocument[];
+  /** Los documentos en memoria, ya serializados para la escena 3D. Null
+      cuando la lectura falló — entonces la vista simplemente no se ofrece. */
+  constellation: ConstellationData | null;
   isAdmin: boolean;
   viewerName: string;
 }) {
@@ -96,6 +102,10 @@ export function KnowledgeBase({
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
 
   const [tab, setTab] = useState<Tab>('ask');
+  // Lista o Constelación. La lista es el default y lo seguirá siendo: la
+  // constelación es otra forma de mirar lo mismo, no un reemplazo — todo lo
+  // que se abre tocando una esfera se abre también desde aquí con teclado.
+  const [view, setView] = useState<'list' | 'constellation'>('list');
   const [hovered, setHovered] = useState<string | null>(null);
   const [probe, setProbe] = useState<ProbeResult | null>(null);
   const [source, setSource] = useState<IntakeKey | null>(null);
@@ -310,23 +320,37 @@ export function KnowledgeBase({
     );
   }
 
-  const view = focusStats(stats, source);
+  const focused = focusStats(stats, source);
   const focusLabel = source ? { label: SOURCE_LABEL[source] } : null;
   const unit = depth === 'cortex' && source ? 'documentos' : 'fragmentos';
+
+  // La constelación solo se ofrece cuando hay algo que dibujar: con la memoria
+  // vacía (o con la lectura caída) el toggle ni aparece — inventar una escena
+  // sin datos sería un cielo que miente, y el estado vacío existente ya dice
+  // lo que hay que decir.
+  const constellationReady = constellation?.spaces.some((s) => s.documents.length > 0) ?? false;
 
   return (
     <div className="space-y-4">
       <Panel className="overflow-hidden">
-        <Breadcrumb
-          spaceName={space?.name ?? null}
-          documentOpen={depth === 'document'}
-          onCortex={() => {
-            setSpaceId(null);
-            setDocumentId(null);
-            setFocusIndex(null);
-          }}
-          onSpace={backFromDocument}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <Breadcrumb
+            spaceName={space?.name ?? null}
+            documentOpen={depth === 'document'}
+            onCortex={() => {
+              setSpaceId(null);
+              setDocumentId(null);
+              setFocusIndex(null);
+            }}
+            onSpace={backFromDocument}
+          />
+          {/* El toggle vive en la corteza, donde la constelación tiene sentido:
+              es una vista de TODO el cerebro. Un nivel más abajo el mapa de un
+              espacio ya cuenta esa historia. */}
+          {depth === 'cortex' && constellationReady && (
+            <ViewToggle view={view} onChange={setView} />
+          )}
+        </div>
 
         {depth === 'document' && documentId ? (
           // The map flattens into the document's own ribbon. Same idea one
@@ -340,6 +364,16 @@ export function KnowledgeBase({
               onBack={backFromDocument}
               backLabel={space ? `Volver a ${space.name}` : 'Volver al cerebro'}
             />
+          </div>
+        ) : depth === 'cortex' &&
+          view === 'constellation' &&
+          constellationReady &&
+          constellation ? (
+          // La misma memoria, como organismo 3D. Toca una esfera y aterrizas en
+          // el mismo lector de fragmentos al que llega la lista — un destino,
+          // dos puertas.
+          <div className="animate-rise border-t border-border">
+            <ConstellationView data={constellation} onOpenDocument={openDocument} />
           </div>
         ) : (
           <div className="grid border-t border-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
@@ -383,9 +417,7 @@ export function KnowledgeBase({
                 </TabButton>
                 <TabButton on={tab === 'index'} onClick={() => setTab('index')}>
                   Índice
-                  <span className="tabular ml-1.5 text-micro opacity-70">
-                    {num(items.length)}
-                  </span>
+                  <span className="tabular ml-1.5 text-micro opacity-70">{num(items.length)}</span>
                 </TabButton>
                 {(graph.isFetching || docs.isFetching) && depth === 'space' && (
                   <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin text-ink-faint motion-reduce:animate-none" />
@@ -475,8 +507,8 @@ export function KnowledgeBase({
       {depth === 'cortex' && (
         <>
           <div className="grid gap-4 lg:grid-cols-2">
-            <DigestionPanel stats={view} focus={focusLabel} />
-            <KnowsPanel stats={view} focus={focusLabel} />
+            <DigestionPanel stats={focused} focus={focusLabel} />
+            <KnowsPanel stats={focused} focus={focusLabel} />
           </div>
 
           <IntakeChooser
@@ -490,7 +522,7 @@ export function KnowledgeBase({
             onCreateSpace={() => setCreating('personal')}
           />
 
-          <GrowthPanel stats={view} focus={source} />
+          <GrowthPanel stats={focused} focus={source} />
         </>
       )}
 
@@ -549,6 +581,56 @@ function Breadcrumb({
         </>
       )}
     </nav>
+  );
+}
+
+/**
+ * Lista | Constelación.
+ *
+ * Un control segmentado y no dos tabs: los tabs de la consola cambian QUÉ
+ * herramienta usas (preguntar, índice); esto cambia CÓMO se dibuja el mismo
+ * cerebro. `aria-pressed` en vez de roles de tab por lo mismo — son dos
+ * botones que pintan la misma cosa de dos maneras.
+ */
+function ViewToggle({
+  view,
+  onChange,
+}: {
+  view: 'list' | 'constellation';
+  onChange: (view: 'list' | 'constellation') => void;
+}) {
+  const segment = (on: boolean) =>
+    clsx(
+      'rounded-pill px-2.5 py-1 text-micro font-semibold transition-colors',
+      on ? 'bg-surface text-ink shadow-card' : 'text-ink-muted hover:text-ink',
+    );
+  return (
+    <div
+      // biome-ignore lint/a11y/useSemanticElements: la sugerencia de la regla es
+      // <fieldset>, que agrupa CONTROLES DE FORMULARIO; esto son dos botones que
+      // cambian cómo se dibuja la misma pantalla, y un fieldset arrastraría
+      // estilos de agente de usuario que habría que deshacer uno por uno.
+      role="group"
+      aria-label="Cómo ver el cerebro"
+      className="mr-3 mt-3 flex shrink-0 items-center gap-0.5 rounded-pill border border-border bg-surface-2 p-0.5"
+    >
+      <button
+        type="button"
+        aria-pressed={view === 'list'}
+        onClick={() => onChange('list')}
+        className={segment(view === 'list')}
+      >
+        Lista
+      </button>
+      <button
+        type="button"
+        aria-pressed={view === 'constellation'}
+        onClick={() => onChange('constellation')}
+        className={segment(view === 'constellation')}
+      >
+        Constelación
+      </button>
+    </div>
   );
 }
 

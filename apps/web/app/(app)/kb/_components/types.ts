@@ -126,6 +126,41 @@ export interface SpaceSummary {
   intake: IntakeCounts;
 }
 
+/* ----------------------------------------------------------- constelación */
+
+/**
+ * Un documento tal como lo dibuja la constelación 3D: nada más que lo que la
+ * escena necesita para poner una esfera y abrirla al tocarla. Serializable a
+ * propósito — viaja del server component al cliente como prop.
+ */
+export interface ConstellationDoc {
+  id: string;
+  title: string;
+  /** Fragmentos recuperables — el tamaño de la esfera. */
+  chunkCount: number;
+  createdAt: string;
+}
+
+export interface ConstellationSpace {
+  id: string;
+  name: string;
+  /** Color CSS opcional. Hoy los espacios no guardan color; si algún día lo
+      hacen, la escena lo respeta sin cambiar de forma. */
+  color?: string;
+  documents: ConstellationDoc[];
+}
+
+/**
+ * `considered`/`total` existen para que la vista pueda decir «los 220 más
+ * recientes de 900» en lugar de presentar un recorte como si fuera el todo —
+ * la misma honestidad que ya practica el grafo de relaciones.
+ */
+export interface ConstellationData {
+  spaces: ConstellationSpace[];
+  considered: number;
+  total: number;
+}
+
 /* --------------------------------------------------------------- fragments */
 
 /**
