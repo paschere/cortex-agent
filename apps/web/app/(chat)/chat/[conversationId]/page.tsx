@@ -1,5 +1,6 @@
 import { ChatRoot } from '@/components/chat/ChatRoot';
 import { type BrainSource, parseBrainSources } from '@/lib/brain-sources-shape';
+import { capServeParts, parseStoredParts, toolInvocationsOf } from '@/lib/message-parts';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { toToolInvocations } from '@/lib/tool-invocations';
@@ -36,8 +37,11 @@ export default async function ResumeChatPage({
     // `brain_sources` viaja igual (migración 0105): es una propiedad del mensaje
     // y sólo se quiere junto a él, así que reabrir un hilo con su procedencia
     // sigue costando la misma lectura de siempre.
+    // `parts` viaja aquí también (migración 0110): la cronología completa del
+    // mensaje —texto, razonamiento y llamadas entrelazados— por la misma
+    // lectura de siempre.
     .select(
-      'id, role, content, tool_calls, tool_results, followups, screen_glance_at, brain_sources, created_at',
+      'id, role, content, tool_calls, tool_results, parts, followups, screen_glance_at, brain_sources, created_at',
     )
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
@@ -81,7 +85,29 @@ export default async function ResumeChatPage({
   const initialMessages: Message[] = (msgs ?? [])
     .filter((m) => m.role === 'user' || m.role === 'assistant')
     .map((m) => {
-      const toolInvocations = toToolInvocations(m.tool_calls, m.tool_results);
+      /**
+       * LA CRONOLOGÍA GUARDADA, SERVIDA RECORTADA.
+       *
+       * Con `parts` (migración 0110) la respuesta se dibuja EXACTAMENTE como
+       * en vivo: cada llamada en su punto del timeline y el razonamiento en su
+       * ReasoningTrail — es la ruta que `segmentsOf` en MessageBubble prefiere.
+       * Se sirve pasada por `capServeParts` (~20 KB por invocación, ver
+       * lib/message-parts.ts): el transcript entero viaja en el payload RSC, y
+       * lo que se guarda completo no tiene por qué viajar completo para
+       * pintarse.
+       *
+       * Las invocaciones planas (`toolInvocations`) salen de LAS MISMAS parts
+       * recortadas, no de `tool_results` sin tope — servir los dos sería mandar
+       * cada resultado dos veces y una de ellas gigante. Sin parts (mensajes de
+       * antes de la migración, o de usuario) se cae al fallback de siempre.
+       */
+      const storedParts = m.role === 'assistant' ? parseStoredParts(m.parts) : undefined;
+      const servedParts = storedParts ? capServeParts(storedParts) : undefined;
+      const partInvocations = servedParts ? toolInvocationsOf(servedParts) : undefined;
+      const toolInvocations =
+        partInvocations && partInvocations.length > 0
+          ? partInvocations
+          : toToolInvocations(m.tool_calls, m.tool_results);
       /**
        * LA HORA VIAJA CON EL MENSAJE, y hasta hoy no viajaba.
        *
@@ -101,6 +127,7 @@ export default async function ResumeChatPage({
         role: m.role as 'user' | 'assistant',
         content: (m.content as string) ?? '',
         ...(toolInvocations ? { toolInvocations } : {}),
+        ...(servedParts ? { parts: servedParts } : {}),
         ...(createdAt && !Number.isNaN(createdAt.getTime()) ? { createdAt } : {}),
       };
     });

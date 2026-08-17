@@ -25,14 +25,17 @@ describe('las fuentes de una respuesta', () => {
   it('cinco trozos del mismo documento son un documento', () => {
     const out = collectBrainSources([hit(), hit(), hit(), hit(), hit()]);
     expect(out).toHaveLength(1);
-    expect(brainSourceLabel(out)).toBe('Contrato Coltrans 2026');
+    expect(brainSourceLabel(out)).toBe('1 fuente');
   });
 
-  it('con uno solo dice su nombre; con varios, cuántos son', () => {
-    expect(brainSourceLabel(collectBrainSources([hit()]))).toBe('Contrato Coltrans 2026');
+  it('la fila colapsada cuenta, no titula: «N fuentes», con su singular', () => {
+    // Decía el título cuando la fuente era una, y el dueño leyó «Del cerebro ·
+    // Contrato Coltrans…» sin entender qué era la fila. Un conteo dice qué es
+    // Y cuántas hay; los títulos completos viven en la lista expandida.
+    expect(brainSourceLabel(collectBrainSources([hit()]))).toBe('1 fuente');
     expect(
       brainSourceLabel(collectBrainSources([hit(), hit({ documentId: 'd2', documentTitle: 'B' })])),
-    ).toBe('2 documentos');
+    ).toBe('2 fuentes');
   });
 
   it('sin fuentes no hay nada que decir, y se dice devolviendo null', () => {
@@ -68,11 +71,11 @@ describe('las fuentes de una respuesta', () => {
     expect(collectBrainSources(many)).toHaveLength(MAX_BRAIN_SOURCES);
   });
 
-  it('un título largo se recorta, pero sólo cuando va solo', () => {
+  it('un título kilométrico no toca la fila colapsada: la etiqueta es el conteo', () => {
+    // El título completo se enseña en la lista expandida, donde tiene el ancho
+    // de la respuesta; la fila de una línea no carga con él.
     const largo = 'Contrato marco de prestación de servicios logísticos 2026 con anexos';
-    const label = brainSourceLabel(collectBrainSources([hit({ documentTitle: largo })]));
-    expect(label).toMatch(/…$/);
-    expect((label ?? '').length).toBeLessThanOrEqual(42);
+    expect(brainSourceLabel(collectBrainSources([hit({ documentTitle: largo })]))).toBe('1 fuente');
   });
 
   it('lo que venga de la base no puede tumbar la lectura de un hilo', () => {

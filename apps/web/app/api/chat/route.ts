@@ -11,6 +11,9 @@ import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attac
 import { CITATION_RULE } from '@/lib/citations';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { enqueueJobs } from '@/lib/jobs';
+// Solo para la persistencia de `onFinish`: la cronología del mensaje, recortada
+// a sus topes (100 KB por resultado, ~1 MB por mensaje — ver lib/message-parts.ts).
+import { buildStoredParts, capStoredParts } from '@/lib/message-parts';
 import {
   POINT_AT_DESCRIPTION,
   POINT_AT_TOOL_ID,
@@ -1073,7 +1076,7 @@ export async function POST(req: NextRequest) {
     onStepFinish: ({ usage, providerMetadata }) => {
       clock.modelStep(usage, providerMetadata);
     },
-    onFinish: async ({ text, toolCalls, toolResults, usage }) => {
+    onFinish: async ({ text, toolCalls, toolResults, usage, steps }) => {
       clock.finished(usage);
 
       /**
@@ -1124,6 +1127,34 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      /**
+       * LA CRONOLOGÍA COMPLETA DEL MENSAJE, PARA QUE RECARGAR NO LA PIERDA.
+       *
+       * `content`, `tool_calls` y `tool_results` guardan las piezas por
+       * separado; lo que no guardaba nadie era EL ORDEN — texto, razonamiento y
+       * llamadas entrelazados como pasaron — ni el razonamiento a secas, y por
+       * eso una conversación reabierta se dibujaba distinta de la que se vio en
+       * vivo (ver `segmentsOf` en MessageBubble). Se reconstruye desde `steps`,
+       * que es la fuente que este callback ya recibe, y se recorta a topes
+       * honestos ANTES de insertar: ~100 KB por resultado de invocación
+       * (truncado con la marca `__truncated` y el primer trozo) y ~1 MB por
+       * mensaje. Números y porqués en lib/message-parts.ts; la forma, en la
+       * migración 0110.
+       *
+       * `null` cuando el turno fue solo texto — `content` ya lo lleva — y
+       * nunca un array vacío, por la misma regla que `brain_sources`. Un fallo
+       * aquí no puede costar el mensaje: sin parts se cae al fallback de
+       * siempre, que es exactamente lo que había.
+       */
+      const storedParts = (() => {
+        try {
+          const built = buildStoredParts(steps ?? []);
+          return built ? capStoredParts(built) : null;
+        } catch {
+          return null;
+        }
+      })();
+
       let assistantMessageId: string | null = null;
       try {
         const { data: assistantRow } = await db
@@ -1134,6 +1165,7 @@ export async function POST(req: NextRequest) {
             content: text,
             tool_calls: toolCalls as unknown as object,
             tool_results: toolResults as unknown as object,
+            parts: storedParts as unknown as object,
             // NULL y no `[]` cuando no se leyó nada: la migración 0105 lo
             // prohíbe a propósito, porque un array vacío y un NULL se dibujan
             // igual y dos maneras de escribir el mismo hecho son dos maneras de

@@ -37,10 +37,40 @@ describe('la cita en línea', () => {
   it('deja de salir en crudo y nombra el documento', () => {
     const html = render({ content: 'Vence el 30 de septiembre[^1].', sources: fuentes });
     expect(html).not.toContain('[^1]');
+    // El nombre y la edad viajan en el `title` y en el `aria-label`, no en un
+    // panel flotante que tape la prosa.
     expect(html).toContain('Contrato Transportes del Valle');
     expect(html).toContain('de hace 8 días');
     // Lo que oye quien no ve la pastilla.
-    expect(html).toContain('aria-label="Fuente: Contrato Transportes del Valle · de hace 8 días"');
+    expect(html).toContain(
+      'aria-label="Fuente 1: Contrato Transportes del Valle · de hace 8 días"',
+    );
+  });
+
+  it('va en la línea base y sin tooltip: ni superíndice que rompa el renglón ni panel que tape', () => {
+    // El dueño lo dijo exacto: «aparecen feo, y solo al hover». La pastilla se
+    // alinea a la base con un token de la escala, y el hover no dibuja nada.
+    const html = render({ content: 'Vence el 30 de septiembre[^1].', sources: fuentes });
+    expect(html).not.toContain('role="tooltip"');
+    expect(html).not.toContain('align-super');
+    expect(html).toContain('align-baseline');
+    expect(html).toContain('text-micro');
+  });
+
+  it('con un destino, la marca es un botón que lleva a la fuente', () => {
+    const html = render({
+      content: 'Vence el 30 de septiembre[^1].',
+      sources: fuentes,
+      onCiteClick: () => {},
+    });
+    expect(html).toContain('cursor-pointer');
+    expect(html).toContain('Ver en las fuentes de la respuesta');
+  });
+
+  it('sin destino no es un botón: un botón que no hace nada es peor que un número quieto', () => {
+    const html = render({ content: 'Vence el 30 de septiembre[^1].', sources: fuentes });
+    expect(html).not.toContain('<button');
+    expect(html).not.toContain('cursor-pointer');
   });
 
   it('la marca apunta al documento que le toca, no al que está en su posición', () => {

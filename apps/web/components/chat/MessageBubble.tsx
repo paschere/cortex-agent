@@ -10,7 +10,8 @@ import {
 import type { ScreenFrame } from '@/lib/screen-marks';
 import type { Message, ToolInvocation } from 'ai';
 import { clsx } from 'clsx';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import { BrainSources, type CiteFocus } from './BrainSources';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChoicePrompt } from './ChoicePrompt';
 import { ConfirmationPrompt } from './ConfirmationPrompt';
@@ -237,6 +238,19 @@ export function MessageBubble({
   // message and ends in another offers nothing, because a quote spanning two
   // answers has no single source to attribute it to.
   const bodyRef = useRef<HTMLDivElement>(null);
+  /**
+   * La marca de cita pulsada en el texto de ESTA respuesta. Vive aquí porque
+   * éste es el único sitio que ve a los dos lados: las pastillas de
+   * `ChatMarkdown` que la disparan y la sección `BrainSources` que la
+   * atiende (se abre, hace scroll y resalta la fuente con ese número). El
+   * `nonce` es lo que hace que pulsar dos veces la misma cita vuelva a
+   * resaltar. Ver BrainSources.
+   */
+  const [citeFocus, setCiteFocus] = useState<CiteFocus | null>(null);
+  const onCiteClick =
+    brainSources && brainSources.length > 0
+      ? (cite: number) => setCiteFocus({ cite, nonce: Date.now() })
+      : undefined;
   if (role === 'data') return null;
   const isUser = role === 'user';
 
@@ -523,6 +537,7 @@ export function MessageBubble({
                     content={seg.text}
                     isStreaming={isStreaming && i === lastText}
                     {...(brainSources ? { sources: brainSources } : {})}
+                    {...(onCiteClick ? { onCiteClick } : {})}
                   />
                 );
               }
@@ -566,6 +581,7 @@ export function MessageBubble({
                     content={content}
                     isStreaming={isStreaming}
                     {...(brainSources ? { sources: brainSources } : {})}
+                    {...(onCiteClick ? { onCiteClick } : {})}
                   />
                 )}
               </>
@@ -659,6 +675,20 @@ export function MessageBubble({
         )}
 
         {/*
+          LAS FUENTES, VISIBLES SIN HOVER Y SIN ESPERAR A LAS ACCIONES.
+
+          Antes viajaban dentro de la fila de botones; ahora son una sección
+          propia porque tienen que hablar con las pastillas del texto — pulsar
+          una cita expande esto y resalta su fuente, y el único que ve a los
+          dos es este componente. Va antes de las acciones: primero la prueba
+          de dónde salió, después qué hacer con ello. Sin fuentes no dibuja
+          nada — regla de procedencia del sistema de diseño.
+        */}
+        {!isStreaming && brainSources && brainSources.length > 0 && (
+          <BrainSources sources={brainSources} focus={citeFocus} />
+        )}
+
+        {/*
           Copiar, rehacer y conservar. `onRegenerate` sólo llega en la última
           respuesta, así que es también la señal de cuál está viva y cuál se
           esconde hasta que se la busca — ver MessageActions.
@@ -671,7 +701,6 @@ export function MessageBubble({
             {...(question ? { question } : {})}
             {...(conversationId ? { conversationId } : {})}
             {...(onRegenerate ? { onRegenerate } : {})}
-            {...(brainSources && brainSources.length > 0 ? { brainSources } : {})}
           />
         )}
 

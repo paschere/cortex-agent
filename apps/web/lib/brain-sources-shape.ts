@@ -229,17 +229,15 @@ export function parseBrainSources(value: unknown): BrainSource[] {
 }
 
 /**
- * Cómo se anuncia en una línea, junto a los botones de la respuesta.
+ * Cómo se anuncia la fila colapsada de fuentes bajo la respuesta.
  *
- * Con una fuente se dice su nombre, porque el nombre es más útil que el conteo
- * y cabe. Con varias se cuenta, porque tres títulos en una fila de botones es
- * una fila de botones ilegible — y los nombres siguen a un clic.
+ * SIEMPRE UN CONTEO, nunca un título. Decía el título cuando la fuente era
+ * una, y el dueño leyó «Del cerebro · Contrato Coltrans…» sin entender qué
+ * era esa fila: un título truncado no dice QUÉ es la fila, solo cuál. «N
+ * fuentes» dice las dos cosas que la fila colapsada tiene que decir —qué es
+ * esto y cuántas hay— y los títulos completos están a un clic, en la lista.
  */
 export function brainSourceLabel(sources: readonly BrainSource[]): string | null {
   if (sources.length === 0) return null;
-  const first = sources[0];
-  if (sources.length === 1 && first) {
-    return first.title.length <= 42 ? first.title : `${first.title.slice(0, 40).trimEnd()}…`;
-  }
-  return `${sources.length} documentos`;
+  return sources.length === 1 ? '1 fuente' : `${sources.length} fuentes`;
 }

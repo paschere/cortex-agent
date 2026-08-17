@@ -1,12 +1,10 @@
 'use client';
 
 import { saveAnswerAsReportAction } from '@/app/(chat)/chat/actions';
-import type { BrainSource } from '@/lib/brain-sources-shape';
 import { clsx } from 'clsx';
 import { BookmarkCheck, Check, Copy, Loader2, RotateCw } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { BrainSources } from './BrainSources';
 
 /**
  * LO QUE SE HACE CON UNA RESPUESTA: COPIARLA, REHACERLA, CONSERVARLA.
@@ -59,8 +57,6 @@ export function MessageActions({
   onRegenerate,
   /** La respuesta viva. Las de más arriba se esconden hasta que se las busca. */
   pinned,
-  /** De dónde salió, si salió del cerebro. Ver BrainSources. */
-  brainSources,
 }: {
   text: string;
   question?: string;
@@ -68,7 +64,6 @@ export function MessageActions({
   messageId: string;
   onRegenerate?: () => void;
   pinned?: boolean;
-  brainSources?: readonly BrainSource[];
 }) {
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -96,23 +91,14 @@ export function MessageActions({
     // El pie de la respuesta: donde termina el carril y donde vive la prueba.
     // `-ml-1.5` mete los botones redondos medio paso a la izquierda para que su
     // TEXTO —no su caja— caiga sobre el mismo margen que la prosa de arriba.
+    //
+    // LA PROCEDENCIA YA NO VIVE AQUÍ. `BrainSources` se volvió una sección con
+    // lista propia que se expande en el flujo y a la que las citas del texto
+    // saltan al pulsarlas — necesita hablar con `ChatMarkdown`, y el único que
+    // ve a los dos es `MessageBubble`, que es donde ahora se monta, justo
+    // encima de esta fila. Aquí quedan solo las ACCIONES, que es lo que esta
+    // fila siempre fue.
     <div className="-ml-1.5 mt-2.5 flex flex-wrap items-center gap-0.5">
-      {/*
-        LA PROCEDENCIA NO SE ESCONDE, Y ÉSA ES LA DIFERENCIA CON LAS DEMÁS.
-
-        Todo lo que hay a la derecha son ACCIONES, y una acción sólo hace falta
-        cuando alguien va a actuar: por eso se esconden hasta que el ratón llega
-        o hasta que se tabula. Esto no es una acción, es la prueba de dónde salió
-        la respuesta — y una prueba que sólo existe mientras el cursor está
-        encima no está en la conversación, está escondida en ella.
-
-        Es literalmente el caso que importa: la cifra que alguien va a discutir
-        dos semanas después está en mitad del hilo, no en la última respuesta.
-        Sin fuentes esto no dibuja nada, así que en la inmensa mayoría de los
-        mensajes no añade ni un píxel.
-      */}
-      {brainSources && brainSources.length > 0 && <BrainSources sources={brainSources} />}
-
       <div
         className={clsx(
           'flex flex-wrap items-center gap-0.5 transition-opacity duration-150 motion-reduce:transition-none',

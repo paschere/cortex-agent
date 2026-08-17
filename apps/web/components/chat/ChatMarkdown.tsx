@@ -17,6 +17,7 @@ export function ChatMarkdown({
   content,
   isStreaming,
   sources,
+  onCiteClick,
   className,
 }: {
   content: string;
@@ -28,6 +29,14 @@ export function ChatMarkdown({
    * apagado y no promete nada. Ver lib/citations.ts.
    */
   sources?: readonly BrainSource[];
+  /**
+   * Qué hacer cuando alguien pulsa una marca de cita: en el chat, abrir la
+   * sección de fuentes de la respuesta y resaltar la que le toca — ver
+   * BrainSources y el estado que MessageBubble teje entre los dos. Ausente
+   * (informes, transcripciones), la marca no es un botón: un botón que no hace
+   * nada es peor que un número quieto.
+   */
+  onCiteClick?: (cite: number) => void;
   className?: string;
 }) {
   return (
@@ -98,6 +107,22 @@ export function ChatMarkdown({
            * dibujar una pastilla — un componente que se fía de que nadie más va
            * a producir su etiqueta es un componente que se rompe el día que
            * alguien active `rehype-raw`.
+           *
+           * =================================================================
+           * EN LA LÍNEA BASE Y SIN TOOLTIP, Y LAS DOS COSAS SON EL ARREGLO
+           * =================================================================
+           * Esto era un superíndice con un panel flotante en hover. El
+           * superíndice rompía el interlineado —el renglón con cita quedaba
+           * más alto que sus vecinos y el número flotaba huérfano tras un
+           * paréntesis— y el panel TAPABA el texto del mensaje para decir algo
+           * que ya tiene su sitio: la sección de fuentes bajo la respuesta.
+           * El dueño lo dijo exacto: «aparecen feo, y solo al hover».
+           *
+           * Ahora es una pastilla micro alineada a la base, pegada a la
+           * palabra que cita, y PULSARLA lleva a la fuente: abre la sección de
+           * abajo y resalta la fila con su mismo número. El hover no tapa
+           * nada; el `title` nativo queda como pista para quien pase por
+           * encima sin pulsar.
            */
           sup({
             children,
@@ -112,56 +137,43 @@ export function ChatMarkdown({
 
             const source = citationSource(sources, cite);
             if (!source) {
-              // Sin documento no hay nada que prometer: el número, apagado.
+              // Sin documento no hay nada que prometer: el número, apagado y
+              // quieto — también en la línea base, que un huérfano no tiene
+              // por qué romper además el renglón.
               return (
-                <sup className="ml-px align-super font-mono text-[0.7em] text-ink-faint">
+                <span className="tabular ml-0.5 inline-block align-baseline font-mono text-micro text-ink-faint">
                   {cite}
-                </sup>
+                </span>
               );
             }
 
             const label = citationLabel(source);
-            return (
-              // `group` + `focus-within`: se abre con el ratón y también
-              // tabulando, que es la única razón por la que el número es
-              // enfocable. `title` va además para quien pase por encima antes de
-              // que el panel termine de aparecer.
-              <span className="group relative inline-block align-baseline">
-                <sup
-                  tabIndex={0}
-                  title={label}
-                  aria-label={`Fuente: ${label}`}
-                  className={clsx(
-                    'tabular ml-0.5 cursor-default rounded-pill bg-primary-soft px-1.5 py-px align-super',
-                    'font-mono text-[0.68em] font-semibold text-primary-ink',
-                    'transition-colors duration-150 group-hover:bg-primary/15 motion-reduce:transition-none',
-                  )}
-                >
+            const pill = clsx(
+              'tabular ml-0.5 inline-block rounded-pill bg-primary-soft px-1.5 align-baseline',
+              'font-mono text-micro font-semibold leading-snug text-primary-ink',
+            );
+            if (!onCiteClick) {
+              // Sin sección a la que llevar (informes, transcripciones) la
+              // marca nombra su documento en el `title` y nada más.
+              return (
+                <span title={label} aria-label={`Fuente ${cite}: ${label}`} className={pill}>
                   {cite}
-                </sup>
-                <span
-                  role="tooltip"
-                  className={clsx(
-                    'pointer-events-none absolute bottom-full left-1/2 z-30 mb-1 hidden w-max max-w-[min(20rem,70vw)]',
-                    '-translate-x-1/2 rounded-sm border border-border bg-surface px-2.5 py-1.5 shadow-pop',
-                    'group-hover:block group-focus-within:block',
-                  )}
-                >
-                  <span className="block truncate text-xs font-medium text-ink">
-                    {source.title}
-                  </span>
-                  {/* La edad es evidencia — regla 3 — y cambia lo que vale la
-                      cita: una tarifa de hace un año no es la misma frase que la
-                      misma tarifa de la semana pasada. */}
-                  <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-micro text-ink-faint">
-                    {source.age && <span className="tabular font-mono">{source.age}</span>}
-                    {source.spokenAt && (
-                      <span className="tabular font-mono">min {source.spokenAt}</span>
-                    )}
-                    {source.relevance === 'weak' && <span>coincidencia floja</span>}
-                  </span>
                 </span>
-              </span>
+              );
+            }
+            return (
+              <button
+                type="button"
+                onClick={() => onCiteClick(cite)}
+                title={label}
+                aria-label={`Fuente ${cite}: ${label}. Ver en las fuentes de la respuesta.`}
+                className={clsx(
+                  pill,
+                  'cursor-pointer transition-colors duration-150 hover:bg-primary/15 motion-reduce:transition-none',
+                )}
+              >
+                {cite}
+              </button>
             );
           },
         }}
