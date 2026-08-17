@@ -316,10 +316,12 @@ html:has(.lp) body {
   text-wrap: balance;
 }
 
-/* El acento de un titular es itálica de la misma serif, en tinta de marca. */
+/* El acento de un titular es LA MISMA letra en tinta de marca — sin itálica,
+   a pedido del dueño: el color solo ya marca el énfasis. `em` se conserva en
+   el HTML por semántica; la redonda es decisión visual. */
 .lp-display em,
 .lp-h2 em {
-  font-style: italic;
+  font-style: normal;
   color: rgb(var(--lp-brand-ink));
 }
 
@@ -816,7 +818,7 @@ html:has(.lp) body {
 }
 
 .lp-seq__tagline em {
-  font-style: italic;
+  font-style: normal;
   color: rgb(var(--lph-brand-bright));
 }
 
@@ -933,7 +935,7 @@ html:has(.lp) body {
 }
 
 .lp-hero__display em {
-  font-style: italic;
+  font-style: normal;
   color: rgb(var(--lph-brand-bright));
 }
 
@@ -2781,7 +2783,7 @@ html:has(.lp) body {
 }
 
 .lp-day__coda em {
-  font-style: italic;
+  font-style: normal;
   color: rgb(var(--lp-brand-ink));
 }
 
