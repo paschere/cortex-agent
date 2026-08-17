@@ -147,6 +147,7 @@ html:has(.lp) body {
    ========================================================================== */
 
 .lp {
+  position: relative;
   background: rgb(var(--lp-canvas));
   color: rgb(var(--lp-ink));
   font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -154,6 +155,43 @@ html:has(.lp) body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
+}
+
+/* ==========================================================================
+   El fondo vivo (.lp-field)
+   ==========================================================================
+   La capa 0 de la página: el organismo de partículas de NeuralField, fijo a la
+   ventana y sin recibir un solo evento — el HTML entero queda encima con
+   z-index 1 y sigue siendo lo que era. El gradiente se pinta SIEMPRE, canvas o
+   no canvas: es el estado de reposo de la misma luz indigo, así que quien pidió
+   `prefers-reduced-motion` (el canvas nunca se monta) o llega sin WebGL recibe
+   una página terminada, no un hueco. El canvas aparece encima en un fundido
+   corto cuando su primer frame ya existe, para que nunca se vea llegar tarde. */
+
+.lp-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(52% 44% at 68% 28%, rgb(var(--lp-brand) / 0.09) 0%, transparent 70%),
+    radial-gradient(42% 38% at 20% 74%, rgb(var(--lp-brand) / 0.05) 0%, transparent 72%);
+}
+
+.lp-field canvas {
+  opacity: 0;
+  transition: opacity 900ms ease-out;
+}
+
+.lp-field--on canvas {
+  opacity: 1;
+}
+
+/* El contenido, encima del fondo. El masthead ya es sticky con su z-index. */
+.lp > main,
+.lp > .lp-foot {
+  position: relative;
+  z-index: 1;
 }
 
 .lp :focus-visible {
@@ -188,8 +226,12 @@ html:has(.lp) body {
   }
 }
 
+/* Con el fondo vivo detrás, el tinte deja pasar una fracción de la luz: a 0.85
+   la mezcla mueve la luminancia de la superficie menos de un 2% (el campo es
+   casi del color del canvas), así que los pares de contraste calculados arriba
+   siguen en pie y el organismo no desaparece media página. */
 .lp-section--tint {
-  background: rgb(var(--lp-surface-2));
+  background: rgb(var(--lp-surface-2) / 0.85);
 }
 
 .lp-section--brand {

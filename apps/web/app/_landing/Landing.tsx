@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { AnswerCard } from './AnswerCard';
 import { IndustrySwitch } from './IndustrySwitch';
+import { NeuralField } from './NeuralField';
 import { INDUSTRIES } from './industries';
 
 /**
@@ -618,6 +619,11 @@ function Footer() {
 export function Landing() {
   return (
     <div className="lp">
+      {/* El fondo: un organismo de partículas que respira, responde al cursor
+          y se transforma con el scroll. Es decoración con reglas — no se monta
+          si el visitante pidió quietud (queda un gradiente estático) y todo el
+          HTML de la página vive encima, intacto e indexable. */}
+      <NeuralField />
       <Masthead />
       <main>
         <Hero />
