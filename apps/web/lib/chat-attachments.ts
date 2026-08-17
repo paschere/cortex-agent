@@ -39,7 +39,21 @@ const MAX_FILES = 2;
 /** Per file. The route already clipped at 24 000 on the way in. */
 const MAX_CHARS_EACH = 12_000;
 
+/**
+ * ===========================================================================
+ * POR QUÉ EL BLOQUE LLEVA EL ID
+ * ===========================================================================
+ * Porque hay algo que se puede hacer con un adjunto además de leerlo:
+ * arrepentirse. `attachments.promote` sube al cerebro el archivo que se soltó
+ * como «sólo este chat», y para llamarla hace falta nombrar CUÁL — y lo único
+ * que el modelo tiene delante es este bloque. Sin el id sólo quedaría el nombre
+ * del archivo, que no es identificador de nada: dos versiones de «contrato.pdf»
+ * en la misma conversación son el caso normal, no el raro, y elegir mal ahí
+ * publica el archivo equivocado en un sitio del que no se puede despublicar.
+ */
 export interface TurnAttachment {
+  /** `chat_attachments.id`. Es lo que `attachments.promote` recibe. */
+  id: string;
   filename: string;
   text: string;
   truncated: boolean;
@@ -52,7 +66,7 @@ export async function loadTurnAttachments(
   try {
     const { data } = await db
       .from('chat_attachments')
-      .select('filename, extracted_text')
+      .select('id, filename, extracted_text')
       .eq('conversation_id', conversationId)
       .eq('disposition', 'turn')
       .order('created_at', { ascending: false })
@@ -62,6 +76,7 @@ export async function loadTurnAttachments(
       .map((row) => {
         const full = (row.extracted_text as string | null) ?? '';
         return {
+          id: row.id as string,
           filename: row.filename as string,
           text: full.slice(0, MAX_CHARS_EACH),
           truncated: full.length > MAX_CHARS_EACH,
@@ -83,7 +98,7 @@ export function renderTurnAttachmentBlock(attachments: readonly TurnAttachment[]
   const files = attachments
     .map(
       (a) =>
-        `<archivo nombre="${a.filename.replace(/"/g, "'")}">\n${a.text}${
+        `<archivo id="${a.id}" nombre="${a.filename.replace(/"/g, "'")}">\n${a.text}${
           a.truncated ? '\n[…el archivo sigue; sólo se leyó esta parte…]' : ''
         }\n</archivo>`,
     )
@@ -95,6 +110,13 @@ export function renderTurnAttachmentBlock(attachments: readonly TurnAttachment[]
     'Úsalos para responder. Al citarlos di que vienen del archivo que acaba de adjuntar, con su nombre —',
     'no los presentes como algo que estuviera en la memoria de la empresa, porque no lo están: nadie más',
     'los puede abrir y se borran solos. Si la respuesta depende de una parte que quedó sin leer, dilo.',
+    // La única frase del bloque que pide una acción. Va aquí y no en el prompt
+    // del sistema porque sólo es verdad cuando hay un adjunto delante, y va
+    // condicionada a que lo PIDAN: promover es publicar, y publicar por
+    // iniciativa propia un archivo que la persona acaba de decir que no quería
+    // guardar es exactamente el error que la 0088 existe para no cometer.
+    'Si la persona te pide guardar alguno en la memoria («guárdalo», «que quede en el cerebro»), llama a',
+    'attachments.promote con el id del archivo tal como viene abajo. No lo hagas por tu cuenta.',
     '',
     files,
     '</adjuntos>',

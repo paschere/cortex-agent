@@ -51,6 +51,7 @@ import {
   MessagesSquare,
   Mic,
   Network,
+  Paperclip,
   PlugZap,
   Power,
   Receipt,
@@ -205,6 +206,7 @@ const ICONS: Record<string, typeof Wrench> = {
   MessagesSquare,
   Mic,
   Network,
+  Paperclip,
   Receipt,
   Send,
   Server,
@@ -789,9 +791,7 @@ export function ToolsControlCentre({
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-baseline gap-x-2">
-                          <span className="text-xs font-bold text-ink">
-                            {BLOCK_LABEL[reason]}
-                          </span>
+                          <span className="text-xs font-bold text-ink">{BLOCK_LABEL[reason]}</span>
                           <span
                             className={clsx(
                               'tabular text-micro font-semibold',
@@ -1255,9 +1255,7 @@ function FamilyBlock({
               <span className="text-xs font-bold text-ink">
                 {isMcp ? (server?.name ?? 'Servidor MCP') : meta.name}
               </span>
-              {!isMcp && (
-                <code className="tabular text-micro text-ink-faint">{familyPattern}</code>
-              )}
+              {!isMcp && <code className="tabular text-micro text-ink-faint">{familyPattern}</code>}
               {isMcp && server && (
                 <span
                   className={clsx(

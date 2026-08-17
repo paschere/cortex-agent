@@ -55,9 +55,18 @@ export const TOOL_PHRASE: Record<string, string> = {
   // conversación —Claude, Google Chat, WhatsApp— y siguen paradas.
   'approvals.list': '¿Qué espera mi aprobación?',
 
+  // Sin complemento y sin id: la frase no nombra el archivo porque el modelo lo
+  // tiene delante, en el bloque de adjuntos del turno. Si no hay ninguno, lo
+  // dirá — que es mejor menú que una fila que aparece y desaparece según lo que
+  // haya en el chat.
+  'attachments.promote': 'Guarda en Brain Knowledge el archivo que te adjunté',
+
   'browser.list_flows': `Muéstrame los ${MODULE.many} que ya aprendiste`,
   'browser.run_flow': `Corre el ${MODULE.one} `,
   'browser.submit_flow': `Radica el ${MODULE.one} `,
+  // La frase empieza por el dato porque así es como llega: la persona escribe
+  // el código que le acaba de entrar, no «retoma el trámite».
+  'browser.resume_flow': `El código que me llegó es `,
 
   'chat.send_dm': 'Escríbele por Google Chat a ',
   'chat.send_message': 'Publica en el espacio de Google Chat ',

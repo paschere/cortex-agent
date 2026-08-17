@@ -2,6 +2,7 @@ import 'server-only';
 import { createIntegrationsClient } from '@cortex/agent-tools';
 import type { RetrievalObservation, ToolContext, ToolSurface } from '@cortex/agent-tools';
 import { type UUID, logger } from '@cortex/core';
+import { enqueueJob } from './jobs';
 import { getOrgScopedClient } from './supabase/service';
 
 /**
@@ -45,6 +46,12 @@ export function buildToolContext(opts: {
     // would turn the tightest restriction into none.
     kbSpaceIds: opts.kbSpaceIds,
     onRetrieval: opts.onRetrieval,
+    // La cola, para las herramientas que hacen algo que no cabe en un turno.
+    // Va aquí y no importada dentro del paquete porque el paquete no puede
+    // alcanzar la aplicación; ver la nota en ToolContext. Este es el ÚNICO
+    // sitio que la ata, así que el día que la cola cambie de implementación no
+    // hay ninguna herramienta que enterarse.
+    enqueueJob,
     signal: opts.signal,
   };
 }

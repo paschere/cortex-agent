@@ -114,6 +114,17 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'sky',
     icon: 'BookOpen',
   },
+  // Familia propia y no parte de `kb` porque lo que toca es el ADJUNTO de una
+  // conversación —con su id, su chat y su semana de vida—, y el documento del
+  // cerebro es la consecuencia. Se agrupa con «Documentos» porque ahí es donde
+  // termina, que es lo que la persona está pidiendo.
+  attachments: {
+    name: 'Archivos del chat',
+    blurb:
+      'Los archivos que alguien soltó en una conversación diciendo «sólo para este chat», y la forma de arrepentirse: subirlos a Brain Knowledge sin volver a cargarlos.',
+    tone: 'sky',
+    icon: 'Paperclip',
+  },
   meetings: {
     name: 'Reuniones',
     blurb: 'Transcripciones grabadas y los briefings que Cortex prepara antes de una llamada.',
@@ -495,6 +506,7 @@ const FAMILY_GROUP: Record<string, string> = {
   meetings: 'agenda',
   inbox: 'agenda',
   kb: 'docs',
+  attachments: 'docs',
   gdrive: 'docs',
   gsheets: 'docs',
   format: 'docs',

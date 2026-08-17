@@ -52,19 +52,29 @@ export const maxDuration = 60;
  * "publish this to everyone" takes both an explicit choice and the authority.
  *
  * ===========================================================================
- * WHERE 'turn' PUTS IT — WHICH IS NOWHERE
+ * WHERE 'turn' PUTS IT — WHICH IS NOWHERE THAT COUNTS
  * ===========================================================================
- * No storage object, no `kb_documents` row, no embeddings, no index. The bytes
- * are parsed to text in this request, the text is written to
- * `chat_attachments.extracted_text`, and the row expires in a week. The chat
- * route hands that text to the model labelled as an attachment rather than as
- * knowledge, so an answer can use it and cannot cite it as though it lived in
- * the brain.
+ * No `kb_documents` row, no embeddings, no index. The bytes are parsed to text
+ * in this request, the text is written to `chat_attachments.extracted_text`,
+ * and the row expires in a week. The chat route hands that text to the model
+ * labelled as an attachment rather than as knowledge, so an answer can use it
+ * and cannot cite it as though it lived in the brain.
  *
  * A consequence worth stating because it is a feature: a 'turn' file never
  * reaches the plan's document meter, because that meter is a trigger on
  * `kb_documents` and no row is ever inserted. Asking a question about a PDF
  * costs nothing; remembering it costs one document.
+ *
+ * DESDE LA 0112 LOS BYTES SÍ SE GUARDAN, y eso no contradice el párrafo de
+ * arriba: van a `app_files` (bucket 'chat-uploads'), viven exactamente lo que
+ * vive la fila y se borran con ella. Nada de eso toca el índice ni el medidor.
+ * Existen para una sola cosa: que `attachments.promote` pueda cumplir lo que
+ * promete. Guardar en el cerebro el texto plano que se extrajo aquí NO es
+ * guardar el contrato — el documento resultante no se podría volver a abrir, ni
+ * descargar, ni reextraer con un parser mejor — y esa diferencia no se nota
+ * hasta el día en que hace falta el original. Si guardar los bytes falla, el
+ * adjunto sigue sirviendo para la conversación y la promoción cae al texto,
+ * diciéndolo.
  *
  * ===========================================================================
  * THE SAME FILE TWICE
@@ -175,10 +185,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // El id se decide aquí, antes de escribir nada, porque la ruta de los bytes
+    // lo lleva dentro: así el archivo y la fila que lo nombra no se pueden
+    // desparejar, y dos personas subiendo el mismo nombre no se pisan.
+    const attachmentId = randomUUID();
+    const filePath = `${user.id}/${attachmentId}/${safeName(file.name)}`;
+
+    // Los bytes, para que `attachments.promote` pueda guardar el ARCHIVO y no
+    // la transcripción. Best-effort a propósito: la conversación necesita el
+    // texto, que ya está leído, y perder este turno porque el almacén parpadeó
+    // sería cambiar una promoción de mejor calidad por ninguna respuesta.
+    let stored = true;
+    try {
+      await putFile(db, {
+        bucket: 'chat-uploads',
+        path: filePath,
+        content: buffer,
+        contentType: mime,
+      });
+    } catch (err) {
+      stored = false;
+      logger.warn('chat attachment bytes not stored', {
+        attachmentId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     const { data, error } = await db
       .from('chat_attachments')
       .insert({
-        id: randomUUID(),
+        id: attachmentId,
         conversation_id: conversationId,
         disposition: 'turn',
         filename: file.name,
@@ -186,12 +222,16 @@ export async function POST(req: NextRequest) {
         byte_size: file.size,
         sha256,
         extracted_text: text,
+        file_path: stored ? filePath : null,
         created_by: user.id,
       })
       .select('id, filename, disposition, created_at')
       .single();
 
     if (error || !data) {
+      // Sin la fila, la ruta no la conoce nadie y el barrido de retención no la
+      // encontraría nunca: el archivo quedaría ocupando sitio para siempre.
+      if (stored) await removeFiles(db, 'chat-uploads', [filePath]).catch(() => {});
       return NextResponse.json({ error: 'No se pudo adjuntar el archivo.' }, { status: 500 });
     }
 

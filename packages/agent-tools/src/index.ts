@@ -40,6 +40,9 @@ export * from './linear';
 // this package.
 export * from './learning';
 export * from './kb';
+// Arrepentirse de «sólo este chat». Va detrás de ./kb porque entra por la misma
+// puerta de ingesta y por la misma frontera de espacios.
+export * from './attachments';
 export * from './schedule';
 export * from './gdrive';
 export * from './payroll';

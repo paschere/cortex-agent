@@ -75,6 +75,28 @@ export interface ToolContext {
    * path of an answer. Errors thrown by an observer are swallowed by the caller.
    */
   onRetrieval?: (observation: RetrievalObservation) => void;
+  /**
+   * Poner trabajo en la cola, sin saber cuál es la cola.
+   *
+   * ===========================================================================
+   * POR QUÉ ESTO ES UNA FUNCIÓN EN EL CONTEXTO Y NO UN IMPORT
+   * ===========================================================================
+   * La cola vive en `apps/web/lib/jobs.ts` — decide entre el worker de pg-boss y
+   * el camino viejo, lee dos variables de entorno y firma la petición. Este
+   * paquete NO puede importar de la aplicación (lo consumen también el runtime
+   * MCP y los tests en Node, y el ciclo ni siquiera compilaría), y copiar aquí
+   * ese despacho crearía una SEGUNDA forma de encolar que se desviaría de la
+   * primera el día que la infraestructura cambie — que es el día en que nadie
+   * está mirando esta copia.
+   *
+   * Es OPCIONAL, y quien la use tiene que tener un plan para cuando no esté: un
+   * contexto sin cola es un contexto que no puede prometer trabajo diferido, y
+   * la respuesta correcta ahí es hacer menos y decirlo, nunca prometer algo que
+   * no va a pasar. Devuelve `false` cuando no se pudo encolar — `enqueueJob` no
+   * lanza a propósito, porque quien encola casi siempre está terminando un turno
+   * de chat.
+   */
+  enqueueJob?: (name: string, data: Record<string, unknown>) => Promise<boolean>;
   signal?: AbortSignal;
   withSpan?: <T>(
     name: string,

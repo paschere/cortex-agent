@@ -90,6 +90,24 @@ export const BASE_FAMILIES: readonly string[] = [
   'pipeline',
   'schedule',
   'format',
+  /**
+   * Una sola herramienta, `attachments.promote`, y está aquí por lo que le pasa
+   * si NO está.
+   *
+   * Sólo tiene sentido en un turno que lleva un adjunto encima, así que la
+   * tentación es dejar que el ranking la traiga cuando haga falta. El problema
+   * es que la frase que la necesita es «guárdalo», «que quede en el cerebro»,
+   * «déjalo ahí» — pronombres, sin una palabra que se parezca a «attachments
+   * promote» ni a nada de su descripción. Contra el resto del catálogo eso
+   * puntúa como ruido, y el turno en que el ranking la deja fuera es
+   * exactamente el turno en que alguien la pidió: el modelo contesta que sí,
+   * no llama a nada, y el archivo se borra solo a la semana.
+   *
+   * El costo del otro lado es una definición de herramienta en el prefijo del
+   * catálogo, que además está antes del breakpoint del caché. Es barato y es
+   * fijo; el fallo que evita es silencioso y no lo ve nadie.
+   */
+  'attachments',
 ];
 
 export type SelectionReason =
