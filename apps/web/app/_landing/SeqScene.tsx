@@ -22,6 +22,18 @@ import { MeshSurfaceSampler } from 'three/examples/jsm/math/MeshSurfaceSampler.j
  * progreso 0..1 en un ref; aquí se suaviza con un damping crítico y se
  * reparte en fases, CADA UNA CON SU CURVA — nada entra ni sale linealmente:
  *
+ *   FASE 0 (reposo; corre con el RELOJ, no con el scroll) — la escena tiene
+ *              vida propia antes del primer scroll: el humano FLOTA (bob
+ *              ±2% de su altura cada 5.6s + deriva de rotación ±1.4°, por
+ *              transform — cero costo por partícula), y cada ~4.3–6s con
+ *              jitter la IA lo LLAMA: zarcillos de luz salen del núcleo
+ *              hacia la mano por la misma bezier del río y se disuelven a
+ *              medio camino o rozándola; el núcleo y los anillos se excitan
+ *              un beat, un shimmer recorre el brazo hacia la mano y el
+ *              hombro se eleva unos grados y vuelve. Todo se multiplica por
+ *              idleK = 1 − smooth01(P/0.15): scrollear ES responder, y la
+ *              vida idle cede el paso a la narrativa sin pelear con ella.
+ *
  *   0.00–0.30  EL ALCANCE (easeInOutCubic) — el humano de partículas (GLB
  *              muestreado + GPU skinning) a la izquierda, el núcleo a la
  *              derecha, SEPARADOS. El progreso acerca el cuerpo, apunta el
@@ -612,6 +624,9 @@ const FIGURE_VERT = /* glsl */ `
   uniform vec2 uHand;
   uniform vec3 uPointer;
   uniform float uPointerK;
+  uniform float uInvite;
+  uniform float uInviteK;
+  uniform float uInviteR;
 
   attribute float aSeed;
   varying float vI;
@@ -644,7 +659,16 @@ const FIGURE_VERT = /* glsl */ `
     float handGlow = smoothstep(0.5, 0.06, distance(position.xy, uHand)) *
       (0.55 + 0.45 * sin(uTime * 2.6)) * (1.0 + 1.6 * uReach) * (1.0 - uBang);
 
-    vI = (0.62 + 0.48 * fract(aSeed * 7.31) + handGlow * 0.9 + g * 0.35 + glow) * uMood;
+    // La respuesta a la llamada (fase 0): un frente de luz converge hacia
+    // la mano — el shimmer recorre el brazo cuando la IA invita.
+    float inv = 0.0;
+    if (uInviteK > 0.001) {
+      float front = (1.0 - uInvite) * uInviteR;
+      float dh = distance(position.xy, uHand);
+      inv = exp(-pow((dh - front) / (uInviteR * 0.24), 2.0)) * uInviteK;
+    }
+
+    vI = (0.62 + 0.48 * fract(aSeed * 7.31) + handGlow * 0.9 + g * 0.35 + glow + inv) * uMood;
 
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     // Niebla de profundidad: lo lejano se atenúa, el campo respira aire.
@@ -672,6 +696,9 @@ const BODY_VERT = /* glsl */ `
   uniform vec3 uHand;
   uniform vec3 uPointer;
   uniform float uPointerK;
+  uniform float uInvite;
+  uniform float uInviteK;
+  uniform float uInviteR;
 
   attribute vec4 aSkinIndex;
   attribute vec4 aSkinWeight;
@@ -717,12 +744,21 @@ const BODY_VERT = /* glsl */ `
     float handGlow = smoothstep(1.1, 0.1, distance(p, uHand)) *
       (0.55 + 0.45 * sin(uTime * 2.6)) * (1.0 + 1.6 * uReach) * (1.0 - uBang);
 
+    // La respuesta a la llamada (fase 0): un frente de luz converge hacia
+    // la mano — el shimmer recorre el brazo cuando la IA invita.
+    float inv = 0.0;
+    if (uInviteK > 0.001) {
+      float front = (1.0 - uInvite) * uInviteR;
+      float dh = distance(p, uHand);
+      inv = exp(-pow((dh - front) / (uInviteR * 0.24), 2.0)) * uInviteK;
+    }
+
     float glow;
     p = seqPos(p, aSeed, uTime, glow);
 
     float tw = 0.86 + 0.14 * sin(uTime * (1.4 + fract(aSeed * 3.3) * 1.6) + aSeed * 61.0);
 
-    vI = ((0.6 + 0.5 * fract(aSeed * 7.31)) * tw * aTone + handGlow * 0.9 + g * 0.35 + glow)
+    vI = ((0.6 + 0.5 * fract(aSeed * 7.31)) * tw * aTone + handGlow * 0.9 + g * 0.35 + glow + inv)
       * uAppear * uMood;
 
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
@@ -895,6 +931,70 @@ const RIVER_VERT = /* glsl */ `
   }
 `;
 
+/**
+ * Los zarcillos de invitación (fase 0): un puñado de chispas sale del núcleo
+ * (uA) hacia la mano (uB) por la misma bezier del río — el mismo lenguaje
+ * visual, dirección invertida y vida efímera. `uCall` es la vida de la
+ * llamada (0..1); `uCallSeed` resembra los zarcillos en cada «ven».
+ */
+const TENDRIL_VERT = /* glsl */ `
+  uniform float uTime;
+  uniform float uDpr;
+  uniform float uSize;
+  uniform vec3 uA;
+  uniform vec3 uB;
+  uniform vec3 uCtrl;
+  uniform float uCall;
+  uniform float uCallSeed;
+
+  attribute float aPhase;
+  attribute float aSeed;
+  varying float vI;
+  varying float vIri;
+
+  vec3 bez(float t) {
+    float u = 1.0 - t;
+    return u * u * uA + 2.0 * u * t * uCtrl + t * t * uB;
+  }
+
+  void main() {
+    // Reseed por llamada: cada invitación dibuja zarcillos distintos.
+    float s = fract(aSeed + uCallSeed * 19.73);
+    // Hasta dónde llega este zarcillo: de medio camino a rozar la mano.
+    float span = 0.45 + 0.5 * fract(s * 3.9);
+    // La cabeza avanza con la llamada; la cola la sigue con retraso —
+    // ease-out: sale decidido del núcleo y llega suave.
+    float head = uCall * (1.15 + 0.3 * fract(s * 7.1));
+    float tt = clamp(head - aPhase * 0.4, 0.0, 1.0);
+    float et = 1.0 - (1.0 - tt) * (1.0 - tt);
+    float tc = et * span;
+    vec3 p = bez(tc);
+
+    vec3 tang = normalize(bez(min(tc + 0.02, 1.0)) - bez(max(tc - 0.02, 0.0)) + vec3(1e-5));
+    vec3 n1 = normalize(vec3(-tang.y, tang.x, 0.0));
+    float len = distance(uA, uB);
+    float mid = sin(3.14159 * clamp(tc / max(span, 1e-3), 0.0, 1.0));
+    p += n1 * (fract(s * 13.7) - 0.5) * len * 0.06 * mid;
+    p.z += (fract(s * 29.3) - 0.5) * len * 0.09 * mid;
+    p += n1 * sin(uTime * (1.6 + fract(s * 5.0)) + s * 40.0) * len * 0.012;
+
+    // La disolución: al final de la llamada las chispas se abren y mueren.
+    float dis = smoothstep(0.62, 1.0, uCall);
+    p += dis * len * 0.14 * (fract(vec3(s * 9.1, s * 4.3, s * 6.7)) - 0.5) * 2.0;
+
+    vIri = (fract(s * 7.7) - 0.5) * 1.4;
+
+    float born = smoothstep(0.0, 0.05, tt);
+    // Brillantes de verdad: la cabeza del zarcillo casi blanca, la cola violeta.
+    vI = (0.9 + 0.9 * fract(s * 7.3)) * born * (1.0 - 0.45 * aPhase) * (1.0 - dis)
+      * (0.8 + 0.2 * sin(uTime * 7.0 + s * 50.0)) * (1.0 + 1.4 * exp(-6.0 * aPhase));
+
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = uSize * (0.55 + 0.8 * fract(s * 11.3)) * uDpr * (55.0 / -mv.z);
+  }
+`;
+
 const SPARK_FRAG = /* glsl */ `
   ${FRAG_COMMON}
 
@@ -997,6 +1097,13 @@ type Live = {
   bodyX: number;
   core: THREE.Vector3;
   aimW: number;
+  /** Fase 0 — el bob de flotación en unidades de mundo (ya × idleK). */
+  floatY: number;
+  /** Fase 0 — la deriva de rotación del cuerpo, en radianes (ya × idleK). */
+  floatRot: number;
+  /** Fase 0 — el pulso suavizado de la llamada (0..1, ya × idleK): eleva
+   * el hombro unos grados vía el peso del aim y vuelve. */
+  invite: number;
 };
 
 type FigureShared = {
@@ -1004,6 +1111,10 @@ type FigureShared = {
   uDpr: { value: number };
   uPointer: { value: THREE.Vector3 };
   uPointerK: { value: number };
+  /** Progreso del frente del shimmer de respuesta (0 = hombro, 1 = mano). */
+  uInvite: { value: number };
+  /** Intensidad del shimmer (0 = apagado). */
+  uInviteK: { value: number };
 };
 
 type FigureProps = {
@@ -1045,6 +1156,11 @@ function FigureFallback({
       uHand: { value: new THREE.Vector2(HAND_UNIT[0], HAND_UNIT[1]) },
       uPointer: { value: new THREE.Vector3(999, 999, 0) },
       uPointerK: { value: 0 },
+      uInvite: { value: 0 },
+      uInviteK: { value: 0 },
+      // La silueta vive en espacio unitario (altura ≈ 1): el frente del
+      // shimmer parte a media figura de la mano.
+      uInviteR: { value: 0.5 },
       uColDeep: { value: COL_DEEP },
       uColMid: { value: COL_MID },
       uColHot: { value: COL_HOT },
@@ -1085,7 +1201,8 @@ function FigureFallback({
   );
 
   useFrame(() => {
-    built.u.uFigOff.value.set(live.bodyX, layout.fig.y);
+    // El bob de flotación de fase 0 entra por el offset: cero costo extra.
+    built.u.uFigOff.value.set(live.bodyX, layout.fig.y + live.floatY);
     built.u.uFigScale.value = layout.fig.scale;
   });
 
@@ -1154,6 +1271,9 @@ function FigureReal({ mobile, layout, live, seqU, register, anchor, onFigureRead
       uHand: { value: new THREE.Vector3() },
       uPointer: { value: new THREE.Vector3(999, 999, 0) },
       uPointerK: { value: 0 },
+      uInvite: { value: 0 },
+      uInviteK: { value: 0 },
+      uInviteR: { value: 1 },
       uColDeep: { value: COL_DEEP },
       uColMid: { value: COL_MID },
       uColHot: { value: COL_HOT },
@@ -1260,9 +1380,11 @@ function FigureReal({ mobile, layout, live, seqU, register, anchor, onFigureRead
     const dt = Math.min(delta, 1 / 20);
 
     // 1. La colocación del cuerpo: x vivo (el reach lo acerca al núcleo).
+    //    En fase 0 el humano FLOTA: bob vertical y deriva de rotación por
+    //    transform del grupo — ingrávido, sin tocar una sola partícula.
     const k = layout.body.height / built.modelH;
-    s.quatY.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, layout.body.rotY);
-    s.pos.set(live.bodyX, layout.body.baseY - built.minY * k, 0);
+    s.quatY.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, layout.body.rotY + live.floatRot);
+    s.pos.set(live.bodyX, layout.body.baseY - built.minY * k + live.floatY, 0);
     s.scl.setScalar(k);
     s.layoutMat.compose(s.pos, s.quatY, s.scl);
     built.u.uXform.value.multiplyMatrices(s.layoutMat, built.meshWorld);
@@ -1274,10 +1396,12 @@ function FigureReal({ mobile, layout, live, seqU, register, anchor, onFigureRead
 
     // 3. El gesto: el brazo apunta al núcleo con el peso que dicta el scroll
     //    (live.aimW = reach): al inicio cuelga, al contacto está extendido.
+    //    En fase 0, cada llamada de la IA suma un peso pequeño (live.invite):
+    //    el hombro se eleva unos 3° hacia el núcleo con lerp suave y vuelve.
     if (built.armBone && built.foreBone && built.handBone) {
       s.layoutInv.copy(s.layoutMat).invert();
       s.coreModel.copy(live.core).applyMatrix4(s.layoutInv);
-      const w = live.aimW * 0.95;
+      const w = Math.min(1, live.aimW * 0.95 + live.invite * 0.07);
       if (w > 0.001) {
         aimBone(built.armBone, built.foreBone, s.coreModel, w);
         aimBone(built.foreBone, built.handBone, s.coreModel, w);
@@ -1294,6 +1418,8 @@ function FigureReal({ mobile, layout, live, seqU, register, anchor, onFigureRead
       built.u.uHand.value.copy(s.hand);
     }
 
+    // El radio del shimmer de respuesta: parte a media figura de la mano.
+    built.u.uInviteR.value = layout.body.height * 0.45;
     built.u.uAppear.value = s.appear;
   });
 
@@ -1353,6 +1479,7 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
       core: Math.round(8_000 * density),
       rings: Math.round(2_400 * density),
       river: Math.round(3_000 * density),
+      tend: Math.round(700 * density),
     }),
     [density],
   );
@@ -1476,6 +1603,41 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
     });
     const riverGlow = makeGlowMaterial(RIVER_VERT, SPARK_FRAG, riverU);
 
+    // Los zarcillos de invitación (fase 0): pocos, brillantes, efímeros.
+    const tdPhase = new Float32Array(counts.tend);
+    const tdSeed = new Float32Array(counts.tend);
+    const tdPos = new Float32Array(counts.tend * 3);
+    for (let i = 0; i < counts.tend; i++) {
+      tdPhase[i] = Math.random();
+      tdSeed[i] = Math.random();
+    }
+    const tendGeo = new THREE.BufferGeometry();
+    tendGeo.setAttribute('position', new THREE.BufferAttribute(tdPos, 3));
+    tendGeo.setAttribute('aPhase', new THREE.BufferAttribute(tdPhase, 1));
+    tendGeo.setAttribute('aSeed', new THREE.BufferAttribute(tdSeed, 1));
+    const tendU = {
+      uTime: { value: 0 },
+      uDpr: { value: 1 },
+      uSize: { value: 1.7 },
+      uA: { value: new THREE.Vector3() },
+      uB: { value: new THREE.Vector3() },
+      uCtrl: { value: new THREE.Vector3() },
+      uCall: { value: 0 },
+      uCallSeed: { value: 0.37 },
+      uColDeep: { value: COL_DEEP },
+      uColMid: { value: COL_CORE_MID },
+      uColHot: { value: COL_HOT },
+      uAlpha: { value: 0 },
+      uSoft: { value: 0 },
+    };
+    const tendMat = new THREE.ShaderMaterial({
+      ...PARTICLE_BLEND,
+      vertexShader: TENDRIL_VERT,
+      fragmentShader: SPARK_FRAG,
+      uniforms: tendU,
+    });
+    const tendGlow = makeGlowMaterial(TENDRIL_VERT, SPARK_FRAG, tendU);
+
     const haloGeo = new THREE.PlaneGeometry(1, 1);
     const haloU = {
       uTime: { value: 0 },
@@ -1502,6 +1664,10 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
       riverMat,
       riverGlow,
       riverU,
+      tendGeo,
+      tendMat,
+      tendGlow,
+      tendU,
       haloGeo,
       haloMat,
       haloU,
@@ -1518,6 +1684,9 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
       built.riverGeo,
       built.riverMat,
       built.riverGlow,
+      built.tendGeo,
+      built.tendMat,
+      built.tendGlow,
       built.haloGeo,
       built.haloMat,
     ];
@@ -1538,13 +1707,23 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
 
   /** Lo que el loop escribe y las figuras leen (posición viva del cuerpo). */
   const live = useMemo<Live>(
-    () => ({ bodyX: layout.body.x0, core: layout.core0.clone(), aimW: 0 }),
+    () => ({
+      bodyX: layout.body.x0,
+      core: layout.core0.clone(),
+      aimW: 0,
+      floatY: 0,
+      floatRot: 0,
+      invite: 0,
+    }),
     [layout],
   );
 
   // --- Entradas: puntero, progreso ---------------------------------------
   const groupRef = useRef<THREE.Group>(null);
   const haloRef = useRef<THREE.Mesh>(null);
+  const tendRef = useRef<THREE.Group>(null);
+  /** La llamada de la IA (fase 0): estado del metrónomo con jitter. */
+  const callRef = useRef({ init: false, next: 0, t0: -1, dur: 1.7, seed: 0.37, sm: 0 });
   const pointerNdc = useRef(new THREE.Vector2(0, 0));
   const pointerWorld = useRef(new THREE.Vector3(999, 999, 0));
   const pointerAt = useRef(-10);
@@ -1592,6 +1771,34 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
     smoothRef.current += (progressRef.current - smoothRef.current) * Math.min(1, dt * 8);
     const P = smoothRef.current;
     const reach = easeInOutCubic(P / 0.3);
+
+    // --- FASE 0: la vida en reposo, con el reloj — no con el scroll ------
+    // idleK muere suave hacia P=0.15: scrollear ES responder, y la vida
+    // idle se disuelve antes de que la narrativa tome el mando.
+    const idleK = 1 - smooth01(P / 0.15);
+
+    // La llamada de la IA: dura 1.7s, y entre el fin de una y el arranque
+    // de la siguiente pasan 2.6–4.3s (≈ cada 4.3–6s, jamás metrónomo).
+    const call = callRef.current;
+    if (!call.init) {
+      call.init = true;
+      call.next = t + 1.6;
+    }
+    let callT = 0;
+    if (call.t0 >= 0) {
+      const c = (t - call.t0) / call.dur;
+      if (c >= 1) {
+        call.t0 = -1;
+        call.next = t + 2.6 + Math.random() * 1.7;
+      } else {
+        callT = c;
+      }
+    } else if (idleK > 0.05 && t >= call.next) {
+      call.t0 = t;
+      call.seed = Math.random();
+    }
+    // El pulso de excitación: campana suave sobre la vida de la llamada.
+    const callPulse = smooth01(callT / 0.2) * (1 - smooth01((callT - 0.55) / 0.45)) * idleK;
     // La anticipación: sube justo antes del contacto y se corta al estallar.
     const suck = smooth01((P - 0.262) / 0.032) * (1 - smooth01((P - 0.302) / 0.01));
     const bangT = clamp01((P - 0.305) / 0.145);
@@ -1599,7 +1806,10 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
     const formT = clamp01((P - 0.45) / 0.3);
     const settle = smooth01((P - 0.75) / 0.25);
 
-    seqU.uReach.value = reach;
+    // El pulso de la llamada entra por uReach: núcleo más brillante, anillos
+    // y latido acelerados, mano con más glow — sin mover cuerpo ni cámara
+    // (esos usan la variable local `reach`).
+    seqU.uReach.value = reach + 0.25 * callPulse;
     seqU.uSuck.value = suck;
     seqU.uBang.value = bang;
     seqU.uForm.value = formT;
@@ -1639,10 +1849,18 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
     live.aimW = reach;
     seqU.uContact.value.copy(live.core);
 
+    // El humano flota (fase 0): bob ±2% de su altura cada 5.6s, deriva de
+    // rotación ±1.4° cada 9.3s — ingrávido, no ascensor. Y el pulso de la
+    // llamada, suavizado con lerp, eleva el hombro y vuelve.
+    live.floatY = layout.body.height * 0.02 * Math.sin((t * 6.2831853) / 5.6) * idleK;
+    live.floatRot = 0.024 * Math.sin((t * 6.2831853) / 9.3 + 1.7) * idleK;
+    call.sm += (callPulse - call.sm) * Math.min(1, dt * 4.5);
+    live.invite = call.sm;
+
     // --- La cámara empuja lento hacia el contacto y se abre después ------
     state.camera.position.z = 16 - 3.1 * reach + 3.1 * smooth01(formT);
 
-    for (const u of [built.coreU, built.ringsU, built.riverU]) {
+    for (const u of [built.coreU, built.ringsU, built.riverU, built.tendU]) {
       u.uTime.value = t;
       u.uDpr.value = dpr;
     }
@@ -1670,12 +1888,27 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
     built.riverU.uAlpha.value = riverAlpha;
     (built.riverGlow.uniforms.uAlpha as { value: number }).value = riverAlpha * GLOW_ALPHA;
 
+    // Los zarcillos de invitación: núcleo → mano por la misma bezier del
+    // río, con vida efímera — el «ven» de luz de la fase 0.
+    built.tendU.uA.value.copy(live.core);
+    built.tendU.uB.value.copy(hand);
+    built.tendU.uCtrl.value.copy(built.riverU.uCtrl.value);
+    built.tendU.uCall.value = callT;
+    built.tendU.uCallSeed.value = call.seed;
+    const tendEnv = smooth01(callT / 0.12) * (1 - smooth01((callT - 0.68) / 0.32));
+    const tendAlpha = 1.0 * tendEnv * idleK;
+    built.tendU.uAlpha.value = tendAlpha;
+    // Doble ración de aura: los zarcillos son pocos y deben leerse solos.
+    (built.tendGlow.uniforms.uAlpha as { value: number }).value = tendAlpha * GLOW_ALPHA * 2;
+    if (tendRef.current) tendRef.current.visible = tendAlpha > 0.003;
+
     if (haloRef.current) {
       haloRef.current.position.copy(live.core);
       const s = layout.coreR * 9;
       haloRef.current.scale.set(s, s, 1);
     }
-    built.haloU.uExcite.value = reach;
+    // El halo también responde a la llamada: brilla y late más rápido.
+    built.haloU.uExcite.value = reach + 0.45 * callPulse;
     // En la anticipación el núcleo se apaga medio beat; en el bang, del todo.
     built.haloU.uFade.value = (1 - bang) * (1 - 0.7 * suck);
 
@@ -1702,6 +1935,11 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
     if (fig) {
       fig.uTime.value = t;
       fig.uDpr.value = dpr;
+      // El shimmer de respuesta: el frente viaja hacia la mano a mitad de
+      // la llamada, cuando los zarcillos ya están en camino.
+      fig.uInvite.value = clamp01((callT - 0.25) / 0.55);
+      fig.uInviteK.value =
+        0.9 * smooth01((callT - 0.22) / 0.15) * (1 - smooth01((callT - 0.85) / 0.15)) * idleK;
     }
 
     // Cámara con vida: la escena se inclina 2–3° hacia el cursor; el efecto
@@ -1718,6 +1956,10 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
         ty = Math.sin(t * 0.13) * 0.035 * damp;
         tx = Math.cos(t * 0.1) * 0.022 * damp;
       }
+      // La deriva orbital de fase 0: ±0.5°, lentísima, se disuelve al
+      // scrollear — micro-vida de cámara aunque el puntero esté quieto.
+      ty += Math.sin(t * 0.083) * 0.0085 * idleK;
+      tx += Math.cos(t * 0.061) * 0.005 * idleK;
       g.rotation.y += (ty - g.rotation.y) * Math.min(1, delta * 2.5);
       g.rotation.x += (tx - g.rotation.x) * Math.min(1, delta * 2.5);
     }
@@ -1746,6 +1988,12 @@ function HeroActors({ mobile, progressRef, onFigureReady }: SceneProps) {
       <points geometry={built.ringsGeo} material={built.ringsMat} frustumCulled={false} />
       <points geometry={built.riverGeo} material={built.riverGlow} frustumCulled={false} />
       <points geometry={built.riverGeo} material={built.riverMat} frustumCulled={false} />
+      {/* Los zarcillos de invitación (fase 0); el loop apaga el grupo
+          entero cuando no hay llamada — cero draw calls en vano. */}
+      <group ref={tendRef} visible={false}>
+        <points geometry={built.tendGeo} material={built.tendGlow} frustumCulled={false} />
+        <points geometry={built.tendGeo} material={built.tendMat} frustumCulled={false} />
+      </group>
     </group>
   );
 }
