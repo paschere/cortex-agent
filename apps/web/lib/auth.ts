@@ -3,6 +3,7 @@ import { betterAuth } from 'better-auth';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { Pool } from 'pg';
 import { sendEmail } from './email';
+import { SIGNUP_CODE_COOKIE, SIGNUP_CODE_ERROR, signupCodeMatches } from './signup-code';
 import { WORKSPACE_LIMIT } from './workspace-limits';
 
 /**
@@ -158,6 +159,76 @@ async function syncGoogleIntegration(account: {
   }
 }
 
+/**
+ * ¿Puede esta dirección crear una cuenta?
+ *
+ * ===========================================================================
+ * LAS TRES PUERTAS, EN ESTE ORDEN
+ * ===========================================================================
+ *   1. SIN `SIGNUP_INVITE_CODE` NO HAY PUERTA. El registro sigue abierto, que es
+ *      como se despliega hoy y como tiene que seguir funcionando en local y en
+ *      los despliegues que no quieran esto. Una guarda nueva que rompe todas las
+ *      instalaciones existentes no es una guarda, es una avería.
+ *
+ *   2. QUIEN YA FUE INVITADO NO NECESITA CÓDIGO, y esta excepción es la mitad de
+ *      la funcionalidad. Una invitación de `ba_invitation` es estrictamente más
+ *      fuerte que el código: nombra a la persona, nombra el espacio, la firmó
+ *      alguien con permiso y caduca a las 48 horas. Exigirle además el código
+ *      compartido rompería el flujo entero de «invita a tu equipo» — que es
+ *      justo lo que se acaba de construir — y obligaría a quien invita a mandar
+ *      dos cosas por dos canales para que entre una persona.
+ *
+ *      Se comprueba en minúsculas contra `lower(email)`, que es como está el
+ *      índice de la 0052, y sólo cuentan las que siguen pendientes y sin vencer:
+ *      una invitación rechazada o caducada no puede seguir abriendo la puerta.
+ *
+ *   3. EL CÓDIGO. Viaja en una cookie porque el registro con Google se va a otro
+ *      dominio y vuelve; ver signup-code.ts.
+ *
+ * ===========================================================================
+ * SI NO SE PUEDE LEER LA COOKIE, SE CIERRA
+ * ===========================================================================
+ * `cookies()` sólo funciona dentro del alcance de una petición. Si algún día
+ * este gancho corriera fuera de él, la respuesta correcta es NEGAR: una puerta
+ * que se abre sola cuando su mecanismo falla no es una puerta. El costo de
+ * equivocarse en esta dirección es que alguien no se puede registrar y escribe;
+ * en la otra, es que se registra cualquiera y nadie escribe.
+ *
+ * El código nunca se registra en el diario, ni siquiera truncado.
+ */
+async function assertMaySignUp(email: string): Promise<void> {
+  const expected = (process.env.SIGNUP_INVITE_CODE ?? '').trim();
+  if (!expected) return;
+
+  const address = email.trim().toLowerCase();
+  try {
+    const { rows } = await pool.query<{ one: number }>(
+      `select 1 as one
+         from public.ba_invitation
+        where lower(email) = $1
+          and status = 'pending'
+          and "expiresAt" > now()
+        limit 1`,
+      [address],
+    );
+    if (rows.length > 0) return;
+  } catch (err) {
+    // Una invitación que no se pudo comprobar no abre la puerta, pero tampoco
+    // debe ocultar el motivo real: se anota y se sigue al código.
+    console.error('[auth] no se pudo comprobar la invitación pendiente', err);
+  }
+
+  const { cookies } = await import('next/headers');
+  let given: string | null = null;
+  try {
+    given = (await cookies()).get(SIGNUP_CODE_COOKIE)?.value ?? null;
+  } catch {
+    throw new Error(SIGNUP_CODE_ERROR);
+  }
+
+  if (!signupCodeMatches(given, expected)) throw new Error(SIGNUP_CODE_ERROR);
+}
+
 export const auth = betterAuth({
   appName: 'Cortex',
   database: pool,
@@ -269,6 +340,7 @@ export const auth = betterAuth({
               throw new Error(`Only @${allowed} accounts are allowed`);
             }
           }
+          await assertMaySignUp(user.email);
           return { data: user };
         },
         after: async (user) => {

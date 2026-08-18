@@ -3,6 +3,12 @@
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
 import {
+  SIGNUP_CODE_COOKIE,
+  SIGNUP_CODE_MAX_AGE_SECONDS,
+  SIGNUP_CODE_MAX_LENGTH,
+  normalizeSignupCode,
+} from '@/lib/signup-code';
+import {
   WORKSPACE_NAME_COOKIE,
   WORKSPACE_NAME_MAX_AGE_SECONDS,
   WORKSPACE_NAME_MAX_LENGTH,
@@ -28,9 +34,27 @@ function rememberCompany(company: string): void {
     `Max-Age=${WORKSPACE_NAME_MAX_AGE_SECONDS}; SameSite=Lax`;
 }
 
+/**
+ * Carry the invite code to the request that creates the account.
+ *
+ * Una cookie y no un campo enviado a `signUp.email`, por lo mismo que la del
+ * nombre de la empresa: con Google el navegador se va a otro dominio y vuelve, y
+ * un campo del formulario no sobrevive ese viaje. Aquí sólo se transporta — la
+ * comprobación está en el servidor, en `assertMaySignUp` (lib/auth.ts), donde
+ * nadie puede saltársela editando esto.
+ */
+function rememberSignupCode(code: string): void {
+  const normalized = normalizeSignupCode(code).slice(0, SIGNUP_CODE_MAX_LENGTH);
+  if (!normalized) return;
+  document.cookie =
+    `${SIGNUP_CODE_COOKIE}=${encodeURIComponent(normalized)}; Path=/; ` +
+    `Max-Age=${SIGNUP_CODE_MAX_AGE_SECONDS}; SameSite=Lax`;
+}
+
 export default function SignupPage() {
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
+  const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState<'google' | 'email' | null>(null);
@@ -38,9 +62,18 @@ export default function SignupPage() {
   const [done, setDone] = useState(false);
 
   async function signUpGoogle() {
+    // El botón de Google vive FUERA del formulario, así que el `required` del
+    // campo no lo detiene. Sin esta guarda, quien no traiga código se va a
+    // Google, se autentica, vuelve, y sólo entonces recibe la negativa — con una
+    // cuenta de Google ya vinculada a nada. Es más honesto pararlo aquí.
+    if (!normalizeSignupCode(code)) {
+      setErr('Escribe el código de invitación antes de continuar con Google.');
+      return;
+    }
     setLoading('google');
     setErr(null);
     rememberCompany(company);
+    rememberSignupCode(code);
     try {
       await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
     } catch (e) {
@@ -58,6 +91,7 @@ export default function SignupPage() {
     setLoading('email');
     setErr(null);
     rememberCompany(company);
+    rememberSignupCode(code);
     const { error } = await authClient.signUp.email({
       name,
       email,
@@ -143,6 +177,20 @@ export default function SignupPage() {
             placeholder="Transportes del Valle"
             value={company}
             onChange={(e) => setCompany(e.target.value)}
+          />
+          {/* Obligatorio mientras el acceso sea por invitación. Va DESPUÉS de la
+              empresa y antes del correo a propósito: quien tiene el código lo
+              tiene a mano y lo pega sin pensar, y quien no lo tiene se entera
+              antes de escribir una contraseña que no le va a servir. */}
+          <AuthField
+            label="Código de invitación"
+            type="text"
+            required
+            autoCapitalize="characters"
+            spellCheck={false}
+            placeholder="CORTEX-2026-…"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
           />
           <AuthField
             label="Correo"
