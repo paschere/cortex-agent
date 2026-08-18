@@ -2,9 +2,10 @@
 
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { safeNextPath } from '@/lib/invite-landing';
 import { FileCheck2, Repeat2, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AuthBody,
   AuthDivider,
@@ -27,8 +28,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState<'google' | 'email' | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  /**
+   * El destino que pidió el middleware, saneado.
+   *
+   * Iba SIN sanear: cualquiera podía mandar `/login?next=https://…` y esta
+   * pantalla llevaba a la persona a otro dominio recién autenticada, con un
+   * enlace salido de aquí. `safeNextPath` sólo deja pasar rutas internas; ver su
+   * comentario. Se guarda en estado porque el enlace de «crear cuenta» se
+   * renderiza en el servidor, donde no hay `window`.
+   */
+  const [next, setNext] = useState<string | null>(null);
+  useEffect(() => {
+    setNext(safeNextPath(new URLSearchParams(window.location.search).get('next')));
+  }, []);
+
   function nextUrl() {
-    return new URLSearchParams(window.location.search).get('next') ?? '/';
+    return safeNextPath(new URLSearchParams(window.location.search).get('next')) ?? '/';
   }
 
   async function signInGoogle() {
@@ -114,7 +129,15 @@ export default function LoginPage() {
           <Link href="/forgot-password" className="text-ink-faint hover:text-ink-muted">
             ¿Olvidaste tu contraseña?
           </Link>
-          <Link href="/signup" className="font-semibold text-primary hover:underline">
+          {/* El destino viaja con el enlace. Un invitado sin cuenta llega aquí
+              con `?next=/accept-invitation/<id>` puesto por el middleware, y si
+              este enlace no lo arrastra lo pierde justo al dar el paso que
+              necesitaba dar — que es el caso normal de una invitación, no el
+              raro. */}
+          <Link
+            href={`/signup${next ? `?next=${encodeURIComponent(next)}` : ''}`}
+            className="font-semibold text-primary hover:underline"
+          >
             Crear una cuenta
           </Link>
         </div>

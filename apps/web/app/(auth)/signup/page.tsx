@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { authClient } from '@/lib/auth-client';
+import { safeNextPath } from '@/lib/invite-landing';
 import {
   SIGNUP_CODE_COOKIE,
   SIGNUP_CODE_MAX_AGE_SECONDS,
@@ -51,6 +52,25 @@ function rememberSignupCode(code: string): void {
     `Max-Age=${SIGNUP_CODE_MAX_AGE_SECONDS}; SameSite=Lax`;
 }
 
+/**
+ * A dónde va la persona después de registrarse.
+ *
+ * `/` mientras nadie pida otra cosa — pero un invitado SÍ pide otra cosa. El
+ * middleware manda a `/login?next=/accept-invitation/<id>` a quien abre el
+ * enlace sin sesión, `login` ya lo honraba, y `signup` no: tenía `'/'` escrito a
+ * mano en los dos caminos. El resultado era que quien no tenía cuenta —o sea el
+ * caso NORMAL de una invitación— perdía el destino justo al registrarse y
+ * aterrizaba en cualquier otro sitio con la invitación sin aceptar.
+ *
+ * `safeNextPath` es lo que impide que esto se convierta en una redirección
+ * abierta; ver su comentario.
+ */
+function nextUrl(): string {
+  if (typeof window === 'undefined') return '/';
+  const requested = new URLSearchParams(window.location.search).get('next');
+  return safeNextPath(requested) ?? '/';
+}
+
 export default function SignupPage() {
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
@@ -75,7 +95,7 @@ export default function SignupPage() {
     rememberCompany(company);
     rememberSignupCode(code);
     try {
-      await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
+      await authClient.signIn.social({ provider: 'google', callbackURL: nextUrl() });
     } catch (e) {
       setErr(
         e instanceof Error
@@ -96,7 +116,7 @@ export default function SignupPage() {
       name,
       email,
       password,
-      callbackURL: '/',
+      callbackURL: nextUrl(),
     });
     if (error) {
       setErr(error.message ?? 'No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.');

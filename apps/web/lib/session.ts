@@ -1,6 +1,7 @@
 import 'server-only';
 import { type Role, type SessionUser, UnauthorizedError } from '@cortex/core';
 import { cookies, headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { auth } from './auth';
 import { resolveActiveOrganization } from './organization';
 import { getSupabaseServiceClient } from './supabase/service';
@@ -47,13 +48,31 @@ export async function requireSession(): Promise<SessionUser> {
   // exists. `cookies()` costs nothing extra: this function is already dynamic
   // through `headers()`.
   const preferredName = (await cookies()).get(WORKSPACE_NAME_COOKIE)?.value ?? null;
-  const organization = await resolveActiveOrganization(
+  const resolution = await resolveActiveOrganization(
     session.user.id,
     (session.session as { activeOrganizationId?: string | null } | undefined)?.activeOrganizationId,
     session.user.name ?? null,
     session.user.email,
     preferredName,
   );
+
+  /**
+   * QUIEN LLEGA INVITADO NO TIENE ESPACIO TODAVÍA, Y ESO NO ES UN ERROR.
+   *
+   * Antes se le fabricaba uno vacío aquí mismo y aterrizaba dentro, con la
+   * empresa que le invitó invisible. Ahora se le manda a aceptar, que es a donde
+   * iba.
+   *
+   * Se usa `redirect()` y NO una excepción capturada: `redirect` lanza un error
+   * que Next entiende y propaga solo, así que `app/(app)/layout.tsx` sigue sin
+   * envolver esta llamada en un try/catch — que es exactamente lo que su
+   * comentario pide, porque capturarla hizo que Next intentara prerenderizar
+   * páginas que sólo existen en tiempo de ejecución.
+   */
+  if (resolution.kind === 'pending-invitation') {
+    redirect(`/accept-invitation/${resolution.invitationId}`);
+  }
+  const organization = resolution.workspace;
 
   const sb = getSupabaseServiceClient();
   const findRow = async () =>

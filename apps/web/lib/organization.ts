@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import type { ActiveOrganization, OrgRole } from '@cortex/core';
 import { pool } from './auth';
+import { workspaceLanding } from './invite-landing';
 import { WORKSPACE_LIMIT } from './workspace-limits';
 
 /**
@@ -192,21 +193,80 @@ async function claimOwnership(orgId: string, baUserId: string): Promise<void> {
  *   created, and only to name it — it reaches no other branch, so a stale or
  *   forged value cannot affect who is a member of what.
  */
+/**
+ * La invitación que está esperando a esta dirección, si la hay.
+ *
+ * Misma consulta que `assertMaySignUp` en lib/auth.ts —`lower(email)` contra el
+ * índice de la 0052, sólo pendientes y sin vencer— y a propósito: son dos
+ * consumidores de UN hecho («a esta persona la están esperando»), y dos
+ * definiciones distintas de ese hecho es como una puerta empieza a discrepar de
+ * la otra. Allí decide si puede registrarse; aquí, si hay que fabricarle un
+ * espacio.
+ *
+ * Devuelve la MÁS RECIENTE cuando hay varias: si dos empresas invitaron a la
+ * misma persona, la que acaba de mandarle el correo que está mirando es la que
+ * tiene más probabilidades de ser a la que iba. Las otras siguen pendientes y
+ * las puede aceptar después desde su propio enlace.
+ */
+async function findPendingInvitationId(email: string): Promise<string | null> {
+  try {
+    const { rows } = await pool.query<{ id: string }>(
+      `select id
+         from public.ba_invitation
+        where lower(email) = $1
+          and status = 'pending'
+          and "expiresAt" > now()
+        order by "expiresAt" desc
+        limit 1`,
+      [email.trim().toLowerCase()],
+    );
+    return rows[0]?.id ?? null;
+  } catch (err) {
+    // Una invitación que no se pudo leer no puede dejar a la persona sin entrar:
+    // se sigue al camino de siempre, que como mucho le fabrica un espacio de más.
+    console.error('[organization] no se pudo buscar la invitación pendiente', err);
+    return null;
+  }
+}
+
+/**
+ * Lo que hay que hacer con esta sesión: entrar a un espacio, o ir a aceptar la
+ * invitación que la está esperando.
+ *
+ * El segundo caso no existía y es la corrección entera: quien llega invitado no
+ * necesita un espacio propio, necesita el que le invitaron. Ver
+ * `lib/invite-landing.ts`.
+ */
+export type WorkspaceResolution =
+  | { kind: 'workspace'; workspace: ActiveOrganization }
+  | { kind: 'pending-invitation'; invitationId: string };
+
 export async function resolveActiveOrganization(
   baUserId: string,
   activeOrganizationId: string | null | undefined,
   name: string | null,
   email: string,
   preferredName?: string | null,
-): Promise<ActiveOrganization> {
-  if (activeOrganizationId) {
-    const claimed = await findMembership(baUserId, activeOrganizationId);
-    if (claimed) return claimed;
+): Promise<WorkspaceResolution> {
+  const claimed = activeOrganizationId
+    ? await findMembership(baUserId, activeOrganizationId)
+    : null;
+  const member = claimed ?? (await findFirstMembership(baUserId));
+
+  // La invitación sólo se busca cuando NO hay ninguna membresía. Es una consulta
+  // más en el camino de una cuenta recién creada, y cero en todas las demás
+  // peticiones del producto.
+  const landing = workspaceLanding({
+    activeMembershipId: claimed?.id ?? null,
+    firstMembershipId: member?.id ?? null,
+    pendingInvitationId: member ? null : await findPendingInvitationId(email),
+  });
+
+  if (landing.action === 'accept-invitation') {
+    return { kind: 'pending-invitation', invitationId: landing.invitationId };
   }
 
-  const resolved =
-    (await findFirstMembership(baUserId)) ??
-    (await createWorkspace(baUserId, name, email, preferredName));
+  const resolved = member ?? (await createWorkspace(baUserId, name, email, preferredName));
 
   // Write the choice back so the next request reads it from the session instead
   // of re-deriving it. Best-effort: a failure here costs a lookup, not access.
@@ -220,7 +280,7 @@ export async function resolveActiveOrganization(
     console.error('[organization] could not persist active workspace', err);
   }
 
-  return resolved;
+  return { kind: 'workspace', workspace: resolved };
 }
 
 /** Point the session at another workspace the user belongs to. */

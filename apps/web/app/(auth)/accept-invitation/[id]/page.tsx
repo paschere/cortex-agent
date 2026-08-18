@@ -28,7 +28,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
   async function respond(action: 'accept' | 'reject') {
     setState('working');
     setErr(null);
-    const { error } =
+    const { data, error } =
       action === 'accept'
         ? await authClient.organization.acceptInvitation({ invitationId: id })
         : await authClient.organization.rejectInvitation({ invitationId: id });
@@ -40,8 +40,42 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ id:
       setState('idle');
       return;
     }
+    /**
+     * ACEPTAR NO TE METÍA EN EL ESPACIO, Y ESE ERA EL FALLO ENTERO.
+     *
+     * `acceptInvitation` de better-auth crea la membresía y NO toca
+     * `activeOrganizationId` de la sesión (comprobado en la 1.6.24). Así que la
+     * persona aceptaba, volvía a `/`, y seguía en el espacio vacío que se le
+     * había fabricado al registrarse: la empresa que la invitó existía, ella era
+     * miembro, y no la veía por ningún lado.
+     *
+     * El id del espacio sale de lo que devolvió el propio aceptar, y se manda a
+     * `/api/organizations/active`, que es la MISMA ruta que usa el selector — y
+     * por tanto la misma comprobación de membresía contra la base antes de mover
+     * la sesión. No se inventa aquí una segunda forma de cambiar de espacio.
+     *
+     * Si algo falla, no se bloquea: la membresía YA existe, así que se sigue a
+     * `/` y el peor caso es que aterrice en su otro espacio y tenga que elegir
+     * este en el selector. Eso es un inconveniente; quedarse en esta pantalla
+     * después de haber aceptado sería un callejón.
+     */
+    if (action === 'accept') {
+      const joined = data as { member?: { organizationId?: string } } | null;
+      const organizationId = joined?.member?.organizationId;
+      if (organizationId) {
+        await fetch('/api/organizations/active', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ organizationId }),
+        }).catch(() => {});
+      }
+    }
+
     setState('done');
-    router.push(action === 'accept' ? '/' : '/login');
+    // Recarga entera y no `router.push`: el espacio activo acaba de cambiar y
+    // todo el árbol de servidor está renderizado contra el anterior.
+    if (action === 'accept') window.location.assign('/');
+    else router.push('/login');
   }
 
   return (
