@@ -1,5 +1,7 @@
 import { runChatTurn } from '@/app/api/chat-app/google/turn';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
+import { readWaitingNotice } from '@/lib/waiting';
+import { briefingLetter, waitingQuestion, whatsappBriefingGate } from '@/lib/waiting-shape';
 import { authenticateBridge } from '@/lib/whatsapp/bridge';
 import { humanDelayMs, toWhatsappText } from '@/lib/whatsapp/format';
 import {
@@ -54,10 +56,12 @@ import { type NextRequest, NextResponse } from 'next/server';
  *
  * ── SIGNALS ─────────────────────────────────────────────────────────────────
  *
- * This route never starts a conversation. It only ever answers a chat where the
- * other person wrote first, which is both the polite behaviour and the one that
- * looks least like automation to WhatsApp. The short delay and the "typing…"
- * indicator are applied by the bridge, from `delayMs` below.
+ * This route never STARTS a conversation. It only ever answers a chat where
+ * the other person wrote first, which is both the polite behaviour and the one
+ * that looks least like automation to WhatsApp. A greeting with work waiting
+ * is answered with the same briefing the empty web chat shows — still a reply,
+ * still their first move. The short delay and the "typing…" indicator are
+ * applied by the bridge, from `delayMs` below.
  */
 
 export const runtime = 'nodejs';
@@ -128,6 +132,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ reply: EMPTY_REPLY, delayMs: humanDelayMs(EMPTY_REPLY.length) });
   }
 
+  let userText = text;
+  try {
+    const waiting = await readWaitingNotice(sender.organizationId, sender.userId);
+    const gate = whatsappBriefingGate(text, waiting);
+    if (gate === 'brief') {
+      const letter = briefingLetter(waiting);
+      if (letter) {
+        return NextResponse.json({ reply: letter, delayMs: humanDelayMs(letter.length) });
+      }
+    } else if (gate === 'yes') {
+      userText = waiting.lead?.ask ?? waitingQuestion(waiting.queues);
+    }
+  } catch (err) {
+    logger.warn(`whatsapp: briefing skipped — ${(err as Error).message ?? 'unknown'}`);
+  }
+
   try {
     const delivery = await runChatTurn({
       organizationId: sender.organizationId,
@@ -145,7 +165,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // its own prefix. A person's WhatsApp thread is one continuous
       // conversation, visible in their history on the web like any other.
       conversationKey: `whatsapp:${phone}`,
-      userText: text,
+      userText,
       surfaceKey: 'whatsapp',
       titlePrefix: 'WhatsApp',
       surfaceNote:

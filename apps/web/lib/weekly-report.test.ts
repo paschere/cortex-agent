@@ -5,7 +5,7 @@ import {
   type Tables,
   createFakeSupabase,
 } from '../../../packages/agent-tools/src/tenancy/__tests__/fake-postgrest';
-import { runWeeklyReport, summarizeForEmail, weeklyRecipients } from './weekly-report';
+import { letterForChat, runWeeklyReport, summarizeForEmail, weeklyRecipients } from './weekly-report';
 
 /**
  * LO ÚNICO QUE NO SE PUEDE FALLAR: QUE EL PARTE NO SALGA DOS VECES.
@@ -154,6 +154,9 @@ function seed(over: Partial<Tables> = {}): Tables {
     payments: [],
     notifications: [],
     reports: [],
+    agents: [{ id: 'agent-cortex', slug: 'cortex', organization_id: ACME }],
+    conversations: [],
+    messages: [],
     ...over,
   };
 }
@@ -424,5 +427,55 @@ describe('lo que el correo dice', () => {
     expect(text).toContain('LAS CIFRAS');
     expect(text).toContain('QUÉ NO DICE ESTE PARTE');
     expect(text).toContain('Vence la semana que entra');
+  });
+});
+
+describe('el parte también llega al chat', () => {
+  it('es la misma lede, no un segundo informe', () => {
+    const letter = letterForChat({
+      lede: 'Coltrans sigue sin pagar.',
+      headlines: ['Cartera vencida: $12.400.000'],
+      reportId: 'rep-1',
+    });
+    expect(letter).toContain('Coltrans sigue sin pagar.');
+    expect(letter).toContain('Cartera vencida: $12.400.000');
+    expect(letter).toContain('/reports/rep-1');
+  });
+
+  it('deja un mensaje en el hilo de quien recibe el correo', async () => {
+    const w = world();
+    await runWeeklyReport({
+      db: w.db,
+      today: TODAY,
+      now: NOW,
+      weekStart: WEEK_START,
+      sendMail: w.mailer,
+    });
+    const convos = (w.tables.conversations ?? []) as Array<Record<string, unknown>>;
+    const msgs = (w.tables.messages ?? []) as Array<Record<string, unknown>>;
+    expect(convos).toHaveLength(1);
+    expect(convos[0]?.external_key).toBe(`weekly:${WEEK_START}:${ANA}`);
+    expect(msgs).toHaveLength(1);
+    expect(String(msgs[0]?.content)).toContain('/reports/');
+  });
+
+  it('no escribe un segundo hilo cuando la semana ya estaba reclamada', async () => {
+    const w = world();
+    await runWeeklyReport({
+      db: w.db,
+      today: TODAY,
+      now: NOW,
+      weekStart: WEEK_START,
+      sendMail: w.mailer,
+    });
+    await runWeeklyReport({
+      db: w.db,
+      today: TODAY,
+      now: NOW,
+      weekStart: WEEK_START,
+      sendMail: w.mailer,
+    });
+    expect(w.tables.conversations).toHaveLength(1);
+    expect(w.tables.messages).toHaveLength(1);
   });
 });

@@ -45,9 +45,9 @@ const displaySerif = Instrument_Serif({
  *
  * HONESTY. Everything asserted here exists in this repository today. Two things
  * deliberately do not appear as available anywhere on the page: charging per
- * additional person (seats are a cap on the plan, not an incremental charge)
- * and signing in with a corporate directory. Both are named only inside the
- * Enterprise card, and named there as a conversation, with a line that says so.
+ * additional person from inside Cortex, and signing in with a corporate
+ * directory. Gerente is named as a conversation — retainer, implantación, SLA —
+ * and the page says we do not collect the money inside the product yet.
  * There are no customer names, logos, testimonials or usage figures, because
  * there are none to tell the truth about yet.
  *
@@ -639,11 +639,11 @@ function Pricing() {
       <div className="lp-wrap">
         <div className="lp-head" data-reveal>
           <p className="lp-marker">Planes</p>
-          <h2 className="lp-h2">Se cobra por persona, porque es un asistente por persona.</h2>
+          <h2 className="lp-h2">Un gerente para tu empresa, no un asiento más.</h2>
           <p className="lp-lead">
-            No compras una licencia para el área de sistemas ni una bolsa que alguien se acaba el
-            día 12. Cada quien entra con su asistente y con su cupo, y la cuenta del mes se saca
-            multiplicando.
+            Diez millones al mes es el sueldo de alguien que abre el martes, propone y no se va de
+            vacaciones con la cabeza de la empresa. Equipo y Empresa siguen existiendo para quien
+            quiere un asistente por persona.
           </p>
         </div>
 
@@ -668,7 +668,7 @@ function Pricing() {
             </div>
           </div>
 
-          <div className="lp-plan lp-plan--pick">
+          <div className="lp-plan">
             <p className="lp-plan__name">Equipo</p>
             <p className="lp-plan__rate lp-data">$30.000</p>
             <p className="lp-plan__per">por persona al mes, desde 5 personas</p>
@@ -685,7 +685,7 @@ function Pricing() {
               15 personas × $30.000 = <b>$450.000</b> al mes
             </p>
             <div className="lp-plan__foot">
-              <Link href="/signup" className="lp-btn lp-btn--primary">
+              <Link href="/signup" className="lp-btn lp-btn--ghost">
                 Empezar
               </Link>
             </div>
@@ -714,19 +714,19 @@ function Pricing() {
             </div>
           </div>
 
-          <div className="lp-plan">
-            <p className="lp-plan__name">Enterprise</p>
-            <p className="lp-plan__rate">Hablemos</p>
-            <p className="lp-plan__per">sin tope de personas, volumen acordado</p>
+          <div className="lp-plan lp-plan--pick">
+            <p className="lp-plan__name">Gerente</p>
+            <p className="lp-plan__rate lp-data">$10.000.000</p>
+            <p className="lp-plan__per">al mes, retainer. Sin tope de respuestas.</p>
             <ul className="lp-plan__pkg">
-              <li className="lp-fine">Se pacta contigo</li>
-              <li>Ingreso con el directorio corporativo</li>
-              <li>Región de datos por contrato</li>
-              <li>Acuerdo de nivel de servicio</li>
-              <li>Factura electrónica y pago anual</li>
+              <li className="lp-fine">Lo que se cobra</li>
+              <li>Implantación y un acuerdo de servicio</li>
+              <li>WhatsApp, chat y el briefing del martes</li>
+              <li>Memoria de la empresa, no de un asiento</li>
+              <li>Factura electrónica y pago mensual o anual</li>
             </ul>
             <div className="lp-plan__foot">
-              <Link href="/signup" className="lp-btn lp-btn--ghost">
+              <Link href="/signup" className="lp-btn lp-btn--primary">
                 Hablemos
               </Link>
             </div>
@@ -734,22 +734,22 @@ function Pricing() {
         </div>
 
         <div className="lp-card mt-5">
-          <h3 className="lp-h3">Empresa es el mismo producto, más barato por persona</h3>
+          <h3 className="lp-h3">Equipo y Empresa son el mismo asistente, distinto tamaño</h3>
           <p className="lp-small mt-2 max-w-[70ch]">
             No hay una versión capada abajo: el plan de $30.000 trae exactamente las mismas reglas,
             las mismas fuentes y las mismas citas que el de $24.000. Lo único que cambia con el
             tamaño es la tarifa — <span className="lp-data">$24.000 en vez de $30.000</span> cuando
-            son más de 25 personas — y cuánto trae cada quien al mes.
+            son más de 25 personas — y cuánto trae cada quien al mes. Gerente no es ese producto
+            más caro: es el otro oficio.
           </p>
         </div>
 
         <p className="lp-fine mt-5 max-w-[74ch]">
-          Precios en pesos colombianos, al mes. Los cupos se cuentan juntos para tu empresa; lo que
-          cambia con cada persona que entra es cuánto suma al total. Enterprise es una conversación,
-          no una casilla: el ingreso con el directorio corporativo y la región de datos se pactan en
-          el contrato y hoy no están en el producto. Y todavía no cobramos dentro de Cortex —
-          acordamos contigo cuántas personas entran y lo activamos; el producto no suma ni cobra una
-          persona más por su cuenta.
+          Precios en pesos colombianos, al mes. En Equipo y Empresa los cupos se cuentan juntos
+          para tu empresa; lo que cambia con cada persona que entra es cuánto suma al total.
+          Gerente es una conversación, no una casilla: implantación, WhatsApp y el acuerdo de
+          servicio se pactan contigo. Y todavía no cobramos dentro de Cortex — acordamos el plan y
+          lo activamos; el producto no suma ni cobra una persona más por su cuenta.
         </p>
 
         <div className="lp-guards">

@@ -66,6 +66,7 @@ const PLAN_ROWS = [
     grace_ratio: '0.100',
     grace_minimum: 10,
     self_serve: true,
+    retainer_cop: null,
     sort_order: 1,
   },
   {
@@ -80,6 +81,7 @@ const PLAN_ROWS = [
     grace_ratio: '0.100',
     grace_minimum: 10,
     self_serve: true,
+    retainer_cop: null,
     sort_order: 2,
   },
   {
@@ -94,6 +96,7 @@ const PLAN_ROWS = [
     grace_ratio: '0.100',
     grace_minimum: 10,
     self_serve: false,
+    retainer_cop: null,
     sort_order: 4,
   },
 ];

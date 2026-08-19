@@ -138,6 +138,65 @@ export function summarizeForEmail(doc: ReportDocument): {
 }
 
 /**
+ * El parte, como mensaje de Cortex. El correo ya se mandó; esto es para
+ * cuando abren el chat el lunes y alguien ya habló.
+ */
+export function letterForChat(input: {
+  lede: string;
+  headlines: string[];
+  reportId: string;
+}): string {
+  const lines = [input.lede.trim()].filter(Boolean);
+  if (input.headlines.length > 0) lines.push(input.headlines.slice(0, 3).join('\n'));
+  lines.push(`El parte completo está en /reports/${input.reportId}.`);
+  return lines.join('\n\n');
+}
+
+/**
+ * Deja el parte en el hilo de esa persona. Best-effort: si no hay agente o
+ * la inserción falla, el correo ya viajó y no se inventa una quinta bandeja.
+ */
+async function postWeeklyLetter(
+  db: SupabaseClient,
+  opts: { userId: string; weekStart: string; title: string; content: string },
+): Promise<void> {
+  const { data: agent } = await db.from('agents').select('id').eq('slug', 'cortex').maybeSingle();
+  const agentId = (agent as { id?: string } | null)?.id;
+  if (!agentId) return;
+
+  const key = `weekly:${opts.weekStart}:${opts.userId}`;
+  const { data: existing } = await db
+    .from('conversations')
+    .select('id')
+    .eq('user_id', opts.userId)
+    .eq('external_key', key)
+    .maybeSingle();
+
+  let conversationId = (existing as { id?: string } | null)?.id ?? null;
+  if (!conversationId) {
+    const { data: created, error } = await db
+      .from('conversations')
+      .insert({
+        user_id: opts.userId,
+        agent_id: agentId,
+        surface: 'web',
+        title: opts.title.slice(0, 60),
+        external_key: key,
+      })
+      .select('id')
+      .single();
+    if (error || !created) return;
+    conversationId = (created as { id: string }).id;
+  }
+
+  await db.from('messages').insert({
+    conversation_id: conversationId,
+    role: 'assistant',
+    content: opts.content,
+  });
+}
+
+/**
  * Quién responde por la empresa cuando nadie más responde.
  *
  * `users.role = 'org_admin'`, sin inventar un organigrama: el producto ya tomó
@@ -213,6 +272,11 @@ export async function runWeeklyReport(
   const row = claim.row;
   const recipients = await weeklyRecipients(db);
   const summary = summarizeForEmail(document);
+  const letter = letterForChat({
+    lede: summary.lede,
+    headlines: summary.headlines,
+    reportId: row.id,
+  });
   const mail = renderWeeklyReportEmail({
     reportId: row.id,
     title: document.title,
@@ -228,6 +292,12 @@ export async function runWeeklyReport(
   let delivered = 0;
   let failed = 0;
   for (const person of recipients) {
+    await postWeeklyLetter(db, {
+      userId: person.userId,
+      weekStart,
+      title: document.title,
+      content: letter,
+    }).then(undefined, () => undefined);
     const outcome = await sendMail({
       to: person.email,
       subject: mail.subject,

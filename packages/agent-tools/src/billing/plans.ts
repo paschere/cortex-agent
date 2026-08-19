@@ -155,6 +155,16 @@
  * database, and it is shown on /plan next to the seat count it was computed
  * from. That is the number a gateway would be told to charge on the day one
  * exists; the columns waiting for that day are still empty.
+ *
+ * ===========================================================================
+ * GERENTE IS NOT A BIGGER SEAT
+ * ===========================================================================
+ * Equipo and Empresa sell an assistant per person. Gerente sells the job: a
+ * monthly retainer, unlimited answers, implantación and an SLA. The invoice is
+ * `retainerCop`, not a headcount times a rate — fifteen people on Gerente still
+ * owe ten million, not a hundred and fifty. `priceCopPerSeat` stays 0 on that
+ * row so a caller that has not read the new column cannot accidentally bill
+ * them as if they were Equipo.
  */
 
 /** The two things a customer buys. */
@@ -209,6 +219,11 @@ export interface Plan {
   graceMinimum: number;
   /** False for plans an owner cannot put themselves on from inside the product. */
   selfServe: boolean;
+  /**
+   * Monthly retainer in whole pesos. When set, the invoice is this number, not
+   * a rate times a headcount. null = per-person pricing.
+   */
+  retainerCop: number | null;
   sortOrder: number;
 }
 
@@ -232,6 +247,7 @@ export const FALLBACK_PLAN: Plan = {
   graceRatio: 0.1,
   graceMinimum: 10,
   selfServe: true,
+  retainerCop: null,
   sortOrder: 1,
 };
 
@@ -261,6 +277,7 @@ export const UNMETERED_PLAN: Plan = {
   graceRatio: 0.1,
   graceMinimum: 10,
   selfServe: false,
+  retainerCop: null,
   sortOrder: 99,
 };
 
@@ -327,6 +344,7 @@ export function limitFor(plan: Plan, meter: MeterId, seats: SeatBasis): number |
 
 /** What this workspace owes for a month at this seat basis, in whole pesos. */
 export function monthlyChargeCop(plan: Plan, seats: SeatBasis): number {
+  if (plan.retainerCop != null) return plan.retainerCop;
   return plan.priceCopPerSeat * seats.billable;
 }
 
@@ -514,6 +532,7 @@ export interface PlanRow {
   grace_ratio: number | string;
   grace_minimum: number;
   self_serve: boolean;
+  retainer_cop: number | null;
   sort_order: number;
 }
 
@@ -530,6 +549,10 @@ export function toPlan(row: PlanRow): Plan {
     graceRatio: Number(row.grace_ratio) || 0,
     graceMinimum: Number(row.grace_minimum) || 0,
     selfServe: row.self_serve !== false,
+    retainerCop:
+      row.retainer_cop === null || row.retainer_cop === undefined
+        ? null
+        : Number(row.retainer_cop) || 0,
     sortOrder: Number(row.sort_order) || 0,
   };
 }

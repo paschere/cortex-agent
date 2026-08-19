@@ -39,6 +39,7 @@ const TEAM: Plan = {
   graceRatio: 0.1,
   graceMinimum: 10,
   selfServe: true,
+  retainerCop: null,
   sortOrder: 2,
 };
 
@@ -63,6 +64,7 @@ const ENTERPRISE: Plan = {
   billableSeatsMinimum: 1,
   seatsMaximum: null,
   selfServe: false,
+  retainerCop: null,
 };
 
 /** A workspace of `members` people with no history and nothing contracted. */
@@ -93,6 +95,18 @@ describe('the ceiling is a rate times a headcount', () => {
       expect(limitFor(ENTERPRISE, 'answers', seats)).toBeNull();
       expect(limitFor(ENTERPRISE, 'documents', seats)).toBeNull();
     }
+  });
+
+  it('Gerente is a retainer: fifteen people still owe ten million', () => {
+    const gerente: Plan = {
+      ...ENTERPRISE,
+      code: 'gerente',
+      name: 'Gerente',
+      retainerCop: 10_000_000,
+    };
+    expect(monthlyChargeCop(gerente, seatBasisFor(gerente, { members: 1 }))).toBe(10_000_000);
+    expect(monthlyChargeCop(gerente, seatBasisFor(gerente, { members: 15 }))).toBe(10_000_000);
+    expect(limitFor(gerente, 'answers', seatBasisFor(gerente, { members: 15 }))).toBeNull();
   });
 });
 

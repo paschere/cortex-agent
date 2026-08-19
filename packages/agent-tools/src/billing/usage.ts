@@ -39,7 +39,7 @@ const SUBSCRIPTION_COLUMNS =
   'plan_code, status, started_at, billing_customer_ref, contracted_seats';
 
 const PLAN_COLUMNS =
-  'code, name, tagline, price_cop_per_seat, answers_per_seat, documents_per_seat, billable_seats_minimum, seats_maximum, grace_ratio, grace_minimum, self_serve, sort_order';
+  'code, name, tagline, price_cop_per_seat, answers_per_seat, documents_per_seat, billable_seats_minimum, seats_maximum, grace_ratio, grace_minimum, self_serve, retainer_cop, sort_order';
 
 /**
  * Run a read that must not take the caller down with it.

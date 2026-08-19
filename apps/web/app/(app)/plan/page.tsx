@@ -161,7 +161,9 @@ export default async function PlanPage({
   // cuenta del mes es de todo el equipo. Ver la nota del pie del panel de abajo.
   const canManageTeam = user.role === 'org_admin';
   const unlimited = plan.perSeat.answers === null && plan.perSeat.documents === null;
-  const others = plans.filter((p) => p.selfServe && p.code !== plan.code);
+  const others = plans.filter(
+    (p) => p.code !== plan.code && (p.selfServe || p.retainerCop != null),
+  );
   // The three reasons the billing basis can be above today's headcount, said in
   // the order somebody would ask about them. Only one is shown, and only when it
   // is actually true — an explanation of a rule nobody has hit is noise.
@@ -193,7 +195,9 @@ export default async function PlanPage({
           title={`Plan ${plan.name}`}
           icon={<Receipt className="h-4 w-4" />}
           right={
-            plan.priceCopPerSeat > 0 ? (
+            plan.retainerCop != null ? (
+              <span className="tabular text-ink">{cop(plan.retainerCop)} / mes</span>
+            ) : plan.priceCopPerSeat > 0 ? (
               <span className="tabular text-ink">
                 {cop(plan.priceCopPerSeat)} por persona / mes
               </span>
@@ -230,7 +234,12 @@ export default async function PlanPage({
               where every peso comes from, and on a per-person price that is a
               multiplication rather than a lookup. Showing the rate, the count and
               the product means the figure can be checked without asking us. */}
-          {plan.priceCopPerSeat > 0 && (
+          {plan.retainerCop != null ? (
+            <div className="tabular mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-xs text-ink-muted">
+              <span className="font-semibold text-ink">{cop(plan.retainerCop)} al mes</span>
+              <span className="text-ink-faint">· retainer, no por persona</span>
+            </div>
+          ) : plan.priceCopPerSeat > 0 ? (
             <div className="tabular mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-sm border border-border bg-surface-2 px-3 py-2.5 text-xs text-ink-muted">
               <span>{cop(plan.priceCopPerSeat)}</span>
               <span className="text-ink-faint">×</span>
@@ -240,16 +249,17 @@ export default async function PlanPage({
               <span className="text-ink-faint">=</span>
               <span className="font-semibold text-ink">{cop(seats.chargeCop)} al mes</span>
             </div>
-          )}
+          ) : null}
 
           {seatNote && <p className="mt-2 text-xs leading-relaxed text-ink-muted">{seatNote}</p>}
 
-          {/* Said plainly, because the public page says it plainly too. */}
-          {plan.priceCopPerSeat > 0 && (
+          {(plan.priceCopPerSeat > 0 || plan.retainerCop != null) && (
             <p className="mt-2 text-xs leading-relaxed text-ink-faint">
               Todavía no cobramos dentro de Cortex: esta es la cuenta del mes tal como la
-              calculamos, no un cargo. Cuando entre alguien nuevo, esta cifra sube sola y aquí lo
-              ves.
+              calculamos, no un cargo.
+              {plan.retainerCop != null
+                ? ' Gerente se activa en una conversación, no sumando asientos.'
+                : ' Cuando entre alguien nuevo, esta cifra sube sola y aquí lo ves.'}
             </p>
           )}
 
@@ -420,9 +430,11 @@ export default async function PlanPage({
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-sm font-semibold text-ink">{other.name}</span>
                     <span className="tabular text-sm text-ink">
-                      {other.priceCopPerSeat > 0
-                        ? `${cop(other.priceCopPerSeat)} por persona`
-                        : 'Gratis'}
+                      {other.retainerCop != null
+                        ? `${cop(other.retainerCop)} al mes`
+                        : other.priceCopPerSeat > 0
+                          ? `${cop(other.priceCopPerSeat)} por persona`
+                          : 'Gratis'}
                     </span>
                   </div>
                   <p className="mt-1.5 text-xs text-ink-muted">{other.tagline}</p>
@@ -440,13 +452,15 @@ export default async function PlanPage({
                       workspace with fewer people is not being turned away; it is
                       being told what the smallest invoice on this plan is. */}
                   <div className="tabular mt-1 text-xs text-ink-faint">
-                    {other.seatsMaximum !== null
-                      ? `Hasta ${count(other.seatsMaximum)} personas`
-                      : other.billableSeatsMinimum > 1
-                        ? `Desde ${count(other.billableSeatsMinimum)} personas · ${cop(
-                            other.priceCopPerSeat * other.billableSeatsMinimum,
-                          )} al mes como mínimo`
-                        : 'Sin tope de personas'}
+                    {other.retainerCop != null
+                      ? 'Retainer. Sin tope de respuestas ni de personas.'
+                      : other.seatsMaximum !== null
+                        ? `Hasta ${count(other.seatsMaximum)} personas`
+                        : other.billableSeatsMinimum > 1
+                          ? `Desde ${count(other.billableSeatsMinimum)} personas · ${cop(
+                              other.priceCopPerSeat * other.billableSeatsMinimum,
+                            )} al mes como mínimo`
+                          : 'Sin tope de personas'}
                   </div>
                   <PlanInterest planCode={other.code} planName={other.name} />
                 </div>

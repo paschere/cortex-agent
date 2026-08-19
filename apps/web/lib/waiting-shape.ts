@@ -149,6 +149,54 @@ export function briefingAsk(queue: WaitingQueue, title: string): string {
 }
 
 /**
+ * El mismo briefing, en texto. WhatsApp no pinta tarjetas; el vacío del chat
+ * sí. Las dos superficies tienen que decir la misma cosa, y esta función es
+ * esa cosa: nombre, frase, pregunta. Sin modelo.
+ */
+export function briefingLetter(waiting: WaitingNoticeData): string | null {
+  if (waiting.total <= 0) return null;
+  if (waiting.lead) {
+    const lines = [clipTitle(waiting.lead.title, 90), waiting.sentence, waiting.lead.ask];
+    if (waiting.lead.detail) lines.splice(1, 0, waiting.lead.detail);
+    lines.push('Responde «sí» y lo hago.');
+    return lines.join('\n\n');
+  }
+  return `${waiting.sentence}\n\nResponde «sí» y lo abro.`;
+}
+
+/** Un «sí» de una palabra. Cualquier otra cosa es una pregunta de verdad. */
+export function isWaitingYes(text: string): boolean {
+  return /^(sí|si|yes|dale|claro|ok|okay|vale|hazlo|adelante|listo|manda|mándalo|mandalo|escríbele)[.!¡]?$/i.test(
+    text.trim(),
+  );
+}
+
+/** Un saludo y nada más. «Hola, ¿cuánto debe Coltrans?» no es un saludo. */
+export function isGreeting(text: string): boolean {
+  return /^(hola|holi|buenas|hey|buenos días|buenas tardes|buenas noches|buen día|qué más|q mas)[.!¡,]?$/i.test(
+    text.trim(),
+  );
+}
+
+export type WhatsappBriefingGate = 'brief' | 'yes' | 'run';
+
+/**
+ * Qué hace WhatsApp con este mensaje, mirando las colas — no el modelo.
+ *
+ * Un saludo con trabajo pendiente es el briefing. Un sí es el turno. Todo lo
+ * demás corre como siempre: la persona preguntó algo.
+ */
+export function whatsappBriefingGate(
+  text: string,
+  waiting: Pick<WaitingNoticeData, 'total'> & { lead?: WaitingLead | null },
+): WhatsappBriefingGate {
+  if (waiting.total <= 0) return 'run';
+  if (isWaitingYes(text)) return 'yes';
+  if (isGreeting(text)) return 'brief';
+  return 'run';
+}
+
+/**
  * Lo primero que hay que hacer, con nombre propio.
  *
  * Lo carga el aviso del chat con UNA lectura extra —el primer elemento de la

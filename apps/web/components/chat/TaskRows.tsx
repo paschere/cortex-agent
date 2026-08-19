@@ -331,19 +331,25 @@ export function TaskRows({
   invocations,
   metrics,
   isStreaming,
+  quiet,
 }: {
   invocations: ToolInvocation[];
   metrics: TurnMetrics | null;
   isStreaming?: boolean;
+  /** Mientras Cortex piensa y aún no hay prosa, la cabecera Presence cuenta. */
+  quiet?: boolean;
 }) {
   const durations = useMemo(() => matchDurations(invocations, metrics), [invocations, metrics]);
   const failures = invocations.filter(isErrorResult).length;
   const running = invocations.some((i) => i.state !== 'result');
 
   // Open while it is happening, and while anything went wrong — a failed step
-  // hidden behind a disclosure is a failed step nobody sees.
+  // hidden behind a disclosure is a failed step nobody sees. `quiet` is the
+  // exception: the header Presence is already the live signal, and a list of
+  // tool names next to "Pensando…" is two theatres for one wait.
   const shouldCollapse =
-    !isStreaming && !running && failures === 0 && invocations.length > COLLAPSE_ABOVE;
+    (quiet && !!isStreaming) ||
+    (!isStreaming && !running && failures === 0 && invocations.length > COLLAPSE_ABOVE);
   const [open, setOpen] = useState(!shouldCollapse);
   useEffect(() => {
     if (!shouldCollapse) setOpen(true);

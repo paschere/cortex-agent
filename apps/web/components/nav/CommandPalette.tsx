@@ -35,9 +35,10 @@ interface Section {
  * donde estás para señalar con el dedo lo que no sabrías nombrar. Recordar
  * contra reconocer.
  *
- * De ahí que esta lista sea más larga que el rail y no al revés: cuatro
- * destinos no están en él (/conversations, /tools, /agents, /evaluation) y sólo
- * se alcanzan por aquí o por una puerta en la pantalla donde surge la pregunta.
+ * De ahí que esta lista sea más larga que el rail y no al revés: orquestador,
+ * desarrollo, Conectar Claude, aprendizaje, /tools, /agents y /evaluation no
+ * están en el menú de todos los días y sólo se alcanzan por aquí o por una
+ * puerta en la pantalla donde surge la pregunta.
  * No están escondidos: el rail tiene una fila «Buscar» visible para que esto sea
  * un sitio conocido y no un atajo en la cabeza de alguien.
  *

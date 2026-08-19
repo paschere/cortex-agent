@@ -359,4 +359,28 @@ describe('los comandos de siempre', () => {
     const out = filterPalette([STATIC_COMMAND_GROUP], 'grafica');
     expect(out[0]?.items[0]?.label).toBe('/grafica');
   });
+
+  it('/briefing pregunta por las colas, no por HubSpot', () => {
+    const briefing = STATIC_COMMAND_GROUP.items.find((item) => item.id === '/briefing');
+    expect(briefing?.expands).toBe('¿Qué está esperando algo de mí?');
+    expect(briefing?.hint).toBe('Qué te espera hoy');
+  });
+
+  it('GitHub y Linear no ocupan el / en reposo, y aparecen al buscarlos', () => {
+    const eng: PaletteGroup = {
+      id: 'tools:eng',
+      heading: 'Ingeniería',
+      icon: 'Hammer',
+      items: [
+        {
+          id: 'github.list_repositories',
+          label: 'Muéstrame los repositorios de GitHub',
+          hint: 'GitHub',
+          expands: 'Muéstrame los repositorios de GitHub',
+        },
+      ],
+    };
+    expect(filterPalette([eng], '')).toEqual([]);
+    expect(filterPalette([eng], 'github')[0]?.items).toHaveLength(1);
+  });
 });

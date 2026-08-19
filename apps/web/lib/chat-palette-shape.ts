@@ -167,9 +167,9 @@ export const STATIC_COMMAND_GROUP: PaletteGroup = {
     {
       id: '/briefing',
       label: '/briefing',
-      hint: 'Estado del negocio desde HubSpot',
-      expands: '/briefing ',
-      keywords: 'hubspot crm negocio bant',
+      hint: 'Qué te espera hoy',
+      expands: '¿Qué está esperando algo de mí?',
+      keywords: 'colas vencimientos aprobaciones briefing hubspot',
       mono: true,
     },
   ],
@@ -271,6 +271,10 @@ export function filterPalette(
   const out: PaletteGroup[] = [];
 
   for (const group of groups) {
+    // GitHub y Linear son oficio de ingeniería. En reposo no aparecen: un
+    // gerente colombiano no abre el `/` a ver repositorios. Teclear «github»
+    // o «linear» los trae, que es cómo se descubren sin ocupar el martes.
+    if (terms.length === 0 && group.id === 'tools:eng') continue;
     const matched = group.items.filter((item) => matchesQuery(item, terms));
     if (matched.length === 0) {
       if (group.error) out.push({ ...group, items: [], more: undefined });

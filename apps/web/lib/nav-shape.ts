@@ -5,11 +5,9 @@ import {
   BookOpen,
   Briefcase,
   Building2,
-  Cable,
   CalendarClock,
   FileBarChart,
   Globe,
-  Hammer,
   Hourglass,
   IdCard,
   Inbox,
@@ -18,7 +16,6 @@ import {
   MessageCircle,
   MessageSquare,
   MoreHorizontal,
-  Network,
   Plug,
   Radar,
   Receipt,
@@ -26,7 +23,6 @@ import {
   Send,
   Settings,
   ShieldCheck,
-  Sprout,
   Table2,
   Target,
   Users,
@@ -105,6 +101,10 @@ import {
  *   /evaluation  → desde /learning, en una acción de la cabecera. Son causa y
  *                  medida: una dice qué cambió Cortex de sí mismo, la otra si
  *                  las respuestas mejoraron.
+ *   /orchestrator, /dev-work, /mcp-tokens, /learning
+ *                → sólo paleta. Son el vocabulario de quien construye Cortex,
+ *                  no el del martes. Un gerente colombiano no tiene un
+ *                  orquestador; tiene WhatsApp y cartera.
  *
  * /conversations colgaba de la lista de hilos que vivía en este rail. Los hilos
  * se mudaron a la cabecera del propio chat (ver `ThreadHistory`) y el archivo se
@@ -246,8 +246,6 @@ export const SECTIONS: NavSection[] = [
       { href: '/browser', label: MODULE.label, icon: Globe },
       { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
       { href: '/pipelines', label: 'Flujos', icon: Workflow },
-      { href: '/orchestrator', label: 'Orquestador', icon: Network },
-      { href: '/dev-work', label: 'Desarrollo', icon: Hammer },
     ],
   },
   {
@@ -258,12 +256,9 @@ export const SECTIONS: NavSection[] = [
       // Inicio bajó de las filas fijas: el chat es la puerta, esto es el
       // recuento de lo que se movió. Sigue existiendo para quien lo busque.
       HOME,
-      // Primera de las que contestan «¿vamos bien?» con un sí o un no. Las
-      // otras cuentan lo que pasó y dejan la conclusión a quien lee.
       { href: '/goals', label: 'Metas', icon: Target },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
       { href: '/prospects', label: 'Prospectos', icon: Radar },
-      { href: '/learning', label: 'Aprendizaje', icon: Sprout },
     ],
   },
   {
@@ -274,7 +269,6 @@ export const SECTIONS: NavSection[] = [
     items: [
       { href: '/integrations', label: 'Integraciones', icon: Plug },
       { href: '/integrations/whatsapp', label: 'WhatsApp', icon: MessageCircle },
-      { href: '/mcp-tokens', label: 'Conectar Claude', icon: Cable },
     ],
   },
 ];

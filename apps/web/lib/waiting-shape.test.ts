@@ -3,6 +3,10 @@ import {
   type WaitingCounts,
   agoPhrase,
   briefingAsk,
+  briefingLetter,
+  isGreeting,
+  isWaitingYes,
+  whatsappBriefingGate,
   clipTitle,
   dayPhrase,
   noticeFromCounts,
@@ -268,5 +272,41 @@ describe('el sí del briefing', () => {
     expect(ask.endsWith('…»?')).toBe(true);
     expect(clipTitle(long).endsWith('…')).toBe(true);
     expect(clipTitle(long).length).toBeLessThanOrEqual(72);
+  });
+});
+
+describe('el briefing en texto, el que WhatsApp puede decir', () => {
+  it('nombra el asunto y pide el sí', () => {
+    const letter = briefingLetter({
+      total: 1,
+      sentence: 'Se te vence una cosa.',
+      queues: [{ queue: 'commitments', label: 'Vencimientos', href: '/commitments', count: 1 }],
+      lead: {
+        queue: 'commitments',
+        title: 'Factura 4412',
+        detail: 'Coltrans · hace 9 días',
+        ask: briefingAsk('commitments', 'Factura 4412'),
+      },
+    });
+    expect(letter).toContain('Factura 4412');
+    expect(letter).toContain('¿Le escribo por «Factura 4412»?');
+    expect(letter).toContain('Responde «sí» y lo hago.');
+  });
+
+  it('un sí de una palabra no es una pregunta', () => {
+    expect(isWaitingYes('sí')).toBe(true);
+    expect(isWaitingYes('Si')).toBe(true);
+    expect(isWaitingYes('dale')).toBe(true);
+    expect(isWaitingYes('si puedes')).toBe(false);
+    expect(isGreeting('hola')).toBe(true);
+    expect(isGreeting('Hola, ¿cuánto debe Coltrans?')).toBe(false);
+  });
+
+  it('saludo con cola → briefing; sí → el turno; el resto corre', () => {
+    const waiting = { total: 1, lead: { ask: '¿Le escribo?' } };
+    expect(whatsappBriefingGate('hola', waiting)).toBe('brief');
+    expect(whatsappBriefingGate('sí', waiting)).toBe('yes');
+    expect(whatsappBriefingGate('¿cuánto debe Coltrans?', waiting)).toBe('run');
+    expect(whatsappBriefingGate('hola', { total: 0 })).toBe('run');
   });
 });

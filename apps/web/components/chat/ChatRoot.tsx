@@ -4,7 +4,7 @@ import { type ScopeSpace, setChatScopeAction } from '@/app/(chat)/chat/actions';
 import type { BrainSource } from '@/lib/brain-sources-shape';
 import { type ScreenFrame, rememberFrame } from '@/lib/screen-marks';
 import type { ScreenGlance } from '@/lib/tab-recorder';
-import type { WaitingNoticeData } from '@/lib/waiting-shape';
+import { type WaitingNoticeData, clipTitle } from '@/lib/waiting-shape';
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
 import { clsx } from 'clsx';
@@ -19,6 +19,7 @@ import { MessageList } from './MessageList';
 import { Presence } from './Presence';
 import { useScreenView } from './ScreenView';
 import { ThreadHistory } from './ThreadHistory';
+import { WaitingNotice } from './WaitingNotice';
 
 interface AgentInfo {
   slug: string;
@@ -373,7 +374,7 @@ export function ChatRoot({
           para tenerlo fuera bueno. Va aquí y no en MessageList porque el
           contenedor de los mensajes es el que scrollea, y una capa absoluta
           dentro de un scroll se va con el contenido. */}
-      <AmbientField mode={messages.length === 0 ? 'open' : 'thread'} />
+      <AmbientField mode={messages.length === 0 && !waiting?.lead ? 'open' : 'thread'} />
 
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
         <button
@@ -387,9 +388,19 @@ export function ChatRoot({
         <div className="flex min-w-0 items-center gap-2.5">
           <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
           <div className="min-w-0 truncate text-base font-semibold tracking-[-0.01em] text-ink">
-            {title ?? (conversationId ? 'Conversación' : 'Conversación nueva')}
+            {title ??
+              (!conversationId && waiting?.lead
+                ? clipTitle(waiting.lead.title, 48)
+                : !conversationId && waiting && waiting.total > 0
+                  ? waiting.sentence
+                  : conversationId
+                    ? 'Conversación'
+                    : 'Conversación nueva')}
           </div>
         </div>
+        {messages.length > 0 && waiting && waiting.total > 0 ? (
+          <WaitingNotice waiting={waiting} onAsk={handleSend} />
+        ) : null}
         <div className="ml-auto flex min-w-0 shrink items-center">
           <ThreadHistory />
         </div>
@@ -402,7 +413,7 @@ export function ChatRoot({
         conversación se relee igual dentro de dos semanas — con la decisión
         dicha en voz de quien la tomó. Ver ChoicePrompt.
       */}
-      <ChatComposeProvider compose={setDraft}>
+      <ChatComposeProvider compose={setDraft} ask={handleSend}>
         <MessageList
           messages={messages}
           isLoading={isLoading}

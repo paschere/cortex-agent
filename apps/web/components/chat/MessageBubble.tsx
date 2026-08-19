@@ -432,12 +432,14 @@ export function MessageBubble({
         <Presence
           size="sm"
           state={
-            isStreaming && content?.trim()
-              ? 'writing'
-              : (confirmationData && conversationId) ||
-                  (choiceData && !!onRegenerate && !isStreaming)
-                ? 'waiting'
-                : 'resting'
+            isStreaming && !content?.trim()
+              ? 'thinking'
+              : isStreaming && content?.trim()
+                ? 'writing'
+                : (confirmationData && conversationId) ||
+                    (choiceData && !!onRegenerate && !isStreaming)
+                  ? 'waiting'
+                  : 'resting'
           }
         />
         {/*
@@ -550,6 +552,7 @@ export function MessageBubble({
                   invocations={steps}
                   metrics={metrics ?? null}
                   isStreaming={isStreaming}
+                  quiet={!!isStreaming && !content?.trim()}
                 />
               );
             });
@@ -574,6 +577,7 @@ export function MessageBubble({
                     invocations={steps}
                     metrics={metrics ?? null}
                     isStreaming={isStreaming}
+                    quiet={!!isStreaming && !content?.trim()}
                   />
                 )}
                 {content && (

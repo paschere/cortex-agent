@@ -5,8 +5,8 @@ import { useChatCompose } from './ChatCompose';
 /**
  * El siguiente paso, ya redactado, en una tarjeta de cola.
  *
- * No manda el turno: lo deja en el compositor, que es donde una persona lo
- * puede retocar. Fuera del chat no hay compositor, y no se dibuja.
+ * Un toque manda el turno — el mismo `ask` del briefing vacío. No aprueba el
+ * correo: propone. Fuera del chat no hay a quién mandárselo, y no se dibuja.
  */
 export function NextMove({
   text,
@@ -15,14 +15,14 @@ export function NextMove({
   text: string;
   label?: string;
 }) {
-  const compose = useChatCompose();
-  if (!compose) return null;
+  const chat = useChatCompose();
+  if (!chat) return null;
 
   return (
     <button
       type="button"
-      onClick={() => compose(text)}
-      className="text-micro font-semibold text-amber underline decoration-amber/40 underline-offset-4 transition-colors hover:decoration-amber focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      onClick={() => chat.ask(text)}
+      className="text-sm font-semibold text-amber underline decoration-amber/40 underline-offset-4 transition-colors hover:decoration-amber focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       {label}
     </button>

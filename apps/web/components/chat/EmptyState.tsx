@@ -299,7 +299,7 @@ export function EmptyState({
   return (
     <div className="relative flex flex-1 flex-col items-center px-4 pb-8 pt-8 text-center [justify-content:safe_flex-end] sm:px-6 sm:pt-10">
       <div className="animate-rise mb-6 flex flex-col items-center">
-        <Mark />
+        {lead ? null : <Mark />}
         {waitingOn ? (
           <button
             type="button"
