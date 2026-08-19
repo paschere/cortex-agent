@@ -281,7 +281,8 @@ export function EmptyState({
   const waitingOn = Boolean(waiting && (waiting.total > 0 || waiting.lead));
   const lead = waiting?.lead ?? null;
   const { open, available } = usePanel();
-  const waitingPanel = waitingOn && !lead && available ? panelForWaiting(waiting.queues) : null;
+  const waitingPanel =
+    waitingOn && !lead && available && waiting ? panelForWaiting(waiting.queues) : null;
   const title = blank
     ? BLANK_COPY.title
     : lead

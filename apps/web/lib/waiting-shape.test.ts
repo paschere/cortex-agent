@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type WaitingCounts,
+  type WaitingLead,
   agoPhrase,
   briefingAsk,
   briefingAskAgain,
@@ -18,6 +19,15 @@ import {
   waitingQuestion,
   waitingTotal,
 } from './waiting-shape';
+
+function leadAsk(ask: string): WaitingLead {
+  return {
+    queue: 'commitments',
+    title: 'Factura 4412',
+    detail: null,
+    ask,
+  };
+}
 
 /**
  * Estas pruebas SON la especificación de la frase de /dashboard.
@@ -378,15 +388,15 @@ describe('el briefing en texto, el que WhatsApp puede decir', () => {
     });
     expect(letter).toContain('Factura 4412');
     expect(letter).toContain('¿Le escribo de nuevo por «Factura 4412»?');
-    expect(hasWaitingWork({ total: 0, lead: { ask: '¿Le escribo de nuevo?' } })).toBe(true);
+    expect(hasWaitingWork({ total: 0, lead: leadAsk('¿Le escribo de nuevo?') })).toBe(true);
     expect(hasWaitingWork({ total: 0 })).toBe(false);
-    expect(whatsappBriefingGate('hola', { total: 0, lead: { ask: '¿Le escribo de nuevo?' } })).toBe(
+    expect(whatsappBriefingGate('hola', { total: 0, lead: leadAsk('¿Le escribo de nuevo?') })).toBe(
       'brief',
     );
   });
 
   it('saludo con cola → briefing; sí → el turno; el resto corre', () => {
-    const waiting = { total: 1, lead: { ask: '¿Le escribo?' } };
+    const waiting = { total: 1, lead: leadAsk('¿Le escribo?') };
     expect(whatsappBriefingGate('hola', waiting)).toBe('brief');
     expect(whatsappBriefingGate('sí', waiting)).toBe('yes');
     expect(whatsappBriefingGate('¿cuánto debe Coltrans?', waiting)).toBe('run');
