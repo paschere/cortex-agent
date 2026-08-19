@@ -65,7 +65,7 @@ import {
 import { loadAgent } from '@cortex/agents';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
 import { type CoreMessage, type CoreTool, generateText, jsonSchema, streamText, tool } from 'ai';
-import { type NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse, after } from 'next/server';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
@@ -1076,35 +1076,28 @@ export async function POST(req: NextRequest) {
     onStepFinish: ({ usage, providerMetadata }) => {
       clock.modelStep(usage, providerMetadata);
     },
-    onFinish: async ({ text, toolCalls, toolResults, usage, steps }) => {
+  });
+
+  /**
+   * LA RESPUESTA SE ESCRIBE DESPUÉS DE DEVOLVER EL STREAM.
+   *
+   * En Vercel la función puede terminar en cuanto cierra el HTTP aunque el
+   * `onFinish` del SDK todavía tenga un insert pendiente — la persona ve la
+   * respuesta en vivo (viene del stream) pero al reabrir el hilo sólo están
+   * sus prompts. `after()` es el mismo patrón que `/api/chat-app/google`:
+   * Next mantiene la invocación viva hasta que este bloque termina.
+   */
+  after(async () => {
+    try {
+      const [text, steps, toolCalls, toolResults, usage] = await Promise.all([
+        result.text,
+        result.steps,
+        result.toolCalls,
+        result.toolResults,
+        result.usage,
+      ]);
       clock.finished(usage);
 
-      /**
-       * UN ENCARGO PEDIDO POR CHAT ARRANCA AHORA, NO EN EL PRÓXIMO BARRIDO.
-       *
-       * =====================================================================
-       * POR QUÉ ESTO VIVE AQUÍ Y NO EN LA HERRAMIENTA
-       * =====================================================================
-       * `errands.start` no puede mandar un evento de Inngest: `agent-tools` es
-       * una biblioteca y a propósito no depende de Inngest. Por eso hasta hoy
-       * el ARRANQUE de un encargo pedido hablando dependía del barrido, y el
-       * barrido corría cada minuto sólo para que «investígame esto» no tardara
-       * cinco en empezar. Su propio comentario lo dice.
-       *
-       * Esa función de biblioteca no puede, pero ESTA RUTA SÍ — vive en la app
-       * y ya importa el cliente. Es exactamente lo que hace `/api/errands`
-       * cuando el encargo nace por la API; lo único que faltaba era el mismo
-       * gesto cuando nace hablando.
-       *
-       * Con esto el barrido deja de ser el arranque y pasa a ser red de
-       * seguridad, que es lo que permite bajarlo de cada minuto a cada cinco:
-       * ~34.500 ejecuciones de paso menos al mes, sin un segundo de retraso.
-       *
-       * NO PUEDE TUMBAR EL TURNO. La respuesta ya se entregó cuando esto corre,
-       * y si el evento no sale, el barrido lo recoge en cinco minutos — que es
-       * exactamente lo que pasaba antes de este bloque. Por eso el `catch` se
-       * lo traga en vez de propagarlo.
-       */
       const startedErrands = (toolResults ?? []).flatMap((r) => {
         const call = r as { toolName?: string; result?: { errandId?: unknown } };
         if (call.toolName !== 'errands_start') return [];
@@ -1112,8 +1105,6 @@ export async function POST(req: NextRequest) {
         return typeof id === 'string' && id ? [id] : [];
       });
       if (startedErrands.length > 0) {
-        // `enqueueJobs` nunca lanza: si la cola parpadea, el barrido recoge el
-        // encargo en cinco minutos — exactamente el contrato de siempre.
         await enqueueJobs(
           startedErrands.map((errandId) => ({
             name: EVENT_ERRAND_ADVANCE,
@@ -1127,25 +1118,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      /**
-       * LA CRONOLOGÍA COMPLETA DEL MENSAJE, PARA QUE RECARGAR NO LA PIERDA.
-       *
-       * `content`, `tool_calls` y `tool_results` guardan las piezas por
-       * separado; lo que no guardaba nadie era EL ORDEN — texto, razonamiento y
-       * llamadas entrelazados como pasaron — ni el razonamiento a secas, y por
-       * eso una conversación reabierta se dibujaba distinta de la que se vio en
-       * vivo (ver `segmentsOf` en MessageBubble). Se reconstruye desde `steps`,
-       * que es la fuente que este callback ya recibe, y se recorta a topes
-       * honestos ANTES de insertar: ~100 KB por resultado de invocación
-       * (truncado con la marca `__truncated` y el primer trozo) y ~1 MB por
-       * mensaje. Números y porqués en lib/message-parts.ts; la forma, en la
-       * migración 0110.
-       *
-       * `null` cuando el turno fue solo texto — `content` ya lo lleva — y
-       * nunca un array vacío, por la misma regla que `brain_sources`. Un fallo
-       * aquí no puede costar el mensaje: sin parts se cae al fallback de
-       * siempre, que es exactamente lo que había.
-       */
       const storedParts = (() => {
         try {
           const built = buildStoredParts(steps ?? []);
@@ -1155,27 +1127,50 @@ export async function POST(req: NextRequest) {
         }
       })();
 
+      const baseRow = {
+        conversation_id: conversationId,
+        role: 'assistant' as const,
+        content: text,
+        tool_calls: toolCalls as unknown as object,
+        tool_results: toolResults as unknown as object,
+      };
+
       let assistantMessageId: string | null = null;
-      try {
-        const { data: assistantRow } = await db
+      const { data: assistantRow, error: insertError } = await db
+        .from('messages')
+        .insert({
+          ...baseRow,
+          parts: storedParts as unknown as object,
+          brain_sources: ragSources.length > 0 ? ragSources : null,
+        })
+        .select('id')
+        .single();
+
+      if (insertError) {
+        logger.error('chat: assistant message insert failed', {
+          conversationId,
+          message: insertError.message,
+          code: insertError.code,
+        });
+        const { data: fallbackRow, error: fallbackError } = await db
           .from('messages')
-          .insert({
-            conversation_id: conversationId,
-            role: 'assistant',
-            content: text,
-            tool_calls: toolCalls as unknown as object,
-            tool_results: toolResults as unknown as object,
-            parts: storedParts as unknown as object,
-            // NULL y no `[]` cuando no se leyó nada: la migración 0105 lo
-            // prohíbe a propósito, porque un array vacío y un NULL se dibujan
-            // igual y dos maneras de escribir el mismo hecho son dos maneras de
-            // que acaben significando cosas distintas.
-            brain_sources: ragSources.length > 0 ? ragSources : null,
-          })
+          .insert(baseRow)
           .select('id')
           .single();
+        if (fallbackError) {
+          logger.error('chat: assistant message fallback insert failed', {
+            conversationId,
+            message: fallbackError.message,
+            code: fallbackError.code,
+          });
+        } else {
+          assistantMessageId = (fallbackRow?.id as string | undefined) ?? null;
+        }
+      } else {
         assistantMessageId = (assistantRow?.id as string | undefined) ?? null;
-        // Auto-generate title on first turn
+      }
+
+      if (assistantMessageId) {
         const isFirstTurn = coreMessages.filter((m) => m.role === 'assistant').length <= 1;
         if (isFirstTurn && lastUserMessage) {
           void (async () => {
@@ -1183,9 +1178,6 @@ export async function POST(req: NextRequest) {
               const { text: titleText } = await generateText({
                 model: utilityModel(),
                 prompt: `Summarize this sales conversation starter in 5 words or fewer, no punctuation: "${lastUserMessage.content.slice(0, 200)}"`,
-                // Thinking off + real headroom: Claude counts reasoning against
-                // maxTokens, so the old 20-token cap would truncate before the
-                // title itself was ever emitted.
                 providerOptions: NO_THINKING,
                 maxTokens: 256,
               });
@@ -1198,6 +1190,7 @@ export async function POST(req: NextRequest) {
             }
           })();
         }
+
         await db.from('audit_events').insert({
           user_id: user.id,
           agent_id: agent.id,
@@ -1205,36 +1198,16 @@ export async function POST(req: NextRequest) {
           tool_id: '__agent_turn',
           input_hash: 'turn',
           status: 'ok',
-          // Was a hardcoded 0 on every turn this route has ever served — the one
-          // row that claimed to say how long a turn took, saying nothing. The
-          // admin usage page computes its p50/p95 over this column, so those
-          // percentiles were being dragged toward zero by every chat turn in the
-          // workspace. Now it is the measurement.
           latency_ms: Math.round(performance.now() - started),
           metadata: {
             model: agent.defaultModel,
             tokensIn: usage?.promptTokens ?? 0,
             tokensOut: usage?.completionTokens ?? 0,
-            // The number the total does not contain: how long the person waited
-            // before anything appeared. Kept here as well as in turn_latencies
-            // so the audit drawer, which nobody joins from, still says it.
             firstVisibleMs: clock.snapshot().firstVisibleMs,
           },
         });
-      } catch {
-        // Non-fatal: don't kill the stream if persistence fails
       }
 
-      // The turn's context, written after the last token has already reached
-      // the person. Outside the try above on purpose: a turn whose message
-      // failed to persist is exactly the turn somebody will want to inspect, so
-      // the capture must not be skipped by the same failure. `save` swallows
-      // its own errors and is awaited only so the serverless invocation is not
-      // frozen mid-write — nobody is waiting on it, the response is finished.
-      // Both captures go out together, and both after the answer. Concurrent
-      // rather than sequential so the invocation is held open for one write and
-      // not two — nobody is waiting on either, but a serverless function billed
-      // for the wait may as well wait once.
       await Promise.all([
         recorder.save(db, {
           messageId: assistantMessageId,
@@ -1245,7 +1218,12 @@ export async function POST(req: NextRequest) {
         }),
         clock.save(db, { messageId: assistantMessageId }),
       ]);
-    },
+    } catch (err) {
+      logger.error('chat: post-turn persistence failed', {
+        conversationId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   return result.toDataStreamResponse({
