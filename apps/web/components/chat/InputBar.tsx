@@ -107,9 +107,9 @@ const CHAR_COUNT_THRESHOLD = 3500;
  *
  *   agent pill   Which agent answers. It changes what Cortex is ALLOWED to do,
  *                which is the person's business. Already here.
- *   📎 adjuntar  Dragging a file is not a gesture that exists on a phone. The
- *                tray was reachable by drag alone, so on the surface where most
- *                of these people are standing, attaching was impossible.
+ *   📎 adjuntar  Siempre visible: en el teléfono no hay arrastrar y soltar, y
+ *                esconderlo detrás de «+» lo volvía imposible de encontrar.
+ *                Dictar, memoria y mirar pantalla siguen en extras.
  *   🎙 dictar    Hands full, phone in a pocket. See VoiceDictation.tsx.
  *   🧠 memoria   Which part of the brain answers. See MemoryScope.tsx.
  *   👁 mirar     Ask about what is ON THE SCREEN. It is admitted against the
@@ -746,11 +746,24 @@ export function InputBar({
                 </DropdownMenu.Root>
               ))}
 
+            {openFilePicker && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => openFilePicker()}
+                aria-label="Adjuntar un archivo"
+                title="Adjuntar un archivo"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-40 motion-reduce:transition-none"
+              >
+                <Paperclip className="h-4 w-4" aria-hidden />
+              </button>
+            )}
+
             <button
               type="button"
               disabled={disabled}
               aria-expanded={extras || Boolean(screen?.live)}
-              aria-label={extras ? 'Esconder extras' : 'Más: adjuntar, dictar, mirar'}
+              aria-label={extras ? 'Esconder extras' : 'Más: dictar, memoria, mirar pantalla'}
               onClick={() => setExtras((was) => !was)}
               className={clsx(
                 'grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors duration-150 motion-reduce:transition-none',
@@ -766,18 +779,6 @@ export function InputBar({
             {(extras || screen?.live) && (
               <>
                 <ScopePicker selected={scope} onChange={onScopeChange} disabled={disabled} />
-                {openFilePicker && (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => openFilePicker()}
-                    aria-label="Adjuntar un archivo"
-                    title="Adjuntar un archivo"
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-faint transition-colors duration-150 hover:bg-surface-2 hover:text-ink disabled:opacity-40 motion-reduce:transition-none"
-                  >
-                    <Paperclip className="h-4 w-4" aria-hidden />
-                  </button>
-                )}
                 <VoiceDictation
                   disabled={disabled}
                   getBaseText={() => textRef.current}
