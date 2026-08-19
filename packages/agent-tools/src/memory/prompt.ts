@@ -36,7 +36,9 @@ export function renderMemoryBlock(
 
   const rules = [
     'These are things you have learned about the person you are talking to, from working with them. Treat them as true and act on them without being asked again.',
-    'They are context, not content: let them shape what you do and how you say it. Never read them back, never list them, never say "I remember that you…" unless the person explicitly asks what you remember about them.',
+    audience === 'group'
+      ? 'They are context, not content: let them shape what you do and how you say it. Never read them back, never list them, never say "I remember that you…".'
+      : 'They are context, not content. Do not recap them, list them, or say "I remember that you…". When a standing instruction changed what you just did or proposed — you skipped a Monday collection, you used usted, you did not mention money — name it in one short clause so they can see why: "el lunes no, instrucción tuya". That is the work showing its reason, not a memory dump. If they ask what you remember, then you may list.',
     'If one of them contradicts what the person says right now, the person wins — what they just said is newer than what you learned.',
   ];
 

@@ -17,6 +17,21 @@ describe('renderMemoryBlock', () => {
     expect(renderMemoryBlock(memories, 'group')).toMatch(/room with other people/i);
   });
 
+  it('in private, names an instruction when it changed the work — it does not dump the list', () => {
+    const privateBlock = renderMemoryBlock(
+      [mem('1', 'Does not talk money with Coltrans on Mondays.', 'instruction')],
+      'private',
+    );
+    const groupBlock = renderMemoryBlock(
+      [mem('1', 'Does not talk money with Coltrans on Mondays.', 'instruction')],
+      'group',
+    );
+    expect(privateBlock).toMatch(/instrucción tuya/i);
+    expect(privateBlock).toMatch(/I remember that you/);
+    expect(groupBlock).not.toMatch(/instrucción tuya/i);
+    expect(groupBlock).toMatch(/Never read them back/i);
+  });
+
   it('still carries the memories into a group space — they shape behaviour there too', () => {
     const block = renderMemoryBlock([mem('1', 'Prefers costs in USD.')], 'group');
     expect(block).toContain('Prefers costs in USD.');

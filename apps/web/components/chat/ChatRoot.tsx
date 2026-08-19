@@ -398,7 +398,7 @@ export function ChatRoot({
                     : 'Conversación nueva')}
           </div>
         </div>
-        {messages.length > 0 && waiting && waiting.total > 0 ? (
+        {messages.length > 0 && waiting && (waiting.total > 0 || waiting.lead) ? (
           <WaitingNotice waiting={waiting} onAsk={handleSend} />
         ) : null}
         <div className="ml-auto flex min-w-0 shrink items-center">

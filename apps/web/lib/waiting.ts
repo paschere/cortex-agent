@@ -22,8 +22,11 @@ import {
   type WaitingNoticeData,
   type WaitingQueue,
   agoPhrase,
-  briefingAsk,
+  LINGERING_DAYS,
+  briefingAskAgain,
+  lingeringSentence,
   noticeFromCounts,
+  pickBriefingLead,
   summarizeWaiting,
   waitingTotal,
 } from './waiting-shape';
@@ -187,14 +190,15 @@ export async function readWaitingIndex(
 }
 
 /**
- * El aviso del chat: los conteos y, si hay algo, el primer asunto.
+ * El aviso del chat: los conteos y el asunto que más duele.
  *
  * Abrir una conversación nueva no puede costar las cuatro lecturas del índice.
  * Los conteos salen de `countNavSignals`, que el layout ya corre. El nombre
- * propio —sin el cual el vacío del chat seguiría siendo un número— es UNA
- * lectura más: el primer elemento de la primera cola que no está vacía, en el
- * orden de `WAITING_QUEUES`. Si esa lectura falla, la frase del conteo sigue
- * siendo verdad y el aviso se queda en ella.
+ * propio sale de la primera cola no vacía y, si no hay una aprobación a punto
+ * de expirar, del correo enviado que más lleva sin respuesta. Ese silencio no
+ * está en las colas —ya salió— y sin esa lectura el martes sigue preguntando
+ * «¿en qué te ayudo?» con Coltrans nueve días mudo. Si una lectura falla, la
+ * frase del conteo sigue siendo verdad.
  */
 export async function readWaitingNotice(
   organizationId: string,
@@ -203,21 +207,51 @@ export async function readWaitingNotice(
   const counts = await countNavSignals(organizationId, userId);
   const notice = noticeFromCounts(counts);
   const first = notice.queues[0];
-  if (!first) return notice;
-
   const db = getOrgScopedClient(organizationId);
-  const preview = await readQueue(first.queue, db, organizationId, userId, Date.now());
+  const now = Date.now();
+
+  if (first?.queue === 'approvals') {
+    const preview = await readApprovals(db, userId, now);
+    const item = preview.items[0];
+    if (!item) return notice;
+    return {
+      ...notice,
+      lead: pickBriefingLead({
+        approval: { title: item.title, detail: item.detail },
+        queue: null,
+        lingering: null,
+      }),
+    };
+  }
+
+  const [preview, lingering] = await Promise.all([
+    first ? readQueue(first.queue, db, organizationId, userId, now) : Promise.resolve(EMPTY),
+    readLingeringLead(db, userId, now),
+  ]);
   const item = preview.items[0];
-  if (!item) return notice;
+  const lead = pickBriefingLead({
+    approval: null,
+    queue:
+      item && first
+        ? {
+            queue: first.queue,
+            title: item.title,
+            detail: item.detail,
+            days: preview.oldestDays,
+          }
+        : null,
+    lingering,
+  });
+  if (!lead) return notice;
+
+  const lingeringWon = Boolean(
+    lingering && lead.ask === briefingAskAgain(lingering.title),
+  );
 
   return {
     ...notice,
-    lead: {
-      queue: first.queue,
-      title: item.title,
-      detail: item.detail,
-      ask: briefingAsk(first.queue, item.title),
-    },
+    sentence: lingeringWon && lingering ? lingeringSentence(lingering.days) : notice.sentence,
+    lead,
   };
 }
 
@@ -237,6 +271,53 @@ async function readQueue(
       return readActions(db, userId, now);
     case 'errands':
       return readErrands(db, organizationId, now);
+  }
+}
+
+/**
+ * El correo enviado que más lleva sin respuesta.
+ *
+ * No es una quinta cola del rail: la acción ya está `approved` y ninguna
+ * pantalla de espera la reclama. Una fila, la más vieja que ya cruzó
+ * `LINGERING_DAYS`. Si la lectura falla, el briefing se queda con las colas;
+ * un silencio invisible es peor, pero un chat que no abre es peor todavía.
+ */
+async function readLingeringLead(
+  db: Db,
+  userId: string,
+  now: number,
+): Promise<{ title: string; detail: string | null; days: number } | null> {
+  try {
+    const { data, error } = await db
+      .from('actions')
+      .select('recipient, subject, executed_at')
+      .eq('user_id', userId)
+      .eq('outcome', 'awaiting')
+      .not('executed_at', 'is', null)
+      .order('executed_at', { ascending: true })
+      .limit(20);
+    if (error) throw error;
+
+    for (const row of (data ?? []) as Array<{
+      recipient: string | null;
+      subject: string | null;
+      executed_at: string | null;
+    }>) {
+      const at = Date.parse(row.executed_at ?? '');
+      if (Number.isNaN(at)) continue;
+      const days = Math.floor((now - at) / 86_400_000);
+      if (days < LINGERING_DAYS) continue;
+      const title = row.subject?.trim();
+      if (!title) continue;
+      return {
+        title,
+        detail: row.recipient?.trim() || null,
+        days,
+      };
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 

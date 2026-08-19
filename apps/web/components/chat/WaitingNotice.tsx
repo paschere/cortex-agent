@@ -2,7 +2,7 @@
 
 import { usePanel } from '@/components/panel/PanelHost';
 import { panelForWaiting } from '@/lib/waiting-panel';
-import { type WaitingNoticeData, waitingQuestion } from '@/lib/waiting-shape';
+import { hasWaitingWork, type WaitingNoticeData, waitingQuestion } from '@/lib/waiting-shape';
 import { clsx } from 'clsx';
 
 /**
@@ -49,10 +49,10 @@ export function WaitingNotice({
 }) {
   const { open, available } = usePanel();
 
-  if (waiting.total <= 0) return null;
+  if (!hasWaitingWork(waiting)) return null;
 
-  const panel = available ? panelForWaiting(waiting.queues) : null;
-  const question = waitingQuestion(waiting.queues);
+  const panel = available && !waiting.lead ? panelForWaiting(waiting.queues) : null;
+  const question = waiting.lead?.ask ?? waitingQuestion(waiting.queues);
   const detail = waiting.queues.map((q) => `${q.label} ${q.count}`).join(' · ');
 
   return (
@@ -70,9 +70,9 @@ export function WaitingNotice({
     >
       {/* El punto es todo el énfasis que se permite una línea permanente. */}
       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber" aria-hidden />
-      {/* Estrecho, la cabecera ya lleva el agente, los hilos y dos botones: se
-          queda el número, que es la mitad que hace levantar la vista. */}
-      <span className="tabular font-semibold text-ink sm:hidden">{waiting.total}</span>
+      {waiting.total > 0 ? (
+        <span className="tabular font-semibold text-ink sm:hidden">{waiting.total}</span>
+      ) : null}
       <span className="hidden min-w-0 truncate font-medium sm:inline">{waiting.sentence}</span>
     </button>
   );

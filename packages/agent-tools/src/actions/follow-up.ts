@@ -1,4 +1,4 @@
-import { FOLLOW_UP_WINDOW_MS } from './shape';
+import { FOLLOW_UP_DAYS, FOLLOW_UP_WINDOW_MS } from './shape';
 
 /**
  * Closing the loop.
@@ -100,4 +100,15 @@ export function outcomeNoteForResolution(kind: 'commitment_met' | 'commitment_dr
   return kind === 'commitment_met'
     ? 'El compromiso quedó cumplido, así que esta acción ya no está pendiente.'
     : 'El compromiso se descartó, así que esta acción ya no está pendiente.';
+}
+
+/**
+ * Lo que se dice en cuanto el correo salió.
+ *
+ * El sweep espera `FOLLOW_UP_DAYS` antes de tratar el silencio como hallazgo.
+ * Si esta línea no se dice al enviar, esa espera es invisible y Cortex parece
+ * haber soltado el hilo.
+ */
+export function insistLine(): string {
+  return `Si no contestan, insisto a los ${FOLLOW_UP_DAYS} días.`;
 }

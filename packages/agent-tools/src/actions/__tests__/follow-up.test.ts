@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CommitmentRow } from '../../commitments/shape';
 import { draftCollectionNotice, draftOwnerReminder, longDate } from '../draft';
-import { addressOf, findReply, silenceIsFinal } from '../follow-up';
+import { addressOf, findReply, insistLine, silenceIsFinal } from '../follow-up';
 import { planOwnerReminders } from '../sweep';
 
 /**
@@ -86,6 +86,12 @@ describe('silenceIsFinal', () => {
   });
   it('is false for something that never ran', () => {
     expect(silenceIsFinal(null, new Date())).toBe(false);
+  });
+});
+
+describe('insistLine', () => {
+  it('names the same window the sweep uses, in a sentence a person can hear', () => {
+    expect(insistLine()).toBe('Si no contestan, insisto a los 10 días.');
   });
 });
 

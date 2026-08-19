@@ -14,6 +14,7 @@ export {
   ACTION_OUTCOMES,
   ACTION_STATES,
   ActionIntegrityError,
+  FOLLOW_UP_DAYS,
   FOLLOW_UP_WINDOW_MS,
   KIND_AUDIENCE,
   KIND_LABEL as ACTION_KIND_LABEL,
@@ -88,7 +89,13 @@ export type {
   EscalationsDueInput,
 } from './escalation';
 
-export { addressOf, findReply, outcomeNoteForResolution, silenceIsFinal } from './follow-up';
+export {
+  addressOf,
+  findReply,
+  insistLine,
+  outcomeNoteForResolution,
+  silenceIsFinal,
+} from './follow-up';
 export type { ReplyVerdict, ThreadMessage } from './follow-up';
 
 export { REMINDER_COOLDOWN_MS, planOwnerReminders, recentlyActedOrigins } from './sweep';

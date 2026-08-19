@@ -103,3 +103,10 @@ export function expiryPhrase(expiresAt: string, now: number = Date.now()): strin
   const hours = Math.ceil(ms / 3_600_000);
   return `vence en ${hours} ${hours === 1 ? 'hora' : 'horas'}`;
 }
+
+/** Same window the sweep uses. Copied: this file cannot import the barrel. */
+export const FOLLOW_UP_DAYS = 10;
+
+export function insistLine(): string {
+  return `Si no contestan, insisto a los ${FOLLOW_UP_DAYS} días.`;
+}

@@ -149,18 +149,93 @@ export function briefingAsk(queue: WaitingQueue, title: string): string {
 }
 
 /**
+ * El sí cuando el correo ya salió y nadie contestó.
+ *
+ * `briefingAsk('actions', …)` pregunta si se manda un borrador. Aquí el
+ * borrador ya se mandó: lo que duele es el silencio, y la pregunta es si se
+ * insiste.
+ */
+export function briefingAskAgain(title: string): string {
+  return `¿Le escribo de nuevo por «${clipTitle(title)}»?`;
+}
+
+/**
+ * A partir de cuántos días en silencio un correo enviado es noticia.
+ *
+ * Un cobro de anteayer es el trabajo del día. Siete días significa que ya
+ * pasó el ciclo de insistir de un gerente paciente y el silencio merece
+ * nombre propio. El sweep trata el silencio como hallazgo a los diez
+ * (`FOLLOW_UP_DAYS`); el briefing habla antes, para que el martes no
+ * dependa de que el cron haya cerrado la ventana.
+ */
+export const LINGERING_DAYS = 7;
+
+export function lingeringSentence(days: number): string {
+  return `Un correo lleva ${dayPhrase(days)} sin respuesta.`;
+}
+
+export interface BriefingCandidate {
+  title: string;
+  detail: string | null;
+}
+
+/**
+ * Qué nombra el chat vacío.
+ *
+ * Una aprobación que expira gana siempre: el reloj no espera. Después, el
+ * silencio más largo gana al borrador fresco — «quién no me contestó» es la
+ * pregunta que las cuatro colas no hacían, porque el correo ya salió y
+ * ninguna las reclama. Sin modelo: las mismas entradas dan el mismo lead.
+ */
+export function pickBriefingLead(input: {
+  approval: BriefingCandidate | null;
+  queue: (BriefingCandidate & { queue: WaitingQueue; days: number | null }) | null;
+  lingering: (BriefingCandidate & { days: number }) | null;
+}): WaitingLead | null {
+  if (input.approval) {
+    return {
+      queue: 'approvals',
+      title: input.approval.title,
+      detail: input.approval.detail,
+      ask: briefingAsk('approvals', input.approval.title),
+    };
+  }
+  const lingering = input.lingering;
+  const queue = input.queue;
+  const lingeringWins =
+    lingering !== null &&
+    lingering.days >= LINGERING_DAYS &&
+    (queue === null || lingering.days > (queue.days ?? 0));
+  if (lingeringWins && lingering) {
+    return {
+      queue: 'actions',
+      title: lingering.title,
+      detail: lingering.detail,
+      ask: briefingAskAgain(lingering.title),
+    };
+  }
+  if (!queue) return null;
+  return {
+    queue: queue.queue,
+    title: queue.title,
+    detail: queue.detail,
+    ask: briefingAsk(queue.queue, queue.title),
+  };
+}
+
+/**
  * El mismo briefing, en texto. WhatsApp no pinta tarjetas; el vacío del chat
  * sí. Las dos superficies tienen que decir la misma cosa, y esta función es
  * esa cosa: nombre, frase, pregunta. Sin modelo.
  */
 export function briefingLetter(waiting: WaitingNoticeData): string | null {
-  if (waiting.total <= 0) return null;
   if (waiting.lead) {
     const lines = [clipTitle(waiting.lead.title, 90), waiting.sentence, waiting.lead.ask];
     if (waiting.lead.detail) lines.splice(1, 0, waiting.lead.detail);
     lines.push('Responde «sí» y lo hago.');
     return lines.join('\n\n');
   }
+  if (waiting.total <= 0) return null;
   return `${waiting.sentence}\n\nResponde «sí» y lo abro.`;
 }
 
@@ -190,19 +265,27 @@ export function whatsappBriefingGate(
   text: string,
   waiting: Pick<WaitingNoticeData, 'total'> & { lead?: WaitingLead | null },
 ): WhatsappBriefingGate {
-  if (waiting.total <= 0) return 'run';
+  if (!hasWaitingWork(waiting)) return 'run';
   if (isWaitingYes(text)) return 'yes';
   if (isGreeting(text)) return 'brief';
   return 'run';
 }
 
+/** Hay trabajo que ofrecer: una cola, o un correo que nadie contestó. */
+export function hasWaitingWork(
+  waiting: Pick<WaitingNoticeData, 'total'> & { lead?: WaitingLead | null },
+): boolean {
+  return waiting.total > 0 || Boolean(waiting.lead);
+}
+
 /**
  * Lo primero que hay que hacer, con nombre propio.
  *
- * Lo carga el aviso del chat con UNA lectura extra —el primer elemento de la
- * primera cola que no está vacía—, no las cuatro listas del índice. Ausente
- * cuando no hay nada o cuando esa lectura falló: la frase del conteo sigue
- * siendo verdad.
+ * Lo carga el aviso del chat con los conteos, el primer elemento de la
+ * primera cola, y —si ninguna aprobación está por expirar— el correo
+ * enviado que más lleva sin respuesta. Ese silencio no vive en las cuatro
+ * colas: la acción ya salió. Ausente cuando no hay nada o cuando esas
+ * lecturas fallaron: la frase del conteo sigue siendo verdad.
  */
 export interface WaitingLead {
   queue: WaitingQueue;

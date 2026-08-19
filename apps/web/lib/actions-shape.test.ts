@@ -2,10 +2,12 @@ import {
   ACTION_KIND_LABEL,
   ACTION_KINDS,
   ACTION_OUTCOMES,
+  FOLLOW_UP_DAYS,
   KIND_AUDIENCE,
   OUTCOME_LABEL,
   OUTCOME_TONE,
   expiryPhrase,
+  insistLine,
   shortHash,
 } from '@/lib/actions-shape';
 import * as tools from '@cortex/agent-tools';
@@ -42,6 +44,11 @@ describe('the browser copy matches the real vocabulary', () => {
     expect([...ACTION_OUTCOMES]).toEqual([...tools.ACTION_OUTCOMES]);
     expect(OUTCOME_LABEL).toEqual(tools.OUTCOME_LABEL);
     expect(OUTCOME_TONE).toEqual(tools.OUTCOME_TONE);
+  });
+
+  it('promises the same follow-up window after a send', () => {
+    expect(FOLLOW_UP_DAYS).toBe(tools.FOLLOW_UP_DAYS);
+    expect(insistLine()).toBe(tools.insistLine());
   });
 });
 

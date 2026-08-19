@@ -115,7 +115,8 @@ export const PROPOSAL_TTL_MS = 7 * 24 * 60 * 60_000;
  * as ignoring you, short enough that a cobro nobody ever answered surfaces
  * while the invoice can still be chased.
  */
-export const FOLLOW_UP_WINDOW_MS = 10 * 24 * 60 * 60_000;
+export const FOLLOW_UP_DAYS = 10;
+export const FOLLOW_UP_WINDOW_MS = FOLLOW_UP_DAYS * 24 * 60 * 60_000;
 
 // ---------------------------------------------------------------------------
 // The fingerprint

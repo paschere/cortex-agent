@@ -3,12 +3,16 @@ import {
   type WaitingCounts,
   agoPhrase,
   briefingAsk,
+  briefingAskAgain,
   briefingLetter,
   isGreeting,
   isWaitingYes,
+  lingeringSentence,
+  pickBriefingLead,
   whatsappBriefingGate,
   clipTitle,
   dayPhrase,
+  hasWaitingWork,
   noticeFromCounts,
   summarizeWaiting,
   waitingQuestion,
@@ -265,6 +269,10 @@ describe('el sí del briefing', () => {
     );
   });
 
+  it('un correo ya enviado pide escribir de nuevo, no mandar el borrador', () => {
+    expect(briefingAskAgain('Factura 4412')).toBe('¿Le escribo de nuevo por «Factura 4412»?');
+  });
+
   it('recorta un asunto largo para que la pregunta quepa en un renglón', () => {
     const long = 'A'.repeat(90);
     const ask = briefingAsk('commitments', long);
@@ -272,6 +280,60 @@ describe('el sí del briefing', () => {
     expect(ask.endsWith('…»?')).toBe(true);
     expect(clipTitle(long).endsWith('…')).toBe(true);
     expect(clipTitle(long).length).toBeLessThanOrEqual(72);
+  });
+});
+
+describe('quién no contestó gana el briefing', () => {
+  const coltrans = {
+    title: 'Factura 4412',
+    detail: 'cartera@coltrans.com.co',
+    days: 9,
+  };
+  const draft = {
+    queue: 'actions' as const,
+    title: 'Recordatorio de pago',
+    detail: null,
+    days: 2,
+  };
+
+  it('una aprobación que expira gana a un silencio de nueve días', () => {
+    const lead = pickBriefingLead({
+      approval: { title: 'Enviar el cobro', detail: null },
+      queue: draft,
+      lingering: coltrans,
+    });
+    expect(lead?.queue).toBe('approvals');
+    expect(lead?.ask).toContain('¿Apruebo');
+  });
+
+  it('un silencio largo gana a un borrador fresco', () => {
+    const lead = pickBriefingLead({
+      approval: null,
+      queue: draft,
+      lingering: coltrans,
+    });
+    expect(lead?.ask).toBe('¿Le escribo de nuevo por «Factura 4412»?');
+    expect(lead?.title).toBe('Factura 4412');
+  });
+
+  it('sin colas, el silencio solo todavía abre el día', () => {
+    const lead = pickBriefingLead({
+      approval: null,
+      queue: null,
+      lingering: coltrans,
+    });
+    expect(lead?.ask).toBe('¿Le escribo de nuevo por «Factura 4412»?');
+    expect(lingeringSentence(9)).toBe('Un correo lleva nueve días sin respuesta.');
+  });
+
+  it('seis días todavía no son noticia', () => {
+    expect(
+      pickBriefingLead({
+        approval: null,
+        queue: draft,
+        lingering: { ...coltrans, days: 6 },
+      })?.title,
+    ).toBe('Recordatorio de pago');
   });
 });
 
@@ -300,6 +362,27 @@ describe('el briefing en texto, el que WhatsApp puede decir', () => {
     expect(isWaitingYes('si puedes')).toBe(false);
     expect(isGreeting('hola')).toBe(true);
     expect(isGreeting('Hola, ¿cuánto debe Coltrans?')).toBe(false);
+  });
+
+  it('sin colas, un silencio de nueve días todavía es el briefing', () => {
+    const letter = briefingLetter({
+      total: 0,
+      sentence: lingeringSentence(9),
+      queues: [],
+      lead: {
+        queue: 'actions',
+        title: 'Factura 4412',
+        detail: 'cartera@coltrans.com.co',
+        ask: briefingAskAgain('Factura 4412'),
+      },
+    });
+    expect(letter).toContain('Factura 4412');
+    expect(letter).toContain('¿Le escribo de nuevo por «Factura 4412»?');
+    expect(hasWaitingWork({ total: 0, lead: { ask: '¿Le escribo de nuevo?' } })).toBe(true);
+    expect(hasWaitingWork({ total: 0 })).toBe(false);
+    expect(whatsappBriefingGate('hola', { total: 0, lead: { ask: '¿Le escribo de nuevo?' } })).toBe(
+      'brief',
+    );
   });
 
   it('saludo con cola → briefing; sí → el turno; el resto corre', () => {

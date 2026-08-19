@@ -278,8 +278,8 @@ export function EmptyState({
   const blank = data?.blank ?? false;
   const cards = data?.openers ?? [];
   const suggestion = !blank ? cards[0] : undefined;
-  const waitingOn = waiting && waiting.total > 0;
-  const lead = waitingOn ? waiting.lead : null;
+  const waitingOn = Boolean(waiting && (waiting.total > 0 || waiting.lead));
+  const lead = waiting?.lead ?? null;
   const { open, available } = usePanel();
   const waitingPanel = waitingOn && !lead && available ? panelForWaiting(waiting.queues) : null;
   const title = blank

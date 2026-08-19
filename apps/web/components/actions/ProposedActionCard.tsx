@@ -1,14 +1,15 @@
 'use client';
 
+import { Provenance } from '@/components/ui/provenance';
 import {
   type ActionView,
   KIND_AUDIENCE,
   OUTCOME_LABEL,
   OUTCOME_TONE,
   expiryPhrase,
+  insistLine,
   shortHash,
 } from '@/lib/actions-shape';
-import { Provenance } from '@/components/ui/provenance';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import {
@@ -171,9 +172,12 @@ export function ProposedActionCard({ action, onSettled, dense }: ProposedActionC
   // ---- Settled states ----------------------------------------------------
   if (status === 'sent') {
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-card border border-emerald/25 bg-emerald-soft px-4 py-3 text-sm font-semibold text-emerald shadow-card">
-        <Check className="h-4 w-4 shrink-0" />
-        Enviada — {draft.kindLabel} a {draft.to.join(', ')}
+      <div className="rounded-card border border-emerald/25 bg-emerald-soft px-4 py-3 text-sm font-semibold text-emerald shadow-card">
+        <div className="flex flex-wrap items-center gap-2">
+          <Check className="h-4 w-4 shrink-0" />
+          Enviada — {draft.kindLabel} a {draft.to.join(', ')}
+        </div>
+        <p className="mt-1 text-xs font-medium text-emerald">{insistLine()}</p>
       </div>
     );
   }

@@ -25,6 +25,7 @@ import { authorizationPhrase } from './mandates/delegation';
 import { mustReadList } from './supabase/read';
 import { getOrgScopedClient } from './supabase/service';
 import { toolLabel } from './tool-labels';
+import { LINGERING_DAYS } from './waiting-shape';
 
 /**
  * LAS LECTURAS DE LA JORNADA.
@@ -80,9 +81,6 @@ import { toolLabel } from './tool-labels';
  * falla en voz alta, y eso es exactamente lo que hace `gaps` — sin permitir que
  * un índice caído borre las otras diez clases de trabajo del día.
  */
-
-/** A partir de cuántos días en silencio un correo enviado es noticia. */
-const LINGERING_DAYS = 7;
 
 /**
  * Cuánto puede llevar abierto un trámite antes de que sea «se quedó a medias».
