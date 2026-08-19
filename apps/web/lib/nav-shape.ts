@@ -27,6 +27,7 @@ import {
   Settings,
   ShieldCheck,
   Sprout,
+  Table2,
   Target,
   Users,
   UsersRound,
@@ -228,6 +229,7 @@ export const SECTIONS: NavSection[] = [
     label: 'Con quién trabajo',
     items: [
       { href: '/clients', label: 'Clientes', icon: Building2 },
+      { href: '/trackers', label: 'Tablas', icon: Table2 },
       { href: '/payments', label: 'Cartera', icon: Wallet },
     ],
   },

@@ -131,6 +131,8 @@ describe('el panel en la dirección', () => {
       'approvals',
       'clients',
       'client',
+      'trackers',
+      'tracker',
     ];
     expect(Object.keys(PANELS).sort()).toEqual([...ids].sort());
   });
@@ -149,6 +151,10 @@ describe('la entrada se arma en el servidor', () => {
     expect(resolvePanelInput('client', '  andina  ')).toEqual({
       ok: true,
       input: { client: 'andina' },
+    });
+    expect(resolvePanelInput('tracker', 'remates')).toEqual({
+      ok: true,
+      input: { limit: 40, tracker: 'remates' },
     });
   });
 

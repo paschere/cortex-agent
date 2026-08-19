@@ -34,6 +34,7 @@ export const cortexRemember = registerTool({
   }),
   outputSchema: z.object({
     remembered: z.string(),
+    kind: z.enum(['instruction', 'preference', 'vocabulary', 'fact']),
     /** How full the always-on set is, so Cortex can say when something fell out. */
     total: z.number().int(),
     limit: z.number().int(),
@@ -71,6 +72,7 @@ export const cortexRemember = registerTool({
 
     return {
       remembered: input.memory.trim(),
+      kind: input.kind,
       total: active.length,
       limit: MEMORY_LIMIT,
       evicted,

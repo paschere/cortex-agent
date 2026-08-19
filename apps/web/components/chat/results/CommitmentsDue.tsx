@@ -8,6 +8,7 @@ import { chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { CalendarClock, Car } from 'lucide-react';
 import Link from 'next/link';
+import { NextMove } from '../NextMove';
 import { PinSurface } from '../PinSurface';
 import type { ResultViewProps } from './registry';
 
@@ -131,6 +132,14 @@ function CommitmentRow({ commitment: c }: { commitment: Row }) {
               {c.title}
             </Link>
           </p>
+          {(c.state === 'overdue' || c.state === 'due_soon') && (
+            <div className="mt-1">
+              <NextMove
+                text={`Déjame redactado un mensaje para ${c.counterparty || c.title} por ${c.title}.`}
+                label={c.counterparty ? `¿Le escribo a ${c.counterparty}?` : '¿Le escribo?'}
+              />
+            </div>
+          )}
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-muted">
             {c.vehiclePlate && (
               <span className="inline-flex items-center gap-1">

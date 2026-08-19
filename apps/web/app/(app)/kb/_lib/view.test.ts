@@ -10,6 +10,7 @@ import {
   fitView,
   focusStats,
   litSet,
+  livingSubtitle,
   neighbourMap,
   panBy,
   scaleOf,
@@ -172,6 +173,47 @@ describe('the viewBox', () => {
     expect(centred.x + centred.w / 2).toBeCloseTo(210, 5);
     // The rim is inside the overscroll allowance, so it really does centre.
     expect(centred.y + centred.h / 2).toBeCloseTo(60, 5);
+  });
+});
+
+describe('livingSubtitle', () => {
+  it('invites feeding when there is nothing to walk yet', () => {
+    expect(livingSubtitle({ chunks: 0, spaces: 0, lastAdded: null })).toContain(
+      'Todavía no guarda nada',
+    );
+    expect(livingSubtitle({ chunks: 0, spaces: 0, lastAdded: null })).toContain(
+      'suelta un archivo y pídele que lo recuerde',
+    );
+  });
+
+  it('does not ask for a space when the shelves are already there', () => {
+    const line = livingSubtitle({ chunks: 0, spaces: 2, lastAdded: null });
+    expect(line).toContain('Los espacios ya están');
+    expect(line).not.toContain('Crea un espacio');
+    expect(line).toContain('suelta un archivo');
+  });
+
+  it('names the fragments and still invites feeding while the corpus is thin', () => {
+    const line = livingSubtitle({ chunks: 8, spaces: 2, lastAdded: 'hace 3 h' });
+    expect(line).toContain('8 fragmentos');
+    expect(line).toContain('2 espacios');
+    expect(line).toContain('Todavía cabe más');
+    expect(line).toContain('suelta un archivo');
+  });
+
+  it('reads as a living memory once there is something to review', () => {
+    const line = livingSubtitle({ chunks: 1284, spaces: 4, lastAdded: 'hace 2 h' });
+    expect(line).toContain('1.284 fragmentos');
+    expect(line).toContain('4 espacios');
+    expect(line).toContain('hace 2 h');
+    expect(line).toContain('Recorre las zonas');
+    expect(line).toContain('el chat también alimenta');
+  });
+
+  it('does not invent a fragment count when the reading came back null', () => {
+    const line = livingSubtitle({ chunks: null, spaces: 3, lastAdded: null });
+    expect(line).not.toMatch(/\d+\s+fragmentos/);
+    expect(line).toContain('3 espacios');
   });
 });
 

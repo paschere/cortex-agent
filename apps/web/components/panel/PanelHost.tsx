@@ -484,7 +484,7 @@ export function PanelHost() {
       // puede seguir escribiendo con él abierto.
       aria-label={PANELS[panelId].title}
       className={clsx(
-        'flex shrink-0 flex-col border-l border-border bg-surface outline-none',
+        'flex shrink-0 flex-col border-l border-border bg-surface outline-none print:hidden',
         PANELS[panelId].wide ? 'w-[560px] xl:w-[640px]' : 'w-[420px] xl:w-[480px]',
       )}
     >

@@ -4,11 +4,10 @@ import { readWaitingNotice } from '@/lib/waiting';
 import { listAgents } from '@cortex/agents';
 
 /**
- * Una conversación nueva empieza con una línea que nadie pidió: si hay trabajo
- * parado en las cuatro colas, se dice aquí antes de la primera pregunta. Sale
- * de los conteos que el layout ya calcula para los badges del menú, así que
- * abrir un chat no cuesta ninguna consulta nueva de listas — ver
- * `readWaitingNotice`.
+ * Una conversación nueva empieza con lo que hay que hacer, no con un conteo:
+ * si hay trabajo parado, la línea nombra el primer asunto y ofrece un sí.
+ * Los conteos salen de `countNavSignals`; el nombre propio es una lectura más
+ * — el primer elemento de la primera cola, ver `readWaitingNotice`.
  */
 export default async function NewChatPage() {
   const user = await requireSession();

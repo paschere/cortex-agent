@@ -3,7 +3,7 @@
 import { usePanel } from '@/components/panel/PanelHost';
 import type { FirstStep, OpenersResponse } from '@/lib/chat-openers-shape';
 import { panelForWaiting } from '@/lib/waiting-panel';
-import { type WaitingNoticeData, waitingQuestion } from '@/lib/waiting-shape';
+import { type WaitingNoticeData, clipTitle, waitingQuestion } from '@/lib/waiting-shape';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlarmClock,
@@ -279,9 +279,22 @@ export function EmptyState({
   const cards = data?.openers ?? [];
   const suggestion = !blank ? cards[0] : undefined;
   const waitingOn = waiting && waiting.total > 0;
+  const lead = waitingOn ? waiting.lead : null;
   const { open, available } = usePanel();
-  const waitingPanel = waitingOn && available ? panelForWaiting(waiting.queues) : null;
-  const title = blank ? BLANK_COPY.title : waitingOn ? waiting.sentence : copy.title;
+  const waitingPanel = waitingOn && !lead && available ? panelForWaiting(waiting.queues) : null;
+  const title = blank
+    ? BLANK_COPY.title
+    : lead
+      ? clipTitle(lead.title, 90)
+      : waitingOn
+        ? (waiting?.sentence ?? '')
+        : copy.title;
+
+  const askWaiting = () => {
+    if (lead) (onAsk ?? onSuggestion)(lead.ask);
+    else if (waitingPanel) open(waitingPanel);
+    else if (waitingOn && waiting) (onAsk ?? onSuggestion)(waitingQuestion(waiting.queues));
+  };
 
   return (
     <div className="relative flex flex-1 flex-col items-center px-4 pb-8 pt-8 text-center [justify-content:safe_flex-end] sm:px-6 sm:pt-10">
@@ -290,11 +303,7 @@ export function EmptyState({
         {waitingOn ? (
           <button
             type="button"
-            onClick={() =>
-              waitingPanel
-                ? open(waitingPanel)
-                : (onAsk ?? onSuggestion)(waitingQuestion(waiting.queues))
-            }
+            onClick={askWaiting}
             className="mt-6 max-w-xl text-balance text-2xl font-semibold tracking-tight text-ink underline decoration-amber/40 underline-offset-8 transition-colors hover:decoration-amber sm:text-[1.75rem]"
           >
             {title}
@@ -307,10 +316,21 @@ export function EmptyState({
         <p className="mt-2 max-w-md text-pretty text-sm leading-relaxed text-ink-muted">
           {blank
             ? BLANK_COPY.subtitle
-            : waitingOn
-              ? 'Tócalo y lo abro al lado, sin salir de aquí.'
-              : copy.subtitle}
+            : lead
+              ? (waiting?.sentence ?? '')
+              : waitingOn
+                ? 'Tócalo y lo abro al lado, sin salir de aquí.'
+                : copy.subtitle}
         </p>
+        {lead ? (
+          <button
+            type="button"
+            onClick={askWaiting}
+            className="mt-3 text-sm font-semibold text-amber underline decoration-amber/40 underline-offset-4 transition-colors hover:decoration-amber"
+          >
+            {lead.ask}
+          </button>
+        ) : null}
       </div>
 
       {data?.notice || openers.isError ? (
@@ -332,7 +352,7 @@ export function EmptyState({
             <FirstStepCard key={step.id} step={step} index={i} />
           ))}
         </div>
-      ) : suggestion ? (
+      ) : waitingOn ? null : suggestion ? (
         <SuggestionLine
           text={suggestion.text}
           hint={suggestion.hint ?? undefined}

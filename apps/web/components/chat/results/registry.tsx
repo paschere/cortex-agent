@@ -158,6 +158,9 @@ export const RICH: Record<string, ResultView> = {
   clients_directory: dynamic(() =>
     import('./ClientsDirectory').then((m) => m.ClientsDirectory as unknown as ResultView),
   ),
+  cortex_remember: dynamic(() =>
+    import('./Remembered').then((m) => m.Remembered as unknown as ResultView),
+  ),
 
   // -------------------------------------------------------------------------
   // La pregunta de apertura, y la cifra contra la que se mide todo lo demás.
@@ -173,6 +176,18 @@ export const RICH: Record<string, ResultView> = {
   // leen de un vistazo o no se leen. En un JSON plegado nadie hace la resta.
   goals_list: dynamic(() =>
     import('./GoalsSummary').then((m) => m.GoalsSummary as unknown as ResultView),
+  ),
+  reports_generate: dynamic(() =>
+    import('./ReportCard').then((m) => m.ReportCard as unknown as ResultView),
+  ),
+  reports_open: dynamic(() =>
+    import('./ReportCard').then((m) => m.ReportCard as unknown as ResultView),
+  ),
+  trackers_list: dynamic(() =>
+    import('./TrackersDirectory').then((m) => m.TrackersDirectory as unknown as ResultView),
+  ),
+  trackers_query: dynamic(() =>
+    import('./TrackerTable').then((m) => m.TrackerTable as unknown as ResultView),
   ),
 };
 
@@ -195,6 +210,12 @@ export const RICH: Record<string, ResultView> = {
  */
 const RICH_NEEDS: Record<string, (result: unknown) => boolean> = {
   reports_chart: (r) => typeof field(r, 'chartId') === 'string',
+  cortex_remember: (r) => typeof field(r, 'remembered') === 'string',
+  reports_generate: (r) => typeof field(field(r, 'report'), 'id') === 'string',
+  reports_open: (r) =>
+    field(r, 'found') === true && typeof field(field(r, 'report'), 'id') === 'string',
+  trackers_query: (r) => typeof field(field(r, 'tracker'), 'slug') === 'string',
+  trackers_list: (r) => Array.isArray(field(r, 'trackers')),
   actions_propose: (r) => {
     const action = field(r, 'action');
     return (

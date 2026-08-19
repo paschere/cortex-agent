@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { AmbientField } from './AmbientField';
+import { ChatComposeProvider } from './ChatCompose';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
 import { Presence } from './Presence';
@@ -401,21 +402,23 @@ export function ChatRoot({
         conversación se relee igual dentro de dos semanas — con la decisión
         dicha en voz de quien la tomó. Ver ChoicePrompt.
       */}
-      <MessageList
-        messages={messages}
-        isLoading={isLoading}
-        conversationId={conversationId}
-        agent={activeAgent}
-        onConfirmed={reload}
-        onRegenerate={handleRegenerate}
-        onSuggestion={setDraft}
-        onAnswer={handleSend}
-        storedFollowups={initialFollowups}
-        glances={initialGlances ? { ...initialGlances, ...glances } : glances}
-        initialBrainSources={initialBrainSources}
-        frames={frames}
-        waiting={waiting}
-      />
+      <ChatComposeProvider compose={setDraft}>
+        <MessageList
+          messages={messages}
+          isLoading={isLoading}
+          conversationId={conversationId}
+          agent={activeAgent}
+          onConfirmed={reload}
+          onRegenerate={handleRegenerate}
+          onSuggestion={setDraft}
+          onAnswer={handleSend}
+          storedFollowups={initialFollowups}
+          glances={initialGlances ? { ...initialGlances, ...glances } : glances}
+          initialBrainSources={initialBrainSources}
+          frames={frames}
+          waiting={waiting}
+        />
+      </ChatComposeProvider>
 
       {blocked && (
         <div

@@ -249,6 +249,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'primary',
     icon: 'BarChart3',
   },
+  trackers: {
+    name: 'Tablas',
+    blurb:
+      'Tableros que esta empresa se inventa: el agente define los campos, llena las filas y las consulta. No sustituye clientes, vencimientos ni cartera.',
+    tone: 'emerald',
+    icon: 'Table2',
+  },
   vehicles: {
     name: 'Vehículos',
     blurb:
@@ -514,6 +521,7 @@ const FAMILY_GROUP: Record<string, string> = {
   // reads and writes rather than with the fleet — the person who asks for one
   // is asking for a document, whatever the numbers inside it are about.
   reports: 'docs',
+  trackers: 'docs',
   github: 'eng',
   linear: 'eng',
   payroll: 'money',

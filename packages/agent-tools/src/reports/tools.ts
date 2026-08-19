@@ -13,6 +13,7 @@ import { longDate, stamp } from './format';
 import {
   type ReportRow,
   type StoredReport,
+  exportUrl,
   getReport,
   listReports,
   reportUrl,
@@ -91,7 +92,9 @@ function reportMarkdown(stored: StoredReport, opts: { justCreated?: boolean } = 
   );
   lines.push('');
   lines.push(`Periodo: ${document.periodLabel}.`);
-  lines.push(`Calculado: ${stamp(document.generatedAt, document.timezone)} (${document.timezone}).`);
+  lines.push(
+    `Calculado: ${stamp(document.generatedAt, document.timezone)} (${document.timezone}).`,
+  );
   lines.push('');
   lines.push('**Cifras, con su procedencia:**');
   lines.push(...figuresMarkdown(document));
@@ -104,6 +107,7 @@ function reportMarkdown(stored: StoredReport, opts: { justCreated?: boolean } = 
 
   lines.push('');
   lines.push(`Se ve completo, con los gráficos, en ${reportUrl(row.id)}`);
+  lines.push(`Para guardar una copia: ${exportUrl(row.id)} (HTML) o ábrelo y usa PDF.`);
 
   if (shareIsLive(row) && row.share_token) {
     lines.push(
@@ -263,7 +267,10 @@ export const reportsList = registerTool({
     'Cada entrada dice de qué es, qué periodo cubre, cuándo se calculó y si tiene enlace público vivo. Sólo lectura. Para ver las cifras de uno, usa `reports.open` con su id.',
   inputSchema: z.object({
     kind: kindEnum.optional().describe('Filtra por tipo de informe. Omítelo para verlos todos.'),
-    mine: z.boolean().default(false).describe('Sólo los que generó la persona que está preguntando.'),
+    mine: z
+      .boolean()
+      .default(false)
+      .describe('Sólo los que generó la persona que está preguntando.'),
     limit: z.number().int().min(1).max(50).default(15),
   }),
   outputSchema: z.object({
@@ -436,9 +443,7 @@ export const reportsShare = registerTool({
         result.url,
         '',
         `Vence el ${longDate(result.expiresAt.slice(0, 10))}. Quien tenga el enlace puede abrirlo, sin contraseña, así que mándalo sólo a quien deba verlo. Muestra la misma fotografía guardada: no cambia aunque cambien los datos.`,
-        stored.row.share_token
-          ? '\nEl enlace anterior de este informe quedó anulado.'
-          : '',
+        stored.row.share_token ? '\nEl enlace anterior de este informe quedó anulado.' : '',
       ]
         .filter(Boolean)
         .join('\n'),

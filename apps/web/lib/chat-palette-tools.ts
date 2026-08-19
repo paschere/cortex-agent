@@ -256,6 +256,12 @@ export const TOOL_PHRASE: Record<string, string> = {
   'reports.run': 'Vuelve a correr el informe a la medida ',
   'reports.share': 'Comparte por enlace el informe de ',
 
+  'trackers.define': 'Crea una tabla para vigilar ',
+  'trackers.list': 'Muéstrame las tablas que hemos inventado',
+  'trackers.query': 'Muéstrame la tabla de ',
+  'trackers.remove': 'Borra de la tabla ',
+  'trackers.upsert': 'Anota en la tabla ',
+
   'sales.draft_proposal': 'Redáctame una propuesta para ',
 
   'schedule.create': 'Todos los lunes a las 8 de la mañana, ',

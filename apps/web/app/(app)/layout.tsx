@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     <AppShell user={user}>
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar email={user.email} />
-        <main className="scroll-slim flex-1 overflow-y-auto">
+        <main className="scroll-slim flex-1 overflow-y-auto print:overflow-visible">
           <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
         </main>
       </div>

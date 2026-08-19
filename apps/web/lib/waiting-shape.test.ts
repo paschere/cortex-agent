@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   type WaitingCounts,
   agoPhrase,
+  briefingAsk,
+  clipTitle,
   dayPhrase,
   noticeFromCounts,
   summarizeWaiting,
@@ -242,5 +244,29 @@ describe('lo que se pregunta al tocar el aviso', () => {
     expect(waitingQuestion(noticeFromCounts(counts({ approvals: 1, commitments: 3 })).queues)).toBe(
       '¿Qué está esperando algo de mí?',
     );
+  });
+});
+
+describe('el sí del briefing', () => {
+  it('nombra el asunto, no la cola', () => {
+    expect(briefingAsk('commitments', 'Cotización Andina')).toBe(
+      '¿Le escribo por «Cotización Andina»?',
+    );
+    expect(briefingAsk('actions', 'Recordatorio de pago')).toBe('¿Mando «Recordatorio de pago»?');
+    expect(briefingAsk('approvals', 'Enviar el correo redactado')).toBe(
+      '¿Apruebo «Enviar el correo redactado»?',
+    );
+    expect(briefingAsk('errands', 'El radicado de la DIM')).toBe(
+      '¿Te contesto lo que te preguntó sobre «El radicado de la DIM»?',
+    );
+  });
+
+  it('recorta un asunto largo para que la pregunta quepa en un renglón', () => {
+    const long = 'A'.repeat(90);
+    const ask = briefingAsk('commitments', long);
+    expect(ask.startsWith('¿Le escribo por «')).toBe(true);
+    expect(ask.endsWith('…»?')).toBe(true);
+    expect(clipTitle(long).endsWith('…')).toBe(true);
+    expect(clipTitle(long).length).toBeLessThanOrEqual(72);
   });
 });

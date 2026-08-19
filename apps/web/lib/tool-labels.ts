@@ -233,6 +233,13 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   // La ficha de la empresa.
   company_facts: { label: 'Leer la ficha de la empresa', icon: 'Landmark' },
 
+  // Tablas que esta empresa se inventa.
+  trackers_define: { label: 'Crear o cambiar una tabla', icon: 'Table2' },
+  trackers_list: { label: 'Ver las tablas inventadas', icon: 'Table2' },
+  trackers_query: { label: 'Consultar la tabla', icon: 'Table2' },
+  trackers_upsert: { label: 'Anotar en la tabla', icon: 'Table2' },
+  trackers_remove: { label: 'Borrar de la tabla', icon: 'Table2' },
+
   // Informes.
   reports_generate: { label: 'Armar el informe', icon: 'FileBarChart' },
   reports_list: { label: 'Ver los informes guardados', icon: 'Files' },

@@ -97,14 +97,13 @@ export function IntakeChooser({
     <Panel>
       <PanelHead title="De qué se alimenta" right="cuatro entradas" />
       <p className="px-5 pt-1 text-xs text-ink-muted">
-        Todo termina en el mismo sitio: troceado, indexado y listo para citar.
+        Todo termina en el mismo sitio: troceado, indexado y listo para citar. En el chat también:
+        suelta el archivo y pídele que lo recuerde.
       </p>
 
       {writable.length === 0 ? (
         <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border px-5 py-4">
-          <p className="text-xs text-ink-muted">
-            Necesitas un espacio antes de poder alimentarlo.
-          </p>
+          <p className="text-xs text-ink-muted">Necesitas un espacio antes de poder alimentarlo.</p>
           <button
             type="button"
             onClick={onCreateSpace}
@@ -205,10 +204,7 @@ export function IntakePanel({
                   className={clsx('h-4 w-4 shrink-0', on ? 'text-primary' : 'text-ink-faint')}
                 />
                 <span
-                  className={clsx(
-                    'text-xs font-semibold',
-                    on ? 'text-primary' : 'text-ink-muted',
-                  )}
+                  className={clsx('text-xs font-semibold', on ? 'text-primary' : 'text-ink-muted')}
                 >
                   {label}
                 </span>

@@ -119,6 +119,10 @@ export * from './approvals';
 // (migration 0079). Placed after ./commitments and ./vehicles because it reads
 // both to build its reports; it registers no source of truth of its own.
 export * from './reports';
+// Tablas que esta empresa se inventa (migración 0115). Van después de
+// informes porque son otra forma de guardar una fotografía de trabajo —
+// filas, no un informe — y antes de encargos, que ejecutan, no almacenan.
+export * from './trackers';
 // Encargos (migration 0089): a job handed over and worked unattended for
 // minutes or hours. The EXECUTION engine lives in apps/web/lib/errands, which
 // needs Inngest and the orchestrator; what is here is the vocabulary every

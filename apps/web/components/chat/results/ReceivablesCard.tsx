@@ -3,6 +3,7 @@
 import { money, plural, shortDate } from '@/app/(app)/payments/_components/format';
 import { chipClass } from '@/lib/status-chip';
 import { Banknote } from 'lucide-react';
+import { NextMove } from '../NextMove';
 import { PinSurface } from '../PinSurface';
 import type { ResultViewProps } from './registry';
 
@@ -104,6 +105,14 @@ export function ReceivablesCard({ result, toolCallId }: ResultViewProps) {
 
       <p className="border-t border-border bg-surface-2 px-4 py-2.5 text-xs leading-relaxed text-ink-muted">
         {view.guidance}
+        {view.byCurrency.some((c) => c.overdueInvoices > 0) && (
+          <span className="mt-2 block">
+            <NextMove
+              text="Déjame redactado un mensaje para cobrar la cartera vencida."
+              label="¿Le escribo por lo vencido?"
+            />
+          </span>
+        )}
       </p>
     </div>
   );

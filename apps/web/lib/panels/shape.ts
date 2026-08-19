@@ -1,4 +1,12 @@
-import { Briefcase, Building2, CalendarClock, FileBarChart, Inbox, Wallet } from 'lucide-react';
+import {
+  Briefcase,
+  Building2,
+  CalendarClock,
+  FileBarChart,
+  Inbox,
+  Table2,
+  Wallet,
+} from 'lucide-react';
 
 /**
  * QUÉ ES UN PANEL, Y POR QUÉ ESTE ARCHIVO NO ES `server-only` NI `'use client'`.
@@ -172,6 +180,24 @@ const TABLE = {
     href: '/clients',
     keyed: true,
     keyField: 'client',
+    wide: true,
+  },
+  trackers: {
+    toolId: 'trackers.list',
+    input: { limit: 40 },
+    title: 'Tablas',
+    icon: Table2,
+    href: '/trackers',
+    wide: true,
+  },
+  tracker: {
+    toolId: 'trackers.query',
+    input: { limit: 40 },
+    title: 'Tabla',
+    icon: Table2,
+    href: '/trackers',
+    keyed: true,
+    keyField: 'tracker',
     wide: true,
   },
 } satisfies Record<string, PanelShape>;

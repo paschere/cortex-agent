@@ -370,6 +370,14 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // que no se ve en ninguna pantalla y que sale por la voz del producto.
   company_facts: tenant(),
 
+  // --- Tablas inventadas (migración 0115) ----------------------------------
+  // El esquema de una tabla que este espacio se inventó, y sus filas. Tenant
+  // las dos: un filtro que faltara aquí no enseñaría una hoja ajena — pondría
+  // los remates, las placas o los contenedores de una empresa en la boca de
+  // Cortex para otra, que los citaría como si fueran suyos.
+  trackers: tenant(),
+  tracker_rows: tenant(),
+
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first
   // ten minutes. `usage_events` and `usage_counters` are tenant in the strongest

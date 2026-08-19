@@ -1,3 +1,4 @@
+import { plural } from '../_components/format';
 import type { BrainStats, DigestingDoc, IntakeKey } from '../_components/types';
 
 /**
@@ -13,6 +14,43 @@ import type { BrainStats, DigestingDoc, IntakeKey } from '../_components/types';
  * Supabase and `@cortex/agent-tools`, and this one is imported by client
  * components.
  */
+
+/** Below this, the header invites feeding instead of reading like a finished archive. */
+export const THIN_CORPUS = 20;
+
+/**
+ * The sentence under Brain Knowledge: how much this memory holds, that you can
+ * walk the zones, that chat can feed it too. `lastAdded` is already worded
+ * ("hace 2 h") so this stays free of the clock and the tests can pin the copy.
+ */
+export function livingSubtitle(input: {
+  chunks: number | null;
+  spaces: number;
+  lastAdded: string | null;
+}): string {
+  const places = input.spaces === 0 ? null : plural(input.spaces, 'espacio', 'espacios');
+  const chat = 'en el chat, suelta un archivo y pídele que lo recuerde';
+
+  if (input.spaces === 0) {
+    return `Todavía no guarda nada. Crea un espacio o, ${chat}.`;
+  }
+
+  if (input.chunks === 0) {
+    return `Los espacios ya están; falta lo que va dentro. Recorre las zonas o, ${chat}.`;
+  }
+
+  if (input.chunks == null) {
+    return `${places} en memoria. Recorre las zonas o, ${chat}.`;
+  }
+
+  const held = `Guarda ${plural(input.chunks, 'fragmento', 'fragmentos')} en ${places}.`;
+  if (input.chunks < THIN_CORPUS) {
+    return `${held} Todavía cabe más. Recorre las zonas o, ${chat}.`;
+  }
+
+  const recent = input.lastAdded ? ` Lo último llegó ${input.lastAdded}.` : '';
+  return `${held}${recent} Recorre las zonas; el chat también alimenta esta memoria.`;
+}
 
 /* ------------------------------------------------------------------- focus */
 

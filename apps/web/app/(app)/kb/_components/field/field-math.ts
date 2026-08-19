@@ -86,6 +86,28 @@ export const LOBE_NAME: Record<IntakeKey, string> = {
   record: 'Grabaciones',
 };
 
+/** The four zones, in the order a person reads the plate: left, top, right, then hearing. */
+export const LOBE_KEYS: IntakeKey[] = ['upload', 'meeting', 'drive', 'record'];
+
+/**
+ * Where the zone names sit on the plate.
+ *
+ * Outside the cortex on purpose: a label on the summit would cover the hill it
+ * is trying to explain, and the names have to stay put while the relief
+ * changes. `anchor` is how the renderer hangs the word so it does not drift
+ * into the drawing — start hangs to the right of the point (frontal, left
+ * margin), end hangs to the left (Drive, right margin).
+ */
+export const LOBE_LABEL: Record<
+  IntakeKey,
+  { x: number; y: number; anchor: 'start' | 'middle' | 'end' }
+> = {
+  upload: { x: 4, y: 62, anchor: 'start' },
+  meeting: { x: 118, y: 14, anchor: 'middle' },
+  drive: { x: 226, y: 78, anchor: 'end' },
+  record: { x: 92, y: 154, anchor: 'middle' },
+};
+
 /**
  * An ellipse inscribed in the cortex outline, used to keep hills from wandering
  * off the drawing. Deliberately approximate: the contours are clipped to the

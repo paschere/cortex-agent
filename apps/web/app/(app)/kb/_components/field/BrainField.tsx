@@ -4,9 +4,13 @@ import { clsx } from 'clsx';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { num } from '../format';
 import { usePrefersReducedMotion } from '../motion';
+import type { IntakeKey } from '../types';
 import {
   CORTEX_PATH,
   type FieldSeed,
+  LOBE_KEYS,
+  LOBE_LABEL,
+  LOBE_NAME,
   type PlacedSeed,
   STEM_PATHS,
   SULCI,
@@ -60,6 +64,8 @@ export function BrainField({
   unit,
   emptyText,
   caption,
+  activeSource = null,
+  onToggleSource,
 }: {
   seeds: FieldSeed[];
   selectedId: string | null;
@@ -75,6 +81,10 @@ export function BrainField({
   unit: string;
   emptyText: string;
   caption: string;
+  /** The lobe in force, so the matching zone name lights up. */
+  activeSource?: IntakeKey | null;
+  /** Click a zone name to filter by source, the same as the legend below. */
+  onToggleSource?: (key: IntakeKey) => void;
 }) {
   const uid = useId();
   const reduced = usePrefersReducedMotion();
@@ -218,276 +228,320 @@ export function BrainField({
   return (
     <div>
       {/*
-        The keyboard contract lives on this wrapper rather than on the drawing:
-        one tab stop, arrows moving a cursor from the largest hill to the
-        smallest, Enter opening the one under it. A listbox is precisely that
-        behaviour, and putting the role on the element that owns the handlers
-        keeps the drawing inside it as what it is — a picture of the options.
+        Aspect-ratio box first, then the listbox inside it. Zone names sit on
+        the same box but OUTSIDE the listbox: a button inside a listbox is not
+        an option, and four extra tab stops on the drawing would be worse than
+        naming the lobes. The listbox stays one tab stop (arrows walk hills);
+        the zone names are ordinary buttons beside it.
       */}
       <div
-        className="relative w-full rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className="relative w-full"
         style={{ aspectRatio: `${VIEWBOX.width} / ${VIEWBOX.height}` }}
-        tabIndex={0}
-        // biome-ignore lint/a11y/useSemanticElements: the rule's advice is to use
-        // <select>, which cannot hold a drawing. The options here are the summits
-        // rendered inside the SVG below, and the plain <select> equivalent of
-        // this whole control is the index list beside the map.
-        role="listbox"
-        aria-label={`Mapa del cerebro: ${placed.length} zonas, de la más grande a la más pequeña con las flechas. ${caption}`}
-        aria-activedescendant={at ? `${uid}-opt-${at.id}` : undefined}
-        onKeyDown={onKeyDown}
-        onFocus={() => setCursor((was) => (was < 0 ? 0 : was))}
-        onBlur={() => {
-          setCursor(-1);
-          onHover(null);
-        }}
       >
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${VIEWBOX.width} ${VIEWBOX.height}`}
-          className="absolute inset-0 h-full w-full text-primary outline-none"
-          onPointerMove={onPointerMove}
-          onPointerLeave={leave}
-          onPointerDown={pick}
+        <div
+          className="absolute inset-0 rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          tabIndex={0}
+          // biome-ignore lint/a11y/useSemanticElements: the rule's advice is to use
+          // <select>, which cannot hold a drawing. The options here are the summits
+          // rendered inside the SVG below, and the plain <select> equivalent of
+          // this whole control is the index list beside the map.
+          role="listbox"
+          aria-label={`Mapa del cerebro: ${placed.length} colinas, de la más grande a la más pequeña con las flechas. ${caption}`}
+          aria-activedescendant={at ? `${uid}-opt-${at.id}` : undefined}
+          onKeyDown={onKeyDown}
+          onFocus={() => setCursor((was) => (was < 0 ? 0 : was))}
+          onBlur={() => {
+            setCursor(-1);
+            onHover(null);
+          }}
         >
-          <title>{caption}</title>
-          <defs>
-            <clipPath id={`${uid}-cortex`}>
-              <path d={CORTEX_PATH} />
-            </clipPath>
-            {/* One gradient, reused by every hill. A filter per hill would look
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${VIEWBOX.width} ${VIEWBOX.height}`}
+            className="absolute inset-0 h-full w-full text-primary outline-none"
+            onPointerMove={onPointerMove}
+            onPointerLeave={leave}
+            onPointerDown={pick}
+          >
+            <title>{caption}</title>
+            <defs>
+              <clipPath id={`${uid}-cortex`}>
+                <path d={CORTEX_PATH} />
+              </clipPath>
+              {/* One gradient, reused by every hill. A filter per hill would look
                 marginally softer and would cost a separate rasterisation pass
                 each, which is the whole frame budget on a laptop. */}
-            <radialGradient id={`${uid}-hill`}>
-              <stop offset="0%" stopColor="currentColor" stopOpacity="0.42" />
-              <stop offset="55%" stopColor="currentColor" stopOpacity="0.14" />
-              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-            </radialGradient>
-          </defs>
+              <radialGradient id={`${uid}-hill`}>
+                <stop offset="0%" stopColor="currentColor" stopOpacity="0.42" />
+                <stop offset="55%" stopColor="currentColor" stopOpacity="0.14" />
+                <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+              </radialGradient>
+            </defs>
 
-          {/* The paper the plate is drawn on. */}
-          <path d={CORTEX_PATH} className="fill-surface-2" />
+            {/* The paper the plate is drawn on. */}
+            <path d={CORTEX_PATH} className="fill-surface-2" />
 
-          <g clipPath={`url(#${uid}-cortex)`}>
-            {placed.map((p) => (
-              <circle
-                key={p.id}
-                cx={p.x}
-                cy={p.y}
-                r={p.sigma * 2.1}
-                fill={`url(#${uid}-hill)`}
-                opacity={0.35 + 0.65 * p.height}
-                className={clsx(
-                  'transition-opacity duration-300',
-                  lit && lit !== p.id && 'opacity-40',
-                )}
-              />
-            ))}
+            <g clipPath={`url(#${uid}-cortex)`}>
+              {placed.map((p) => (
+                <circle
+                  key={p.id}
+                  cx={p.x}
+                  cy={p.y}
+                  r={p.sigma * 2.1}
+                  fill={`url(#${uid}-hill)`}
+                  opacity={0.35 + 0.65 * p.height}
+                  className={clsx(
+                    'transition-opacity duration-300',
+                    lit && lit !== p.id && 'opacity-40',
+                  )}
+                />
+              ))}
 
-            {/* The contour lines. Higher ground gets a firmer line, which is how
+              {/* The contour lines. Higher ground gets a firmer line, which is how
                 a relief map has always shown that you are near a summit. */}
-            {contours.map((c) => (
-              <path
-                key={c.level}
-                d={c.d}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={0.35 + c.level * 0.5}
-                strokeLinecap="round"
-                opacity={0.2 + c.level * 0.45}
-                pointerEvents="none"
-              />
-            ))}
+              {contours.map((c) => (
+                <path
+                  key={c.level}
+                  d={c.d}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={0.35 + c.level * 0.5}
+                  strokeLinecap="round"
+                  opacity={0.2 + c.level * 0.45}
+                  pointerEvents="none"
+                />
+              ))}
 
-            {SULCI.map((d) => (
+              {SULCI.map((d) => (
+                <path
+                  key={d}
+                  d={d}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={0.6}
+                  opacity={0.18}
+                  strokeLinecap="round"
+                  pointerEvents="none"
+                />
+              ))}
+            </g>
+
+            {/* The outline last, over the fill, so the edge of the cortex stays a
+              clean line however dense the relief gets underneath it. */}
+            <path
+              d={CORTEX_PATH}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.1}
+              strokeLinejoin="round"
+              opacity={0.55}
+              pointerEvents="none"
+            />
+            {STEM_PATHS.map((d) => (
               <path
                 key={d}
                 d={d}
                 fill="none"
                 stroke="currentColor"
-                strokeWidth={0.6}
-                opacity={0.18}
+                strokeWidth={0.8}
+                opacity={0.22}
                 strokeLinecap="round"
                 pointerEvents="none"
               />
             ))}
-          </g>
 
-          {/* The outline last, over the fill, so the edge of the cortex stays a
-              clean line however dense the relief gets underneath it. */}
-          <path
-            d={CORTEX_PATH}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.1}
-            strokeLinejoin="round"
-            opacity={0.55}
-            pointerEvents="none"
-          />
-          {STEM_PATHS.map((d) => (
-            <path
-              key={d}
-              d={d}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={0.8}
-              opacity={0.22}
-              strokeLinecap="round"
-              pointerEvents="none"
-            />
-          ))}
-
-          {/* Where the search landed. This is the one moment the map exists for:
+            {/* Where the search landed. This is the one moment the map exists for:
               you type a question and the cortex lights up where the answer
               lives, before a single result has rendered underneath. */}
-          {flare &&
-            placed.map((p) => {
-              const strength = flare.strength.get(p.id);
-              if (!strength) return null;
-              return (
-                <g key={`flare-${p.id}`} pointerEvents="none">
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={p.sigma * 0.85}
-                    fill="none"
-                    className="text-amber"
-                    stroke="currentColor"
-                    strokeWidth={1.1 + strength}
-                    opacity={0.35 + 0.5 * strength}
-                  />
-                  {!reduced && (
+            {flare &&
+              placed.map((p) => {
+                const strength = flare.strength.get(p.id);
+                if (!strength) return null;
+                return (
+                  <g key={`flare-${p.id}`} pointerEvents="none">
                     <circle
                       cx={p.x}
                       cy={p.y}
                       r={p.sigma * 0.85}
                       fill="none"
-                      className="text-amber kb-flare"
+                      className="text-amber"
                       stroke="currentColor"
-                      strokeWidth={1}
+                      strokeWidth={1.1 + strength}
+                      opacity={0.35 + 0.5 * strength}
+                    />
+                    {!reduced && (
+                      <circle
+                        cx={p.x}
+                        cy={p.y}
+                        r={p.sigma * 0.85}
+                        fill="none"
+                        className="text-amber kb-flare"
+                        stroke="currentColor"
+                        strokeWidth={1}
+                      />
+                    )}
+                  </g>
+                );
+              })}
+
+            {/* Something is being read into memory right now, here. */}
+            {placed.map((p) =>
+              working.has(p.id) ? (
+                <circle
+                  key={`work-${p.id}`}
+                  cx={p.x}
+                  cy={p.y}
+                  r={2.6}
+                  className={clsx('fill-primary', !reduced && 'kb-breathe')}
+                  pointerEvents="none"
+                />
+              ) : null,
+            )}
+
+            {/* Summit markers. Small, because the hill is the thing; the marker
+              only says exactly where to point — and each one is the listbox
+              option the keyboard cursor lands on, so what a screen reader reads
+              out is the same set of things a sighted person is pointing at. */}
+            {placed.map((p) => {
+              const on = selectedId === p.id;
+              const near = lit === p.id;
+              return (
+                <g
+                  key={`peak-${p.id}`}
+                  id={`${uid}-opt-${p.id}`}
+                  // biome-ignore lint/a11y/useSemanticElements: the rule's advice is
+                  // to use <option>, which cannot exist inside an SVG. These are the
+                  // options of the listbox declared on the wrapper above, and they
+                  // have to be the drawn summits themselves so that
+                  // aria-activedescendant points at what the cursor is sitting on.
+                  role="option"
+                  aria-selected={at?.id === p.id}
+                  aria-label={`${p.label}: ${num(Math.round(p.weight))} ${unit}`}
+                  pointerEvents="none"
+                >
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r={on ? 3 : near ? 2.6 : 1.7}
+                    className={clsx(on || near ? 'fill-primary' : 'fill-primary/50')}
+                    style={{ transition: reduced ? undefined : 'r 160ms ease-out' }}
+                  />
+                  {(on || near) && (
+                    <circle
+                      cx={p.x}
+                      cy={p.y}
+                      r={on ? 6 : 5}
+                      fill="none"
+                      className="stroke-primary"
+                      strokeWidth={0.9}
+                      opacity={0.55}
                     />
                   )}
                 </g>
               );
             })}
+          </svg>
 
-          {/* Something is being read into memory right now, here. */}
-          {placed.map((p) =>
-            working.has(p.id) ? (
-              <circle
-                key={`work-${p.id}`}
-                cx={p.x}
-                cy={p.y}
-                r={2.6}
-                className={clsx('fill-primary', !reduced && 'kb-breathe')}
-                pointerEvents="none"
-              />
-            ) : null,
-          )}
-
-          {/* Summit markers. Small, because the hill is the thing; the marker
-              only says exactly where to point — and each one is the listbox
-              option the keyboard cursor lands on, so what a screen reader reads
-              out is the same set of things a sighted person is pointing at. */}
-          {placed.map((p) => {
-            const on = selectedId === p.id;
-            const near = lit === p.id;
-            return (
-              <g
-                key={`peak-${p.id}`}
-                id={`${uid}-opt-${p.id}`}
-                // biome-ignore lint/a11y/useSemanticElements: the rule's advice is
-                // to use <option>, which cannot exist inside an SVG. These are the
-                // options of the listbox declared on the wrapper above, and they
-                // have to be the drawn summits themselves so that
-                // aria-activedescendant points at what the cursor is sitting on.
-                role="option"
-                aria-selected={at?.id === p.id}
-                aria-label={`${p.label}: ${num(Math.round(p.weight))} ${unit}`}
-                pointerEvents="none"
-              >
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={on ? 3 : near ? 2.6 : 1.7}
-                  className={clsx(on || near ? 'fill-primary' : 'fill-primary/50')}
-                  style={{ transition: reduced ? undefined : 'r 160ms ease-out' }}
-                />
-                {(on || near) && (
-                  <circle
-                    cx={p.x}
-                    cy={p.y}
-                    r={on ? 6 : 5}
-                    fill="none"
-                    className="stroke-primary"
-                    strokeWidth={0.9}
-                    opacity={0.55}
-                  />
-                )}
-              </g>
-            );
-          })}
-        </svg>
-
-        {/* Names as real HTML, not SVG text: the container's aspect ratio is
+          {/* Names as real HTML, not SVG text: the container's aspect ratio is
             pinned to the viewBox so percentages land exactly on the drawing,
             and the labels get the product's typography instead of whatever an
             SVG font-size happens to scale to. */}
-        {placed.map((p) => {
-          if (!named.has(p.id)) return null;
-          const on = selectedId === p.id;
-          const near = lit === p.id;
-          return (
-            <span
-              key={`label-${p.id}`}
+          {placed.map((p) => {
+            if (!named.has(p.id)) return null;
+            const on = selectedId === p.id;
+            const near = lit === p.id;
+            return (
+              <span
+                key={`label-${p.id}`}
+                aria-hidden
+                className={clsx(
+                  'pointer-events-none absolute max-w-[38%] -translate-x-1/2 truncate rounded-pill px-1.5 py-px text-micro font-semibold leading-tight',
+                  on
+                    ? 'bg-primary text-white shadow-pop'
+                    : near
+                      ? 'bg-surface text-ink shadow-card'
+                      : 'text-ink-muted',
+                )}
+                style={{
+                  left: `${(p.x / VIEWBOX.width) * 100}%`,
+                  top: `${((p.y - p.sigma * 0.5 - 7) / VIEWBOX.height) * 100}%`,
+                }}
+              >
+                {p.label}
+              </span>
+            );
+          })}
+
+          {/* The lens: what you are standing on, and how much of it there is.
+            Reveal-on-approach is the futurism budget spent on behaviour rather
+            than on colour — nothing here glows, it simply answers. */}
+          {lens && (
+            <div
               aria-hidden
-              className={clsx(
-                'pointer-events-none absolute max-w-[38%] -translate-x-1/2 truncate rounded-pill px-1.5 py-px text-micro font-semibold leading-tight',
-                on
-                  ? 'bg-primary text-white shadow-pop'
-                  : near
-                    ? 'bg-surface text-ink shadow-card'
-                    : 'text-ink-muted',
-              )}
+              className="pointer-events-none absolute z-10 -translate-x-1/2 translate-y-2 whitespace-nowrap rounded-card border border-border bg-surface px-2.5 py-1.5 shadow-pop"
               style={{
-                left: `${(p.x / VIEWBOX.width) * 100}%`,
-                top: `${((p.y - p.sigma * 0.5 - 7) / VIEWBOX.height) * 100}%`,
+                left: `${Math.min(88, Math.max(12, (lens.x / VIEWBOX.width) * 100))}%`,
+                top: `${(lens.y / VIEWBOX.height) * 100}%`,
               }}
             >
-              {p.label}
+              <div className="max-w-[220px] truncate text-xs font-bold text-ink">
+                {lens.seed.label}
+              </div>
+              <div className="stat-num mt-0.5 text-micro text-primary">
+                {num(Math.round(lens.seed.weight))}{' '}
+                <span className="font-sans text-micro font-medium text-ink-faint">{unit}</span>
+              </div>
+            </div>
+          )}
+
+          {empty && (
+            <div className="absolute inset-0 grid place-items-center px-6">
+              <p className="max-w-[16rem] text-center text-xs leading-relaxed text-ink-faint">
+                {emptyText}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* The four lobes, named on the drawing so a first visit can read it.
+          Clickable when the page wires a source filter; otherwise they are
+          just the legend sitting where the anatomy is. */}
+        {LOBE_KEYS.map((key) => {
+          const pos = LOBE_LABEL[key];
+          const on = activeSource === key;
+          const hang =
+            pos.anchor === 'start'
+              ? '-translate-y-1/2'
+              : pos.anchor === 'end'
+                ? '-translate-x-full -translate-y-1/2'
+                : '-translate-x-1/2 -translate-y-1/2';
+          const look = clsx(
+            'absolute z-[1] max-w-[42%] truncate rounded-pill px-1.5 py-0.5 text-micro font-semibold leading-tight',
+            hang,
+            on ? 'bg-primary-soft text-primary' : 'text-ink-faint',
+            onToggleSource && !on && 'hover:bg-surface hover:text-ink',
+          );
+          const style = {
+            left: `${(pos.x / VIEWBOX.width) * 100}%`,
+            top: `${(pos.y / VIEWBOX.height) * 100}%`,
+          };
+          return onToggleSource ? (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onToggleSource(key)}
+              className={look}
+              style={style}
+            >
+              {LOBE_NAME[key]}
+            </button>
+          ) : (
+            <span key={key} className={look} style={style}>
+              {LOBE_NAME[key]}
             </span>
           );
         })}
-
-        {/* The lens: what you are standing on, and how much of it there is.
-            Reveal-on-approach is the futurism budget spent on behaviour rather
-            than on colour — nothing here glows, it simply answers. */}
-        {lens && (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute z-10 -translate-x-1/2 translate-y-2 whitespace-nowrap rounded-card border border-border bg-surface px-2.5 py-1.5 shadow-pop"
-            style={{
-              left: `${Math.min(88, Math.max(12, (lens.x / VIEWBOX.width) * 100))}%`,
-              top: `${(lens.y / VIEWBOX.height) * 100}%`,
-            }}
-          >
-            <div className="max-w-[220px] truncate text-xs font-bold text-ink">
-              {lens.seed.label}
-            </div>
-            <div className="stat-num mt-0.5 text-micro text-primary">
-              {num(Math.round(lens.seed.weight))}{' '}
-              <span className="font-sans text-micro font-medium text-ink-faint">{unit}</span>
-            </div>
-          </div>
-        )}
-
-        {empty && (
-          <div className="absolute inset-0 grid place-items-center px-6">
-            <p className="max-w-[16rem] text-center text-xs leading-relaxed text-ink-faint">
-              {emptyText}
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Said out loud as well as drawn, once, for anybody arriving by keyboard

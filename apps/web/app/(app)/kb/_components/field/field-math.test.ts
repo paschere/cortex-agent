@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type FieldSeed,
   LOBE_ANCHOR,
+  LOBE_LABEL,
   contourLines,
   elevationAt,
   placeSeeds,
@@ -41,6 +42,13 @@ describe('placing hills on the cortex', () => {
     expect(
       Math.hypot(spoken.x - LOBE_ANCHOR.record.x, spoken.y - LOBE_ANCHOR.record.y),
     ).toBeLessThan(Math.hypot(spoken.x - LOBE_ANCHOR.upload.x, spoken.y - LOBE_ANCHOR.upload.y));
+  });
+
+  it('names the four zones outside the cortex so they do not cover a hill', () => {
+    expect(LOBE_LABEL.upload.x).toBeLessThan(LOBE_ANCHOR.upload.x);
+    expect(LOBE_LABEL.drive.x).toBeGreaterThan(LOBE_ANCHOR.drive.x);
+    expect(LOBE_LABEL.meeting.y).toBeLessThan(LOBE_ANCHOR.meeting.y);
+    expect(LOBE_LABEL.record.y).toBeGreaterThan(LOBE_ANCHOR.record.y);
   });
 
   it('separates spaces made of exactly the same material', () => {

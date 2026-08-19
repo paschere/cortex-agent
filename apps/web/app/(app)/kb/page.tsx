@@ -4,10 +4,12 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { BookOpen } from 'lucide-react';
 import { KnowledgeBase } from './_components/KnowledgeBase';
+import { ago } from './_components/format';
 import type { SpaceSummary } from './_components/types';
 import { readBrain } from './_lib/brain';
 import { readConstellation } from './_lib/constellation';
 import { readFragmentHealth, readShape, readStale } from './_lib/inspect';
+import { livingSubtitle } from './_lib/view';
 
 export const dynamic = 'force-dynamic';
 
@@ -77,7 +79,11 @@ export default async function KnowledgeBasePage() {
     <>
       <PageHeader
         title="Brain Knowledge"
-        subtitle="El archivo de la empresa. Entra, encuentra, lee."
+        subtitle={livingSubtitle({
+          chunks: stats.chunks,
+          spaces: summaries.length,
+          lastAdded: stats.lastAddedAt ? ago(stats.lastAddedAt) : null,
+        })}
         icon={<BookOpen className="h-5 w-5" />}
       />
       {/* A view, not a control panel: WhatsApp is configured in Integrations,

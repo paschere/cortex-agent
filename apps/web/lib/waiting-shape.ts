@@ -122,12 +122,56 @@ export function waitingQuestion(queues: ReadonlyArray<{ queue: WaitingQueue }>):
   return ANY_QUEUE_QUESTION;
 }
 
+/**
+ * El sí de cada cola, con el asunto ya puesto.
+ *
+ * «Tres cosas te esperan» es un conteo. «¿Le escribo por Cotización Andina?»
+ * es una decisión. El chat vacío tiene que ofrecer la segunda, o sigue siendo
+ * un índice que se lee y no se contesta.
+ */
+const QUEUE_YES: Record<WaitingQueue, (title: string) => string> = {
+  approvals: (title) => `¿Apruebo «${title}»?`,
+  commitments: (title) => `¿Le escribo por «${title}»?`,
+  actions: (title) => `¿Mando «${title}»?`,
+  errands: (title) => `¿Te contesto lo que te preguntó sobre «${title}»?`,
+};
+
+/** Recorta un asunto para que quepa en una pregunta de un renglón. */
+export function clipTitle(title: string, max = 72): string {
+  const trimmed = title.trim().replace(/\s+/g, ' ');
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+}
+
+/** El sí que corresponde a esta cola y este asunto. Pura, como la frase. */
+export function briefingAsk(queue: WaitingQueue, title: string): string {
+  return QUEUE_YES[queue](clipTitle(title));
+}
+
+/**
+ * Lo primero que hay que hacer, con nombre propio.
+ *
+ * Lo carga el aviso del chat con UNA lectura extra —el primer elemento de la
+ * primera cola que no está vacía—, no las cuatro listas del índice. Ausente
+ * cuando no hay nada o cuando esa lectura falló: la frase del conteo sigue
+ * siendo verdad.
+ */
+export interface WaitingLead {
+  queue: WaitingQueue;
+  title: string;
+  detail: string | null;
+  /** «¿Le escribo por Cotización Andina?» */
+  ask: string;
+}
+
 /** Lo que el chat necesita saber: la frase, el total y a dónde ir. */
 export interface WaitingNoticeData {
   total: number;
   sentence: string;
   /** Sólo las colas que tienen algo dentro, en el orden de WAITING_QUEUES. */
   queues: Array<{ queue: WaitingQueue; label: string; href: string; count: number }>;
+  /** El primer asunto, cuando se pudo leer. */
+  lead?: WaitingLead | null;
 }
 
 export function waitingTotal(counts: WaitingCounts): number {

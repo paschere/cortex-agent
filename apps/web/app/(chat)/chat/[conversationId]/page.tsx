@@ -202,10 +202,10 @@ export default async function ResumeChatPage({
   /**
    * La línea de la cabecera, también en un hilo reabierto.
    *
-   * Son los mismos conteos que el layout ya hace para los badges del rail
-   * (`countNavSignals`), no una lectura de las cuatro listas — ver
-   * `readWaitingNotice`. Un hilo de hace tres semanas se abre igual de rápido
-   * que antes y encima dice qué está parado hoy.
+   * Los conteos son los del rail (`countNavSignals`). El nombre propio —si hay
+   * algo parado— es una lectura más, la del primer asunto, ver
+   * `readWaitingNotice`. Un hilo de hace tres semanas se abre casi igual de
+   * rápido que antes y encima dice qué está parado hoy.
    */
   const waiting = await readWaitingNotice(user.organization.id, user.id);
 

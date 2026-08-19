@@ -65,7 +65,7 @@ describe('el rail', () => {
   });
 
   it('una sección que se queda vacía no deja su encabezado colgando', () => {
-    const rail = buildRail(['/clients', '/payments'], false);
+    const rail = buildRail(['/clients', '/payments', '/trackers'], false);
     expect(rail.rest.map((s) => s.id)).not.toContain('work');
   });
 

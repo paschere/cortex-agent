@@ -7,7 +7,8 @@ import type {
   WaitingItem,
   WaitingQueueView,
 } from '@/lib/waiting';
-import { WAITING_QUEUES, type WaitingQueue } from '@/lib/waiting-shape';
+import { WAITING_QUEUES, type WaitingQueue, briefingAsk } from '@/lib/waiting-shape';
+import { NextMove } from '../NextMove';
 import type { ResultViewProps } from './registry';
 
 /**
@@ -118,6 +119,9 @@ export function WaitingOverview({ result }: ResultViewProps) {
   const index = indexOf(result);
   if (!index) return null;
 
+  const leadQueue = index.queues.find((q) => q.count > 0 && q.items.length > 0);
+  const leadItem = leadQueue?.items[0];
+
   return (
     <div className="space-y-2">
       <p
@@ -129,6 +133,12 @@ export function WaitingOverview({ result }: ResultViewProps) {
       >
         {index.sentence}
       </p>
+      {leadQueue && leadItem && (
+        <NextMove
+          text={briefingAsk(leadQueue.queue, leadItem.title)}
+          label={briefingAsk(leadQueue.queue, leadItem.title)}
+        />
+      )}
       <WaitingIndex index={index} />
     </div>
   );

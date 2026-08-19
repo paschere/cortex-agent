@@ -22,6 +22,7 @@ import {
   type WaitingNoticeData,
   type WaitingQueue,
   agoPhrase,
+  briefingAsk,
   noticeFromCounts,
   summarizeWaiting,
   waitingTotal,
@@ -186,18 +187,57 @@ export async function readWaitingIndex(
 }
 
 /**
- * El aviso del chat: los conteos y nada más.
+ * El aviso del chat: los conteos y, si hay algo, el primer asunto.
  *
- * Abrir una conversación nueva no puede costar cuatro lecturas de listas, así
- * que esta versión se queda en las consultas de cabecera que ya corren en cada
- * pantalla. La frase lo aguanta sin mentir: sin contenido no hay coletilla, y
- * «Tres cosas te esperan.» sigue siendo cierto. Ver `WaitingFacts`.
+ * Abrir una conversación nueva no puede costar las cuatro lecturas del índice.
+ * Los conteos salen de `countNavSignals`, que el layout ya corre. El nombre
+ * propio —sin el cual el vacío del chat seguiría siendo un número— es UNA
+ * lectura más: el primer elemento de la primera cola que no está vacía, en el
+ * orden de `WAITING_QUEUES`. Si esa lectura falla, la frase del conteo sigue
+ * siendo verdad y el aviso se queda en ella.
  */
 export async function readWaitingNotice(
   organizationId: string,
   userId: string,
 ): Promise<WaitingNoticeData> {
-  return noticeFromCounts(await countNavSignals(organizationId, userId));
+  const counts = await countNavSignals(organizationId, userId);
+  const notice = noticeFromCounts(counts);
+  const first = notice.queues[0];
+  if (!first) return notice;
+
+  const db = getOrgScopedClient(organizationId);
+  const preview = await readQueue(first.queue, db, organizationId, userId, Date.now());
+  const item = preview.items[0];
+  if (!item) return notice;
+
+  return {
+    ...notice,
+    lead: {
+      queue: first.queue,
+      title: item.title,
+      detail: item.detail,
+      ask: briefingAsk(first.queue, item.title),
+    },
+  };
+}
+
+async function readQueue(
+  queue: WaitingQueue,
+  db: Db,
+  organizationId: string,
+  userId: string,
+  now: number,
+): Promise<Preview> {
+  switch (queue) {
+    case 'approvals':
+      return readApprovals(db, userId, now);
+    case 'commitments':
+      return readCommitments(db, now);
+    case 'actions':
+      return readActions(db, userId, now);
+    case 'errands':
+      return readErrands(db, organizationId, now);
+  }
 }
 
 // ---------------------------------------------------------------------------

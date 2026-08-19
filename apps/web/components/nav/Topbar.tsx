@@ -23,7 +23,7 @@ export function Topbar({ email }: { email?: string }) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-4 md:gap-3 md:px-6">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-4 print:hidden md:gap-3 md:px-6">
       <button
         type="button"
         onClick={() => setOpen(true)}
