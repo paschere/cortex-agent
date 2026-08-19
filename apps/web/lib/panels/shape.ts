@@ -1,4 +1,4 @@
-import { Briefcase, CalendarClock, FileBarChart, Inbox, Wallet } from 'lucide-react';
+import { Briefcase, Building2, CalendarClock, FileBarChart, Inbox, Wallet } from 'lucide-react';
 
 /**
  * QUÉ ES UN PANEL, Y POR QUÉ ESTE ARCHIVO NO ES `server-only` NI `'use client'`.
@@ -38,9 +38,10 @@ import { Briefcase, CalendarClock, FileBarChart, Inbox, Wallet } from 'lucide-re
  * POR QUÉ ESTE ARCHIVO LO IMPORTAN LOS DOS LADOS
  * ===========================================================================
  * El `toolId` NUNCA viaja desde el navegador. Del cliente sale un `panelId` —
- * una de cinco palabras cerradas — y el servidor lo resuelve CONTRA ESTA TABLA
- * antes de tocar nada. Un cliente que pudiera nombrar la herramienta podría
- * nombrar `gmail.send_message`.
+ * una palabra cerrada de esta tabla — y, si la superficie es de una entidad,
+ * una clave. El servidor lo resuelve CONTRA ESTA TABLA antes de tocar nada.
+ * Un cliente que pudiera nombrar la herramienta podría nombrar
+ * `gmail.send_message`.
  *
  * Para que eso funcione, la tabla tiene que ser la MISMA en los dos sitios: el
  * rail necesita saber qué destinos tienen panel, y la ruta necesita saber qué
@@ -82,15 +83,30 @@ export interface PanelShape {
    * primer clic ya no cuesta la conversación.
    */
   href: string;
+  /**
+   * Esta superficie necesita una clave (un cliente, no «los clientes»).
+   *
+   * El navegador manda `key` como texto. El servidor la pone en `keyField` de
+   * la entrada FIJA. Sin `key` no se abre: una ficha sin decir de quién sería
+   * un ejecutor con la sesión de quien pulsa.
+   */
+  keyed?: boolean;
+  /** El campo de la entrada donde va la clave. Sólo tiene sentido con `keyed`. */
+  keyField?: string;
+  /**
+   * Un poco más ancha: directorio y ficha merecen el segundo ancho del marco,
+   * no un segundo mecanismo. Ver PanelHost.
+   */
+  wide?: boolean;
 }
 
 /**
- * LOS CINCO DE v1. No quince.
+ * LAS SUPERFICIES DEL MARCO. No quince.
  *
- * El criterio no es «qué pantalla cabe», es qué se pregunta CON el chat delante:
- * lo que se debe, lo que vence, lo que Cortex está haciendo solo, lo que ya se
- * calculó y lo que espera un sí. Todas son de lectura y todas contestan en una
- * sola llamada.
+ * El criterio no es «qué pantalla cabe», es qué se pregunta CON el chat delante.
+ * Las cinco de lectura de siempre, más el directorio de clientes y la ficha de
+ * uno — ésta última parametrizada: el navegador manda el id (o el nombre) de
+ * ESTE espacio, nunca el `toolId`.
  *
  * NO ESTÁ `/actions`, que es la OTRA cola de «esperando tu sí», y la diferencia
  * importa: una acción es un borrador ya redactado que se sigue vigilando
@@ -104,7 +120,7 @@ export interface PanelShape {
  * `packages/agent-tools/src/approvals/tools.ts`, que explica por qué esa
  * herramienta no existe a propósito.
  */
-export const PANELS = {
+const TABLE = {
   payments: {
     toolId: 'payments.receivables',
     input: {},
@@ -140,9 +156,28 @@ export const PANELS = {
     icon: Inbox,
     href: '/approvals',
   },
+  clients: {
+    toolId: 'clients.directory',
+    input: { limit: 40 },
+    title: 'Clientes',
+    icon: Building2,
+    href: '/clients',
+    wide: true,
+  },
+  client: {
+    toolId: 'clients.overview',
+    input: {},
+    title: 'Cliente',
+    icon: Building2,
+    href: '/clients',
+    keyed: true,
+    keyField: 'client',
+    wide: true,
+  },
 } satisfies Record<string, PanelShape>;
 
-export type PanelId = keyof typeof PANELS;
+export type PanelId = keyof typeof TABLE;
+export const PANELS: Record<PanelId, PanelShape> = TABLE;
 
 /** El guardia de la frontera: lo que llega del navegador pasa por aquí. */
 export function isPanelId(value: unknown): value is PanelId {
@@ -152,6 +187,9 @@ export function isPanelId(value: unknown): value is PanelId {
 /** Qué panel resume esta pantalla, si alguno. Lo pregunta el rail. */
 export function panelForHref(href: string): PanelId | null {
   for (const [id, shape] of Object.entries(PANELS)) {
+    // Una ficha parametrizada comparte href con su directorio. El rail abre
+    // el directorio; la ficha se abre desde una tarjeta, con clave.
+    if (shape.keyed) continue;
     if (shape.href === href) return id as PanelId;
   }
   return null;
@@ -167,11 +205,21 @@ export function panelForHref(href: string): PanelId | null {
  * router es exactamente lo que no puede tocar esto.
  */
 export const PANEL_PARAM = 'panel';
+/** La clave de una superficie parametrizada. Nunca un `toolId`. */
+export const PANEL_KEY_PARAM = 'key';
 
 /** Qué panel pide esta búsqueda. `null` cuando no pide ninguno o pide uno que no existe. */
 export function panelFromSearch(search: string): PanelId | null {
   const value = new URLSearchParams(search).get(PANEL_PARAM);
   return isPanelId(value) ? value : null;
+}
+
+/** La clave que pide esta búsqueda, si hay una. */
+export function panelKeyFromSearch(search: string): string | null {
+  const value = new URLSearchParams(search).get(PANEL_KEY_PARAM);
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 /**
@@ -181,10 +229,42 @@ export function panelFromSearch(search: string): PanelId | null {
  * cualquier otro parámetro porque no es suyo: quien abre un panel sobre una
  * pantalla filtrada no ha pedido que se le caiga el filtro.
  */
-export function searchWithPanel(search: string, panel: PanelId | null): string {
+export function searchWithPanel(
+  search: string,
+  panel: PanelId | null,
+  key?: string | null,
+): string {
   const params = new URLSearchParams(search);
-  if (panel) params.set(PANEL_PARAM, panel);
-  else params.delete(PANEL_PARAM);
+  if (panel) {
+    params.set(PANEL_PARAM, panel);
+    const shape = PANELS[panel];
+    const trimmed = typeof key === 'string' ? key.trim() : '';
+    if (shape.keyed && trimmed) params.set(PANEL_KEY_PARAM, trimmed);
+    else params.delete(PANEL_KEY_PARAM);
+  } else {
+    params.delete(PANEL_PARAM);
+    params.delete(PANEL_KEY_PARAM);
+  }
   const query = params.toString();
   return query ? `?${query}` : '';
+}
+
+/**
+ * La entrada que el servidor le pasa a la herramienta.
+ *
+ * El navegador nunca la construye: manda un id de superficie y, si aplica, una
+ * clave. Aquí se decide qué campo recibe esa clave. Una superficie `keyed` sin
+ * clave no se abre — no hay ficha de «nadie».
+ */
+export function resolvePanelInput(
+  id: PanelId,
+  key?: string | null,
+): { ok: true; input: Record<string, unknown> } | { ok: false; message: string } {
+  const panel = PANELS[id];
+  if (!panel.keyed) return { ok: true, input: panel.input };
+  const trimmed = typeof key === 'string' ? key.trim() : '';
+  if (!trimmed) return { ok: false, message: 'Falta qué abrir.' };
+  if (trimmed.length > 200) return { ok: false, message: 'Eso no cabe como clave.' };
+  if (!panel.keyField) return { ok: false, message: 'Esta superficie está mal definida.' };
+  return { ok: true, input: { ...panel.input, [panel.keyField]: trimmed } };
 }

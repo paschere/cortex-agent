@@ -5,24 +5,15 @@ import {
   ALL_ICON,
   ALL_LABEL,
   COMPANY_ICON,
-  DEFAULT_QUICK,
   FOOTER,
   type NavItem,
-  QUICK_CANDIDATES,
   WAITING_ICON,
   WAITING_LABEL,
   buildRail,
   waitingHref,
 } from '@/lib/nav-shape';
 import type { NavCounts } from '@/lib/nav-signals';
-import {
-  orderByUsage,
-  pickQuick,
-  readQuick,
-  readUsage,
-  recordVisit,
-  writeQuick,
-} from '@/lib/nav-usage';
+import { orderByUsage, readUsage, recordVisit } from '@/lib/nav-usage';
 import { type PanelId, panelForHref } from '@/lib/panels/shape';
 import { waitingTotal } from '@/lib/waiting-shape';
 import type { ActiveOrganization, Role } from '@cortex/core';
@@ -41,9 +32,10 @@ import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 // Este archivo DIBUJA el rail; la lista de destinos y el porqué de cada grupo
 // están en `lib/nav-shape.ts`, que es donde se puede probar sin un navegador.
 //
-// La forma es: tres filas que no se mueven nunca (Inicio, Chat, Te espera),
-// cinco plazas que se ganan por uso, «Todo» con el resto dentro y «La empresa»
-// aparte y plegada. Once filas donde había veintiocho, y ni un destino menos.
+// La forma es: Chat, Te espera y Brain Knowledge fijos, «Todo» con el resto
+// dentro y «La empresa» aparte y plegada. El chat es el producto; el archivo
+// es la otra superficie de primera. Nada se pierde: lo que no está arriba
+// se alcanza desde «Todo» o desde ⌘K.
 //
 // LO QUE SE MANTIENE INTACTO, porque cada una costó una decisión: el rail se
 // estrecha dentro de `/chat` y se asoma al pasar por encima sin mover la
@@ -69,8 +61,6 @@ const OPEN_KEY = {
 };
 
 const NO_COUNTS: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
-
-const QUICK_HREFS = QUICK_CANDIDATES.map((item) => item.href);
 
 /**
  * Un desplegable que se acuerda de cómo lo dejaste.
@@ -537,32 +527,21 @@ function SidebarNav({
    *
    * `localStorage` does not exist on the server, so reading it while rendering
    * would either throw or make the first client paint disagree with the HTML
-   * that came down. Both show up as a rail that jumps. So the first paint is
-   * always the designed order — las cinco plazas sembradas — and la personalizada
-   * llega un tick después, que es también el orden honesto de los hechos: no se
-   * sabe nada de esta persona hasta que su navegador lo dice.
+   * that came down. Both show up as a rail that jumps. The first paint is the
+   * designed order inside «Todo»; the personalised order arrives a tick later.
    */
   const [usage, setUsage] = useState<Record<string, number>>({});
-  const [quick, setQuick] = useState<string[]>(DEFAULT_QUICK);
   /**
    * `pathname` es el DISPARADOR, no un valor que este efecto lea, y por eso la
    * regla lo ve de más. Sin él, el uso se leería una sola vez al montar y el
-   * rail no se reordenaría nunca dentro de una sesión — que es justo la mitad
-   * de lo que esto hace. Quitarlo deja el linter contento y la función muerta.
+   * orden dentro de «Todo» no se reordenaría nunca dentro de una sesión.
    */
   // biome-ignore lint/correctness/useExhaustiveDependencies: es el disparador, no una lectura.
   useEffect(() => {
-    const scores = readUsage();
-    setUsage(scores);
-    // Se reevalúa al navegar, que es justo después de que `recordVisit` haya
-    // escrito. La pertenencia se guarda para que el que está arriba pueda
-    // defenderse la próxima vez — sin memoria no hay histéresis.
-    const next = pickQuick(QUICK_HREFS, scores, readQuick(), DEFAULT_QUICK);
-    writeQuick(next);
-    setQuick(next);
+    setUsage(readUsage());
   }, [pathname]);
 
-  const rail = buildRail(quick, admin);
+  const rail = buildRail([], admin);
 
   const ids = useId();
   const [waitingOpen, toggleWaiting] = useRemembered(OPEN_KEY.waiting);
@@ -630,7 +609,6 @@ function SidebarNav({
         <div id={`${ids}-waiting`} className={clsx('flex flex-col gap-px', nested)}>
           {waitingOpen && rail.waiting.map(row)}
         </div>
-        {rail.quick.map(row)}
       </div>
 
       <div className="flex flex-col gap-px pt-3">

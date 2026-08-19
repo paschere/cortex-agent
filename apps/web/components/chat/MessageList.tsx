@@ -3,6 +3,7 @@
 import type { BrainSource } from '@/lib/brain-sources-shape';
 import { type ExercisedMandate, planNotices } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
+import type { WaitingNoticeData } from '@/lib/waiting-shape';
 import { toolDisplayName } from '@/lib/tool-labels';
 import type { Message } from 'ai';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -211,6 +212,11 @@ interface MessageListProps {
    * viaje. Ver el efecto de `/api/chat/turn-metrics` más abajo.
    */
   initialBrainSources?: Record<string, BrainSource[]>;
+  /**
+   * Lo que espera a esta persona. En un chat vacío se dice como la frase del
+   * día; con un hilo abierto no se dibuja aquí — el rail ya lleva el total.
+   */
+  waiting?: WaitingNoticeData;
 }
 
 export function MessageList({
@@ -226,6 +232,7 @@ export function MessageList({
   glances,
   initialBrainSources,
   frames,
+  waiting,
 }: MessageListProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [metrics, setMetrics] = useState<TurnMetrics | null>(null);
@@ -446,7 +453,12 @@ export function MessageList({
     <div ref={ref} className="scroll-slim flex-1 overflow-y-auto">
       {empty ? (
         <div className="mx-auto flex h-full w-full max-w-3xl">
-          <EmptyState agent={agent} onSuggestion={(t) => onSuggestion?.(t)} />
+          <EmptyState
+            agent={agent}
+            waiting={waiting}
+            onSuggestion={(t) => onSuggestion?.(t)}
+            onAsk={(t) => onAnswer?.(t)}
+          />
         </div>
       ) : (
         <div className="mx-auto w-full max-w-3xl space-y-11 px-4 py-8 sm:px-6">

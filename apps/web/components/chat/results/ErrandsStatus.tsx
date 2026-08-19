@@ -5,6 +5,7 @@ import { ERRAND_BOUNDARY_NOTICE, type ErrandState } from '@/lib/errands-shape';
 import { chipClass } from '@/lib/status-chip';
 import { HelpCircle, Telescope } from 'lucide-react';
 import Link from 'next/link';
+import { PinSurface } from '../PinSurface';
 import type { ResultViewProps } from './registry';
 
 /**
@@ -60,7 +61,7 @@ interface Errand {
   result: string | null;
 }
 
-export function ErrandsStatus({ result }: ResultViewProps) {
+export function ErrandsStatus({ result, toolCallId }: ResultViewProps) {
   const view = statusOf(result);
   if (!view) return null;
 
@@ -85,7 +86,10 @@ export function ErrandsStatus({ result }: ResultViewProps) {
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2.5">
         <Telescope className="h-4 w-4 shrink-0 text-primary" aria-hidden />
         <span className="field-label">Encargos</span>
-        <span className="ml-auto text-micro text-ink-faint">{view.summary}</span>
+        <span className="ml-auto flex items-center gap-2">
+          <span className="text-micro text-ink-faint">{view.summary}</span>
+          <PinSurface surface="errands" hidden={toolCallId.startsWith('panel:')} />
+        </span>
       </div>
 
       <ul className="divide-y divide-border">

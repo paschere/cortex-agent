@@ -1,6 +1,9 @@
 'use client';
 
-import type { FirstStep, Opener, OpenerTone, OpenersResponse } from '@/lib/chat-openers-shape';
+import { usePanel } from '@/components/panel/PanelHost';
+import type { FirstStep, OpenersResponse } from '@/lib/chat-openers-shape';
+import { panelForWaiting } from '@/lib/waiting-panel';
+import { type WaitingNoticeData, waitingQuestion } from '@/lib/waiting-shape';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlarmClock,
@@ -16,7 +19,6 @@ import {
   Handshake,
   Inbox,
   Mic,
-  PenLine,
   Plug,
   Send,
   Sparkles,
@@ -100,33 +102,12 @@ function icon(name: string): typeof Brain {
 }
 
 /**
- * Los mismos cinco tonos de `globals.css`, nada inventado aquí.
- *
- * El icono pasa de ir suelto a ir en su propia baldosa teñida: es lo que hace
- * que seis tarjetas se lean como seis cosas distintas de un vistazo en vez de
- * como una lista, que es justo lo que la selección se esfuerza en conseguir.
- */
-const TONE: Record<OpenerTone, { tile: string; dot: string }> = {
-  primary: { tile: 'bg-primary-soft text-primary ring-primary/15', dot: 'bg-primary' },
-  emerald: { tile: 'bg-emerald-soft text-emerald ring-emerald/15', dot: 'bg-emerald' },
-  amber: { tile: 'bg-amber-soft text-amber ring-amber/15', dot: 'bg-amber' },
-  sky: { tile: 'bg-sky-soft text-sky ring-sky/15', dot: 'bg-sky' },
-  rose: { tile: 'bg-rose-soft text-rose ring-rose/15', dot: 'bg-rose' },
-};
-
-/**
  * EL TITULAR, EN PRIMERA PERSONA.
  *
- * Antes decía «Pregúntale a Cortex» y describía el producto desde fuera, como
- * lo diría la página de ventas. Pero el rail entero habla como habla el que
- * trabaja aquí —«Lo que hago solo», «Cómo vamos», «De dónde saco todo»— y esta
- * es la primera frase que alguien lee del producto: si aquí Cortex es «él», en
- * la siguiente pantalla ya es tarde para que sea «yo».
- *
- * Y el titular puede afirmar que ya leyó porque las tarjetas de abajo lo
- * demuestran: nombran el documento, el cliente y la fecha que salieron de este
- * espacio. Cuando no hay nada que leer, el titular cambia entero (ver `blank`),
- * que es la única forma de que esta frase no sea una promesa vacía.
+ * El rail entero habla como habla el que trabaja aquí, y ésta es la primera
+ * frase que alguien lee del producto: si aquí Cortex es «él», en la siguiente
+ * pantalla ya es tarde para que sea «yo». Cuando hay algo esperándote, la
+ * frase del día es esa — no un catálogo de seis tarjetas.
  */
 const CORTEX_COPY = {
   title: 'Ya leí lo tuyo. Pregúntame.',
@@ -183,87 +164,32 @@ const CARDS_AT_MS = 120;
 const rise = (delayMs: number) => ({ animationDelay: `${delayMs}ms` });
 
 /**
- * UNA MANDA Y LAS DEMÁS ACOMPAÑAN.
+ * LA PREGUNTA DEL DÍA, EN UNA LÍNEA.
  *
- * Eran seis tarjetas del mismo tamaño, el mismo peso y el mismo color en una
- * rejilla de dos columnas. Seis cosas idénticas no son seis opciones: son una
- * pared, y el ojo no tiene por dónde entrar. La primera —que es la que el
- * ranking de `pickOpeners` ya considera la mejor, sólo que la pantalla no lo
- * decía— pasa a ocupar el ancho entero, con el texto un paso más grande y la
- * baldosa más alta. Las demás quedan compactas debajo.
- *
- * Y la pregunta pasa de `ink-muted` a `ink`: es el contenido de la tarjeta, no
- * su pie de foto. Estaba escrita en el tono de lo secundario mientras lo único
- * secundario que hay ahí —la procedencia— competía con ella en atención.
+ * Ya no es un catálogo. Una sola frase, escrita no mandada, y el compositor
+ * debajo. Si hay algo esperándote, esa frase es la de las colas — no una
+ * tarjeta de más encima del titular.
  */
-function OpenerCard({
-  opener,
-  index,
-  lead = false,
-  wide = false,
+function SuggestionLine({
+  text,
+  hint,
   onSuggestion,
 }: {
-  opener: Opener;
-  index: number;
-  /** La primera: ancho completo y un paso más de tipografía. */
-  lead?: boolean;
-  /** Un huérfano al final de una rejilla impar, que ocupa las dos columnas. */
-  wide?: boolean;
+  text: string;
+  hint?: string;
   onSuggestion: (text: string) => void;
 }) {
-  const Icon = icon(opener.icon);
-  const tone = TONE[opener.tone];
   return (
     <button
       type="button"
-      // CSS animation, not framer-motion: globals.css already neutralises it
-      // under prefers-reduced-motion.
-      className={`animate-rise group relative flex items-start gap-3 overflow-hidden rounded-card border border-border bg-surface text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-pop focus-visible:-translate-y-0.5 motion-reduce:transform-none motion-reduce:transition-none ${
-        lead ? 'p-4 sm:col-span-2' : 'p-3.5'
-      } ${wide ? 'sm:col-span-2' : ''}`}
-      style={rise(CARDS_AT_MS + index * STEP_MS)}
-      onClick={() => onSuggestion(opener.text)}
+      onClick={() => onSuggestion(text)}
+      className="animate-rise group max-w-lg text-pretty text-center"
+      style={rise(80)}
     >
-      {/* El tinte del hover va en su propia capa y no en un `hover:bg-*` sobre
-          la tarjeta: así entra por opacidad —se puede interpolar— en vez de
-          cambiar de color de golpe, y no se pelea con `bg-surface`. */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-primary-soft opacity-0 transition-opacity duration-200 group-hover:opacity-60 motion-reduce:transition-none"
-      />
-      <span
-        className={`relative grid shrink-0 place-items-center rounded-sm ring-1 ring-inset transition-transform duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none ${
-          lead ? 'h-11 w-11' : 'h-9 w-9'
-        } ${tone.tile}`}
-      >
-        <Icon className={lead ? 'h-5 w-5' : 'h-4 w-4'} aria-hidden />
+      <span className="text-sm leading-snug text-ink-muted underline decoration-border underline-offset-4 transition-colors duration-150 group-hover:text-ink group-hover:decoration-primary/40 motion-reduce:transition-none">
+        {text}
       </span>
-      <span className="relative min-w-0 flex-1 pr-5">
-        <span
-          className={`block leading-snug text-ink ${lead ? 'text-base font-medium' : 'line-clamp-3 text-sm'}`}
-        >
-          {opener.text}
-        </span>
-        {opener.hint ? (
-          // La procedencia se dibuja porque es la mitad del valor: una tarjeta
-          // que nombra un documento tiene que decir que lo está nombrando, o
-          // se lee como una frase de ejemplo más. El punto de color sólo lo
-          // llevan las sembradas: distingue «esto existe en tu espacio» de
-          // «esto es algo que puedo hacer», que es la distinción que la
-          // selección se toma el trabajo de calcular.
-          <span className="mt-1.5 flex items-center gap-1.5 text-micro text-ink-faint">
-            {opener.kind === 'grounded' ? (
-              <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-pill ${tone.dot}`} />
-            ) : null}
-            <span className="min-w-0 truncate">{opener.hint}</span>
-          </span>
-        ) : null}
-      </span>
-      {/* El lápiz dice, sin una línea de texto, que esto ESCRIBE y no manda. */}
-      <PenLine
-        aria-hidden
-        className="absolute right-3 top-3.5 h-3.5 w-3.5 translate-y-0.5 text-primary opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transform-none motion-reduce:transition-none"
-      />
+      {hint ? <span className="mt-1.5 block text-micro text-ink-faint">{hint}</span> : null}
     </button>
   );
 }
@@ -273,19 +199,17 @@ function FirstStepCard({ step, index }: { step: FirstStep; index: number }) {
   return (
     <Link
       href={step.href}
-      className="animate-rise group relative flex items-start gap-3 overflow-hidden rounded-card border border-border bg-surface p-3.5 text-left shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-pop motion-reduce:transform-none motion-reduce:transition-none"
+      className="animate-rise group flex items-start gap-3 px-1 py-2 text-left"
       style={rise(CARDS_AT_MS + index * STEP_MS)}
     >
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-primary-soft opacity-0 transition-opacity duration-200 group-hover:opacity-60 motion-reduce:transition-none"
-      />
-      <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary ring-1 ring-inset ring-primary/15 transition-transform duration-200 group-hover:scale-105 motion-reduce:transform-none motion-reduce:transition-none">
-        <Icon className="h-4 w-4" aria-hidden />
+      <span className="relative mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary ring-1 ring-inset ring-primary/15">
+        <Icon className="h-3.5 w-3.5" aria-hidden />
       </span>
-      <span className="relative min-w-0 flex-1">
-        <span className="block text-sm font-semibold leading-snug text-ink">{step.label}</span>
-        <span className="mt-1 block text-xs leading-snug text-ink-muted">{step.blurb}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium leading-snug text-ink group-hover:text-primary">
+          {step.label}
+        </span>
+        <span className="mt-0.5 block text-xs leading-snug text-ink-muted">{step.blurb}</span>
       </span>
     </Link>
   );
@@ -319,62 +243,16 @@ function Mark() {
   );
 }
 
-/**
- * El pie: la garantía, y de dónde salen estas frases.
- *
- * Contar cuántas tarjetas están sembradas no es adorno — es la única prueba en
- * pantalla de que esto no son ejemplos escritos a mano. Y la segunda frase es
- * la postura del componente dicha en voz alta: tocar una tarjeta no manda nada.
- */
-function ComposerNote({ grounded, delayMs }: { grounded: number; delayMs: number }) {
-  const source =
-    grounded === 1
-      ? 'Una de estas sale de algo que ya tienes adentro. '
-      : grounded > 1
-        ? `${grounded} de estas salen de algo que ya tienes adentro. `
-        : '';
-  return (
-    // El lápiz va EN el renglón, no en una columna aparte: con `flex` se queda
-    // flotando a la izquierda de un párrafo de dos líneas, que es exactamente el
-    // aspecto de un icono puesto por poner.
-    <p
-      className="animate-rise mt-5 max-w-xl text-balance text-center text-micro leading-snug text-ink-faint"
-      style={rise(delayMs)}
-    >
-      <PenLine className="mr-1.5 inline h-3 w-3 -translate-y-px" aria-hidden />
-      {source}Toca la que quieras y te la escribo abajo: tú decides cuándo se manda.
-    </p>
-  );
-}
-
-/**
- * Se intentó y no hay tarjetas. Ni una sola palabra de error, porque puede que
- * no lo haya: un espacio con integraciones conectadas pero sin nada que citar
- * todavía devuelve una lista vacía y no le pasa nada malo. Lo único que este
- * renglón tiene que hacer es señalar el sitio donde sí se puede empezar —la
- * caja de texto de abajo, que manda igual con sugerencias o sin ellas.
- *
- * Cuando además hubo un fallo (red, o el tope de seis segundos), el aviso ámbar
- * de arriba ya lo dijo; esto sigue siendo verdad en los dos casos y no repite.
- */
-function NoOpeners() {
-  return (
-    <p
-      className="animate-rise mt-5 max-w-xl text-balance text-center text-micro leading-snug text-ink-faint"
-      style={rise(60)}
-    >
-      <PenLine className="mr-1.5 inline h-3 w-3 -translate-y-px" aria-hidden />
-      Hoy no tengo sugerencias que valgan la pena. Escríbeme abajo y arrancamos por ahí.
-    </p>
-  );
-}
-
 export function EmptyState({
   agent,
+  waiting,
   onSuggestion,
+  onAsk,
 }: {
   agent?: AgentInfo;
+  waiting?: WaitingNoticeData;
   onSuggestion: (text: string) => void;
+  onAsk?: (text: string) => void;
 }) {
   const copy = (agent && COPY[agent.slug]) ?? {
     title: agent?.name ?? CORTEX_COPY.title,
@@ -386,17 +264,12 @@ export function EmptyState({
     queryKey: ['chat-openers', slug],
     queryFn: async () => {
       const res = await fetch(`/api/chat/openers?agent=${encodeURIComponent(slug)}`, {
-        // El tope va aquí, en la petición, y no en un temporizador que sólo
-        // apague los huecos: una respuesta que llega a los cuarenta segundos y
-        // repuebla la pantalla es peor que ninguna. Ver `OPENERS_TIMEOUT_MS`.
         signal: AbortSignal.timeout(OPENERS_TIMEOUT_MS),
       });
       if (!res.ok) throw new Error('openers');
       return (await res.json()) as OpenersResponse;
     },
     staleTime: OPENERS_STALE_MS,
-    // Una pantalla de bienvenida no puede reintentar tres veces: o llega rápido
-    // o no llega, y lo que se dibuja entretanto no cambia.
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -404,64 +277,42 @@ export function EmptyState({
   const data = openers.data;
   const blank = data?.blank ?? false;
   const cards = data?.openers ?? [];
-  const grounded = cards.filter((o) => o.kind === 'grounded').length;
-
-  /**
-   * Ya no se está esperando y no hay nada que ofrecer.
-   *
-   * Las tres maneras de llegar aquí terminan en la misma pantalla porque para
-   * quien está mirando son el mismo hecho —hoy no hay tarjetas—: la petición
-   * falló, la cortó el tope de seis segundos, o llegó bien y venía vacía. Lo
-   * que las distingue es el aviso ámbar de arriba, que sólo sale en las dos
-   * primeras; ninguna de las tres deja huecos latiendo.
-   *
-   * Se mira `isLoading` y no `isPending`: con el navegador sin red react-query
-   * deja la consulta PAUSADA —pendiente pero sin ir a buscar nada— y esperar a
-   * que se resuelva sería otra vez el latido eterno, sólo que por otra puerta.
-   */
-  const nothingToSuggest = !openers.isLoading && !blank && cards.length === 0;
+  const suggestion = !blank ? cards[0] : undefined;
+  const waitingOn = waiting && waiting.total > 0;
+  const { open, available } = usePanel();
+  const waitingPanel = waitingOn && available ? panelForWaiting(waiting.queues) : null;
+  const title = blank ? BLANK_COPY.title : waitingOn ? waiting.sentence : copy.title;
 
   return (
-    // `safe center` y no `justify-center`: el contenedor de arriba es el que
-    // scrollea, y un centrado normal que no cabe reparte el sobrante por los dos
-    // lados — o sea, deja la marca y el titular por encima del borde superior,
-    // donde no se puede llegar con el dedo. En un teléfono con seis tarjetas eso
-    // pasa. `safe` centra sólo mientras quepa y a partir de ahí ancla arriba.
-    /*
-      ANCLADO ABAJO, NO CENTRADO. Y `chat-sky` se fue.
-
-      Centrado dejaba ~350px de vacío entre la última tarjeta y el compositor:
-      en una pantalla de 900px el contenido flotaba en mitad de la nada y la
-      caja de texto —lo único que alguien va a tocar aquí— quedaba huérfana al
-      fondo. El recorrido correcto de la vista es marca → titular → sugerencias
-      → escribir, y termina donde se escribe: así que el bloque se apoya en el
-      compositor en vez de flotar lejos de él.
-
-      `safe flex-end` y no `flex-end` a secas, por la misma razón por la que
-      antes era `safe center`: cuando el contenido no cabe —seis tarjetas en un
-      teléfono— un anclaje normal empuja la marca por encima del borde del
-      scroll, donde no se llega. `safe` ancla al principio en cuanto desborda.
-
-      Y `chat-sky` sobraba: era un tercer lavado de índigo encima de la luz de
-      `AmbientField`, en la misma pantalla y del mismo color. Dos gradientes
-      superpuestos no son el doble de atmósfera, son barro.
-    */
-    <div className="relative flex flex-1 flex-col items-center px-4 pb-6 pt-8 text-center [justify-content:safe_flex-end] sm:px-6 sm:pt-10">
-      <div className="animate-rise mb-7 flex flex-col items-center">
+    <div className="relative flex flex-1 flex-col items-center px-4 pb-8 pt-8 text-center [justify-content:safe_flex-end] sm:px-6 sm:pt-10">
+      <div className="animate-rise mb-6 flex flex-col items-center">
         <Mark />
-        <h2 className="mt-5 text-balance text-lg font-bold tracking-tight text-ink sm:text-xl">
-          {blank ? BLANK_COPY.title : copy.title}
-        </h2>
-        <p className="mt-2 max-w-lg text-pretty text-sm leading-snug text-ink-muted">
-          {blank ? BLANK_COPY.subtitle : copy.subtitle}
+        {waitingOn ? (
+          <button
+            type="button"
+            onClick={() =>
+              waitingPanel
+                ? open(waitingPanel)
+                : (onAsk ?? onSuggestion)(waitingQuestion(waiting.queues))
+            }
+            className="mt-6 max-w-xl text-balance text-2xl font-semibold tracking-tight text-ink underline decoration-amber/40 underline-offset-8 transition-colors hover:decoration-amber sm:text-[1.75rem]"
+          >
+            {title}
+          </button>
+        ) : (
+          <h2 className="mt-6 max-w-xl text-balance text-2xl font-semibold tracking-tight text-ink sm:text-[1.75rem]">
+            {title}
+          </h2>
+        )}
+        <p className="mt-2 max-w-md text-pretty text-sm leading-relaxed text-ink-muted">
+          {blank
+            ? BLANK_COPY.subtitle
+            : waitingOn
+              ? 'Tócalo y lo abro al lado, sin salir de aquí.'
+              : copy.subtitle}
         </p>
       </div>
 
-      {/*
-        Un fallo de lectura NUNCA se dibuja como un espacio vacío. «No tienes
-        documentos» y «no pude leer tus documentos» son dos frases distintas, y
-        sólo una de las dos manda a alguien a subir de nuevo algo que ya está.
-      */}
       {data?.notice || openers.isError ? (
         <p
           className="animate-rise mb-4 flex max-w-xl items-start gap-2 rounded-sm border border-amber/25 bg-amber-soft px-3 py-2 text-left text-xs leading-snug text-ink-muted"
@@ -475,62 +326,23 @@ export function EmptyState({
         </p>
       ) : null}
 
-      {/*
-        UNA COLUMNA CUANDO SON LOS PRIMEROS PASOS, DOS CUANDO SON SUGERENCIAS.
-
-        Los primeros pasos son TRES, y tres en una rejilla de dos columnas deja
-        una huérfana sola a la izquierda con un hueco al lado — que no se lee
-        como «tres cosas», se lee como una tarjeta que no cargó. Además no son
-        alternativas entre las que elegir una: son tres cosas que hay que hacer,
-        y una columna es la forma de una lista de tareas.
-
-        Las sugerencias sí son alternativas —eliges una y descartas cinco— y
-        para eso la rejilla es correcta; ahí el huérfano ya lo resuelve `wide`.
-      */}
-      <div className={`grid w-full max-w-3xl grid-cols-1 gap-2 ${blank ? '' : 'sm:grid-cols-2'}`}>
-        {blank
-          ? (data?.firstSteps ?? []).map((step, i) => (
-              <FirstStepCard key={step.id} step={step} index={i} />
-            ))
-          : cards.map((opener, i) => (
-              <OpenerCard
-                key={opener.id}
-                opener={opener}
-                index={i}
-                lead={i === 0}
-                // El último de una cola impar ocuparía media fila y dejaría un
-                // hueco al lado, que se lee como una tarjeta que faltó cargar.
-                wide={i > 0 && i === cards.length - 1 && cards.length % 2 === 0}
-                onSuggestion={onSuggestion}
-              />
-            ))}
-        {/*
-          Mientras llega la respuesta no se dibujan tarjetas de relleno con
-          texto falso: son seis frases que alguien va a leer, y leer una frase
-          inventada y verla cambiar es peor que esperar dos décimas. El latido
-          va desfasado tarjeta a tarjeta para que se lea como algo cargando y
-          no como cuatro cajas parpadeando al unísono.
-        */}
-        {openers.isLoading
-          ? [0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                // El primero ancho, como la tarjeta que va a ocupar su sitio:
-                // si el hueco no tiene la forma del contenido, la pantalla da
-                // un salto al llegar los datos.
-                className={`animate-pulse rounded-card border border-border bg-surface-2 ${
-                  i === 0 ? 'h-[86px] sm:col-span-2' : 'h-[74px]'
-                }`}
-                style={rise(i * 140)}
-              />
-            ))
-          : null}
-      </div>
-
-      {!blank && cards.length > 0 ? (
-        <ComposerNote grounded={grounded} delayMs={CARDS_AT_MS + cards.length * STEP_MS + 60} />
-      ) : nothingToSuggest ? (
-        <NoOpeners />
+      {blank ? (
+        <div className="w-full max-w-md text-left">
+          {(data?.firstSteps ?? []).map((step, i) => (
+            <FirstStepCard key={step.id} step={step} index={i} />
+          ))}
+        </div>
+      ) : suggestion ? (
+        <SuggestionLine
+          text={suggestion.text}
+          hint={suggestion.hint ?? undefined}
+          onSuggestion={onSuggestion}
+        />
+      ) : openers.isLoading ? (
+        <div
+          className="h-4 w-48 animate-pulse rounded-pill bg-surface-2 motion-reduce:animate-none"
+          aria-hidden
+        />
       ) : null}
     </div>
   );

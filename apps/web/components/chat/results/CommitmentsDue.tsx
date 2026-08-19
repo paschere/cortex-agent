@@ -8,6 +8,7 @@ import { chipClass } from '@/lib/status-chip';
 import { clsx } from 'clsx';
 import { CalendarClock, Car } from 'lucide-react';
 import Link from 'next/link';
+import { PinSurface } from '../PinSurface';
 import type { ResultViewProps } from './registry';
 
 /**
@@ -66,7 +67,7 @@ interface Row {
   source: Source;
 }
 
-export function CommitmentsDue({ result }: ResultViewProps) {
+export function CommitmentsDue({ result, toolCallId }: ResultViewProps) {
   const view = dueOf(result);
   if (!view) return null;
 
@@ -89,7 +90,10 @@ export function CommitmentsDue({ result }: ResultViewProps) {
         <span className="field-label">Vencimientos</span>
         {view.overdue > 0 && <span className={chipClass('rose')}>{view.overdue} vencido</span>}
         {view.dueSoon > 0 && <span className={chipClass('amber')}>{view.dueSoon} por vencer</span>}
-        <span className="ml-auto text-micro text-ink-faint">al {shortDate(view.today)}</span>
+        <span className="ml-auto flex items-center gap-2">
+          <span className="text-micro text-ink-faint">al {shortDate(view.today)}</span>
+          <PinSurface surface="commitments" hidden={toolCallId.startsWith('panel:')} />
+        </span>
       </div>
 
       <ul className="divide-y divide-border">

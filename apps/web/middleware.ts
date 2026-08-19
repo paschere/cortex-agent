@@ -5,7 +5,7 @@ const PUBLIC_PATHS = [
   // because isPublic() only matches a prefix at a segment boundary: the root
   // matches itself via `pathname === '/'`, and the nested test becomes
   // `startsWith('//')`, which nothing satisfies. app/page.tsx decides what to
-  // render — signed-in visitors are still sent to /dashboard from there.
+  // render — signed-in visitors are still sent to /chat (or /onboarding) from there.
   '/',
   '/login',
   // SaaS auth surface: signup, password recovery and the post-password 2FA

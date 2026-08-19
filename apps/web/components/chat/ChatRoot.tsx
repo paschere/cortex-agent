@@ -13,13 +13,11 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
 import { AmbientField } from './AmbientField';
-import { Capabilities } from './Capabilities';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
 import { Presence } from './Presence';
 import { useScreenView } from './ScreenView';
 import { ThreadHistory } from './ThreadHistory';
-import { WaitingNotice } from './WaitingNotice';
 
 interface AgentInfo {
   slug: string;
@@ -385,108 +383,13 @@ export function ChatRoot({
         >
           <Menu className="h-5 w-5" />
         </button>
-        {/*
-          LA CABECERA TENÍA CINCO COSAS CON EL MISMO PESO — el nombre del
-          agente, el id, el aviso, tres chips de hilo y dos botones—, así que
-          no había ninguna. Ahora tiene cuatro zonas y una jerarquía dicha con
-          tamaño y con separadores, no con color:
-
-            SUJETO      de qué va esta conversación. Es lo único a `text-base`,
-                        que es el token de «el nombre de lo que estás mirando».
-                        Debajo, quién contesta y el id a 11px monoespaciado.
-            PUERTA      qué se le puede pedir. En el centro, que era el vacío.
-            AVISO       lo que te espera. Interrumpe en voz baja.
-            NAVEGACIÓN  los hilos y los dos botones, al otro lado de un filete.
-
-          EL TÍTULO SUBIÓ Y EL AGENTE BAJÓ, y es un cambio con motivo. La
-          cabecera anunciaba «Cortex» —lo mismo en las mil conversaciones de
-          esta cuenta— y escondía «Cartera de Coltrans» en una pastilla a mil
-          doscientos píxeles a la derecha, que es donde va lo que se consulta,
-          no lo que se lee. Con una transcripción en pantalla la pregunta
-          «¿quién contesta?» ya la responde cada turno; la que nadie contestaba
-          era «¿qué estoy mirando?». Visto en pantalla con siete mensajes
-          delante, que es la primera vez que alguien miró esto con mensajes.
-
-          La identidad no se pierde: baja al antetítulo, junto al id, que es
-          exactamente el peso que le corresponde a un dato constante.
-        */}
         <div className="flex min-w-0 items-center gap-2.5">
-          {/* La misma presencia que trabaja abajo, aquí arriba y siempre a la
-              vista. En la cabecera sólo puede saber una cosa —si hay un turno
-              en marcha— y con eso basta: es el punto fijo que dice que hay
-              alguien ahí incluso cuando la conversación está en el turno
-              treinta y el indicador de abajo hace rato que no aparece. */}
           <Presence size="sm" state={isLoading ? 'thinking' : 'resting'} />
-          <div className="min-w-0 leading-tight">
-            <div className="truncate text-base font-semibold tracking-[-0.01em] text-ink">
-              {title ?? (conversationId ? 'Conversación' : 'Conversación nueva')}
-            </div>
-            {/* The conversation id is what a person quotes when they need this
-                exchange looked up later, so it is set as evidence, not prose. */}
-            <div className="truncate text-micro text-ink-faint">
-              {activeAgent?.name ?? 'Cortex'}
-              {conversationId && (
-                <>
-                  {' · '}
-                  <span className="font-mono" title={conversationId}>
-                    #{conversationId.slice(0, 8)}
-                  </span>
-                </>
-              )}
-            </div>
+          <div className="min-w-0 truncate text-base font-semibold tracking-[-0.01em] text-ink">
+            {title ?? (conversationId ? 'Conversación' : 'Conversación nueva')}
           </div>
         </div>
-
-        {/*
-          LA PUERTA, EN EL HUECO QUE ERA EL PROBLEMA.
-
-          Aquí había mil cuatrocientos píxeles de nada entre el nombre y los dos
-          botones del extremo: la barra más grande de la pantalla sin decir
-          nada. Y al mismo tiempo la queja de fondo era que no se ve todo lo que
-          Cortex sabe hacer. Las dos cosas se contestan con la misma pieza: lo
-          que faltaba no eran opciones —hay decenas de frases curadas detrás del
-          `/`— sino una PUERTA que no exija saber ya que existe. Ver
-          Capabilities.tsx, que explica por qué escribe en vez de mandar.
-
-          `mx-auto` y no `ml-auto`: la puerta se queda en el centro óptico de la
-          barra aunque el título crezca, que es donde el ojo va a buscar cuando
-          no sabe qué pedir. Se esconde por debajo de `md` porque ahí la
-          cabecera ya lleva el botón del menú y el título, y un tercer elemento
-          la parte en dos líneas.
-        */}
-        <div className="mx-auto hidden md:block">
-          <Capabilities agentSlug={agentSlug} onCompose={setDraft} disabled={isLoading} />
-        </div>
-
-        {/*
-          La derecha de la cabecera: lo que te espera, los hilos recientes y los
-          dos botones de siempre.
-
-          El aviso va PRIMERO y pegado al nombre del agente porque es lo único
-          de aquí que interrumpe —en voz baja, un punto y una frase—, mientras
-          que los hilos son un destino al que se va cuando uno ya decidió
-          cambiar de tema. Y va en la cabecera y no sobre la conversación porque
-          tiene que seguir existiendo en el turno treinta, que es cuando ya
-          nadie se acuerda de que hay cuatro colas. Ver WaitingNotice.
-        */}
-        <div className="ml-auto flex min-w-0 shrink items-center gap-1 md:ml-0">
-          {/*
-            `waiting.total > 0` y no `waiting`: el objeto existe también cuando
-            no hay nada esperándote, y en ese caso `WaitingNotice` se dibuja a sí
-            mismo como nada —se guarda solo, ver su línea 52—. Colgarle un filete
-            al lado condicionado sólo a que el objeto exista ponía un filete
-            suelto en la cabecera de toda conversación sin cola: un separador
-            separando una cosa de ninguna. Visto en pantalla, no deducido.
-          */}
-          {waiting && waiting.total > 0 && (
-            <>
-              <WaitingNotice waiting={waiting} onAsk={handleSend} />
-              {/* El filete es lo que impide que el aviso se lea como un cuarto
-                  chip de hilo. Son dos cosas distintas pegadas: una te pide
-                  algo, las otras te llevan a otro sitio. */}
-              <span className="mx-1 h-4 w-px shrink-0 bg-border" aria-hidden />
-            </>
-          )}
+        <div className="ml-auto flex min-w-0 shrink items-center">
           <ThreadHistory />
         </div>
       </header>
@@ -511,6 +414,7 @@ export function ChatRoot({
         glances={initialGlances ? { ...initialGlances, ...glances } : glances}
         initialBrainSources={initialBrainSources}
         frames={frames}
+        waiting={waiting}
       />
 
       {blocked && (

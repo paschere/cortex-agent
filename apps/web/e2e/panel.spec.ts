@@ -154,7 +154,7 @@ function chatSurvived(page: Page): Promise<boolean> {
   });
 }
 
-const composer = (page: Page) => page.getByPlaceholder(/Pregunta por una llamada/);
+const composer = (page: Page) => page.getByPlaceholder(/Pregúntame/);
 const railRow = (page: Page, name: RegExp) => page.getByRole('link', { name });
 
 // ---------------------------------------------------------------------------
@@ -291,6 +291,7 @@ test('los cinco paneles de v1 traen datos, y se ven', async ({ page }) => {
     ['errands', 'Encargos', /SECOP/i],
     ['reports', 'Informes', /Vencimientos de la flota|Resumen semanal/i],
     ['approvals', 'Aprobaciones', /correo|gmail/i],
+    ['clients', 'Clientes', /Andina/],
   ];
 
   for (const [id, title, content] of expected) {
@@ -325,4 +326,19 @@ test('el rail en modo chat, retratado', async ({ page }) => {
   await page.goto('/chat');
   await expect(composer(page)).toBeVisible();
   await page.screenshot({ path: shot('rail-en-chat'), fullPage: false });
+});
+
+test('una ficha sin clave no se abre, y una clave ajena tampoco', async ({ page }) => {
+  const missing = await page.request.post('/api/panel', { data: { panelId: 'client' } });
+  expect(missing.status()).toBe(400);
+
+  const foreign = await page.request.post('/api/panel', {
+    data: { panelId: 'client', key: '00000000-0000-4000-8000-000000000000' },
+  });
+  expect(foreign.status()).toBe(404);
+
+  const named = await page.request.post('/api/panel', {
+    data: { panelId: 'gmail.send_message' },
+  });
+  expect(named.status()).toBe(400);
 });

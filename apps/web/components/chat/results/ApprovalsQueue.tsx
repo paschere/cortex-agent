@@ -4,6 +4,7 @@ import { PendingActionCard } from '@/components/approvals/PendingActionCard';
 import { STAGED_VIA_LABEL } from '@/lib/approvals-shape';
 import type { PendingApproval } from '@cortex/agent-tools';
 import { Inbox, ShieldAlert } from 'lucide-react';
+import { PinSurface } from '../PinSurface';
 import type { ResultViewProps } from './registry';
 
 /**
@@ -64,7 +65,7 @@ function pendingOf(result: unknown): PendingApproval[] | null {
   );
 }
 
-export function ApprovalsQueue({ result, onSettled }: ResultViewProps) {
+export function ApprovalsQueue({ result, onSettled, toolCallId }: ResultViewProps) {
   const pending = pendingOf(result);
   if (!pending) return null;
 
@@ -84,6 +85,9 @@ export function ApprovalsQueue({ result, onSettled }: ResultViewProps) {
         Esperando tu permiso
         <span className="tabular rounded-pill border border-amber/40 bg-amber-soft px-1.5 text-micro font-semibold">
           {pending.length}
+        </span>
+        <span className="ml-auto">
+          <PinSurface surface="approvals" hidden={toolCallId.startsWith('panel:')} />
         </span>
       </div>
       {pending.map((row) => (

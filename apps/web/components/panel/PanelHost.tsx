@@ -1,7 +1,13 @@
 'use client';
 
 import { PanelResult } from '@/lib/panels/registry';
-import { PANELS, type PanelId, panelFromSearch, searchWithPanel } from '@/lib/panels/shape';
+import {
+  PANELS,
+  type PanelId,
+  panelFromSearch,
+  panelKeyFromSearch,
+  searchWithPanel,
+} from '@/lib/panels/shape';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
 import { ArrowUpRight, RefreshCw, X } from 'lucide-react';
@@ -67,7 +73,9 @@ import {
 interface PanelContextValue {
   /** El panel abierto, o `null`. */
   panelId: PanelId | null;
-  open: (id: PanelId) => void;
+  /** La clave de una ficha, o `null`. Nunca un `toolId`. */
+  panelKey: string | null;
+  open: (id: PanelId, key?: string | null) => void;
   close: () => void;
   /**
    * Si hay de verdad un proveedor encima.
@@ -84,8 +92,9 @@ const PanelContext = createContext<PanelContextValue | null>(null);
 
 export function PanelProvider({ children }: { children: ReactNode }) {
   const [panelId, setPanelId] = useState<PanelId | null>(null);
+  const [panelKey, setPanelKey] = useState<string | null>(null);
   /** El último que estuvo abierto, para que ⌘\ pueda devolverlo. */
-  const lastPanel = useRef<PanelId>('payments');
+  const lastPanel = useRef<{ id: PanelId; key: string | null }>({ id: 'payments', key: null });
 
   /**
    * La dirección se lee DESPUÉS de montar, nunca durante el render.
@@ -97,29 +106,36 @@ export function PanelProvider({ children }: { children: ReactNode }) {
    */
   useEffect(() => {
     const fromUrl = panelFromSearch(window.location.search);
+    const key = panelKeyFromSearch(window.location.search);
     if (fromUrl) {
-      lastPanel.current = fromUrl;
+      if (PANELS[fromUrl].keyed && !key) return;
+      lastPanel.current = { id: fromUrl, key };
       setPanelId(fromUrl);
+      setPanelKey(key);
     }
   }, []);
 
-  const writeUrl = useCallback((next: PanelId | null) => {
-    const search = searchWithPanel(window.location.search, next);
+  const writeUrl = useCallback((next: PanelId | null, key: string | null) => {
+    const search = searchWithPanel(window.location.search, next, key);
     window.history.replaceState(null, '', `${window.location.pathname}${search}`);
   }, []);
 
   const open = useCallback(
-    (id: PanelId) => {
-      lastPanel.current = id;
+    (id: PanelId, key?: string | null) => {
+      const nextKey = PANELS[id].keyed ? key?.trim() || null : null;
+      if (PANELS[id].keyed && !nextKey) return;
+      lastPanel.current = { id, key: nextKey };
       setPanelId(id);
-      writeUrl(id);
+      setPanelKey(nextKey);
+      writeUrl(id, nextKey);
     },
     [writeUrl],
   );
 
   const close = useCallback(() => {
     setPanelId(null);
-    writeUrl(null);
+    setPanelKey(null);
+    writeUrl(null, null);
   }, [writeUrl]);
 
   /**
@@ -136,7 +152,7 @@ export function PanelProvider({ children }: { children: ReactNode }) {
       if ((event.metaKey || event.ctrlKey) && event.key === '\\') {
         event.preventDefault();
         if (panelId) close();
-        else open(lastPanel.current);
+        else open(lastPanel.current.id, lastPanel.current.key);
         return;
       }
       if (event.key === 'Escape' && panelId) close();
@@ -145,7 +161,10 @@ export function PanelProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [panelId, open, close]);
 
-  const value = useMemo(() => ({ panelId, open, close, available: true }), [panelId, open, close]);
+  const value = useMemo(
+    () => ({ panelId, panelKey, open, close, available: true }),
+    [panelId, panelKey, open, close],
+  );
 
   return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>;
 }
@@ -158,7 +177,9 @@ export function PanelProvider({ children }: { children: ReactNode }) {
  */
 export function usePanel(): PanelContextValue {
   const ctx = useContext(PanelContext);
-  if (!ctx) return { panelId: null, open: () => {}, close: () => {}, available: false };
+  if (!ctx) {
+    return { panelId: null, panelKey: null, open: () => {}, close: () => {}, available: false };
+  }
   return ctx;
 }
 
@@ -168,8 +189,12 @@ export function usePanel(): PanelContextValue {
 
 type Load =
   | { state: 'loading' }
-  | { state: 'ready'; of: PanelId; result: unknown }
-  | { state: 'error'; of: PanelId; message: string };
+  | { state: 'ready'; of: string; result: unknown }
+  | { state: 'error'; of: string; message: string };
+
+function stamp(id: PanelId | null, key: string | null): string {
+  return `${id ?? ''}:${key ?? ''}`;
+}
 
 /**
  * Una llamada por apertura, y ninguna cuando está cerrado.
@@ -182,7 +207,7 @@ type Load =
  * ya dice «Vencimientos» y debajo siguen las cifras de la cartera. Un panel que
  * enseña los datos de otro durante un parpadeo es peor que uno que tarda.
  */
-function usePanelData(panelId: PanelId | null) {
+function usePanelData(panelId: PanelId | null, panelKey: string | null) {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
   const [nonce, setNonce] = useState(0);
 
@@ -196,8 +221,9 @@ function usePanelData(panelId: PanelId | null) {
     fetch('/api/panel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // Sólo el id. La herramienta y su entrada las decide el servidor.
-      body: JSON.stringify({ panelId }),
+      // El id, y la clave si la superficie es de una entidad. La herramienta
+      // y su entrada las decide el servidor.
+      body: JSON.stringify({ panelId, key: panelKey }),
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -208,24 +234,24 @@ function usePanelData(panelId: PanelId | null) {
         if (!response.ok) {
           throw new Error(payload?.error ?? 'No se pudo abrir el panel.');
         }
-        setLoad({ state: 'ready', of: panelId, result: payload?.result });
+        setLoad({ state: 'ready', of: stamp(panelId, panelKey), result: payload?.result });
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         setLoad({
           state: 'error',
-          of: panelId,
+          of: stamp(panelId, panelKey),
           message: err instanceof Error ? err.message : 'No se pudo abrir el panel.',
         });
       });
     return () => controller.abort();
-  }, [panelId, nonce]);
+  }, [panelId, panelKey, nonce]);
 
   const refresh = useCallback(() => setNonce((n) => n + 1), []);
   // Lo que sobró del panel anterior no se enseña: se lee como «cargando», que
   // es exactamente lo que está pasando.
   const current: Load =
-    load.state === 'loading' || load.of === panelId ? load : { state: 'loading' };
+    load.state === 'loading' || load.of === stamp(panelId, panelKey) ? load : { state: 'loading' };
   return { load: current, refresh };
 }
 
@@ -411,8 +437,8 @@ function useCompactViewport(): boolean {
  * reemplaza.
  */
 export function PanelHost() {
-  const { panelId, close } = usePanel();
-  const { load, refresh } = usePanelData(panelId);
+  const { panelId, panelKey, close } = usePanel();
+  const { load, refresh } = usePanelData(panelId, panelKey);
   const compact = useCompactViewport();
   const surface = useRef<HTMLElement>(null);
 
@@ -459,7 +485,7 @@ export function PanelHost() {
       aria-label={PANELS[panelId].title}
       className={clsx(
         'flex shrink-0 flex-col border-l border-border bg-surface outline-none',
-        'w-[420px] xl:w-[480px]',
+        PANELS[panelId].wide ? 'w-[560px] xl:w-[640px]' : 'w-[420px] xl:w-[480px]',
       )}
     >
       <PanelHeader panelId={panelId} onRefresh={refresh} onClose={close} />

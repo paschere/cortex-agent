@@ -14,13 +14,7 @@ import {
   paletteSize,
   slashQuery,
 } from '@/lib/chat-palette-shape';
-import {
-  matchShortcut,
-  pickShortcuts,
-  readUses,
-  recordUse,
-  shortcutCandidates,
-} from '@/lib/chat-shortcuts';
+import { matchShortcut, recordUse, shortcutCandidates } from '@/lib/chat-shortcuts';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
@@ -42,6 +36,7 @@ import {
   Layers,
   Mail,
   Paperclip,
+  Plus,
   Server,
   ShieldCheck,
   Target,
@@ -55,7 +50,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachmentTray } from './AttachmentTray';
 import { ScopePicker, ScopeStrip } from './MemoryScope';
-import { QuickChips } from './QuickChips';
 import { ScreenViewButton, type ScreenViewSession, ScreenViewStrip } from './ScreenView';
 import { VoiceDictation } from './VoiceDictation';
 
@@ -270,6 +264,7 @@ export function InputBar({
   // exists, which is why the button appears with it and not before: there is no
   // conversation to attach a file to yet.
   const [openFilePicker, setOpenFilePicker] = useState<(() => void) | null>(null);
+  const [extras, setExtras] = useState(false);
   const registerFilePicker = useCallback(
     (open: () => void) => setOpenFilePicker((prev) => (prev === open ? prev : open)),
     [],
@@ -399,17 +394,6 @@ export function InputBar({
     [commands.data],
   );
 
-  /**
-   * El uso se lee DESPUÉS de montar, nunca durante el render: `localStorage` no
-   * existe en el servidor, y leerlo mientras se renderiza haría que el HTML que
-   * baja y la primera pintura no coincidieran. El coste es que la fila aparece
-   * con los por defecto un tick antes de ordenarse, y sólo la primera vez.
-   */
-  const [uses, setUses] = useState<Record<string, number>>({});
-  useEffect(() => setUses(readUses()), []);
-
-  const shortcuts = useMemo(() => pickShortcuts(candidates, uses), [candidates, uses]);
-
   const resize = useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -485,10 +469,7 @@ export function InputBar({
   const send = useCallback(
     (trimmed: string) => {
       const learned = matchShortcut(trimmed, candidates);
-      if (learned) {
-        recordUse(learned);
-        setUses(readUses());
-      }
+      if (learned) recordUse(learned);
       onSend(trimmed);
     },
     [candidates, onSend],
@@ -544,28 +525,28 @@ export function InputBar({
   }
 
   const composer = (
-        <div className="relative">
-          {/*
+    <div className="relative">
+      {/*
             Above the box, not inside a menu, and on every turn it is in force.
             The whole argument is in MemoryScope.tsx: a filter somebody forgot
             turns a full brain into "no tengo nada sobre eso".
           */}
-          <ScopeStrip
-            selected={scope}
-            onRemove={(id) => onScopeChange(scope.filter((s) => s.id !== id))}
-            onClear={() => onScopeChange([])}
-            disabled={disabled}
-          />
-          {/*
+      <ScopeStrip
+        selected={scope}
+        onRemove={(id) => onScopeChange(scope.filter((s) => s.id !== id))}
+        onClear={() => onScopeChange([])}
+        disabled={disabled}
+      />
+      {/*
             And here, for the same reason and with more at stake. A memory
             filter somebody forgot costs them an answer; a screen share somebody
             forgot is the worst thing this product can do to a person. So it is
             a band on the screen for as long as the share is, never a menu item
             and never a dot — see ScreenView.tsx.
           */}
-          {screen && <ScreenViewStrip session={screen} />}
-          {menuOpen && (
-            /*
+      {screen && <ScreenViewStrip session={screen} />}
+      {menuOpen && (
+        /*
               A real listbox, not a styled div: arrow keys move `aria-activedescendant`
               and the textarea keeps focus, so somebody driving this from the
               keyboard never loses their place in what they were writing.
@@ -574,116 +555,105 @@ export function InputBar({
               sección, no opciones, y un lector de pantalla que los cuente como
               filas anuncia «14 opciones» donde hay nueve.
             */
-            <ul
-              id="composer-menu"
-              // biome-ignore lint/a11y/useSemanticElements: the listbox pattern is correct here; focus stays in the textarea.
-              role="listbox"
-              // "Menciones", not "Fuentes": since the composer grew a memory
-              // filter, "fuente" means the space an answer was read from, and
-              // it is already what the citations under an answer are called.
-              // Two things by one name is how somebody looks for the filter in
-              // the `@` menu.
-              aria-label={mention ? 'Menciones' : 'Comandos'}
-              className="scroll-slim absolute bottom-full z-40 mb-2 max-h-80 w-full overflow-y-auto rounded-card border border-border bg-surface p-1.5 shadow-pop"
-            >
-              {groups.map((group) => {
-                const Icon = paletteIcon(group.icon);
-                return (
-                  <li key={group.id} role="presentation">
-                    <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-micro font-semibold uppercase tracking-wide text-ink-faint">
-                      <Icon className="h-3 w-3 shrink-0" aria-hidden />
-                      {group.heading}
-                    </div>
-                    {group.error && (
-                      // Nunca una lista vacía en lugar de un fallo: la sección
-                      // dice qué no se pudo leer y sigue en su sitio.
-                      <p className="px-2.5 pb-1.5 text-xs leading-snug text-ink-muted">
-                        {group.error}
-                      </p>
-                    )}
-                    <ul role="presentation">
-                      {group.items.map((item) => {
-                        const index = rows.findIndex(
-                          (row) => row.groupId === group.id && row.item.id === item.id,
-                        );
-                        const selected = index === activeRow;
-                        return (
-                          // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard handling lives on the textarea, which keeps focus.
-                          <li
-                            key={item.id}
-                            id={`composer-option-${index}`}
-                            role="option"
-                            aria-selected={selected}
-                            onMouseEnter={() => setActive(index)}
-                            onMouseDown={(e) => {
-                              // Before blur, so the caret position is still valid.
-                              e.preventDefault();
-                              applyItem(item);
-                            }}
-                            className={clsx(
-                              'flex cursor-pointer items-baseline gap-2 rounded-sm px-2.5 py-1.5',
-                              selected && 'bg-primary-soft',
-                            )}
-                          >
-                            {/* Las dos truncan y las dos llevan `min-w-0`: sin
+        <ul
+          id="composer-menu"
+          // biome-ignore lint/a11y/useSemanticElements: the listbox pattern is correct here; focus stays in the textarea.
+          role="listbox"
+          // "Menciones", not "Fuentes": since the composer grew a memory
+          // filter, "fuente" means the space an answer was read from, and
+          // it is already what the citations under an answer are called.
+          // Two things by one name is how somebody looks for the filter in
+          // the `@` menu.
+          aria-label={mention ? 'Menciones' : 'Comandos'}
+          className="scroll-slim absolute bottom-full z-40 mb-2 max-h-80 w-full overflow-y-auto rounded-card border border-border bg-surface p-1.5 shadow-pop"
+        >
+          {groups.map((group) => {
+            const Icon = paletteIcon(group.icon);
+            return (
+              <li key={group.id} role="presentation">
+                <div className="flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-micro font-semibold uppercase tracking-wide text-ink-faint">
+                  <Icon className="h-3 w-3 shrink-0" aria-hidden />
+                  {group.heading}
+                </div>
+                {group.error && (
+                  // Nunca una lista vacía en lugar de un fallo: la sección
+                  // dice qué no se pudo leer y sigue en su sitio.
+                  <p className="px-2.5 pb-1.5 text-xs leading-snug text-ink-muted">{group.error}</p>
+                )}
+                <ul role="presentation">
+                  {group.items.map((item) => {
+                    const index = rows.findIndex(
+                      (row) => row.groupId === group.id && row.item.id === item.id,
+                    );
+                    const selected = index === activeRow;
+                    return (
+                      // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard handling lives on the textarea, which keeps focus.
+                      <li
+                        key={item.id}
+                        id={`composer-option-${index}`}
+                        role="option"
+                        aria-selected={selected}
+                        onMouseEnter={() => setActive(index)}
+                        onMouseDown={(e) => {
+                          // Before blur, so the caret position is still valid.
+                          e.preventDefault();
+                          applyItem(item);
+                        }}
+                        className={clsx(
+                          'flex cursor-pointer items-baseline gap-2 rounded-sm px-2.5 py-1.5',
+                          selected && 'bg-primary-soft',
+                        )}
+                      >
+                        {/* Las dos truncan y las dos llevan `min-w-0`: sin
                                 él un flex-item no baja de su ancho de contenido
                                 y una frase larga empuja la pista fuera de la
                                 caja en vez de cortarse. */}
-                            <span
-                              className={clsx(
-                                'min-w-0 truncate text-xs text-ink',
-                                item.mono ? 'font-mono font-semibold' : 'font-medium',
-                              )}
-                            >
-                              {item.label}
-                            </span>
-                            {item.hint && (
-                              <span className="min-w-0 shrink truncate text-xs text-ink-faint">
-                                {item.hint}
-                              </span>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    {group.more !== undefined && (
-                      <p className="px-2.5 pb-1 text-micro text-ink-faint">
-                        y {group.more} más — sigue escribiendo
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+                        <span
+                          className={clsx(
+                            'min-w-0 truncate text-xs text-ink',
+                            item.mono ? 'font-mono font-semibold' : 'font-medium',
+                          )}
+                        >
+                          {item.label}
+                        </span>
+                        {item.hint && (
+                          <span className="min-w-0 shrink truncate text-xs text-ink-faint">
+                            {item.hint}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {group.more !== undefined && (
+                  <p className="px-2.5 pb-1 text-micro text-ink-faint">
+                    y {group.more} más — sigue escribiendo
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-          {/*
-            La fila de accesos, y las dos condiciones para que se vea. Vacío el
-            compositor: es la fila para EMPEZAR, y sobre un borrador a medias
-            sería una distracción justo encima de donde se está mirando. Y con
-            el menú cerrado por consecuencia — el menú del `/` se abre en este
-            mismo hueco, y sólo se abre cuando hay texto.
-          */}
-          {!text.trim() && <QuickChips shortcuts={shortcuts} onPick={send} disabled={disabled} />}
-
-          <form
-            onSubmit={handleSubmit}
-            className={clsx(
-              'rounded-card border bg-surface transition-all duration-150 motion-reduce:transition-none',
-              focused
-                ? 'border-primary/40 shadow-pop ring-4 ring-primary/10'
-                : 'border-border shadow-card',
-            )}
-          >
-            <textarea
-              ref={textareaRef}
-              value={text}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              /*
+      <form
+        onSubmit={handleSubmit}
+        className={clsx(
+          'rounded-card border bg-surface transition-all duration-150 motion-reduce:transition-none',
+          focused
+            ? 'border-primary/40 shadow-pop ring-4 ring-primary/10'
+            : 'border-border shadow-card',
+        )}
+      >
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={handleInput}
+          onKeyDown={handleKeyDown}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          /*
                 A 390px la anterior pedía TRES líneas y la caja enseña dos, así
                 que se cortaba a media palabra —«/ para un»— en el sitio donde
                 más caro sale parecer roto. Se acortan las dos pistas y no la
@@ -692,17 +662,17 @@ export function InputBar({
                 dentro. Las dos siguen nombradas, que es lo que las hace
                 descubribles.
               */
-              placeholder="Pregunta por una llamada, una placa o una rutina. @ nombra algo, / comandos"
-              disabled={disabled}
-              rows={1}
-              role="combobox"
-              aria-expanded={menuOpen}
-              aria-controls={menuOpen ? 'composer-menu' : undefined}
-              aria-activedescendant={
-                menuOpen && rows.length > 0 ? `composer-option-${activeRow}` : undefined
-              }
-              aria-autocomplete="list"
-              /*
+          placeholder="Pregúntame. @ nombra algo, / comandos"
+          disabled={disabled}
+          rows={1}
+          role="combobox"
+          aria-expanded={menuOpen}
+          aria-controls={menuOpen ? 'composer-menu' : undefined}
+          aria-activedescendant={
+            menuOpen && rows.length > 0 ? `composer-option-${activeRow}` : undefined
+          }
+          aria-autocomplete="list"
+          /*
                 ESCRIBIR ES LA ACCIÓN PRINCIPAL, Y SE ESCRIBÍA MÁS PEQUEÑO QUE
                 EL NOMBRE DEL AGENTE DE AL LADO. `text-base` es el token que el
                 sistema de diseño reserva para el énfasis dentro de una tarjeta;
@@ -724,92 +694,78 @@ export function InputBar({
                 `max-h` de 200 no cambia: quien escriba un párrafo sigue
                 teniendo el mismo techo.
               */
-              className="scroll-slim block max-h-[200px] min-h-[64px] w-full resize-none bg-transparent px-4 pt-3.5 text-base text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
-            />
+          className="scroll-slim block max-h-[200px] min-h-[64px] w-full resize-none bg-transparent px-4 pt-3.5 text-base text-ink placeholder:text-ink-faint focus:outline-none disabled:opacity-50"
+        />
 
-            <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-1">
-              <div className="flex min-w-0 items-center gap-1">
-                {/*
-                  LA PASTILLA DEL AGENTE, DESPUÉS DE QUITARLE UN GRADO.
+        <div className="flex items-center justify-between gap-2 px-3 pb-2.5 pt-1">
+          <div className="flex min-w-0 items-center gap-1">
+            {agents.length > 1 &&
+              (pillDisabled ? (
+                <span
+                  title="Empieza un chat nuevo para cambiar de agente"
+                  className="inline-flex items-center gap-1.5 rounded-pill px-2 py-1.5 text-xs font-medium text-ink-faint"
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                  {activeAgent?.name ?? 'Agente'}
+                </span>
+              ) : (
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 rounded-pill px-2 py-1.5 text-xs font-medium text-ink-muted transition-colors duration-150 hover:bg-primary-soft hover:text-primary-ink data-[state=open]:bg-primary-soft data-[state=open]:text-primary-ink motion-reduce:transition-none"
+                    >
+                      <Bot className="h-3.5 w-3.5 text-primary" />
+                      {activeAgent?.name ?? 'Agente'}
+                      <ChevronDown size={12} className="opacity-60" />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.Content
+                      side="top"
+                      align="start"
+                      sideOffset={8}
+                      className="z-50 min-w-[240px] rounded-card border border-border bg-surface p-1.5 shadow-pop"
+                    >
+                      {agents.map((a) => (
+                        <DropdownMenu.Item
+                          key={a.slug}
+                          onSelect={() => onAgentChange(a.slug)}
+                          className="flex cursor-pointer flex-col gap-0.5 rounded-sm px-2.5 py-2 text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
+                        >
+                          <span className="font-semibold text-ink">{a.name}</span>
+                          {a.description && (
+                            <span className="line-clamp-1 text-xs text-ink-faint">
+                              {a.description}
+                            </span>
+                          )}
+                        </DropdownMenu.Item>
+                      ))}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+              ))}
 
-                  Tenía borde y `font-semibold`: era el control con más peso de
-                  la fila y el único que no hace nada — dice quién contesta y,
-                  en una conversación empezada, ni siquiera se puede cambiar.
-                  Ahora es del mismo material que los iconos de al lado (nada en
-                  reposo, matiz al pasar por encima) y conserva su identidad en
-                  el icono, que sigue en indigo. Lo que se enseña sin borde no
-                  compite con el botón de enviar, que es el único de la fila que
-                  manda algo.
-                */}
-                {pillDisabled ? (
-                  <span
-                    title="Empieza un chat nuevo para cambiar de agente"
-                    className="inline-flex items-center gap-1.5 rounded-pill px-2 py-1.5 text-xs font-medium text-ink-faint"
-                  >
-                    <Bot className="h-3.5 w-3.5" />
-                    {activeAgent?.name ?? 'Agente'}
-                  </span>
-                ) : (
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1.5 rounded-pill px-2 py-1.5 text-xs font-medium text-ink-muted transition-colors duration-150 hover:bg-primary-soft hover:text-primary-ink data-[state=open]:bg-primary-soft data-[state=open]:text-primary-ink motion-reduce:transition-none"
-                      >
-                        <Bot className="h-3.5 w-3.5 text-primary" />
-                        {activeAgent?.name ?? 'Agente'}
-                        <ChevronDown size={12} className="opacity-60" />
-                      </button>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Portal>
-                      <DropdownMenu.Content
-                        side="top"
-                        align="start"
-                        sideOffset={8}
-                        className="z-50 min-w-[240px] rounded-card border border-border bg-surface p-1.5 shadow-pop"
-                      >
-                        {agents.map((a) => (
-                          <DropdownMenu.Item
-                            key={a.slug}
-                            onSelect={() => onAgentChange(a.slug)}
-                            className="flex cursor-pointer flex-col gap-0.5 rounded-sm px-2.5 py-2 text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
-                          >
-                            <span className="font-semibold text-ink">{a.name}</span>
-                            {a.description && (
-                              <span className="line-clamp-1 text-xs text-ink-faint">
-                                {a.description}
-                              </span>
-                            )}
-                          </DropdownMenu.Item>
-                        ))}
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu.Root>
-                )}
+            <button
+              type="button"
+              disabled={disabled}
+              aria-expanded={extras || Boolean(screen?.live)}
+              aria-label={extras ? 'Esconder extras' : 'Más: adjuntar, dictar, mirar'}
+              onClick={() => setExtras((was) => !was)}
+              className={clsx(
+                'grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors duration-150 motion-reduce:transition-none',
+                extras || screen?.live
+                  ? 'bg-primary-soft text-primary'
+                  : 'text-ink-faint hover:bg-surface-2 hover:text-ink',
+                'disabled:opacity-40',
+              )}
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+            </button>
 
-                {/*
-                  EL ÁMBITO SUBE A JUNTARSE CON EL AGENTE, y con eso la fila
-                  deja de ser cinco iconos iguales en hilera.
-
-                  Estaba al final, pegado al botón de enviar, entre cosas con
-                  las que no tiene nada que ver. Pero el ámbito y el agente
-                  contestan la MISMA pregunta —quién responde y con qué
-                  memoria—, y los otros cuatro contestan otra distinta: qué le
-                  estoy dando además de lo que escribo (un archivo, mi voz, un
-                  trámite, mi pantalla). Dos preguntas, dos grupos, un filete en
-                  medio. Es exactamente lo que se hizo en la cabecera, y por lo
-                  mismo: la jerarquía se dice con la agrupación y el tamaño,
-                  nunca con el color.
-
-                  Ninguno cambia de comportamiento ni pierde su sitio: el
-                  ámbito sigue enseñando su franja encima de la caja cuando
-                  está puesto (ver MemoryScope) y la pantalla compartida sigue
-                  teniendo la suya (ver ScreenView). Sólo se reordenan.
-                */}
+            {(extras || screen?.live) && (
+              <>
                 <ScopePicker selected={scope} onChange={onScopeChange} disabled={disabled} />
-
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-border" aria-hidden />
-
                 {openFilePicker && (
                   <button
                     type="button"
@@ -822,48 +778,37 @@ export function InputBar({
                     <Paperclip className="h-4 w-4" aria-hidden />
                   </button>
                 )}
-
                 <VoiceDictation
                   disabled={disabled}
                   getBaseText={() => textRef.current}
                   onText={setComposerText}
                 />
-
-                {/* Enseñar un trámite sin salir de la conversación. The whole
-                    recorder is the same component the Trámites screen uses;
-                    see components/browser/TeachFlowDialog.tsx for why the
-                    person starts it rather than the agent offering it. */}
                 <TeachFlowDialog onCompose={setComposerText} />
-
-                {/* Preguntarle a Cortex por lo que tienes en pantalla. The
-                    fifth control, and the argument for admitting it is in
-                    ScreenView.tsx: without it there is no way to ask about
-                    what is on screen at all, which is the only test a control
-                    has to pass to get in here. MIRAR, not GRABAR — the
-                    recorder beside it does the other thing. */}
                 {screen && <ScreenViewButton session={screen} disabled={disabled} />}
-              </div>
+              </>
+            )}
+          </div>
 
-              <div className="flex shrink-0 items-center gap-2">
-                {text.length > CHAR_COUNT_THRESHOLD && (
-                  <span className="tabular text-micro text-ink-faint">{text.length}</span>
-                )}
-                {/* Un punto más grande que los 32px de todo lo demás de la
+          <div className="flex shrink-0 items-center gap-2">
+            {text.length > CHAR_COUNT_THRESHOLD && (
+              <span className="tabular text-micro text-ink-faint">{text.length}</span>
+            )}
+            {/* Un punto más grande que los 32px de todo lo demás de la
                     fila. Es el único relleno saturado del compositor y ahora
                     también el único de otro tamaño: la diferencia se ve sin
                     leer nada, que es lo que se le pide al botón que manda. */}
-                <button
-                  type="submit"
-                  disabled={disabled || !text.trim()}
-                  aria-label="Enviar mensaje"
-                  className="grid h-9 w-9 place-items-center rounded-full bg-primary text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
-                >
-                  <ArrowUp size={17} strokeWidth={2.5} />
-                </button>
-              </div>
-            </div>
-          </form>
+            <button
+              type="submit"
+              disabled={disabled || !text.trim()}
+              aria-label="Enviar mensaje"
+              className="grid h-9 w-9 place-items-center rounded-full bg-primary text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
+            >
+              <ArrowUp size={17} strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
+      </form>
+    </div>
   );
 
   return (

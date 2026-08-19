@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { Landing } from './_landing/Landing';
 import './_landing/landing.css';
 import { getOptionalSession } from '@/lib/session';
+import { getOrgScopedClient } from '@/lib/supabase/service';
+import { readOnboarding } from '@cortex/agent-tools';
 
 /**
  * `/` is two things depending on who is knocking.
@@ -18,10 +20,11 @@ import { getOptionalSession } from '@/lib/session';
  *
  * That moves the decision here, where it belongs:
  *
- *   signed in  → /dashboard, exactly as before. The login screen's `next`
- *                parameter defaults to '/', so this is the hop that lands
- *                somebody on their dashboard right after signing in, and it
- *                must keep working.
+ *   signed in  → /chat, unless the workspace still has the first-run guide
+ *                open (`readOnboarding().show`), in which case /onboarding.
+ *                The login screen's `next` parameter defaults to '/', so this
+ *                is the hop that lands somebody on the product after signing
+ *                in, and it must keep working.
  *   signed out → the landing.
  *
  * WHY THE COOKIE IS CHECKED FIRST. `getOptionalSession()` is the honest answer
@@ -55,8 +58,12 @@ export default async function RootPage() {
   const jar = await cookies();
   const maybeSignedIn = jar.getAll().some((c) => SESSION_COOKIE.test(c.name));
 
-  if (maybeSignedIn && (await getOptionalSession())) {
-    redirect('/dashboard');
+  if (maybeSignedIn) {
+    const session = await getOptionalSession();
+    if (session) {
+      const onboarding = await readOnboarding(getOrgScopedClient(session.organization.id));
+      redirect(onboarding.show ? '/onboarding' : '/chat');
+    }
   }
 
   return <Landing />;

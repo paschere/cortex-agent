@@ -160,6 +160,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   commitments_confirm_extracted: 'Confirmar el vencimiento leído del documento',
   commitments_reject_extracted: 'Descartar el vencimiento leído',
   clients_search: 'Buscar un cliente',
+  clients_directory: 'Ver el directorio de clientes',
   clients_overview: 'Ver la ficha del cliente',
   clients_register: 'Registrar o actualizar el cliente',
   clients_link: 'Enganchar esto a la ficha del cliente',

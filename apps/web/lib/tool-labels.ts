@@ -199,6 +199,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
 
   // Clientes.
   clients_search: { label: 'Buscar un cliente', icon: 'Search' },
+  clients_directory: { label: 'Ver el directorio de clientes', icon: 'Building2' },
   clients_overview: { label: 'Ver la ficha del cliente', icon: 'Building2' },
   clients_register: { label: 'Registrar o actualizar el cliente', icon: 'Building' },
   clients_link: { label: 'Enganchar esto a la ficha del cliente', icon: 'Link2' },

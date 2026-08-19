@@ -32,8 +32,8 @@ import { WaitingIndex } from './_components/WaitingIndex';
 /**
  * INICIO ES «LO QUE TE ESPERA», NO UN TABLERO.
  *
- * Aquí aterriza todo el mundo: `/` redirige a esta ruta. Hasta ahora contaba
- * aprobaciones y prospectos y dejaba fuera tres colas enteras — vencimientos,
+ * Aquí aterriza quien abre /dashboard a propósito. El hop de `/` ya no manda
+ * aquí: manda al chat. Hasta ahora esta pantalla contaba aprobaciones y prospectos y dejaba fuera tres colas enteras — vencimientos,
  * correos redactados y encargos atascados — que los crons nocturnos llenan
  * solos y que nadie ve hasta que abre la pantalla donde cayeron. Un borrador
  * puede llevar nueve días ahí sin que nada lo diga.

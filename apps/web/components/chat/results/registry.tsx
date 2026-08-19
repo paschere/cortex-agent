@@ -155,6 +155,9 @@ export const RICH: Record<string, ResultView> = {
   clients_overview: dynamic(() =>
     import('./ClientOverview').then((m) => m.ClientOverview as unknown as ResultView),
   ),
+  clients_directory: dynamic(() =>
+    import('./ClientsDirectory').then((m) => m.ClientsDirectory as unknown as ResultView),
+  ),
 
   // -------------------------------------------------------------------------
   // La pregunta de apertura, y la cifra contra la que se mide todo lo demás.

@@ -71,6 +71,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'chat.send_dm': 'Escríbele por Google Chat a ',
   'chat.send_message': 'Publica en el espacio de Google Chat ',
 
+  'clients.directory': 'Muéstrame los clientes',
   'clients.link': 'Cuelga esto del cliente ',
   'clients.overview': 'Dame el panorama completo del cliente ',
   'clients.register': 'Registra al cliente ',

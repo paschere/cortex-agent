@@ -77,7 +77,7 @@ export default async function KnowledgeBasePage() {
     <>
       <PageHeader
         title="Brain Knowledge"
-        subtitle="Lo que Cortex memorizó, fragmento por fragmento — y la prueba de que lo encuentra."
+        subtitle="El archivo de la empresa. Entra, encuentra, lee."
         icon={<BookOpen className="h-5 w-5" />}
       />
       {/* A view, not a control panel: WhatsApp is configured in Integrations,

@@ -13,6 +13,7 @@ import {
   Lock,
   Plus,
   Quote,
+  ScanSearch,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { focusStats } from '../_lib/view';
@@ -42,34 +43,14 @@ import type {
 } from './types';
 
 /**
- * Brain Knowledge.
+ * Brain Knowledge, as an archive.
  *
- * THE SHAPE OF THE SCREEN, AND WHY. The old page was a stack of panels with a
- * drawing of a brain at the top: the drawing was an illustration and the lists
- * underneath were the product. This inverts that. The cortex is now the map you
- * navigate — spaces are hills, you walk into one and its documents become the
- * hills, you walk into a document and the map flattens into that document's own
- * ribbon of fragments. Three depths, one object, and it is drawn from the
- * corpus rather than from constants: elevation is fragments, position is what
- * the material is made of.
- *
- * AND IT IS NEVER THE ONLY DOOR. Beside the map, at every depth, is the same
- * set of things as a list you can filter by typing and walk with the arrow
- * keys. Not a fallback — a peer, wired to the same state, so pointing at a row
- * lights the hill and the other way round. A screen whose navigation lives
- * inside a picture is unusable to anybody on a keyboard and slower than a
- * filing cabinet for anybody who already knows the name of what they want.
- *
- * THE FIRST THING ON SCREEN IS THE BENCH. Not the map. The most useful thing
- * here is being able to type a real question and see exactly which fragments
- * Cortex would retrieve, in what order, with what score, without spending an
- * answer — so it sits open by default in the right-hand column, beside the map,
- * and running it lights the map where the answer lives. That is the whole
- * product in one view: ask it something, watch which part of the memory
- * responds, go and read the actual fragment.
+ * Three jobs, in that order: enter (intake, when the shelf is thin), find
+ * (ask a company question, walk the collections), read (the fragment). The
+ * 3D field, the constellation, digestion, growth and analysis live behind
+ * Inspeccionar — they are how an admin audits the corpus, not how the company
+ * uses its memory.
  */
-
-type Tab = 'ask' | 'index';
 
 export function KnowledgeBase({
   spaces,
@@ -101,16 +82,12 @@ export function KnowledgeBase({
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
 
-  const [tab, setTab] = useState<Tab>('ask');
-  // Lista o Constelación. La lista es el default y lo seguirá siendo: la
-  // constelación es otra forma de mirar lo mismo, no un reemplazo — todo lo
-  // que se abre tocando una esfera se abre también desde aquí con teclado.
-  const [view, setView] = useState<'list' | 'constellation'>('list');
   const [hovered, setHovered] = useState<string | null>(null);
   const [probe, setProbe] = useState<ProbeResult | null>(null);
   const [source, setSource] = useState<IntakeKey | null>(null);
   const [creating, setCreating] = useState<'personal' | 'global' | null>(null);
   const [intake, setIntake] = useState<IntakeKey>('upload');
+  const [inspect, setInspect] = useState(false);
 
   const space = spaces.find((s) => s.id === spaceId) ?? null;
   const depth: 'cortex' | 'space' | 'document' = documentId
@@ -329,11 +306,25 @@ export function KnowledgeBase({
   // sin datos sería un cielo que miente, y el estado vacío existente ya dice
   // lo que hay que decir.
   const constellationReady = constellation?.spaces.some((s) => s.documents.length > 0) ?? false;
+  const thin = (stats.chunks ?? 0) < 20;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {thin && depth === 'cortex' && !inspect && (
+        <IntakeChooser
+          spaces={spaces}
+          totals={stats.intake}
+          highlight={source}
+          onFeed={(id, key) => {
+            setIntake(key);
+            setSpaceId(id);
+          }}
+          onCreateSpace={() => setCreating('personal')}
+        />
+      )}
+
       <Panel className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1">
           <Breadcrumb
             spaceName={space?.name ?? null}
             documentOpen={depth === 'document'}
@@ -344,41 +335,124 @@ export function KnowledgeBase({
             }}
             onSpace={backFromDocument}
           />
-          {/* El toggle vive en la corteza, donde la constelación tiene sentido:
-              es una vista de TODO el cerebro. Un nivel más abajo el mapa de un
-              espacio ya cuenta esa historia. */}
-          {depth === 'cortex' && constellationReady && (
-            <ViewToggle view={view} onChange={setView} />
-          )}
+          <button
+            type="button"
+            onClick={() => setInspect((was) => !was)}
+            aria-pressed={inspect}
+            className={clsx(
+              'mr-3 inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-micro font-semibold transition-colors',
+              inspect
+                ? 'bg-primary-soft text-primary'
+                : 'text-ink-faint hover:bg-surface-2 hover:text-ink',
+            )}
+          >
+            <ScanSearch className="h-3.5 w-3.5" aria-hidden />
+            Inspeccionar
+          </button>
         </div>
 
         {depth === 'document' && documentId ? (
-          // The map flattens into the document's own ribbon. Same idea one
-          // level further down — where you are, how big each piece is, what has
-          // never been used — so descending never changes the kind of thing you
-          // are reading.
           <div className="animate-rise">
             <FragmentReader
               documentId={documentId}
               focusIndex={focusIndex}
               onBack={backFromDocument}
-              backLabel={space ? `Volver a ${space.name}` : 'Volver al cerebro'}
+              backLabel={space ? `Volver a ${space.name}` : 'Volver al archivo'}
             />
           </div>
-        ) : depth === 'cortex' &&
-          view === 'constellation' &&
-          constellationReady &&
-          constellation ? (
-          // La misma memoria, como organismo 3D. Toca una esfera y aterrizas en
-          // el mismo lector de fragmentos al que llega la lista — un destino,
-          // dos puertas.
-          <div className="animate-rise border-t border-border">
-            <ConstellationView data={constellation} onOpenDocument={openDocument} />
-          </div>
         ) : (
-          <div className="grid border-t border-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-            {/* ------------------------------------------------------- map */}
-            <div className="border-b border-border px-5 py-4 lg:border-b-0 lg:border-r">
+          <div className="grid border-t border-border lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+            <div className="flex min-h-0 flex-col border-b border-border lg:h-[560px] lg:border-b-0 lg:border-r">
+              <div className="flex items-center gap-2 px-4 pt-3">
+                <p className="text-micro font-semibold uppercase tracking-wide text-ink-faint">
+                  {depth === 'cortex' ? 'Colecciones' : 'En este espacio'}
+                </p>
+                <span className="tabular text-micro text-ink-faint">{num(items.length)}</span>
+                {(graph.isFetching || docs.isFetching) && depth === 'space' && (
+                  <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin text-ink-faint motion-reduce:animate-none" />
+                )}
+              </div>
+              <IndexList
+                items={items}
+                unit={unit}
+                placeholder={depth === 'cortex' ? 'Buscar un espacio…' : 'Buscar un documento…'}
+                selectedId={depth === 'cortex' ? lastSpace : lastDocument}
+                hoveredId={hovered}
+                onHover={setHovered}
+                onSelect={enter}
+                emptyText={
+                  depth === 'cortex'
+                    ? 'Todavía no hay espacios.'
+                    : 'Este espacio está vacío. Métele algo abajo.'
+                }
+              />
+              {depth === 'cortex' && (
+                <div className="flex flex-wrap gap-2 border-t border-border px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => setCreating('personal')}
+                    className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    Nuevo espacio propio
+                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setCreating('global')}
+                      className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
+                    >
+                      <Building2 className="h-3.5 w-3.5" />
+                      Nuevo espacio común
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex min-h-0 flex-col lg:h-[560px]">
+              <p className="px-4 pt-3 text-micro font-semibold uppercase tracking-wide text-ink-faint">
+                Preguntar al archivo
+              </p>
+              <MemoryBench
+                spaces={spaces}
+                scopeId={spaceId ?? ''}
+                onScopeChange={(id) => {
+                  setSpaceId(id || null);
+                  setDocumentId(null);
+                }}
+                onProbe={setProbe}
+                onOpenFragment={openFragment}
+              />
+            </div>
+          </div>
+        )}
+      </Panel>
+
+      {depth === 'space' && space && (
+        <SpaceTools
+          space={space}
+          allSpaces={spaces}
+          intake={intake}
+          onIntakeChange={setIntake}
+          onLeave={() => setSpaceId(null)}
+          onOpenDocument={openDocument}
+        />
+      )}
+
+      {inspect && (
+        <div className="animate-rise space-y-4">
+          {depth === 'cortex' && constellationReady && constellation && (
+            <Panel className="overflow-hidden">
+              <p className="px-4 py-3 text-xs font-semibold text-ink">Constelación</p>
+              <div className="border-t border-border">
+                <ConstellationView data={constellation} onOpenDocument={openDocument} />
+              </div>
+            </Panel>
+          )}
+
+          {depth !== 'document' && (
+            <Panel className="overflow-hidden px-5 py-4">
               <BrainField
                 seeds={seeds}
                 selectedId={depth === 'cortex' ? lastSpace : lastDocument}
@@ -401,129 +475,46 @@ export function KnowledgeBase({
                       : 'Este espacio no tiene nada indexado todavía.'
                 }
               />
-
               <SourceLegend
                 stats={stats}
                 active={source}
                 onToggle={(key) => setSource((was) => (was === key ? null : key))}
               />
-            </div>
+            </Panel>
+          )}
 
-            {/* ---------------------------------------------------- console */}
-            <div className="flex min-h-0 flex-col lg:h-[600px]">
-              <div className="flex items-center gap-1 border-b border-border px-4 pt-3">
-                <TabButton on={tab === 'ask'} onClick={() => setTab('ask')}>
-                  Preguntar
-                </TabButton>
-                <TabButton on={tab === 'index'} onClick={() => setTab('index')}>
-                  Índice
-                  <span className="tabular ml-1.5 text-micro opacity-70">{num(items.length)}</span>
-                </TabButton>
-                {(graph.isFetching || docs.isFetching) && depth === 'space' && (
-                  <Loader2 className="ml-auto h-3.5 w-3.5 animate-spin text-ink-faint motion-reduce:animate-none" />
-                )}
+          {depth !== 'document' && (
+            <Analysis
+              health={health}
+              shape={shape}
+              stale={stale}
+              onOpenDocument={openDocument}
+              onOpenFragment={openFragment}
+            />
+          )}
+
+          {depth === 'cortex' && (
+            <>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <DigestionPanel stats={focused} focus={focusLabel} />
+                <KnowsPanel stats={focused} focus={focusLabel} />
               </div>
-
-              {tab === 'ask' ? (
-                <MemoryBench
+              {!thin && (
+                <IntakeChooser
                   spaces={spaces}
-                  scopeId={spaceId ?? ''}
-                  onScopeChange={(id) => {
-                    setSpaceId(id || null);
-                    setDocumentId(null);
+                  totals={stats.intake}
+                  highlight={source}
+                  onFeed={(id, key) => {
+                    setIntake(key);
+                    setSpaceId(id);
                   }}
-                  onProbe={setProbe}
-                  onOpenFragment={openFragment}
+                  onCreateSpace={() => setCreating('personal')}
                 />
-              ) : (
-                <>
-                  <IndexList
-                    items={items}
-                    unit={unit}
-                    placeholder={depth === 'cortex' ? 'Buscar un espacio…' : 'Buscar un documento…'}
-                    selectedId={depth === 'cortex' ? lastSpace : lastDocument}
-                    hoveredId={hovered}
-                    onHover={setHovered}
-                    onSelect={enter}
-                    emptyText={
-                      depth === 'cortex'
-                        ? 'Todavía no hay espacios.'
-                        : 'Este espacio está vacío. Métele algo abajo.'
-                    }
-                  />
-                  {depth === 'cortex' && (
-                    <div className="flex flex-wrap gap-2 border-t border-border px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => setCreating('personal')}
-                        className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
-                      >
-                        <Lock className="h-3.5 w-3.5" />
-                        Nuevo espacio propio
-                      </button>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => setCreating('global')}
-                          className="inline-flex items-center gap-1.5 rounded-pill border border-border px-3 py-1.5 text-xs font-semibold text-ink-muted transition-colors hover:border-border-strong hover:text-ink"
-                        >
-                          <Building2 className="h-3.5 w-3.5" />
-                          Nuevo espacio común
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </>
               )}
-            </div>
-          </div>
-        )}
-      </Panel>
-
-      {/* ------------------------------------------------------ inside a space */}
-      {depth === 'space' && space && (
-        <SpaceTools
-          space={space}
-          allSpaces={spaces}
-          intake={intake}
-          onIntakeChange={setIntake}
-          onLeave={() => setSpaceId(null)}
-          onOpenDocument={openDocument}
-        />
-      )}
-
-      {/* --------------------------------------------------------- the analysis */}
-      {depth !== 'document' && (
-        <Analysis
-          health={health}
-          shape={shape}
-          stale={stale}
-          onOpenDocument={openDocument}
-          onOpenFragment={openFragment}
-        />
-      )}
-
-      {/* ------------------------------------------------------------- the belt */}
-      {depth === 'cortex' && (
-        <>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <DigestionPanel stats={focused} focus={focusLabel} />
-            <KnowsPanel stats={focused} focus={focusLabel} />
-          </div>
-
-          <IntakeChooser
-            spaces={spaces}
-            totals={stats.intake}
-            highlight={source}
-            onFeed={(id, key) => {
-              setIntake(key);
-              setSpaceId(id);
-            }}
-            onCreateSpace={() => setCreating('personal')}
-          />
-
-          <GrowthPanel stats={focused} focus={source} />
-        </>
+              <GrowthPanel stats={focused} focus={source} />
+            </>
+          )}
+        </div>
       )}
 
       {creating && (

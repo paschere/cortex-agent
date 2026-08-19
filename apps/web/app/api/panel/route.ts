@@ -1,10 +1,11 @@
 import { buildToolContext } from '@/lib/agent';
-import { PANELS, isPanelId } from '@/lib/panels/shape';
+import { PANELS, isPanelId, resolvePanelInput } from '@/lib/panels/shape';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { getTool, runTool } from '@cortex/agent-tools';
 import { loadAgent } from '@cortex/agents';
+import { CortexError } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -17,11 +18,11 @@ export const dynamic = 'force-dynamic';
  * ===========================================================================
  * DEL CLIENTE NO VIENE UNA HERRAMIENTA. VIENE UNA PALABRA.
  * ===========================================================================
- * El cuerpo trae `panelId` y nada más. El `toolId` y la entrada salen de
- * `lib/panels/shape.ts`, aquí, en el servidor. Es la diferencia entre cinco
- * consultas fijas y un ejecutor de herramientas arbitrario con sesión: un
- * cuerpo que pudiera nombrar la herramienta podría nombrar
- * `gmail.send_message`, y la entrada la escribiría quien manda el POST.
+ * El cuerpo trae `panelId` y, si la superficie es de una entidad, `key`. El
+ * `toolId` y la entrada salen de `lib/panels/shape.ts`, aquí, en el servidor.
+ * Es la diferencia entre consultas fijas y un ejecutor de herramientas
+ * arbitrario con sesión: un cuerpo que pudiera nombrar la herramienta podría
+ * nombrar `gmail.send_message`, y la entrada la escribiría quien manda el POST.
  *
  * ===========================================================================
  * SIN `confirmed`, Y CON LA DENY-LIST RECOMPROBADA
@@ -45,6 +46,11 @@ const Body = z.object({
    * las tres: sin panel no hay nada que ejecutar.
    */
   panelId: z.string(),
+  /**
+   * La clave de una superficie parametrizada (el cliente, no «los clientes»).
+   * Nunca un `toolId`. El servidor decide en qué campo de la entrada cae.
+   */
+  key: z.string().min(1).max(200).nullish(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -56,6 +62,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const panel = PANELS[parsed.data.panelId];
+  const resolved = resolvePanelInput(parsed.data.panelId, parsed.data.key);
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.message }, { status: 400 });
+  }
 
   const tool = getTool(panel.toolId);
   if (!tool) {
@@ -88,9 +98,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
 
   try {
-    const result = await runTool(tool, panel.input, ctx);
+    const result = await runTool(tool, resolved.input, ctx);
     return NextResponse.json({ result });
   } catch (err) {
+    if (err instanceof CortexError && err.code === 'NOT_FOUND') {
+      return NextResponse.json({ error: err.message }, { status: 404 });
+    }
     const message = err instanceof Error ? err.message : 'No se pudo abrir el panel.';
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -6,6 +6,8 @@ import {
   isPanelId,
   panelForHref,
   panelFromSearch,
+  panelKeyFromSearch,
+  resolvePanelInput,
   searchWithPanel,
 } from './shape';
 
@@ -14,11 +16,11 @@ import {
  * propósito: es el ÚNICO sitio de todo el camino del panel donde se puede
  * importar un valor de `@cortex/agent-tools`. Un test corre en Node; un
  * componente de cliente no. Y es justo lo que hace falta para comprobar que los
- * cinco `toolId` de `shape.ts` existen de verdad — una cadena mal escrita ahí
+ * `toolId` de `shape.ts` existen de verdad — una cadena mal escrita ahí
  * es un panel que abre un 404 y nada más lo vería.
  */
 
-describe('los cinco paneles apuntan a herramientas que existen', () => {
+describe('los paneles apuntan a herramientas que existen', () => {
   it('cada toolId está registrado', () => {
     for (const [id, shape] of Object.entries(PANELS)) {
       expect(getTool(shape.toolId), `el panel «${id}» apunta a ${shape.toolId}`).toBeTruthy();
@@ -28,26 +30,41 @@ describe('los cinco paneles apuntan a herramientas que existen', () => {
   it('la entrada fija pasa el esquema de su herramienta', () => {
     // Un panel con una entrada que no valida no falla al escribirlo: falla la
     // primera vez que alguien lo abre, con un error de validación en vez de
-    // datos. Aquí se ve al guardar el archivo.
+    // datos. Aquí se ve al guardar el archivo. Las superficies con clave no
+    // tienen una entrada completa hasta que llega la clave, y eso lo cubre
+    // `resolvePanelInput`.
     for (const [id, shape] of Object.entries(PANELS)) {
+      if (shape.keyed) continue;
       const tool = getTool(shape.toolId);
       const parsed = tool?.inputSchema.safeParse(shape.input);
       expect(parsed?.success, `la entrada del panel «${id}» no valida`).toBe(true);
     }
   });
 
-  it('cada panel resume una pantalla distinta', () => {
-    const hrefs = Object.values(PANELS).map((p) => p.href);
+  it('cada panel sin clave resume una pantalla distinta', () => {
+    const hrefs = Object.values(PANELS)
+      .filter((p) => !p.keyed)
+      .map((p) => p.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  it('una superficie con clave declara el campo donde va', () => {
+    for (const [id, shape] of Object.entries(PANELS)) {
+      if (!shape.keyed) continue;
+      expect(shape.keyField, `«${id}» es keyed sin keyField`).toBeTruthy();
+    }
   });
 });
 
 describe('lo que llega del navegador es una palabra, no una herramienta', () => {
-  it('sólo pasan los cinco ids', () => {
+  it('sólo pasan los ids de la tabla', () => {
     expect(isPanelId('payments')).toBe(true);
+    expect(isPanelId('clients')).toBe(true);
+    expect(isPanelId('client')).toBe(true);
     // La razón por la que el `toolId` no viaja: si viajara, esto sería un
     // ejecutor de herramientas arbitrario con la sesión de quien pulsa.
     expect(isPanelId('gmail.send_message')).toBe(false);
+    expect(isPanelId('clients.overview')).toBe(false);
     expect(isPanelId('__proto__')).toBe(false);
     expect(isPanelId('toString')).toBe(false);
     expect(isPanelId(null)).toBe(false);
@@ -59,6 +76,7 @@ describe('qué pantalla abre panel', () => {
   it('encuentra el panel de una pantalla que lo tiene', () => {
     expect(panelForHref('/payments')).toBe('payments');
     expect(panelForHref('/commitments')).toBe('commitments');
+    expect(panelForHref('/clients')).toBe('clients');
   });
 
   it('un destino sin panel sigue siendo un destino', () => {
@@ -75,6 +93,17 @@ describe('el panel en la dirección', () => {
     const search = searchWithPanel('', 'reports');
     expect(search).toBe('?panel=reports');
     expect(panelFromSearch(search)).toBe('reports');
+  });
+
+  it('una ficha lleva la clave y no un toolId', () => {
+    const search = searchWithPanel('', 'client', 'coltrans-id');
+    expect(search).toBe('?panel=client&key=coltrans-id');
+    expect(panelFromSearch(search)).toBe('client');
+    expect(panelKeyFromSearch(search)).toBe('coltrans-id');
+  });
+
+  it('cerrar un panel con clave también quita la clave', () => {
+    expect(searchWithPanel('?panel=client&key=x', null)).toBe('');
   });
 
   it('no se lleva por delante lo que ya había', () => {
@@ -94,7 +123,39 @@ describe('el panel en la dirección', () => {
   });
 
   it('los ids del tipo y los de la tabla son los mismos', () => {
-    const ids: PanelId[] = ['payments', 'commitments', 'errands', 'reports', 'approvals'];
+    const ids: PanelId[] = [
+      'payments',
+      'commitments',
+      'errands',
+      'reports',
+      'approvals',
+      'clients',
+      'client',
+    ];
     expect(Object.keys(PANELS).sort()).toEqual([...ids].sort());
+  });
+});
+
+describe('la entrada se arma en el servidor', () => {
+  it('sin clave, la ficha no se abre', () => {
+    expect(resolvePanelInput('client', null)).toEqual({
+      ok: false,
+      message: 'Falta qué abrir.',
+    });
+    expect(resolvePanelInput('client', '')).toMatchObject({ ok: false });
+  });
+
+  it('con clave, la pone en el campo que el servidor eligió', () => {
+    expect(resolvePanelInput('client', '  andina  ')).toEqual({
+      ok: true,
+      input: { client: 'andina' },
+    });
+  });
+
+  it('un panel sin clave ignora lo que venga de más', () => {
+    expect(resolvePanelInput('payments', 'gmail.send_message')).toEqual({
+      ok: true,
+      input: {},
+    });
   });
 });

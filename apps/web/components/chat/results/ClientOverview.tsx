@@ -4,7 +4,7 @@ import { cop, plural, shortDate } from '@/app/(app)/clients/_components/format';
 import { type ClientStatus, STATUS_TONE } from '@/lib/clients-shape';
 import { type StatusTone, chipClass } from '@/lib/status-chip';
 import { Building2, Star } from 'lucide-react';
-import Link from 'next/link';
+import { PinSurface } from '../PinSurface';
 import type { ResultViewProps } from './registry';
 
 /**
@@ -54,6 +54,7 @@ function statusTone(status: string): StatusTone {
 }
 
 interface Client {
+  id: string;
   name: string;
   nit: string | null;
   status: string;
@@ -90,7 +91,7 @@ interface Overview {
   proposals: number;
 }
 
-export function ClientOverview({ result }: ResultViewProps) {
+export function ClientOverview({ result, toolCallId }: ResultViewProps) {
   const view = overviewOf(result);
   if (!view) return null;
 
@@ -107,6 +108,13 @@ export function ClientOverview({ result }: ResultViewProps) {
         <span className={chipClass(tone)}>{client.statusLabel}</span>
         {client.nit && <span className="tabular text-xs text-ink-muted">NIT {client.nit}</span>}
         {place && <span className="text-xs text-ink-muted">{place}</span>}
+        <span className="ml-auto">
+          <PinSurface
+            surface="client"
+            surfaceKey={client.id}
+            hidden={toolCallId.startsWith('panel:')}
+          />
+        </span>
       </div>
 
       {(client.owner || client.paymentTermsDays != null || view.domains.length > 0) && (
@@ -196,13 +204,6 @@ export function ClientOverview({ result }: ResultViewProps) {
           hace que empiece a llenarse solo.
         </p>
       )}
-
-      <Link
-        href="/clients"
-        className="block border-t border-border bg-surface-2 px-4 py-2 text-micro font-medium text-ink-faint transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
-      >
-        Abrir en Clientes
-      </Link>
     </div>
   );
 }
@@ -262,6 +263,7 @@ function overviewOf(result: unknown): Overview | null {
 
   return {
     client: {
+      id: typeof c.id === 'string' ? c.id : '',
       name: c.name as string,
       nit: typeof c.nit === 'string' ? c.nit : null,
       status: typeof c.status === 'string' ? c.status : '',

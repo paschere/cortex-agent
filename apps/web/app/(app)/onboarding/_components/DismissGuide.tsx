@@ -17,7 +17,7 @@ export function DismissGuide() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dismissed: true }),
       });
-      startTransition(() => router.push('/dashboard'));
+      startTransition(() => router.push('/chat'));
     } finally {
       setBusy(false);
     }

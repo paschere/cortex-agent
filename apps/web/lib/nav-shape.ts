@@ -69,10 +69,12 @@ import {
  * ===========================================================================
  * LA FORMA NUEVA, Y LO QUE NO CAMBIA
  * ===========================================================================
- * Un bloque corto arriba, «Todo» con el resto dentro, y «La empresa» aparte y
- * plegada. NO DESAPARECE NI UN DESTINO: los 28 siguen estando, y
- * `nav-shape.test.ts` lo comprueba sumando la unión de todo lo que este archivo
- * devuelve. La diferencia es cuántos hay que mirar para encontrar el tuyo.
+ * Un bloque corto arriba — Chat, Te espera, Brain Knowledge —, «Todo» con el
+ * resto dentro, y «La empresa» aparte y plegada. NO DESAPARECE NI UN DESTINO:
+ * siguen estando, y `nav-shape.test.ts` lo comprueba sumando la unión de todo lo
+ * que este archivo devuelve. La diferencia es cuántos hay que mirar para
+ * encontrar el tuyo. El chat es el producto; Brain Knowledge es el archivo; lo
+ * demás se abre desde el chat o desde «Todo».
  *
  * ===========================================================================
  * POR QUÉ ESTO ES UN `.ts` Y NO VIVE EN EL COMPONENTE
@@ -152,18 +154,20 @@ export interface NavSection {
 }
 
 // ===========================================================================
-// EL BLOQUE FIJO: TRES FILAS QUE NO SE MUEVEN NUNCA
+// EL BLOQUE FIJO: LO QUE SE APRENDE CON LAS MANOS
 // ===========================================================================
-// Inicio, Chat y Te espera, en ese orden, siempre. Son la parte del rail que se
-// aprende con las manos, y mover un destino al que alguien ya está apuntando con
-// el dedo es el peor cambio que se le puede hacer a un menú. Lo que viene
-// después sí se gana por uso (ver `nav-usage.ts`), y por eso estas tres tienen
-// que estar fuera de esa negociación.
+// Chat, Te espera y Brain Knowledge, en ese orden, siempre. El chat es el
+// producto; Brain Knowledge es el archivo de la empresa, la única otra
+// superficie de primera. Inicio vive en «Todo»: sigue existiendo, ya no es la
+// puerta. Mover un destino al que alguien ya está apuntando con el dedo es el
+// peor cambio que se le puede hacer a un menú, y por eso estas filas están
+// fuera de cualquier negociación de uso.
 
-/** Primera porque es donde todo el mundo aterriza: `/` redirige aquí al entrar. */
+/** Sigue existiendo. Ya no es la puerta: `/` autentica hacia `/chat`. */
 export const HOME: NavItem = { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard };
 export const CHAT: NavItem = { href: '/chat', label: 'Chat', icon: MessageSquare };
-export const PINNED: NavItem[] = [HOME, CHAT];
+export const BRAIN: NavItem = { href: '/kb', label: 'Brain Knowledge', icon: BookOpen };
+export const PINNED: NavItem[] = [CHAT, BRAIN];
 
 const QUEUE_ICON: Record<WaitingQueue, NavIcon> = {
   approvals: Inbox,
@@ -210,10 +214,9 @@ export function waitingHref(counts: WaitingCounts): string {
 // ===========================================================================
 // LO QUE VA DENTRO DE «TODO»
 // ===========================================================================
-// El resto del producto, agrupado. De aquí salen también las ~5 plazas que se
-// ganan por uso en el bloque de arriba: lo que asciende sale de esta lista y lo
-// que no está arriba sigue estando aquí, a un clic. Nada se esconde para
-// siempre.
+// El resto del producto, agrupado. Nada se esconde para siempre: lo que no
+// está arriba sigue estando aquí, a un clic. Las plazas ganadas por uso se
+// fueron — competían con el chat por la mirada, y el chat es el producto.
 export const SECTIONS: NavSection[] = [
   {
     // Clientes es el eje del que cuelga el resto del producto (migración 0075):
@@ -250,8 +253,11 @@ export const SECTIONS: NavSection[] = [
     id: 'review',
     label: 'Cómo vamos',
     items: [
-      // Primera porque es la única que contesta «¿vamos bien?» con un sí o un
-      // no. Las otras tres cuentan lo que pasó y dejan la conclusión a quien lee.
+      // Inicio bajó de las filas fijas: el chat es la puerta, esto es el
+      // recuento de lo que se movió. Sigue existiendo para quien lo busque.
+      HOME,
+      // Primera de las que contestan «¿vamos bien?» con un sí o un no. Las
+      // otras cuentan lo que pasó y dejan la conclusión a quien lee.
       { href: '/goals', label: 'Metas', icon: Target },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
       { href: '/prospects', label: 'Prospectos', icon: Radar },
@@ -259,15 +265,11 @@ export const SECTIONS: NavSection[] = [
     ],
   },
   {
-    // Brain Knowledge se mudó aquí desde el bloque diario, y la mudanza dice
-    // algo verdadero: esta sección es literalmente de dónde saca Cortex lo que
-    // sabe, y lo que memorizó es la primera de esas fuentes. Sigue siendo una de
-    // las cinco plazas sembradas por defecto arriba, así que para casi todo el
-    // mundo no cambia de sitio; esto es sólo dónde vuelve si deja de usarse.
+    // Brain Knowledge subió al bloque fijo. Aquí quedan las fuentes que se
+    // conectan, no el archivo en sí.
     id: 'sources',
     label: 'De dónde saco todo',
     items: [
-      { href: '/kb', label: 'Brain Knowledge', icon: BookOpen },
       { href: '/integrations', label: 'Integraciones', icon: Plug },
       { href: '/integrations/whatsapp', label: 'WhatsApp', icon: MessageCircle },
       { href: '/mcp-tokens', label: 'Conectar Claude', icon: Cable },
@@ -333,26 +335,20 @@ export const FOOTER: NavItem[] = [
   { href: '/settings', label: 'Ajustes', icon: Settings },
 ];
 
-/** Todo lo que puede ascender al bloque fijo, en el orden en que se diseñó. */
+/** Destinos que podrían haber subido al bloque fijo. El rail ya no los sube. */
 export const QUICK_CANDIDATES: NavItem[] = SECTIONS.flatMap((section) => section.items);
 
 /**
- * LAS CINCO PLAZAS SEMBRADAS, Y POR QUÉ HAY CINCO.
- *
- * Hay cinco plazas porque hay cinco semillas: el número de huecos ES el tamaño
- * de esta lista, y así no existe una constante que pueda decir seis mientras la
- * lista dice cinco.
- *
- * Se siembran porque un rail vacío el primer día es peor que uno largo. Nadie ha
- * usado nada todavía y aun así hay una respuesta razonable a «¿qué abre la gente
- * de una empresa?»: a quién le vendo, quién me debe, qué sé, qué trámites hay
- * puestos y cómo vamos. A partir de ahí, el uso manda — ver `pickQuick`.
+ * Vacío a propósito. El bloque ganado por uso competía con el chat por la
+ * mirada, y el chat es el producto. `buildRail` sigue aceptando una lista para
+ * no romper las pruebas de que un destino no se pierde si alguien la pasa; el
+ * rail dibuja siempre `[]`.
  */
-export const DEFAULT_QUICK: string[] = ['/clients', '/payments', '/kb', '/browser', '/reports'];
+export const DEFAULT_QUICK: string[] = [];
 
 /** El rail entero, ya resuelto: lo que el componente sólo tiene que dibujar. */
 export interface Rail {
-  /** Inicio y Chat. La fila «Te espera» va detrás y la arma el componente. */
+  /** Chat y Brain Knowledge. La fila «Te espera» va detrás y la arma el componente. */
   pinned: NavItem[];
   /** Las cuatro colas, dentro del desplegable de «Te espera». */
   waiting: NavItem[];

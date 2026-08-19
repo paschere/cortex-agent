@@ -34,7 +34,7 @@ setup('entrar y guardar la sesión', async ({ page }) => {
   // Las cookies quedan en el contexto de `request`, que es el mismo del `page`.
   // Una carga real las convierte en sesión aprovisionada.
   await page.goto('/chat');
-  await expect(page.getByPlaceholder(/Pregunta por una llamada/)).toBeVisible();
+  await expect(page.getByPlaceholder(/Pregúntame/)).toBeVisible();
 
   // Fuera de `apps/web` a propósito: `next dev` vigila ese directorio y un
   // fichero nuevo a mitad de una prueba le costaba el `.next` entero. Ver la

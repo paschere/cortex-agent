@@ -6,6 +6,7 @@
 // already saved by the modules that own them. What this adds is the noun that
 // makes them reachable together — see the header of migration 0075.
 export { clientsSearch } from './search';
+export { clientsDirectory } from './directory';
 export { clientsOverview, resolveClient } from './overview';
 export { clientsRegister, domainWarning } from './register';
 export { clientsLink } from './link';

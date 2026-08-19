@@ -55,12 +55,12 @@ describe('el rail', () => {
 
   it('el bloque ganado sale en el orden diseñado, no en el que se pidió', () => {
     // La pertenencia la decide el uso; la posición no. Si el orden siguiera al
-    // ranking, las cinco filas se cambiarían de sitio entre sí cada pocos clics.
-    const asked = ['/reports', '/clients', '/kb'];
+    // ranking, las filas se cambiarían de sitio entre sí cada pocos clics.
+    const asked = ['/reports', '/clients', '/browser'];
     expect(buildRail(asked, false).quick.map((i) => i.href)).toEqual([
       '/clients',
+      '/browser',
       '/reports',
-      '/kb',
     ]);
   });
 
@@ -74,14 +74,20 @@ describe('el rail', () => {
     expect(buildRail([], true).company.items).toHaveLength(COMPANY.items.length);
   });
 
-  it('las cinco semillas son destinos que existen', () => {
-    const candidates = new Set(QUICK_CANDIDATES.map((i) => i.href));
-    for (const href of DEFAULT_QUICK) expect(candidates.has(href), href).toBe(true);
+  it('no hay plazas ganadas por defecto: el chat no comparte el bloque de arriba', () => {
+    expect(DEFAULT_QUICK).toEqual([]);
+    expect(buildRail([], false).quick).toEqual([]);
+    expect(PINNED.map((i) => i.href)).toEqual(['/chat', '/kb']);
   });
 
-  it('las tres filas fijas nunca compiten por una plaza', () => {
-    // Inicio, Chat y las cuatro colas están fuera de `QUICK_CANDIDATES`: no
-    // pueden ascender porque ya están arriba, y sobre todo no pueden bajar.
+  it('Inicio vive en «Todo», no en las filas fijas', () => {
+    expect(PINNED.map((i) => i.href)).not.toContain('/dashboard');
+    expect(QUICK_CANDIDATES.map((i) => i.href)).toContain('/dashboard');
+    expect(SECTIONS.flatMap((s) => s.items).map((i) => i.href)).toContain('/dashboard');
+  });
+
+  it('las filas fijas nunca compiten por una plaza', () => {
+    // Chat, Brain Knowledge y las cuatro colas están fuera de `QUICK_CANDIDATES`.
     const candidates = new Set(QUICK_CANDIDATES.map((i) => i.href));
     for (const item of [...PINNED, ...WAITING_ITEMS]) {
       expect(candidates.has(item.href), item.href).toBe(false);

@@ -7,12 +7,12 @@
  * una sola línea en español que dice cuánto hay y qué es lo peor.
  *
  * ESA LÍNEA ES UNA FUNCIÓN PURA DE LOS NÚMEROS, a propósito y para siempre.
- * Es la pantalla a la que redirige `/`: se dibuja en cada carga, para todo el
- * mundo. Pedírsela a un modelo costaría una llamada por visita, tardaría
- * segundos en la primera pintura y —lo que de verdad importa— daría una frase
- * distinta cada vez para los mismos datos, así que nadie podría comprobar que
- * dice la verdad. Aquí las mismas entradas dan siempre la misma oración, y el
- * archivo de al lado la prueba caso por caso.
+ * Es la frase del día en un chat vacío, y el aviso del rail. Se dibuja en cada
+ * carga, para todo el mundo. Pedírsela a un modelo costaría una llamada por
+ * visita, tardaría segundos en la primera pintura y —lo que de verdad importa—
+ * daría una frase distinta cada vez para los mismos datos, así que nadie podría
+ * comprobar que dice la verdad. Aquí las mismas entradas dan siempre la misma
+ * oración, y el archivo de al lado la prueba caso por caso.
  *
  * NADA DE ESTE ARCHIVO TOCA LA BASE NI IMPORTA `@cortex/agent-tools`. El aviso
  * del chat es un componente de cliente, así que la frase tiene que poder

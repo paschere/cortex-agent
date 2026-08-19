@@ -3,6 +3,7 @@
 import { money, plural, shortDate } from '@/app/(app)/payments/_components/format';
 import { chipClass } from '@/lib/status-chip';
 import { Banknote } from 'lucide-react';
+import { PinSurface } from '../PinSurface';
 import type { ResultViewProps } from './registry';
 
 /**
@@ -53,7 +54,7 @@ interface Receivables {
   guidance: string;
 }
 
-export function ReceivablesCard({ result }: ResultViewProps) {
+export function ReceivablesCard({ result, toolCallId }: ResultViewProps) {
   const view = receivablesOf(result);
   if (!view) return null;
 
@@ -62,7 +63,10 @@ export function ReceivablesCard({ result }: ResultViewProps) {
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <Banknote className="h-4 w-4 shrink-0 text-primary" aria-hidden />
         <span className="field-label">Cartera</span>
-        <span className="ml-auto text-micro text-ink-faint">al {shortDate(view.today)}</span>
+        <span className="ml-auto flex items-center gap-2">
+          <span className="text-micro text-ink-faint">al {shortDate(view.today)}</span>
+          <PinSurface surface="payments" hidden={toolCallId.startsWith('panel:')} />
+        </span>
       </div>
 
       {view.byCurrency.length === 0 ? (
