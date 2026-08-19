@@ -100,6 +100,16 @@ describe('abrir el panel no puede desmontar ChatRoot', () => {
     // sitio.
     expect(read('components/nav/AppShell.tsx')).not.toContain("'use client'");
   });
+
+  it('el Sidebar es hijo flex de la fila, no de un wrapper', () => {
+    // Un `div print:hidden` alrededor del rail le quita la altura: el nav se
+    // va a cero y en /chat sólo quedan el workspace y el pie. Esconder al
+    // imprimir es cosa del aside, igual que PanelHost ya trae print:hidden.
+    expect(shell).not.toMatch(/<div[^>]*print:hidden[^>]*>\s*<Sidebar/);
+    expect(shell).toMatch(
+      /flex h-screen[\s\S]*?<Sidebar[\s\S]*?\{children\}[\s\S]*?<PanelHost \/>/,
+    );
+  });
 });
 
 describe('el camino del panel no toca el router', () => {

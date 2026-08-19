@@ -57,13 +57,13 @@ export async function AppShell({
       <CommandMenuProvider role={user.role}>
         <PanelProvider>
           <div className="flex h-screen overflow-hidden bg-canvas print:h-auto print:overflow-visible">
-            {/* `user.organization` baja hasta el pie del rail para que el
-                selector de espacio pinte el nombre con el HTML y no medio
-                segundo después: el shell ya lo sabe, y el dato de en qué
-                empresa estás no puede llegar más tarde que sus cifras. */}
-            <div className="print:hidden">
-              <Sidebar role={user.role} counts={counts} organization={user.organization} />
-            </div>
+            {/* El rail es hijo flex de esta fila. Un wrapper (`print:hidden`)
+                no estira: el nav (`flex-1`) se va a cero y en /chat sólo
+                quedan el workspace y el pie. Esconder al imprimir es cosa
+                del aside. `user.organization` baja al pie para que el
+                selector pinte el nombre con el HTML, no medio segundo
+                después. */}
+            <Sidebar role={user.role} counts={counts} organization={user.organization} />
             {children}
             <PanelHost />
           </div>

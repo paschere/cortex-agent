@@ -854,7 +854,7 @@ export function Sidebar({
         // hace que asomarse no mueva la conversación. En el chat ancho el rail
         // reserva sus 260px y ya no se asoma nada, porque ya está abierto.
         className={clsx(
-          'relative hidden shrink-0 md:flex',
+          'relative hidden h-full shrink-0 print:hidden md:flex',
           hydrated && !inChat && 'transition-[width] duration-200 motion-reduce:transition-none',
           inChat ? 'w-[56px]' : collapsed ? 'w-[72px]' : 'w-[260px]',
         )}
@@ -917,8 +917,8 @@ export function Sidebar({
       {/* Mobile: Radix Dialog drawer, always in the expanded layout. */}
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm md:hidden" />
-          <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-rail-border bg-rail shadow-pop outline-none md:hidden">
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm print:hidden md:hidden" />
+          <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-rail-border bg-rail shadow-pop outline-none print:hidden md:hidden">
             <div className="flex h-14 shrink-0 items-center justify-between px-3">
               <Dialog.Title asChild>
                 <div>
