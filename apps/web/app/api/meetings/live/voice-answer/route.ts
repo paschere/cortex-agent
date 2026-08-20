@@ -3,12 +3,12 @@ import { buildToolContext } from '@/lib/agent';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import {
-  ConfirmationRequiredError,
   chatModel,
   listTools,
   readWorkspacePlan,
   runTool,
 } from '@cortex/agent-tools';
+import { ConfirmationRequiredError } from '@cortex/core';
 import { type CoreTool, generateText, tool } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
