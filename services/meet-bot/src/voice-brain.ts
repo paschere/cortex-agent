@@ -106,7 +106,12 @@ export class VoiceBrain {
             question,
             transcript: tail,
           }),
-          signal: AbortSignal.timeout(20_000),
+          // Margen para un turno REAL: voice-answer corre el cerebro con
+          // herramientas (maxDuration 45s del lado de Cortex). Un turno con una
+          // consulta al CRM o un envío pasa de 20s; cortarlo ahí dejaba a Cortex
+          // mudo justo cuando de verdad fue a hacer algo. 40s deja terminar sin
+          // colgar la reunión para siempre.
+          signal: AbortSignal.timeout(40_000),
         },
       );
       if (!res.ok) return null;

@@ -8,7 +8,16 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * the auditor is looking at on screen.
  */
 
-export const AUDIT_STATUSES = ['ok', 'error', 'confirmation_required', 'rate_limited'] as const;
+// 'attempted' llega con la migración 0118 (audit-before-act): la fila de
+// intención que se escribe ANTES de ejecutar una llamada con efectos. Una
+// attempted sin su ok/error posterior = el proceso murió con el efecto en vuelo.
+export const AUDIT_STATUSES = [
+  'ok',
+  'error',
+  'confirmation_required',
+  'rate_limited',
+  'attempted',
+] as const;
 export const AUDIT_SURFACES = ['web', 'mcp', 'schedule'] as const;
 export const AUDIT_RISK_LEVELS = ['low', 'medium', 'high', 'critical'] as const;
 // 'delegated' llega con la migración 0099: la llamada iba a preguntar y no

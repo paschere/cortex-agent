@@ -10,7 +10,7 @@ set -e
 # y se baja privilegios en la misma línea, igual que services/browser.
 
 export DISPLAY=:99
-Xvfb :99 -screen 0 1280x800x24 -nolisten tcp &
+Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
 sleep 1
 
 if [ -n "${MEET_PROFILES_DIR:-}" ] && [ -d "${MEET_PROFILES_DIR}" ]; then

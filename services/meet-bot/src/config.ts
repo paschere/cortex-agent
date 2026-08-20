@@ -52,14 +52,16 @@ export interface Config {
   proxyUsername: string | null;
   proxyPassword: string | null;
   /**
-   * Cómo entra el bot: 'account' (logueado con la cuenta del workspace, para
-   * auto-admisión) o 'guest' (anónimo, solo un nombre, sin login). El guest no
-   * tiene cuenta que Google pueda marcar por «actividad sospechosa desde IP
-   * nueva», así que a veces entra donde el login rebota — a costa de necesitar
-   * que alguien lo admita, o una reunión de acceso abierto. Default: 'account'
-   * si hay credenciales o perfil, 'guest' si no.
+   * Cómo entra el bot: 'guest' (anónimo, solo un nombre) o 'account' (logueado
+   * con la cuenta del workspace). Guest es el default: Google marca las
+   * cuentas que se loguean desde una IP de datacenter y las expulsa; un
+   * invitado no tiene cuenta que quemar. Cuesta que alguien lo admita, o una
+   * reunión abierta. MEET_MODE=account para el camino viejo.
    */
   mode: 'account' | 'guest';
+  /** Locale/timezone del Chrome. Un contenedor sale en UTC, y UTC es huella. */
+  locale: string;
+  timezone: string;
 }
 
 export function loadConfig(): Config {
@@ -85,6 +87,8 @@ export function loadConfig(): Config {
     proxyServer: process.env.MEET_PROXY_SERVER?.trim() || null,
     proxyUsername: process.env.MEET_PROXY_USERNAME?.trim() || null,
     proxyPassword: process.env.MEET_PROXY_PASSWORD?.trim() || null,
-    mode: process.env.MEET_MODE?.trim() === 'guest' ? 'guest' : 'account',
+    mode: process.env.MEET_MODE?.trim() === 'account' ? 'account' : 'guest',
+    locale: process.env.MEET_LOCALE?.trim() || 'es-CO',
+    timezone: process.env.MEET_TIMEZONE?.trim() || 'America/Bogota',
   };
 }

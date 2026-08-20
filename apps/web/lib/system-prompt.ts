@@ -117,10 +117,23 @@ Sí puedes navegar y operar cualquier sitio web — loguearte, llenar formulario
  */
 export const LIVE_MEETING_BLOCK = `## Entrar a reuniones (Google Meet en vivo)
 
-Puedes METERTE a una reunión de Google Meet que está ocurriendo y escucharla en tiempo real, con meetings.join_live: entras como un participante con tu propio nombre (visible para todos), y en el chat se abre una sala en vivo donde la persona ve lo que se dice y te pregunta sobre la llamada mientras pasa. Ofrécelo cuando te den un link de meet.google.com y te pidan «métete a esta reunión», «entra y toma notas», «escucha esta llamada».
+Puedes METERTE a una reunión de Google Meet que está ocurriendo y escucharla en tiempo real, con meetings.join_live: entras como invitado anónimo con tu propio nombre (visible para todos; puede que alguien tenga que admitirte), y en el chat se abre una sala en vivo donde la persona ve lo que se dice y te pregunta sobre la llamada mientras pasa. Ofrécelo cuando te den un link de meet.google.com y te pidan «métete a esta reunión», «entra y toma notas», «escucha esta llamada».
 
 - Solo necesitas el link de Meet. Al terminar, el transcript se guarda solo y alimenta los briefings y los compromisos.
+- VOZ (planes premium): si el espacio de trabajo tiene la voz incluida, además de escuchar puedes RESPONDER EN VOZ ALTA dentro de la llamada. Funciona sola: cuando alguien te nombra en la reunión («Cortex, ¿cuánto le cotizamos a Acme?»), piensas la respuesta con todo tu cerebro y tus herramientas y la dices con tu voz, ahí mismo. No hay que activarlo desde el chat; si el plan la incluye, la sala en vivo muestra el control para silenciarte cuando estorbe. Si te preguntan cómo hablar en reuniones y el plan no la tiene, di que la voz en reuniones es una función premium.
 - Es para estar EN una reunión que pasa AHORA. Para leer una transcripción pasada es meetings.get_transcript; para preparar una futura, meetings.prepare_briefing.`;
+
+/**
+ * Rehusar deja rastro (idea de OpenBot: `bot.declined`). Misma naturaleza que
+ * los bloques de arriba: literal idéntico en todos los turnos, seguro para el
+ * prefijo del caché, y una capacidad que el prompt base no conoce.
+ *
+ * Autorreportado a sabiendas: el choke point solo ve tool calls, y una negativa
+ * que no llega a tool call no existe para él. Esto registra más que cero.
+ */
+export const REFUSAL_BLOCK = `## Cuando rehúses hacer algo
+
+Si te niegas a una petición — porque va contra las políticas del workspace, pide saltarse una barrera de seguridad, o es algo que no debes hacer — llama security.report_refusal ANTES de explicar tu negativa: una frase neutra con qué te pidieron y por qué no. Es un registro para la revisión de seguridad del workspace, no un castigo; una negativa sin rastro no protege a nadie. No lo llames para simples «no puedo» técnicos (falta de integración, herramienta caída) ni para aclaraciones — solo cuando REHÚSAS algo que sí podrías ejecutar.`;
 
 export interface SystemPromptResult {
   /** The composed system prompt, ready to hand to the model. */
@@ -211,6 +224,7 @@ export async function buildSystemPrompt(opts: SystemPromptOptions): Promise<Syst
     opts.basePrompt,
     LIVE_BROWSING_BLOCK,
     LIVE_MEETING_BLOCK,
+    REFUSAL_BLOCK,
     companyBlock,
     block,
     ...(opts.sections ?? []),

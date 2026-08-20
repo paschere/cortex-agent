@@ -1,0 +1,14 @@
+-- Audit-before-act (idea portada de OpenBot, CopilotKit/openbot).
+--
+-- Hasta aquí la fila de auditoría de una llamada se escribía DESPUÉS de
+-- ejecutar: una acción con efectos que reventaba el proceso a medias no dejaba
+-- rastro de haberse intentado, y un rastro que solo contiene éxitos miente por
+-- omisión. `runTool` escribe ahora una fila `attempted` ANTES del handler para
+-- toda llamada cuyo blast radius no sea `read`; la fila `ok`/`error` de siempre
+-- sigue llegando al final. Una `attempted` huérfana = el proceso murió con el
+-- efecto en vuelo.
+--
+-- Los lectores que cuentan trabajo real filtran por status y no cambian:
+-- conversation-grace lee `ok`, frequency excluye `attempted` desde este mismo
+-- cambio. La UI de auditoría las muestra tal cual, que es el objetivo.
+alter type audit_status add value if not exists 'attempted';

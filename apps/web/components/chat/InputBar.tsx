@@ -44,6 +44,7 @@ import {
   Terminal,
   User,
   Wallet,
+  Waves,
   Workflow,
   Wrench,
 } from 'lucide-react';
@@ -52,6 +53,7 @@ import { AttachmentTray } from './AttachmentTray';
 import { ScopePicker, ScopeStrip } from './MemoryScope';
 import { ScreenViewButton, type ScreenViewSession, ScreenViewStrip } from './ScreenView';
 import { VoiceDictation } from './VoiceDictation';
+import { VoiceMode } from './VoiceMode';
 
 interface AgentInfo {
   slug: string;
@@ -265,6 +267,9 @@ export function InputBar({
   // conversation to attach a file to yet.
   const [openFilePicker, setOpenFilePicker] = useState<(() => void) | null>(null);
   const [extras, setExtras] = useState(false);
+  // El modo voz manos-libres: una conversación hablada con Cortex, aparte del
+  // hilo de texto. Se abre desde la fila de herramientas del compositor.
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const registerFilePicker = useCallback(
     (open: () => void) => setOpenFilePicker((prev) => (prev === open ? prev : open)),
     [],
@@ -784,6 +789,15 @@ export function InputBar({
                   getBaseText={() => textRef.current}
                   onText={setComposerText}
                 />
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setVoiceOpen(true)}
+                  title="Modo voz: habla con Cortex y te responde con voz"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-pill px-2.5 text-xs font-medium text-ink-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50"
+                >
+                  <Waves className="h-3.5 w-3.5" /> voz
+                </button>
                 <TeachFlowDialog onCompose={setComposerText} />
                 {screen && <ScreenViewButton session={screen} disabled={disabled} />}
               </>
@@ -814,6 +828,7 @@ export function InputBar({
 
   return (
     <div className="shrink-0 px-4 pb-4 pt-1">
+      {voiceOpen ? <VoiceMode onClose={() => setVoiceOpen(false)} /> : null}
       <div className="mx-auto w-full max-w-3xl">
         {/*
           EL COMPOSITOR VA DENTRO DE LA BANDEJA, no debajo. La bandeja es la

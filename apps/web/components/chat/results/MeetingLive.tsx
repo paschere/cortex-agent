@@ -48,12 +48,27 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 
 export function MeetingLive({ result }: ResultViewProps) {
-  const r = result as { sessionId?: string; meetUrl?: string; ok?: boolean };
+  const r = result as {
+    sessionId?: string;
+    meetUrl?: string;
+    ok?: boolean;
+    voiceEnabled?: boolean;
+  };
   if (!r?.ok || !r.sessionId) return null;
-  return <Room sessionId={r.sessionId} meetUrl={r.meetUrl} />;
+  return (
+    <Room sessionId={r.sessionId} meetUrl={r.meetUrl} voiceEnabled={r.voiceEnabled === true} />
+  );
 }
 
-function Room({ sessionId, meetUrl }: { sessionId: string; meetUrl?: string }) {
+function Room({
+  sessionId,
+  meetUrl,
+  voiceEnabled,
+}: {
+  sessionId: string;
+  meetUrl?: string;
+  voiceEnabled: boolean;
+}) {
   const [status, setStatus] = useState<Status>('joining');
   const [detail, setDetail] = useState<string | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
@@ -167,17 +182,23 @@ function Room({ sessionId, meetUrl }: { sessionId: string; meetUrl?: string }) {
         </span>
         {!dead ? (
           <div className="ml-auto flex items-center gap-1">
-            <button
-              type="button"
-              onClick={toggleMute}
-              title={muted ? 'Cortex está en silencio — activar voz' : 'Cortex puede hablar si lo nombran — silenciar'}
-              className={`inline-flex items-center gap-1 rounded-pill px-2 py-1 text-xs font-medium ${
-                muted ? 'text-ink-faint hover:bg-surface-2' : 'bg-primary-soft text-primary'
-              }`}
-            >
-              {muted ? <MicOff className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-              {muted ? 'Voz en silencio' : 'Voz activa'}
-            </button>
+            {voiceEnabled ? (
+              <button
+                type="button"
+                onClick={toggleMute}
+                title={
+                  muted
+                    ? 'Cortex está en silencio — activar voz'
+                    : 'Si te nombran en la llamada («Cortex, …») responde en voz alta — toca para silenciar'
+                }
+                className={`inline-flex items-center gap-1 rounded-pill px-2 py-1 text-xs font-medium ${
+                  muted ? 'text-ink-faint hover:bg-surface-2' : 'bg-primary-soft text-primary'
+                }`}
+              >
+                {muted ? <MicOff className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                {muted ? 'Voz en silencio' : 'Voz activa'}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={leave}

@@ -16,6 +16,9 @@ export const STATUS_TAG: Record<string, string> = {
   error: 'border-rose/20 bg-rose-soft text-rose',
   confirmation_required: 'border-amber/20 bg-amber-soft text-amber',
   rate_limited: 'border-amber/20 bg-amber-soft text-amber',
+  // La fila de intención (0118): neutra a propósito — siempre viene seguida de
+  // un ok/error de la misma llamada, que es el que lleva el color.
+  attempted: 'border-border bg-surface-2 text-ink-faint',
 };
 
 export const RISK_TAG: Record<string, string> = {
@@ -33,6 +36,9 @@ export const DECISION_TAG: Record<string, string> = {
   // Delegada no es verde. `confirmed` es verde porque una persona miró y dijo
   // que sí; aquí nadie miró, y el color tiene que decirlo.
   delegated: 'border-sky/20 bg-sky-soft text-sky',
+  // El propio agente rehusó antes de actuar (security.report_refusal) — ámbar:
+  // no es un fallo, es un sondeo que quedó registrado.
+  declined: 'border-amber/20 bg-amber-soft text-amber',
 };
 
 export const SURFACE_TAG: Record<string, string> = {
@@ -53,6 +59,7 @@ export const STATUS_LABEL: Record<string, string> = {
   error: 'error',
   confirmation_required: 'pide confirmar',
   rate_limited: 'tope de uso',
+  attempted: 'intento',
 };
 
 export const RISK_LABEL: Record<string, string> = {
@@ -68,6 +75,7 @@ export const DECISION_LABEL: Record<string, string> = {
   flagged: 'marcada',
   blocked: 'bloqueada',
   delegated: 'sin preguntar',
+  declined: 'rehusada',
 };
 
 const NEUTRAL = 'border-border bg-surface-2 text-ink-faint';

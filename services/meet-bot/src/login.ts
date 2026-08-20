@@ -1,26 +1,16 @@
 /**
- * INICIAR SESIÓN UNA VEZ, EN EL PERFIL QUE EL BOT REUSA.
+ * INICIAR SESIÓN UNA VEZ, EN EL PERFIL QUE EL BOT REUSA (modo account).
  *
- * F0 demostró que el invitado anónimo no pasa: Meet corre un chequeo anti-bot
- * al «Solicitar unirse» y lo reprueba. Un usuario AUTENTICADO de Google no
- * pasa por ese filtro — por eso el plan eligió la cuenta real, y por eso este
- * paso existe.
+ * El default de producción es invitado anónimo. Este script queda para el
+ * camino MEET_MODE=account: abre Chrome visible en el perfil persistente y la
+ * persona inicia sesión con la cuenta dedicada del bot. La sesión queda en
+ * disco; el bot la reusa.
  *
- * Abre el mismo perfil persistente que usa el spike, en Chrome visible, en la
- * pantalla de acceso de Google. La persona inicia sesión con la cuenta que va
- * a ser el bot (idealmente una cuenta dedicada, cortex@…), y al terminar la
- * sesión queda escrita en el perfil de disco. El spike, que reusa ese mismo
- * PROFILE_DIR, entra a las reuniones ya logueado.
- *
- * En producción esto NO es un humano frente a una pantalla: es el flujo de
- * secretos del navegador (browser v2) escribiendo la contraseña directo en la
- * página de Google sin que el modelo la vea. Aquí, para el spike, la persona
- * lo hace a mano una vez.
- *
- *     PROFILE_DIR=/tmp/cortex-meet-profile node services/meet-bot/dist/login.js
+ *     PROFILE_DIR=/tmp/cortex-meet-profile pnpm --filter @cortex/meet-bot login
  */
 
-import { chromium } from 'playwright';
+import { chromium } from 'patchright';
+import { chromeLaunchOptions } from './stealth';
 
 const PROFILE_DIR = process.env.PROFILE_DIR || '/tmp/cortex-meet-profile';
 
@@ -31,22 +21,7 @@ async function main(): Promise<void> {
     '[login] cuando termines y veas tu bandeja/cuenta, cierra la ventana o pulsa Ctrl+C aquí.',
   );
 
-  const context = await chromium.launchPersistentContext(PROFILE_DIR, {
-    channel: 'chrome',
-    headless: false,
-    viewport: null,
-    args: [
-      '--no-sandbox',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-features=IsolateOrigins,site-per-process,AutomationControlled',
-      '--start-maximized',
-    ],
-    ignoreDefaultArgs: ['--enable-automation'],
-  });
-
-  await context.addInitScript(`
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-  `);
+  const context = await chromium.launchPersistentContext(PROFILE_DIR, chromeLaunchOptions());
 
   const page = context.pages()[0] || (await context.newPage());
   await page.goto('https://accounts.google.com/', { waitUntil: 'domcontentloaded' });

@@ -48,6 +48,9 @@ async function countSensitiveCalls(db: SupabaseClient, userId: string): Promise<
       .from('audit_events')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
+      // Sin las filas de intención (0118): una llamada con efectos deja
+      // `attempted` + `ok`, y contarla dos veces inflaría esta señal.
+      .neq('status', 'attempted')
       .gte('created_at', since)
       .or(orFilter);
     if (error) return null;

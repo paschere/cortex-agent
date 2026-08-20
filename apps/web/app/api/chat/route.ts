@@ -28,7 +28,12 @@ import {
 } from '@/lib/screen-glance';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { LIVE_BROWSING_BLOCK, buildSystemPrompt } from '@/lib/system-prompt';
+import {
+  LIVE_BROWSING_BLOCK,
+  LIVE_MEETING_BLOCK,
+  REFUSAL_BLOCK,
+  buildSystemPrompt,
+} from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
 import { buildTurnMessages } from '@/lib/turn-messages';
 import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
@@ -969,7 +974,13 @@ export async function POST(req: NextRequest) {
   // LIVE_BROWSING_BLOCK in lib/system-prompt.ts), so it is weighed with the
   // instructions it extends — leaving it out would understate every turn by
   // exactly its length.
-  recorder.part('instructions', `${agent.systemPrompt}\n\n${LIVE_BROWSING_BLOCK}`);
+  // Los tres bloques-literal viajan pegados al prompt base (ver
+  // buildSystemPrompt); pesarlos aquí evita subestimar cada turno por
+  // exactamente su longitud. El de reuniones faltaba desde que se añadió.
+  recorder.part(
+    'instructions',
+    `${agent.systemPrompt}\n\n${LIVE_BROWSING_BLOCK}\n\n${LIVE_MEETING_BLOCK}\n\n${REFUSAL_BLOCK}`,
+  );
   recorder.part('memory', memoryBlock);
   // Su propia etiqueta y no sumado a 'memory': lo escribe un admin una vez y lo
   // paga todo el mundo en cada turno, así que si un día pesa demasiado la

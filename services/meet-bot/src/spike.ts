@@ -26,8 +26,9 @@
  */
 
 import { writeFileSync } from 'node:fs';
-import { chromium } from 'playwright';
+import { chromium } from 'patchright';
 import { AUDIO_TAP_SCRIPT } from './audio-tap';
+import { chromeLaunchOptions } from './stealth';
 
 const MEET_URL = process.env.MEET_URL;
 const BOT_NAME = process.env.BOT_NAME || 'Cortex (notas)';
@@ -66,34 +67,12 @@ async function main(): Promise<void> {
   const HEADFUL = process.env.HEADFUL !== '0';
   const profileDir = process.env.PROFILE_DIR || '/tmp/cortex-meet-profile';
   const context = await chromium.launchPersistentContext(profileDir, {
-    channel: 'chrome',
+    ...chromeLaunchOptions({
+      locale: 'es-CO',
+      timezone: 'America/Bogota',
+    }),
     headless: !HEADFUL,
-    permissions: ['microphone', 'camera'],
-    locale: 'es-CO',
-    timezoneId: 'America/Bogota',
-    viewport: { width: 1280, height: 800 },
-    args: [
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-      '--use-fake-ui-for-media-stream',
-      '--autoplay-policy=no-user-gesture-required',
-      // Quita el infobar y la marca de automatización que Meet sniffa.
-      '--disable-blink-features=AutomationControlled',
-      '--disable-features=IsolateOrigins,site-per-process,AutomationControlled',
-      '--start-maximized',
-    ],
-    ignoreDefaultArgs: ['--enable-automation'],
   });
-
-  // Borrar las huellas que quedan aunque el flag esté puesto: navigator.webdriver
-  // y el objeto de automatización. Se instala ANTES de que corra cualquier
-  // script de la página, para que Meet lea un navegador normal.
-  await context.addInitScript(`
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    window.chrome = window.chrome || { runtime: {} };
-    Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
-    Object.defineProperty(navigator, 'languages', { get: () => ['es-CO','es','en'] });
-  `);
 
   const chunks: Buffer[] = [];
   let peakRms = 0;

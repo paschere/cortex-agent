@@ -1,34 +1,23 @@
-import { type BrowserContext, type Page, chromium } from 'playwright';
+import { type BrowserContext, type Page, chromium } from 'patchright';
 import { AUDIO_TAP_SCRIPT } from './audio-tap';
 import type { Config } from './config';
 import { DeepgramStream, type Transcript } from './deepgram';
 import { ensureGoogleSession } from './google-login';
+import { chromeLaunchOptions, evaluateInMain, humanPause, looksKicked } from './stealth';
 import { VoiceBrain } from './voice-brain';
 import { VOICE_INJECT_SCRIPT } from './voice-inject';
 
 /**
- * UNA REUNIÓN VIVA: el bot autenticado dentro de un Meet, escuchando.
+ * UNA REUNIÓN VIVA: el bot dentro de un Meet, escuchando.
  *
- * ===========================================================================
- * LO QUE F0 DEJÓ PROBADO, Y AQUÍ ES DOCTRINA
- * ===========================================================================
- * El spike respondió las tres preguntas y sus respuestas son las reglas de
- * esta clase:
- *   1. El invitado anónimo NO entra — Meet corre un anti-bot al «Solicitar
- *      unirse». Se entra AUTENTICADO, con el perfil del tenant ya logueado.
- *   2. Contra la detección de automatización: launchPersistentContext + Chrome
- *      real + máscara de navigator.webdriver + sin --enable-automation.
- *   3. El audio de la sala se saca con el tap de Web Audio (audio-tap.ts), sin
- *      PulseAudio. RMS 0→0.08 al hablar, medido.
+ * Entra como INVITADO anónimo (default). Google quema las cuentas que se
+ * loguean desde un datacenter y las saca de la llamada; un guest no tiene
+ * cuenta que marcar. Contra la detección: Patchright (Chrome real, headed,
+ * sin Runtime.enable) + perfil efímero + fingerprint de persona (locale,
+ * timezone, viewport real). El audio se toca DESPUÉS de estar dentro, para
+ * no regalar CDP en la pre-sala.
  *
- * ===========================================================================
- * UN PERFIL POR TENANT, IGUAL QUE EL NAVEGADOR
- * ===========================================================================
- * `<profilesDir>/<owner>` — la misma forma que services/browser/profiles.ts,
- * y por la misma razón: la sesión de Google del bot de una empresa es suya y
- * no la ve otra. El login de esa cuenta se hace una vez con el flujo de
- * secretos (la persona escribe la clave en la página de Google sin que el
- * modelo la vea); aquí solo se reusa.
+ * MEET_MODE=account reusa el camino viejo (sesión de Google del tenant).
  */
 export interface MeetSessionEvents {
   onTranscript: (t: Transcript) => void;
@@ -36,6 +25,32 @@ export interface MeetSessionEvents {
 }
 
 export type MeetStatus = 'joining' | 'waiting-admit' | 'live' | 'ended' | 'failed';
+
+const JOIN_BUTTON =
+  'button:has-text("Ask to join"), button:has-text("Solicitar unirse"), button:has-text("Request to join"), button:has-text("Join now"), button:has-text("Unirte ahora"), button:has-text("Unirse ahora"), button:has-text("Join anyway"), button:has-text("Unirse")';
+
+const LEAVE_BUTTON =
+  '[aria-label*="Leave call"], [aria-label*="Abandonar"], button[aria-label*="Salir"], [aria-label*="Leave meeting"]';
+
+const NAME_FIELD =
+  'input[aria-label*="name" i], input[aria-label*="nombre" i], input[placeholder*="name" i], input[placeholder*="nombre" i], input[type="text"]';
+
+const DISMISS_BUTTONS = [
+  'Continue as guest',
+  'Continuar como invitado',
+  'Join as guest',
+  'Unirse como invitado',
+  'Got it',
+  'Entendido',
+  'Dismiss',
+  'Cerrar',
+  'Not now',
+  'Ahora no',
+  'Use the browser',
+  'Usar el navegador',
+  'Join from your browser',
+  'Unirse desde el navegador',
+];
 
 export class MeetSession {
   private context: BrowserContext | null = null;
@@ -78,83 +93,50 @@ export class MeetSession {
   private async peek(page: Page): Promise<string> {
     return (await page
       .evaluate(
-        'document.body ? document.body.innerText.slice(0, 400).replace(/\\n+/g, " | ") : "(vacío)"',
+        'document.body ? document.body.innerText.slice(0, 800).replace(/\\n+/g, " | ") : "(vacío)"',
       )
       .catch(() => '(no se pudo leer)')) as string;
   }
 
   async join(): Promise<void> {
-    // En modo guest, un perfil EFÍMERO por sesión: sin cookies de ninguna
-    // cuenta, un invitado limpio. En modo cuenta, el perfil persistente del
-    // tenant (con la sesión de Google). El guest no arrastra identidad, que es
-    // justo lo que lo hace pasar donde el login de cuenta rebota.
     const guest = this.config.mode === 'guest';
     const profileDir = guest
       ? `${this.config.profilesDir}/guest_${this.id}`
       : `${this.config.profilesDir}/${this.owner.replace(/[^A-Za-z0-9_-]/g, '_')}`;
-    // El proxy residencial, si está configurado — por-contexto, como recomienda
-    // la industria, para aislar el tráfico del bot y poder rotarlo. Es lo que
-    // hace que Meet acepte al bot desde Railway (ver config.proxyServer).
-    const proxy = this.config.proxyServer
-      ? {
-          server: this.config.proxyServer,
-          ...(this.config.proxyUsername ? { username: this.config.proxyUsername } : {}),
-          ...(this.config.proxyPassword ? { password: this.config.proxyPassword } : {}),
-        }
-      : undefined;
 
-    this.context = await chromium.launchPersistentContext(profileDir, {
-      channel: 'chrome',
-      ...(proxy ? { proxy } : {}),
-      // NUNCA headless: Meet degrada a los clientes headless. En Railway hay
-      // Xvfb (DISPLAY=:99) que hace a Chrome headful sin abrir ventana; en un
-      // Mac se ve la ventana. headless solo si de verdad no hay display Y no se
-      // pidió headful — un caso que en la práctica no ocurre en producción.
-      headless: false,
-      permissions: ['microphone', 'camera'],
-      viewport: { width: 1280, height: 800 },
-      args: [
-        '--no-sandbox',
-        '--disable-dev-shm-usage',
-        '--use-fake-ui-for-media-stream',
-        '--autoplay-policy=no-user-gesture-required',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-features=IsolateOrigins,site-per-process,AutomationControlled',
-      ],
-      ignoreDefaultArgs: ['--enable-automation'],
-    });
-    await this.context.addInitScript(
-      "Object.defineProperty(navigator,'webdriver',{get:()=>undefined}); window.chrome=window.chrome||{runtime:{}};",
+    console.log(
+      `[cortex-meet] ${this.id} chrome guest=${guest} proxy=${Boolean(this.config.proxyServer)} voice=${this.voiceEnabled}`,
     );
-    // Suplantar el micro ANTES de que Meet lo pida, solo si la voz está activa.
+
+    this.context = await chromium.launchPersistentContext(
+      profileDir,
+      chromeLaunchOptions({
+        proxyServer: this.config.proxyServer,
+        proxyUsername: this.config.proxyUsername,
+        proxyPassword: this.config.proxyPassword,
+        locale: this.config.locale,
+        timezone: this.config.timezone,
+      }),
+    );
+    // La voz engancha getUserMedia ANTES de que Meet lo pida. Solo con voz:
+    // el hook mismo es una huella, no se instala si solo vamos a escuchar.
     if (this.voiceEnabled) await this.context.addInitScript(VOICE_INJECT_SCRIPT);
 
     const page = this.context.pages()[0] || (await this.context.newPage());
     this.page = page;
 
-    // El puente por el que el tap manda audio + hablante a este proceso.
     this.deepgram = new DeepgramStream(this.config.deepgramKey, this.config.sttLanguage, (t) => {
       if (t.isFinal) {
         this.recent.push(t);
         if (this.recent.length > 200) this.recent.shift();
-        // Si le hablaron a Cortex, la voz decide (detrás del flag).
         if (this.voice) void this.voice.onFinalLine(t);
       }
       this.events.onTranscript(t);
     });
     this.deepgram.start();
-    await this.context.exposeBinding(
-      '__cortexAudioChunk',
-      (_src, payload: { b64: string; speaker: string | null }) => {
-        this.deepgram?.setSpeaker(payload.speaker);
-        if (payload.b64) this.deepgram?.push(Buffer.from(payload.b64, 'base64'));
-      },
-    );
 
     this.setStatus('joining');
 
-    // Modo cuenta: asegurar la sesión de Google. Modo guest: nada de login —
-    // se entra anónimo, que es lo que evita el anti-bot de cuentas.
     if (!guest) {
       const login = await ensureGoogleSession(this.context, page, {
         email: this.config.googleEmail ?? undefined,
@@ -168,69 +150,65 @@ export class MeetSession {
     }
 
     await page.goto(this.meetUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.waitForTimeout(4_000);
+    await humanPause(1_200, 2_400);
+    await this.dismissInterstitials(page);
 
-    // Apagar cámara y micro en la pre-sala. Selectores laxos y en dos idiomas;
-    // se verifica el ESTADO (aria-label cambia a «Turn on…» al apagar) para no
-    // volver a encenderlos por clickear dos veces.
-    await this.muteDevices(page);
-    const nameField = page.locator('input[type="text"]').first();
-    if (await nameField.isVisible().catch(() => false)) {
-      await nameField.pressSequentially(this.botName, { delay: 30 }).catch(() => undefined);
+    const kickedOnArrival = await this.peek(page);
+    if (looksKicked(kickedOnArrival)) {
+      this.setStatus('failed', `Meet rebotó al llegar. Pantalla: ${kickedOnArrival}`);
+      await this.leave();
+      return;
     }
-    const joinBtn = page
-      .locator(
-        'button:has-text("Ask to join"), button:has-text("Solicitar unirse"), button:has-text("Join now"), button:has-text("Unirte ahora")',
-      )
-      .first();
-    await joinBtn.click({ timeout: 5_000 }).catch(() => undefined);
+
+    await this.muteDevices(page);
+    await this.fillGuestName(page);
+    await humanPause(400, 900);
+
+    const joinBtn = page.locator(JOIN_BUTTON).first();
+    const joinVisible = await joinBtn
+      .waitFor({ state: 'visible', timeout: 20_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!joinVisible) {
+      this.setStatus('failed', `No vi el botón de unirse. Pantalla: ${await this.peek(page)}`);
+      await this.leave();
+      return;
+    }
+    await joinBtn.click({ timeout: 8_000 }).catch(() => undefined);
     this.setStatus('waiting-admit');
 
-    // Esperar admisión (hasta 2 min). La sala aparece con el botón de colgar.
     const deadline = Date.now() + 120_000;
     let inRoom = false;
     while (Date.now() < deadline) {
       inRoom = await page
-        .locator(
-          '[aria-label*="Leave call"], [aria-label*="Abandonar"], button[aria-label*="Salir"]',
-        )
+        .locator(LEAVE_BUTTON)
         .first()
         .isVisible()
         .catch(() => false);
-      // Si Meet nos echó (anti-bot, o el anfitrión rechazó), no insistir.
-      const bounced = await page
-        .getByText(/no puedes unirte|can.t join|removed from the meeting/i)
-        .first()
-        .isVisible()
-        .catch(() => false);
-      if (inRoom || bounced) {
-        if (bounced) {
-          this.setStatus('failed', `Meet rebotó. Pantalla: ${await this.peek(page)}`);
-          return;
-        }
-        break;
+      const screen = await this.peek(page);
+      if (inRoom) break;
+      if (looksKicked(screen)) {
+        this.setStatus('failed', `Meet rebotó. Pantalla: ${screen}`);
+        await this.leave();
+        return;
       }
       await page.waitForTimeout(3_000);
     }
     if (!inRoom) {
       this.setStatus('failed', `No entré en 2 min. Pantalla: ${await this.peek(page)}`);
+      await this.leave();
       return;
     }
 
-    // Ya dentro: Meet a veces entra con la cámara encendida aunque se apagara en
-    // la pre-sala. Se apaga otra vez, en la sala, donde los atajos sí aplican.
-    // La cámara siempre; el micro solo sin voz (ver muteDevices).
     await this.muteDevices(page);
-    await page.keyboard.press('Control+e').catch(() => undefined); // cámara (Meet)
-    if (!this.voiceEnabled) await page.keyboard.press('Control+d').catch(() => undefined); // micro
+    await page.keyboard.press('Control+e').catch(() => undefined);
+    if (!this.voiceEnabled) await page.keyboard.press('Control+d').catch(() => undefined);
 
-    await page.evaluate(AUDIO_TAP_SCRIPT).catch(() => undefined);
-    await page.evaluate('window.__cortexTap && window.__cortexTap.start()').catch(() => undefined);
+    // CDP (binding + tap) recién aquí: si se instala en la pre-sala, Meet ve
+    // el binding y echa al invitado antes de admitirlo.
+    await this.armAudioTap(page);
 
     if (this.voiceEnabled) {
-      // La voz: suplantar el micro (se instaló como initScript, aquí solo se
-      // arma el cerebro que decide cuándo hablar). speak/mute cruzan a la
-      // página; la reproducción ocurre en voice-inject.
       this.voice = new VoiceBrain(this.owner, this.id, {
         config: this.config,
         recentTranscript: () => this.recent,
@@ -242,38 +220,82 @@ export class MeetSession {
                   window as unknown as { __cortexVoice?: { speak: (b: string) => Promise<number> } }
                 ).__cortexVoice?.speak(b64),
               mp3B64,
+              undefined,
+              false,
             )
             .catch(() => undefined);
         },
         mute: async () => {
-          await page
-            .evaluate('window.__cortexVoice && window.__cortexVoice.mute()')
-            .catch(() => undefined);
+          await evaluateInMain(page, 'window.__cortexVoice && window.__cortexVoice.mute()').catch(
+            () => undefined,
+          );
         },
         unmute: async () => {
-          await page
-            .evaluate('window.__cortexVoice && window.__cortexVoice.unmute()')
-            .catch(() => undefined);
+          await evaluateInMain(page, 'window.__cortexVoice && window.__cortexVoice.unmute()').catch(
+            () => undefined,
+          );
         },
       });
     }
     this.setStatus('live');
-
-    // Vigilar que sigamos dentro: si el bot es expulsado o la reunión termina,
-    // la sala desaparece y la sesión se cierra sola.
     void this.watchAlive(page);
+  }
+
+  private async armAudioTap(page: Page): Promise<void> {
+    if (!this.context) return;
+    await this.context.exposeBinding(
+      '__cortexAudioChunk',
+      (_src, payload: { b64: string; speaker: string | null }) => {
+        this.deepgram?.setSpeaker(payload.speaker);
+        if (payload.b64) this.deepgram?.push(Buffer.from(payload.b64, 'base64'));
+      },
+    );
+    await evaluateInMain(page, AUDIO_TAP_SCRIPT).catch(() => undefined);
+    await evaluateInMain(page, 'window.__cortexTap && window.__cortexTap.start()').catch(
+      () => undefined,
+    );
+  }
+
+  private async fillGuestName(page: Page): Promise<void> {
+    const nameField = page.locator(NAME_FIELD).first();
+    const visible = await nameField
+      .waitFor({ state: 'visible', timeout: 12_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!visible) return;
+    await nameField.click().catch(() => undefined);
+    await nameField.fill('').catch(() => undefined);
+    await nameField
+      .pressSequentially(this.botName, { delay: 70 + Math.random() * 50 })
+      .catch(() => undefined);
+  }
+
+  private async dismissInterstitials(page: Page): Promise<void> {
+    for (const label of DISMISS_BUTTONS) {
+      const btn = page.getByRole('button', { name: label }).first();
+      if (await btn.isVisible().catch(() => false)) {
+        await btn.click({ timeout: 1_500 }).catch(() => undefined);
+        await humanPause(300, 700);
+      }
+    }
   }
 
   private async watchAlive(page: Page): Promise<void> {
     while (this.status === 'live') {
       await page.waitForTimeout(5_000);
       const alive = await page
-        .locator('[aria-label*="Leave call"], [aria-label*="Abandonar"]')
+        .locator(LEAVE_BUTTON)
         .first()
         .isVisible()
         .catch(() => false);
-      if (!alive) {
-        this.setStatus('ended', 'La reunión terminó o el bot salió.');
+      const screen = await this.peek(page);
+      if (!alive || looksKicked(screen)) {
+        this.setStatus(
+          'ended',
+          looksKicked(screen)
+            ? `Google nos sacó de la llamada. Pantalla: ${screen}`
+            : 'La reunión terminó o el bot salió.',
+        );
         await this.leave();
         return;
       }
@@ -311,7 +333,6 @@ export class MeetSession {
     await this.context?.close().catch(() => undefined);
     this.context = null;
     this.page = null;
-    // El perfil efímero del guest no sobrevive a la sesión.
     if (this.config.mode === 'guest') {
       try {
         const { rmSync } = await import('node:fs');

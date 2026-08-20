@@ -8,8 +8,8 @@ import { hashInput, writeAuditEvent } from './audit.js';
 import { consumeToken } from './rate-limit.js';
 import { hasConversationGrace } from './security/conversation-grace.js';
 import {
+  blockExplanation,
   evaluate as evaluateSecurity,
-  explainBlock,
   explainFlag,
   isIncident,
   riskAuditFields,
@@ -104,6 +104,8 @@ export async function runTool<I, O>(
     input: parsed.data,
     db: ctx.db,
     userId: ctx.userId,
+    organizationId: ctx.organizationId,
+    agentId: ctx.agentId,
     surface: ctx.surface,
     confirmed: opts.confirmed,
   });
@@ -142,7 +144,8 @@ export async function runTool<I, O>(
       }),
     ]);
     throw new SecurityBlockedError(
-      explainBlock(evaluation.classification),
+      // Si quien paró fue una regla CEL del tenant, el mensaje la nombra.
+      blockExplanation(evaluation),
       tool.id,
       evaluation.classification.riskLevel,
       evaluation.classification.signals,
@@ -306,6 +309,34 @@ export async function runTool<I, O>(
       }
     }
   }
+  // ---------------------------------------------------------------------------
+  // AUDIT-BEFORE-ACT (portado de OpenBot). Para una llamada con efectos, la
+  // intención queda escrita ANTES de ejecutar el handler: una acción permitida
+  // que luego revienta a medias sigue constando en la secuencia, y un rastro
+  // que solo contiene éxitos no puede responder «¿lo intentó?» — miente por
+  // omisión justo cuando más importa.
+  //
+  // Solo blast radius con efectos (escrituras, envíos, bulk): una lectura que
+  // falla ya deja su fila `error` después, y pagar un viaje extra de base de
+  // datos en cada lectura no compra ninguna verdad nueva. Se espera (await) a
+  // propósito: la garantía es «la fila existe antes de que el efecto ocurra»,
+  // y un insert en vuelo no es una fila.
+  // ---------------------------------------------------------------------------
+  if (evaluation.classification.blastRadius !== 'read') {
+    await writeAuditEvent({
+      db: ctx.db,
+      userId: ctx.userId,
+      agentId: ctx.agentId,
+      conversationId: ctx.conversationId,
+      toolId: tool.id,
+      input,
+      status: 'attempted',
+      latencyMs: Math.round(performance.now() - t0),
+      ...(viaConversationGrace ? { metadata: { reason: 'conversation_grace' } } : {}),
+      ...riskFinal,
+    });
+  }
+
   let result: O;
   try {
     const exec = () => tool.handler(parsed.data, ctx) as Promise<O>;

@@ -209,6 +209,9 @@ async function loadAuditSignals(organizationId: string, userId: string): Promise
     .from('audit_events')
     .select('tool_id, status, created_at')
     .eq('user_id', userId)
+    // Sin las filas de intención (0118): duplicarían cada escritura al derivar
+    // hábitos de uso.
+    .neq('status', 'attempted')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(3000);

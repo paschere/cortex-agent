@@ -49,7 +49,11 @@ export type RiskSignal =
   | 'personal-id-in-payload'
   | 'off-hours'
   | 'high-frequency'
-  | 'unattended';
+  | 'unattended'
+  // Una regla CEL del tenant decidió (action-policy.ts): `policy-denied` paró
+  // la llamada en `enforce`; `policy-dry-run` la habría parado y la dejó pasar.
+  | 'policy-denied'
+  | 'policy-dry-run';
 
 export interface Classification {
   riskLevel: RiskLevel;

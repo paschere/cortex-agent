@@ -77,6 +77,9 @@ export async function GET(req: NextRequest) {
     // The turn's own summary row, not a tool. Excluded so it cannot be matched
     // to an invocation.
     .neq('tool_id', '__agent_turn')
+    // La fila de intención (0118) también: casaría como una invocación fantasma
+    // junto a la fila de resultado de la misma llamada.
+    .neq('status', 'attempted')
     .order('created_at', { ascending: true })
     .limit(MAX_TOOL_ROWS);
 

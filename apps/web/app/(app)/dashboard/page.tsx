@@ -104,6 +104,9 @@ export default async function DashboardPage() {
         // Both are bookkeeping rows, not tool calls: counting them would make
         // approving something look like running two things.
         .not('tool_id', 'in', '("__agent_turn","__approval_decision")')
+        // La fila de intención (0118) precede a la de resultado de la MISMA
+        // llamada; contarla haría parecer dos acciones donde hubo una.
+        .neq('status', 'attempted')
         .gte('created_at', todayStart.toISOString()),
       sb.from('growth_signals').select('id', { count: 'exact', head: true }).eq('status', 'new'),
       sb

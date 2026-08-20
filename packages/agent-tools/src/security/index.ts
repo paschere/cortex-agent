@@ -1,7 +1,24 @@
-// Side-effect import: registers security.review_action / security.recent_events.
+// Side-effect import: registers security.review_action / security.recent_events /
+// security.report_refusal / security.get_action_policy / security.set_action_policy.
 import './tools';
 
-export { securityReviewAction, securityRecentEvents } from './tools';
+export {
+  securityReviewAction,
+  securityRecentEvents,
+  securityReportRefusal,
+  securityGetActionPolicy,
+  securitySetActionPolicy,
+} from './tools';
+
+// La política CEL por tenant (portada de OpenBot): reglas deny/allow encima de
+// la matriz de riesgo, con dry-run. Ver action-policy.ts.
+export { evaluateActionPolicy, parseActionPolicy } from './action-policy';
+export type {
+  ActionPolicy,
+  ActionPolicyContext,
+  ActionPolicyDecision,
+  ActionPolicyMode,
+} from './action-policy';
 
 export {
   classify,
@@ -40,6 +57,7 @@ export {
   riskAuditFields,
   isIncident,
   writeSecurityEvent,
+  blockExplanation,
 } from './enforce';
 export type { SecurityEvaluation, RiskAuditFields, AuditDecision } from './enforce';
 
@@ -52,7 +70,14 @@ export {
   FREQUENCY_CACHE_TTL_MS,
 } from './frequency';
 
-export { loadPolicy, policyFromRows, resetPolicyCache, POLICY_CACHE_TTL_MS } from './store';
+export {
+  loadPolicy,
+  loadActionPolicy,
+  policyFromRows,
+  actionPolicyFromRows,
+  resetPolicyCache,
+  POLICY_CACHE_TTL_MS,
+} from './store';
 
 // El mandato (migración 0099): la excepción de un cliente sobre la doctrina de
 // la casa. `applyMandate` es puro y corre DESPUÉS de `decide()`; la lectura y la

@@ -92,6 +92,8 @@ export async function fetchToolUsage(sb: SupabaseClient): Promise<UsageReport> {
     .select('tool_id, status, created_at')
     .gte('created_at', since)
     .neq('tool_id', AGENT_TURN_TOOL_ID)
+    // Sin las filas de intención (0118): attempted + ok son UNA llamada.
+    .neq('status', 'attempted')
     .order('created_at', { ascending: false })
     .limit(USAGE_SCAN_LIMIT);
 

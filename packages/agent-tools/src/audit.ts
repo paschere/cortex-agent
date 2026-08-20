@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto';
 import { type UUID, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type AuditStatus = 'ok' | 'error' | 'rate_limited' | 'confirmation_required';
+/**
+ * `attempted` (migración 0118): la fila de intención que `runTool` escribe
+ * ANTES de ejecutar una llamada con efectos — audit-before-act. Siempre viene
+ * seguida de una fila `ok` o `error` de la misma llamada; una `attempted`
+ * huérfana significa que el proceso murió con el efecto en vuelo, que es
+ * exactamente el caso que esta fila existe para no perder.
+ */
+export type AuditStatus = 'ok' | 'error' | 'rate_limited' | 'confirmation_required' | 'attempted';
 
 /**
  * See migration 0042 — why a call was allowed, gated, flagged or refused —

@@ -1,17 +1,16 @@
 /**
- * HABLAR: texto → voz, por Deepgram (API v2 /speak, modelos Flux).
+ * HABLAR: texto → voz, por Deepgram (Aura-2 TTS, endpoint /v1/speak).
  *
- * Un solo proveedor para oír y hablar (Aura/Flux STT+TTS, más barato que
- * ElevenLabs y una sola llave). La v2 devuelve audio ya codificado; se pide
- * mp3 porque el navegador lo decodifica con `decodeAudioData` sin que nadie
- * arme un PCM a mano (voice-inject.ts), y porque es lo que el ejemplo del
- * dueño usa:
+ * Un solo proveedor para oír y hablar (Deepgram para STT y TTS: más barato que
+ * ElevenLabs y una sola llave). Devuelve audio ya codificado; se pide el
+ * contenedor por defecto (mp3/wav) porque el navegador lo decodifica con
+ * `decodeAudioData` sin que nadie arme un PCM a mano (voice-inject.ts):
  *
- *     POST https://api.deepgram.com/v2/speak?model=flux-hannah-en&speed=1
+ *     POST https://api.deepgram.com/v1/speak?model=aura-2-celeste-es&speed=1
  *
- * La voz se elige por variable (MEET_TTS_VOICE). El default es un modelo Flux;
- * para reuniones en español, ponle un modelo Flux en español. La velocidad es
- * ajustable (MEET_TTS_SPEED) — 1 es natural.
+ * La voz se elige por variable (MEET_TTS_VOICE). El default es `aura-2-celeste-es`,
+ * una voz de Aura-2 en español — la que elegimos para las reuniones. La
+ * velocidad es ajustable (MEET_TTS_SPEED); 1 es natural.
  */
 
 const DEFAULT_VOICE = process.env.MEET_TTS_VOICE || 'aura-2-celeste-es';

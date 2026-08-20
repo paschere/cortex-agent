@@ -1,5 +1,7 @@
+import { evaluate as celEvaluate } from 'cel-js';
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { evaluateActionPolicy, parseActionPolicy } from './action-policy';
 import { applyMandate } from './mandate';
 import { loadMandates } from './mandate-store';
 import {
@@ -11,8 +13,9 @@ import {
   explainBlock,
   explainConfirm,
   explainFlag,
+  familyOf,
 } from './policy';
-import { loadPolicy } from './store';
+import { loadActionPolicy, loadPolicy, resetPolicyCache } from './store';
 
 const SURFACES = ['web', 'mcp', 'schedule'] as const;
 const LEVELS = ['low', 'medium', 'high', 'critical'] as const;
@@ -70,7 +73,10 @@ export const securityReviewAction = registerTool({
   }),
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
-    const policy = await loadPolicy(ctx.db);
+    const [policy, actionPolicy] = await Promise.all([
+      loadPolicy(ctx.db, ctx.organizationId),
+      loadActionPolicy(ctx.db, ctx.organizationId),
+    ]);
     const surface = (input.surface ?? ctx.surface ?? 'web') as Surface;
     const payload = {
       ...(input.input ?? {}),
@@ -108,8 +114,33 @@ export const securityReviewAction = registerTool({
       surface,
       mandates,
     });
-    const decision = outcome.decision;
+    let decision = outcome.decision;
     const delegated = outcome.mandate !== null && doctrine !== decision;
+
+    // Un dry-run que ignora la política CEL es un dry-run que miente — el
+    // mismo argumento que con los mandatos, en la otra dirección.
+    let policyNote: string | null = null;
+    if (actionPolicy) {
+      const cel = evaluateActionPolicy(actionPolicy, {
+        tool: { id: input.toolId, family: familyOf(input.toolId) },
+        surface,
+        user: { id: ctx.userId },
+        agent: { id: ctx.agentId ?? '' },
+        risk: {
+          level: classification.riskLevel,
+          sensitivity: classification.sensitivity,
+          blastRadius: classification.blastRadius,
+          signals: classification.signals,
+        },
+        confirmed: false,
+      });
+      if (!cel.allowed && cel.mode === 'enforce') {
+        decision = 'block';
+        policyNote = cel.reason;
+      } else if (!cel.allowed) {
+        policyNote = `**Policy (dry-run):** rule \`${cel.matched ?? 'default deny'}\` would refuse this once the policy is switched to enforce.`;
+      }
+    }
 
     // Anything above low risk is recorded even when it sails through — that is
     // the whole posture: visible, not stopped.
@@ -117,7 +148,8 @@ export const securityReviewAction = registerTool({
 
     const explanation =
       decision === 'block'
-        ? explainBlock(classification)
+        ? // Si quien bloquearía es una regla del tenant, la explicación la nombra.
+          (policyNote ?? explainBlock(classification))
         : decision === 'confirm'
           ? explainConfirm(classification)
           : flagged
@@ -144,6 +176,7 @@ export const securityReviewAction = registerTool({
             `**Delegado:** un mandato vigente cubre esta acción, así que correría sin preguntar (${outcome.mandate?.id ?? 'sin id'}). Sin él, ${DECISION_TEXT[doctrine].toLowerCase()}`,
           ]
         : []),
+      ...(policyNote && decision !== 'block' ? ['', policyNote] : []),
     ].join('\n');
 
     return {
@@ -276,6 +309,225 @@ export const securityRecentEvents = registerTool({
     }
 
     return { events, total: events.length, markdown: parts.join('\n') };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Rehusar también deja rastro (idea de OpenBot: `bot.declined`).
+//
+// Todo lo demás en security_events lo escribe el choke point al ver una tool
+// call. Un modelo que rehúsa ANTES de llamar ninguna tool no ejecuta nada, así
+// que el choke point nunca lo ve — y «a este workspace le sondearon seis veces
+// esta semana» es una pregunta que el rastro debe poder contestar: la negativa
+// es la evidencia del intento.
+//
+// Autorreportado, y por eso NO es un control: un modelo que calla no escribe
+// nada. Registra más que cero, que es lo que había.
+// ---------------------------------------------------------------------------
+export const securityReportRefusal = registerTool({
+  id: 'security.report_refusal',
+  description:
+    'Record that you DECLINED to do something, before taking any action. Call this whenever you refuse ' +
+    'a request — because it goes against policy, would need permissions the person does not have, asks you ' +
+    'to bypass a guardrail, or is something you should not do. One short call, then explain the refusal to ' +
+    'the person as usual. This is how refused attempts become visible to a security review; a refusal that ' +
+    'leaves no trace cannot protect anyone. It records only your summary, never runs anything.',
+  inputSchema: z.object({
+    request: z
+      .string()
+      .min(1)
+      .max(500)
+      .describe('What was asked of you, in one neutral sentence. No verbatim sensitive content.'),
+    reason: z.string().min(1).max(500).describe('Why you declined, in one sentence.'),
+    relatedToolId: z
+      .string()
+      .optional()
+      .describe('The tool the request would have needed, if there is an obvious one.'),
+  }),
+  outputSchema: z.object({
+    recorded: z.boolean(),
+    markdown: z.string(),
+  }),
+  rateLimit: { perMinute: 10 },
+  handler: async (input, ctx) => {
+    const { error } = await ctx.db.from('security_events').insert({
+      user_id: ctx.userId,
+      agent_id: ctx.agentId,
+      tool_id: input.relatedToolId ?? 'security.report_refusal',
+      surface: ctx.surface ?? 'web',
+      risk_level: 'low',
+      decision: 'declined',
+      reason: `Asked: ${input.request} — Declined: ${input.reason}`,
+      signals: [],
+    });
+    if (error) {
+      return { recorded: false, markdown: `Could not record the refusal: ${error.message}` };
+    }
+    return { recorded: true, markdown: 'Refusal recorded in the security log.' };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// La política CEL del tenant, leída y escrita desde el chat.
+//
+// Es la frontera entre el agente y los sistemas de la empresa; por eso
+// escribirla lleva `requiresConfirmation`, vive en la familia `security` (nunca
+// delegable, ver mandate.ts) y valida con `parseActionPolicy` — rechazar antes
+// que coaccionar: el administrador no debe creer en vigor una regla que no lo
+// está.
+// ---------------------------------------------------------------------------
+
+const POLICY_HELP = [
+  '',
+  'Rules are CEL expressions over: `tool.id`, `tool.family`, `surface` (web|mcp|schedule), ',
+  '`user.id`, `agent.id`, `confirmed`, `risk.level` (low|medium|high|critical), `risk.sensitivity`, ',
+  '`risk.blastRadius` (read|internal_write|external_send|bulk), `risk.signals` (list). ',
+  'Helpers: `contains(x, "sub")` (case-insensitive, works on lists), `matches(x, "^regex$")`. ',
+  'Examples: `tool.family == "payments"` · `risk.blastRadius == "external_send" && surface == "schedule"` ',
+  '· `contains(risk.signals, "compensation-in-payload")`.',
+].join('');
+
+export const securityGetActionPolicy = registerTool({
+  id: 'security.get_action_policy',
+  description:
+    'Read the workspace action policy — the CEL deny/allow rules evaluated on every tool call, on top of ' +
+    'the built-in guardrails. Shows the mode (dry-run records what WOULD be refused without stopping ' +
+    'anything; enforce refuses) and every rule. Returns null when the workspace has not written one.',
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    policy: z
+      .object({ mode: z.enum(['dry-run', 'enforce']), deny: z.array(z.string()), allow: z.array(z.string()) })
+      .nullable(),
+    markdown: z.string(),
+  }),
+  rateLimit: { perMinute: 20 },
+  handler: async (_input, ctx) => {
+    const { data, error } = await ctx.db
+      .from('security_policies')
+      .select('value, updated_at')
+      .eq('key', 'action_policy')
+      .maybeSingle();
+    if (error) return { policy: null, markdown: `Could not read the policy: ${error.message}` };
+    if (!data) {
+      return {
+        policy: null,
+        markdown:
+          'This workspace has no action policy: only the built-in guardrails apply. ' +
+          'Write one with security.set_action_policy — start in dry-run mode.' +
+          POLICY_HELP,
+      };
+    }
+    const parsed = parseActionPolicy(data.value);
+    if (!parsed.ok) {
+      return {
+        policy: null,
+        markdown: `The stored policy is malformed and is being IGNORED (${parsed.error}). Rewrite it with security.set_action_policy.`,
+      };
+    }
+    const p = parsed.policy;
+    return {
+      policy: p,
+      markdown: [
+        `### Action policy — mode: **${p.mode}**`,
+        p.mode === 'dry-run'
+          ? '_Dry-run: decisions are recorded in the security log but nothing is refused yet._'
+          : '_Enforce: a deny match refuses the call outright._',
+        '',
+        `**Deny** (${p.deny.length}):`,
+        ...(p.deny.length ? p.deny.map((r) => `- \`${r}\``) : ['- (none)']),
+        `**Allow** (${p.allow.length}):`,
+        ...p.allow.map((r) => `- \`${r}\``),
+      ].join('\n'),
+    };
+  },
+});
+
+export const securitySetActionPolicy = registerTool({
+  id: 'security.set_action_policy',
+  description:
+    'Write the workspace action policy: CEL deny/allow rules evaluated on every tool call, plus a mode. ' +
+    'ALWAYS start new rules in "dry-run" — decisions get recorded in the security log without refusing ' +
+    'anything, so the admin can read what would have been blocked before switching to "enforce". ' +
+    'Deny beats allow; a broken rule fails closed (denies) in enforce mode. Omitting allow means allow ' +
+    'everything not denied.' +
+    POLICY_HELP,
+  inputSchema: z.object({
+    mode: z.enum(['dry-run', 'enforce']),
+    deny: z.array(z.string().min(1)).max(50).default([]),
+    allow: z.array(z.string().min(1)).max(50).optional(),
+  }),
+  outputSchema: z.object({
+    saved: z.boolean(),
+    policy: z
+      .object({ mode: z.enum(['dry-run', 'enforce']), deny: z.array(z.string()), allow: z.array(z.string()) })
+      .nullable(),
+    /** Reglas que no evaluaron limpio contra un contexto de prueba — typos probables. */
+    warnings: z.array(z.string()),
+    markdown: z.string(),
+  }),
+  requiresConfirmation: true,
+  rateLimit: { perMinute: 5 },
+  handler: async (input, ctx) => {
+    const parsed = parseActionPolicy(input);
+    if (!parsed.ok) {
+      return { saved: false, policy: null, warnings: [], markdown: `Rejected: ${parsed.error}` };
+    }
+    const policy = parsed.policy;
+
+    // Cada expresión se prueba contra un contexto de muestra. Un typo no impide
+    // guardar — el motor falla cerrado igual — pero avisar aquí evita descubrirlo
+    // como un workspace que rechaza todo.
+    const sample = {
+      tool: { id: 'gmail.send_message', family: 'gmail' },
+      surface: 'web' as const,
+      user: { id: ctx.userId },
+      agent: { id: ctx.agentId ?? '' },
+      risk: {
+        level: 'medium' as const,
+        sensitivity: 'client' as const,
+        blastRadius: 'external_send' as const,
+        signals: ['external-recipient'],
+      },
+      confirmed: false,
+    };
+    const warnings: string[] = [];
+    for (const rule of [...policy.deny, ...policy.allow]) {
+      try {
+        celEvaluate(rule, sample as unknown as Record<string, unknown>, {
+          contains: () => false,
+          matches: () => false,
+        });
+      } catch (err) {
+        warnings.push(`\`${rule}\` — ${String(err).slice(0, 140)}`);
+      }
+    }
+
+    const { error } = await ctx.db
+      .from('security_policies')
+      .upsert(
+        { key: 'action_policy', value: policy, updated_by: ctx.userId, updated_at: new Date().toISOString() },
+        { onConflict: 'organization_id,key' },
+      );
+    if (error) {
+      return { saved: false, policy: null, warnings, markdown: `Could not save the policy: ${error.message}` };
+    }
+    // Que rija YA en este proceso; otros procesos la recogen al expirar su caché (≤60s).
+    resetPolicyCache();
+
+    return {
+      saved: true,
+      policy,
+      warnings,
+      markdown: [
+        `Action policy saved in **${policy.mode}** mode — ${policy.deny.length} deny, ${policy.allow.length} allow.`,
+        policy.mode === 'dry-run'
+          ? 'Nothing is refused yet: matches land in the security log. Review them with security.recent_events, then switch to enforce.'
+          : 'Deny matches now refuse the call. Other running instances pick this up within a minute.',
+        ...(warnings.length
+          ? ['', '⚠️ These rules did not evaluate cleanly against a sample call (probable typo — they will fail CLOSED in enforce):', ...warnings.map((w) => `- ${w}`)]
+          : []),
+      ].join('\n'),
+    };
   },
 });
 

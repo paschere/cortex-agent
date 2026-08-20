@@ -177,6 +177,8 @@ export async function fetchUserUsage(sb: SupabaseClient, userId: string): Promis
       .from('audit_events')
       .select(select)
       .eq('user_id', userId)
+      // Sin las filas de intención (0118): attempted + ok son UNA acción.
+      .neq('status', 'attempted')
       .gte('created_at', since30)
       .order('created_at', { ascending: false })
       .limit(AUDIT_ROW_CAP);

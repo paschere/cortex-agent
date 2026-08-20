@@ -26,22 +26,28 @@ RUN pnpm --filter @cortex/meet-bot build
 
 # --- runtime ---------------------------------------------------------------
 #
-# La imagen de Playwright trae el Chrome real (canal 'chrome') con los códecs
-# propietarios que Meet exige — la misma razón por la que F0 tuvo que dejar el
-# Chromium pelado. El tag debe casar con la versión de `playwright` en
-# package.json.
-FROM mcr.microsoft.com/playwright:v1.49.1-jammy AS runtime
+# La imagen de Patchright/Playwright trae el Chrome real (canal 'chrome') con
+# los códecs propietarios que Meet exige — la misma razón por la que F0 tuvo
+# que dejar el Chromium pelado. El tag debe casar con la versión de
+# `patchright` en package.json (1.62.x → imagen 1.62.0).
+FROM mcr.microsoft.com/playwright:v1.62.0-jammy AS runtime
+USER root
 WORKDIR /app
 ENV NODE_ENV=production
 
 # Xvfb: la pantalla virtual. Sin ella, Meet degrada el cliente y el audio no
-# fluye. `xvfb` ya viene en la imagen de Playwright; se arranca en el entrypoint.
+# fluye. `xvfb` a veces viene en la imagen; se instala explícito para no
+# depender de eso. Patchright habla el protocolo de Playwright 1.62 — el tag
+# de la imagen tiene que casar.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends xvfb fonts-liberation \
+  && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/meet-bot/package.json services/meet-bot/
 RUN pnpm install --filter @cortex/meet-bot --prod --frozen-lockfile
-RUN pnpm --filter @cortex/meet-bot exec playwright install chrome
+RUN pnpm --filter @cortex/meet-bot exec patchright install chrome
 COPY --from=build /repo/services/meet-bot/dist services/meet-bot/dist
 
 COPY services/meet-bot/docker-entrypoint.sh /usr/local/bin/cortex-meet-entrypoint
