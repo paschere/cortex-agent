@@ -88,6 +88,39 @@ export function startServer(config: Config): Server {
       return;
     }
 
+    // Importar un perfil de Chrome ya autenticado a /profiles/<owner>. Se usa
+    // UNA vez por tenant para sembrar la sesión de Google sin pelear con el
+    // login headless (que Google bloquea desde un datacenter). Recibe un
+    // tar.gz por el cuerpo; lo extrae al directorio del owner.
+    if (req.method === 'POST' && path === '/profile/import') {
+      const owner = String(url.searchParams.get('owner') ?? '');
+      if (!owner) {
+        json(res, 400, { error: 'owner es obligatorio' });
+        return;
+      }
+      const safe = owner.replace(/[^A-Za-z0-9_-]/g, '_');
+      const dir = `${config.profilesDir}/${safe}`;
+      try {
+        const { mkdirSync, rmSync } = await import('node:fs');
+        const { spawn } = await import('node:child_process');
+        rmSync(dir, { recursive: true, force: true });
+        mkdirSync(dir, { recursive: true });
+        // tar lee el gzip del stdin y extrae en dir. El cuerpo es el tar.gz.
+        const tar = spawn('tar', ['-xzf', '-', '-C', dir]);
+        req.pipe(tar.stdin);
+        await new Promise<void>((resolve, reject) => {
+          tar.on('close', (code) =>
+            code === 0 ? resolve() : reject(new Error(`tar salió ${code}`)),
+          );
+          tar.on('error', reject);
+        });
+        json(res, 200, { ok: true, dir });
+      } catch (err) {
+        json(res, 500, { error: (err as Error).message });
+      }
+      return;
+    }
+
     if (req.method === 'POST' && path === '/join') {
       const body = await readBody(req);
       const owner = String(body.owner ?? '');

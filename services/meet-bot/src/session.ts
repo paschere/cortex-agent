@@ -78,9 +78,11 @@ export class MeetSession {
     const profileDir = `${this.config.profilesDir}/${this.owner.replace(/[^A-Za-z0-9_-]/g, '_')}`;
     this.context = await chromium.launchPersistentContext(profileDir, {
       channel: 'chrome',
-      // En Railway corre bajo Xvfb (headful ante Meet sin abrir ventana). En un
-      // Mac de desarrollo, MEET_HEADFUL=1 muestra la ventana.
-      headless: process.env.MEET_HEADFUL !== '1' && process.env.DISPLAY == null,
+      // NUNCA headless: Meet degrada a los clientes headless. En Railway hay
+      // Xvfb (DISPLAY=:99) que hace a Chrome headful sin abrir ventana; en un
+      // Mac se ve la ventana. headless solo si de verdad no hay display Y no se
+      // pidió headful — un caso que en la práctica no ocurre en producción.
+      headless: false,
       permissions: ['microphone', 'camera'],
       viewport: { width: 1280, height: 800 },
       args: [
