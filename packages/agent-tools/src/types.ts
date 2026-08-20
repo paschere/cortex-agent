@@ -155,6 +155,15 @@ export interface ToolDef<I, O> {
   outputSchema: z.ZodType<O>;
   requiresConfirmation?: boolean;
   /**
+   * Ventana (ms) durante la cual una confirmación humana de ESTA herramienta,
+   * en ESTA conversación, vale también para las llamadas siguientes — la
+   * «memoria corta del sí» (security/conversation-grace.ts lleva el argumento
+   * completo y sus límites: no toca la puerta de seguridad, no cruza hilos ni
+   * usuarios, y en la duda vuelve la tarjeta). Solo tiene sentido junto a
+   * `requiresConfirmation: true`.
+   */
+  conversationGrace?: number;
+  /**
    * Dónde están el importe y su moneda dentro de `inputSchema`, cuando esta
    * herramienta mueve dinero (migración 0099).
    *

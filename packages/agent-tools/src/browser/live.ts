@@ -124,7 +124,13 @@ function resolveRef(
   const actual = (el.name ?? '').trim().toLowerCase();
   // Igualdad laxa: el nombre accesible de un botón no cambia por un espacio,
   // y exigir igualdad estricta convertiría cada tilde en un reintento.
-  if (wanted && actual && actual !== wanted && !actual.includes(wanted) && !wanted.includes(actual)) {
+  if (
+    wanted &&
+    actual &&
+    actual !== wanted &&
+    !actual.includes(wanted) &&
+    !wanted.includes(actual)
+  ) {
     return {
       stale: `El elemento ${ref} ahora se llama «${el.name}», no «${claimedName}». La página cambió: mira de nuevo antes de actuar.`,
     };
@@ -145,17 +151,22 @@ export const browserOpenPage = registerTool({
     purpose: z
       .string()
       .max(200)
-      .describe('Qué vas a hacer ahí, en una frase. Es lo que la persona aprueba y lo que queda en la auditoría.'),
+      .describe(
+        'Qué vas a hacer ahí, en una frase. Es lo que la persona aprueba y lo que queda en la auditoría.',
+      ),
   }),
   outputSchema: z.object({
     sessionId: z.string(),
     page: viewSchema,
     guidance: z.string(),
   }),
-  // Una vez por pestaña, como enviar un correo: la persona aprueba «voy a
-  // entrar a X a hacer Y» y desde ahí mira en vivo. Los actos dentro de la
-  // pestaña quedan auditados uno a uno, no confirmados uno a uno.
+  // Una vez por RATO, no por pestaña: la persona aprueba «voy a entrar a X a
+  // hacer Y» y desde ahí mira en vivo. Los actos dentro de la pestaña quedan
+  // auditados uno a uno, y las aperturas siguientes de la misma conversación
+  // heredan el sí durante 15 minutos (conversation-grace.ts) — el «cierra esa
+  // y vuelve a entrar» no merece una segunda tarjeta idéntica.
   requiresConfirmation: true,
+  conversationGrace: 15 * 60_000,
   rateLimit: { perMinute: 6 },
   handler: async (input, ctx) => {
     // El piso SSRF, aquí para que la frase llegue en el turno; el servicio lo
@@ -185,14 +196,26 @@ export const browserAct = registerTool({
     sessionId: sessionField,
     action: z
       .enum(['click', 'fill', 'select', 'check', 'press', 'goto', 'wait'])
-      .describe('Qué gesto: click | fill (escribe text en el campo) | select (elige la opción text) | check | press (una tecla, en text) | goto (navega a url) | wait (deja cargar un segundo)'),
-    ref: z.string().max(12).optional().describe('La ref del elemento del último vistazo (e5). Obligatoria salvo goto y wait.'),
+      .describe(
+        'Qué gesto: click | fill (escribe text en el campo) | select (elige la opción text) | check | press (una tecla, en text) | goto (navega a url) | wait (deja cargar un segundo)',
+      ),
+    ref: z
+      .string()
+      .max(12)
+      .optional()
+      .describe('La ref del elemento del último vistazo (e5). Obligatoria salvo goto y wait.'),
     name: z
       .string()
       .max(120)
       .optional()
-      .describe('El name del elemento tal como lo leíste. Es la verificación de que la página no cambió.'),
-    text: z.string().max(500).optional().describe('El texto a escribir, la opción a elegir o la tecla a presionar.'),
+      .describe(
+        'El name del elemento tal como lo leíste. Es la verificación de que la página no cambió.',
+      ),
+    text: z
+      .string()
+      .max(500)
+      .optional()
+      .describe('El texto a escribir, la opción a elegir o la tecla a presionar.'),
     url: z.string().url().max(600).optional().describe('Solo para goto.'),
   }),
   outputSchema: z.object({
@@ -213,7 +236,10 @@ export const browserAct = registerTool({
     let target: Target | null = null;
     if (input.action !== 'goto' && input.action !== 'wait') {
       if (!input.ref) {
-        return { ok: false, message: 'Ese gesto necesita la ref de un elemento del último vistazo.' };
+        return {
+          ok: false,
+          message: 'Ese gesto necesita la ref de un elemento del último vistazo.',
+        };
       }
       // La mirada fresca contra la que se resuelve la ref. Es una petición
       // más, y es el precio de no actuar nunca sobre una página imaginada.
@@ -225,7 +251,10 @@ export const browserAct = registerTool({
       }
       target = bestTarget(resolved.el);
       if (!target) {
-        return { ok: false, message: `El elemento ${input.ref} no tiene forma estable de señalarse. Prueba otro camino.` };
+        return {
+          ok: false,
+          message: `El elemento ${input.ref} no tiene forma estable de señalarse. Prueba otro camino.`,
+        };
       }
     }
 
@@ -274,13 +303,25 @@ export const browserAskPerson = registerTool({
       .string()
       .min(5)
       .max(300)
-      .describe('Qué necesitas que haga, en sus palabras: «marca la casilla “no soy un robot”», «ingresa el código que te llegó al celular».'),
+      .describe(
+        'Qué necesitas que haga, en sus palabras: «marca la casilla “no soy un robot”», «ingresa el código que te llegó al celular».',
+      ),
   }),
-  outputSchema: z.object({ ok: z.boolean(), sessionId: z.string(), reason: z.string(), message: z.string() }),
+  outputSchema: z.object({
+    ok: z.boolean(),
+    sessionId: z.string(),
+    reason: z.string(),
+    message: z.string(),
+  }),
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     const transport = createHttpTransport(ctx.logger);
-    const asked = await transport.control(input.sessionId, 'request', input.reason, ctx.organizationId);
+    const asked = await transport.control(
+      input.sessionId,
+      'request',
+      input.reason,
+      ctx.organizationId,
+    );
     if (!asked.ok) throw new Error(asked.reason);
     return {
       ok: true,
@@ -323,7 +364,10 @@ export const browserRequestSecret = registerTool({
     if ('stale' in resolved) return { ok: false, message: resolved.stale };
     const target = bestTarget(resolved.el);
     if (!target) {
-      return { ok: false, message: 'Ese campo no tiene forma estable de señalarse. Mira la página de nuevo.' };
+      return {
+        ok: false,
+        message: 'Ese campo no tiene forma estable de señalarse. Mira la página de nuevo.',
+      };
     }
     const asked = await transport.requestSecret(input.sessionId, target, input.label, owner);
     if (!asked.ok) throw new Error(asked.reason);

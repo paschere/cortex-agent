@@ -390,10 +390,14 @@ export class BrowserWorker {
       // humanos como los demás: llegan por el proxy autenticado, y en la
       // pestaña viva la tarjeta los ofrece solo con el volante en la mano.
       case 'back':
-        await page.goBack({ timeout: 10_000, waitUntil: 'domcontentloaded' }).catch(() => undefined);
+        await page
+          .goBack({ timeout: 10_000, waitUntil: 'domcontentloaded' })
+          .catch(() => undefined);
         break;
       case 'refresh':
-        await page.reload({ timeout: 15_000, waitUntil: 'domcontentloaded' }).catch(() => undefined);
+        await page
+          .reload({ timeout: 15_000, waitUntil: 'domcontentloaded' })
+          .catch(() => undefined);
         break;
       default:
         throw new Error(`unknown input ${String(input.kind)}`);
@@ -560,6 +564,7 @@ export class BrowserWorker {
     const persistent = this.profiles && owner ? await this.profiles.contextFor(owner) : null;
     const context = persistent ?? (await this.newContext());
     const page = await context.newPage();
+    this.foldPopupsInto(page);
     await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     const sessionId = this.newSessionId();
     this.sessions.set(sessionId, {
@@ -695,6 +700,49 @@ export class BrowserWorker {
       throw new UnknownSession();
     }
     return session;
+  }
+
+  /**
+   * UNA SESIÓN, UNA PESTAÑA — también cuando la página opina lo contrario.
+   *
+   * Un enlace con target=_blank (o un window.open) abre una página que NADA
+   * de este servicio mira: el snapshot, el screencast y el volante están
+   * amarrados a la pestaña original, así que el modelo veía «el click no hizo
+   * nada» y la persona veía una pantalla quieta, mientras el contenido real
+   * vivía en una pestaña fantasma. Multiplicar pestañas por sesión arreglaría
+   * eso al precio de romper el contrato en todas partes (¿cuál pestaña mira
+   * un snapshot? ¿cuál transmite el cast?).
+   *
+   * Así que el popup se PLIEGA: se espera a que diga a dónde iba, se cierra,
+   * y la pestaña principal navega ahí. Para todos los que miran, el enlace
+   * simplemente funcionó. La URL del popup pasa por el MISMO piso SSRF que
+   * cualquier navegación — sin esto, un target=_blank a la metadata sería la
+   * puerta de atrás del guard.
+   *
+   * LO QUE ESTO NO SOPORTA, DICHO: un flujo OAuth de popup que necesita al
+   * opener vivo (window.opener.postMessage) no va a funcionar plegado. Es
+   * raro en los portales que este navegador opera, y si un día importa, la
+   * respuesta es soporte real de multi-pestaña, no aflojar este pliegue.
+   */
+  private foldPopupsInto(page: Page): void {
+    page.on('popup', (popup) => {
+      void (async () => {
+        try {
+          // Muchos popups nacen en about:blank y el JS les pone la URL después.
+          await popup
+            .waitForLoadState('domcontentloaded', { timeout: 5_000 })
+            .catch(() => undefined);
+          const url = popup.url();
+          await popup.close().catch(() => undefined);
+          if (!url || url === 'about:blank') return;
+          assertNavigable(url);
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+        } catch {
+          // Prohibida o rota: la pestaña principal se queda donde estaba y el
+          // siguiente vistazo lo cuenta tal cual.
+        }
+      })();
+    });
   }
 
   private controlFor(session: InteractiveSession): ControlState {

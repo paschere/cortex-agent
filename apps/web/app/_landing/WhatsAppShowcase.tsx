@@ -28,17 +28,17 @@ interface WaMsg {
 }
 
 const MSGS: WaMsg[] = [
-  { from: 'user', text: '¿cuánto le debemos a proveedores este mes?', time: '11:42' },
+  { from: 'user', text: '¿quién responde por el calentador del 704?', time: '11:42' },
   {
     from: 'cortex',
-    text: '$18.400.000 a cuatro proveedores. El más grande: $9.200.000 a Distribuciones El Roble, vence el viernes 22.',
-    cite: '6 facturas · correo de compras',
+    text: 'El propietario. El contrato deja al arrendatario sólo las reparaciones locativas; el calentador entró con el inmueble.',
+    cite: 'Contrato · cláusula 8 · grupo del edificio',
     time: '11:42',
   },
-  { from: 'user', text: '¿y cuáles vencen esta semana?', time: '11:43' },
+  { from: 'user', text: '¿la administradora lo confirmó?', time: '11:43' },
   {
     from: 'cortex',
-    text: 'Dos: El Roble ($9.200.000, viernes) y Empaques Andinos ($2.100.000, jueves). Si quieres, dejo los dos pagos listos — no salen sin tu aprobación.',
+    text: 'Sí, el 5 de agosto, minuto 03:22: «Eso lo cubre el propietario, siempre ha sido así en esa torre.» Si quieres, le dejo el mensaje listo — no sale sin tu aprobación.',
     time: '11:43',
   },
 ];

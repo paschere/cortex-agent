@@ -1,9 +1,8 @@
-import { Instrument_Serif } from 'next/font/google';
+import { Caveat, Plus_Jakarta_Sans } from 'next/font/google';
 import Link from 'next/link';
 import { Fragment } from 'react';
 import { AuditLedger } from './AuditLedger';
 import { DayTimeline } from './DayTimeline';
-import { HeroSequence } from './HeroSequence';
 import { IndustrySwitch } from './IndustrySwitch';
 import { IntegrationsOrbit } from './IntegrationsOrbit';
 import { Interactive } from './Interactive';
@@ -12,47 +11,43 @@ import { ScrollStory } from './ScrollStory';
 import { WhatsAppShowcase } from './WhatsAppShowcase';
 
 /**
- * La voz de los titulares. Instrument Serif — editorial, con itálicas de
- * verdad para los acentos — contra el canvas oscuro del hero y el claro del
- * resto. La landing gana una tercera voz tipográfica: serif para lo que se
- * AFIRMA, Manrope para lo que se explica, JetBrains Mono para lo que se
- * puede verificar. `next/font` la sirve self-hosted en el build: cero CDN,
- * cero CSP, cero layout shift (fallback métrico automático).
+ * Plus Jakarta Sans is the commercial voice: geometric, slightly rounded,
+ * the same family for what is claimed and what is explained. Caveat is the
+ * one handwritten note — the annotation beside the hero, never a heading.
+ * JetBrains Mono (from the root layout) still carries anything a visitor
+ * might check: a clause, a minute, a peso amount.
  */
-const displaySerif = Instrument_Serif({
-  weight: '400',
-  style: ['normal', 'italic'],
+const display = Plus_Jakarta_Sans({
   subsets: ['latin'],
+  weight: ['500', '600', '700', '800'],
   variable: '--lp-font-display',
+  display: 'swap',
+});
+
+const script = Caveat({
+  subsets: ['latin'],
+  weight: ['600'],
+  variable: '--lp-font-script',
   display: 'swap',
 });
 
 /**
  * The public page.
  *
- * DIRECTION — "an answer and its margin." Cortex's whole claim is that it never
- * asserts anything it cannot attribute, so the page is built the way one of its
- * answers is built: a statement, and beside it the thing the statement came
- * from. The hero is not a headline over a gradient; it is a real reply with its
- * sources opened up, quoted, with the minute of the call. That card is the only
- * place the page raises its voice, and everything around it is kept quiet so it
- * reads as evidence rather than as another marketing panel.
+ * DIRECTION — SheerID's commercial air, Cortex's evidence. Ice-blue canvas,
+ * organic blobs, a floating pill nav and a gold CTA: the page has to sell to a
+ * visitor who already lives in a polished SaaS (ByDomu and its peers). The
+ * product claim does not change: Cortex never asserts what it cannot attribute.
+ * The loud object is still a real reply with its sources opened — now sitting
+ * in a light stage under the hero, not inside a night scene.
  *
- * The provenance chip does double duty: inside the answer cards it does what it
- * does in the product, and beside a claim the page makes about ITSELF it names
- * the screen where a visitor can go and check. Demonstrating the idea is worth
- * more than describing it.
+ * HONESTY. Everything asserted here exists in this repository today. There are
+ * no customer names, logos, testimonials or usage figures, because there are
+ * none to tell the truth about yet. The handwritten note is a claim about the
+ * product (it answers in WhatsApp), not a fabricated endorsement.
  *
- * HONESTY. Everything asserted here exists in this repository today. Two things
- * deliberately do not appear as available anywhere on the page: charging per
- * additional person from inside Cortex, and signing in with a corporate
- * directory. Gerente is named as a conversation — retainer, implantación, SLA —
- * and the page says we do not collect the money inside the product yet.
- * There are no customer names, logos, testimonials or usage figures, because
- * there are none to tell the truth about yet.
- *
- * Server component throughout except the industry picker. Everything is static
- * markup — no data fetching, no third-party request, no remote image.
+ * Server component throughout except the industry picker and the live demos.
+ * Static markup — no data fetching, no third-party request, no remote image.
  */
 
 const CITE = {
@@ -77,19 +72,24 @@ function Cite({ src, at }: { src: string; at: string }) {
 function Masthead() {
   return (
     <header className="lp-top">
-      <div className="lp-wrap lp-top__row">
+      <div className="lp-top__pill">
         <Link href="/" className="lp-mark" aria-label="Cortex, inicio">
-          {/* The app icon, served from this origin by Next metadata — the same
-              mark as the browser tab. No remote image anywhere on the page. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icon.png" alt="" width={24} height={24} />
+          <img src="/icon.png" alt="" width={28} height={28} />
           <span className="lp-mark__word">Cortex</span>
         </Link>
+        <nav className="lp-top__links" aria-label="Secciones">
+          <a href="#producto">Producto</a>
+          <a href="#whatsapp">WhatsApp</a>
+          <a href="#industrias">Oficio</a>
+          <a href="#como-funciona">Cómo funciona</a>
+          <a href="#confianza">Confianza</a>
+        </nav>
         <nav className="lp-top__actions" aria-label="Entrar">
           <Link href="/login" className="lp-btn lp-btn--plain">
             Iniciar sesión
           </Link>
-          <Link href="/signup" className="lp-btn lp-btn--primary">
+          <Link href="/signup" className="lp-btn lp-btn--nav">
             Crear cuenta
           </Link>
         </nav>
@@ -98,27 +98,6 @@ function Masthead() {
   );
 }
 
-/**
- * El hero cinematográfico, ahora una SECUENCIA dirigida por el scroll: el
- * humano de partículas alcanza el núcleo de la IA, lo toca, el contacto es un
- * big bang, del estallido nace el wordmark CORTEX y la secuencia culmina en
- * el producto real — la ventana viva del chat escribiéndose sola. Toda la
- * maquinaria (pin, progreso, WebGL) vive en HeroSequence/SeqScene; este
- * archivo pone SOLO el contenido, que el servidor renderiza completo: sin JS
- * o con reduced-motion no hay pin ni timeline y esto es un hero normal con la
- * conversación terminada. El titular sigue siendo el LCP.
- */
-/**
- * El titular, palabra por palabra: el revelado cinético se hace en el
- * servidor (spans con su delay ya puesto), así que no cuesta un byte de JS.
- * El texto es EXACTAMENTE el mismo — los spans no cambian lo que lee un
- * buscador ni un lector de pantalla, y la regla global de reduced-motion
- * colapsa la animación al estado final.
- */
-// «Un asistente… que ya se sabe la empresa» obligaba a releer: doble
-// «empresa» y un reflexivo que no todo el mundo parsea a la primera. El
-// titular nuevo es la acción entera del producto en cuatro palabras — y la
-// ventana de abajo la demuestra al segundo siguiente.
 const TITLE_WORDS: Array<{ t: string; em?: boolean }> = [
   { t: 'Pregúntale' },
   { t: 'a', em: true },
@@ -126,14 +105,43 @@ const TITLE_WORDS: Array<{ t: string; em?: boolean }> = [
   { t: 'empresa.', em: true },
 ];
 
-/** La fase del alcance: titular serif, lead y CTAs. También el hero entero
- * cuando no hay secuencia (sin JS, reduced-motion, sin WebGL). */
-function HeroIntro() {
+/** Organic blobs + two product moments. Photos would be a lie we don't have;
+ *  the moments are the product: a WhatsApp question and the clause it cites. */
+function HeroStage() {
   return (
-    <div className="lp-wrap">
-      <div className="lp-hero__copy">
+    <div className="lp-stage" aria-hidden="true">
+      <span className="lp-blob lp-blob--sky-a" />
+      <span className="lp-blob lp-blob--sky-b" />
+      <span className="lp-blob lp-blob--navy" />
+      <span className="lp-blob lp-blob--butter" />
+
+      <div className="lp-float lp-float--wa">
+        <span className="lp-float__badge" />
+        <p className="lp-float__kicker">Grupo del edificio</p>
+        <p className="lp-float__q">¿quién responde por el calentador del 704?</p>
+        <p className="lp-float__a">El propietario. Quedó en la cláusula 8.</p>
+      </div>
+
+      <div className="lp-float lp-float--cite">
+        <span className="lp-float__heart" />
+        <p className="lp-float__kicker">De dónde salió</p>
+        <p className="lp-float__src">Contrato de arrendamiento · cláusula 8</p>
+        <p className="lp-float__quote">
+          «Las reparaciones necesarias corren por cuenta del arrendador.»
+        </p>
+        <p className="lp-float__when lp-data">firmado 03 mar · grupo 03 ago 19:48</p>
+      </div>
+    </div>
+  );
+}
+
+function Hero() {
+  return (
+    <section className="lp-hero">
+      <HeroStage />
+      <div className="lp-wrap lp-hero__copy">
         <p className="lp-marker lp-arrive">La IA que ya leyó tu empresa</p>
-        <h1 className="lp-display lp-hero__display mt-4">
+        <h1 className="lp-display lp-hero__display">
           {TITLE_WORDS.map((w, i) => (
             <Fragment key={`${i}-${w.t}`}>
               <span className="lp-wb">
@@ -148,15 +156,13 @@ function HeroIntro() {
             </Fragment>
           ))}
         </h1>
-        <p className="lp-lead lp-hero__lead lp-arrive" style={{ animationDelay: '0.6s' }}>
+        <p className="lp-lead lp-hero__lead lp-arrive" style={{ animationDelay: '0.55s' }}>
           No es un chatbot al que hay que explicarle todo. Cortex ya leyó los correos, los
           contratos, las actas de las reuniones y los grupos de WhatsApp que le habilitaste.
           Preguntas en español y contesta diciendo de dónde lo sacó: el documento, el día y, si
           salió de una grabación, el minuto.
         </p>
-        {/* Las dos únicas puertas que hay, disponibles desde el primer frame:
-            nadie está obligado a ver la película entera para entrar. */}
-        <div className="lp-hero__cta lp-arrive" style={{ animationDelay: '0.85s' }}>
+        <div className="lp-hero__cta lp-arrive" style={{ animationDelay: '0.75s' }}>
           <Link href="/signup" className="lp-btn lp-btn--primary">
             Crear cuenta
           </Link>
@@ -164,54 +170,38 @@ function HeroIntro() {
             Iniciar sesión
           </Link>
         </div>
+        <p className="lp-note lp-arrive" style={{ animationDelay: '0.95s' }}>
+          Hecho para quien ya vive en WhatsApp
+        </p>
       </div>
-    </div>
+    </section>
   );
 }
 
-/** La culminación de la secuencia: del mito al producto. Copy corto a la
- * izquierda, la ventana viva del chat a la derecha. */
-function HeroFinal() {
+function Product() {
   return (
-    <div className="lp-wrap lp-hero__grid">
-      <div className="lp-hero__final-copy">
-        {/* La cartela de cierre de la secuencia es el marker del hero final:
-            del mito al producto, en cuatro palabras. */}
-        <p className="lp-marker">esto es Cortex</p>
-        <p className="lp-h2 lp-hero__final-title">
-          Preguntas. Contesta. <em>Y dice de dónde lo sacó.</em>
-        </p>
-        <p className="lp-lead lp-hero__final-lead">
-          Tres preguntas reales, contestadas con cifras y con su fuente: el documento, el día y el
-          minuto. Pasa el cursor por una cita y mira de qué paso salió.
-        </p>
-        <div className="lp-hero__cta">
-          <Link href="/signup" className="lp-btn lp-btn--primary">
-            Crear cuenta
-          </Link>
-          <Link href="/login" className="lp-btn lp-btn--ghost">
-            Iniciar sesión
-          </Link>
+    <section className="lp-section lp-product" id="producto">
+      <div className="lp-wrap lp-product__grid">
+        <div className="lp-head" data-reveal>
+          <p className="lp-marker">El producto, usándose</p>
+          <h2 className="lp-h2">
+            Preguntas. Contesta. <em>Y dice de dónde lo sacó.</em>
+          </h2>
+          <p className="lp-lead">
+            Tres preguntas reales, contestadas con cifras y con su fuente: el documento, el día y
+            el minuto. Pasa el cursor por una cita y mira de qué paso salió.
+          </p>
+          <div className="lp-hero__cta">
+            <Link href="/signup" className="lp-btn lp-btn--primary">
+              Crear cuenta
+            </Link>
+          </div>
+        </div>
+        <div className="lp-product__demo" data-reveal>
+          <LiveDemo />
         </div>
       </div>
-      <div className="lp-hero__demo">
-        <LiveDemo />
-      </div>
-    </div>
-  );
-}
-
-function Hero() {
-  return (
-    <HeroSequence
-      intro={<HeroIntro />}
-      tagline={
-        <p className="lp-seq__tagline">
-          La IA que <em>ya leyó tu empresa</em> — y contesta con la fuente.
-        </p>
-      }
-      final={<HeroFinal />}
-    />
+    </section>
   );
 }
 
@@ -791,24 +781,26 @@ function Pricing() {
  */
 function Close() {
   return (
-    <section className="lp-night">
-      <div className="lp-wrap lp-close" data-reveal>
-        <p className="lp-marker">Empieza hoy</p>
-        <h2 className="lp-h2 lp-night__title">
-          El primer día <em>ya contesta</em>.
-        </h2>
-        <p className="lp-lead mt-4">
-          No hay que entrenar nada ni escribir instrucciones. Conectas las fuentes por la mañana y
-          en la tarde alguien de tu equipo le pregunta algo que hasta hoy sólo sabía otra persona —
-          y recibe la respuesta con la frase, el documento y el día de los que salió.
-        </p>
-        <div className="lp-close__cta">
-          <Link href="/signup" className="lp-btn lp-btn--primary">
-            Crear cuenta
-          </Link>
-          <Link href="/login" className="lp-btn lp-btn--ghost">
-            Ya tengo cuenta
-          </Link>
+    <section className="lp-section lp-close-sec">
+      <div className="lp-wrap">
+        <div className="lp-close" data-reveal>
+          <p className="lp-marker">Empieza hoy</p>
+          <h2 className="lp-h2 lp-close__title">
+            El primer día <em>ya contesta</em>.
+          </h2>
+          <p className="lp-lead mt-4">
+            No hay que entrenar nada ni escribir instrucciones. Conectas las fuentes por la mañana y
+            en la tarde alguien de tu equipo le pregunta algo que hasta hoy sólo sabía otra persona —
+            y recibe la respuesta con la frase, el documento y el día de los que salió.
+          </p>
+          <div className="lp-close__cta">
+            <Link href="/signup" className="lp-btn lp-btn--primary">
+              Crear cuenta
+            </Link>
+            <Link href="/login" className="lp-btn lp-btn--ghost">
+              Ya tengo cuenta
+            </Link>
+          </div>
         </div>
       </div>
     </section>
@@ -822,7 +814,7 @@ function Footer() {
         <div className="lp-foot__brand">
           <span className="lp-mark">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icon.png" alt="" width={24} height={24} />
+            <img src="/icon.png" alt="" width={28} height={28} />
             <span className="lp-mark__word">Cortex</span>
           </span>
           <p className="lp-foot__line">
@@ -831,10 +823,11 @@ function Footer() {
         </div>
         <nav className="lp-foot__col" aria-label="Producto">
           <p className="lp-foot__h">Producto</p>
+          <a href="#producto">El producto</a>
           <a href="#como-funciona">Cómo funciona</a>
           <a href="#industrias">Para tu oficio</a>
+          <a href="#whatsapp">WhatsApp</a>
           <a href="#confianza">Por qué creerle</a>
-          <a href="#control">Control y permisos</a>
         </nav>
         <nav className="lp-foot__col" aria-label="Cuenta">
           <p className="lp-foot__h">Cuenta</p>
@@ -851,26 +844,15 @@ function Footer() {
 
 export function Landing() {
   return (
-    <div className={`lp ${displaySerif.variable}`}>
-      {/* El cerebro de las reacciones del resto de la página: revelado por
-          scroll, tilt de tarjetas, botones magnéticos, glow ambiental. No
-          pinta nada y con reduced-motion no hace nada. */}
+    <div className={`lp ${display.variable} ${script.variable}`}>
       <Interactive />
       <Masthead />
       <main>
-        {/* La secuencia: alcance → contacto/big bang → nace CORTEX → el
-            producto (la ventana viva). Ver HeroSequence para la maquinaria. */}
         <Hero />
         <div className="lp-after">
           <CapabilityBand />
+          <Product />
           <Objection />
-          {/* El orden de las secciones alterna superficie clara y teñida, con
-              dos noches reservadas — la auditoría y el cierre — separadas por
-              Control para que la oscuridad nunca se repita seguida. La
-              narrativa: contesta (hero) → conoce tu empresa (objeción) →
-              trabaja solo (un día) → donde ya estás (WhatsApp) → tu oficio →
-              cómo funciona → a qué se conecta → por qué creerle → todo queda
-              escrito → quién ve qué → empieza hoy. */}
           <DayTimeline />
           <WhatsAppShowcase />
           <Industries />

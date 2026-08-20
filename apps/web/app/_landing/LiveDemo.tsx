@@ -73,6 +73,24 @@ interface DemoScenario {
  */
 const SCENARIOS: readonly [DemoScenario, ...DemoScenario[]] = [
   {
+    id: 'inmobiliaria',
+    tab: 'Inmobiliaria',
+    tag: 'inmobiliaria',
+    q: '¿quién responde por el calentador del 704?',
+    lead: 'El propietario.',
+    rest: 'El contrato deja al arrendatario sólo las reparaciones locativas. El grupo del edificio y la administradora dan por sentado que el calentador entró con el inmueble, no con el inquilino.',
+    tools: [
+      { name: 'Contrato de arriendo', arg: 'cláusula 8', ms: '0,7s' },
+      { name: 'Grupo del edificio', arg: '03 ago 19:48', ms: '0,5s' },
+      { name: 'Llamada con la administradora', arg: 'min 03:22', ms: '0,8s' },
+    ],
+    cites: [
+      { label: 'Contrato · cláusula 8 · 03 mar', tool: 0 },
+      { label: 'WhatsApp del edificio · 03 ago', tool: 1 },
+      { label: 'Llamada · 05 ago · min 03:22', tool: 2 },
+    ],
+  },
+  {
     id: 'logistica',
     tab: 'Logística',
     tag: 'logística y aduanas',
@@ -106,24 +124,6 @@ const SCENARIOS: readonly [DemoScenario, ...DemoScenario[]] = [
       { label: 'Factura FV-2214 · 05 jul', tool: 0 },
       { label: 'Correo del cliente · 29 jul', tool: 1 },
       { label: 'Reunión de cierre · min 08:41', tool: 2 },
-    ],
-  },
-  {
-    id: 'nomina',
-    tab: 'Nómina',
-    tag: 'nómina y personal',
-    q: '¿cuánto nos cuesta al mes un auxiliar con básico de $1.800.000?',
-    lead: 'Cerca de $2.725.000 al mes — un 51% más que el básico.',
-    rest: 'Al básico de $1.800.000 se suman $200.000 de auxilio de transporte, $428.000 de prestaciones (prima, cesantías, intereses y vacaciones) y $297.000 de aportes del empleador: pensión, ARL y caja. Te dejo la cifra desglosada para que la confirmes antes de pasarla a la oferta.',
-    tools: [
-      { name: 'Nómina', arg: 'auxiliar de bodega', ms: '1,1s' },
-      { name: 'Aportes del empleador', arg: 'año 2025', ms: '0,5s' },
-      { name: 'Auxilio de transporte', arg: '$200.000', ms: '0,4s' },
-    ],
-    cites: [
-      { label: 'Nómina · básico $1.800.000', tool: 0 },
-      { label: 'Aportes 2025 · pensión, ARL, caja', tool: 1 },
-      { label: 'Auxilio de transporte · $200.000', tool: 2 },
     ],
   },
 ];

@@ -6,6 +6,7 @@ import {
 } from '@cortex/core';
 import { hashInput, writeAuditEvent } from './audit.js';
 import { consumeToken } from './rate-limit.js';
+import { hasConversationGrace } from './security/conversation-grace.js';
 import {
   evaluate as evaluateSecurity,
   explainBlock,
@@ -236,19 +237,34 @@ export async function runTool<I, O>(
   // absolutamente nada — el correo seguiría parándose aquí después de que el
   // veredicto resuelto dijera que siga. Por eso lee `evaluation.mandate` y no
   // vuelve a decidir nada por su cuenta: las dos puertas, un solo veredicto.
+  let viaConversationGrace = false;
   if (tool.requiresConfirmation && !opts.confirmed && !evaluation.mandate) {
-    await writeAuditEvent({
-      db: ctx.db,
-      userId: ctx.userId,
-      agentId: ctx.agentId,
-      conversationId: ctx.conversationId,
-      toolId: tool.id,
-      input,
-      status: 'confirmation_required',
-      latencyMs: Math.round(performance.now() - t0),
-      ...risk,
-    });
-    throw new ConfirmationRequiredError(tool.id, parsed.data);
+    // La memoria corta del sí: una confirmación de esta misma herramienta, en
+    // esta misma conversación y dentro de su ventana, vale para esta llamada.
+    // Solo afloja ESTA puerta — la de seguridad ya pasó, sin consultarla.
+    viaConversationGrace = Boolean(
+      tool.conversationGrace &&
+        (await hasConversationGrace(ctx.db, {
+          conversationId: ctx.conversationId,
+          userId: ctx.userId,
+          toolId: tool.id,
+          graceMs: tool.conversationGrace,
+        })),
+    );
+    if (!viaConversationGrace) {
+      await writeAuditEvent({
+        db: ctx.db,
+        userId: ctx.userId,
+        agentId: ctx.agentId,
+        conversationId: ctx.conversationId,
+        toolId: tool.id,
+        input,
+        status: 'confirmation_required',
+        latencyMs: Math.round(performance.now() - t0),
+        ...risk,
+      });
+      throw new ConfirmationRequiredError(tool.id, parsed.data);
+    }
   }
   if (tool.rateLimit) {
     try {
@@ -341,6 +357,9 @@ export async function runTool<I, O>(
     input,
     status: 'ok',
     latencyMs: Math.round(performance.now() - t0),
+    // Que la auditoría diga cuando un sí heredado abrió la puerta: es la
+    // diferencia entre «confirmó» y «se lo habías confirmado hace un rato».
+    ...(viaConversationGrace ? { metadata: { reason: 'conversation_grace' } } : {}),
     ...riskFinal,
   });
 

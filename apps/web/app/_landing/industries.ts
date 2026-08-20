@@ -71,6 +71,50 @@ export interface Industry {
  */
 export const INDUSTRIES: readonly [Industry, ...Industry[]] = [
   {
+    id: 'inmobiliaria',
+    label: 'Inmobiliaria',
+    tag: 'inmobiliaria',
+    asks: [
+      {
+        role: 'Administradora de arriendos',
+        text: '¿quién responde por el calentador del 704, el propietario o el arrendatario?',
+      },
+      {
+        role: 'Asesor comercial',
+        text: '¿qué comisión le ofrecimos al propietario del 1102?',
+      },
+      {
+        role: 'Contadora de propiedad horizontal',
+        text: '¿a este contrato le toca incremento con IPC este mes?',
+      },
+    ],
+    before:
+      'Buscabas el contrato escaneado en Drive, y si no aparecía llamabas a la administradora del edificio a ver si se acordaba.',
+    answer: {
+      question: '¿quién responde por el calentador del 704, el propietario o el arrendatario?',
+      lead: 'El propietario.',
+      rest: 'El contrato deja al arrendatario sólo las reparaciones locativas, y tanto la administradora como el grupo del edificio dan por sentado que el calentador entró con el inmueble, no con el inquilino.',
+      sources: [
+        {
+          source: 'Contrato de arrendamiento · cláusula 8',
+          when: 'firmado 03 mar',
+          quote:
+            '«Las reparaciones necesarias del inmueble corren por cuenta del arrendador; las locativas, por cuenta del arrendatario.»',
+        },
+        {
+          source: 'Grupo de WhatsApp del edificio',
+          when: '03 ago 19:48',
+          quote: '«Ese calentador vino con el apartamento desde la entrega.»',
+        },
+        {
+          source: 'Llamada con la administradora',
+          when: '05 ago · min 03:22',
+          quote: '«Eso lo cubre el propietario, siempre ha sido así en esa torre.»',
+        },
+      ],
+    },
+  },
+  {
     id: 'logistica',
     label: 'Logística y aduanas',
     tag: 'logística y aduanas',
@@ -280,50 +324,6 @@ export const INDUSTRIES: readonly [Industry, ...Industry[]] = [
           source: 'Llamada con el socio',
           when: '18 jul · min 06:15',
           quote: '«Avisemos con tiempo, no el último día como la vez pasada.»',
-        },
-      ],
-    },
-  },
-  {
-    id: 'inmobiliaria',
-    label: 'Inmobiliaria',
-    tag: 'inmobiliaria',
-    asks: [
-      {
-        role: 'Administradora de arriendos',
-        text: '¿quién responde por el calentador del 704, el propietario o el arrendatario?',
-      },
-      {
-        role: 'Asesor comercial',
-        text: '¿qué comisión le ofrecimos al propietario del 1102?',
-      },
-      {
-        role: 'Contadora de propiedad horizontal',
-        text: '¿a este contrato le toca incremento con IPC este mes?',
-      },
-    ],
-    before:
-      'Buscabas el contrato escaneado en Drive, y si no aparecía llamabas a la administradora del edificio a ver si se acordaba.',
-    answer: {
-      question: '¿quién responde por el calentador del 704, el propietario o el arrendatario?',
-      lead: 'El propietario.',
-      rest: 'El contrato deja al arrendatario sólo las reparaciones locativas, y tanto la administradora como el grupo del edificio dan por sentado que el calentador entró con el inmueble, no con el inquilino.',
-      sources: [
-        {
-          source: 'Contrato de arrendamiento · cláusula 8',
-          when: 'firmado 03 mar',
-          quote:
-            '«Las reparaciones necesarias del inmueble corren por cuenta del arrendador; las locativas, por cuenta del arrendatario.»',
-        },
-        {
-          source: 'Grupo de WhatsApp del edificio',
-          when: '03 ago 19:48',
-          quote: '«Ese calentador vino con el apartamento desde la entrega.»',
-        },
-        {
-          source: 'Llamada con la administradora',
-          when: '05 ago · min 03:22',
-          quote: '«Eso lo cubre el propietario, siempre ha sido así en esa torre.»',
         },
       ],
     },
