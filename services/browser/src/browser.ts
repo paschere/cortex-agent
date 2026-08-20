@@ -297,6 +297,36 @@ export class BrowserWorker {
     return `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
   }
 
+  private countOwned(owner: string): number {
+    let n = 0;
+    for (const session of this.sessions.values()) if (session.owner === owner) n += 1;
+    return n;
+  }
+
+  /**
+   * Cierra la pestaña viva más vieja del dueño que pide espacio. Devuelve si
+   * hizo lugar. Lo intocable no se toca: manos humanas al volante, y trámites
+   * pausados (`request`) que esperan un código que ya viene en camino.
+   */
+  private async evictOldestOwned(owner: string | undefined): Promise<boolean> {
+    if (!owner) return false;
+    let victim: string | null = null;
+    let oldest = Number.POSITIVE_INFINITY;
+    for (const [id, session] of this.sessions) {
+      if (session.owner !== owner) continue;
+      if (session.request) continue;
+      if (session.control && session.control.driver === 'human') continue;
+      if (session.touchedAt < oldest) {
+        oldest = session.touchedAt;
+        victim = id;
+      }
+    }
+    if (!victim) return false;
+    logger.info({ sessionId: victim }, "evicting the requester's oldest live tab to make room");
+    await this.closeSession(victim);
+    return true;
+  }
+
   // -------------------------------------------------------------------------
   // Driving a handed-over tab
   //
@@ -487,7 +517,28 @@ export class BrowserWorker {
   ): Promise<{ sessionId: string; snapshot: PageSnapshot }> {
     // Antes de gastar un contexto: a donde no se va, no se va ni un byte.
     assertNavigable(startUrl);
-    if (this.sessions.size >= this.config.maxConcurrent) throw new BusyError();
+
+    // ── EL CUPO SE DEFIENDE DESALOJANDO LO PROPIO, NO NEGANDO LO NUEVO ────
+    //
+    // Se vio en producción la primera hora: la persona aprueba abrir una
+    // pestaña, el chat no le enseña nada (bug aparte, ya arreglado), vuelve a
+    // pedir, y a la tercera el cupo global está lleno DE SUS PROPIAS pestañas
+    // abandonadas — que iban a vivir cinco minutos cada una. «Ocupado» era
+    // técnicamente cierto y completamente inútil: el servicio se negaba a
+    // trabajar por culpa de basura del mismo dueño que pedía.
+    //
+    // Así que: un dueño puede tener a lo sumo DOS pestañas vivas (la que usa y
+    // una que quedó de antes), y cuando el cupo global se llena, la pestaña
+    // más vieja del que pide se va primero. Nunca se desaloja lo intocable:
+    // una pestaña con una persona conduciendo, o un trámite pausado esperando
+    // su código. Y jamás se desaloja a OTRO dueño — su basura la paga su
+    // próximo openSession, no el de un vecino. BusyError queda para el caso
+    // honesto: el cupo lleno de trabajo ajeno de verdad.
+    if (owner && this.countOwned(owner) >= 2) await this.evictOldestOwned(owner);
+    if (this.sessions.size >= this.config.maxConcurrent) {
+      const evicted = await this.evictOldestOwned(owner);
+      if (!evicted) throw new BusyError();
+    }
     // Con la feature encendida y un dueño conocido, la pestaña nace en el
     // computador del tenant: una página nueva en su Chromium persistente, con
     // las cookies del login de la semana pasada ya puestas. Sin cualquiera de

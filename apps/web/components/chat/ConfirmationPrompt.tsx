@@ -5,6 +5,7 @@ import { confirmationSummary } from '@/lib/tool-labels';
 import { clsx } from 'clsx';
 import { Check, ChevronDown, Loader2, ShieldAlert, X } from 'lucide-react';
 import { useState } from 'react';
+import { resolveView } from './results/registry';
 
 interface ConfirmationPromptProps {
   conversationId: string;
@@ -12,6 +13,8 @@ interface ConfirmationPromptProps {
   input: unknown;
   toolCallId?: string;
   onConfirmed?: () => void;
+  /** El canal de ChoicePrompt, para una tarjeta que habla por la persona. */
+  onSay?: (text: string) => void;
 }
 
 type Status = 'pending' | 'running' | 'allowed' | 'cancelled' | 'error';
@@ -22,10 +25,12 @@ export function ConfirmationPrompt({
   input,
   toolCallId,
   onConfirmed,
+  onSay,
 }: ConfirmationPromptProps) {
   const [status, setStatus] = useState<Status>('pending');
   const [errorMessage, setErrorMessage] = useState('');
   const [showDetails, setShowDetails] = useState(false);
+  const [executed, setExecuted] = useState<unknown>(undefined);
 
   async function handleAllow() {
     setStatus('running');
@@ -41,6 +46,16 @@ export function ConfirmationPrompt({
         setStatus('error');
         return;
       }
+      // El resultado real de la ejecución, guardado para dibujarlo aquí mismo.
+      // La ruta lo persiste sobre el centinela, pero eso vive en la BASE: el
+      // mensaje que esta pantalla tiene en memoria sigue cargando el centinela,
+      // y sin esto la primera vez que alguien vería la tarjeta de lo que acaba
+      // de aprobar sería tras recargar la página. Se vio en producción con la
+      // pestaña viva del navegador: la persona aprobaba, la pestaña se abría
+      // de verdad, y el chat no enseñaba nada — así que la persona volvía a
+      // pedir, y cada reintento abría otra pestaña hasta llenar el cupo.
+      const data = (await res.json().catch(() => ({}))) as { result?: unknown };
+      setExecuted(data.result);
       setStatus('allowed');
       onConfirmed?.();
     } catch (err) {
@@ -54,12 +69,28 @@ export function ConfirmationPrompt({
     input && typeof input === 'object' ? (input as Record<string, unknown>) : {},
   );
 
-  // ---- Resolved states (a single settled line) ----
+  // ---- Resolved states ----
   if (status === 'allowed') {
+    // Si lo ejecutado tiene vista propia (la pestaña viva del navegador, un
+    // trámite que quedó esperando un captcha), se dibuja AQUÍ, debajo del
+    // «Listo»: es la salida de lo que la persona acaba de aprobar y el sitio
+    // donde la está mirando. En una recarga este prompt ya no existe — el
+    // centinela fue reescrito — y la misma tarjeta sale por el camino normal
+    // del registro, así que nunca hay dos.
+    const resolved = executed === undefined ? null : resolveView(toolId, executed);
     return (
-      <div className="flex items-center gap-2 rounded-card border border-emerald/20 bg-emerald-soft px-3.5 py-2 text-sm font-medium text-emerald shadow-card">
-        <Check className="h-4 w-4" />
-        Listo — {summary}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 rounded-card border border-emerald/20 bg-emerald-soft px-3.5 py-2 text-sm font-medium text-emerald shadow-card">
+          <Check className="h-4 w-4" />
+          Listo — {summary}
+        </div>
+        {resolved?.as === 'rich' ? (
+          <resolved.View
+            result={executed}
+            toolCallId={toolCallId ?? `confirmed:${toolId}`}
+            onSay={onSay}
+          />
+        ) : null}
       </div>
     );
   }

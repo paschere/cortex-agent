@@ -662,6 +662,7 @@ export function MessageBubble({
               input={confirmationData.input}
               toolCallId={confirmationInvocation?.toolCallId}
               onConfirmed={onConfirmed}
+              onSay={onAnswer}
             />
           </div>
         )}
