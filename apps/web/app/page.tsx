@@ -45,7 +45,7 @@ import { readOnboarding } from '@cortex/agent-tools';
  */
 
 export const metadata: Metadata = {
-  title: 'Cortex — pregúntale a tu empresa',
+  title: 'Cortex — un asistente para cada persona de tu empresa',
   description:
     'Cortex ya leyó los correos, los contratos, las reuniones y los grupos de WhatsApp de tu empresa. Preguntas en español y contesta citando de dónde salió: el documento, el día y el minuto.',
 };

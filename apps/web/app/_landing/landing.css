@@ -1,51 +1,68 @@
 /*
  * Cortex — the public page.
  *
- * DIRECTION: SheerID's commercial air, Cortex's evidence.
+ * DIRECTION: "an answer and its margin."
  *
- * Ice canvas, navy ink, gold CTA, organic blobs. The page has to sell to a
- * visitor who already lives in polished SaaS. The product claim does not
- * change: every assertion still names its source. The landing is light-only.
+ * The product's whole claim is that it never asserts anything it cannot
+ * attribute. So the page is built the way an answer is built: a claim, and
+ * beside it the thing the claim came from. The one element the visitor should
+ * remember is the answer card — a real Cortex reply with its sources opened up,
+ * quoted, timestamped — and it is the only place the page raises its voice.
+ * Everything around it is deliberately quiet so that card reads as evidence
+ * rather than as another marketing panel.
  *
- * Tokens are namespaced under `.lp` and this file is imported by `app/page.tsx`
- * alone, so Next only ships it on `/`. Fonts: Plus Jakarta Sans (display + UI,
- * self-hosted via next/font on Landing.tsx), Manrope as fallback from the root
- * layout, JetBrains Mono for evidence, Caveat for the one handwritten note.
+ * It inherits the app's system (indigo, 14px curvature, depth by shadow, every
+ * quotable value monospaced) and stretches only two things a product screen
+ * cannot afford: a much larger type scale, and full-bleed section rhythm.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY A SEPARATE TOKEN SET (--lp-*)
+ * ---------------------------------------------------------------------------
+ * globals.css is light-only on purpose — `color-scheme: light`, no dark
+ * counterpart, and tailwind.config.ts pins `darkMode: 'class'` precisely so a
+ * stray `dark:` variant cannot repaint an app surface while the ink stays
+ * light. That constraint is right for the app and wrong for a public page,
+ * which is opened from whatever the visitor's phone is set to.
+ *
+ * So the landing carries its own palette, prefixed and namespaced under `.lp`.
+ * Every colour is declared once in `:root`; the dark block redefines only those
+ * same tokens and introduces no new ones. Nothing here can reach an app screen:
+ * the tokens are additive, the selectors are all under `.lp`, and this file is
+ * imported by `app/page.tsx` alone, so Next only ships it on `/`.
+ *
+ * Fonts are the two the root layout already self-hosts through next/font
+ * (Manrope, JetBrains Mono) — no stylesheet from a CDN, no request to a third
+ * party at runtime — with a real system stack behind each var, so the page has
+ * something correct to paint before either file lands.
  */
 
 :root {
-  /* --- Canvas & surfaces ------------------------------------------------
-     Ice, not grey: the SheerID room. The page is light on purpose — a
-     commercial SaaS that has to sit next to ByDomu, not a night scene. */
-  --lp-canvas: 237 246 252;
+  /* --- Canvas & surfaces ------------------------------------------------ */
+  --lp-canvas: 249 250 253;
   --lp-surface: 255 255 255;
-  --lp-surface-2: 226 239 249;
-  --lp-line: 201 220 236;
-  --lp-line-strong: 168 196 222;
+  --lp-surface-2: 243 244 250;
+  --lp-line: 228 230 241;
+  --lp-line-strong: 209 213 229;
 
-  /* --- Ink: navy, not near-black ---------------------------------------- */
-  --lp-ink: 36 50 94;
-  --lp-ink-muted: 86 104 140;
-  --lp-ink-faint: 104 122 156;
+  /* --- Ink -------------------------------------------------------------- */
+  --lp-ink: 22 24 37;
+  --lp-ink-muted: 95 100 126;
+  /* Darker than the app's `ink-faint`. On a product screen that token labels a
+     value sitting right beside it; here it carries the small print that matters
+     most — the honest caveats about pricing — so it is tuned to clear 4.5:1 on
+     both the canvas and the inset surface rather than to recede. */
+  --lp-ink-faint: 100 106 133;
 
-  /* --- Brand: periwinkle for evidence; gold is reserved for the CTA ----- */
-  --lp-brand: 79 122 220;
-  --lp-brand-strong: 58 98 204;
-  --lp-brand-ink: 44 78 176;
-  --lp-brand-soft: 226 238 255;
-  --lp-brand-line: 79 122 220;
+  /* --- Brand ------------------------------------------------------------ */
+  --lp-brand: 88 80 236;
+  --lp-brand-strong: 71 62 214;
+  --lp-brand-ink: 62 53 199;
+  --lp-brand-soft: 240 239 254;
+  --lp-brand-line: 88 80 236;
+  /* What goes ON a brand fill. It is a token and not a hard-coded white
+     because the dark theme lifts the brand until white stops being legible on
+     it — 3.1:1, which is a button nobody with low vision can read. */
   --lp-on-brand: 255 255 255;
-
-  --lp-gold: 240 176 42;
-  --lp-gold-strong: 226 156 22;
-  --lp-gold-ink: 36 50 94;
-
-  --lp-navy: 36 50 94;
-  --lp-navy-deep: 24 34 68;
-  --lp-sky: 130 176 236;
-  --lp-sky-deep: 70 106 214;
-  --lp-butter: 247 218 110;
-  --lp-lilac: 196 186 242;
 
   /* --- Status: in force / lapsing / lapsed ------------------------------
      Deepened from the app's values for the same reason as ink-faint: these
@@ -57,27 +74,72 @@
   --lp-rose: 190 38 52;
   --lp-rose-soft: 254 240 242;
 
-  /* --- Elevation -------------------------------------------------------- */
-  --lp-shadow-card: 0 1px 2px rgb(36 50 94 / 0.04), 0 10px 28px -12px rgb(36 50 94 / 0.12);
-  --lp-shadow-pop: 0 8px 20px -8px rgb(36 50 94 / 0.14), 0 28px 56px -24px rgb(79 122 220 / 0.28);
+  /* --- Elevation --------------------------------------------------------
+     Tinted toward the brand rather than pure black, which is what keeps a
+     shadow from reading as a grey smudge. */
+  --lp-shadow-card: 0 1px 2px rgb(24 26 39 / 0.04), 0 4px 14px -6px rgb(24 26 39 / 0.08);
+  --lp-shadow-pop: 0 6px 16px -4px rgb(24 26 39 / 0.1), 0 28px 56px -24px rgb(62 53 199 / 0.28);
 
-  /* --- Geometry: stadiums and soft tiles, not 14px product chips -------- */
-  --lp-r: 22px;
-  --lp-r-sm: 14px;
-  --lp-r-lg: 32px;
+  /* --- Geometry --------------------------------------------------------- */
+  --lp-r: 14px;
+  --lp-r-sm: 10px;
+  --lp-r-lg: 22px;
 
   /* --- Measure ---------------------------------------------------------- */
-  --lp-page: 1180px;
+  --lp-page: 1120px;
   --lp-prose: 60ch;
 }
 
-/* The landing is light on purpose. A stray OS dark preference must not
-   repaint a page whose whole argument is this ice-and-gold room. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Not grey: the same indigo tilt the light canvas has, taken all the way
+       down, so the two themes are the same room at different hours. */
+    --lp-canvas: 12 13 22;
+    --lp-surface: 21 23 36;
+    --lp-surface-2: 27 29 45;
+    --lp-line: 41 45 66;
+    --lp-line-strong: 58 63 89;
+
+    --lp-ink: 234 236 245;
+    --lp-ink-muted: 158 164 189;
+    --lp-ink-faint: 136 142 168;
+
+    /* Lifted off the seed indigo: #5850EC on a near-black canvas fails contrast
+       for text, so the brand reads one step brighter and its "soft" fill
+       becomes a tint of the canvas instead of a wash of white. */
+    --lp-brand: 138 130 255;
+    --lp-brand-strong: 118 109 246;
+    --lp-brand-ink: 181 176 255;
+    --lp-brand-soft: 38 37 74;
+    --lp-brand-line: 138 130 255;
+    /* Inverted: the ink goes dark so the fill can stay vivid. */
+    --lp-on-brand: 12 13 22;
+
+    --lp-emerald: 61 205 160;
+    --lp-emerald-soft: 16 51 44;
+    --lp-amber: 233 180 78;
+    --lp-amber-soft: 54 42 18;
+    --lp-rose: 248 128 140;
+    --lp-rose-soft: 60 26 33;
+
+    --lp-shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px -8px rgb(0 0 0 / 0.5);
+    --lp-shadow-pop: 0 8px 20px -6px rgb(0 0 0 / 0.55), 0 32px 60px -28px rgb(0 0 0 / 0.7);
+  }
+}
+
+/* The app's <body> paints `bg-canvas`, which is a light-only token. Repaint it
+   from the landing's own canvas so overscroll and the area under a short page
+   match the theme. Scoped by :has so no other route is touched. */
 html:has(.lp) {
   color-scheme: light;
 }
 html:has(.lp) body {
   background: rgb(var(--lp-canvas));
+}
+@media (prefers-color-scheme: dark) {
+  html:has(.lp) {
+    color-scheme: dark;
+  }
 }
 
 /* ==========================================================================
@@ -88,20 +150,24 @@ html:has(.lp) body {
   position: relative;
   background: rgb(var(--lp-canvas));
   color: rgb(var(--lp-ink));
-  font-family: var(--lp-font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   overflow-x: clip;
 
-  /* Aliases for the navy audit band, which still speaks in the old night
-     token names so its rows stay light-on-navy without a second rewrite. */
-  --lph-bg: 36 50 94;
-  --lph-bg-deep: 24 34 68;
-  --lph-ink: 255 255 255;
-  --lph-ink-muted: 186 198 222;
-  --lph-brand: 79 122 220;
-  --lph-brand-bright: 240 176 42;
+  /* --- Tokens del hero: SIEMPRE oscuro ---------------------------------
+     Decisión deliberada de identidad, no un tema: el primer viewport es una
+     escena nocturna con tinte índigo profundo, en claro y en oscuro por
+     igual. Por eso estos tokens no viven en el bloque de dark-mode: no
+     cambian nunca. Los colores de la escena WebGL (SeqScene) son estos
+     mismos valores. */
+  --lph-bg: 7 8 22;
+  --lph-bg-deep: 5 6 18;
+  --lph-ink: 237 239 251;
+  --lph-ink-muted: 178 183 214;
+  --lph-brand: 149 141 255;
+  --lph-brand-bright: 187 181 255;
 }
 
 .lp > main,
@@ -110,11 +176,16 @@ html:has(.lp) body {
   z-index: 1;
 }
 
+/* Todo lo que viene después del hero corre sobre fondo propio y opaco: es lo
+   que "tapa" la escena fija cuando el visitante baja. */
 .lp-after {
   position: relative;
   background: rgb(var(--lp-canvas));
 }
 
+/* El glow ambiental: una luz radial que sigue al cursor con retraso (las
+   variables las pone Interactive con un solo listener + rAF). La habitación
+   nota dónde está la mano; nada más. */
 .lp-live .lp-after::before {
   content: "";
   position: absolute;
@@ -123,7 +194,7 @@ html:has(.lp) body {
   pointer-events: none;
   background: radial-gradient(
     560px circle at var(--amb-x, 50%) var(--amb-y, -9999px),
-    rgb(var(--lp-gold) / 0.1) 0%,
+    rgb(var(--lp-brand) / 0.07) 0%,
     transparent 70%
   );
 }
@@ -134,7 +205,7 @@ html:has(.lp) body {
 }
 
 .lp-foot {
-  background: rgb(var(--lp-surface));
+  background: rgb(var(--lph-bg-deep));
 }
 
 .lp :focus-visible {
@@ -160,7 +231,7 @@ html:has(.lp) body {
   padding-block: 72px;
   /* The masthead is sticky, so an in-page jump has to stop short of it or the
      heading it was aimed at lands underneath. */
-  scroll-margin-top: 88px;
+  scroll-margin-top: 78px;
 }
 
 @media (min-width: 768px) {
@@ -221,29 +292,36 @@ html:has(.lp) body {
    Type
    ========================================================================== */
 
+/* La voz de los titulares: Instrument Serif (self-hosted vía next/font, la
+   variable la pone Landing.tsx en la raíz). Editorial y con itálicas de
+   verdad para los acentos — el contraste contra Manrope (explica) y JetBrains
+   Mono (verifica) es lo que hace que la página deje de sonar a plantilla.
+   A 400 el trazo es fino, así que la escala sube: el carácter lo pone el
+   dibujo de la letra, no el peso. */
 .lp-display {
-  font-family: var(--lp-font-display), var(--font-sans), ui-sans-serif, sans-serif;
-  font-size: clamp(2.7rem, 6vw, 4.6rem);
-  font-weight: 800;
+  font-family: var(--lp-font-display), "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-size: clamp(2.6rem, 5.2vw, 4.3rem);
+  font-weight: 400;
   line-height: 1.02;
-  letter-spacing: -0.038em;
+  letter-spacing: -0.015em;
   text-wrap: balance;
-  color: rgb(var(--lp-ink));
 }
 
 .lp-h2 {
-  font-family: var(--lp-font-display), var(--font-sans), ui-sans-serif, sans-serif;
-  font-size: clamp(2rem, 4.2vw, 3.2rem);
-  font-weight: 800;
-  line-height: 1.08;
-  letter-spacing: -0.032em;
+  font-family: var(--lp-font-display), "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-size: clamp(2rem, 3.9vw, 3.05rem);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: -0.012em;
   text-wrap: balance;
 }
 
+/* El acento de un titular es LA MISMA letra en tinta de marca — sin itálica,
+   a pedido del dueño: el color solo ya marca el énfasis. `em` se conserva en
+   el HTML por semántica; la redonda es decisión visual. */
 .lp-display em,
 .lp-h2 em {
-  font-style: italic;
-  font-weight: 700;
+  font-style: normal;
   color: rgb(var(--lp-brand-ink));
 }
 
@@ -255,8 +333,8 @@ html:has(.lp) body {
 }
 
 .lp-lead {
-  font-size: clamp(1.05rem, 1.5vw, 1.2rem);
-  line-height: 1.6;
+  font-size: clamp(1.0625rem, 1.5vw, 1.25rem);
+  line-height: 1.55;
   color: rgb(var(--lp-ink-muted));
   max-width: var(--lp-prose);
   text-wrap: pretty;
@@ -280,19 +358,25 @@ html:has(.lp) body {
   color: rgb(var(--lp-ink-faint));
 }
 
+/* Every figure, name, clause number, minute mark or peso amount a visitor
+   might check, quote or copy. Rule 3 of the design system, and on this page it
+   is the argument rather than the styling. */
 .lp-data {
   font-family: var(--font-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums lining-nums slashed-zero;
   letter-spacing: -0.015em;
 }
 
+/* Section marker. Monospaced and sentence case — not a stamped small-caps
+   eyebrow, which the design system explicitly refuses. */
 .lp-marker {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
   color: rgb(var(--lp-brand-ink));
 }
 
@@ -301,17 +385,7 @@ html:has(.lp) body {
   width: 18px;
   height: 2px;
   border-radius: 2px;
-  background: rgb(var(--lp-gold));
-}
-
-.lp-note {
-  margin-top: 22px;
-  font-family: var(--lp-font-script), "Segoe Script", cursive;
-  font-size: 1.45rem;
-  line-height: 1.2;
-  color: rgb(var(--lp-brand-ink));
-  transform: rotate(-4deg);
-  transform-origin: left center;
+  background: rgb(var(--lp-brand-line));
 }
 
 .lp-head {
@@ -380,38 +454,24 @@ html:has(.lp) body {
   justify-content: center;
   gap: 8px;
   border-radius: 999px;
-  padding: 12px 22px;
-  font-size: 14.5px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 650;
   text-decoration: none;
-  border: 1.5px solid transparent;
+  border: 1px solid transparent;
   transition: transform 150ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out,
     box-shadow 150ms ease-out;
 }
 
 .lp-btn--primary {
-  background: rgb(var(--lp-gold));
-  color: rgb(var(--lp-gold-ink));
-  box-shadow: 0 8px 22px -8px rgb(var(--lp-gold) / 0.7);
+  background: rgb(var(--lp-brand));
+  color: rgb(var(--lp-on-brand));
+  box-shadow: var(--lp-shadow-pop);
 }
 
 .lp-btn--primary:hover {
-  background: rgb(var(--lp-gold-strong));
+  background: rgb(var(--lp-brand-strong));
   transform: translateY(-1px);
-}
-
-.lp-btn--nav {
-  background: transparent;
-  border-color: rgb(var(--lp-ink) / 0.22);
-  color: rgb(var(--lp-ink));
-  padding: 8px 16px;
-  font-size: 13.5px;
-}
-
-.lp-btn--nav:hover {
-  border-color: rgb(var(--lp-ink) / 0.5);
-  background: rgb(var(--lp-surface));
 }
 
 .lp-btn--ghost {
@@ -428,10 +488,9 @@ html:has(.lp) body {
 }
 
 .lp-btn--plain {
-  padding: 8px 10px;
+  padding: 8px 4px;
   color: rgb(var(--lp-ink-muted));
-  font-weight: 650;
-  font-size: 14px;
+  font-weight: 600;
 }
 
 .lp-btn--plain:hover {
@@ -439,89 +498,65 @@ html:has(.lp) body {
 }
 
 /* ==========================================================================
-   Masthead — floating pill
+   Masthead
    ========================================================================== */
 
+/* Superpuesto al hero oscuro, transparente: la escena llega hasta el borde
+   superior de la ventana y el masthead flota encima con tinta clara. Ya no es
+   sticky — se va con el hero, y el cierre de la página repite las dos CTAs. */
 .lp-top {
-  position: sticky;
-  top: 14px;
-  z-index: 40;
-  display: flex;
-  justify-content: center;
-  padding-inline: 16px;
-  pointer-events: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
 }
 
-.lp-top__pill {
-  pointer-events: auto;
+.lp-top .lp-mark {
+  color: rgb(var(--lph-ink));
+}
+
+.lp-top .lp-btn--plain {
+  color: rgb(var(--lph-ink-muted));
+}
+
+.lp-top .lp-btn--plain:hover {
+  color: rgb(var(--lph-ink));
+}
+
+.lp-top__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  width: min(1080px, 100%);
-  height: 58px;
-  padding: 6px 8px 6px 16px;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.86);
-  border: 1px solid rgb(255 255 255 / 0.9);
-  box-shadow: 0 10px 40px -18px rgb(36 50 94 / 0.28), 0 1px 0 rgb(255 255 255 / 0.8) inset;
-  backdrop-filter: blur(16px);
-}
-
-.lp-top__links {
-  display: none;
-  align-items: center;
-  gap: 4px;
-}
-
-.lp-top__links a {
-  padding: 8px 11px;
-  border-radius: 999px;
-  color: rgb(var(--lp-ink-muted));
-  font-size: 13.5px;
-  font-weight: 650;
-  text-decoration: none;
-}
-
-.lp-top__links a:hover {
-  color: rgb(var(--lp-ink));
-  background: rgb(var(--lp-canvas));
-}
-
-@media (min-width: 880px) {
-  .lp-top__links {
-    display: flex;
-  }
+  gap: 16px;
+  height: 62px;
 }
 
 .lp-mark {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   text-decoration: none;
   color: rgb(var(--lp-ink));
-  flex: none;
 }
 
 .lp-mark img {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
 }
 
 .lp-mark__word {
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  text-transform: none;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   line-height: 1;
 }
 
 .lp-top__actions {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex: none;
+  gap: 6px;
 }
 
 @media (max-width: 419px) {
@@ -531,228 +566,384 @@ html:has(.lp) body {
 }
 
 /* ==========================================================================
-   Hero — ice, blobs, gold
-   ========================================================================== */
+   La secuencia del hero (.lp-seq)
+   ==========================================================================
+   El humano toca a la IA → big bang → nace CORTEX → el producto. La sección
+   mide 350vh en modo `run` y su primer hijo (.lp-seq__pin) es sticky a
+   pantalla completa: el scroll dentro de la sección es la línea de tiempo.
+   Las fases las escribe HeroSequence como estilos inline (opacity/transform)
+   sobre los overlays; aquí viven la base, el fondo nocturno y el flash.
 
-.lp-hero {
+   SIN el modo run — SSR, sin JS, prefers-reduced-motion, sin WebGL — nada de
+   esto es una película: la MISMA sección es un hero normal en flujo (titular
+   + la ventana del producto, completa y quieta). Quien pidió quietud recibe
+   el estado final, no una escena a medio estallar. */
+
+.lp-seq {
   position: relative;
-  isolation: isolate;
-  overflow: clip;
-  min-height: min(92svh, 860px);
-  padding: 108px 20px 72px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  color: rgb(var(--lph-ink));
 }
 
-.lp-hero__copy {
+/* El fondo nocturno: índigo profundo con las luces de reposo y un campo de
+   puntos tenue. Se pinta canvas o no canvas — sin WebGL la página queda
+   terminada, no rota. */
+.lp-seq__pin {
   position: relative;
-  z-index: 2;
-  text-align: center;
-  max-width: 44rem;
+  overflow: clip;
   display: flex;
   flex-direction: column;
-  align-items: center;
-}
-
-.lp-hero__display {
-  margin-top: 16px;
-}
-
-.lp-hero__lead {
-  margin-top: 18px;
-  margin-inline: auto;
-}
-
-.lp-hero__cta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin-top: 28px;
+  gap: 56px;
+  min-height: 100svh;
+  padding-block: 120px 64px;
+  background: radial-gradient(42% 38% at 72% 36%, rgb(var(--lph-brand) / 0.14) 0%, transparent 70%),
+    radial-gradient(36% 44% at 22% 66%, rgb(var(--lph-brand) / 0.07) 0%, transparent 72%),
+    linear-gradient(180deg, rgb(var(--lph-bg-deep)) 0%, rgb(9 10 28) 100%);
 }
 
-.lp-hero .lp-note {
-  transform-origin: center;
-}
-
-/* --- Organic stadiums --------------------------------------------------- */
-
-.lp-stage {
+/* Grano de emulsión: feTurbulence inline (data-uri, cero red), en overlay.
+   Va POR ENCIMA del canvas (z-index 2 contra el 1 de la escena): la película
+   entera se siente fotografiada, no renderizada. */
+.lp-seq__pin::after {
+  content: "";
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+/* La viñeta: abraza el frame completo — canvas incluido — hacia el índigo
+   profundo. Es lo que hace que la luz viva en el centro. */
+.lp-seq__pin::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: radial-gradient(
+    120% 105% at 50% 44%,
+    transparent 52%,
+    rgb(var(--lph-bg-deep) / 0.38) 82%,
+    rgb(var(--lph-bg-deep) / 0.72) 100%
+  );
+}
+
+/* En estático el tagline sobra: es la misma promesa del titular. */
+.lp-seq:not(.lp-seq--run) .lp-seq__tag {
+  display: none;
+}
+
+/* --- El modo run: el pin y sus capas ------------------------------------ */
+
+.lp-seq--run {
+  /* vh y no svh a propósito: la barra del navegador móvil no debe cambiar
+     la longitud de la película mientras se reproduce. */
+  height: 350vh;
+}
+
+.lp-seq--run .lp-seq__pin {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  min-height: 0;
+  display: block;
+  padding: 0;
+}
+
+.lp-seq__scene {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.lp-seq__scene canvas {
+  opacity: 0;
+  transition: opacity 800ms ease-out;
+}
+
+.lp-seq__scene--on canvas {
+  opacity: 1;
+}
+
+/* --- El contacto: flash + onda de choque -------------------------------- */
+
+.lp-seq__bang {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
   pointer-events: none;
 }
 
-.lp-blob {
+/* Doble curva: subida instantánea, caída lenta — la fotografía de un
+   destello, no un parpadeo simétrico. */
+.lp-seq__flash {
   position: absolute;
-  border-radius: 46% 54% 48% 52% / 42% 48% 52% 58%;
+  inset: 0;
+  background: radial-gradient(
+    62% 62% at 50% 42%,
+    rgb(255 255 255 / 0.95) 0%,
+    rgb(var(--lph-brand-bright) / 0.5) 32%,
+    transparent 72%
+  );
+  opacity: 0;
+  animation: lp-flash 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.lp-blob--sky-a {
-  left: -6%;
-  top: 18%;
-  width: min(38vw, 420px);
-  height: min(52vw, 520px);
-  background: rgb(var(--lp-sky));
-  transform: rotate(-28deg);
-  border-radius: 48% 52% 46% 54% / 40% 55% 45% 60%;
-}
-
-.lp-blob--sky-b {
-  right: -8%;
-  top: 22%;
-  width: min(34vw, 380px);
-  height: min(46vw, 460px);
-  background: rgb(var(--lp-sky-deep));
-  transform: rotate(24deg);
-  border-radius: 52% 48% 58% 42% / 46% 40% 60% 54%;
-}
-
-.lp-blob--navy {
-  right: 6%;
-  bottom: 8%;
-  width: min(22vw, 240px);
-  height: min(16vw, 170px);
-  background: rgb(var(--lp-navy));
-  transform: rotate(18deg);
-  opacity: 0.92;
-}
-
-.lp-blob--butter {
-  left: 8%;
-  bottom: 12%;
-  width: min(18vw, 200px);
-  height: min(14vw, 150px);
-  background: rgb(var(--lp-butter));
-  transform: rotate(-16deg);
-}
-
-.lp-float {
-  position: absolute;
-  z-index: 1;
-  pointer-events: auto;
-  width: min(250px, 22vw);
-  padding: 16px 18px 14px;
-  border-radius: 28px;
-  background: rgb(var(--lp-surface));
-  box-shadow: var(--lp-shadow-pop);
-  border: 1px solid rgb(255 255 255 / 0.8);
-}
-
-.lp-live .lp-float.lp-tilt {
-  position: absolute;
-}
-
-.lp-float--wa {
-  left: 3%;
-  top: auto;
-  bottom: 18%;
-}
-
-.lp-float--cite {
-  right: 3%;
-  top: auto;
-  bottom: 22%;
-}
-
-.lp-float__badge,
-.lp-float__heart {
-  position: absolute;
-  top: -12px;
-  right: 18px;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: rgb(var(--lp-gold));
-  box-shadow: 0 6px 14px -4px rgb(var(--lp-gold) / 0.7);
-}
-
-.lp-float__badge::after,
-.lp-float__heart::after {
-  content: "";
-  position: absolute;
-  inset: 8px 7px 10px;
-  background: rgb(var(--lp-gold-ink));
-  clip-path: polygon(14% 42%, 38% 66%, 86% 18%, 96% 28%, 38% 88%, 4% 52%);
-}
-
-.lp-float__heart {
-  background: rgb(var(--lp-sky-deep));
-  box-shadow: 0 6px 14px -4px rgb(var(--lp-sky-deep) / 0.55);
-}
-
-.lp-float__heart::after {
-  inset: 9px 8px;
-  background: #fff;
-  clip-path: polygon(50% 86%, 8% 48%, 8% 32%, 24% 18%, 40% 22%, 50% 36%, 60% 22%, 76% 18%, 92% 32%, 92% 48%);
-}
-
-.lp-float__kicker {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgb(var(--lp-ink-faint));
-}
-
-.lp-float__q {
-  margin-top: 8px;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.35;
-  color: rgb(var(--lp-ink));
-}
-
-.lp-float__a {
-  margin-top: 6px;
-  font-size: 13.5px;
-  line-height: 1.45;
-  color: rgb(var(--lp-ink-muted));
-}
-
-.lp-float__src {
-  margin-top: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  color: rgb(var(--lp-brand-ink));
-}
-
-.lp-float__quote {
-  margin-top: 6px;
-  padding-left: 10px;
-  border-left: 2px solid rgb(var(--lp-gold));
-  font-size: 13px;
-  line-height: 1.45;
-  color: rgb(var(--lp-ink));
-}
-
-.lp-float__when {
-  margin-top: 8px;
-  font-size: 11px;
-  color: rgb(var(--lp-ink-faint));
-}
-
-@media (max-width: 1399px) {
-  .lp-blob--sky-a,
-  .lp-blob--sky-b {
-    opacity: 0.5;
+@keyframes lp-flash {
+  0% {
+    opacity: 0;
   }
-  .lp-float {
+  5% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* La onda: un círculo SVG con trazo que no escala (vector-effect), así el
+   anillo crece hasta llenar la pantalla sin engordar. */
+.lp-seq__wave {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 160vmax;
+  height: 160vmax;
+  margin-left: -80vmax;
+  margin-top: -80vmax;
+  color: rgb(var(--lph-brand-bright) / 0.85);
+  transform: scale(0.01);
+  opacity: 0;
+  animation: lp-wave 1.15s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards;
+}
+
+@keyframes lp-wave {
+  0% {
+    transform: scale(0.01);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* --- Overlays: el titular, el tagline, el hero final --------------------- */
+
+/* En run, cada overlay es una capa a pantalla completa; HeroSequence escribe
+   su opacity/transform por scroll. En estático son bloques de flujo normal. */
+.lp-seq--run .lp-seq__intro,
+.lp-seq--run .lp-seq__final {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+}
+
+/* La fase del alcance: el titular flota centrado entre el humano y el
+   núcleo, con una viñeta suave detrás para la legibilidad. */
+.lp-seq--run .lp-seq__intro {
+  pointer-events: none;
+  text-align: center;
+  background: radial-gradient(
+    56% 44% at 50% 46%,
+    rgb(var(--lph-bg-deep) / 0.62) 0%,
+    rgb(var(--lph-bg-deep) / 0.28) 55%,
+    transparent 78%
+  );
+}
+
+/* En angosto la figura pasa por detrás del texto: el scrim gana piso para
+   que el titular gane siempre. */
+@media (max-width: 1023px) {
+  .lp-seq--run .lp-seq__intro {
+    background: radial-gradient(
+        70% 50% at 50% 46%,
+        rgb(var(--lph-bg-deep) / 0.66) 0%,
+        rgb(var(--lph-bg-deep) / 0.3) 58%,
+        transparent 80%
+      ),
+      linear-gradient(
+        0deg,
+        rgb(var(--lph-bg-deep) / 0.85) 0%,
+        rgb(var(--lph-bg-deep) / 0.45) 30%,
+        transparent 55%
+      );
+  }
+}
+
+.lp-seq--run .lp-seq__intro a {
+  pointer-events: auto;
+}
+
+.lp-seq--run .lp-seq__intro .lp-hero__copy {
+  max-width: 56rem;
+  margin-inline: auto;
+}
+
+.lp-seq--run .lp-seq__intro .lp-lead {
+  margin-inline: auto;
+  max-width: 46rem;
+}
+
+.lp-seq--run .lp-seq__intro .lp-hero__cta {
+  justify-content: center;
+}
+
+/* El tagline bajo el wordmark de partículas. */
+.lp-seq__tag {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 63%;
+  z-index: 3;
+  padding-inline: 24px;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.lp-seq__tagline {
+  font-family: var(--lp-font-display), "Iowan Old Style", Georgia, serif;
+  font-size: clamp(1.25rem, 2.4vw, 1.8rem);
+  line-height: 1.25;
+  color: rgb(var(--lph-ink-muted));
+  text-wrap: balance;
+}
+
+.lp-seq__tagline em {
+  font-style: normal;
+  color: rgb(var(--lph-brand-bright));
+}
+
+/* El hero final: deja aire arriba para el wordmark asentado. */
+.lp-seq--run .lp-seq__final {
+  z-index: 4;
+  align-items: flex-end;
+  padding-top: 28svh;
+  padding-bottom: max(4svh, 28px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* En angosto no caben titular + prosa + ventana en un viewport: manda la
+   ventana (la regla del encargo: completa y legible) con el marker y las
+   CTAs; el titular del hero final es de escritorio. */
+@media (max-width: 1023px) {
+  .lp-seq--run .lp-seq__final {
+    padding-top: 15svh;
+    align-items: flex-start;
+    overflow: hidden;
+  }
+
+  .lp-seq--run .lp-seq__final .lp-hero__final-title,
+  .lp-seq--run .lp-seq__final .lp-hero__final-lead {
     display: none;
   }
-  .lp-hero {
-    min-height: unset;
-    padding-top: 96px;
-    padding-bottom: 48px;
+
+  .lp-seq--run .lp-seq__final .lp-hero__grid {
+    gap: 18px;
+  }
+
+  .lp-seq--run .lp-seq__final .lp-hero__cta {
+    margin-top: 12px;
   }
 }
 
-/* --- Word reveal (server-stamped delays) -------------------------------- */
+/* La pista de scroll: sólo existe en run, sólo se ve al inicio. */
+.lp-seq__hint {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  z-index: 3;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: rgb(var(--lph-ink-muted));
+}
 
+.lp-seq__hint-line {
+  width: 1px;
+  height: 34px;
+  background: linear-gradient(180deg, rgb(var(--lph-brand-bright) / 0.9), transparent);
+  animation: lp-hint 1.8s ease-in-out infinite;
+  transform-origin: top;
+}
+
+@keyframes lp-hint {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* Las cartelas de fase: micro-texto mono, tracking amplio, un protagonista
+   a la vez. La opacidad la escribe HeroSequence con el scroll. */
+.lp-seq__cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8.5%;
+  z-index: 3;
+  text-align: center;
+  padding-inline: 24px;
+  pointer-events: none;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  color: rgb(var(--lph-ink-muted));
+  opacity: 0;
+}
+
+/* ==========================================================================
+   El contenido del hero (compartido por los dos modos)
+   ========================================================================== */
+
+.lp-hero__copy {
+  max-width: 34rem;
+}
+
+.lp-seq .lp-marker {
+  color: rgb(var(--lph-brand-bright));
+}
+
+.lp-seq .lp-marker::before {
+  background: rgb(var(--lph-brand));
+}
+
+.lp-hero__display {
+  color: rgb(var(--lph-ink));
+  font-size: clamp(2.5rem, 5.4vw, 4.5rem);
+}
+
+.lp-hero__display em {
+  font-style: normal;
+  color: rgb(var(--lph-brand-bright));
+}
+
+/* --- El titular entra por palabras -----------------------------------
+   Cada palabra vive en una ventana con clip (lp-wb) y sube desde abajo con
+   su propio delay (inline, puesto en el servidor). Los paddings negativos
+   compensan el clip para que descendentes e itálicas no se corten. La regla
+   global de reduced-motion colapsa la animación al estado final. */
 .lp-wb {
   display: inline-block;
   overflow: clip;
@@ -777,6 +968,90 @@ html:has(.lp) body {
   }
 }
 
+.lp-seq .lp-lead {
+  color: rgb(var(--lph-ink-muted));
+}
+
+.lp-hero__lead {
+  margin-top: 20px;
+}
+
+.lp-hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+/* Botones sobre el hero oscuro: el primario es la luz del núcleo (lavanda
+   encendida con tinta oscura — 6:1) y el fantasma es vidrio. El masthead
+   comparte el primario porque flota sobre la misma escena. */
+.lp-seq .lp-btn--primary,
+.lp-top .lp-btn--primary {
+  background: rgb(var(--lph-brand));
+  color: rgb(var(--lph-bg-deep));
+  box-shadow: 0 0 0 1px rgb(var(--lph-brand) / 0.35), 0 10px 34px -8px rgb(var(--lph-brand) / 0.5);
+}
+
+.lp-seq .lp-btn--primary:hover,
+.lp-top .lp-btn--primary:hover {
+  background: rgb(var(--lph-brand-bright));
+}
+
+.lp-seq .lp-btn--ghost {
+  background: rgb(255 255 255 / 0.06);
+  border-color: rgb(255 255 255 / 0.22);
+  color: rgb(var(--lph-ink));
+  box-shadow: none;
+  backdrop-filter: blur(6px);
+}
+
+.lp-seq .lp-btn--ghost:hover {
+  background: rgb(255 255 255 / 0.1);
+  border-color: rgb(255 255 255 / 0.38);
+}
+
+/* --- El hero final: copy + la ventana viva ------------------------------ */
+
+.lp-hero__grid {
+  display: grid;
+  gap: 40px;
+  width: 100%;
+  align-items: center;
+}
+
+@media (min-width: 1024px) {
+  .lp-hero__grid {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 56px;
+  }
+}
+
+.lp-hero__final-title {
+  margin-top: 14px;
+  color: rgb(var(--lph-ink));
+}
+
+.lp-hero__final-title em {
+  color: rgb(var(--lph-brand-bright));
+}
+
+.lp-hero__final-lead {
+  margin-top: 14px;
+  font-size: 1rem;
+}
+
+/* En estático el copy final repetiría el titular a media página: la ventana
+   manda y el copy se recorta con la misma jerarquía del resto. */
+.lp-seq:not(.lp-seq--run) .lp-hero__final-copy {
+  max-width: 34rem;
+}
+
+/* The pieces of the hero arrive in the order the product produces them: the
+   question, then the answer, then what the answer stands on. One orchestrated
+   entrance, once, and the global reduced-motion rule in globals.css collapses
+   it to the finished state. */
 @keyframes lp-arrive {
   from {
     opacity: 0;
@@ -790,33 +1065,6 @@ html:has(.lp) body {
 
 .lp-arrive {
   animation: lp-arrive 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-/* --- Product stage under the hero --------------------------------------- */
-
-.lp-product {
-  padding-top: 72px;
-}
-
-.lp-product__grid {
-  display: grid;
-  gap: 40px;
-  align-items: center;
-}
-
-@media (min-width: 980px) {
-  .lp-product__grid {
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-    gap: 56px;
-  }
-}
-
-.lp-product__demo {
-  background: rgb(var(--lp-surface));
-  border-radius: 36px;
-  padding: 22px;
-  box-shadow: var(--lp-shadow-pop);
-  border: 1px solid rgb(var(--lp-line) / 0.6);
 }
 
 /* ==========================================================================
@@ -1430,74 +1678,102 @@ html:has(.lp) body {
 }
 
 /* ==========================================================================
-   Close band + footer
-   ========================================================================== */
+   El cierre nocturno + footer
+   ==========================================================================
+   La página empieza de noche y termina de noche: el cierre rima con el hero
+   (mismo índigo profundo, misma luz lavanda, mismo grano) pero sin repetir el
+   organismo de partículas — aquí la luz está quieta y la que habla es la CTA.
+   El footer vive dentro de la misma noche, en columnas. */
 
-.lp-close-sec {
-  padding-bottom: 48px;
+.lp-night {
+  position: relative;
+  overflow: clip;
+  padding-block: 104px 96px;
+  color: rgb(var(--lph-ink));
+  background: radial-gradient(48% 46% at 78% 18%, rgb(var(--lph-brand) / 0.16) 0%, transparent 70%),
+    radial-gradient(38% 52% at 16% 96%, rgb(var(--lph-brand) / 0.07) 0%, transparent 72%),
+    linear-gradient(180deg, rgb(9 10 28) 0%, rgb(var(--lph-bg-deep)) 100%);
+}
+
+.lp-night::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+.lp-night > .lp-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.lp-night .lp-marker {
+  color: rgb(var(--lph-brand-bright));
+}
+
+.lp-night .lp-marker::before {
+  background: rgb(var(--lph-brand));
+}
+
+.lp-night__title {
+  margin-top: 14px;
+  color: rgb(var(--lph-ink));
+  font-size: clamp(2.5rem, 4.8vw, 4rem);
+}
+
+.lp-night__title em {
+  color: rgb(var(--lph-brand-bright));
+}
+
+.lp-night .lp-lead {
+  color: rgb(var(--lph-ink-muted));
+}
+
+/* Los botones del cierre son los del hero: misma luz sobre la misma noche. */
+.lp-night .lp-btn--primary {
+  background: rgb(var(--lph-brand));
+  color: rgb(var(--lph-bg-deep));
+  box-shadow: 0 0 0 1px rgb(var(--lph-brand) / 0.35), 0 10px 34px -8px rgb(var(--lph-brand) / 0.5);
+}
+
+.lp-night .lp-btn--primary:hover {
+  background: rgb(var(--lph-brand-bright));
+}
+
+.lp-night .lp-btn--ghost {
+  background: rgb(255 255 255 / 0.06);
+  border-color: rgb(255 255 255 / 0.22);
+  color: rgb(var(--lph-ink));
+  box-shadow: none;
+  backdrop-filter: blur(6px);
+}
+
+.lp-night .lp-btn--ghost:hover {
+  background: rgb(255 255 255 / 0.1);
+  border-color: rgb(255 255 255 / 0.38);
 }
 
 .lp-close {
-  text-align: center;
-  max-width: none;
-  margin-inline: auto;
-  padding: 72px 32px;
-  border-radius: 40px;
-  background:
-    radial-gradient(60% 80% at 90% 0%, rgb(var(--lp-sky) / 0.35) 0%, transparent 70%),
-    radial-gradient(50% 70% at 8% 100%, rgb(var(--lp-gold) / 0.18) 0%, transparent 62%),
-    rgb(var(--lp-navy));
-  color: #fff;
-}
-
-.lp-close .lp-marker {
-  color: rgb(var(--lp-gold));
-}
-
-.lp-close .lp-marker::before {
-  background: rgb(var(--lp-gold));
-}
-
-.lp-close__title {
-  margin-top: 14px;
-  color: #fff;
-  font-size: clamp(2.2rem, 4.4vw, 3.5rem);
-}
-
-.lp-close__title em {
-  color: rgb(var(--lp-gold));
-}
-
-.lp-close .lp-lead {
-  margin-inline: auto;
-  color: rgb(210 220 240);
-}
-
-.lp-close .lp-btn--ghost {
-  background: transparent;
-  border-color: rgb(255 255 255 / 0.28);
-  color: #fff;
-  box-shadow: none;
-}
-
-.lp-close .lp-btn--ghost:hover {
-  background: rgb(255 255 255 / 0.08);
-  border-color: rgb(255 255 255 / 0.5);
+  text-align: left;
+  max-width: 46rem;
 }
 
 .lp-close__cta {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 12px;
   margin-top: 32px;
 }
 
 .lp-foot {
-  background: rgb(var(--lp-surface));
-  border-top: 1px solid rgb(var(--lp-line));
+  border-top: 1px solid rgb(255 255 255 / 0.08);
   padding-block: 52px 36px;
-  color: rgb(var(--lp-ink-muted));
+  color: rgb(var(--lph-ink-muted));
 }
 
 .lp-foot__grid {
@@ -1514,7 +1790,7 @@ html:has(.lp) body {
 }
 
 .lp-foot .lp-mark {
-  color: rgb(var(--lp-ink));
+  color: rgb(var(--lph-ink));
 }
 
 .lp-foot__line {
@@ -1522,7 +1798,7 @@ html:has(.lp) body {
   max-width: 36ch;
   font-size: 13.5px;
   line-height: 1.6;
-  color: rgb(var(--lp-ink-muted));
+  color: rgb(var(--lph-ink-muted));
 }
 
 .lp-foot__col {
@@ -1533,31 +1809,31 @@ html:has(.lp) body {
 }
 
 .lp-foot__h {
-  font-size: 12px;
-  font-weight: 700;
-  color: rgb(var(--lp-ink));
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: rgb(var(--lph-brand-bright));
   margin-bottom: 3px;
 }
 
 .lp-foot a {
-  color: rgb(var(--lp-ink-muted));
+  color: rgb(var(--lph-ink-muted));
   text-decoration: none;
   font-size: 13.5px;
   font-weight: 600;
 }
 
 .lp-foot a:hover {
-  color: rgb(var(--lp-ink));
+  color: rgb(var(--lph-ink));
 }
 
 .lp-foot__base {
   margin-top: 44px;
   padding-top: 22px;
-  border-top: 1px solid rgb(var(--lp-line));
+  border-top: 1px solid rgb(255 255 255 / 0.07);
 }
 
 .lp-foot__base .lp-fine {
-  color: rgb(var(--lp-ink-faint));
+  color: rgb(var(--lph-ink-muted));
 }
 
 /* ==========================================================================
@@ -1569,7 +1845,7 @@ html:has(.lp) body {
 
 .lpd {
   width: 100%;
-  max-width: none;
+  max-width: 560px;
 }
 
 @media (min-width: 1024px) {
@@ -1589,25 +1865,26 @@ html:has(.lp) body {
 .lpd-tab {
   appearance: none;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 650;
-  color: rgb(var(--lp-ink-muted));
-  background: rgb(var(--lp-surface));
-  border: 1px solid rgb(var(--lp-line));
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(var(--lph-ink-muted));
+  background: rgb(255 255 255 / 0.05);
+  border: 1px solid rgb(255 255 255 / 0.13);
   border-radius: 999px;
   padding: 7px 15px;
   transition: color 160ms ease-out, background-color 160ms ease-out, border-color 160ms ease-out;
 }
 
 .lpd-tab:hover {
-  color: rgb(var(--lp-ink));
-  border-color: rgb(var(--lp-line-strong));
+  color: rgb(var(--lph-ink));
+  border-color: rgb(255 255 255 / 0.28);
 }
 
 .lpd-tab[aria-selected="true"] {
-  color: rgb(var(--lp-gold-ink));
-  background: rgb(var(--lp-gold));
-  border-color: rgb(var(--lp-gold));
+  color: rgb(var(--lph-brand-bright));
+  background: rgb(var(--lph-brand) / 0.16);
+  border-color: rgb(var(--lph-brand) / 0.55);
 }
 
 /* --- El marco de vidrio -------------------------------------------------- */
@@ -1615,9 +1892,16 @@ html:has(.lp) body {
 .lpd-frame {
   position: relative;
   border-radius: 22px;
-  padding: 0;
-  background: transparent;
-  box-shadow: none;
+  padding: 9px;
+  background: linear-gradient(
+    165deg,
+    rgb(255 255 255 / 0.1) 0%,
+    rgb(255 255 255 / 0.035) 46%,
+    rgb(var(--lph-brand) / 0.09) 100%
+  );
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.14) inset, 0 -1px 0 rgb(0 0 0 / 0.3) inset, 0 24px
+    70px -24px rgb(var(--lph-brand) / 0.42), 0 60px 140px -60px rgb(0 0 0 / 0.85);
   transform: perspective(1300px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg));
   transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
@@ -1627,18 +1911,19 @@ html:has(.lp) body {
   transition: transform 90ms ease-out;
 }
 
-.lpd-frame::before,
-.lpd-frame::after {
-  display: none;
-}
-
+/* El borde de 1px con brillo: gradiente enmascarado al contorno. */
 .lpd-frame::before {
-  content: none;
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
   background: linear-gradient(
     160deg,
     rgb(255 255 255 / 0.55) 0%,
     rgb(255 255 255 / 0.1) 30%,
-    rgb(var(--lp-brand) / 0.5) 100%
+    rgb(var(--lph-brand) / 0.5) 100%
   );
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
@@ -1659,10 +1944,10 @@ html:has(.lp) body {
 /* --- La ventana del producto -------------------------------------------- */
 
 .lpd-win {
-  border-radius: 22px;
+  border-radius: 14px;
   overflow: hidden;
   background: rgb(var(--lp-surface));
-  box-shadow: 0 0 0 1px rgb(var(--lp-line));
+  box-shadow: 0 0 0 1px rgb(var(--lph-bg-deep) / 0.55);
 }
 
 .lpd-bar {
@@ -2029,7 +2314,7 @@ html:has(.lp) body {
   transform: translate(var(--mx, 0px), var(--my, 0px));
   transition: transform 90ms ease-out, background-color 150ms ease-out, border-color 150ms ease-out,
     box-shadow 150ms ease-out;
-  box-shadow: 0 0 0 1px rgb(var(--lp-gold) / 0.45), 0 12px 38px -8px rgb(var(--lp-gold) / 0.7);
+  box-shadow: 0 0 0 1px rgb(var(--lp-brand) / 0.4), 0 12px 38px -8px rgb(var(--lp-brand) / 0.6);
 }
 
 /* ==========================================================================
@@ -2490,9 +2775,7 @@ html:has(.lp) body {
 .lp-day__coda {
   margin-top: 40px;
   padding-left: 88px;
-  font-family: var(--lp-font-display), var(--font-sans), sans-serif;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-family: var(--lp-font-display), "Iowan Old Style", Georgia, serif;
   font-size: clamp(1.4rem, 2.6vw, 1.85rem);
   line-height: 1.25;
   color: rgb(var(--lp-ink));
@@ -2535,6 +2818,20 @@ html:has(.lp) body {
   align-items: center;
 }
 
+@media (prefers-color-scheme: dark) {
+  .lp-wa {
+    --wa-bg: #0b141a;
+    --wa-out: #005c4b;
+    --wa-in: #202c33;
+    --wa-ink: #e9edef;
+    --wa-ink-2: #8696a0;
+    --wa-head: #1c272e;
+    --wa-line: rgb(233 237 239 / 0.1);
+    --wa-doodle-op: 0.35;
+    --wa-doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cg fill='none' stroke='%23273b46' stroke-width='1.2' stroke-linecap='round'%3E%3Ccircle cx='22' cy='24' r='7'/%3E%3Cpath d='M62 18c4-6 12-6 16 0'/%3E%3Cpath d='M108 30l6 6m0-6l-6 6'/%3E%3Ccircle cx='128' cy='92' r='5'/%3E%3Cpath d='M24 88c0-5 4-9 9-9'/%3E%3Cpath d='M70 64h6m-3-3v6'/%3E%3Cpath d='M96 120c6-4 12 4 18 0'/%3E%3Ccircle cx='52' cy='118' r='3'/%3E%3Cpath d='M12 126l5 5'/%3E%3C/g%3E%3C/svg%3E");
+  }
+}
+
 @media (min-width: 960px) {
   .lp-wa {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -2560,10 +2857,10 @@ html:has(.lp) body {
   width: min(340px, 100%);
   border-radius: 46px;
   padding: 10px;
-  background: linear-gradient(165deg, #e8f1fb 0%, #ffffff 48%, #d7e6f6 100%);
+  background: linear-gradient(165deg, #262a45 0%, #0f1120 52%, #1b1e34 100%);
   box-shadow:
-    0 1px 0 rgb(255 255 255 / 0.9) inset, 0 34px 80px -34px rgb(var(--lp-brand) / 0.4),
-    0 60px 120px -48px rgb(36 50 94 / 0.28);
+    0 1px 0 rgb(255 255 255 / 0.16) inset, 0 -1px 0 rgb(0 0 0 / 0.55) inset, 0 34px
+    80px -34px rgb(var(--lp-brand) / 0.5), 0 60px 120px -48px rgb(24 26 39 / 0.55);
 }
 
 .lp-wa__ring {
@@ -3120,8 +3417,10 @@ html:has(.lp) body {
 .lp-ledger-sec {
   position: relative;
   overflow: clip;
-  color: rgb(var(--lp-ink));
-  background: rgb(var(--lp-navy));
+  color: rgb(var(--lph-ink));
+  background: radial-gradient(46% 42% at 16% 10%, rgb(var(--lph-brand) / 0.13) 0%, transparent 70%),
+    radial-gradient(40% 48% at 88% 92%, rgb(var(--lph-brand) / 0.08) 0%, transparent 72%),
+    linear-gradient(180deg, rgb(var(--lph-bg-deep)) 0%, rgb(9 10 28) 100%);
 }
 
 .lp-ledger-sec::before {
@@ -3130,9 +3429,10 @@ html:has(.lp) body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    radial-gradient(50% 50% at 12% 8%, rgb(var(--lp-sky) / 0.4) 0%, transparent 70%),
-    radial-gradient(40% 50% at 92% 92%, rgb(var(--lp-gold) / 0.16) 0%, transparent 70%);
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
 .lp-ledger-sec > .lp-wrap {
@@ -3141,23 +3441,23 @@ html:has(.lp) body {
 }
 
 .lp-ledger-sec .lp-marker {
-  color: rgb(var(--lp-gold));
+  color: rgb(var(--lph-brand-bright));
 }
 
 .lp-ledger-sec .lp-marker::before {
-  background: rgb(var(--lp-gold));
+  background: rgb(var(--lph-brand));
 }
 
 .lp-ledger-sec .lp-h2 {
-  color: #fff;
+  color: rgb(var(--lph-ink));
 }
 
 .lp-ledger-sec .lp-h2 em {
-  color: rgb(var(--lp-gold));
+  color: rgb(var(--lph-brand-bright));
 }
 
 .lp-ledger-sec .lp-lead {
-  color: rgb(210 220 240);
+  color: rgb(var(--lph-ink-muted));
 }
 
 .lp-ledger {
