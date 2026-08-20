@@ -51,6 +51,15 @@ export interface Config {
   proxyServer: string | null;
   proxyUsername: string | null;
   proxyPassword: string | null;
+  /**
+   * Cómo entra el bot: 'account' (logueado con la cuenta del workspace, para
+   * auto-admisión) o 'guest' (anónimo, solo un nombre, sin login). El guest no
+   * tiene cuenta que Google pueda marcar por «actividad sospechosa desde IP
+   * nueva», así que a veces entra donde el login rebota — a costa de necesitar
+   * que alguien lo admita, o una reunión de acceso abierto. Default: 'account'
+   * si hay credenciales o perfil, 'guest' si no.
+   */
+  mode: 'account' | 'guest';
 }
 
 export function loadConfig(): Config {
@@ -76,5 +85,6 @@ export function loadConfig(): Config {
     proxyServer: process.env.MEET_PROXY_SERVER?.trim() || null,
     proxyUsername: process.env.MEET_PROXY_USERNAME?.trim() || null,
     proxyPassword: process.env.MEET_PROXY_PASSWORD?.trim() || null,
+    mode: process.env.MEET_MODE?.trim() === 'guest' ? 'guest' : 'account',
   };
 }

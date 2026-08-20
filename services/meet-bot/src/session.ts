@@ -75,7 +75,14 @@ export class MeetSession {
   }
 
   async join(): Promise<void> {
-    const profileDir = `${this.config.profilesDir}/${this.owner.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+    // En modo guest, un perfil EFÍMERO por sesión: sin cookies de ninguna
+    // cuenta, un invitado limpio. En modo cuenta, el perfil persistente del
+    // tenant (con la sesión de Google). El guest no arrastra identidad, que es
+    // justo lo que lo hace pasar donde el login de cuenta rebota.
+    const guest = this.config.mode === 'guest';
+    const profileDir = guest
+      ? `${this.config.profilesDir}/guest_${this.id}`
+      : `${this.config.profilesDir}/${this.owner.replace(/[^A-Za-z0-9_-]/g, '_')}`;
     // El proxy residencial, si está configurado — por-contexto, como recomienda
     // la industria, para aislar el tráfico del bot y poder rotarlo. Es lo que
     // hace que Meet acepte al bot desde Railway (ver config.proxyServer).
@@ -137,15 +144,18 @@ export class MeetSession {
 
     this.setStatus('joining');
 
-    // Asegurar sesión de Google (auto-login en Railway; no-op si ya logueado).
-    const login = await ensureGoogleSession(this.context, page, {
-      email: this.config.googleEmail ?? undefined,
-      password: this.config.googlePassword ?? undefined,
-    });
-    if (!login.ok) {
-      this.setStatus('failed', login.reason);
-      await this.leave();
-      return;
+    // Modo cuenta: asegurar la sesión de Google. Modo guest: nada de login —
+    // se entra anónimo, que es lo que evita el anti-bot de cuentas.
+    if (!guest) {
+      const login = await ensureGoogleSession(this.context, page, {
+        email: this.config.googleEmail ?? undefined,
+        password: this.config.googlePassword ?? undefined,
+      });
+      if (!login.ok) {
+        this.setStatus('failed', login.reason);
+        await this.leave();
+        return;
+      }
     }
 
     await page.goto(this.meetUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 });
@@ -292,5 +302,14 @@ export class MeetSession {
     await this.context?.close().catch(() => undefined);
     this.context = null;
     this.page = null;
+    // El perfil efímero del guest no sobrevive a la sesión.
+    if (this.config.mode === 'guest') {
+      try {
+        const { rmSync } = await import('node:fs');
+        rmSync(`${this.config.profilesDir}/guest_${this.id}`, { recursive: true, force: true });
+      } catch {
+        // Un perfil que no se pudo borrar lo barre el próximo arranque.
+      }
+    }
   }
 }
