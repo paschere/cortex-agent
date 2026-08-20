@@ -1,3 +1,6 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getTool } from '@cortex/agent-tools';
 import { describe, expect, it } from 'vitest';
 import {
@@ -163,5 +166,40 @@ describe('la entrada se arma en el servidor', () => {
       ok: true,
       input: {},
     });
+  });
+});
+
+describe('la API de datos se entera de las tablas nuevas', () => {
+  /**
+   * El panel de «Tablas» fue quien descubrió el hueco: la 0115 creó `trackers`
+   * DESPUÉS del cutover a Railway, `deploy-migrate` la aplicó bien, y aun así
+   * el panel abría con «Could not find the table 'public.trackers' in the
+   * schema cache» — el PostgREST de `services/pgrest` cachea el esquema al
+   * arrancar y nadie le avisaba de los DDL (en Supabase avisan sus event
+   * triggers de fábrica; en Railway no existían).
+   *
+   * Esto pinza la 0117: mientras haya una migración que instale un event
+   * trigger sobre DDL que haga NOTIFY al canal `pgrst`, cada tabla futura
+   * aparece en la API sin reiniciar nada. Si alguien la borra o le cambia el
+   * canal, el siguiente panel nuevo volvería a nacer roto en producción y
+   * verde en local — exactamente el fallo que no se ve hasta que lo ve el
+   * dueño.
+   */
+  it('hay un vigía de DDL que recarga la caché de PostgREST', () => {
+    const migrations = join(
+      fileURLToPath(new URL('../../../../', import.meta.url)),
+      'infra/supabase/migrations',
+    );
+    const texts = readdirSync(migrations)
+      .filter((name) => name.endsWith('.sql'))
+      .map((name) => readFileSync(join(migrations, name), 'utf8'));
+
+    const watcher = texts.find(
+      (sql) => /create event trigger/i.test(sql) && /ddl_command_end/i.test(sql),
+    );
+    expect(watcher, 'ninguna migración instala el event trigger de DDL').toBeTruthy();
+    // El canal es el que PostgREST escucha de fábrica (db-channel = pgrst);
+    // `services/pgrest/start.sh` no lo cambia, así que aquí tampoco.
+    expect(watcher).toMatch(/notify pgrst, 'reload schema'/i);
   });
 });
