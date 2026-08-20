@@ -55,15 +55,27 @@ const sessionField = z
   .max(60)
   .describe('El id de la pestaña, tal como lo devolvió browser.open_page');
 
-/** Lo que el modelo ve de la página. Acotado: es contexto, no un volcado. */
-function viewOf(snapshot: PageSnapshot) {
+/**
+ * Lo que el modelo ve de la página. Acotado: es contexto, no un volcado.
+ *
+ * DOS TAMAÑOS, Y EL PORQUÉ EN TOKENS. Una navegación son diez o doce actos, y
+ * cada acto devuelve la página fresca; a vista completa (~1.500 tokens) el
+ * transcript del turno engorda cuadráticamente y se paga en cada paso
+ * siguiente. Así que actuar devuelve la vista de MANIOBRA — dónde estoy y con
+ * qué puedo actuar: url, avisos, elementos y un pellizco de texto — y LEER
+ * (browser.read_page) devuelve la página entera. Es la misma división del
+ * prompt del sistema: snapshot→act→read; el texto largo se pide cuando toca
+ * responder con él, no en cada click.
+ */
+function viewOf(snapshot: PageSnapshot, size: 'full' | 'lite' = 'full') {
+  const lite = size === 'lite';
   return {
     url: snapshot.url,
     title: snapshot.title,
-    headings: snapshot.headings.slice(0, 8),
+    ...(lite ? {} : { headings: snapshot.headings.slice(0, 8) }),
     alerts: snapshot.alerts.slice(0, 6),
-    text: snapshot.text.slice(0, 2_500),
-    elements: snapshot.elements.slice(0, 50).map((el) => ({
+    text: snapshot.text.slice(0, lite ? 700 : 2_500),
+    elements: snapshot.elements.slice(0, lite ? 35 : 50).map((el) => ({
       ref: el.ref,
       role: el.role,
       name: el.name,
@@ -206,7 +218,7 @@ export const browserAct = registerTool({
       if (!fresh.ok) return { ok: false, message: fresh.reason };
       const resolved = resolveRef(fresh.data, input.ref, input.name ?? '');
       if ('stale' in resolved) {
-        return { ok: false, message: resolved.stale, page: viewOf(fresh.data) };
+        return { ok: false, message: resolved.stale, page: viewOf(fresh.data, 'lite') };
       }
       target = bestTarget(resolved.el);
       if (!target) {
@@ -228,7 +240,8 @@ export const browserAct = registerTool({
       message: acted.data.ok
         ? `Hecho${acted.data.matchedTarget ? ` sobre ${acted.data.matchedTarget}` : ''}.`
         : `No se pudo: ${acted.data.error ?? 'sin detalle'}. La página de ahora viene abajo; decide con ella.`,
-      page: viewOf(acted.data.snapshot),
+      // La vista de maniobra. Para LEER el contenido está browser.read_page.
+      page: viewOf(acted.data.snapshot, 'lite'),
     };
   },
 });

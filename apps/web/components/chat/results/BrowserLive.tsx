@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronUp,
   Eye,
@@ -10,6 +11,7 @@ import {
   Maximize2,
   Minimize2,
   MonitorSmartphone,
+  RotateCw,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -485,6 +487,16 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
     [sendWs, postInput],
   );
 
+  // Atrás y recargar: los dos botones de navegador que una persona espera.
+  // Gestos humanos como los demás — solo con el volante en la mano.
+  const nav = useCallback(
+    (action: 'back' | 'refresh') => {
+      if (!drivingRef.current) return;
+      if (!sendWs({ type: 'nav', action })) postInput({ kind: action });
+    },
+    [sendWs, postInput],
+  );
+
   // -------------------------------------------------------------------------
   // El volante y el secreto, contra el proxy.
   // -------------------------------------------------------------------------
@@ -597,13 +609,22 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
     !gone && ((control?.help && !driving) || control?.secret || (tab.checkpointId && !resumed)),
   );
 
-  const screen = (
+  const renderScreen = (fitHeight: boolean) => (
     <div
       ref={surfaceRef}
-      className={`relative w-full overflow-hidden rounded-lg border border-border bg-black/90 ${
-        driving ? 'cursor-crosshair ring-2 ring-amber-400' : ''
-      }`}
-      style={{ aspectRatio: `${width} / ${height}` }}
+      className={`relative overflow-hidden rounded-lg border border-border bg-black/90 ${
+        fitHeight ? 'mx-auto' : 'w-full'
+      } ${driving ? 'cursor-crosshair ring-2 ring-amber-400' : ''}`}
+      style={
+        fitHeight
+          ? {
+              aspectRatio: `${width} / ${height}`,
+              // Lo más grande que quepa dejando sitio a la barra y al pie —
+              // alto-limitado en un monitor ancho, ancho-limitado en uno alto.
+              width: `min(100%, calc((100dvh - 11rem) * ${width / height}))`,
+            }
+          : { aspectRatio: `${width} / ${height}` }
+      }
       tabIndex={driving ? 0 : -1}
       role={driving ? 'application' : undefined}
       onMouseDown={(e) => onMouse('mousePressed', e)}
@@ -630,6 +651,31 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
         </div>
       ) : null}
     </div>
+  );
+
+  const navButtons = (
+    <>
+      <button
+        type="button"
+        disabled={!driving}
+        title={driving ? 'Atrás' : 'Toma el control para navegar'}
+        onClick={() => nav('back')}
+        className="rounded p-1.5 hover:bg-muted disabled:opacity-40"
+        aria-label="Atrás"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        disabled={!driving}
+        title={driving ? 'Recargar' : 'Toma el control para navegar'}
+        onClick={() => nav('refresh')}
+        className="rounded p-1.5 hover:bg-muted disabled:opacity-40"
+        aria-label="Recargar"
+      >
+        <RotateCw className="h-4 w-4" />
+      </button>
+    </>
   );
 
   const header = (
@@ -692,9 +738,73 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
     </div>
   );
 
+  // La caja del secreto y la del trámite parado, como constantes porque viven
+  // en dos sitios: el cuerpo del dock y el pie de la pantalla completa.
+  const secretBox =
+    !gone && control?.secret ? (
+      <div className="mt-2 rounded-lg border border-border bg-muted/40 p-3">
+        <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
+          <KeyRound className="h-4 w-4" /> {control.secret.label}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="password"
+            autoComplete="off"
+            value={secretValue}
+            onChange={(e) => setSecretValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submitSecret();
+            }}
+            placeholder="Se escribe directo en la página"
+            className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+          />
+          <button
+            type="button"
+            disabled={busy || !secretValue}
+            onClick={() => void submitSecret()}
+            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            Escribir
+          </button>
+        </div>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Va del teclado a la página. Cortex nunca ve el valor y no queda en la conversación.
+        </p>
+        {secretDone ? <p className="mt-1 text-xs text-foreground">{secretDone}</p> : null}
+      </div>
+    ) : null;
+
+  const checkpointBox =
+    !gone && tab.checkpointId && !resumed ? (
+      <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/40">
+        <p className="mb-2 text-amber-900 dark:text-amber-200">
+          {tab.ask ||
+            'El trámite necesita algo tuyo aquí (un captcha, una casilla). Resuélvelo en la pantalla y sigue.'}
+        </p>
+        <div className="flex gap-2">
+          {tab.fills ? (
+            <input
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="La respuesta (el código, el dato)"
+              className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+            />
+          ) : null}
+          <button
+            type="button"
+            disabled={busy || (Boolean(tab.fills) && !answer.trim())}
+            onClick={() => void resumeCheckpoint()}
+            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar el trámite'}
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   const body = collapsed ? null : (
     <>
-      <div className="mt-2">{screen}</div>
+      <div className="mt-2">{renderScreen(false)}</div>
 
       {/* La mano levantada del bot: su razón, tal cual, y el botón que la responde. */}
       {!gone && control?.help && !driving ? (
@@ -705,66 +815,8 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
       ) : null}
 
       {/* El secreto: la caja enmascarada y la promesa, juntas. */}
-      {!gone && control?.secret ? (
-        <div className="mt-2 rounded-lg border border-border bg-muted/40 p-3">
-          <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
-            <KeyRound className="h-4 w-4" /> {control.secret.label}
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              autoComplete="off"
-              value={secretValue}
-              onChange={(e) => setSecretValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void submitSecret();
-              }}
-              placeholder="Se escribe directo en la página"
-              className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
-            />
-            <button
-              type="button"
-              disabled={busy || !secretValue}
-              onClick={() => void submitSecret()}
-              className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
-            >
-              Escribir
-            </button>
-          </div>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            Va del teclado a la página. Cortex nunca ve el valor y no queda en la conversación.
-          </p>
-          {secretDone ? <p className="mt-1 text-xs text-foreground">{secretDone}</p> : null}
-        </div>
-      ) : null}
-
-      {/* Un trámite parado: la pregunta del portal y el botón de seguir. */}
-      {!gone && tab.checkpointId && !resumed ? (
-        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/40">
-          <p className="mb-2 text-amber-900 dark:text-amber-200">
-            {tab.ask ||
-              'El trámite necesita algo tuyo aquí (un captcha, una casilla). Resuélvelo en la pantalla y sigue.'}
-          </p>
-          <div className="flex gap-2">
-            {tab.fills ? (
-              <input
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="La respuesta (el código, el dato)"
-                className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
-              />
-            ) : null}
-            <button
-              type="button"
-              disabled={busy || (Boolean(tab.fills) && !answer.trim())}
-              onClick={() => void resumeCheckpoint()}
-              className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
-            >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar el trámite'}
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {secretBox}
+      {checkpointBox}
       {resumed ? <p className="mt-2 text-sm text-muted-foreground">{resumed}</p> : null}
 
       {/* El volante. */}
@@ -811,19 +863,84 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
   );
 
   if (expanded) {
+    // Pantalla completa DE VERDAD: la página ocupa lo que el monitor dé, con
+    // una barra de herramientas de navegador arriba (atrás, recargar, el
+    // volante) y lo que espera a la persona (captcha, clave, trámite) en un
+    // pie que no tapa la página.
     return createPortal(
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-        onClick={(e) => {
-          // El fondo cierra; la tarjeta no — un click en sus botones no debe
-          // cerrar la pantalla que los contiene.
-          if (e.target === e.currentTarget) setExpanded(false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape' && e.target === e.currentTarget) setExpanded(false);
-        }}
-      >
-        <div className="max-h-full w-full max-w-5xl overflow-auto">{panel}</div>
+      <div className="fixed inset-0 z-50 flex flex-col bg-card">
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2 text-sm">
+          <MonitorSmartphone className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="truncate font-medium">{control?.title || 'Pestaña de Cortex'}</span>
+          {host ? <span className="truncate text-xs text-muted-foreground">· {host}</span> : null}
+          {gone ? null : live ? (
+            <span className="flex items-center gap-1 text-xs text-emerald-600">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> en vivo
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Eye className="h-3.5 w-3.5" /> foto/s
+            </span>
+          )}
+          <span className="mx-2 h-4 w-px bg-border" />
+          {navButtons}
+          <span className="ml-auto flex items-center gap-2">
+            {!gone ? (
+              driving ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void setDriver('release')}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  <X className="h-3.5 w-3.5" /> Devolver el control
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void setDriver('take')}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                >
+                  <Hand className="h-3.5 w-3.5" /> Tomar el control
+                </button>
+              )
+            ) : null}
+            <button
+              type="button"
+              className="rounded p-1.5 hover:bg-muted"
+              onClick={() => setExpanded(false)}
+              aria-label="Salir de pantalla completa"
+            >
+              <Minimize2 className="h-4 w-4" />
+            </button>
+          </span>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3">
+          {renderScreen(true)}
+        </div>
+        {!gone &&
+        ((control?.help && !driving) ||
+          control?.secret ||
+          (tab.checkpointId && !resumed) ||
+          driving) ? (
+          <div className="max-h-56 shrink-0 overflow-auto border-t border-border px-4 py-2 [&>div]:mt-2 first:[&>div]:mt-0">
+            {driving ? (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Estás conduciendo: tu mouse (con sus movimientos), tu teclado y tu scroll van a la
+                página. Nada de esto le llega a Cortex.
+              </p>
+            ) : null}
+            {control?.help && !driving ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                <Hand className="mr-1.5 inline h-4 w-4" />
+                Cortex necesita tus manos: {control.help.reason}
+              </div>
+            ) : null}
+            {secretBox}
+            {checkpointBox}
+          </div>
+        ) : null}
       </div>,
       document.body,
     );

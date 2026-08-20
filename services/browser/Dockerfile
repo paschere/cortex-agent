@@ -50,10 +50,16 @@ RUN pnpm install --filter @cortex/browser-service --prod --frozen-lockfile
 
 COPY --from=build /repo/services/browser/dist services/browser/dist
 
-# Not root. This process renders pages from the open internet, which is the
-# broadest attack surface anything in this repo has. `pwuser` ships with the
-# Playwright image and owns the browser cache under /ms-playwright.
-USER pwuser
+# Not root — but via the entrypoint rather than `USER`. This process renders
+# pages from the open internet, which is the broadest attack surface anything
+# in this repo has, so it runs as `pwuser` (ships with the Playwright image,
+# owns the browser cache under /ms-playwright). The container STARTS as root
+# for exactly one line: Railway mounts the profiles volume owned by root, and
+# somebody has to hand it over before dropping privileges. See
+# docker-entrypoint.sh — the running process is pwuser, same as always.
+COPY services/browser/docker-entrypoint.sh /usr/local/bin/cortex-browser-entrypoint
+RUN chmod +x /usr/local/bin/cortex-browser-entrypoint
+ENTRYPOINT ["/usr/local/bin/cortex-browser-entrypoint"]
 
 # Stateless by default: every replay context is created fresh and destroyed at
 # the end of the run, so one workspace's cookies can never be present while

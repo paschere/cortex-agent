@@ -361,7 +361,12 @@ export class BrowserWorker {
   /** One human gesture, delivered to the tab. */
   async sendInput(
     sessionId: string,
-    input: { kind: 'click' | 'type' | 'key' | 'scroll'; x?: number; y?: number; text?: string },
+    input: {
+      kind: 'click' | 'type' | 'key' | 'scroll' | 'back' | 'refresh';
+      x?: number;
+      y?: number;
+      text?: string;
+    },
     owner?: string,
   ): Promise<void> {
     const session = this.sessionOf(sessionId, owner);
@@ -380,6 +385,15 @@ export class BrowserWorker {
         break;
       case 'scroll':
         await page.mouse.wheel(0, input.y ?? 0);
+        break;
+      // Los dos botones de navegador que una persona espera tener. Gestos
+      // humanos como los demás: llegan por el proxy autenticado, y en la
+      // pestaña viva la tarjeta los ofrece solo con el volante en la mano.
+      case 'back':
+        await page.goBack({ timeout: 10_000, waitUntil: 'domcontentloaded' }).catch(() => undefined);
+        break;
+      case 'refresh':
+        await page.reload({ timeout: 15_000, waitUntil: 'domcontentloaded' }).catch(() => undefined);
         break;
       default:
         throw new Error(`unknown input ${String(input.kind)}`);

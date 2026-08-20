@@ -77,7 +77,8 @@ type InboundMessage =
       windowsVirtualKeyCode?: number;
       modifiers?: number;
     }
-  | { type: 'text'; text: string };
+  | { type: 'text'; text: string }
+  | { type: 'nav'; action: 'back' | 'refresh' };
 
 export class Screencast {
   private cdp: CDPSession | null = null;
@@ -245,6 +246,12 @@ export class Screencast {
           nativeVirtualKeyCode: message.windowsVirtualKeyCode,
           modifiers: message.modifiers ?? 0,
         });
+      } else if (message.type === 'nav') {
+        if (message.action === 'back') {
+          await this.page.goBack({ timeout: 10_000, waitUntil: 'domcontentloaded' });
+        } else if (message.action === 'refresh') {
+          await this.page.reload({ timeout: 15_000, waitUntil: 'domcontentloaded' });
+        }
       } else if (message.type === 'text') {
         // Pegar. Un paste de 4000 caracteres tecleado uno a uno tarda y
         // dispara autocompletes; `insertText` es lo que Chromium mismo hace.

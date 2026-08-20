@@ -38,7 +38,7 @@ const Op = z.discriminatedUnion('op', [
   z.object({ op: z.literal('secret'), value: z.string().min(1).max(500) }),
   z.object({
     op: z.literal('input'),
-    kind: z.enum(['click', 'type', 'key', 'scroll']),
+    kind: z.enum(['click', 'type', 'key', 'scroll', 'back', 'refresh']),
     x: z.number().finite().optional(),
     y: z.number().finite().optional(),
     text: z.string().max(200).optional(),

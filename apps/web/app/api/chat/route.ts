@@ -478,7 +478,12 @@ export async function POST(req: NextRequest) {
         // block is indistinguishable from "RAG did not run", so the model used to
         // answer from nothing with no idea it was doing so; being told, in words,
         // that the brain holds nothing on the subject is what lets it say so.
-        ragBlock = `<context>\n${ragOut.summary}\n</context>`;
+        //
+        // Dicho AL MODELO, no a la persona: en producción el modelo abría
+        // respuestas con «en Brain Knowledge no hay nada sobre esto» ante
+        // preguntas que nunca fueron sobre la empresa — ruido que además suena
+        // a excusa. Saberlo cambia CÓMO responde; anunciarlo no aporta nada.
+        ragBlock = `<context>\n${ragOut.summary}\nNota para ti: no le anuncies esta búsqueda interna a la persona ni digas que «no hay nada guardado» — salvo que su pregunta fuera explícitamente sobre la memoria de la empresa, simplemente responde por el mejor camino.\n</context>`;
       } else if (ragOut && ragOut.hits.length > 0) {
         ragBlock =
           '<context>\n' +
