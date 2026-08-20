@@ -23,7 +23,10 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 type ThinkingMode = 'summarized' | 'off' | 'absent';
 
 function bodyRewriter(mode: ThinkingMode) {
-  return async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {
+  return async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> => {
     if (typeof init?.body !== 'string') return fetch(input, init);
 
     let body: Record<string, unknown>;
@@ -334,6 +337,26 @@ export function resolveModelId(id?: string | null): string {
 /** The model an agent answers with, honouring its configured id. */
 export function chatModel(id?: string | null) {
   return thinkingProvider(resolveModelId(id));
+}
+
+/**
+ * EL MODELO DEL MODO VOZ — Sonnet 5 SIN pensar.
+ *
+ * Una conversación hablada tiene un reloj que la escrita no tiene: cada segundo
+ * antes de la primera palabra se oye como un silencio incómodo, no como «está
+ * trabajando». El `thinking` de `chatModel()` —razonar en silencio antes de
+ * emitir— es justo lo que no cabe aquí: añade segundos que en voz son muertos,
+ * a cambio de un cuidado que una respuesta de una o dos frases no necesita.
+ *
+ * Sonnet y no Haiku a propósito: el modo voz lleva el catálogo completo de
+ * herramientas y el cerebro de la empresa, y Haiku 4.5 trae un quinto del
+ * contexto y orquesta peor una cadena de tools — un asistente veloz que manda
+ * el correo equivocado no es más rápido, es peor. El grueso de la latencia se
+ * va al apagar el `thinking` y al streamear la respuesta por frases (ver
+ * /api/voice/turn); bajar de modelo compraría milésimas a cambio de eso.
+ */
+export function voiceModel() {
+  return quietProvider(CHAT_MODEL);
 }
 
 /** The model for short internal calls that never face the user directly. */

@@ -62,6 +62,10 @@ export interface Config {
   /** Locale/timezone del Chrome. Un contenedor sale en UTC, y UTC es huella. */
   locale: string;
   timezone: string;
+  /** Conectar a Chrome por CDP en vez de launchPersistentContext. Más stealth. */
+  cdpConnect: boolean;
+  /** Visitar Google antes de Meet para que el perfil parezca "vivido". */
+  warmup: boolean;
 }
 
 export function loadConfig(): Config {
@@ -90,5 +94,7 @@ export function loadConfig(): Config {
     mode: process.env.MEET_MODE?.trim() === 'account' ? 'account' : 'guest',
     locale: process.env.MEET_LOCALE?.trim() || 'es-CO',
     timezone: process.env.MEET_TIMEZONE?.trim() || 'America/Bogota',
+    cdpConnect: process.env.MEET_CDP_CONNECT?.trim() === 'true',
+    warmup: process.env.MEET_WARMUP?.trim() !== 'false',
   };
 }

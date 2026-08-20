@@ -1,21 +1,37 @@
-import { type BrowserContext, type Page, chromium } from 'patchright';
+import { type Browser, type BrowserContext, type Page, chromium } from 'patchright';
+import { type ChildProcess } from 'node:child_process';
 import { AUDIO_TAP_SCRIPT } from './audio-tap';
 import type { Config } from './config';
 import { DeepgramStream, type Transcript } from './deepgram';
 import { ensureGoogleSession } from './google-login';
-import { chromeLaunchOptions, evaluateInMain, humanPause, looksKicked } from './stealth';
+import {
+  chromeLaunchOptions,
+  connectOverCDP,
+  evaluateInMain,
+  humanClick,
+  humanPause,
+  launchChrome,
+  looksDeniedInLobby,
+  looksKicked,
+  warmUpProfile,
+} from './stealth';
 import { VoiceBrain } from './voice-brain';
 import { VOICE_INJECT_SCRIPT } from './voice-inject';
 
 /**
  * UNA REUNIÓN VIVA: el bot dentro de un Meet, escuchando.
  *
- * Entra como INVITADO anónimo (default). Google quema las cuentas que se
- * loguean desde un datacenter y las saca de la llamada; un guest no tiene
- * cuenta que marcar. Contra la detección: Patchright (Chrome real, headed,
- * sin Runtime.enable) + perfil efímero + fingerprint de persona (locale,
- * timezone, viewport real). El audio se toca DESPUÉS de estar dentro, para
- * no regalar CDP en la pre-sala.
+ * Contra la detección de Google Meet (2026):
+ * 1. CONNECT-OVER-CDP (MEET_CDP_CONNECT=true): lanzamos Chrome como proceso
+ *    y conectamos por CDP. Cero inyección de Playwright — ni __pwInitScripts,
+ *    ni playwright__binding, ni Runtime.enable. El navegador más limpio que
+ *    se puede manejar. Sin ese flag, cae a launchPersistentContext (Patchright).
+ * 2. WARM-UP (MEET_WARMUP≠false): antes de ir a Meet, visita Google y hace
+ *    una búsqueda. El perfil acumula historial y cookies — parece "vivido".
+ * 3. RETRY EN LOBBY: si Google niega en la sala de espera (la "additional
+ *    review queue" de 2026 cuyo default es denegar), reintenta hasta 2 veces.
+ *    El primer intento se auto-deniega seguido; el segundo pasa a la cola
+ *    estándar.
  *
  * MEET_MODE=account reusa el camino viejo (sesión de Google del tenant).
  */
@@ -54,6 +70,8 @@ const DISMISS_BUTTONS = [
 
 export class MeetSession {
   private context: BrowserContext | null = null;
+  private browser: Browser | null = null;
+  private chromeProcess: ChildProcess | null = null;
   private page: Page | null = null;
   private deepgram: DeepgramStream | null = null;
   private status: MeetStatus = 'joining';
@@ -105,19 +123,35 @@ export class MeetSession {
       : `${this.config.profilesDir}/${this.owner.replace(/[^A-Za-z0-9_-]/g, '_')}`;
 
     console.log(
-      `[cortex-meet] ${this.id} chrome guest=${guest} proxy=${Boolean(this.config.proxyServer)} voice=${this.voiceEnabled}`,
+      `[cortex-meet] ${this.id} chrome guest=${guest} cdp=${this.config.cdpConnect} warmup=${this.config.warmup} proxy=${Boolean(this.config.proxyServer)} voice=${this.voiceEnabled}`,
     );
 
-    this.context = await chromium.launchPersistentContext(
-      profileDir,
-      chromeLaunchOptions({
-        proxyServer: this.config.proxyServer,
-        proxyUsername: this.config.proxyUsername,
-        proxyPassword: this.config.proxyPassword,
-        locale: this.config.locale,
-        timezone: this.config.timezone,
-      }),
-    );
+    // --- Lanzar Chrome: CDP (más stealth) o launchPersistentContext (Patchright) ---
+    const stealthInput = {
+      proxyServer: this.config.proxyServer,
+      proxyUsername: this.config.proxyUsername,
+      proxyPassword: this.config.proxyPassword,
+      locale: this.config.locale,
+      timezone: this.config.timezone,
+    };
+
+    if (this.config.cdpConnect) {
+      const { process, port } = await launchChrome(stealthInput, profileDir);
+      this.chromeProcess = process;
+      const { context, browser } = await connectOverCDP(
+        port,
+        this.config.proxyUsername,
+        this.config.proxyPassword,
+      );
+      this.context = context;
+      this.browser = browser;
+    } else {
+      this.context = await chromium.launchPersistentContext(
+        profileDir,
+        chromeLaunchOptions(stealthInput),
+      );
+    }
+
     // La voz engancha getUserMedia ANTES de que Meet lo pida. Solo con voz:
     // el hook mismo es una huella, no se instala si solo vamos a escuchar.
     if (this.voiceEnabled) await this.context.addInitScript(VOICE_INJECT_SCRIPT);
@@ -149,6 +183,11 @@ export class MeetSession {
       }
     }
 
+    // --- WARM-UP: que el perfil no parezca un bot que solo abre Meet ---
+    if (this.config.warmup) {
+      await warmUpProfile(page);
+    }
+
     await page.goto(this.meetUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await humanPause(1_200, 2_400);
     await this.dismissInterstitials(page);
@@ -164,38 +203,89 @@ export class MeetSession {
     await this.fillGuestName(page);
     await humanPause(400, 900);
 
-    const joinBtn = page.locator(JOIN_BUTTON).first();
-    const joinVisible = await joinBtn
-      .waitFor({ state: 'visible', timeout: 20_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!joinVisible) {
-      this.setStatus('failed', `No vi el botón de unirse. Pantalla: ${await this.peek(page)}`);
-      await this.leave();
-      return;
-    }
-    await joinBtn.click({ timeout: 8_000 }).catch(() => undefined);
-    this.setStatus('waiting-admit');
-
-    const deadline = Date.now() + 120_000;
+    // --- Pedir unirse, con RETRY si Google niega en la cola de revisión ---
+    const maxAttempts = 3;
     let inRoom = false;
-    while (Date.now() < deadline) {
-      inRoom = await page
-        .locator(LEAVE_BUTTON)
-        .first()
-        .isVisible()
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      console.log(`[cortex-meet] ${this.id} intento ${attempt}/${maxAttempts}`);
+
+      const joinBtn = page.locator(JOIN_BUTTON).first();
+      const joinVisible = await joinBtn
+        .waitFor({ state: 'visible', timeout: 20_000 })
+        .then(() => true)
         .catch(() => false);
-      const screen = await this.peek(page);
-      if (inRoom) break;
-      if (looksKicked(screen)) {
-        this.setStatus('failed', `Meet rebotó. Pantalla: ${screen}`);
+      if (!joinVisible) {
+        // Si no hay botón de unirse puede ser que ya estamos dentro, o que la
+        // página cambió. Si el botón de salir está visible, ya estamos en sala.
+        const alreadyIn = await page
+          .locator(LEAVE_BUTTON)
+          .first()
+          .isVisible()
+          .catch(() => false);
+        if (alreadyIn) {
+          inRoom = true;
+          break;
+        }
+        this.setStatus('failed', `No vi el botón de unirse. Pantalla: ${await this.peek(page)}`);
         await this.leave();
         return;
       }
-      await page.waitForTimeout(3_000);
+
+      // Click humano con movimiento de mouse, no un click seco del locator.
+      await humanClick(page, JOIN_BUTTON, 8_000).catch(() => undefined);
+      this.setStatus('waiting-admit');
+
+      // Esperar admisión. Si nos niegan en el lobby, reintentar.
+      const deadline = Date.now() + 90_000;
+      let denied = false;
+      while (Date.now() < deadline) {
+        inRoom = await page
+          .locator(LEAVE_BUTTON)
+          .first()
+          .isVisible()
+          .catch(() => false);
+        if (inRoom) break;
+        const screen = await this.peek(page);
+        if (looksKicked(screen)) {
+          this.setStatus('failed', `Meet rebotó. Pantalla: ${screen}`);
+          await this.leave();
+          return;
+        }
+        if (looksDeniedInLobby(screen)) {
+          denied = true;
+          console.log(`[cortex-meet] ${this.id} negado en lobby (intento ${attempt}): ${screen}`);
+          break;
+        }
+        await page.waitForTimeout(3_000);
+      }
+
+      if (inRoom) break;
+
+      if (denied && attempt < maxAttempts) {
+        // La "additional review queue" de Google (2026) a veces auto-deniega el
+        // primer intento; el segundo cae en la cola estándar. Recargar la
+        // página y volver a pedir unirse.
+        console.log(`[cortex-meet] ${this.id} reintentando tras denegación en lobby…`);
+        await humanPause(2_000, 4_000);
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 45_000 }).catch(() => undefined);
+        await humanPause(1_000, 2_000);
+        await this.dismissInterstitials(page);
+        await this.muteDevices(page);
+        await this.fillGuestName(page);
+        await humanPause(400, 900);
+        continue;
+      }
+
+      // No fue denegado explícito, pero no entró en 90s — timeout.
+      if (!denied) {
+        this.setStatus('failed', `No entré en 90s. Pantalla: ${await this.peek(page)}`);
+        await this.leave();
+        return;
+      }
     }
+
     if (!inRoom) {
-      this.setStatus('failed', `No entré en 2 min. Pantalla: ${await this.peek(page)}`);
+      this.setStatus('failed', `Negado en lobby ${maxAttempts} veces. Pantalla: ${await this.peek(page)}`);
       await this.leave();
       return;
     }
@@ -330,7 +420,20 @@ export class MeetSession {
   async leave(): Promise<void> {
     if (this.status === 'live') this.setStatus('ended', 'Cerrada por Cortex.');
     await this.deepgram?.stop().catch(() => undefined);
-    await this.context?.close().catch(() => undefined);
+    if (this.browser) {
+      // CDP: desconectar Playwright de Chrome. NO cerramos el context (eso
+      // mataría Chrome); solo soltamos la conexión.
+      await this.browser.close().catch(() => undefined);
+      this.browser = null;
+    } else {
+      // launchPersistentContext: cerrar el context cierra Chrome.
+      await this.context?.close().catch(() => undefined);
+    }
+    // Si lanzamos Chrome a mano (CDP), matar el proceso.
+    if (this.chromeProcess) {
+      this.chromeProcess.kill('SIGTERM');
+      this.chromeProcess = null;
+    }
     this.context = null;
     this.page = null;
     if (this.config.mode === 'guest') {

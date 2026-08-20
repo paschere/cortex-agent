@@ -4,33 +4,35 @@ import { Loader2, Mic, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
- * MODO VOZ MANOS LIBRES — hablar con Cortex como una llamada.
+ * MODO VOZ MANOS LIBRES — hablar con Cortex como una llamada, con streaming.
  *
  * ===========================================================================
  * EL LOOP
  * ===========================================================================
  * Abres el modo, hablas, Cortex nota que terminaste (un silencio corto tras la
- * última palabra), piensa la respuesta con TODO su cerebro y sus herramientas
- * (/api/voice/turn), la dice con su voz (/api/voice/speak, Deepgram Aura-2), y
- * vuelve a escuchar. Sin tocar nada entre medias: es una conversación, no una
- * ráfaga de botones.
+ * última palabra), y responde EN VOZ mientras aún está pensando: el servidor
+ * (/api/voice/turn) le manda frase por frase el audio ya sintetizado, y aquí se
+ * reproduce en cola, sin cortes, en cuanto llega la primera. Time-to-first-word
+ * de ~un segundo en vez de esperar el turno entero. Al terminar, vuelve a
+ * escuchar. Sin tocar nada entre medias.
  *
  * ===========================================================================
  * LA TRANSCRIPCIÓN ES DEL NAVEGADOR — Y ESO DECIDE DÓNDE VIVE ESTO
  * ===========================================================================
  * Lo que TÚ dices lo transcribe `SpeechRecognition`, que ya vive en el
- * navegador (el mismo que usa el dictado): sin subir tu voz a ningún lado, sin
- * llave, sin factura por escuchar. El precio es Firefox, que no lo trae — ahí
- * el modo no se ofrece. Solo la VOZ DE CORTEX pasa por Deepgram, porque una voz
- * de verdad sí vale la pena pagarla.
+ * navegador (el mismo del dictado): sin subir tu voz, sin llave, sin factura por
+ * escuchar. El precio es Firefox, que no lo trae — ahí el modo no se ofrece.
+ * Solo la VOZ DE CORTEX pasa por Deepgram.
  *
  * ===========================================================================
- * NO SE ESCUCHA A SÍ MISMO
+ * EL AUDIO SE ENCOLA CON WEB AUDIO, NO CON <audio>
  * ===========================================================================
- * Mientras Cortex habla, el reconocedor se DETIENE, y se reanuda cuando el
- * audio termina. Si no, el micrófono oiría a Cortex y le contestaría a Cortex
- * — un bucle que se muerde la cola. Detener y reanudar es la versión simple y
- * correcta; interrumpirlo a media frase (barge-in) es un lujo para después.
+ * Cada frase llega como su propio mp3. Reproducirlas con un `<audio>` tras otro
+ * deja un hueco audible entre frases. En su lugar se decodifican a AudioBuffer
+ * y se programan una tras otra en un AudioContext (`nextStart`), así suenan
+ * pegadas como una sola voz. Mientras Cortex habla, el reconocedor se DETIENE, y
+ * se reanuda cuando la cola se vacía — si no, el micrófono lo oiría y le
+ * contestaría a Cortex.
  */
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -74,7 +76,7 @@ function recognitionCtor(): RecognitionCtor | null {
 }
 
 /** Silencio tras la última palabra que cuenta como «terminé de hablar». */
-const END_OF_TURN_MS = 1_100;
+const END_OF_TURN_MS = 800;
 
 const PHASE_LABEL: Record<Phase, string> = {
   idle: 'Preparando…',
@@ -84,22 +86,34 @@ const PHASE_LABEL: Record<Phase, string> = {
   error: 'Algo salió mal',
 };
 
+function b64ToArrayBuffer(b64: string): ArrayBuffer {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
 export function VoiceMode({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [supported, setSupported] = useState<boolean | null>(null);
   const [liveText, setLiveText] = useState('');
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [reply, setReply] = useState('');
   const [note, setNote] = useState<string | null>(null);
 
   const recRef = useRef<Recognition | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  // Lo que queremos que el reconocedor haga: reiniciarlo en su `onend` solo si
-  // seguimos en modo escucha (y no porque paramos para hablar o cerrar).
   const wantListenRef = useRef(false);
   const finalRef = useRef('');
   const silenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyRef = useRef<Turn[]>([]);
   const closedRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Cola de audio (Web Audio). `pending` cuenta buffers aún sonando; cuando el
+  // stream terminó y no queda ninguno, se vuelve a escuchar.
+  const ctxRef = useRef<AudioContext | null>(null);
+  const nextStartRef = useRef(0);
+  const pendingRef = useRef(0);
+  const streamDoneRef = useRef(false);
 
   const clearSilence = useCallback(() => {
     if (silenceTimer.current) {
@@ -122,7 +136,50 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
-  // El turno: paramos de oír, preguntamos al cerebro, hablamos, y volvemos.
+  // Cuando el stream acabó y la cola de audio se vació, volvemos a escuchar.
+  const maybeResume = useCallback(() => {
+    if (closedRef.current) return;
+    if (streamDoneRef.current && pendingRef.current <= 0) startListening();
+  }, [startListening]);
+
+  const enqueueAudio = useCallback(
+    async (b64: string) => {
+      if (closedRef.current) return;
+      let ctx = ctxRef.current;
+      if (!ctx) {
+        ctx = new (
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+        )();
+        ctxRef.current = ctx;
+      }
+      if (ctx.state === 'suspended') await ctx.resume();
+      let buffer: AudioBuffer;
+      try {
+        buffer = await ctx.decodeAudioData(b64ToArrayBuffer(b64));
+      } catch {
+        return;
+      }
+      if (closedRef.current) return;
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(ctx.destination);
+      // Programa cada frase justo tras la anterior; si la cola se vació, arranca
+      // ya (con un pelín de margen para no cortar el ataque).
+      const at = Math.max(ctx.currentTime + 0.02, nextStartRef.current);
+      pendingRef.current += 1;
+      src.onended = () => {
+        pendingRef.current -= 1;
+        maybeResume();
+      };
+      src.start(at);
+      nextStartRef.current = at + buffer.duration;
+    },
+    [maybeResume],
+  );
+
+  // El turno: paramos de oír, pedimos la respuesta en streaming, la hablamos
+  // frase por frase, y cuando el audio se acaba volvemos a escuchar.
   const runTurn = useCallback(
     async (said: string) => {
       const question = said.trim();
@@ -132,76 +189,96 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
       recRef.current?.stop();
 
       setLiveText('');
-      const withYou = [...historyRef.current, { role: 'you' as const, text: question }];
-      historyRef.current = withYou;
-      setTurns(withYou);
-      setPhase('thinking');
+      setReply('');
       setNote(null);
+      historyRef.current = [...historyRef.current, { role: 'you', text: question }];
+      setPhase('thinking');
 
-      let answer = '';
+      // Reinicia la cola de audio para este turno.
+      streamDoneRef.current = false;
+      pendingRef.current = 0;
+      nextStartRef.current = 0;
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let full = '';
+      let firstChunk = true;
+
       try {
         const res = await fetch('/api/voice/turn', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          // Solo la cola reciente, para dar continuidad sin mandar la charla entera.
-          body: JSON.stringify({ question, history: withYou.slice(-12) }),
+          body: JSON.stringify({ question, history: historyRef.current.slice(-12) }),
+          signal: controller.signal,
         });
-        // El muro premium (402): no es un error de la charla, es que el plan no
-        // incluye la voz. Se para el loop y se dice claro.
         if (res.status === 402) {
           wantListenRef.current = false;
           setPhase('error');
           setNote('El modo voz es una función premium. Habla con tu administrador para activarla.');
           return;
         }
-        const data = (await res.json().catch(() => ({}))) as { answer?: string; error?: string };
-        answer = data.answer ?? data.error ?? 'No pude responder.';
-      } catch {
-        answer = 'Se me cayó la conexión un momento.';
-      }
-      if (closedRef.current) return;
-
-      const withCortex = [...historyRef.current, { role: 'cortex' as const, text: answer }];
-      historyRef.current = withCortex;
-      setTurns(withCortex);
-
-      // Hablar. Si la voz no está configurada (503) o falla, mostramos el texto
-      // y volvemos a escuchar igual: el modo no se rompe por quedarse sin voz.
-      setPhase('speaking');
-      try {
-        const speak = await fetch('/api/voice/speak', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ text: answer }),
-        });
-        if (!speak.ok) {
-          if (speak.status === 503) setNote('La voz no está configurada aquí; te dejo el texto.');
-          if (!closedRef.current) startListening();
+        if (!res.ok || !res.body) {
+          setPhase('error');
+          setNote('No pude responder ahora mismo.');
           return;
         }
-        const blob = await speak.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          audioRef.current = null;
-          if (!closedRef.current) startListening();
-        };
-        audio.onerror = () => {
-          URL.revokeObjectURL(url);
-          audioRef.current = null;
-          if (!closedRef.current) startListening();
-        };
-        await audio.play().catch(() => {
-          // Si el navegador rechaza reproducir, no dejamos el modo colgado.
-          if (!closedRef.current) startListening();
-        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let sse = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done || closedRef.current) break;
+          sse += decoder.decode(value, { stream: true });
+          let sep = sse.indexOf('\n\n');
+          while (sep >= 0) {
+            const block = sse.slice(0, sep);
+            sse = sse.slice(sep + 2);
+            sep = sse.indexOf('\n\n');
+            const event = /event: (.*)/.exec(block)?.[1]?.trim();
+            const dataRaw = /data: (.*)/.exec(block)?.[1];
+            if (!event || dataRaw === undefined) continue;
+            let data: { text?: string; b64?: string; message?: string } = {};
+            try {
+              data = JSON.parse(dataRaw);
+            } catch {
+              continue;
+            }
+            if (event === 'text' && data.text) {
+              if (firstChunk) {
+                firstChunk = false;
+                setPhase('speaking');
+              }
+              full = `${full} ${data.text}`.trim();
+              setReply(full);
+            } else if (event === 'audio' && data.b64) {
+              void enqueueAudio(data.b64);
+            } else if (event === 'error') {
+              setNote(data.message ?? 'Algo se cortó.');
+            }
+          }
+        }
       } catch {
-        if (!closedRef.current) startListening();
+        if (!closedRef.current) {
+          setPhase('error');
+          setNote('Se me cayó la conexión un momento.');
+        }
+      } finally {
+        abortRef.current = null;
+      }
+
+      if (closedRef.current) return;
+      if (full) historyRef.current = [...historyRef.current, { role: 'cortex', text: full }];
+
+      // El stream terminó. Si hubo audio, `maybeResume` reanudará la escucha
+      // cuando la última frase acabe de sonar; si no hubo (sin voz), reanuda ya.
+      streamDoneRef.current = true;
+      if (pendingRef.current <= 0) {
+        if (!full) setNote((n) => n ?? 'No estoy seguro de eso.');
+        startListening();
       }
     },
-    [startListening, clearSilence],
+    [clearSilence, enqueueAudio, startListening],
   );
 
   // Montaje: detectar soporte, cablear el reconocedor, arrancar el loop.
@@ -228,15 +305,12 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
         else interim += t;
       }
       setLiveText(`${finalRef.current} ${interim}`.trim());
-      // Cada palabra reinicia el reloj del silencio: cuando de verdad callas,
-      // se cumple y disparamos el turno con lo acumulado.
       clearSilence();
       if (finalRef.current) {
         silenceTimer.current = setTimeout(() => void runTurn(finalRef.current), END_OF_TURN_MS);
       }
     };
     rec.onerror = (e) => {
-      // 'no-speech'/'aborted' son normales; solo el de permiso importa contarlo.
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         setNote('Necesito permiso del micrófono para el modo voz.');
         setPhase('error');
@@ -244,8 +318,6 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
       }
     };
     rec.onend = () => {
-      // El reconocedor se detiene solo cada tanto; si seguimos queriendo oír,
-      // lo reanudamos. Si paramos a propósito (hablar/cerrar), no.
       if (wantListenRef.current && !closedRef.current) {
         try {
           rec.start();
@@ -269,8 +341,9 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
       } catch {
         /* ya detenido */
       }
-      audioRef.current?.pause();
-      audioRef.current = null;
+      abortRef.current?.abort();
+      void ctxRef.current?.close().catch(() => undefined);
+      ctxRef.current = null;
     };
   }, [runTurn, startListening, clearSilence]);
 
@@ -279,12 +352,9 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
     onClose();
   }, [onClose]);
 
-  const lastCortex = [...turns].reverse().find((t) => t.role === 'cortex');
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md overflow-hidden rounded-card border border-border bg-surface shadow-card">
-        {/* Cabecera */}
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="font-semibold text-ink">Modo voz</span>
@@ -299,7 +369,6 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Cuerpo */}
         <div className="flex flex-col items-center gap-4 px-5 py-7">
           {supported === false ? (
             <p className="text-center text-sm text-ink-muted">
@@ -308,7 +377,6 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
             </p>
           ) : (
             <>
-              {/* El anillo que respira según la fase */}
               <div
                 className={`grid h-24 w-24 place-items-center rounded-full transition-colors ${
                   phase === 'listening'
@@ -335,7 +403,6 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
 
-              {/* Lo que se está oyendo o lo último que Cortex dijo */}
               <div className="min-h-[3.5rem] w-full text-center">
                 {phase === 'listening' || phase === 'idle' ? (
                   <p className="text-sm text-ink">
@@ -343,8 +410,8 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
                   </p>
                 ) : phase === 'thinking' ? (
                   <p className="text-sm text-ink-faint">Cortex está pensando…</p>
-                ) : lastCortex ? (
-                  <p className="text-sm font-medium text-ink">{lastCortex.text}</p>
+                ) : reply ? (
+                  <p className="text-sm font-medium text-ink">{reply}</p>
                 ) : null}
               </div>
 
