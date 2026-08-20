@@ -88,7 +88,10 @@ function viewOf(snapshot: PageSnapshot, size: 'full' | 'lite' = 'full') {
 const viewSchema = z.object({
   url: z.string(),
   title: z.string(),
-  headings: z.array(z.string()),
+  // Opcional porque la vista de maniobra (viewOf 'lite') no los trae — y un
+  // esquema que exige lo que la dieta de tokens quitó convierte CADA acto en
+  // «Invalid output [VALIDATION]». Pasó en producción la misma tarde.
+  headings: z.array(z.string()).optional(),
   alerts: z.array(z.string()),
   text: z.string(),
   elements: z.array(
