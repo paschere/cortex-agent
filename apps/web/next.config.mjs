@@ -5,7 +5,10 @@ const config = {
   reactStrictMode: true,
   experimental: { serverActions: { bodySizeLimit: '12mb' } },
   transpilePackages: ['@cortex/core', '@cortex/agent-tools', '@cortex/agents'],
-  serverExternalPackages: ['inngest'],
+  // 'ws' se deja fuera del bundle: trae binarios opcionales (bufferutil,
+  // utf-8-validate) que webpack no debe empaquetar. Lo usa el modo voz para el
+  // WebSocket de TTS de Deepgram (app/api/voice/turn).
+  serverExternalPackages: ['inngest', 'ws'],
   webpack(webpackConfig) {
     // Allow webpack to resolve .js imports as .ts for ESM workspace packages
     webpackConfig.resolve = webpackConfig.resolve ?? {};

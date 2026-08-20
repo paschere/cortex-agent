@@ -25,14 +25,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * Solo la VOZ DE CORTEX pasa por Deepgram.
  *
  * ===========================================================================
- * EL AUDIO SE ENCOLA CON WEB AUDIO, NO CON <audio>
+ * EL AUDIO ES PCM EN FLUJO, ENCOLADO CON WEB AUDIO
  * ===========================================================================
- * Cada frase llega como su propio mp3. Reproducirlas con un `<audio>` tras otro
- * deja un hueco audible entre frases. En su lugar se decodifican a AudioBuffer
- * y se programan una tras otra en un AudioContext (`nextStart`), así suenan
- * pegadas como una sola voz. Mientras Cortex habla, el reconocedor se DETIENE, y
- * se reanuda cuando la cola se vacía — si no, el micrófono lo oiría y le
- * contestaría a Cortex.
+ * El servidor manda audio como PCM linear16 crudo (del WS de Deepgram) en
+ * trozos, con su sample rate en el evento `meta`. Cada trozo se convierte
+ * Int16→Float32, se mete en un AudioBuffer y se programa tras el anterior en un
+ * AudioContext (`nextStart`), así suenan pegados como una sola voz sin huecos.
+ * Un byte suelto entre trozos (una muestra partida) se arrastra al siguiente.
+ * Mientras Cortex habla, el reconocedor se DETIENE, y se reanuda cuando la cola
+ * se vacía — si no, el micrófono lo oiría y le contestaría a Cortex.
  */
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -86,11 +87,11 @@ const PHASE_LABEL: Record<Phase, string> = {
   error: 'Algo salió mal',
 };
 
-function b64ToArrayBuffer(b64: string): ArrayBuffer {
+function b64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes.buffer;
+  return bytes;
 }
 
 export function VoiceMode({ onClose }: { onClose: () => void }) {
@@ -114,6 +115,10 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
   const nextStartRef = useRef(0);
   const pendingRef = useRef(0);
   const streamDoneRef = useRef(false);
+  const sampleRateRef = useRef(24_000);
+  // Un chunk de PCM puede partir una muestra de 16 bits por la mitad; el byte
+  // suelto se guarda para pegarlo al principio del siguiente chunk.
+  const leftoverRef = useRef<Uint8Array | null>(null);
 
   const clearSilence = useCallback(() => {
     if (silenceTimer.current) {
@@ -142,6 +147,9 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
     if (streamDoneRef.current && pendingRef.current <= 0) startListening();
   }, [startListening]);
 
+  // Un trozo de PCM linear16 (base64) → un AudioBuffer programado en cola.
+  // Deepgram Aura entrega PCM crudo por su WS, así que no hay decodeAudioData
+  // (eso es para contenedores como mp3): se convierte Int16 → Float32 a mano.
   const enqueueAudio = useCallback(
     async (b64: string) => {
       if (closedRef.current) return;
@@ -154,18 +162,33 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
         ctxRef.current = ctx;
       }
       if (ctx.state === 'suspended') await ctx.resume();
-      let buffer: AudioBuffer;
-      try {
-        buffer = await ctx.decodeAudioData(b64ToArrayBuffer(b64));
-      } catch {
-        return;
-      }
       if (closedRef.current) return;
+
+      // Pega el byte suelto del chunk anterior, y guarda el de este si queda uno.
+      let bytes = b64ToBytes(b64);
+      const prev = leftoverRef.current;
+      if (prev?.length) {
+        const joined = new Uint8Array(prev.length + bytes.length);
+        joined.set(prev, 0);
+        joined.set(bytes, prev.length);
+        bytes = joined;
+      }
+      const usable = bytes.length - (bytes.length % 2);
+      leftoverRef.current = usable < bytes.length ? bytes.slice(usable) : null;
+      if (usable < 2) return;
+
+      const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, usable / 2);
+      const f32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) f32[i] = (int16[i] ?? 0) / 32768;
+
+      const buffer = ctx.createBuffer(1, f32.length, sampleRateRef.current);
+      buffer.copyToChannel(f32, 0);
+
       const src = ctx.createBufferSource();
       src.buffer = buffer;
       src.connect(ctx.destination);
-      // Programa cada frase justo tras la anterior; si la cola se vació, arranca
-      // ya (con un pelín de margen para no cortar el ataque).
+      // Programa cada trozo tras el anterior; si la cola se vació, arranca ya
+      // (con un pelín de margen para no cortar el ataque).
       const at = Math.max(ctx.currentTime + 0.02, nextStartRef.current);
       pendingRef.current += 1;
       src.onended = () => {
@@ -198,6 +221,7 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
       streamDoneRef.current = false;
       pendingRef.current = 0;
       nextStartRef.current = 0;
+      leftoverRef.current = null;
 
       const controller = new AbortController();
       abortRef.current = controller;
@@ -238,13 +262,15 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
             const event = /event: (.*)/.exec(block)?.[1]?.trim();
             const dataRaw = /data: (.*)/.exec(block)?.[1];
             if (!event || dataRaw === undefined) continue;
-            let data: { text?: string; b64?: string; message?: string } = {};
+            let data: { text?: string; b64?: string; message?: string; sampleRate?: number } = {};
             try {
               data = JSON.parse(dataRaw);
             } catch {
               continue;
             }
-            if (event === 'text' && data.text) {
+            if (event === 'meta' && data.sampleRate) {
+              sampleRateRef.current = data.sampleRate;
+            } else if (event === 'text' && data.text) {
               if (firstChunk) {
                 firstChunk = false;
                 setPhase('speaking');

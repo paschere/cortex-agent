@@ -6,44 +6,42 @@ import { listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent
 import { ConfirmationRequiredError, SecurityBlockedError } from '@cortex/core';
 import { type CoreTool, streamText, tool } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
+import WebSocket from 'ws';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 /**
- * EL CEREBRO DEL MODO VOZ, EN STREAMING — Cortex piensa y HABLA por frases.
+ * EL CEREBRO DEL MODO VOZ — Cortex piensa y habla en FLUJO CONTINUO.
  *
  * ===========================================================================
- * POR QUÉ ESTO STREAMEA Y EL CHAT DE TEXTO PUEDE NO HACERLO
+ * DOS STREAMS COSIDOS: EL MODELO Y LA VOZ
  * ===========================================================================
- * En una conversación hablada, el reloj es implacable: cada segundo antes de la
- * primera palabra se oye como un silencio incómodo. Así que aquí NO se espera a
- * que la respuesta esté entera para hablarla. El modelo emite texto; en cuanto
- * hay una FRASE completa, se sintetiza (Deepgram Aura-2) y se manda al cliente,
- * que la reproduce mientras el modelo sigue generando la siguiente. El «tiempo
- * hasta la primera palabra hablada» deja de ser «todo el turno» y pasa a ser
- * «la primera frase» — de segundos a ~un segundo.
+ * El modelo emite texto por tokens; Deepgram Aura, por su WebSocket de TTS,
+ * sintetiza en flujo lo que se le va mandando y devuelve audio (PCM) en trozos
+ * a medida que lo genera. Aquí se cosen los dos: cada cláusula que suelta el
+ * modelo se empuja al WS, y cada trozo de audio que vuelve se reenvía al
+ * cliente por SSE. No se espera a tener una frase entera ni su mp3 completo —
+ * el audio empieza a fluir con las primeras palabras. Es el mínimo de latencia
+ * que esta cadena permite.
  *
- * El transporte es SSE: un evento `text` por frase (para pintarla), un evento
- * `audio` con el mp3 en base64 (para reproducirla), y `done` al final. El
- * cliente encola el audio y lo reproduce sin cortes (ver VoiceMode.tsx).
- *
- * ===========================================================================
- * EL MODELO: SONNET SIN PENSAR
- * ===========================================================================
- * `voiceModel()` es Sonnet 5 con el `thinking` apagado — razonar en silencio es
- * justo el segundo muerto que la voz no perdona, y una respuesta de una o dos
- * frases no lo necesita. Ver la nota en packages/agent-tools/src/model.ts.
+ * POR QUÉ EL WS Y NO EL REST. El /v1/speak REST devuelve el mp3 de una frase de
+ * una sola vez: hay que esperar a que la frase entera esté sintetizada antes de
+ * oír la primera sílaba. El WS emite audio conforme sintetiza, así que la
+ * primera muestra sale en ~200ms en vez de en «toda la frase». La llave nunca
+ * toca el navegador: el WS vive aquí, en el servidor, y el cliente solo recibe
+ * PCM ya sintetizado.
  *
  * ===========================================================================
- * MODO VOZ = AUTO-AUTORIZA (igual que en reuniones, y por lo mismo)
+ * TRANSPORTE
  * ===========================================================================
- * Hablando no hay tarjeta que tocar, así que las confirmaciones se AUTO-AUTORIZAN
- * (`confirmed: true`). Lo que NO se afloja: la capa de SEGURIDAD sigue bloqueando
- * lo que clasifica como `block`, la voz es premium, y todo lo ejecutado se
- * audita. Un `block` sigue siendo un `block`, y Cortex lo dice de viva voz en
- * vez de actuar.
+ * SSE al cliente: `meta` (sample rate, una vez), `text` (la frase, para
+ * pintarla), `audio` (PCM linear16 en base64, para reproducir en cola) y
+ * `done`. El cliente reproduce el PCM con Web Audio (ver VoiceMode.tsx).
+ *
+ * Modelo: `voiceModel()` (Sonnet 5 sin thinking). Auto-autoriza las tools como
+ * en reuniones; la capa de seguridad sigue bloqueando lo que clasifica `block`.
  */
 
 const Body = z.object({
@@ -63,29 +61,11 @@ const VOICE_PLANS = new Set(
 );
 
 const TTS_VOICE = process.env.VOICE_TTS_VOICE || 'aura-2-celeste-es';
-const TTS_SPEED = process.env.VOICE_TTS_SPEED || '1';
+/** Deepgram Aura entrega PCM crudo por WS; el cliente lo reproduce a esta tasa. */
+const SAMPLE_RATE = 24_000;
 
-/**
- * Una frase → mp3 en base64, o null si la voz no está configurada o falla. Un
- * fallo de síntesis no rompe el turno: el cliente igual pinta el texto.
- */
-async function synthesize(text: string): Promise<string | null> {
-  const apiKey = process.env.DEEPGRAM_API_KEY;
-  if (!apiKey) return null;
-  const params = new URLSearchParams({ model: TTS_VOICE, speed: TTS_SPEED, encoding: 'mp3' });
-  try {
-    const res = await fetch(`https://api.deepgram.com/v1/speak?${params}`, {
-      method: 'POST',
-      headers: { Authorization: `Token ${apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ text }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return null;
-    return Buffer.from(await res.arrayBuffer()).toString('base64');
-  } catch {
-    return null;
-  }
-}
+/** Corta el texto en cláusulas: mandarlas al TTS apenas listas baja la latencia. */
+const CLAUSE = /^([\s\S]*?[.!?…,;:]+)(\s+)([\s\S]*)$/;
 
 export async function POST(req: NextRequest) {
   const user = await requireSession();
@@ -98,7 +78,6 @@ export async function POST(req: NextRequest) {
   const orgId = user.organization.id;
   const db = getOrgScopedClient(orgId);
 
-  // El muro premium, del lado servidor: no se salta ocultando un botón.
   const plan = await readWorkspacePlan(db).catch(() => null);
   if (!plan || !VOICE_PLANS.has(plan.plan.code)) {
     return NextResponse.json({ error: 'voice-not-in-plan' }, { status: 402 });
@@ -177,47 +156,125 @@ export async function POST(req: NextRequest) {
     maxSteps: 6,
   });
 
-  // Corta una frase cuando ve puntuación final seguida de espacio. Un tope de
-  // longitud fuerza el corte aunque no haya puntuación (una lista dictada, un
-  // titubeo), para que la voz nunca se quede esperando un punto que no llega.
-  const SENTENCE = /^([\s\S]*?[.!?…]+)(\s+)([\s\S]*)$/;
-  const MAX_CHUNK = 220;
-
+  const apiKey = process.env.DEEPGRAM_API_KEY;
   const encoder = new TextEncoder();
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (event: string, data: unknown) => {
         controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
       };
-      const flush = async (raw: string) => {
-        const text = raw.trim();
-        if (!text) return;
-        send('text', { text });
-        const b64 = await synthesize(text);
-        if (b64) send('audio', { b64 });
-      };
 
-      let buf = '';
+      // Sin llave: se degrada a solo texto (el cliente pinta, no suena).
+      if (!apiKey) {
+        try {
+          let buf = '';
+          for await (const delta of result.textStream) {
+            buf += delta;
+            let m = buf.match(CLAUSE);
+            while (m) {
+              send('text', { text: (m[1] ?? '').trim() });
+              buf = m[3] ?? '';
+              m = buf.match(CLAUSE);
+            }
+          }
+          if (buf.trim()) send('text', { text: buf.trim() });
+          send('done', {});
+        } catch {
+          send('error', { message: 'No pude responder.' });
+        } finally {
+          controller.close();
+        }
+        return;
+      }
+
+      send('meta', { sampleRate: SAMPLE_RATE });
+
+      const dgUrl = `wss://api.deepgram.com/v1/speak?encoding=linear16&sample_rate=${SAMPLE_RATE}&model=${encodeURIComponent(TTS_VOICE)}`;
+      const ws = new WebSocket(dgUrl, { headers: { Authorization: `Token ${apiKey}` } });
+
+      // El audio (binario) se reenvía al cliente; un `Flushed` de control marca
+      // que Deepgram terminó de sintetizar todo lo que se le mandó.
+      let resolveDone!: () => void;
+      const audioDone = new Promise<void>((r) => {
+        resolveDone = r;
+      });
+      ws.on('message', (data: WebSocket.RawData, isBinary: boolean) => {
+        if (isBinary) {
+          send('audio', { b64: (data as Buffer).toString('base64') });
+          return;
+        }
+        try {
+          const msg = JSON.parse(data.toString()) as { type?: string };
+          if (msg.type === 'Flushed') resolveDone();
+        } catch {
+          /* metadatos no-JSON */
+        }
+      });
+      ws.on('error', () => resolveDone());
+      ws.on('close', () => resolveDone());
+
+      const opened = new Promise<boolean>((resolve) => {
+        ws.on('open', () => resolve(true));
+        ws.on('error', () => resolve(false));
+        setTimeout(() => resolve(false), 8_000);
+      });
+
       try {
+        const ok = await opened;
+        if (!ok) {
+          // El WS no abrió: caer a solo texto para no dejar el turno mudo.
+          let buf = '';
+          for await (const delta of result.textStream) {
+            buf += delta;
+            let m = buf.match(CLAUSE);
+            while (m) {
+              send('text', { text: (m[1] ?? '').trim() });
+              buf = m[3] ?? '';
+              m = buf.match(CLAUSE);
+            }
+          }
+          if (buf.trim()) send('text', { text: buf.trim() });
+          send('done', {});
+          return;
+        }
+
+        // El modelo fluye; cada cláusula se pinta y se manda al TTS al instante.
+        let buf = '';
+        const speak = (text: string) => {
+          const clean = text.trim();
+          if (!clean) return;
+          send('text', { text: clean });
+          ws.send(JSON.stringify({ type: 'Speak', text: clean }));
+        };
         for await (const delta of result.textStream) {
           buf += delta;
-          // Saca todas las frases completas que haya en el buffer.
-          let m = buf.match(SENTENCE);
+          let m = buf.match(CLAUSE);
           while (m) {
-            await flush(m[1] ?? '');
+            speak(m[1] ?? '');
             buf = m[3] ?? '';
-            m = buf.match(SENTENCE);
-          }
-          if (buf.length > MAX_CHUNK) {
-            await flush(buf);
-            buf = '';
+            m = buf.match(CLAUSE);
           }
         }
-        if (buf.trim()) await flush(buf);
+        if (buf.trim()) speak(buf);
+
+        // Flush: síntetiza lo pendiente. Esperamos el `Flushed` (o el cierre).
+        ws.send(JSON.stringify({ type: 'Flush' }));
+        await Promise.race([audioDone, new Promise<void>((r) => setTimeout(r, 20_000))]);
+        try {
+          ws.send(JSON.stringify({ type: 'Close' }));
+        } catch {
+          /* ya cerrando */
+        }
         send('done', {});
       } catch {
         send('error', { message: 'No pude terminar de responder.' });
       } finally {
+        try {
+          ws.close();
+        } catch {
+          /* ya cerrado */
+        }
         controller.close();
       }
     },
