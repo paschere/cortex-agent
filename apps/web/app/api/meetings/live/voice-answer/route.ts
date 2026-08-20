@@ -59,29 +59,18 @@ const Body = z.object({
 const VOICE_PLANS = new Set((process.env.MEET_VOICE_PLANS || 'business,enterprise').split(','));
 
 /**
- * Un conjunto CURADO de familias, no las 170 tools: una respuesta hablada no
- * navega ni radica trámites. Lee el cerebro y el CRM, mira compromisos y pagos,
- * y puede mandar un correo o agendar (auto-autorizado en voz). Chico a
- * propósito: el modelo elige mejor entre 30 que entre 170, y una reunión por
- * voz no es el sitio para las tools de más riesgo (browser, pagos que mueven
- * plata, etc.).
+ * Qué NO puede hacer la voz — una deny-list, no una allow-list. Por decisión
+ * del dueño, en la reunión Cortex puede casi todo: leer el cerebro y el CRM,
+ * mandar correos, RADICAR TRÁMITES, EJECUTAR PIPELINES, agendar, registrar
+ * pagos. La voz auto-autoriza, así que el poder es real. Solo quedan fuera las
+ * familias que no tienen sentido dichas en una llamada:
+ *   - browser.*: abrir una pestaña viva que nadie mira en una reunión por voz.
+ *   - screen/ask_choice: superficies del chat, no de la voz.
+ *   - security/admin: administrar la seguridad no se hace de viva voz.
+ * Todo lo demás entra. La capa de SEGURIDAD (no la de confirmación) sigue
+ * bloqueando lo que clasifica como `block`; eso no lo afloja el modo voz.
  */
-const VOICE_FAMILIES = new Set([
-  'kb',
-  'clients',
-  'commitments',
-  'goals',
-  'company',
-  'cortex',
-  'hubspot',
-  'gmail',
-  'gcal',
-  'people',
-  'reports',
-  'inbox',
-  'meetings',
-  'payments',
-]);
+const VOICE_FAMILIES_BLOCKED = new Set(['browser', 'screen', 'security', 'admin']);
 
 function tokenOk(req: NextRequest): boolean {
   const expected = process.env.MEET_SERVICE_TOKEN;
@@ -164,7 +153,7 @@ export async function POST(req: NextRequest) {
   const aiTools: Record<string, CoreTool> = {};
   for (const def of listTools()) {
     const family = def.id.split('.')[0] ?? '';
-    if (!VOICE_FAMILIES.has(family)) continue;
+    if (VOICE_FAMILIES_BLOCKED.has(family)) continue;
     aiTools[def.id.replaceAll('.', '_')] = tool({
       description: def.description,
       parameters: def.inputSchema,
