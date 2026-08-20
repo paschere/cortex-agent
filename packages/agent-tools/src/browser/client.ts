@@ -61,6 +61,8 @@ export interface ActCall {
   target?: Target | null;
   text?: string;
   url?: string;
+  /** El id de la organización dueña de la pestaña. */
+  owner?: string;
 }
 
 export interface ActResult {
@@ -70,6 +72,15 @@ export interface ActResult {
   snapshot: PageSnapshot;
 }
 
+/** El estado del volante, como lo cuenta el servicio. */
+export interface ControlView {
+  driver: 'bot' | 'human';
+  help: { reason: string; requestedAt: number } | null;
+  secret: { label: string; requestedAt: number } | null;
+  url: string;
+  title: string;
+}
+
 export interface BrowserTransport {
   configured(): boolean;
   replay(call: ReplayCall): Promise<TransportResult<ReplayResponse>>;
@@ -77,8 +88,25 @@ export interface BrowserTransport {
   resume(call: ResumeCall): Promise<TransportResult<ReplayResponse>>;
   openSession(
     startUrl: string,
+    owner?: string,
   ): Promise<TransportResult<{ sessionId: string; snapshot: PageSnapshot }>>;
   act(call: ActCall): Promise<TransportResult<ActResult>>;
+  /** La página como está ahora, sin actuar sobre ella. */
+  read(sessionId: string, owner?: string): Promise<TransportResult<PageSnapshot>>;
+  /** El volante: pedir ayuda, y leer quién conduce. Tomar/soltar es de la UI. */
+  control(
+    sessionId: string,
+    op: 'get' | 'request',
+    reason?: string,
+    owner?: string,
+  ): Promise<TransportResult<ControlView>>;
+  /** Señalar un campo para que una persona lo llene. El valor nunca pasa por aquí. */
+  requestSecret(
+    sessionId: string,
+    target: Target,
+    label: string,
+    owner?: string,
+  ): Promise<TransportResult<{ ok: boolean }>>;
   closeSession(sessionId: string): Promise<void>;
 }
 
@@ -119,6 +147,9 @@ function describeStatus(status: number): string {
   if (status === 404) {
     return 'Esa sesión de navegador ya no existe. Hay que empezar de nuevo.';
   }
+  if (status === 409) {
+    return 'Una persona está conduciendo esta pestaña en este momento. No actúes: espera a que te avise que terminó y vuelve a mirar la página.';
+  }
   if (status >= 500) {
     return 'El servicio de navegador falló al ejecutar el trámite. Suele recuperarse solo en unos minutos.';
   }
@@ -131,6 +162,7 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
     method: 'GET' | 'POST' | 'DELETE',
     body: unknown,
     timeoutMs: number,
+    owner?: string,
   ): Promise<TransportResult<T>> {
     const base = process.env.BROWSER_SERVICE_URL;
     const token = process.env.BROWSER_SERVICE_TOKEN;
@@ -143,6 +175,7 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
         headers: {
           authorization: `Bearer ${token}`,
           accept: 'application/json',
+          ...(owner ? { 'x-cortex-owner': owner } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -181,14 +214,47 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
         { fromIndex: c.fromIndex, inputs: c.inputs ?? {} },
         200_000,
       ),
-    openSession: (startUrl) =>
-      call<{ sessionId: string; snapshot: PageSnapshot }>('/session', 'POST', { startUrl }, 60_000),
+    openSession: (startUrl, owner) =>
+      call<{ sessionId: string; snapshot: PageSnapshot }>(
+        '/session',
+        'POST',
+        { startUrl, owner },
+        60_000,
+        owner,
+      ),
     act: (c) =>
       call<ActResult>(
         `/session/${encodeURIComponent(c.sessionId)}/act`,
         'POST',
         { action: c.action, target: c.target ?? null, text: c.text ?? '', url: c.url ?? '' },
         60_000,
+        c.owner,
+      ),
+    read: (sessionId, owner) =>
+      call<PageSnapshot>(`/session/${encodeURIComponent(sessionId)}`, 'GET', undefined, 30_000, owner),
+    control: (sessionId, op, reason, owner) =>
+      op === 'get'
+        ? call<ControlView>(
+            `/session/${encodeURIComponent(sessionId)}/control`,
+            'GET',
+            undefined,
+            15_000,
+            owner,
+          )
+        : call<ControlView>(
+            `/session/${encodeURIComponent(sessionId)}/control`,
+            'POST',
+            { op: 'request', reason: reason ?? '' },
+            15_000,
+            owner,
+          ),
+    requestSecret: (sessionId, target, label, owner) =>
+      call<{ ok: boolean }>(
+        `/session/${encodeURIComponent(sessionId)}/secret-request`,
+        'POST',
+        { target, label },
+        15_000,
+        owner,
       ),
     closeSession: async (sessionId) => {
       await call(`/session/${encodeURIComponent(sessionId)}`, 'DELETE', undefined, 15_000);

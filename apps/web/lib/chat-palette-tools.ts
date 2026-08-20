@@ -67,6 +67,10 @@ export const TOOL_PHRASE: Record<string, string> = {
   // La frase empieza por el dato porque así es como llega: la persona escribe
   // el código que le acaba de entrar, no «retoma el trámite».
   'browser.resume_flow': `El código que me llegó es `,
+  // La navegación libre se pide así; los pasos sueltos (act, read_page,
+  // ask_person, request_secret, close_page) los decide el bot dentro de la
+  // pestaña y no son una petición — están en la fontanería del test.
+  'browser.open_page': 'Entra a este sitio web y encárgate: ',
 
   'chat.send_dm': 'Escríbele por Google Chat a ',
   'chat.send_message': 'Publica en el espacio de Google Chat ',

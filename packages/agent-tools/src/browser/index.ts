@@ -161,3 +161,15 @@ export {
   browserRunFlow,
   browserSubmitFlow,
 } from './tools';
+
+// La navegación libre (browser v2): la pestaña viva del chat. Registra
+// browser.open_page, browser.act, browser.read_page, browser.ask_person,
+// browser.request_secret y browser.close_page al importarse.
+export {
+  browserAct,
+  browserAskPerson,
+  browserClosePage,
+  browserOpenPage,
+  browserReadPage,
+  browserRequestSecret,
+} from './live';

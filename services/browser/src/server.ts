@@ -1,12 +1,16 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
+import { WebSocketServer } from 'ws';
 import { type BrowserWorker, BusyError, UnknownSession } from './browser';
 import type { Config } from './config';
+import { HumanHasControl } from './control';
 import { logger } from './logger';
-import type { ReplayRequest } from './types';
+import { signStreamToken, verifyStreamToken } from './stream-token';
+import { ForbiddenTarget } from './target';
+import type { ReplayRequest, Target } from './types';
 
 /**
- * A small HTTP surface, for four jobs and no others.
+ * A small HTTP surface, in two families and no more.
  *
  *   GET    /health              Unauthenticated, on purpose. Railway polls it
  *                               to decide whether the container is alive, and a
@@ -20,6 +24,12 @@ import type { ReplayRequest } from './types';
  *   POST   /session             Open an interactive page.
  *   POST   /session/:id/act     Act on it.
  *   DELETE /session/:id         Close it.
+ *
+ * And the live-tab family (browser v2) on the same sessions: /control (el
+ * volante), /secret-request y /secret (un campo que llena una persona),
+ * /stream-token + el upgrade de WebSocket en /stream (la pantalla en vivo,
+ * autenticada con un boleto firmado de un minuto porque la abre el navegador
+ * de una persona — ver stream-token.ts).
  *
  * Everything else is 404.
  *
@@ -97,6 +107,35 @@ export function startServer(worker: BrowserWorker, config: Config): Server {
     });
   });
 
+  /**
+   * La pantalla en vivo entra por aquí y no por `handle`: un upgrade de
+   * WebSocket no es una petición normal y Node lo entrega por otro evento.
+   *
+   * QUIÉN PUEDE PASAR. No el bearer de servicio — esto lo abre el navegador de
+   * una persona, que jamás lo tiene — sino un boleto firmado que Cortex pidió
+   * hace segundos con ese bearer (stream-token.ts cuenta el esquema completo).
+   * El boleto viaja en la query porque un upgrade no lleva headers propios, y
+   * vale un minuto por exactamente esa razón.
+   */
+  const streaming = new WebSocketServer({ noServer: true });
+  server.on('upgrade', (req, socket, head) => {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    const match = /^\/session\/([A-Za-z0-9_]+)\/stream$/.exec(url.pathname);
+    const token = url.searchParams.get('token') ?? '';
+    if (!match?.[1] || !verifyStreamToken(token, match[1], config.serviceToken)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    const sessionId = match[1];
+    streaming.handleUpgrade(req, socket, head, (ws) => {
+      worker.attachStream(sessionId, ws).catch((err: unknown) => {
+        logger.warn({ sessionId, err: (err as Error).message }, 'live stream did not attach');
+        ws.close(4004, 'session is gone');
+      });
+    });
+  });
+
   // Longer than the default 2 minutes: one errand may legitimately take three,
   // and a socket closed underneath a run wastes the whole thing.
   server.requestTimeout = config.runTimeoutMs + 30_000;
@@ -152,13 +191,92 @@ async function handle(
       return;
     }
 
+    // A quién pertenece la sesión sobre la que se actúa. Cortex lo manda en
+    // todas sus llamadas de navegación libre; las pantallas viejas de handoff
+    // no, y para esas el chequeo simplemente no aplica (browser.ts, `owner`).
+    const owner = String(req.headers['x-cortex-owner'] ?? '').slice(0, 80) || undefined;
+
+    // El «Reset» del computador del tenant: borra su perfil Chromium
+    // persistente — cookies, logins, todo — de forma IRREVERSIBLE. Cerrar
+    // conserva el disco; esto no. Quién lo pidió y por qué queda en la
+    // auditoría de Cortex, que es quien llama: este servicio no tiene base de
+    // datos y no recuerda nada.
+    if (req.method === 'DELETE' && path === '/profile') {
+      if (!owner) {
+        json(res, 400, { error: 'x-cortex-owner is required' });
+        return;
+      }
+      await worker.resetProfile(owner);
+      json(res, 200, { ok: true });
+      return;
+    }
+
     if (req.method === 'POST' && path === '/session') {
-      const body = (await readBody(req)) as { startUrl?: string };
+      const body = (await readBody(req)) as { startUrl?: string; owner?: string };
       if (!body?.startUrl) {
         json(res, 400, { error: 'startUrl is required' });
         return;
       }
-      json(res, 200, await worker.openSession(body.startUrl));
+      json(res, 200, await worker.openSession(body.startUrl, body.owner ?? owner));
+      return;
+    }
+
+    // -----------------------------------------------------------------------
+    // El volante, los secretos y la pantalla en vivo (browser v2).
+    // -----------------------------------------------------------------------
+
+    const controlMatch = /^\/session\/([A-Za-z0-9_]+)\/control$/.exec(path);
+    if (controlMatch?.[1]) {
+      if (req.method === 'GET') {
+        json(res, 200, await worker.controlState(controlMatch[1], owner));
+        return;
+      }
+      if (req.method === 'POST') {
+        const body = (await readBody(req)) as { op?: string; reason?: string };
+        if (body.op === 'request') worker.requestHelp(controlMatch[1], body.reason ?? '', owner);
+        else if (body.op === 'take') worker.takeControl(controlMatch[1], owner);
+        else if (body.op === 'release') worker.releaseControl(controlMatch[1], owner);
+        else {
+          json(res, 400, { error: 'op must be request, take or release' });
+          return;
+        }
+        json(res, 200, await worker.controlState(controlMatch[1], owner));
+        return;
+      }
+    }
+
+    const secretRequestMatch = /^\/session\/([A-Za-z0-9_]+)\/secret-request$/.exec(path);
+    if (req.method === 'POST' && secretRequestMatch?.[1]) {
+      const body = (await readBody(req)) as { target?: Target; label?: string };
+      if (!body?.target || !body?.label) {
+        json(res, 400, { error: 'target and label are required' });
+        return;
+      }
+      worker.requestSecret(secretRequestMatch[1], body.target, body.label, owner);
+      json(res, 200, { ok: true });
+      return;
+    }
+
+    const secretMatch = /^\/session\/([A-Za-z0-9_]+)\/secret$/.exec(path);
+    if (req.method === 'POST' && secretMatch?.[1]) {
+      const body = (await readBody(req)) as { value?: string };
+      if (typeof body?.value !== 'string' || body.value.length === 0) {
+        json(res, 400, { error: 'value is required' });
+        return;
+      }
+      // Del cuerpo de esta petición al campo de la página. El body no se
+      // loguea (la nota del catch de abajo ya lo dice para todos), y la
+      // respuesta lleva la longitud, nunca el valor.
+      json(res, 200, await worker.supplySecret(secretMatch[1], body.value.slice(0, 500), owner));
+      return;
+    }
+
+    const streamTokenMatch = /^\/session\/([A-Za-z0-9_]+)\/stream-token$/.exec(path);
+    if (req.method === 'POST' && streamTokenMatch?.[1]) {
+      // Solo comprueba que la sesión exista y sea de quien pregunta; el boleto
+      // resultante es lo que el navegador de la persona usará en el upgrade.
+      await worker.controlState(streamTokenMatch[1], owner);
+      json(res, 200, { token: signStreamToken(streamTokenMatch[1], config.serviceToken) });
       return;
     }
 
@@ -190,7 +308,7 @@ async function handle(
 
     const viewMatch = /^\/session\/([A-Za-z0-9_]+)\/view$/.exec(path);
     if (req.method === 'GET' && viewMatch?.[1]) {
-      json(res, 200, await worker.viewSession(viewMatch[1]));
+      json(res, 200, await worker.viewSession(viewMatch[1], owner));
       return;
     }
 
@@ -211,12 +329,17 @@ async function handle(
       // rounding bug on the way here, not an instruction.
       const clamp = (v: number | undefined, max: number) =>
         Math.max(0, Math.min(Math.round(v ?? 0), max));
-      await worker.sendInput(inputMatch[1], {
-        kind: body.kind,
-        x: clamp(body.x, config.viewportWidth),
-        y: body.kind === 'scroll' ? Math.round(body.y ?? 0) : clamp(body.y, config.viewportHeight),
-        text: (body.text ?? '').slice(0, 200),
-      });
+      await worker.sendInput(
+        inputMatch[1],
+        {
+          kind: body.kind,
+          x: clamp(body.x, config.viewportWidth),
+          y:
+            body.kind === 'scroll' ? Math.round(body.y ?? 0) : clamp(body.y, config.viewportHeight),
+          text: (body.text ?? '').slice(0, 200),
+        },
+        owner,
+      );
       json(res, 200, { ok: true });
       return;
     }
@@ -243,7 +366,7 @@ async function handle(
     const sessionMatch = /^\/session\/([A-Za-z0-9_]+)$/.exec(path);
     if (sessionMatch?.[1]) {
       if (req.method === 'GET') {
-        json(res, 200, await worker.readSession(sessionMatch[1]));
+        json(res, 200, await worker.readSession(sessionMatch[1], owner));
         return;
       }
       if (req.method === 'DELETE') {
@@ -261,6 +384,18 @@ async function handle(
     }
     if (err instanceof UnknownSession) {
       json(res, 404, { error: err.message });
+      return;
+    }
+    if (err instanceof ForbiddenTarget) {
+      // 400 con la frase: quien pidió (el modelo, o una pantalla) puede leerla
+      // y no reintentar. El código deja que el transporte la distinga.
+      json(res, 400, { error: err.message, code: 'forbidden-target' });
+      return;
+    }
+    if (err instanceof HumanHasControl) {
+      // 409 con nombre: el que llama es un modelo, y «una persona está
+      // conduciendo; espera» es una instrucción que sabe seguir. Un 500 no.
+      json(res, 409, { error: err.message, code: 'human-has-control' });
       return;
     }
     // The body can carry a decrypted credential, so only the path and the

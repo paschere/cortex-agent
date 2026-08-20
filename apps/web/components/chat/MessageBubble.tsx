@@ -500,6 +500,9 @@ export function MessageBubble({
                       toolCallId={inv.toolCallId}
                       onSettled={onConfirmed}
                       screenFrame={screenFrame}
+                      // El mismo canal de ChoicePrompt: lo que una tarjeta
+                      // diga por la persona entra como mensaje de la persona.
+                      onSay={onAnswer}
                     />,
                   );
                   continue;

@@ -70,6 +70,43 @@ export async function buildCompanyFactsBlock(organizationId: string): Promise<st
   return renderCompanyFactsBlock(facts);
 }
 
+/**
+ * The live-tab capability, taught here and not in the `agents` row.
+ *
+ * WHY IT EXISTS. The base prompt in the database predates free navigation, and
+ * the tool descriptions alone only teach a capability on the turn the tools are
+ * selected. Asked «¿puedes navegar a wikipedia.com?» with no browser tool in
+ * the request, the model truthfully answered that it could not — the vehicles
+ * incident (see tool-selection/index.ts), as a sentence instead of a silence.
+ * A capability the model must OFFER has to live in the prompt every surface
+ * sends, which is this file and nowhere else.
+ *
+ * WHY IT IS A CONSTANT IN CODE AND NOT A MIGRATION. It describes what the
+ * PRODUCT can do, not what this workspace decided — it ships and changes with
+ * `packages/agent-tools/src/browser/live.ts`, and a DB copy would drift from
+ * the tools exactly the way the base prompt just did.
+ *
+ * WHERE IT SITS, AND WHY THAT IS SAFE FOR THE CACHE. The system prompt is the
+ * stable prefix of the Anthropic prompt cache: everything volatile travels as
+ * turn blocks after the breakpoint (see the note above `buildSystemPrompt` in
+ * app/api/chat/route.ts). This block is a string literal — identical bytes on
+ * every turn of every conversation — so concatenating it right after the base
+ * prompt moves the prefix once per deploy, which is the one move the cache
+ * forgives. Do not interpolate anything into it.
+ *
+ * Exported so the chat route can weigh it with the instructions it extends —
+ * the cost screen measures the strings that really went in, and an unmeasured
+ * block would fold its length into somebody else's bar.
+ */
+export const LIVE_BROWSING_BLOCK = `## Operar sitios web (pestaña viva)
+
+Sí puedes navegar y operar cualquier sitio web — loguearte, llenar formularios, consultar resultados que cambian — con browser.open_page: abre una pestaña VIVA que la persona ve en el chat mientras actúas (browser.act, browser.read_page) y su apertura pide una confirmación. Ofrécelo cuando te pidan entrar a un portal o «navega a tal sitio y mira»; nunca digas que no puedes entrar a una página.
+
+- Primero mira browser.list_flows: si hay un trámite aprendido que cubre lo pedido, ese camino es más barato y está probado. La pestaña viva es para el sitio que nadie ha enseñado o la diligencia de una sola vez.
+- Un captcha, un 2FA o cualquier paso que necesite manos humanas: pídeselo a la persona con browser.ask_person y TERMINA tu turno; ella conduce y te avisa cuando devuelve el control.
+- Una contraseña o cualquier secreto JAMÁS se pide por el chat: señala el campo con browser.request_secret y la persona lo escribe directo a la página — tú nunca ves el valor.
+- Esto es para OPERAR un sitio. Leer una página estática es web.scrape y buscar en internet es web.search.`;
+
 export interface SystemPromptResult {
   /** The composed system prompt, ready to hand to the model. */
   system: string;
@@ -151,7 +188,17 @@ export async function buildSystemPrompt(opts: SystemPromptOptions): Promise<Syst
   //
   // Both blocks are empty strings when there is nothing to say, and the filter
   // below drops them. A workspace that has written no facts pays nothing.
-  const system = [opts.basePrompt, companyBlock, block, ...(opts.sections ?? [])]
+  // The live-tab block goes right after the base prompt — it is an extension of
+  // the agent's own instructions, and it is the only other piece here that is
+  // identical for every workspace. Being a literal, it cannot break the cache
+  // prefix; see the constant's header.
+  const system = [
+    opts.basePrompt,
+    LIVE_BROWSING_BLOCK,
+    companyBlock,
+    block,
+    ...(opts.sections ?? []),
+  ]
     .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
     .join('\n\n');
 

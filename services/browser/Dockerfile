@@ -55,8 +55,12 @@ COPY --from=build /repo/services/browser/dist services/browser/dist
 # Playwright image and owns the browser cache under /ms-playwright.
 USER pwuser
 
-# No volume. The service is stateless between runs on purpose: every context is
-# created fresh and destroyed at the end of the run, so one workspace's cookies
-# can never be present while another workspace's flow is executing.
+# Stateless by default: every replay context is created fresh and destroyed at
+# the end of the run, so one workspace's cookies can never be present while
+# another workspace's flow is executing. The ONE exception is opt-in: mount a
+# volume and set BROWSER_PROFILES_DIR and the live-tab sessions (browser v2)
+# get a persistent Chromium profile PER TENANT — separate directories, separate
+# processes, so the isolation claim above still holds between workspaces.
+# Without the variable, nothing is written and this comment is the whole truth.
 EXPOSE 3300
 CMD ["node", "services/browser/dist/index.js"]

@@ -82,7 +82,7 @@ function describeSlots(flow: import('./types').Flow) {
 export const browserListFlows = registerTool({
   id: 'browser.list_flows',
   description:
-    "List the trámites this workspace has taught Cortex to do on other people's portals — sacar un certificado, consultar un estado, descargar un paz y salvo, subir un documento a un portal, radicar una solicitud — with what each one does, which site it runs on (RUNT, SIMIT, DIAN, Cámara de Comercio, a customer's supplier portal), WHAT DATA EACH ONE NEEDS AND OF WHAT KIND (a NIT, a plate, a date, a FILE), whether it brings a file back, whether it puts one in, and whether it consults or submits. Call this FIRST whenever the request means going into an external website: «sácame el certificado de tradición», «consúltame eso en el portal», «descárgame el paz y salvo», «súbele el certificado al portal del cliente», «radica la solicitud». It is also the tool that tells you HOW TO CHAIN TWO OF THEM: a trámite that downloads returns a document id, and a trámite whose slot is of type `file` takes that id, so «baja el certificado en la DIAN y súbelo al portal del cliente» is two calls and not an impossibility. Only trámites proven to reproduce are listed.",
+    "List the trámites this workspace has taught Cortex to do on other people's portals — sacar un certificado, consultar un estado, descargar un paz y salvo, subir un documento a un portal, radicar una solicitud — with what each one does, which site it runs on (RUNT, SIMIT, DIAN, Cámara de Comercio, a customer's supplier portal), WHAT DATA EACH ONE NEEDS AND OF WHAT KIND (a NIT, a plate, a date, a FILE), whether it brings a file back, whether it puts one in, and whether it consults or submits. Call this FIRST whenever the request means going into an external website: «sácame el certificado de tradición», «consúltame eso en el portal», «descárgame el paz y salvo», «súbele el certificado al portal del cliente», «radica la solicitud». It is also the tool that tells you HOW TO CHAIN TWO OF THEM: a trámite that downloads returns a document id, and a trámite whose slot is of type `file` takes that id, so «baja el certificado en la DIAN y súbelo al portal del cliente» is two calls and not an impossibility. Only trámites proven to reproduce are listed — and when NONE of them covers what was asked, the answer is browser.open_page (a live tab the person watches in the chat), never a refusal.",
   inputSchema: z.object({}),
   outputSchema: z.object({
     flows: z.array(
@@ -122,8 +122,22 @@ export const browserListFlows = registerTool({
     // build a plan around it and discover the refusal three steps later, having
     // spent a leg on it — and «no puedo» from a tool that was just advertised
     // reads as a bug rather than as a permission.
-    const flows =
-      ctx.surface === 'schedule' ? ready.filter((f) => f.errandAllowed) : ready;
+    const flows = ctx.surface === 'schedule' ? ready.filter((f) => f.errandAllowed) : ready;
+    // La rama de schedule es la única sin salida a la pestaña viva, y es a
+    // propósito: browser.open_page existe para que LA PERSONA mire en vivo y
+    // pueda tomar el volante, y en una rutina desatendida no hay nadie al otro
+    // lado de la tarjeta. En las demás superficies, la guidance nunca deja al
+    // modelo en «no hay trámite» sin decir cuál es el otro camino.
+    const openPageExit =
+      ctx.surface === 'schedule'
+        ? ''
+        : ' Y si NINGUNO de estos trámites cubre lo pedido, no digas que no puedes: abre el sitio con browser.open_page — la persona lo ve en vivo en el chat — y hazlo paso a paso.';
+    const emptyGuidance =
+      ctx.surface === 'schedule'
+        ? ready.length > 0
+          ? 'Hay trámites aprendidos, pero ninguno está habilitado para correr sin nadie mirando. Dilo así y sigue con lo que sí puedas hacer; un administrador los habilita desde Trámites.'
+          : 'Todavía no hay trámites web aprendidos y probados. Se enseñan en Trámites web, grabando la pestaña una vez.'
+        : 'Todavía no hay trámites web aprendidos y probados (se enseñan en Trámites web, grabando la pestaña una vez), pero eso no te deja sin salida: abre el sitio con browser.open_page — una pestaña viva que la persona ve en el chat — y haz la diligencia tú mismo, paso a paso.';
     return {
       flows: flows.map((f) => ({
         slug: f.slug,
@@ -141,13 +155,8 @@ export const browserListFlows = registerTool({
       })),
       guidance:
         flows.length === 0
-          ? ctx.surface === 'schedule' && ready.length > 0
-            ? 'Hay trámites aprendidos, pero ninguno está habilitado para correr sin nadie mirando. Dilo así y sigue con lo que sí puedas hacer; un administrador los habilita desde Trámites.'
-            : 'Todavía no hay trámites web aprendidos y probados. Se enseñan en Trámites web, grabando la pestaña una vez.'
-          : 'Usa browser.run_flow para los de tipo read y browser.submit_flow para los de tipo write (esos piden aprobación). ' +
-            'Para encadenar: corre primero el que trae el archivo, toma el result.download.documentId que devuelve, y pásalo ' +
-            'como "doc:<ese id>" en la variable de tipo file del segundo. Si un trámite dice asksForAHuman, en algún punto se ' +
-            'va a detener a pedir un código o una verificación; eso no es una falla y se retoma con browser.resume_flow.',
+          ? emptyGuidance
+          : `Usa browser.run_flow para los de tipo read y browser.submit_flow para los de tipo write (esos piden aprobación). Para encadenar: corre primero el que trae el archivo, toma el result.download.documentId que devuelve, y pásalo como "doc:<ese id>" en la variable de tipo file del segundo. Si un trámite dice asksForAHuman, en algún punto se va a detener a pedir un código o una verificación; eso no es una falla y se retoma con browser.resume_flow.${openPageExit}`,
     };
   },
 });

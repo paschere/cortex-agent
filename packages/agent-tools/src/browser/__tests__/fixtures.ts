@@ -191,6 +191,9 @@ export function scriptedTransport(replies: TransportResult<ReplayResponse>[]): S
     },
     openSession: async () => ({ ok: false, configured: true, reason: 'no usado en esta prueba' }),
     act: async () => ({ ok: false, configured: true, reason: 'no usado en esta prueba' }),
+    read: async () => ({ ok: false, configured: true, reason: 'no usado en esta prueba' }),
+    control: async () => ({ ok: false, configured: true, reason: 'no usado en esta prueba' }),
+    requestSecret: async () => ({ ok: false, configured: true, reason: 'no usado en esta prueba' }),
     closeSession: async () => undefined,
   };
 }

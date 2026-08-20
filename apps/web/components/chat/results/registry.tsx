@@ -78,6 +78,16 @@ export interface ResultViewProps {
   /** Refrescar lo que la tarjeta cambió (aprobar, descartar). */
   onSettled?: () => void;
   /**
+   * Decir algo en la conversación EN NOMBRE DE LA PERSONA, cuando la tarjeta
+   * media un gesto que el bot está esperando oír. Hoy lo usa una sola vista:
+   * la pestaña viva del navegador, cuyo «ya terminé, sigue» y «ya escribí la
+   * clave» son de la persona y deben entrar como mensaje suyo — es lo que
+   * despierta al bot, igual que elegir en ChoicePrompt escribe un mensaje.
+   * Viene de ChatRoot (quien tiene el `append`) por el mismo camino que
+   * `screenFrame`. Ausente en superficies sin conversación abierta.
+   */
+  onSay?: (text: string) => void;
+  /**
    * La foto contra la que se contestó este turno, cuando la hay.
    *
    * Es lo único de aquí que no sale del resultado, y está porque `ScreenMarks`
@@ -130,6 +140,31 @@ export const RICH: Record<string, ResultView> = {
   ),
   screen_point_at: dynamic(() =>
     import('./MarksResult').then((m) => m.MarksResult as unknown as ResultView),
+  ),
+
+  // -------------------------------------------------------------------------
+  // La pestaña viva del navegador (browser v2). Una sola vista para las tres
+  // formas de llegar a ella: abrirla, pedir ayuda en ella, y un trámite que
+  // se paró en un captcha u OTP y dejó la pestaña esperando. RICH_NEEDS decide
+  // cuándo hay pestaña que pintar; sin ella el resultado sigue siendo un paso.
+  // -------------------------------------------------------------------------
+  browser_open_page: dynamic(() =>
+    import('./BrowserLive').then((m) => m.BrowserLive as unknown as ResultView),
+  ),
+  browser_ask_person: dynamic(() =>
+    import('./BrowserLive').then((m) => m.BrowserLive as unknown as ResultView),
+  ),
+  browser_request_secret: dynamic(() =>
+    import('./BrowserLive').then((m) => m.BrowserLive as unknown as ResultView),
+  ),
+  browser_run_flow: dynamic(() =>
+    import('./BrowserLive').then((m) => m.BrowserLive as unknown as ResultView),
+  ),
+  browser_submit_flow: dynamic(() =>
+    import('./BrowserLive').then((m) => m.BrowserLive as unknown as ResultView),
+  ),
+  browser_resume_flow: dynamic(() =>
+    import('./BrowserLive').then((m) => m.BrowserLive as unknown as ResultView),
   ),
 
   // -------------------------------------------------------------------------
@@ -224,6 +259,14 @@ const RICH_NEEDS: Record<string, (result: unknown) => boolean> = {
   },
   sales_draft_proposal: (r) =>
     isPlainObject(field(r, 'company')) && Array.isArray(field(r, 'roles')),
+  // Hay tarjeta si hay pestaña. Un run_flow que terminó sin pausa, o un
+  // ask_person que falló, siguen siendo un paso en su renglón.
+  browser_open_page: (r) => typeof field(r, 'sessionId') === 'string',
+  browser_ask_person: (r) => typeof field(r, 'sessionId') === 'string',
+  browser_request_secret: (r) => typeof field(r, 'sessionId') === 'string',
+  browser_run_flow: (r) => typeof field(field(r, 'handoff'), 'sessionId') === 'string',
+  browser_submit_flow: (r) => typeof field(field(r, 'handoff'), 'sessionId') === 'string',
+  browser_resume_flow: (r) => typeof field(field(r, 'handoff'), 'sessionId') === 'string',
 };
 
 function field(value: unknown, key: string): unknown {

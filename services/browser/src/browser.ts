@@ -1,5 +1,18 @@
 import { type Browser, type BrowserContext, type Page, chromium } from 'playwright';
+import type { WebSocket } from 'ws';
 import type { Config } from './config';
+import {
+  type ControlState,
+  HumanHasControl,
+  botMayAct,
+  createControl,
+  humanMayDrive,
+  releaseControl,
+  requestHelp,
+  secretSettled,
+  takeControl,
+  wantSecret,
+} from './control';
 import {
   buildLocator,
   describeTarget,
@@ -8,8 +21,11 @@ import {
   resolveTarget,
 } from './locators';
 import { logger } from './logger';
+import { ProfileManager } from './profiles';
 import { replay } from './replay';
+import { Screencast } from './screencast';
 import { LOCATOR_INSTALL_SCRIPT, snapshotPage } from './snapshot';
+import { assertNavigable } from './target';
 import type { PageSnapshot, ReplayRequest, ReplayResponse, Target } from './types';
 
 /**
@@ -37,8 +53,22 @@ export class BrowserWorker {
   private stopping = false;
   private readonly sessions = new Map<string, InteractiveSession>();
   private sweeper: NodeJS.Timeout | null = null;
+  /** El computador del tenant (profiles.ts). Null = la feature está apagada. */
+  private profiles: ProfileManager | null = null;
 
-  constructor(private readonly config: Config) {}
+  constructor(private readonly config: Config) {
+    // Solo si hay volumen donde guardarlo: sin BROWSER_PROFILES_DIR todo
+    // sigue naciendo incógnito, como siempre.
+    if (config.profilesDir) {
+      this.profiles = new ProfileManager(config.profilesDir, config, () => {
+        // El supplier mira el Chromium compartido, calentado en start(): así
+        // los perfiles anuncian exactamente el mismo user-agent que los
+        // contextos incógnitos, por las razones de userAgentFor.
+        const shared = this.browser;
+        return shared?.isConnected() ? this.userAgentFor(shared) : undefined;
+      });
+    }
+  }
 
   async start(): Promise<void> {
     this.sweeper = setInterval(() => void this.sweepSessions(), 30_000);
@@ -55,6 +85,10 @@ export class BrowserWorker {
     this.stopping = true;
     if (this.sweeper) clearInterval(this.sweeper);
     for (const id of [...this.sessions.keys()]) await this.closeSession(id);
+    // Los perfiles se cierran con su settle (profiles.ts, closeAll) para que
+    // el flush de cookies quepa en la ventana de SIGTERM; el login queda en
+    // el volumen, listo para el contenedor siguiente.
+    await this.profiles?.closeAll().catch(() => undefined);
     await this.browser?.close().catch(() => undefined);
     this.browser = null;
   }
@@ -64,6 +98,7 @@ export class BrowserWorker {
       browser: this.browser?.isConnected() ? 'up' : 'down',
       inFlight: this.inFlight,
       sessions: this.sessions.size,
+      profiles: this.profiles?.size() ?? 0,
       runsTotal: this.runsTotal,
       runsFailed: this.runsFailed,
       lastError: this.lastError,
@@ -168,6 +203,9 @@ export class BrowserWorker {
    * handed to a human instead of thrown away. See `ReplayResponse.handoff`.
    */
   async runReplay(request: ReplayRequest): Promise<ReplayResponse> {
+    // Un trámite aprendido hacia una dirección privada no existe legítimamente;
+    // si una fila llega a decir eso, la fila miente y este es el piso.
+    assertNavigable(request.startUrl);
     if (this.inFlight >= this.config.maxConcurrent) {
       throw new BusyError();
     }
@@ -211,7 +249,10 @@ export class BrowserWorker {
             },
           };
         }
-        logger.warn({ runId: request.runId }, 'a trámite asked for a person, and there was no room to wait');
+        logger.warn(
+          { runId: request.runId },
+          'a trámite asked for a person, and there was no room to wait',
+        );
         return result;
       }
 
@@ -274,10 +315,9 @@ export class BrowserWorker {
   /** A picture of the tab, and where it is. */
   async viewSession(
     sessionId: string,
+    owner?: string,
   ): Promise<{ png: string; url: string; title: string; width: number; height: number }> {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new UnknownSession();
-    session.touchedAt = Date.now();
+    const session = this.peekSession(sessionId, owner);
     const shot = await session.page.screenshot({ type: 'png' });
     return {
       png: shot.toString('base64'),
@@ -292,10 +332,9 @@ export class BrowserWorker {
   async sendInput(
     sessionId: string,
     input: { kind: 'click' | 'type' | 'key' | 'scroll'; x?: number; y?: number; text?: string },
+    owner?: string,
   ): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new UnknownSession();
-    session.touchedAt = Date.now();
+    const session = this.sessionOf(sessionId, owner);
     const { page } = session;
     switch (input.kind) {
       case 'click':
@@ -382,9 +421,7 @@ export class BrowserWorker {
         ...(result.failure
           ? { failure: { ...result.failure, index: result.failure.index + shift } }
           : {}),
-        ...(result.pause
-          ? { pause: { ...result.pause, index: result.pause.index + shift } }
-          : {}),
+        ...(result.pause ? { pause: { ...result.pause, index: result.pause.index + shift } } : {}),
       };
 
       // A SECOND PAUSE IN THE SAME ERRAND. A bank that asks for a code after
@@ -419,7 +456,10 @@ export class BrowserWorker {
             },
           };
         }
-        logger.warn({ runId: original.runId }, 'a resumed trámite asked again, and there was no room to wait');
+        logger.warn(
+          { runId: original.runId },
+          'a resumed trámite asked again, and there was no room to wait',
+        );
       }
 
       return rebased;
@@ -441,13 +481,30 @@ export class BrowserWorker {
   // the container's memory.
   // -------------------------------------------------------------------------
 
-  async openSession(startUrl: string): Promise<{ sessionId: string; snapshot: PageSnapshot }> {
+  async openSession(
+    startUrl: string,
+    owner?: string,
+  ): Promise<{ sessionId: string; snapshot: PageSnapshot }> {
+    // Antes de gastar un contexto: a donde no se va, no se va ni un byte.
+    assertNavigable(startUrl);
     if (this.sessions.size >= this.config.maxConcurrent) throw new BusyError();
-    const context = await this.newContext();
+    // Con la feature encendida y un dueño conocido, la pestaña nace en el
+    // computador del tenant: una página nueva en su Chromium persistente, con
+    // las cookies del login de la semana pasada ya puestas. Sin cualquiera de
+    // las dos cosas, el camino incógnito de siempre.
+    const persistent = this.profiles && owner ? await this.profiles.contextFor(owner) : null;
+    const context = persistent ?? (await this.newContext());
     const page = await context.newPage();
     await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     const sessionId = this.newSessionId();
-    this.sessions.set(sessionId, { context, page, touchedAt: Date.now() });
+    this.sessions.set(sessionId, {
+      context,
+      page,
+      touchedAt: Date.now(),
+      control: createControl(),
+      owner: owner || undefined,
+      ...(persistent && owner ? { profileOwner: owner } : {}),
+    });
     return { sessionId, snapshot: await snapshotPage(page) };
   }
 
@@ -466,12 +523,18 @@ export class BrowserWorker {
     const session = this.sessions.get(sessionId);
     if (!session) throw new UnknownSession();
     session.touchedAt = Date.now();
+    // Con una persona al volante, el acto del bot se rechaza — no se encola.
+    // control.ts lleva el argumento; aquí solo se aplica.
+    if (session.control && !botMayAct(session.control)) throw new HumanHasControl();
     const { page } = session;
     const deadline = Date.now() + this.config.stepTimeoutMs;
     let matchedTarget: string | null = null;
 
     try {
       if (action === 'goto') {
+        // Dentro del catch a propósito: para un modelo, «esa dirección es
+        // privada» es un resultado con el que decide, no una excepción.
+        assertNavigable(url);
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: this.config.stepTimeoutMs });
       } else if (action === 'wait_for') {
         await page.waitForTimeout(1_000);
@@ -510,10 +573,10 @@ export class BrowserWorker {
     }
   }
 
-  async readSession(sessionId: string): Promise<PageSnapshot> {
-    const session = this.sessions.get(sessionId);
-    if (!session) throw new UnknownSession();
-    session.touchedAt = Date.now();
+  async readSession(sessionId: string, owner?: string): Promise<PageSnapshot> {
+    // El bot mirando sí toca: es el paso «mira» de su bucle mirar-actuar, y
+    // barrerle la pestaña entre dos pasos sería castigarlo por pensar.
+    const session = this.sessionOf(sessionId, owner);
     return snapshotPage(session.page);
   }
 
@@ -521,7 +584,152 @@ export class BrowserWorker {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     this.sessions.delete(sessionId);
+    await session.cast?.stop().catch(() => undefined);
+    if (session.profileOwner) {
+      // La pestaña muere; el contexto NO. Es el computador de toda la
+      // organización y otras sesiones pueden estar viviendo en él — quien lo
+      // apaga es el cupo LRU, el sweep o el shutdown (profiles.ts).
+      await session.page.close().catch(() => undefined);
+      return;
+    }
     await session.context.close().catch(() => undefined);
+  }
+
+  /**
+   * El «Reset» de openbot: borra el perfil persistente del tenant — cookies,
+   * logins, todo — de forma irreversible. Con la feature apagada no hay nada
+   * que borrar y esto no hace nada, a propósito.
+   */
+  async resetProfile(owner: string): Promise<void> {
+    await this.profiles?.reset(owner);
+  }
+
+  // -------------------------------------------------------------------------
+  // El volante, los secretos y la pantalla en vivo. control.ts es la máquina;
+  // esto es la máquina puesta sobre una pestaña de verdad.
+  // -------------------------------------------------------------------------
+
+  private sessionOf(sessionId: string, owner?: string): InteractiveSession {
+    const session = this.peekSession(sessionId, owner);
+    session.touchedAt = Date.now();
+    return session;
+  }
+
+  /**
+   * La misma búsqueda, sin marcar actividad. Para las LECTURAS: la tarjeta
+   * del chat polea el estado y la foto cada segundo y medio mientras la
+   * conversación esté abierta, y si mirar contara como actividad, una pestaña
+   * abandonada en una pestaña abandonada del navegador de alguien viviría
+   * para siempre — sobre un cupo de tres. Actuar toca; mirar no.
+   */
+  private peekSession(sessionId: string, owner?: string): InteractiveSession {
+    const session = this.sessions.get(sessionId);
+    // Un dueño equivocado recibe el MISMO error que un id inexistente. Decir
+    // «existe pero no es tuya» confirma la mitad que no había que confirmar.
+    if (!session || (session.owner && owner && session.owner !== owner)) {
+      throw new UnknownSession();
+    }
+    return session;
+  }
+
+  private controlFor(session: InteractiveSession): ControlState {
+    if (!session.control) session.control = createControl();
+    return session.control;
+  }
+
+  /** El estado que la tarjeta del chat polea: volante, página y pedidos. */
+  async controlState(
+    sessionId: string,
+    owner?: string,
+  ): Promise<{
+    driver: 'bot' | 'human';
+    help: { reason: string; requestedAt: number } | null;
+    secret: { label: string; requestedAt: number } | null;
+    url: string;
+    title: string;
+  }> {
+    const session = this.peekSession(sessionId, owner);
+    const control = this.controlFor(session);
+    return {
+      driver: control.driver,
+      help: control.help
+        ? { reason: control.help.reason, requestedAt: control.help.requestedAt }
+        : null,
+      // El target del secreto se queda aquí: la tarjeta necesita la etiqueta,
+      // no los localizadores.
+      secret: control.secret
+        ? { label: control.secret.label, requestedAt: control.secret.requestedAt }
+        : null,
+      url: session.page.url(),
+      title: await session.page.title().catch(() => ''),
+    };
+  }
+
+  requestHelp(sessionId: string, reason: string, owner?: string): void {
+    const session = this.sessionOf(sessionId, owner);
+    session.control = requestHelp(this.controlFor(session), reason);
+  }
+
+  takeControl(sessionId: string, owner?: string): void {
+    const session = this.sessionOf(sessionId, owner);
+    session.control = takeControl(this.controlFor(session));
+  }
+
+  releaseControl(sessionId: string, owner?: string): void {
+    const session = this.sessionOf(sessionId, owner);
+    session.control = releaseControl(this.controlFor(session));
+  }
+
+  /** El bot señala el campo y le pone nombre. El valor no viene aquí. */
+  requestSecret(sessionId: string, target: Target, label: string, owner?: string): void {
+    const session = this.sessionOf(sessionId, owner);
+    session.control = wantSecret(this.controlFor(session), label, target);
+  }
+
+  /**
+   * La persona entrega el valor y este método lo lleva del cuerpo de UNA
+   * petición al campo de la página, y a ningún otro lado: ni al log, ni a la
+   * respuesta, ni al transcript. Lo único que sale es cuántos caracteres eran,
+   * para que la auditoría pueda decir «se ingresó algo» sin poder decir qué.
+   */
+  async supplySecret(
+    sessionId: string,
+    value: string,
+    owner?: string,
+  ): Promise<{ ok: boolean; length: number; error?: string }> {
+    const session = this.sessionOf(sessionId, owner);
+    const control = this.controlFor(session);
+    if (!control.secret) return { ok: false, length: 0, error: 'nothing was asked for' };
+    const deadline = Date.now() + this.config.stepTimeoutMs;
+    const found = await resolveTarget(session.page, [control.secret.target], deadline);
+    if (!isResolved(found)) {
+      return { ok: false, length: 0, error: 'the field is no longer on the page' };
+    }
+    try {
+      await found.locator.fill(value, { timeout: Math.max(1_000, deadline - Date.now()) });
+    } catch (err) {
+      return { ok: false, length: 0, error: (err as Error).message };
+    }
+    session.control = secretSettled(control);
+    return { ok: true, length: value.length };
+  }
+
+  /** Conecta la pantalla en vivo. El espectador anterior queda reemplazado. */
+  async attachStream(sessionId: string, socket: WebSocket): Promise<void> {
+    const session = this.peekSession(sessionId);
+    if (!session.cast) {
+      session.cast = new Screencast(
+        session.page,
+        { width: this.config.viewportWidth, height: this.config.viewportHeight },
+        // Por gesto, no por conexión: soltar el volante corta el input aunque
+        // la pantalla siga abierta.
+        () => humanMayDrive(this.controlFor(session)),
+        () => {
+          session.touchedAt = Date.now();
+        },
+      );
+    }
+    await session.cast.attach(socket);
   }
 
   private async sweepSessions(): Promise<void> {
@@ -532,6 +740,9 @@ export class BrowserWorker {
         await this.closeSession(id);
       }
     }
+    // Los perfiles sin pestañas siguen el mismo reloj: un Chromium persistente
+    // ocioso son 150-300MB calentando el rack para nadie.
+    await this.profiles?.sweep(this.config.sessionIdleMs);
   }
 }
 
@@ -545,6 +756,24 @@ interface InteractiveSession {
    * driven a step at a time by their caller and have no list to carry on with.
    */
   request?: ReplayRequest;
+  /**
+   * Quién conduce. Ausente hasta que a alguien le importa (una sesión de
+   * refinamiento nunca lo pregunta), creado en el primer acceso — así los
+   * cuatro sitios que crean sesiones no cargan con un campo que tres de ellos
+   * no usan.
+   */
+  control?: ControlState;
+  /** La pantalla en vivo, si alguien está mirando. */
+  cast?: Screencast;
+  /**
+   * A quién pertenece la pestaña. Las sesiones abiertas por la navegación
+   * libre lo traen (el id de la organización); las de un handoff de trámite
+   * no, y para esas la mitigación sigue siendo la de siempre: ids
+   * inadivinables que viven minutos. Con dueño, un id filtrado no alcanza.
+   */
+  owner?: string;
+  /** Presente si la pestaña vive en un perfil persistente: cerrarla no debe cerrar el contexto del tenant. */
+  profileOwner?: string;
 }
 
 export class BusyError extends Error {

@@ -51,6 +51,20 @@ export interface Config {
   viewportWidth: number;
   viewportHeight: number;
   userAgent: string | null;
+  /**
+   * Dónde viven los perfiles Chromium persistentes, uno por organización (el
+   * «computador del tenant», profiles.ts). Null = la feature no existe: sin un
+   * volumen montado, un perfil «persistente» moriría con el contenedor y el
+   * login que promete conservar sería mentira.
+   */
+  profilesDir: string | null;
+  /**
+   * Cuántos perfiles persistentes pueden estar ABIERTOS a la vez. Cada
+   * Chromium persistente es un proceso de 150-300MB y el contenedor está
+   * dimensionado en ~1GB, así que el default es deliberadamente tacaño; los
+   * demás tenants esperan cerrados en disco, que es barato de reabrir.
+   */
+  maxProfiles: number;
 }
 
 export function loadConfig(): Config {
@@ -68,5 +82,7 @@ export function loadConfig(): Config {
     viewportWidth: number('BROWSER_VIEWPORT_WIDTH', 1366),
     viewportHeight: number('BROWSER_VIEWPORT_HEIGHT', 900),
     userAgent: process.env.BROWSER_USER_AGENT?.trim() || null,
+    profilesDir: process.env.BROWSER_PROFILES_DIR?.trim() || null,
+    maxProfiles: number('BROWSER_MAX_PROFILES', 2),
   };
 }

@@ -272,7 +272,7 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   browser: {
     name: MODULE.label,
     blurb:
-      'Vueltas aprendidas en portales ajenos: entra, llena el formulario y trae el resultado. Los que radican algo piden aprobación.',
+      'Vueltas aprendidas en portales ajenos: entra, llena el formulario y trae el resultado. Los que radican algo piden aprobación. Y para el sitio que nadie le ha enseñado, navega en vivo: una pestaña que ves en el chat mientras trabaja, donde puedes tomar el control cuando un paso es tuyo.',
     tone: 'amber',
     icon: 'Globe',
   },
@@ -422,7 +422,7 @@ export const CAPABILITY_GROUPS: CapabilityGroup[] = [
     // «Información pública», que es donde va lo que NO toca nada. Radicar en el
     // RUNT o en la DIAN con la clave de la empresa no es información pública.
     blurb:
-      'SOAT y RTM desde el RUNT, comparendos desde el SIMIT, todo lo que se vence con fecha —contratos, pólizas, plazos de aduana y pagos— y las vueltas aprendidas en portales ajenos: entra, llena el formulario y radica.',
+      'SOAT y RTM desde el RUNT, comparendos desde el SIMIT, todo lo que se vence con fecha —contratos, pólizas, plazos de aduana y pagos— y las vueltas en portales ajenos: las aprendidas corren solas, y a un sitio nuevo entra en vivo, con la pestaña a la vista en el chat.',
     tone: 'emerald',
     icon: 'Car',
   },
@@ -612,7 +612,7 @@ export const FAMILY_CREDENTIALS: Record<string, CredentialRequirement> = {
     vars: ['BROWSER_SERVICE_URL', 'BROWSER_SERVICE_TOKEN'],
     label: 'el servicio de navegador en Railway',
     blocking: true,
-    effect: 'Sin él no se puede ejecutar ningún trámite aprendido.',
+    effect: 'Sin él no se puede ejecutar ningún trámite aprendido ni abrir una pestaña en vivo.',
   },
   slack: {
     vars: ['SLACK_BOT_TOKEN'],

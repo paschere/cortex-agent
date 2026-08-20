@@ -640,6 +640,70 @@ not a mask — not even the length is kept.
 
 ---
 
+## 8. La pestaña viva (browser v2): navegación libre en el chat
+
+Los trámites siguen siendo el camino barato: aprendidos una vez, repetidos sin
+modelo. La pestaña viva es el otro camino — el sitio que nadie ha enseñado, la
+diligencia de una sola vez — hecho como lo hace una persona: mirar, decidir un
+paso, darlo, volver a mirar. Y con la persona MIRANDO: la pestaña se pinta en
+vivo dentro del chat.
+
+### Las piezas
+
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| El volante | `services/browser/src/control.ts` | Quién conduce (bot o humano). Con una persona al volante, todo acto del bot es 409 — se rechaza, no se encola. |
+| La pantalla | `services/browser/src/screencast.ts` | `Page.startScreencast` por CDP: un frame cuando algo cambió, ack por frame como contrapresión. Input humano de vuelta por `Input.dispatch*`. |
+| El boleto | `services/browser/src/stream-token.ts` | HMAC de (sesión, vencimiento) con el token de servicio. Un minuto, una sesión. Es lo único que pisa un navegador. |
+| Las manos del bot | `packages/agent-tools/src/browser/live.ts` | `browser.open_page` (pide confirmación una vez), `browser.act`, `browser.read_page`, `browser.ask_person`, `browser.request_secret`, `browser.close_page`. Todas por `runTool`: auditadas y con límite de frecuencia. |
+| La ventana | `apps/web/components/chat/results/BrowserLive.tsx` | La tarjeta del chat: stream en vivo con caída sola a fotos por segundo, tomar/devolver el control, la caja enmascarada del secreto. También es la ventana de un trámite parado en captcha/OTP. |
+| El proxy | `apps/web/app/api/browser/live/[id]/` | Sesión de Cortex → servicio, con `x-cortex-owner` (el id de la organización). Un dueño equivocado recibe el mismo 404 que un id inexistente. |
+
+### Las tres reglas que no se negocian
+
+1. **Actuar exige ref + name.** El modelo señala un elemento por la ref de su
+   último vistazo Y por el nombre que leyó; la herramienta vuelve a mirar la
+   página y verifica ambos contra ESA mirada. Si la página cambió, no actúa.
+   La política jamás decide sobre una etiqueta que puso quien pide.
+2. **El secreto no pasa por el modelo.** `browser.request_secret` señala el
+   campo; la persona teclea en la caja enmascarada de la tarjeta; el valor va
+   del proxy al servicio al campo. Lo único que se registra es la longitud.
+3. **Mirar no toca.** El poleo de la tarjeta usa `peekSession` (sin marcar
+   actividad); solo los actos y los gestos humanos posponen al barrendero.
+   Una pestaña abandonada muere en cinco minutos aunque el chat siga abierto.
+
+### Variables
+
+En Vercel, opcional: `BROWSER_SERVICE_PUBLIC_URL` si la URL que ve el navegador
+de la persona difiere de `BROWSER_SERVICE_URL` (sin ella se deriva sola). Si el
+WebSocket no conecta, la tarjeta cae a fotos por segundo — nunca es requisito.
+
+### El computador del tenant: perfiles persistentes
+
+Sin esto, todo login muere con la sesión: cada pestaña nace en un contexto
+incógnito y al cerrarla no queda nada. Con perfiles persistentes
+(`services/browser/src/profiles.ts`), cada organización tiene *su* Chromium —
+cookies, sesiones iniciadas, localStorage — guardado en disco con
+`launchPersistentContext`, así que el login que alguien hizo el lunes sigue
+vivo el jueves aunque el contenedor se haya redeployado dos veces.
+
+Se enciende con dos piezas: un volumen de Railway montado en el servicio y
+`BROWSER_PROFILES_DIR` apuntando a él. Sin la variable la feature no existe y
+todo sigue incógnito, como siempre.
+
+El cupo (`BROWSER_MAX_PROFILES`, default 2) limita cuántos perfiles están
+ABIERTOS a la vez — cada Chromium persistente pesa 150-300MB. Al llegar un
+tenant nuevo con el cupo lleno se cierra el perfil menos usado que no tenga
+pestañas vivas; si todos están ocupados, el nuevo recibe el 429 de capacidad.
+
+Cerrar y borrar son cosas distintas a propósito: **cerrar** (cupo, inactividad,
+shutdown) conserva el login en disco y reabrir es barato; **reset**
+(`DELETE /profile` con `x-cortex-owner`) borra el directorio entero y es
+irreversible. Los trámites (`/replay`) siguen en incógnito: sus credenciales
+viajan por request y fueron enseñados desde una página sin sesión.
+
+---
+
 ## Related
 
 - `infra/supabase/migrations/0087_browser_flows.sql` — the schema and the reasoning behind every table, including why credentials are separate from flows

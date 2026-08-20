@@ -331,8 +331,17 @@ describe('TOOL_PHRASE contra el registro real', () => {
 
   it('cubre el catálogo salvo lo que es fontanería y no una petición', () => {
     // `whatsapp.inbound` la dispara un webhook, no una persona; `test.*` no
-    // existe fuera de las pruebas del paquete.
-    const skip = new Set(['whatsapp.inbound']);
+    // existe fuera de las pruebas del paquete. Los pasos de la pestaña viva
+    // (browser v2) los da el bot dentro de una sesión que abrió open_page:
+    // nadie teclea «dame un click en e5» en el menú /.
+    const skip = new Set([
+      'whatsapp.inbound',
+      'browser.act',
+      'browser.read_page',
+      'browser.ask_person',
+      'browser.request_secret',
+      'browser.close_page',
+    ]);
     const missing = listTools()
       .map((tool) => tool.id)
       .filter((id) => !id.startsWith('test.') && !skip.has(id) && !TOOL_PHRASE[id]);
