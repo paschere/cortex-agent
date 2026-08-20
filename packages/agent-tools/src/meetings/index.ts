@@ -6,6 +6,8 @@ import './prepare-briefing';
 import './schedule-briefings';
 
 export { meetingsGetTranscript } from './get-transcript';
+export { meetingsJoinLive } from './join-live';
+export { meetingsLiveStatus } from './live-status';
 export { meetingsImportTranscript } from './import-transcript';
 export { meetingsListTranscripts } from './list-transcripts';
 export { meetingsPrepareBriefing } from './prepare-briefing';

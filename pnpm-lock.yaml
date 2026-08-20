@@ -362,6 +362,28 @@ importers:
         specifier: 5.7.2
         version: 5.7.2
 
+  services/meet-bot:
+    dependencies:
+      playwright:
+        specifier: 1.49.1
+        version: 1.49.1
+      ws:
+        specifier: 8.18.0
+        version: 8.18.0
+    devDependencies:
+      '@types/node':
+        specifier: 20.17.10
+        version: 20.17.10
+      '@types/ws':
+        specifier: 8.5.13
+        version: 8.5.13
+      tsx:
+        specifier: 4.19.2
+        version: 4.19.2
+      typescript:
+        specifier: 5.7.2
+        version: 5.7.2
+
   services/whatsapp:
     dependencies:
       '@hapi/boom':

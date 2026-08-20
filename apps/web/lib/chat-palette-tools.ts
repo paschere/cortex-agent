@@ -205,6 +205,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'linear.list_teams': 'Muéstrame los equipos de Linear',
   'linear.workload_stats': '¿Cómo está repartida la carga del equipo?',
 
+  'meetings.join_live': 'Métete a esta reunión de Meet y escúchala: ',
   'meetings.get_transcript': 'Léeme la transcripción de la reunión ',
   'meetings.import_transcript': 'Guarda en Brain Knowledge la reunión ',
   'meetings.list_transcripts': 'Muéstrame las reuniones que dejaron transcripción',

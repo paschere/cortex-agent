@@ -151,6 +151,9 @@ export const RICH: Record<string, ResultView> = {
   browser_open_page: dynamic(() =>
     import('./BrowserLive').then((m) => m.BrowserLive as unknown as ResultView),
   ),
+  meetings_join_live: dynamic(() =>
+    import('./MeetingLive').then((m) => m.MeetingLive as unknown as ResultView),
+  ),
   browser_ask_person: dynamic(() =>
     import('./BrowserLive').then((m) => m.BrowserLive as unknown as ResultView),
   ),
@@ -262,6 +265,7 @@ const RICH_NEEDS: Record<string, (result: unknown) => boolean> = {
   // Hay tarjeta si hay pestaña. Un run_flow que terminó sin pausa, o un
   // ask_person que falló, siguen siendo un paso en su renglón.
   browser_open_page: (r) => typeof field(r, 'sessionId') === 'string',
+  meetings_join_live: (r) => field(r, 'ok') === true && typeof field(r, 'sessionId') === 'string',
   browser_ask_person: (r) => typeof field(r, 'sessionId') === 'string',
   browser_request_secret: (r) => typeof field(r, 'sessionId') === 'string',
   browser_run_flow: (r) => typeof field(field(r, 'handoff'), 'sessionId') === 'string',

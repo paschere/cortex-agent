@@ -270,6 +270,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   pipeline_finish_run: { label: 'Cerrar la ejecución del procedimiento', icon: 'CircleCheck' },
 
   // Reuniones.
+  meetings_join_live: { label: 'Entrar a la reunión en vivo', icon: 'Radio' },
   meetings_list_transcripts: { label: 'Ver qué reuniones dejaron transcripción', icon: 'Video' },
   meetings_get_transcript: { label: 'Leer la transcripción de la reunión', icon: 'ScrollText' },
   meetings_import_transcript: { label: 'Guardar la reunión en Brain Knowledge', icon: 'Mic' },

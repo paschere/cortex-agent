@@ -211,6 +211,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   meetings_list_transcripts: 'Ver qué reuniones dejaron transcripción',
   meetings_get_transcript: 'Leer la transcripción de la reunión',
   meetings_import_transcript: 'Guardar la reunión en Brain Knowledge',
+  meetings_join_live: 'Entrar a la reunión en vivo',
   meetings_prepare_briefing: 'Preparar la reunión',
   meetings_schedule_briefings: 'Programar el aviso antes de cada reunión',
   cortex_remember: 'Recordar esto tuyo',

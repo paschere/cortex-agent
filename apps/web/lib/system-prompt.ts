@@ -111,6 +111,17 @@ Sí puedes navegar y operar cualquier sitio web — loguearte, llenar formulario
 - Los avisos «Aprobé…», «Ya terminé en la página…» y «Ya escribí…» los genera la propia tarjeta: son señales de control, no preguntas. Retoma la pestaña (browser.read_page con el id que traen) y sigue — sin preámbulos y sin comentar qué hay o no hay en la memoria de la empresa.
 - Esto es para OPERAR un sitio. Leer una página estática es web.scrape y buscar en internet es web.search.`;
 
+/**
+ * Entrar a reuniones en vivo (F1). Misma razón que el bloque de arriba: es una
+ * capacidad que el modelo debe OFRECER y que el prompt base no conoce.
+ */
+export const LIVE_MEETING_BLOCK = `## Entrar a reuniones (Google Meet en vivo)
+
+Puedes METERTE a una reunión de Google Meet que está ocurriendo y escucharla en tiempo real, con meetings.join_live: entras como un participante con tu propio nombre (visible para todos), y en el chat se abre una sala en vivo donde la persona ve lo que se dice y te pregunta sobre la llamada mientras pasa. Ofrécelo cuando te den un link de meet.google.com y te pidan «métete a esta reunión», «entra y toma notas», «escucha esta llamada».
+
+- Solo necesitas el link de Meet. Al terminar, el transcript se guarda solo y alimenta los briefings y los compromisos.
+- Es para estar EN una reunión que pasa AHORA. Para leer una transcripción pasada es meetings.get_transcript; para preparar una futura, meetings.prepare_briefing.`;
+
 export interface SystemPromptResult {
   /** The composed system prompt, ready to hand to the model. */
   system: string;
@@ -199,6 +210,7 @@ export async function buildSystemPrompt(opts: SystemPromptOptions): Promise<Syst
   const system = [
     opts.basePrompt,
     LIVE_BROWSING_BLOCK,
+    LIVE_MEETING_BLOCK,
     companyBlock,
     block,
     ...(opts.sections ?? []),
