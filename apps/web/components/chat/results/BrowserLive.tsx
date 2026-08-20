@@ -1,6 +1,8 @@
 'use client';
 
 import {
+  ChevronDown,
+  ChevronUp,
   Eye,
   Hand,
   KeyRound,
@@ -11,64 +13,85 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ResultViewProps } from './registry';
 
 /**
- * LA PESTAÑA DE CORTEX, EN VIVO, DENTRO DEL CHAT.
+ * LA PESTAÑA DE CORTEX, EN VIVO — EN UN DOCK FIJO, NO EN EL RÍO DEL CHAT.
  *
  * ===========================================================================
- * QUÉ ES ESTA TARJETA
+ * POR QUÉ UN DOCK Y NO UNA TARJETA INLINE
  * ===========================================================================
- * Cuando Cortex abre una página con `browser.open_page`, esta tarjeta es la
- * ventana: la persona VE la pestaña mientras el bot navega, puede agrandarla,
- * puede TOMAR EL CONTROL y conducir con su mouse y su teclado, y puede
- * escribir un secreto en una caja enmascarada que va directo a la página.
- * También es la ventana de un trámite que se paró en un captcha: la misma
- * pestaña, el mismo volante, sin salir de la conversación.
+ * La primera versión pintaba la pantalla dentro del transcript, y la vida
+ * real la desmintió en una tarde: la conversación sigue (cada aprobación y
+ * cada «ya terminé» agregan mensajes), la tarjeta se va scroll arriba, y la
+ * persona pierde de vista LA COSA QUE ESTÁ PASANDO — una página moviéndose —
+ * justo cuando más la necesita (un captcha esperándola). Además el wheel
+ * sobre la tarjeta peleaba con el scroll del chat.
+ *
+ * Ahora la ventana vive en un dock fijo abajo a la derecha (portal a
+ * `document.body`), y en el transcript queda solo una línea que dice dónde
+ * está. El dock no se mueve con el scroll, se puede plegar a una píldora, y
+ * se agranda a pantalla completa. Fixed dentro de un portal, además, porque
+ * `position: fixed` bajo un ancestro con transform (el transcript anima) se
+ * vuelve relativo a ese ancestro — así se rompió el botón de fullscreen de la
+ * primera versión.
  *
  * ===========================================================================
- * DOS TRANSPORTES, UNO DE ELLOS UN REGALO
+ * LOS FRAMES SE PINTAN EN UN CANVAS, FUERA DE REACT
  * ===========================================================================
- * El camino bueno es un WebSocket directo al servicio de navegador (frames
- * CDP cuando algo cambia, input de vuelta). Vercel no termina WebSockets, así
- * que el navegador de la persona se conecta directo a Railway con un boleto
- * de un minuto que pide `/api/browser/live/[id]/stream`. Si ese socket no
- * conecta —red corporativa, servicio sin URL pública— la tarjeta cae SOLA a
- * fotos por segundo vía el proxy HTTP, con clicks por coordenadas. Peor, pero
- * completo: todo lo que se puede hacer en vivo se puede hacer en el respaldo.
+ * La primera versión metía cada frame en un estado y lo pintaba como
+ * `<img src="data:...">`: un re-render de React y una decodificación en el
+ * hilo principal POR FRAME — lag visible, medido con las manos. Ahora el
+ * frame va por `createImageBitmap` (decodifica fuera del hilo) directo a un
+ * canvas, React no se entera, y el ACK al servicio sale DESPUÉS de dibujar:
+ * la contrapresión del screencast mide la capacidad real de esta pantalla.
  *
  * ===========================================================================
- * UNA SESIÓN, UNA VENTANA
+ * CONDUCIR SE SIENTE COMO UNA MANO, NO COMO UN ROBOT
  * ===========================================================================
- * Un turno puede dejar varias tarjetas de la misma pestaña (la de abrirla, la
- * de pedir ayuda). Dos ventanas sobre la misma sesión serían dos streams
- * compitiendo — el servicio además reemplaza al espectador anterior, así que
- * la de arriba se quedaría congelada fingiendo estar viva. El reclamo de
- * módulo de abajo hace que SOLO LA ÚLTIMA tarjeta montada de cada sesión
- * pinte la ventana; las anteriores lo dicen en una línea y no fingen.
+ * Al tomar el control viajan también los MOVIMIENTOS del mouse (throttle
+ * ~33ms, con bitmask de botones para que un arrastre sea un arrastre). No es
+ * cosmética: un reCAPTCHA puntúa la trayectoria del cursor, y un click que se
+ * teletransporta al centro de la casilla es exactamente lo que castiga. La
+ * persona resolviendo el captcha ES una persona; el puente no debe hacerla
+ * parecer otra cosa.
  *
  * ===========================================================================
- * EL SECRETO, Y LO QUE ESTA TARJETA PROMETE EN VOZ ALTA
+ * UNA SESIÓN, UN DOCK — Y EL SECRETO, DICHO EN VOZ ALTA
  * ===========================================================================
- * La caja enmascarada manda el valor por el proxy al servicio, que lo escribe
- * en el campo y devuelve SOLO cuántos caracteres eran. No pasa por el modelo,
- * no queda en el transcript, no se loguea. La tarjeta lo dice debajo de la
- * caja porque una promesa de privacidad que no se enseña no tranquiliza a
- * nadie.
+ * Varios resultados del turno pueden nombrar la misma sesión (abrirla, pedir
+ * ayuda); el reclamo de módulo hace que solo el ÚLTIMO montado tenga el dock.
+ * Si hay dos sesiones vivas, cada dock se apila con su desplazamiento. Y la
+ * caja del secreto promete debajo lo que cumple arriba: el valor va del
+ * teclado a la página, el modelo no lo ve, y solo vuelve cuántos caracteres.
  */
 
 // ---------------------------------------------------------------------------
-// El reclamo: la última tarjeta montada de cada sesión es la que vive.
+// El reclamo: la última tarjeta montada de cada sesión es la que vive. Y los
+// docks vivos se cuentan para apilarse sin taparse entre sí.
 // ---------------------------------------------------------------------------
 let claimSeq = 0;
 const claims = new Map<string, number>();
 const claimWatchers = new Map<string, Set<() => void>>();
+const dockOrder: string[] = [];
 
 function claim(sessionId: string): number {
   claimSeq += 1;
   claims.set(sessionId, claimSeq);
+  if (!dockOrder.includes(sessionId)) dockOrder.push(sessionId);
   for (const notify of claimWatchers.get(sessionId) ?? []) notify();
   return claimSeq;
+}
+
+function dockSlot(sessionId: string): number {
+  const i = dockOrder.indexOf(sessionId);
+  return i === -1 ? 0 : i;
+}
+
+function releaseDock(sessionId: string): void {
+  const i = dockOrder.indexOf(sessionId);
+  if (i !== -1) dockOrder.splice(i, 1);
 }
 
 function watchClaim(sessionId: string, notify: () => void): () => void {
@@ -88,10 +111,15 @@ interface ControlView {
   title: string;
 }
 
-/** Los dos resultados que traen pestaña: los de navegación libre y los de un trámite parado. */
-function sessionOf(
-  result: unknown,
-): { sessionId: string; checkpointId?: string; ask?: string; fills?: string | null } | null {
+interface TabRef {
+  sessionId: string;
+  checkpointId?: string;
+  ask?: string;
+  fills?: string | null;
+}
+
+/** Los dos resultados que traen pestaña: navegación libre y trámite parado. */
+function sessionOf(result: unknown): TabRef | null {
   if (!result || typeof result !== 'object') return null;
   const r = result as {
     sessionId?: unknown;
@@ -121,13 +149,7 @@ export function BrowserLive({ result, onSay }: ResultViewProps) {
   return <LiveTab key={tab.sessionId} tab={tab} onSay={onSay} />;
 }
 
-function LiveTab({
-  tab,
-  onSay,
-}: {
-  tab: { sessionId: string; checkpointId?: string; ask?: string; fills?: string | null };
-  onSay?: (text: string) => void;
-}) {
+function LiveTab({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void }) {
   const { sessionId } = tab;
   const [active, setActive] = useState(false);
   const ticketRef = useRef(0);
@@ -141,29 +163,39 @@ function LiveTab({
     });
   }, [sessionId]);
 
-  if (!active) {
-    return (
+  // Lo que queda EN el transcript es una línea que apunta al dock. La pantalla
+  // no compite con el scroll del chat: vive fija, abajo a la derecha.
+  return (
+    <>
       <div className="mt-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <MonitorSmartphone className="mr-1.5 inline h-3.5 w-3.5" />
-        Esta pestaña se está mostrando en una tarjeta más reciente, más abajo.
+        {active
+          ? 'La pestaña está en vivo abajo a la derecha.'
+          : 'Esta pestaña se muestra en su ventana fija, abajo a la derecha.'}
       </div>
-    );
-  }
-  return <LiveWindow tab={tab} onSay={onSay} />;
+      {active ? <LiveDock tab={tab} onSay={onSay} /> : null}
+    </>
+  );
 }
 
-function LiveWindow({
-  tab,
-  onSay,
-}: {
-  tab: { sessionId: string; checkpointId?: string; ask?: string; fills?: string | null };
-  onSay?: (text: string) => void;
-}) {
+/** Milisegundos entre movimientos de mouse reenviados. ~30fps de trayectoria. */
+const MOVE_THROTTLE_MS = 33;
+
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void }) {
   const { sessionId } = tab;
-  const [frame, setFrame] = useState<string | null>(null);
+  const [hasFrame, setHasFrame] = useState(false);
   const [control, setControl] = useState<ControlView | null>(null);
   const [gone, setGone] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [live, setLive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [secretValue, setSecretValue] = useState('');
@@ -173,17 +205,43 @@ function LiveWindow({
   const wsRef = useRef<WebSocket | null>(null);
   const viewportRef = useRef({ width: 1366, height: 900 });
   const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const goneRef = useRef(false);
   const liveRef = useRef(false);
+  const lastMoveAtRef = useRef(0);
+  /** Bitmask CDP de botones apretados (1 = izquierdo), para el arrastre. */
+  const buttonsRef = useRef(0);
 
   const driving = control?.driver === 'human';
   const drivingRef = useRef(false);
   drivingRef.current = driving;
 
+  useEffect(() => () => releaseDock(sessionId), [sessionId]);
+
   const markGone = useCallback(() => {
     goneRef.current = true;
     setGone(true);
     wsRef.current?.close();
+  }, []);
+
+  // Dibuja unos bytes de imagen en el canvas, fuera del ciclo de React.
+  const paint = useCallback(async (bytes: Uint8Array, mime: string) => {
+    try {
+      const bitmap = await createImageBitmap(
+        new Blob([bytes.buffer as ArrayBuffer], { type: mime }),
+      );
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+      }
+      canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      setHasFrame(true);
+    } catch {
+      // Un frame que no decodifica se pierde; el siguiente lo reemplaza.
+    }
   }, []);
 
   // -------------------------------------------------------------------------
@@ -219,8 +277,12 @@ function LiveWindow({
             if (msg.type === 'frame' && msg.data) {
               if (msg.width && msg.height)
                 viewportRef.current = { width: msg.width, height: msg.height };
-              setFrame(`data:image/jpeg;base64,${msg.data}`);
-              ws?.send(JSON.stringify({ type: 'ack' }));
+              // El ack sale cuando el frame ya está EN PANTALLA: esa es la
+              // contrapresión honesta. Frames que lleguen mientras se dibuja
+              // esperan en Chromium, que es donde deben esperar.
+              void paint(base64ToBytes(msg.data), 'image/jpeg').finally(() => {
+                ws?.send(JSON.stringify({ type: 'ack' }));
+              });
             }
           } catch {
             // Un mensaje raro no tumba la ventana.
@@ -242,14 +304,18 @@ function LiveWindow({
       ws?.close();
       wsRef.current = null;
     };
-  }, [sessionId]);
+  }, [sessionId, paint]);
 
   // -------------------------------------------------------------------------
   // El poleo. Con stream vivo, solo el estado del volante (barato). Sin él,
-  // también la foto. En 410 la pestaña murió y se dice, no se disimula.
+  // también la foto — y más seguido si hay una persona conduciendo, porque a
+  // 1.5s el respaldo se siente como manejar por correo. En 410 la pestaña
+  // murió y se dice, no se disimula.
   // -------------------------------------------------------------------------
   useEffect(() => {
     let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
     const tick = async () => {
       if (disposed || goneRef.current) return;
       try {
@@ -268,20 +334,24 @@ function LiveWindow({
           if (data.control) setControl(data.control);
           if (data.view?.png && !liveRef.current) {
             viewportRef.current = { width: data.view.width, height: data.view.height };
-            setFrame(`data:image/png;base64,${data.view.png}`);
+            void paint(base64ToBytes(data.view.png), 'image/png');
           }
         }
       } catch {
         // Una pasada perdida no es un evento; la siguiente lo cuenta.
+      } finally {
+        if (!disposed && !goneRef.current) {
+          const delay = liveRef.current ? 2_000 : drivingRef.current ? 600 : 1_200;
+          timer = setTimeout(() => void tick(), delay);
+        }
       }
     };
     void tick();
-    const interval = setInterval(() => void tick(), 1_500);
     return () => {
       disposed = true;
-      clearInterval(interval);
+      if (timer) clearTimeout(timer);
     };
-  }, [sessionId, markGone]);
+  }, [sessionId, markGone, paint]);
 
   // -------------------------------------------------------------------------
   // Conducir. Coordenadas del contenedor → viewport real; por el socket si
@@ -322,13 +392,45 @@ function LiveWindow({
     (kind: 'mousePressed' | 'mouseReleased', e: React.MouseEvent) => {
       if (!drivingRef.current) return;
       e.preventDefault();
+      buttonsRef.current = kind === 'mousePressed' ? 1 : 0;
       const { x, y } = toViewport(e.clientX, e.clientY);
-      if (!sendWs({ type: 'mouse', kind, x, y, button: 'left', clickCount: 1 })) {
+      if (
+        !sendWs({
+          type: 'mouse',
+          kind,
+          x,
+          y,
+          button: 'left',
+          buttons: buttonsRef.current,
+          clickCount: Math.min(e.detail || 1, 3),
+        })
+      ) {
         // En respaldo, el par pressed/released se colapsa en un click al soltar.
         if (kind === 'mouseReleased') postInput({ kind: 'click', x, y });
       }
     },
     [toViewport, sendWs, postInput],
+  );
+
+  const onMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!drivingRef.current) return;
+      // La trayectoria solo viaja por el socket: por HTTP sería una petición
+      // por pixel. En respaldo el cursor se teletransporta y se acepta.
+      const now = performance.now();
+      if (now - lastMoveAtRef.current < MOVE_THROTTLE_MS) return;
+      lastMoveAtRef.current = now;
+      const { x, y } = toViewport(e.clientX, e.clientY);
+      sendWs({
+        type: 'mouse',
+        kind: 'mouseMoved',
+        x,
+        y,
+        button: buttonsRef.current ? 'left' : 'none',
+        buttons: buttonsRef.current,
+      });
+    },
+    [toViewport, sendWs],
   );
 
   const onKey = useCallback(
@@ -359,10 +461,14 @@ function LiveWindow({
 
   const onWheel = useCallback(
     (e: React.WheelEvent) => {
-      if (!drivingRef.current) return;
+      // Fuera del transcript el wheel ya no pelea con el chat: sobre la
+      // pantalla siempre scrollea LA PÁGINA, se esté conduciendo o no — mirar
+      // hacia abajo en una página larga no debería exigir tomar el volante.
+      // Actuar (click, teclas) sí lo exige, como siempre.
+      e.preventDefault();
       const { x, y } = toViewport(e.clientX, e.clientY);
       if (!sendWs({ type: 'wheel', x, y, deltaX: e.deltaX, deltaY: e.deltaY })) {
-        postInput({ kind: 'scroll', y: e.deltaY });
+        if (drivingRef.current) postInput({ kind: 'scroll', y: e.deltaY });
       }
     },
     [toViewport, sendWs, postInput],
@@ -461,6 +567,19 @@ function LiveWindow({
     }
   }, [tab.checkpointId, answer, markGone]);
 
+  // Escape achica la pantalla grande — salvo mientras se conduce, que es una
+  // tecla que la página puede querer.
+  useEffect(() => {
+    if (!expanded) return;
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !drivingRef.current) setExpanded(false);
+    };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
+  }, [expanded]);
+
+  if (dismissed) return null;
+
   // -------------------------------------------------------------------------
   // Pintar.
   // -------------------------------------------------------------------------
@@ -472,6 +591,11 @@ function LiveWindow({
       return '';
     }
   })();
+  const slot = dockSlot(sessionId);
+
+  const needsPerson = Boolean(
+    !gone && ((control?.help && !driving) || control?.secret || (tab.checkpointId && !resumed)),
+  );
 
   const screen = (
     <div
@@ -484,24 +608,22 @@ function LiveWindow({
       role={driving ? 'application' : undefined}
       onMouseDown={(e) => onMouse('mousePressed', e)}
       onMouseUp={(e) => onMouse('mouseReleased', e)}
+      onMouseMove={onMove}
       onKeyDown={(e) => onKey('keyDown', e)}
       onKeyUp={(e) => onKey('keyUp', e)}
       onWheel={onWheel}
       onPaste={onPaste}
     >
-      {frame ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={frame}
-          alt={control?.title || 'La pestaña de Cortex'}
-          className="h-full w-full object-contain"
-          draggable={false}
-        />
-      ) : (
+      <canvas
+        ref={canvasRef}
+        className={`h-full w-full object-contain ${hasFrame ? '' : 'hidden'}`}
+        aria-label={control?.title || 'La pestaña de Cortex'}
+      />
+      {!hasFrame ? (
         <div className="flex h-full w-full items-center justify-center text-xs text-white/60">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Abriendo la pantalla…
         </div>
-      )}
+      ) : null}
       {gone ? (
         <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-sm text-white">
           Esta pestaña ya se cerró.
@@ -510,25 +632,39 @@ function LiveWindow({
     </div>
   );
 
-  const card = (
-    <div className="mt-2 w-full max-w-2xl rounded-xl border border-border bg-card p-3 shadow-sm">
-      {/* Barra: dónde está la pestaña y en qué calidad se ve. */}
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <MonitorSmartphone className="h-4 w-4 shrink-0" />
-        <span className="truncate font-medium text-foreground">
-          {control?.title || 'Pestaña de Cortex'}
-        </span>
-        {host ? <span className="truncate">· {host}</span> : null}
-        <span className="ml-auto flex shrink-0 items-center gap-1.5">
-          {gone ? null : live ? (
-            <span className="flex items-center gap-1 text-emerald-600">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> en vivo
-            </span>
+  const header = (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <MonitorSmartphone className="h-4 w-4 shrink-0" />
+      <span className="truncate font-medium text-foreground">
+        {control?.title || 'Pestaña de Cortex'}
+      </span>
+      {host ? <span className="truncate">· {host}</span> : null}
+      <span className="ml-auto flex shrink-0 items-center gap-1">
+        {gone ? null : live ? (
+          <span className="flex items-center gap-1 text-emerald-600">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> en vivo
+          </span>
+        ) : (
+          <span className="flex items-center gap-1">
+            <Eye className="h-3.5 w-3.5" /> foto/s
+          </span>
+        )}
+        <button
+          type="button"
+          className="rounded p-1 hover:bg-muted"
+          onClick={() => {
+            setCollapsed((v) => !v);
+            setExpanded(false);
+          }}
+          aria-label={collapsed ? 'Desplegar' : 'Plegar'}
+        >
+          {collapsed ? (
+            <ChevronUp className="h-3.5 w-3.5" />
           ) : (
-            <span className="flex items-center gap-1">
-              <Eye className="h-3.5 w-3.5" /> foto por segundo
-            </span>
+            <ChevronDown className="h-3.5 w-3.5" />
           )}
+        </button>
+        {!collapsed ? (
           <button
             type="button"
             className="rounded p-1 hover:bg-muted"
@@ -541,10 +677,24 @@ function LiveWindow({
               <Maximize2 className="h-3.5 w-3.5" />
             )}
           </button>
-        </span>
-      </div>
+        ) : null}
+        {gone ? (
+          <button
+            type="button"
+            className="rounded p-1 hover:bg-muted"
+            onClick={() => setDismissed(true)}
+            aria-label="Cerrar"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </span>
+    </div>
+  );
 
-      {screen}
+  const body = collapsed ? null : (
+    <>
+      <div className="mt-2">{screen}</div>
 
       {/* La mano levantada del bot: su razón, tal cual, y el botón que la responde. */}
       {!gone && control?.help && !driving ? (
@@ -631,8 +781,7 @@ function LiveWindow({
                 <X className="h-3.5 w-3.5" /> Devolver el control
               </button>
               <span className="text-xs text-amber-600 dark:text-amber-400">
-                Estás conduciendo: tu mouse y tu teclado van a la página. Nada de esto le llega a
-                Cortex.
+                Estás conduciendo. Nada de esto le llega a Cortex.
               </span>
             </>
           ) : (
@@ -647,13 +796,48 @@ function LiveWindow({
           )}
         </div>
       ) : null}
+    </>
+  );
+
+  const panel = (
+    <div
+      className={`pointer-events-auto rounded-xl border bg-card p-3 shadow-lg ${
+        needsPerson ? 'border-amber-400' : 'border-border'
+      }`}
+    >
+      {header}
+      {body}
     </div>
   );
 
-  if (!expanded) return card;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-full w-full max-w-5xl overflow-auto">{card}</div>
-    </div>
+  if (expanded) {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        onClick={(e) => {
+          // El fondo cierra; la tarjeta no — un click en sus botones no debe
+          // cerrar la pantalla que los contiene.
+          if (e.target === e.currentTarget) setExpanded(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && e.target === e.currentTarget) setExpanded(false);
+        }}
+      >
+        <div className="max-h-full w-full max-w-5xl overflow-auto">{panel}</div>
+      </div>,
+      document.body,
+    );
+  }
+
+  // El dock: fijo abajo a la derecha, fuera del río del chat. Dos sesiones se
+  // apilan hacia arriba en vez de taparse.
+  return createPortal(
+    <div
+      className="pointer-events-none fixed right-4 z-40 w-[26rem] max-w-[calc(100vw-2rem)]"
+      style={{ bottom: `calc(1rem + ${slot} * 3.25rem)` }}
+    >
+      {panel}
+    </div>,
+    document.body,
   );
 }

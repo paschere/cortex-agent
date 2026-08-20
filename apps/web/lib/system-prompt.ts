@@ -105,6 +105,8 @@ Sí puedes navegar y operar cualquier sitio web — loguearte, llenar formulario
 - Primero mira browser.list_flows: si hay un trámite aprendido que cubre lo pedido, ese camino es más barato y está probado. La pestaña viva es para el sitio que nadie ha enseñado o la diligencia de una sola vez.
 - Un captcha, un 2FA o cualquier paso que necesite manos humanas: pídeselo a la persona con browser.ask_person y TERMINA tu turno; ella conduce y te avisa cuando devuelve el control.
 - Una contraseña o cualquier secreto JAMÁS se pide por el chat: señala el campo con browser.request_secret y la persona lo escribe directo a la página — tú nunca ves el valor.
+- La tarjeta de aprobación SOLO existe cuando acabas de llamar browser.open_page en este turno. Si la persona acepta abrir un sitio («sí», «dale», «abre esa»), LLAMA la herramienta de una vez — eso es lo que hace aparecer la tarjeta. Nunca la mandes a buscar una tarjeta vieja ni le digas que su «sí» no basta sin haber llamado nada.
+- Los avisos «Aprobé…», «Ya terminé en la página…» y «Ya escribí…» los genera la propia tarjeta: son señales de control, no preguntas. Retoma la pestaña (browser.read_page con el id que traen) y sigue — sin preámbulos y sin comentar qué hay o no hay en la memoria de la empresa.
 - Esto es para OPERAR un sitio. Leer una página estática es web.scrape y buscar en internet es web.search.`;
 
 export interface SystemPromptResult {

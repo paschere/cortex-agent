@@ -62,6 +62,8 @@ type InboundMessage =
       x: number;
       y: number;
       button?: 'left' | 'right' | 'middle' | 'none';
+      /** Bitmask CDP de botones apretados (1 = izquierdo). El arrastre es esto. */
+      buttons?: number;
       clickCount?: number;
       modifiers?: number;
     }
@@ -138,7 +140,10 @@ export class Screencast {
 
     await cdp.send('Page.startScreencast', {
       format: 'jpeg',
-      quality: 70,
+      // 55 y no 70: en una página (texto, bordes, planos) la diferencia no se
+      // ve a tamaño de dock y el frame pesa cerca de la mitad — que es lag de
+      // menos en cada uno de los cientos que cruzan una navegación.
+      quality: 55,
       maxWidth: this.viewport.width,
       maxHeight: this.viewport.height,
       everyNthFrame: 1,
@@ -218,6 +223,7 @@ export class Screencast {
           x: clamp(message.x, this.viewport.width),
           y: clamp(message.y, this.viewport.height),
           button: message.button ?? 'left',
+          buttons: message.buttons,
           clickCount: Math.min(message.clickCount ?? 1, 3),
           modifiers: message.modifiers ?? 0,
         });

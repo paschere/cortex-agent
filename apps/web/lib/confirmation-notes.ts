@@ -100,11 +100,46 @@ export function confirmationFollowUp(toolId: string, result: unknown): string {
     const sessionId = typeof r.sessionId === 'string' ? r.sessionId : '';
     const page = (r.page && typeof r.page === 'object' ? r.page : {}) as Record<string, unknown>;
     const url = typeof page.url === 'string' ? page.url : '';
+    // Solo el dominio: una URL real puede ser un /sorry/index de Google con
+    // 400 caracteres de querystring, y esto es un mensaje que una persona lee
+    // en el cuerpo del chat. El bot no la necesita — con el id de pestaña le
+    // basta, y la página como está se la da browser.read_page.
+    const host = (() => {
+      try {
+        return url ? new URL(url).host : '';
+      } catch {
+        return '';
+      }
+    })();
     if (sessionId) {
       // El id viaja en el texto porque es lo único que browser.act necesita
       // para retomar EXACTAMENTE esta pestaña en vez de abrir otra.
-      return `Aprobé y la pestaña ya quedó abierta${url ? ` en ${url}` : ''} (id de pestaña: ${sessionId}). La estoy viendo en vivo aquí en el chat. No la vuelvas a abrir: continúa ahí con lo que ibas a hacer.`;
+      return `Aprobé y la pestaña ya quedó abierta${host ? ` en ${host}` : ''} (id de pestaña: ${sessionId}). La estoy viendo en vivo aquí en el chat. No la vuelvas a abrir: continúa ahí con lo que ibas a hacer.`;
     }
   }
   return 'Aprobé y ya se ejecutó — el resultado quedó en la tarjeta de arriba. No lo repitas: continúa desde ahí.';
+}
+
+/**
+ * ¿Este mensaje de la persona es una SEÑAL DE CONTROL fabricada por nuestras
+ * propias tarjetas, y no una pregunta?
+ *
+ * Las tarjetas de la pestaña viva escriben por la persona («Aprobé y la
+ * pestaña ya quedó abierta…», «Ya terminé en la página…», «Ya escribí “la
+ * clave”…») y esas frases superan las 8 palabras con las que la compuerta de
+ * RAG decide buscar en Brain Knowledge. Resultado visto en producción: cada
+ * aviso de control disparaba una búsqueda, la búsqueda no encontraba nada, y
+ * el modelo le narraba a la persona que su aviso «no aparece en la memoria de
+ * la empresa» — ruido puro. Un aviso de control no es una pregunta: no se
+ * busca nada con él.
+ *
+ * Por prefijo y no por marca invisible: estas frases las escribimos nosotros
+ * (aquí mismo y en BrowserLive.tsx), así que el prefijo es estable por
+ * construcción. Si alguna cambia allá, cámbiala aquí.
+ */
+const CONTROL_MESSAGE_STEMS = ['Aprobé y ', 'Ya terminé en la página', 'Ya escribí «'] as const;
+
+export function isControlHandoffMessage(message: string): boolean {
+  const trimmed = message.trim();
+  return CONTROL_MESSAGE_STEMS.some((stem) => trimmed.startsWith(stem));
 }

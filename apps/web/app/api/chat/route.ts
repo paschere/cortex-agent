@@ -1,3 +1,4 @@
+import { isControlHandoffMessage } from '@/lib/confirmation-notes';
 import { buildToolContext } from '@/lib/agent';
 import {
   ASK_CHOICE_DESCRIPTION,
@@ -85,6 +86,10 @@ function shouldRunRag(message: string): boolean {
   const wordCount = message.trim().split(/\s+/).length;
   if (wordCount < 8) return false;
   if (ACKNOWLEDGMENT_RE.test(message.trim())) return false;
+  // Los avisos que nuestras propias tarjetas escriben por la persona
+  // («aprobé», «ya terminé en la página») son control, no preguntas — largos
+  // solo porque cargan un id de pestaña. Ver isControlHandoffMessage.
+  if (isControlHandoffMessage(message)) return false;
   return true;
 }
 
