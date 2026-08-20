@@ -169,7 +169,7 @@ function LiveTab({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void }
   // no compite con el scroll del chat: vive fija, abajo a la derecha.
   return (
     <>
-      <div className="mt-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+      <div className="mt-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-ink-muted">
         <MonitorSmartphone className="mr-1.5 inline h-3.5 w-3.5" />
         {active
           ? 'La pestaña está en vivo abajo a la derecha.'
@@ -210,6 +210,14 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const goneRef = useRef(false);
   const liveRef = useRef(false);
+  /**
+   * El último frame, en bytes. El canvas se RE-MONTA al entrar o salir de la
+   * pantalla completa (cambia de portal) y nace vacío — y en vivo los frames
+   * solo llegan cuando la página cambia, así que una página quieta se quedaba
+   * en negro hasta el próximo cambio. Con la copia, el canvas recién montado
+   * repinta lo último que se vio.
+   */
+  const lastFrameRef = useRef<{ bytes: Uint8Array; mime: string } | null>(null);
   const lastMoveAtRef = useRef(0);
   /** Bitmask CDP de botones apretados (1 = izquierdo), para el arrastre. */
   const buttonsRef = useRef(0);
@@ -228,6 +236,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
 
   // Dibuja unos bytes de imagen en el canvas, fuera del ciclo de React.
   const paint = useCallback(async (bytes: Uint8Array, mime: string) => {
+    lastFrameRef.current = { bytes, mime };
     try {
       const bitmap = await createImageBitmap(
         new Blob([bytes.buffer as ArrayBuffer], { type: mime }),
@@ -614,7 +623,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
       ref={surfaceRef}
       className={`relative overflow-hidden rounded-lg border border-border bg-black/90 ${
         fitHeight ? 'mx-auto' : 'w-full'
-      } ${driving ? 'cursor-crosshair ring-2 ring-amber-400' : ''}`}
+      } ${driving ? 'cursor-crosshair ring-2 ring-amber' : ''}`}
       style={
         fitHeight
           ? {
@@ -636,7 +645,13 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
       onPaste={onPaste}
     >
       <canvas
-        ref={canvasRef}
+        ref={(node) => {
+          canvasRef.current = node;
+          // Repintar al montar: ver lastFrameRef.
+          if (node && lastFrameRef.current) {
+            void paint(lastFrameRef.current.bytes, lastFrameRef.current.mime);
+          }
+        }}
         className={`h-full w-full object-contain ${hasFrame ? '' : 'hidden'}`}
         aria-label={control?.title || 'La pestaña de Cortex'}
       />
@@ -660,7 +675,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
         disabled={!driving}
         title={driving ? 'Atrás' : 'Toma el control para navegar'}
         onClick={() => nav('back')}
-        className="rounded p-1.5 hover:bg-muted disabled:opacity-40"
+        className="rounded p-1.5 hover:bg-surface-2 disabled:opacity-40"
         aria-label="Atrás"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -670,7 +685,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
         disabled={!driving}
         title={driving ? 'Recargar' : 'Toma el control para navegar'}
         onClick={() => nav('refresh')}
-        className="rounded p-1.5 hover:bg-muted disabled:opacity-40"
+        className="rounded p-1.5 hover:bg-surface-2 disabled:opacity-40"
         aria-label="Recargar"
       >
         <RotateCw className="h-4 w-4" />
@@ -679,16 +694,14 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
   );
 
   const header = (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+    <div className="flex items-center gap-2 text-xs text-ink-muted">
       <MonitorSmartphone className="h-4 w-4 shrink-0" />
-      <span className="truncate font-medium text-foreground">
-        {control?.title || 'Pestaña de Cortex'}
-      </span>
+      <span className="truncate font-medium text-ink">{control?.title || 'Pestaña de Cortex'}</span>
       {host ? <span className="truncate">· {host}</span> : null}
       <span className="ml-auto flex shrink-0 items-center gap-1">
         {gone ? null : live ? (
-          <span className="flex items-center gap-1 text-emerald-600">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> en vivo
+          <span className="flex items-center gap-1 text-emerald">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald" /> en vivo
           </span>
         ) : (
           <span className="flex items-center gap-1">
@@ -697,7 +710,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
         )}
         <button
           type="button"
-          className="rounded p-1 hover:bg-muted"
+          className="rounded p-1 hover:bg-surface-2"
           onClick={() => {
             setCollapsed((v) => !v);
             setExpanded(false);
@@ -713,7 +726,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
         {!collapsed ? (
           <button
             type="button"
-            className="rounded p-1 hover:bg-muted"
+            className="rounded p-1 hover:bg-surface-2"
             onClick={() => setExpanded((v) => !v)}
             aria-label={expanded ? 'Achicar' : 'Ver en grande'}
           >
@@ -727,7 +740,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
         {gone ? (
           <button
             type="button"
-            className="rounded p-1 hover:bg-muted"
+            className="rounded p-1 hover:bg-surface-2"
             onClick={() => setDismissed(true)}
             aria-label="Cerrar"
           >
@@ -742,7 +755,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
   // en dos sitios: el cuerpo del dock y el pie de la pantalla completa.
   const secretBox =
     !gone && control?.secret ? (
-      <div className="mt-2 rounded-lg border border-border bg-muted/40 p-3">
+      <div className="mt-2 rounded-lg border border-border bg-surface-2 p-3">
         <div className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
           <KeyRound className="h-4 w-4" /> {control.secret.label}
         </div>
@@ -756,28 +769,28 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
               if (e.key === 'Enter') void submitSecret();
             }}
             placeholder="Se escribe directo en la página"
-            className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 flex-1 rounded-md border border-border bg-surface px-3 text-sm"
           />
           <button
             type="button"
             disabled={busy || !secretValue}
             onClick={() => void submitSecret()}
-            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-ink disabled:opacity-50"
           >
             Escribir
           </button>
         </div>
-        <p className="mt-1.5 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-xs text-ink-muted">
           Va del teclado a la página. Cortex nunca ve el valor y no queda en la conversación.
         </p>
-        {secretDone ? <p className="mt-1 text-xs text-foreground">{secretDone}</p> : null}
+        {secretDone ? <p className="mt-1 text-xs text-ink">{secretDone}</p> : null}
       </div>
     ) : null;
 
   const checkpointBox =
     !gone && tab.checkpointId && !resumed ? (
-      <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/40">
-        <p className="mb-2 text-amber-900 dark:text-amber-200">
+      <div className="mt-2 rounded-lg border border-amber/25 bg-amber-soft p-3 text-sm">
+        <p className="mb-2 text-ink">
           {tab.ask ||
             'El trámite necesita algo tuyo aquí (un captcha, una casilla). Resuélvelo en la pantalla y sigue.'}
         </p>
@@ -787,14 +800,14 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="La respuesta (el código, el dato)"
-              className="h-9 flex-1 rounded-md border border-input bg-background px-3 text-sm"
+              className="h-9 flex-1 rounded-md border border-border bg-surface px-3 text-sm"
             />
           ) : null}
           <button
             type="button"
             disabled={busy || (Boolean(tab.fills) && !answer.trim())}
             onClick={() => void resumeCheckpoint()}
-            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-ink disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar el trámite'}
           </button>
@@ -808,7 +821,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
 
       {/* La mano levantada del bot: su razón, tal cual, y el botón que la responde. */}
       {!gone && control?.help && !driving ? (
-        <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+        <div className="mt-2 rounded-lg border border-amber/25 bg-amber-soft px-3 py-2 text-sm text-ink">
           <Hand className="mr-1.5 inline h-4 w-4" />
           Cortex necesita tus manos: {control.help.reason}
         </div>
@@ -817,7 +830,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
       {/* El secreto: la caja enmascarada y la promesa, juntas. */}
       {secretBox}
       {checkpointBox}
-      {resumed ? <p className="mt-2 text-sm text-muted-foreground">{resumed}</p> : null}
+      {resumed ? <p className="mt-2 text-sm text-ink-muted">{resumed}</p> : null}
 
       {/* El volante. */}
       {!gone ? (
@@ -828,11 +841,11 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
                 type="button"
                 disabled={busy}
                 onClick={() => void setDriver('release')}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-ink disabled:opacity-50"
               >
                 <X className="h-3.5 w-3.5" /> Devolver el control
               </button>
-              <span className="text-xs text-amber-600 dark:text-amber-400">
+              <span className="text-xs text-amber">
                 Estás conduciendo. Nada de esto le llega a Cortex.
               </span>
             </>
@@ -841,7 +854,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
               type="button"
               disabled={busy}
               onClick={() => void setDriver('take')}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-2 disabled:opacity-50"
             >
               <Hand className="h-3.5 w-3.5" /> Tomar el control
             </button>
@@ -853,8 +866,8 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
 
   const panel = (
     <div
-      className={`pointer-events-auto rounded-xl border bg-card p-3 shadow-lg ${
-        needsPerson ? 'border-amber-400' : 'border-border'
+      className={`pointer-events-auto rounded-xl border bg-surface p-3 shadow-lg ${
+        needsPerson ? 'border-amber' : 'border-border'
       }`}
     >
       {header}
@@ -868,17 +881,17 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
     // volante) y lo que espera a la persona (captcha, clave, trámite) en un
     // pie que no tapa la página.
     return createPortal(
-      <div className="fixed inset-0 z-50 flex flex-col bg-card">
+      <div className="fixed inset-0 z-50 flex flex-col bg-surface">
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2 text-sm">
-          <MonitorSmartphone className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <MonitorSmartphone className="h-4 w-4 shrink-0 text-ink-muted" />
           <span className="truncate font-medium">{control?.title || 'Pestaña de Cortex'}</span>
-          {host ? <span className="truncate text-xs text-muted-foreground">· {host}</span> : null}
+          {host ? <span className="truncate text-xs text-ink-muted">· {host}</span> : null}
           {gone ? null : live ? (
-            <span className="flex items-center gap-1 text-xs text-emerald-600">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> en vivo
+            <span className="flex items-center gap-1 text-xs text-emerald">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald" /> en vivo
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1 text-xs text-ink-muted">
               <Eye className="h-3.5 w-3.5" /> foto/s
             </span>
           )}
@@ -891,7 +904,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
                   type="button"
                   disabled={busy}
                   onClick={() => void setDriver('release')}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-ink disabled:opacity-50"
                 >
                   <X className="h-3.5 w-3.5" /> Devolver el control
                 </button>
@@ -900,7 +913,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
                   type="button"
                   disabled={busy}
                   onClick={() => void setDriver('take')}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-surface-2 disabled:opacity-50"
                 >
                   <Hand className="h-3.5 w-3.5" /> Tomar el control
                 </button>
@@ -908,7 +921,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
             ) : null}
             <button
               type="button"
-              className="rounded p-1.5 hover:bg-muted"
+              className="rounded p-1.5 hover:bg-surface-2"
               onClick={() => setExpanded(false)}
               aria-label="Salir de pantalla completa"
             >
@@ -926,13 +939,13 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
           driving) ? (
           <div className="max-h-56 shrink-0 overflow-auto border-t border-border px-4 py-2 [&>div]:mt-2 first:[&>div]:mt-0">
             {driving ? (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
+              <p className="text-xs text-amber">
                 Estás conduciendo: tu mouse (con sus movimientos), tu teclado y tu scroll van a la
                 página. Nada de esto le llega a Cortex.
               </p>
             ) : null}
             {control?.help && !driving ? (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="rounded-lg border border-amber/25 bg-amber-soft px-3 py-2 text-sm text-ink">
                 <Hand className="mr-1.5 inline h-4 w-4" />
                 Cortex necesita tus manos: {control.help.reason}
               </div>
