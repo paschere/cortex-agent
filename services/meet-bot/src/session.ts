@@ -76,8 +76,20 @@ export class MeetSession {
 
   async join(): Promise<void> {
     const profileDir = `${this.config.profilesDir}/${this.owner.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+    // El proxy residencial, si está configurado — por-contexto, como recomienda
+    // la industria, para aislar el tráfico del bot y poder rotarlo. Es lo que
+    // hace que Meet acepte al bot desde Railway (ver config.proxyServer).
+    const proxy = this.config.proxyServer
+      ? {
+          server: this.config.proxyServer,
+          ...(this.config.proxyUsername ? { username: this.config.proxyUsername } : {}),
+          ...(this.config.proxyPassword ? { password: this.config.proxyPassword } : {}),
+        }
+      : undefined;
+
     this.context = await chromium.launchPersistentContext(profileDir, {
       channel: 'chrome',
+      ...(proxy ? { proxy } : {}),
       // NUNCA headless: Meet degrada a los clientes headless. En Railway hay
       // Xvfb (DISPLAY=:99) que hace a Chrome headful sin abrir ventana; en un
       // Mac se ve la ventana. headless solo si de verdad no hay display Y no se

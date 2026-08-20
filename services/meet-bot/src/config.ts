@@ -40,6 +40,17 @@ export interface Config {
   /** Cuenta de Google dedicada del bot, para auto-login en Railway. */
   googleEmail: string | null;
   googlePassword: string | null;
+  /**
+   * Proxy residencial. LA pieza que hace que Google Meet acepte al bot desde
+   * un datacenter: Meet rebota las IPs de hosting (AWS/GCP/Railway) aunque la
+   * sesión sea válida, y la solución estándar de la industria (Recall.ai
+   * incluido) es salir por una IP residencial. Formato server:
+   * http://host:puerto (o socks5://…). Sin esto, el bot funciona desde una IP
+   * residencial (un Mac) pero rebota desde Railway.
+   */
+  proxyServer: string | null;
+  proxyUsername: string | null;
+  proxyPassword: string | null;
 }
 
 export function loadConfig(): Config {
@@ -62,5 +73,8 @@ export function loadConfig(): Config {
     sttLanguage: process.env.MEET_STT_LANGUAGE?.trim() || 'es',
     googleEmail: process.env.MEET_GOOGLE_EMAIL?.trim() || null,
     googlePassword: process.env.MEET_GOOGLE_PASSWORD?.trim() || null,
+    proxyServer: process.env.MEET_PROXY_SERVER?.trim() || null,
+    proxyUsername: process.env.MEET_PROXY_USERNAME?.trim() || null,
+    proxyPassword: process.env.MEET_PROXY_PASSWORD?.trim() || null,
   };
 }
