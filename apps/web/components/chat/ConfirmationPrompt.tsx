@@ -1,6 +1,6 @@
 'use client';
 
-import { confirmationReason } from '@/lib/confirmation-notes';
+import { confirmationFollowUp, confirmationReason } from '@/lib/confirmation-notes';
 import { confirmationSummary } from '@/lib/tool-labels';
 import { clsx } from 'clsx';
 import { Check, ChevronDown, Loader2, ShieldAlert, X } from 'lucide-react';
@@ -57,7 +57,14 @@ export function ConfirmationPrompt({
       const data = (await res.json().catch(() => ({}))) as { result?: unknown };
       setExecuted(data.result);
       setStatus('allowed');
-      onConfirmed?.();
+      // La continuación. `onSay` mete la aprobación como mensaje de la persona
+      // con el desenlace en palabras — que es el ÚNICO canal por el que el
+      // resultado alcanza al modelo, porque el historial entre turnos es texto
+      // (ver confirmationFollowUp). `onConfirmed` (regenerar) queda solo de
+      // respaldo para superficies sin compositor: regenerar borra el turno y
+      // el modelo, sin el resultado a la vista, vuelve a pedir confirmación.
+      if (onSay) onSay(confirmationFollowUp(toolId, data.result));
+      else onConfirmed?.();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'No se pudo enviar la solicitud.');
       setStatus('error');

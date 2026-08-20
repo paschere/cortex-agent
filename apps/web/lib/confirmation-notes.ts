@@ -76,3 +76,35 @@ export function confirmationReason(toolId: string): string {
   const system = FAMILY_SYSTEM[family] ?? 'un sistema externo';
   return `Ejecuta una escritura sobre ${system} — cambia datos reales fuera de esta conversación y puede quedar visible para otras personas.`;
 }
+
+/**
+ * Lo que la persona «dice» al aprobar, para que el bot pueda SEGUIR.
+ *
+ * El historial entre turnos es texto (app/api/chat/route.ts lo relee de
+ * `messages` como role+content, a propósito), así que el resultado de una
+ * herramienta confirmada no le llega al modelo por ningún canal estructurado.
+ * Regenerar el turno tras confirmar era un bucle: el modelo no veía el
+ * resultado, volvía a llamar la herramienta, y la herramienta volvía a pedir
+ * confirmación — se vio en producción con la pestaña viva del navegador,
+ * aprobación tras aprobación de la misma pestaña.
+ *
+ * La salida es el mismo canal de ChoicePrompt: la aprobación entra como
+ * MENSAJE DE LA PERSONA con el desenlace en palabras, y las palabras llevan
+ * lo que el siguiente turno necesita para actuar (el id de la pestaña, la
+ * URL). Es honesto además: la aprobación ES de la persona, y el transcript
+ * la muestra donde ocurrió.
+ */
+export function confirmationFollowUp(toolId: string, result: unknown): string {
+  const r = (result && typeof result === 'object' ? result : {}) as Record<string, unknown>;
+  if (toolId === 'browser.open_page') {
+    const sessionId = typeof r.sessionId === 'string' ? r.sessionId : '';
+    const page = (r.page && typeof r.page === 'object' ? r.page : {}) as Record<string, unknown>;
+    const url = typeof page.url === 'string' ? page.url : '';
+    if (sessionId) {
+      // El id viaja en el texto porque es lo único que browser.act necesita
+      // para retomar EXACTAMENTE esta pestaña en vez de abrir otra.
+      return `Aprobé y la pestaña ya quedó abierta${url ? ` en ${url}` : ''} (id de pestaña: ${sessionId}). La estoy viendo en vivo aquí en el chat. No la vuelvas a abrir: continúa ahí con lo que ibas a hacer.`;
+    }
+  }
+  return 'Aprobé y ya se ejecutó — el resultado quedó en la tarjeta de arriba. No lo repitas: continúa desde ahí.';
+}
