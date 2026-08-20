@@ -74,6 +74,15 @@ export class MeetSession {
     this.events.onStatus(status, detail);
   }
 
+  /** El texto visible de la página, para saber QUÉ ve el bot cuando falla. */
+  private async peek(page: Page): Promise<string> {
+    return (await page
+      .evaluate(
+        'document.body ? document.body.innerText.slice(0, 400).replace(/\\n+/g, " | ") : "(vacío)"',
+      )
+      .catch(() => '(no se pudo leer)')) as string;
+  }
+
   async join(): Promise<void> {
     // En modo guest, un perfil EFÍMERO por sesión: sin cookies de ninguna
     // cuenta, un invitado limpio. En modo cuenta, el perfil persistente del
@@ -196,7 +205,7 @@ export class MeetSession {
         .catch(() => false);
       if (inRoom || bounced) {
         if (bounced) {
-          this.setStatus('failed', 'Meet no dejó entrar al bot (¿cuenta sin sesión o rechazado?).');
+          this.setStatus('failed', `Meet rebotó. Pantalla: ${await this.peek(page)}`);
           return;
         }
         break;
@@ -204,7 +213,7 @@ export class MeetSession {
       await page.waitForTimeout(3_000);
     }
     if (!inRoom) {
-      this.setStatus('failed', 'Nadie admitió al bot en la reunión.');
+      this.setStatus('failed', `No entré en 2 min. Pantalla: ${await this.peek(page)}`);
       return;
     }
 
