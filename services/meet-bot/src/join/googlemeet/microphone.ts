@@ -153,3 +153,28 @@ export function locateUnmuteBanner(): { found: boolean; x: number; y: number } {
   }
   return { found: false, x: 0, y: 0 };
 }
+
+/**
+ * Lo que la SALA ve: el mosaico propio del bot y su icono de silenciado. El
+ * botón de abajo puede decir «Turn off microphone» y aun así el bot aparecer
+ * silenciado para los demás (21-08: «nunca se desmutea»). Este es el veredicto
+ * que manda; el botón es solo la palanca.
+ *   true  = silenciado, false = abierto, null = no se pudo leer.
+ */
+export function locateSelfMuted(): boolean | null {
+  (globalThis as { __name?: (f: unknown) => unknown }).__name =
+    (globalThis as { __name?: (f: unknown) => unknown }).__name || ((f) => f);
+  const tiles = Array.from(document.querySelectorAll('[data-self-name], [data-participant-id]'));
+  const self =
+    tiles.find((t) => t.hasAttribute('data-self-name')) ??
+    tiles.find((t) => /\b(you|tú|yo)\b/i.test(t.getAttribute('aria-label') || ''));
+  if (!self) return null;
+  const muted = self.querySelector('[data-is-muted]');
+  if (muted) return muted.getAttribute('data-is-muted') === 'true';
+  const icons = Array.from(self.querySelectorAll('[aria-label], i, span'));
+  for (const el of icons) {
+    const txt = `${el.getAttribute('aria-label') || ''} ${el.textContent || ''}`.toLowerCase();
+    if (/mic_off|micr[oó]fono (apagado|desactivado)|is muted|est[aá] silenciad|muted/.test(txt)) return true;
+  }
+  return false;
+}
