@@ -18,11 +18,13 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
   const pending = [];
   const seenTrack = new Set();
 
+  const pcs = [];
   const OrigPC = window.RTCPeerConnection;
   if (OrigPC && !OrigPC.__cortexWrapped) {
     const Wrapped = new Proxy(OrigPC, {
       construct(Target, args) {
         const pc = new Target(...args);
+        pcs.push(pc);
         pc.addEventListener('track', (ev) => {
           if (ev.track && ev.track.kind === 'audio') {
             pending.push(ev.streams[0] || new MediaStream([ev.track]));
@@ -35,7 +37,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     window.RTCPeerConnection = Wrapped;
   }
 
-  const state = { started: false, peak: 0, chunks: 0, speaker: null, roster: [], tracks: 0, live: 0, elements: 0, ctxState: 'none' };
+  const state = { started: false, peak: 0, chunks: 0, speaker: null, roster: [], tracks: 0, live: 0, elements: 0, pcs: 0, mine: 0, playing: 0, trackInfo: '', ctxState: 'none' };
 
   const EFFECTS = /visual_effects|backgrounds and effects|fondos y efectos/i;
   const SPEAKING_SEL = '.Oaajhc, .HX2H7, .wEsLMd, .OgVli, [data-audio-level]:not([data-audio-level="0"])';
@@ -188,10 +190,28 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     }
     function sweep() {
       while (pending.length) wireStream(pending.pop());
+      // Los receivers de cada RTCPeerConnection: aquí vive el audio remoto
+      // aunque Meet nunca lo monte en un <audio> (elements:0). Es la fuente
+      // que no depende de la UI de Meet.
+      for (const pc of pcs) {
+        try {
+          for (const r of pc.getReceivers ? pc.getReceivers() : []) {
+            if (r.track && r.track.kind === 'audio') wireTrack(r.track);
+          }
+        } catch (e) { /* pc cerrada */ }
+      }
       const els = document.querySelectorAll('audio:not([data-cortex-tap]), video');
       state.elements = els.length;
       for (const el of els) wireEl(el);
       state.live = wired.filter((t) => t.readyState === 'live' && !t.muted).length;
+      state.pcs = pcs.length;
+      state.mine = document.querySelectorAll('audio[data-cortex-tap]').length;
+      state.playing = [...document.querySelectorAll('audio[data-cortex-tap]')]
+        .filter((e) => !e.paused && e.currentTime > 0).length;
+      state.trackInfo = wired
+        .slice(0, 6)
+        .map((t) => t.readyState[0] + (t.muted ? 'M' : '') + (t.enabled ? '' : 'D'))
+        .join(',');
       state.ctxState = ctx.state;
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     }
@@ -244,6 +264,10 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
       tracks: state.tracks,
       live: state.live,
       elements: state.elements,
+      pcs: state.pcs,
+      mine: state.mine,
+      playing: state.playing,
+      trackInfo: state.trackInfo,
       ctx: state.ctxState,
     }),
     roster: () => {
