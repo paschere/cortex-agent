@@ -139,7 +139,11 @@ export const meetingsJoinLive = registerTool({
   requiresConfirmation: true,
   conversationGrace: 15 * 60_000,
   rateLimit: { perMinute: 4 },
-  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/calendar.events'] }],
+  // Sin requiredScopes a propósito: el bot entra como invitado con el link.
+  // Meterlo en el invite del Calendar (para saltarse la sala de espera) es un
+  // extra si hay MEET_GOOGLE_EMAIL y el permiso calendar.events; no es la
+  // puerta de entrada. Pedir ese scope aquí bloqueaba «métete a este Meet» a
+  // cualquiera que no hubiera reconectado Google con escritura de agenda.
   handler: async (input, ctx) => {
     const svc = meetService();
     if (!svc) {
@@ -162,9 +166,17 @@ export const meetingsJoinLive = registerTool({
     // Claap, etc.). Si no hay MEET_GOOGLE_EMAIL configurado, se salta.
     const botEmail = process.env.MEET_GOOGLE_EMAIL?.trim();
     if (botEmail) {
-      const invite = await ensureBotOnInvite(ctx, input.meetUrl, botEmail);
-      if (invite.added) {
-        ctx.logger.info({ meetUrl: input.meetUrl, eventId: invite.eventId }, 'bot invited to calendar event');
+      const canInvite = await ctx.integrations.hasScopes('google', [
+        'https://www.googleapis.com/auth/calendar.events',
+      ]);
+      if (canInvite) {
+        const invite = await ensureBotOnInvite(ctx, input.meetUrl, botEmail);
+        if (invite.added) {
+          ctx.logger.info(
+            { meetUrl: input.meetUrl, eventId: invite.eventId },
+            'bot invited to calendar event',
+          );
+        }
       }
     }
 
