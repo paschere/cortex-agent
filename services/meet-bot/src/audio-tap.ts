@@ -15,6 +15,20 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
 (() => {
   if (window.__cortexTap) return;
 
+  // MEET CORTA EL AUDIO A UNA PESTAÑA OCULTA. En headless/Xvfb la página
+  // arranca 'hidden' y Meet deja de suscribir al bot a los streams de audio
+  // remotos (las pistas llegan pero muted=true, sin RTP). Forzamos que la
+  // página SIEMPRE se reporte visible y con foco.
+  try {
+    Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+    Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+    Object.defineProperty(document, 'webkitVisibilityState', { get: () => 'visible', configurable: true });
+    document.hasFocus = () => true;
+    window.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
+    document.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
+    document.dispatchEvent(new Event('visibilitychange'));
+  } catch (e) { /* algún getter no configurable */ }
+
   const pending = [];
   const seenTrack = new Set();
 
@@ -37,7 +51,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     window.RTCPeerConnection = Wrapped;
   }
 
-  const state = { started: false, peak: 0, chunks: 0, speaker: null, roster: [], tracks: 0, live: 0, elements: 0, pcs: 0, mine: 0, playing: 0, trackInfo: '', ctxState: 'none' };
+  const state = { started: false, peak: 0, chunks: 0, speaker: null, roster: [], tracks: 0, live: 0, elements: 0, pcs: 0, mine: 0, playing: 0, trackInfo: '', vis: '', ctxState: 'none' };
 
   const EFFECTS = /visual_effects|backgrounds and effects|fondos y efectos/i;
   const SPEAKING_SEL = '.Oaajhc, .HX2H7, .wEsLMd, .OgVli, [data-audio-level]:not([data-audio-level="0"])';
@@ -169,6 +183,9 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
         nodes.push(srcNode);
         wired.push(t);
         state.tracks = wired.length;
+        // El audio remoto suele llegar MUTED y desmutearse segundos después
+        // (Meet nos suscribe tarde). Cuando pase, que el elemento reanude.
+        t.addEventListener('unmute', () => { const p = el.play(); if (p && p.catch) p.catch(() => {}); });
       } catch (e) {
         // Si ya se le sacó un source al elemento, capturar la pista directo.
         try {
@@ -212,6 +229,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
         .slice(0, 6)
         .map((t) => t.readyState[0] + (t.muted ? 'M' : '') + (t.enabled ? '' : 'D'))
         .join(',');
+      state.vis = document.visibilityState;
       state.ctxState = ctx.state;
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     }
@@ -268,6 +286,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
       mine: state.mine,
       playing: state.playing,
       trackInfo: state.trackInfo,
+      vis: state.vis,
       ctx: state.ctxState,
     }),
     roster: () => {
