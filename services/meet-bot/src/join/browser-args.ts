@@ -29,6 +29,10 @@
  * selectors correct BY CONSTRUCTION rather than lucky.
  */
 
+import { existsSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 /** The pinned browser UI locale (#856). Deployment knob; default en-US. */
 export function resolveBotUiLocale(): string {
   const v = (process.env.BOT_UI_LOCALE || process.env.MEET_LOCALE || "").trim();
@@ -61,6 +65,9 @@ export const JOIN_BROWSER_ARGS: readonly string[] = [
   // so it lives here to keep the debug harness byte-for-byte with production.
   "--in-process-gpu",
   "--use-fake-ui-for-media-stream",
+  // Sin esto Chrome en Docker no enumera ningún audioinput (no hay hardware).
+  // Meet ve «no microphone found» y deja el botón apagado para siempre.
+  "--use-fake-device-for-media-stream",
   // Start AudioContexts in 'running', not 'suspended' — the capture taps remote participant audio
   // via createMediaStreamSource; without this the worklet never fires and no PCM flows. (L4.)
   "--autoplay-policy=no-user-gesture-required",
@@ -70,9 +77,51 @@ export const JOIN_BROWSER_ARGS: readonly string[] = [
   "--disable-site-isolation-trials",
 ];
 
+/** 1 s of silent PCM so the fake device is not Chromium's 1 kHz test beep. */
+export function silentMicWavBytes(): Buffer {
+  const sampleRate = 48_000;
+  const samples = sampleRate;
+  const data = Buffer.alloc(samples * 2);
+  const hdr = Buffer.alloc(44);
+  hdr.write("RIFF", 0);
+  hdr.writeUInt32LE(36 + data.length, 4);
+  hdr.write("WAVE", 8);
+  hdr.write("fmt ", 12);
+  hdr.writeUInt32LE(16, 16);
+  hdr.writeUInt16LE(1, 20);
+  hdr.writeUInt16LE(1, 22);
+  hdr.writeUInt32LE(sampleRate, 24);
+  hdr.writeUInt32LE(sampleRate * 2, 28);
+  hdr.writeUInt16LE(2, 32);
+  hdr.writeUInt16LE(16, 34);
+  hdr.write("data", 36);
+  hdr.writeUInt32LE(data.length, 40);
+  return Buffer.concat([hdr, data]);
+}
+
+export function silentMicWavPath(): string {
+  const baked = "/app/silent-mic.wav";
+  try {
+    if (existsSync(baked)) return baked;
+  } catch {
+    /* */
+  }
+  const out = join(tmpdir(), "cortex-silent-mic.wav");
+  try {
+    if (!existsSync(out)) writeFileSync(out, silentMicWavBytes());
+  } catch {
+    /* Chrome still gets a fake device; it may beep until replaceTrack. */
+  }
+  return out;
+}
+
 /** The canonical join launch args, as a fresh mutable array per call. Includes
  *  the pinned-locale flags (#856) so every launch path — production bot and the
  *  debug harness — is byte-identical and speaks the same UI language. */
 export function getJoinBrowserArgs(): string[] {
-  return [...JOIN_BROWSER_ARGS, ...getLocaleBrowserArgs()];
+  return [
+    ...JOIN_BROWSER_ARGS,
+    ...getLocaleBrowserArgs(),
+    `--use-file-for-fake-audio-capture=${silentMicWavPath()}`,
+  ];
 }

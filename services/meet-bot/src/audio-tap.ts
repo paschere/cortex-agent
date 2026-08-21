@@ -1,14 +1,19 @@
 /**
  * EL TAP: cómo un script DENTRO de la página de Meet saca el audio de la sala.
  *
- * PCM linear16 a 16 kHz, no WebM. MediaRecorder en timeslices manda el header
- * solo en el primer blob; Deepgram transcribe esa frase y luego se queda
- * ciego (o con varios segundos de retraso). El ScriptProcessor emite PCM
- * continuo: cada reconexión de Deepgram sigue entendiendo los bytes.
+ * Vexa (gmeet-capture + pcm-capture) dejó de usar ScriptProcessor: el callback
+ * corre en el hilo principal y Meet lo mata a mitad de llamada (issue #204:
+ * chunks dejan de salir, Whisper se queda en 0). AudioWorklet corre en el hilo
+ * de audio. El PCM sale a 16 kHz linear16 para Deepgram.
  *
- * Las pistas remotas se enganchan de dos formas: elementos <audio>/<video>
- * que Meet ya montó, y el constructor de RTCPeerConnection (antes de que
- * Meet corra, vía addInitScript).
+ * Cómo se engancha cada pista (el fallo del 21-08: chunks>0, peak=0, playing=0):
+ *  1. Los <audio>/<video> que Meet YA está reproduciendo — createMediaStreamSource
+ *     sobre su srcObject, igual que Vexa.
+ *  2. Los receivers de RTCPeerConnection, porque Meet a veces no monta elementos
+ *     (elements:0). Un <audio> sink 1×1 MUTED tira del jitter buffer; el tap es
+ *     MediaStreamSource de la pista, NUNCA MediaElementSource (un elemento mudo
+ *     o con display:none entrega silencio).
+ *  3. Al `ended`, se olvida el id para que Meet pueda reciclar la pista.
  */
 
 export const AUDIO_TAP_SCRIPT = /* js */ `
@@ -31,7 +36,6 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
 
   const pending = [];
   const seenTrack = new Set();
-
   const pcs = [];
   const OrigPC = window.RTCPeerConnection;
   if (OrigPC && !OrigPC.__cortexWrapped) {
@@ -51,7 +55,11 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     window.RTCPeerConnection = Wrapped;
   }
 
-  const state = { started: false, peak: 0, chunks: 0, speaker: null, roster: [], tracks: 0, live: 0, elements: 0, pcs: 0, mine: 0, playing: 0, trackInfo: '', vis: '', ctxState: 'none' };
+  const state = {
+    started: false, peak: 0, recentPeak: 0, chunks: 0, speaker: null, roster: [],
+    tracks: 0, live: 0, elements: 0, pcs: 0, mine: 0, playing: 0,
+    trackInfo: '', vis: '', ctxState: 'none', capture: 'none', lastRms: 0,
+  };
 
   const EFFECTS = /visual_effects|backgrounds and effects|fondos y efectos/i;
   const SPEAKING_SEL = '.Oaajhc, .HX2H7, .wEsLMd, .OgVli, [data-audio-level]:not([data-audio-level="0"])';
@@ -114,131 +122,208 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     if (talking?.name) state.speaker = talking.name;
   }
 
-  async function start() {
-    if (state.started) return { ok: false, reason: 'already-started' };
-    state.started = true;
+  let ctx = null;
+  const mixerHold = { current: null };
+  const nodes = [];
+  const sinks = [];
+  let sweepTimer = null;
+  let speakerWatched = false;
 
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const WORKLET_SRC = [
+    'class CortexPcmCapture extends AudioWorkletProcessor {',
+    '  constructor() { super(); this._buf = new Float32Array(4096); this._n = 0; }',
+    '  process(inputs) {',
+    '    const ch = inputs[0] && inputs[0][0];',
+    '    if (!ch) return true;',
+    '    for (let i = 0; i < ch.length; i++) {',
+    '      this._buf[this._n++] = ch[i];',
+    '      if (this._n === 4096) { this.port.postMessage(this._buf); this._buf = new Float32Array(4096); this._n = 0; }',
+    '    }',
+    '    return true;',
+    '  }',
+    '}',
+    "registerProcessor('cortex-pcm-capture', CortexPcmCapture);",
+  ].join('\\n');
+
+  function emitPcm(float32, sampleRate) {
+    let sum = 0;
+    for (let i = 0; i < float32.length; i++) sum += float32[i] * float32[i];
+    const rms = Math.sqrt(sum / Math.max(1, float32.length));
+    if (rms > state.peak) state.peak = rms;
+    if (rms > state.recentPeak) state.recentPeak = rms;
+    state.lastRms = rms;
+    const pcm = downsampleTo16k(float32, sampleRate);
+    if (!pcm.length) return;
+    state.chunks += 1;
+    const b64 = int16ToBase64(pcm);
+    try {
+      if (window.__cortexAudioChunk) window.__cortexAudioChunk({ b64, rms, speaker: state.speaker });
+    } catch (e) { /* binding caído un frame */ }
+  }
+
+  async function setupGraph() {
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
     if (ctx.state === 'suspended') await ctx.resume();
     const mixer = ctx.createGain();
     mixer.gain.value = 1;
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 512;
-    const buf = new Float32Array(analyser.fftSize);
-    mixer.connect(analyser);
+    mixerHold.current = mixer;
 
-    const processor = ctx.createScriptProcessor(4096, 1, 1);
-    mixer.connect(processor);
-    const silent = ctx.createGain();
-    silent.gain.value = 0;
-    processor.connect(silent);
-    silent.connect(ctx.destination);
+    const onFrame = (ev) => emitPcm(ev.inputBuffer.getChannelData(0), ctx.sampleRate);
 
-    processor.onaudioprocess = (ev) => {
-      const input = ev.inputBuffer.getChannelData(0);
-      let sum = 0;
-      for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
-      const rms = Math.sqrt(sum / input.length);
-      if (rms > state.peak) state.peak = rms;
-      const pcm = downsampleTo16k(input, ctx.sampleRate);
-      if (!pcm.length) return;
-      state.chunks += 1;
-      const b64 = int16ToBase64(pcm);
-      if (window.__cortexAudioChunk) {
-        window.__cortexAudioChunk({ b64, rms, speaker: state.speaker });
-      }
-    };
+    try {
+      const url = URL.createObjectURL(new Blob([WORKLET_SRC], { type: 'application/javascript' }));
+      try { await ctx.audioWorklet.addModule(url); }
+      finally { URL.revokeObjectURL(url); }
+      const node = new AudioWorkletNode(ctx, 'cortex-pcm-capture', {
+        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1],
+        channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers',
+      });
+      node.port.onmessage = (e) => emitPcm(e.data, ctx.sampleRate);
+      mixer.connect(node);
+      node.connect(ctx.destination);
+      nodes.push(node);
+      state.capture = 'worklet';
+    } catch (err) {
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      mixer.connect(processor);
+      processor.connect(ctx.destination);
+      processor.onaudioprocess = onFrame;
+      nodes.push(processor);
+      state.capture = 'script';
+    }
+    state.ctxState = ctx.state;
+  }
 
-    // PISTAS REMOTAS EN CHROME: un MediaStreamAudioSourceNode de una pista
-    // WebRTC remota solo produce audio si esa pista TAMBIÉN está sonando en
-    // un <audio>/<video> (bug viejo de Chromium). Meet normalmente las tiene
-    // en elementos propios, pero no siempre ni para todas (21-08: chunks
-    // fluían y peak=0 durante toda una llamada). Por eso cada pista que se
-    // engancha se reproduce además en un <audio> oculto a volumen 0.
-    const wired = [];
-    const nodes = [];  // referencias vivas: sin esto el GC calla el audio.
+  function dropWire(entry) {
+    try { entry.node && entry.node.disconnect(); } catch (e) { /* ya cortado */ }
+    if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+    seenTrack.delete(entry.trackId);
+  }
 
-    // Cada pista remota se reproduce en su PROPIO <audio> y se captura de ESE
-    // elemento (createMediaElementSource), no de la pista suelta. En Chromium
-    // headless una MediaStreamSource de pista WebRTC remota entrega silencio;
-    // un elemento que ya la decodifica, no. El elemento queda a volumen real
-    // (el contenedor no tiene altavoces, nadie lo oye) para que Chromium no
-    // descarte la decodificación.
-    function wireTrack(t) {
-      if (!t || seenTrack.has(t.id)) return;
-      seenTrack.add(t.id);
+  function attachSink(track) {
+    const el = document.createElement('audio');
+    el.autoplay = true;
+    el.playsInline = true;
+    el.muted = true;
+    el.volume = 1;
+    el.setAttribute('data-cortex-tap', '1');
+    el.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';
+    el.srcObject = new MediaStream([track]);
+    (document.body || document.documentElement).appendChild(el);
+    const play = () => { const p = el.play(); if (p && p.catch) p.catch(() => {}); };
+    play();
+    track.addEventListener('unmute', play);
+    return el;
+  }
+
+  function wireTrack(t) {
+    if (!t || t.kind !== 'audio' || t.readyState === 'ended') return;
+    if (seenTrack.has(t.id)) return;
+    if (!mixerHold.current || !ctx) return;
+    seenTrack.add(t.id);
+    let el = null;
+    try {
+      el = attachSink(t);
+      const src = ctx.createMediaStreamSource(new MediaStream([t]));
+      src.connect(mixerHold.current);
+      const entry = { trackId: t.id, track: t, node: src, el };
+      sinks.push(entry);
+      t.addEventListener('ended', () => {
+        const i = sinks.indexOf(entry);
+        if (i >= 0) sinks.splice(i, 1);
+        dropWire(entry);
+      });
+    } catch (e) {
+      seenTrack.delete(t.id);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+  }
+
+  function wireStream(stream) {
+    if (!stream) return;
+    const tracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
+    for (const t of tracks) wireTrack(t);
+    if (stream.addEventListener && !stream.__cortexWatch) {
+      stream.__cortexWatch = true;
+      stream.addEventListener('addtrack', (ev) => {
+        if (ev.track && ev.track.kind === 'audio') wireTrack(ev.track);
+      });
+    }
+  }
+
+  function wireMeetElements() {
+    const els = document.querySelectorAll('audio:not([data-cortex-tap]), video');
+    state.elements = els.length;
+    for (const el of els) {
+      if (el.srcObject) wireStream(el.srcObject);
+    }
+  }
+
+  function sweep() {
+    while (pending.length) wireStream(pending.pop());
+    for (const pc of pcs) {
       try {
-        const el = document.createElement('audio');
-        el.autoplay = true;
-        el.volume = 1;
-        el.muted = false;
-        el.setAttribute('data-cortex-tap', '1');
-        el.style.display = 'none';
-        el.srcObject = new MediaStream([t]);
-        document.body.appendChild(el);
-        const p = el.play();
-        if (p && p.catch) p.catch(() => {});
-        const srcNode = ctx.createMediaElementSource(el);
-        srcNode.connect(mixer);
-        nodes.push(srcNode);
-        wired.push(t);
-        state.tracks = wired.length;
-        // El audio remoto suele llegar MUTED y desmutearse segundos después
-        // (Meet nos suscribe tarde). Cuando pase, que el elemento reanude.
-        t.addEventListener('unmute', () => { const p = el.play(); if (p && p.catch) p.catch(() => {}); });
-      } catch (e) {
-        // Si ya se le sacó un source al elemento, capturar la pista directo.
-        try {
-          const n = ctx.createMediaStreamSource(new MediaStream([t]));
-          n.connect(mixer);
-          nodes.push(n);
-          wired.push(t);
-          state.tracks = wired.length;
-        } catch (e2) { /* pista cerrada */ }
-      }
+        for (const r of pc.getReceivers ? pc.getReceivers() : []) {
+          if (r.track && r.track.kind === 'audio') wireTrack(r.track);
+        }
+      } catch (e) { /* pc cerrada */ }
     }
-    function wireStream(stream) {
-      if (!stream) return;
-      const tracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
-      for (const t of tracks) wireTrack(t);
-    }
-    function wireEl(el) {
-      if (el && el.srcObject) wireStream(el.srcObject);
-    }
-    function sweep() {
-      while (pending.length) wireStream(pending.pop());
-      // Los receivers de cada RTCPeerConnection: aquí vive el audio remoto
-      // aunque Meet nunca lo monte en un <audio> (elements:0). Es la fuente
-      // que no depende de la UI de Meet.
-      for (const pc of pcs) {
-        try {
-          for (const r of pc.getReceivers ? pc.getReceivers() : []) {
-            if (r.track && r.track.kind === 'audio') wireTrack(r.track);
-          }
-        } catch (e) { /* pc cerrada */ }
-      }
-      const els = document.querySelectorAll('audio:not([data-cortex-tap]), video');
-      state.elements = els.length;
-      for (const el of els) wireEl(el);
-      state.live = wired.filter((t) => t.readyState === 'live' && !t.muted).length;
-      state.pcs = pcs.length;
-      state.mine = document.querySelectorAll('audio[data-cortex-tap]').length;
-      state.playing = [...document.querySelectorAll('audio[data-cortex-tap]')]
-        .filter((e) => !e.paused && e.currentTime > 0).length;
-      state.trackInfo = wired
-        .slice(0, 6)
-        .map((t) => t.readyState[0] + (t.muted ? 'M' : '') + (t.enabled ? '' : 'D'))
-        .join(',');
-      state.vis = document.visibilityState;
+    wireMeetElements();
+    const liveTracks = sinks.map((s) => s.track).filter(Boolean);
+    state.tracks = sinks.length;
+    state.live = liveTracks.filter((t) => t.readyState === 'live' && !t.muted).length;
+    state.pcs = pcs.length;
+    const mine = document.querySelectorAll('audio[data-cortex-tap]');
+    state.mine = mine.length;
+    state.playing = [...mine].filter((e) => !e.paused).length;
+    state.trackInfo = liveTracks
+      .slice(0, 8)
+      .map((t) => (t.readyState[0] || '?') + (t.muted ? 'M' : '') + (t.enabled ? '' : 'D'))
+      .join(',');
+    state.vis = document.visibilityState;
+    if (ctx) {
       state.ctxState = ctx.state;
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     }
-    sweep();
-    setInterval(sweep, 500);
+  }
 
+  function disconnectWires() {
+    while (sinks.length) dropWire(sinks.pop());
+    seenTrack.clear();
+  }
+
+  async function start() {
+    if (state.started) return { ok: false, reason: 'already-started' };
+    state.started = true;
+    await setupGraph();
+    sweep();
+    if (!sweepTimer) sweepTimer = setInterval(sweep, 1000);
     refreshRoster();
     watchSpeaker();
-    return { ok: true, sampleRate: ctx.sampleRate };
+    return { ok: true, sampleRate: ctx && ctx.sampleRate, capture: state.capture };
+  }
+
+  function rewire() {
+    disconnectWires();
+    sweep();
+    return { ok: true, tracks: state.tracks, capture: state.capture };
+  }
+
+  async function restart() {
+    disconnectWires();
+    for (const n of nodes.splice(0)) {
+      try { n.disconnect(); } catch (e) { /* */ }
+    }
+    if (ctx) {
+      try { await ctx.close(); } catch (e) { /* */ }
+      ctx = null;
+    }
+    mixerHold.current = null;
+    state.started = false;
+    state.capture = 'none';
+    state.peak = 0;
+    state.recentPeak = 0;
+    return start();
   }
 
   function downsampleTo16k(float32, inRate) {
@@ -265,6 +350,8 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
   }
 
   function watchSpeaker() {
+    if (speakerWatched) return;
+    speakerWatched = true;
     const pick = () => refreshRoster();
     new MutationObserver(pick).observe(document.body, {
       subtree: true, attributes: true, childList: true,
@@ -273,10 +360,12 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     setInterval(pick, 400);
   }
 
-  window.__cortexTap = {
-    start,
-    level: () => ({
+  function snapshotLevel(consumeRecent) {
+    const recent = state.recentPeak;
+    if (consumeRecent) state.recentPeak = 0;
+    return {
       peak: state.peak,
+      recentPeak: recent,
       chunks: state.chunks,
       speaker: state.speaker,
       tracks: state.tracks,
@@ -288,7 +377,17 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
       trackInfo: state.trackInfo,
       vis: state.vis,
       ctx: state.ctxState,
-    }),
+      capture: state.capture,
+      lastRms: state.lastRms,
+    };
+  }
+
+  window.__cortexTap = {
+    start,
+    rewire,
+    restart,
+    peek: () => snapshotLevel(false),
+    level: () => snapshotLevel(true),
     roster: () => {
       refreshRoster();
       return state.roster.slice();

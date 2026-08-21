@@ -4,7 +4,7 @@ import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/ser
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
-import { type CoreTool, generateText, tool } from 'ai';
+import { type CoreTool, streamText, tool } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -32,6 +32,13 @@ export const maxDuration = 45;
  * lo que se dijo en la llamada.
  *
  * ===========================================================================
+ * STREAM, NO UN JSON AL FINAL
+ * ===========================================================================
+ * El bot de Meet pide `Accept: text/event-stream`. Cada cláusula (`text`) sale
+ * apenas el modelo la cierra; el bot la manda al WebSocket de Deepgram Aura y
+ * la sala oye la primera frase sin esperar el resto. `done` cierra el turno.
+ *
+ * ===========================================================================
  * MODO VOZ = AUTO-AUTORIZA. Y POR QUÉ ESO ES PELIGROSO Y AUN ASÍ CORRECTO.
  * ===========================================================================
  * En una reunión por voz no hay tarjeta que clickear: si una herramienta
@@ -49,7 +56,12 @@ const Body = z.object({
   sessionId: z.string().optional(),
   question: z.string().min(1).max(500),
   transcript: z.string().max(20_000),
+  /** Saludo / «¿me oyes?»: sin tools, para no gastar 2–4 s mirando el catálogo. */
+  quick: z.boolean().optional(),
 });
+
+/** Corta el texto en cláusulas: mandarlas al TTS apenas listas baja la latencia. */
+const CLAUSE = /^([\s\S]*?[.!?…,;:]+)(\s+)([\s\S]*)$/;
 
 const VOICE_PLANS = new Set((process.env.MEET_VOICE_PLANS || 'business,enterprise').split(','));
 
@@ -105,7 +117,7 @@ export async function POST(req: NextRequest) {
   if (!tokenOk(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'bad request' }, { status: 400 });
-  const { owner, question, transcript } = parsed.data;
+  const { owner, question, transcript, quick } = parsed.data;
 
   // El flag de plan: sin voz en el plan, 403 y el bot se calla.
   const plan = await readWorkspacePlan(getOrgScopedClient(owner)).catch(() => null);
@@ -147,51 +159,94 @@ export async function POST(req: NextRequest) {
   }));
 
   const aiTools: Record<string, CoreTool> = {};
-  for (const def of listTools()) {
-    const family = def.id.split('.')[0] ?? '';
-    if (VOICE_FAMILIES_BLOCKED.has(family)) continue;
-    aiTools[def.id.replaceAll('.', '_')] = tool({
-      description: def.description,
-      parameters: def.inputSchema,
-      execute: async (args, { abortSignal }) => {
-        try {
-          // MODO VOZ: auto-autoriza. Ver la cabecera para lo que abre.
-          return await runTool(
-            def,
-            args,
-            { ...scopedCtx, signal: abortSignal },
-            { confirmed: true },
-          );
-        } catch (err) {
-          if (err instanceof ConfirmationRequiredError) {
-            return { __error: true, message: 'necesitaba confirmación' };
+  if (!quick) {
+    for (const def of listTools()) {
+      const family = def.id.split('.')[0] ?? '';
+      if (VOICE_FAMILIES_BLOCKED.has(family)) continue;
+      aiTools[def.id.replaceAll('.', '_')] = tool({
+        description: def.description,
+        parameters: def.inputSchema,
+        execute: async (args, { abortSignal }) => {
+          try {
+            // MODO VOZ: auto-autoriza. Ver la cabecera para lo que abre.
+            return await runTool(
+              def,
+              args,
+              { ...scopedCtx, signal: abortSignal },
+              { confirmed: true },
+            );
+          } catch (err) {
+            if (err instanceof ConfirmationRequiredError) {
+              return { __error: true, message: 'necesitaba confirmación' };
+            }
+            return { __error: true, message: (err as Error).message };
           }
-          return { __error: true, message: (err as Error).message };
-        }
-      },
-    });
+        },
+      });
+    }
   }
 
   // voiceModel(): sin thinking. Con chatModel() un «hola, ¿cómo estás?» tardaba
   // ~30 s y a veces volvía con text vacío (el bot callaba sin error, 21-08).
-  const { text, steps } = await generateText({
+  const result = streamText({
     model: voiceModel(),
     system,
     prompt: `TE DIJERON EN LA REUNIÓN: ${question}`,
-    tools: aiTools,
-    maxSteps: 6,
+    ...(quick ? { maxSteps: 1 as const } : { tools: aiTools, maxSteps: 6 as const }),
   });
 
-  // Vacío nunca: si el modelo se quedó en una herramienta o no dijo nada, al
-  // menos que la sala oiga que está ahí.
-  const answer =
-    text.trim() ||
-    (steps.some((s) => s.toolCalls.length > 0)
-      ? 'Listo, ya lo hice.'
-      : 'Aquí estoy. ¿En qué te ayudo?');
-  logger.info(
-    { owner, sessionId: parsed.data.sessionId, ms: Date.now() - startedAt, chars: answer.length },
-    'voice-answer',
-  );
-  return NextResponse.json({ answer });
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      };
+      try {
+        let buf = '';
+        let sent = 0;
+        for await (const delta of result.textStream) {
+          buf += delta;
+          let m = buf.match(CLAUSE);
+          while (m) {
+            const clause = (m[1] ?? '').trim();
+            if (clause) {
+              send('text', { text: clause });
+              sent += 1;
+            }
+            buf = m[3] ?? '';
+            m = buf.match(CLAUSE);
+          }
+        }
+        if (buf.trim()) {
+          send('text', { text: buf.trim() });
+          sent += 1;
+        }
+        if (sent === 0) send('text', { text: 'Aquí estoy. ¿En qué te ayudo?' });
+        send('done', {});
+        logger.info(
+          {
+            owner,
+            sessionId: parsed.data.sessionId,
+            ms: Date.now() - startedAt,
+            clauses: sent,
+            quick: Boolean(quick),
+          },
+          'voice-answer',
+        );
+      } catch (err) {
+        logger.error({ err }, 'voice-answer stream');
+        send('error', { message: 'No pude responder.' });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache, no-transform',
+      connection: 'keep-alive',
+    },
+  });
 }

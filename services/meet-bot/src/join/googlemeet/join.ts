@@ -10,10 +10,15 @@ import {
   googleLobbyIconGlyphSelectors,
   googleLobbyCtaMaxLabelChars
 } from "./selectors";
-import { HumanizedInteractor, MOCAP_LIBRARY } from "./humanized";
+import { HumanizedInteractor, MOCAP_LIBRARY, X11Input } from "./humanized";
 import { AdmissionError } from "../shared/admission";
 import { resolveBotUiLocale } from "../browser-args";
-import { locateGoogleMeetMicrophone, locateSelfMuted, locateUnmuteBanner } from "./microphone";
+import {
+  locateGoogleMeetMicrophone,
+  locateSelfMuted,
+  locateUnmuteBanner,
+  googleMeetMicButtonElement,
+} from "./microphone";
 
 /** Thrown when authenticated mode detects a signed-out browser profile. Extends AdmissionError so
  *  the JoinDriver's single `instanceof` catch maps the typed `auth_session_missing` outcome to a
@@ -31,56 +36,168 @@ export class AuthSessionError extends AdmissionError {
  * Activar). No es un toggle ciego, y no se asume «ya está» cuando el
  * botón no aparece: la barra se esconde sola y hay que despertarla.
  */
-export async function setGoogleMeetMicrophone(page: Page, wantOn: boolean): Promise<void> {
-  const readSelf = () => page.evaluate(locateSelfMuted).catch(() => null);
-  const settled = async (): Promise<boolean> => {
-    const selfMuted = await readSelf();
-    if (selfMuted !== null) return selfMuted === !wantOn;
-    const loc = await page.evaluate(locateGoogleMeetMicrophone).catch(() => null);
-    return Boolean(loc?.found && loc.on === wantOn);
-  };
-
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    try {
-      await page.mouse.move(640, 360);
-      await page.mouse.move(960, 980);
-    } catch {
-      /* sin puntero: igual intentamos leer el DOM */
-    }
-    if (wantOn) {
-      const banner = await page.evaluate(locateUnmuteBanner).catch(() => ({ found: false, x: 0, y: 0 }));
-      if (banner.found) {
-        await page.mouse.click(banner.x, banner.y).catch(() => undefined);
-        log("Clicked Meet unmute banner.");
-      }
-    }
-    const loc = await page.evaluate(locateGoogleMeetMicrophone).catch(() => ({
+export async function setGoogleMeetMicrophone(
+  page: Page,
+  wantOn: boolean,
+  selfName?: string,
+  display?: string,
+  opts?: { onlyIfNeeded?: boolean },
+): Promise<void> {
+  const readSelf = () =>
+    page.evaluate(locateSelfMuted, selfName ?? null).catch(() => null);
+  const readLoc = () =>
+    page.evaluate(locateGoogleMeetMicrophone).catch(() => ({
       found: false,
       on: false,
       x: 0,
       y: 0,
       label: "",
+      mutedAttr: null as string | null,
+      area: 0,
     }));
-    const selfMuted = await readSelf();
-    log(`Microphone inspect #${attempt}: ${JSON.stringify({ ...loc, selfMuted })}`);
 
-    // El mosaico propio manda: si dice lo que queremos, listo.
-    if (await settled()) {
-      log(wantOn ? "Microphone on (room sees it open)." : "Microphone muted (room sees it).");
+  if (opts?.onlyIfNeeded) {
+    const selfMuted = await readSelf();
+    const loc = await readLoc();
+    if (wantOn && selfMuted === false) {
+      log("Microphone already on — skip XTEST.");
+      return;
+    }
+    if (
+      wantOn &&
+      selfMuted !== true &&
+      loc.found &&
+      loc.on &&
+      loc.mutedAttr !== "true"
+    ) {
+      log("Microphone button already on — skip XTEST.");
+      return;
+    }
+    if (!wantOn && (selfMuted === true || (loc.found && loc.on === false))) {
+      log("Microphone already muted — skip XTEST.");
+      return;
+    }
+  }
+
+  const x11 = new X11Input({ display: display || process.env.DISPLAY || ":99" });
+  const x11Ok = await x11.isAvailable().catch(() => false);
+  const humanizer = x11Ok
+    ? new HumanizedInteractor(MOCAP_LIBRARY, {
+        log,
+        display: display || process.env.DISPLAY || ":99",
+      })
+    : null;
+
+  const wakeToolbar = async () => {
+    try {
+      await page.bringToFront();
+    } catch {
+      /* */
+    }
+    if (x11Ok) {
+      await x11.moveAbs(960, 1040).catch(() => undefined);
+    } else {
+      await page.mouse.move(960, 980).catch(() => undefined);
+    }
+    await page.waitForTimeout(250);
+  };
+
+  const trustedClickMic = async (): Promise<boolean> => {
+    const handle = (await page.evaluateHandle(googleMeetMicButtonElement).catch(() => null)) as
+      | ElementHandle<Element>
+      | null;
+    const el = handle ? await handle.asElement() : null;
+    if (!el) {
+      log("Microphone button handle missing.");
+      return false;
+    }
+    try {
+      if (humanizer) {
+        await humanizer.navigateAndClick(page, el);
+        log("Microphone clicked via XTEST (trusted).");
+        return true;
+      }
+      await el.click({ timeout: 2_000 });
+      log("Microphone clicked via Playwright (untrusted fallback).");
+      return true;
+    } catch (err) {
+      log(`Microphone click failed: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    } finally {
+      await handle?.dispose().catch(() => undefined);
+    }
+  };
+
+  const trustedToggleShortcut = async () => {
+    if (x11Ok) {
+      await x11.key("ctrl+d");
+      log("Pressed Ctrl+D via XTEST (trusted).");
+      return;
+    }
+    await page.keyboard.press("Control+d").catch(() => undefined);
+    log("Pressed Ctrl+D via Playwright (untrusted fallback).");
+  };
+
+  const roomAgrees = async (
+    loc: Awaited<ReturnType<typeof readLoc>>,
+    trustedActions: number,
+  ): Promise<boolean> => {
+    const selfMuted = await readSelf();
+    if (selfMuted === true) return !wantOn;
+    if (selfMuted === false) return wantOn;
+    if (!loc.found) return false;
+    if (wantOn && loc.mutedAttr === "true") return false;
+    // Sin mosaico, el botón miente. Un click XTEST obligatorio; si después
+    // sigue diciendo on, lo damos por bueno.
+    if (wantOn && loc.on && trustedActions === 0) return false;
+    return loc.on === wantOn;
+  };
+
+  let trustedActions = 0;
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    await wakeToolbar();
+    if (wantOn) {
+      const banner = await page.evaluate(locateUnmuteBanner).catch(() => ({ found: false, x: 0, y: 0 }));
+      if (banner.found) {
+        if (x11Ok) {
+          await x11.moveAbs(Math.round(banner.x), Math.round(banner.y)).catch(() => undefined);
+          await x11.buttonDown(1).catch(() => undefined);
+          await page.waitForTimeout(50);
+          await x11.buttonUp(1).catch(() => undefined);
+        } else {
+          await page.mouse.click(banner.x, banner.y).catch(() => undefined);
+        }
+        log("Clicked Meet unmute banner.");
+        await page.waitForTimeout(400);
+      }
+    }
+
+    const loc = await readLoc();
+    const selfMuted = await readSelf();
+    log(`Microphone inspect #${attempt}: ${JSON.stringify({ ...loc, selfMuted, x11: x11Ok })}`);
+
+    if (await roomAgrees(loc, trustedActions)) {
+      log(wantOn ? "Microphone on (room/button agree)." : "Microphone muted (room/button agree).");
       return;
     }
 
-    // 1) el botón, si está y su estado no coincide con lo que queremos;
-    // 2) si el botón dice «ya está» pero la sala no, el atajo de Meet (Ctrl+D).
-    if (loc.found && loc.on !== wantOn) {
-      await page.mouse.click(loc.x, loc.y).catch(() => undefined);
-      log("Clicked microphone button.");
+    const buttonSaysOff = loc.found && (loc.on === false || loc.mutedAttr === "true");
+    const tileMuted = selfMuted === true;
+    if (wantOn && (buttonSaysOff || tileMuted || trustedActions === 0)) {
+      const clicked = await trustedClickMic();
+      trustedActions += 1;
+      if (!clicked) await trustedToggleShortcut();
+    } else if (!wantOn) {
+      if (loc.found && loc.on === true) await trustedClickMic();
+      else await trustedToggleShortcut();
+      trustedActions += 1;
     } else {
-      await page.keyboard.press("Control+d").catch(() => undefined);
-      log("Pressed Ctrl+D to toggle microphone.");
+      await trustedToggleShortcut();
+      trustedActions += 1;
     }
-    await page.waitForTimeout(600);
-    if (await settled()) {
+    await page.waitForTimeout(700);
+    const after = await readLoc();
+    if (await roomAgrees(after, trustedActions)) {
       log(wantOn ? "Microphone on (voice)." : "Microphone muted.");
       return;
     }
@@ -494,7 +611,7 @@ export async function joinGoogleMeeting(
     log("📸 Diagnostic screenshot: auth lobby state");
 
     // Mic: Meet suele nacer muteado. Con voz hay que ENCENDERLO; sin voz, apagarlo.
-    await setGoogleMeetMicrophone(page, Boolean(botConfig.voiceEnabled));
+    await setGoogleMeetMicrophone(page, Boolean(botConfig.voiceEnabled), botConfig.botName, botConfig.display);
 
     try {
       const cameraHandle = await page.waitForSelector(googleCameraButtonSelectors[0], { timeout: 3000 });
@@ -551,7 +668,7 @@ export async function joinGoogleMeeting(
 
     await fillField(nameHandle!, nameFieldSelector, botName, "name");
 
-    await setGoogleMeetMicrophone(page, Boolean(botConfig.voiceEnabled));
+    await setGoogleMeetMicrophone(page, Boolean(botConfig.voiceEnabled), botConfig.botName, botConfig.display);
 
     try {
       const cameraHandle = await page.waitForSelector(googleCameraButtonSelectors[0], { timeout: 1000 });

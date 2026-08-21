@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import type { BrowserContext, Page } from 'playwright';
 import { AUDIO_TAP_SCRIPT } from './audio-tap';
+import { chunksStalled, shouldRestartCapture, shouldRewireTracks } from './capture-health';
 import type { Config } from './config';
 import { DeepgramStream, type Transcript } from './deepgram';
 import { ensureGoogleSession } from './google-login';
@@ -108,6 +109,7 @@ export class MeetSession {
   private xvfb: ChildProcess | null = null;
   private display: string | undefined;
   private rosterTimer: ReturnType<typeof setInterval> | null = null;
+  private captureTimer: ReturnType<typeof setInterval> | null = null;
   private roster: MeetingParticipant[] = [];
   private finishing = false;
   private sawOthers = false;
@@ -127,7 +129,7 @@ export class MeetSession {
 
   setVoiceMuted(muted: boolean): void {
     this.voice?.setMuted(muted);
-    if (this.page) void setGoogleMeetMicrophone(this.page, !muted);
+    if (this.page) void setGoogleMeetMicrophone(this.page, !muted, this.botName, this.display);
   }
 
   /**
@@ -193,7 +195,10 @@ export class MeetSession {
 
     await this.context.addInitScript(AUDIO_TAP_SCRIPT);
     await page.evaluate(AUDIO_TAP_SCRIPT).catch(() => undefined);
-    if (this.voiceEnabled) await this.context.addInitScript(VOICE_INJECT_SCRIPT);
+    if (this.voiceEnabled) {
+      await this.context.addInitScript(VOICE_INJECT_SCRIPT);
+      await page.evaluate(VOICE_INJECT_SCRIPT).catch(() => undefined);
+    }
 
     await this.context.exposeBinding(
       '__cortexAudioChunk',
@@ -317,6 +322,7 @@ export class MeetSession {
 
     await this.armAudioTap(page);
     this.startRosterWatch(page);
+    this.startCaptureWatch(page);
     if (this.voiceEnabled) await this.ensureVoiceReady();
     this.startCallEndWatch(page);
     this.setStatus('live');
@@ -354,7 +360,7 @@ export class MeetSession {
       setTimeout(() => {
         if (page.isClosed()) return;
         void page
-          .evaluate('(window.__cortexTap && window.__cortexTap.level()) || {peak:0,chunks:0}')
+          .evaluate('(window.__cortexTap && (window.__cortexTap.peek || window.__cortexTap.level)()) || {peak:0,chunks:0}')
           .then((lvl) =>
             console.log(
               `[cortex-meet] ${this.id} audio level @${delay / 1000}s ${JSON.stringify(lvl)}`,
@@ -363,6 +369,77 @@ export class MeetSession {
           .catch(() => undefined);
       }, delay);
     }
+  }
+
+  /**
+   * Si el worklet/ScriptProcessor se muere o las pistas se reciclan en silencio,
+   * Deepgram se queda ciego a mitad de llamada. Cada 10 s se mira el snapshot
+   * del tap y se reengancha o se recrea el grafo, como el rescan de Vexa.
+   */
+  private startCaptureWatch(page: Page): void {
+    let lastChunks = 0;
+    let stallRounds = 0;
+    let silentRounds = 0;
+    const tick = async () => {
+      if (this.status !== 'live' || page.isClosed()) return;
+      const lvl = (await page
+        .evaluate(
+          '(window.__cortexTap && window.__cortexTap.level()) || {peak:0,recentPeak:0,chunks:0,live:0,playing:0,speaker:null}',
+        )
+        .catch(() => null)) as {
+        chunks?: number;
+        live?: number;
+        recentPeak?: number;
+        peak?: number;
+        playing?: number;
+        speaker?: string | null;
+        capture?: string;
+        trackInfo?: string;
+      } | null;
+      if (!lvl) return;
+      const chunks = lvl.chunks ?? 0;
+      if (chunksStalled(lastChunks, chunks)) stallRounds += 1;
+      else stallRounds = 0;
+      lastChunks = chunks;
+      const snapshot = {
+        silentRounds,
+        speaker: lvl.speaker ?? null,
+        live: lvl.live ?? 0,
+        recentPeak: lvl.recentPeak ?? 0,
+      };
+      if (snapshot.live > 0 && snapshot.recentPeak < 0.0005) silentRounds += 1;
+      else silentRounds = 0;
+      snapshot.silentRounds = silentRounds;
+      console.log(
+        `[cortex-meet] ${this.id} audio watch chunks=${chunks} live=${snapshot.live} recentPeak=${snapshot.recentPeak.toFixed(4)} stall=${stallRounds} silent=${silentRounds} capture=${lvl.capture ?? '?'} tracks=${lvl.trackInfo ?? ''}`,
+      );
+
+      if (shouldRestartCapture(stallRounds)) {
+        stallRounds = 0;
+        silentRounds = 0;
+        const result = await page
+          .evaluate(
+            '(window.__cortexTap && window.__cortexTap.restart && window.__cortexTap.restart()) || {ok:false}',
+          )
+          .catch((err: Error) => ({ ok: false, reason: err.message }));
+        console.log(
+          `[cortex-meet] ${this.id} audio restart (chunks stalled) ${JSON.stringify(result)}`,
+        );
+        return;
+      }
+      if (shouldRewireTracks(snapshot)) {
+        silentRounds = 0;
+        const result = await page
+          .evaluate(
+            '(window.__cortexTap && window.__cortexTap.rewire && window.__cortexTap.rewire()) || {ok:false}',
+          )
+          .catch((err: Error) => ({ ok: false, reason: err.message }));
+        console.log(
+          `[cortex-meet] ${this.id} audio rewire (live tracks silent) ${JSON.stringify(result)}`,
+        );
+      }
+    };
+    this.captureTimer = setInterval(() => void tick(), 10_000);
   }
 
   private startRosterWatch(page: Page): void {
@@ -439,7 +516,15 @@ export class MeetSession {
     if (!page) return false;
     this.voiceEnabled = true;
     await page.evaluate(VOICE_INJECT_SCRIPT).catch(() => undefined);
-    await setGoogleMeetMicrophone(page, true);
+    await setGoogleMeetMicrophone(page, true, this.botName, this.display);
+    const armed = await page
+      .evaluate(() =>
+        (
+          window as unknown as { __cortexVoice?: { arm?: () => Promise<unknown> } }
+        ).__cortexVoice?.arm?.() ?? { error: 'sin __cortexVoice.arm' },
+      )
+      .catch((err: Error) => ({ error: err.message }));
+    console.log(`[cortex-meet] ${this.id} voice arm ${JSON.stringify(armed)}`);
     if (this.voice) return true;
     this.voice = new VoiceBrain(this.owner, this.id, {
       config: this.config,
@@ -460,7 +545,7 @@ export class MeetSession {
         console.log(`[cortex-meet] ${this.id} speak ${JSON.stringify(result)}`);
       },
       mute: async () => {
-        await setGoogleMeetMicrophone(page, false);
+        await setGoogleMeetMicrophone(page, false, this.botName, this.display);
         await page
           .evaluate(() =>
             (window as unknown as { __cortexVoice?: { mute: () => void } }).__cortexVoice?.mute(),
@@ -468,12 +553,45 @@ export class MeetSession {
           .catch(() => undefined);
       },
       unmute: async () => {
-        await setGoogleMeetMicrophone(page, true);
         await page
           .evaluate(() =>
             (
               window as unknown as { __cortexVoice?: { unmute: () => void } }
             ).__cortexVoice?.unmute(),
+          )
+          .catch(() => undefined);
+        await setGoogleMeetMicrophone(page, true, this.botName, this.display, {
+          onlyIfNeeded: true,
+        });
+      },
+      beginSpeak: async () => {
+        await page
+          .evaluate(() =>
+            (
+              window as unknown as { __cortexVoice?: { beginSpeak?: () => Promise<unknown> } }
+            ).__cortexVoice?.beginSpeak?.(),
+          )
+          .catch(() => undefined);
+      },
+      pushPcm: async (b64, sampleRate) => {
+        await page
+          .evaluate(
+            ({ pcm, rate }) =>
+              (
+                window as unknown as {
+                  __cortexVoice?: { speakPcm?: (b: string, s: number) => unknown };
+                }
+              ).__cortexVoice?.speakPcm?.(pcm, rate),
+            { pcm: b64, rate: sampleRate },
+          )
+          .catch(() => undefined);
+      },
+      endSpeak: async () => {
+        await page
+          .evaluate(() =>
+            (
+              window as unknown as { __cortexVoice?: { endSpeak?: () => Promise<unknown> } }
+            ).__cortexVoice?.endSpeak?.(),
           )
           .catch(() => undefined);
       },
@@ -487,6 +605,10 @@ export class MeetSession {
     if (this.rosterTimer) {
       clearInterval(this.rosterTimer);
       this.rosterTimer = null;
+    }
+    if (this.captureTimer) {
+      clearInterval(this.captureTimer);
+      this.captureTimer = null;
     }
     this.stopRemoval?.();
     this.stopRemoval = null;

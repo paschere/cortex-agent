@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "spike": "tsx src/spike.ts",
     "login": "tsx src/login.ts",
-    "test": "tsx src/join/googlemeet/humanized/humanized.test.ts && tsx src/join/googlemeet/admission.test.ts && tsx src/join/googlemeet/microphone.test.ts && tsx src/join/googlemeet/call-end.test.ts",
+    "test": "tsx src/join/googlemeet/humanized/humanized.test.ts && tsx src/join/googlemeet/admission.test.ts && tsx src/join/googlemeet/microphone.test.ts && tsx src/join/googlemeet/call-end.test.ts && tsx src/capture-health.test.ts && tsx src/voice-inject.test.ts",
     "lint": "biome check src",
     "typecheck": "tsc --noEmit"
   },
