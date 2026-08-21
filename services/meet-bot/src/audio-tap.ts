@@ -144,7 +144,12 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
       try {
         const el = document.createElement('audio');
         el.autoplay = true;
-        el.volume = 0;
+        // volume=0 hace que Chromium NO decodifique la pista (21-08: peak=0
+        // con tracks>0). El contenedor no tiene altavoces, así que volumen
+        // real no se oye en ningún lado; solo mantiene la pista FLUYENDO para
+        // que createMediaStreamSource entregue muestras.
+        el.volume = 1;
+        el.muted = false;
         el.setAttribute('data-cortex-tap', '1');
         el.style.display = 'none';
         el.srcObject = new MediaStream([t]);
