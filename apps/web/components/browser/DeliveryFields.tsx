@@ -75,9 +75,7 @@ export function DeliveryFields({
               value={value.outputLabel}
               maxLength={120}
               placeholder={
-                value.outputKind === 'document'
-                  ? 'Certificado de tradición'
-                  : 'Estado del vehículo'
+                value.outputKind === 'document' ? 'Certificado de tradición' : 'Estado del vehículo'
               }
               onChange={(e) => onChange({ ...value, outputLabel: e.target.value })}
             />

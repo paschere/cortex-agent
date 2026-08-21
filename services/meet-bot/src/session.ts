@@ -98,6 +98,7 @@ export class MeetSession {
   private page: Page | null = null;
   private deepgram: DeepgramStream | null = null;
   private status: MeetStatus = 'joining';
+  private finalCount = 0;
   private endedReason: string | null = null;
   private voice: VoiceBrain | null = null;
   private voiceEnabled: boolean;
@@ -210,6 +211,15 @@ export class MeetSession {
         null;
       const line = { ...t, speaker };
       if (line.isFinal) {
+        // Rastro de que SÍ se oye: la primera frase y luego una de cada 25.
+        // Sin esto, «entra pero no transcribe» no se puede distinguir de
+        // «nadie habló» en los logs (pasó el 21-08).
+        this.finalCount += 1;
+        if (this.finalCount === 1 || this.finalCount % 25 === 0) {
+          console.log(
+            `[cortex-meet] ${this.id} transcript #${this.finalCount} ${speaker ?? '?'}: ${line.text.slice(0, 80)}`,
+          );
+        }
         this.recent.push(line);
         if (this.recent.length > 200) this.recent.shift();
         if (this.voice) void this.voice.onFinalLine(line);
@@ -247,23 +257,26 @@ export class MeetSession {
     };
     this.botConfig = botConfig;
 
-    setHooks({
-      onState: (state, detail) => {
-        if (state === 'joining') this.setStatus('joining');
-        else if (state === 'awaiting_admission') this.setStatus('waiting-admit');
-        else if (state === 'blocked' || state === 'needs_human_help') {
-          this.setStatus(
-            'waiting-admit',
-            typeof detail === 'string' ? detail : JSON.stringify(detail ?? {}),
-          );
-        } else if (state === 'rejected') {
-          this.setStatus('failed', typeof detail === 'string' ? detail : 'Meet rechazó al bot.');
-        }
+    setHooks(
+      {
+        onState: (state, detail) => {
+          if (state === 'joining') this.setStatus('joining');
+          else if (state === 'awaiting_admission') this.setStatus('waiting-admit');
+          else if (state === 'blocked' || state === 'needs_human_help') {
+            this.setStatus(
+              'waiting-admit',
+              typeof detail === 'string' ? detail : JSON.stringify(detail ?? {}),
+            );
+          } else if (state === 'rejected') {
+            this.setStatus('failed', typeof detail === 'string' ? detail : 'Meet rechazó al bot.');
+          }
+        },
+        onStopRecording: async () => {
+          await this.deepgram?.stop().catch(() => undefined);
+        },
       },
-      onStopRecording: async () => {
-        await this.deepgram?.stop().catch(() => undefined);
-      },
-    });
+      botConfig,
+    );
 
     const maxAttempts = 3;
     let admitted = false;
@@ -335,12 +348,21 @@ export class MeetSession {
       .evaluate('(window.__cortexTap && window.__cortexTap.start()) || {ok:false,reason:"sin tap"}')
       .catch((err: Error) => ({ ok: false, reason: err.message }));
     console.log(`[cortex-meet] ${this.id} audio tap ${JSON.stringify(started)}`);
-    setTimeout(() => {
-      void page
-        .evaluate('(window.__cortexTap && window.__cortexTap.level()) || {peak:0,chunks:0}')
-        .then((lvl) => console.log(`[cortex-meet] ${this.id} audio level ${JSON.stringify(lvl)}`))
-        .catch(() => undefined);
-    }, 4_000);
+    // Tres lecturas, no una: a los 4 s casi siempre hay silencio; a los 30 s y
+    // 2 min ya se sabe si el tap oye (peak > 0) o si la sala está muda para él.
+    for (const delay of [4_000, 30_000, 120_000]) {
+      setTimeout(() => {
+        if (page.isClosed()) return;
+        void page
+          .evaluate('(window.__cortexTap && window.__cortexTap.level()) || {peak:0,chunks:0}')
+          .then((lvl) =>
+            console.log(
+              `[cortex-meet] ${this.id} audio level @${delay / 1000}s ${JSON.stringify(lvl)}`,
+            ),
+          )
+          .catch(() => undefined);
+      }, delay);
+    }
   }
 
   private startRosterWatch(page: Page): void {

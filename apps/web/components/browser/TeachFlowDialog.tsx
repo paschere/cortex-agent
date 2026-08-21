@@ -92,7 +92,9 @@ export function TeachFlowDialog({ onCompose }: { onCompose: (text: string) => vo
             <div className="rounded-card border border-border bg-surface p-5 shadow-card">
               <div className="flex items-start gap-2">
                 <CheckCircle2
-                  className={saved.verified ? 'mt-0.5 h-4 w-4 text-emerald' : 'mt-0.5 h-4 w-4 text-amber'}
+                  className={
+                    saved.verified ? 'mt-0.5 h-4 w-4 text-emerald' : 'mt-0.5 h-4 w-4 text-amber'
+                  }
                   aria-hidden="true"
                 />
                 <p className="text-sm leading-relaxed text-ink">{saved.message}</p>

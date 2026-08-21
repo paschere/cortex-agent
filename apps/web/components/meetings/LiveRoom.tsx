@@ -387,7 +387,7 @@ export function LiveRoom({
                 key={`${m.role}-${i}`}
                 className={`max-w-[85%] rounded-card px-3 py-2 text-sm ${
                   m.role === 'you'
-                    ? 'self-end bg-primary text-primary-ink'
+                    ? 'self-end bg-primary text-white'
                     : 'self-start bg-surface-2 text-ink'
                 }`}
               >
@@ -415,7 +415,7 @@ export function LiveRoom({
               type="button"
               disabled={asking || !question.trim()}
               onClick={() => void ask()}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-ink disabled:opacity-50"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-white disabled:opacity-50"
               aria-label="Preguntar"
             >
               <Send className="h-4 w-4" />

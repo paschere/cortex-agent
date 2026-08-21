@@ -179,6 +179,27 @@ export function startServer(config: Config): Server {
         json(res, 400, { error: 'owner y un meetUrl de meet.google.com son obligatorios' });
         return;
       }
+      // IDEMPOTENTE POR REUNIÓN. Si este espacio de trabajo ya tiene una sesión
+      // viva en el mismo Meet, se devuelve ESA en vez de mandar un segundo
+      // bot: dos pestañas pidiendo entrar a la vez confunden al anfitrión y,
+      // el 21-08, la segunda (rechazada) se llevó los callbacks de la primera.
+      const code = (u: string) =>
+        u
+          .replace(/[?#].*$/, '')
+          .replace(/\/+$/, '')
+          .toLowerCase();
+      const existing = [...meetings.entries()].find(
+        ([, m]) =>
+          m.owner === owner &&
+          code(m.meetUrl) === code(meetUrl) &&
+          m.status !== 'ended' &&
+          m.status !== 'failed',
+      );
+      if (existing) {
+        console.log(`[cortex-meet] ${existing[0]} ya está en ${meetUrl}; se reutiliza`);
+        json(res, 200, { sessionId: existing[0], reused: true });
+        return;
+      }
       if (meetings.size >= config.maxConcurrent) {
         json(res, 429, { error: 'El bot está en el máximo de reuniones a la vez.' });
         return;
@@ -301,7 +322,9 @@ export function startServer(config: Config): Server {
         return;
       }
       const body = await readBody(req);
-      const text = String(body.text ?? '').trim().slice(0, 500);
+      const text = String(body.text ?? '')
+        .trim()
+        .slice(0, 500);
       if (!text) {
         json(res, 400, { error: 'falta el texto' });
         return;

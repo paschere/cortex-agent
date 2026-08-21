@@ -57,7 +57,15 @@ import { useState } from 'react';
  * the only fact here that can hurt.
  */
 
-type Status = 'idle' | 'editing' | 'saving' | 'sending' | 'sent' | 'dismissing' | 'dismissed' | 'error';
+type Status =
+  | 'idle'
+  | 'editing'
+  | 'saving'
+  | 'sending'
+  | 'sent'
+  | 'dismissing'
+  | 'dismissed'
+  | 'error';
 
 /**
  * The outcome palette speaks the design system's colour vocabulary, where the
@@ -404,9 +412,7 @@ function SettledSummary({ action }: { action: ActionView }) {
         )}
       </div>
       <p className="mt-1 truncate text-xs text-ink-muted">{action.subject}</p>
-      {action.outcomeNote && (
-        <p className="mt-1 text-xs text-ink-faint">{action.outcomeNote}</p>
-      )}
+      {action.outcomeNote && <p className="mt-1 text-xs text-ink-faint">{action.outcomeNote}</p>}
     </div>
   );
 }

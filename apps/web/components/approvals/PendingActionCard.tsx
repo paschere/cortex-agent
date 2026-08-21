@@ -268,9 +268,7 @@ export function PendingActionCard({
             </span>
           </div>
           <p className="mt-0.5 text-sm font-semibold text-ink">{title}</p>
-          <p className="mt-1 text-xs leading-snug text-ink-muted">
-            {confirmationReason(toolId)}
-          </p>
+          <p className="mt-1 text-xs leading-snug text-ink-muted">{confirmationReason(toolId)}</p>
           {originLabel && (
             <p className="mt-1 text-micro text-ink-faint">Quedó pendiente en {originLabel}.</p>
           )}

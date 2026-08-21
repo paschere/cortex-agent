@@ -68,7 +68,7 @@ export async function leaveGoogleMeet(page: Page | null, botConfig?: BotConfig, 
   // __vexaFlushRecordingBlob full-blob path (dead under chunked upload).
   try {
     log("[leaveGoogleMeet] Stopping recording pipeline before leave...");
-    await stopGoogleRecording();
+    await stopGoogleRecording(page, botConfig);
   } catch (flushError: any) {
     // v0.10.5 Pack G.1 — recording-flush failure means the final chunk
     // never made it; chunks already in MinIO are still durable, but the

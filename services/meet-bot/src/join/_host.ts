@@ -56,18 +56,32 @@ const defaultHooks: Hooks = {
   onState: (s, d) => log(`>>> [JOIN-STATE] ${s}${d ? " — " + JSON.stringify(d) : ""}`),
   onStopRecording: () => {},
 };
-let hooks: Hooks = { ...defaultHooks };
-export function setHooks(h: Partial<Hooks>): void { hooks = { ...defaultHooks, ...h }; }
+// HOOKS POR SESIÓN, NO GLOBALES. El bot corre varias reuniones a la vez en
+// el mismo proceso; con un solo juego de hooks, la última sesión en llamar a
+// setHooks se quedaba con los callbacks de TODAS (el 21-08 una sesión
+// rechazada recibió los estados de la admitida y le paró el Deepgram al
+// salir). Cada callback recibe el botConfig de su sesión: es la llave.
+let globalHooks: Hooks = { ...defaultHooks };
+const perConfig = new WeakMap<object, Hooks>();
+export function setHooks(h: Partial<Hooks>, botConfig?: BotConfig): void {
+  const merged = { ...defaultHooks, ...h };
+  if (botConfig) perConfig.set(botConfig, merged);
+  else globalHooks = merged;
+}
+export function clearHooks(botConfig: BotConfig): void { perConfig.delete(botConfig); }
+function hooksFor(botConfig?: BotConfig): Hooks {
+  return (botConfig && perConfig.get(botConfig)) || globalHooks;
+}
 
 // ── The exact symbols the copied files import ──────────────────────────
-export async function callJoiningCallback(_botConfig: BotConfig): Promise<void> {
-  await hooks.onState("joining");
+export async function callJoiningCallback(botConfig: BotConfig): Promise<void> {
+  await hooksFor(botConfig).onState("joining");
 }
-export async function callAwaitingAdmissionCallback(_botConfig: BotConfig): Promise<void> {
-  await hooks.onState("awaiting_admission");
+export async function callAwaitingAdmissionCallback(botConfig: BotConfig): Promise<void> {
+  await hooksFor(botConfig).onState("awaiting_admission");
 }
-export async function callLeaveCallback(_botConfig: BotConfig, ...rest: any[]): Promise<void> {
-  await hooks.onState("leaving", rest?.[0]);
+export async function callLeaveCallback(botConfig: BotConfig, ...rest: any[]): Promise<void> {
+  await hooksFor(botConfig).onState("leaving", rest?.[0]);
 }
 /**
  * Bot-detection block (reCAPTCHA / blank block page). The join layer does NOT
@@ -75,24 +89,24 @@ export async function callLeaveCallback(_botConfig: BotConfig, ...rest: any[]): 
  * surface the state so the host stops waiting blind. Emitted once per block.
  */
 export async function callBlockedCallback(
-  _botConfig: BotConfig, reason: string, detail?: any,
+  botConfig: BotConfig, reason: string, detail?: any,
 ): Promise<void> {
-  await hooks.onState("blocked", { reason, ...detail });
+  await hooksFor(botConfig).onState("blocked", { reason, ...detail });
 }
 export async function callNeedsHumanHelpCallback(
-  _botConfig: BotConfig, reason?: string, screenshotPath?: string,
+  botConfig: BotConfig, reason?: string, screenshotPath?: string,
 ): Promise<void> {
-  await hooks.onState("needs_human_help", { reason, screenshotPath });
+  await hooksFor(botConfig).onState("needs_human_help", { reason, screenshotPath });
 }
 export async function stopGoogleRecording(page?: any, botConfig?: BotConfig): Promise<void> {
-  await hooks.onStopRecording(page, botConfig as BotConfig);
+  await hooksFor(botConfig).onStopRecording(page, botConfig as BotConfig);
 }
 export async function stopTeamsRecording(page?: any, botConfig?: BotConfig): Promise<void> {
-  await hooks.onStopRecording(page, botConfig as BotConfig);
+  await hooksFor(botConfig).onStopRecording(page, botConfig as BotConfig);
 }
 export async function stopZoomRecording(page?: any, botConfig?: BotConfig): Promise<void> {
-  await hooks.onStopRecording(page, botConfig as BotConfig);
+  await hooksFor(botConfig).onStopRecording(page, botConfig as BotConfig);
 }
 export async function stopJitsiRecording(page?: any, botConfig?: BotConfig): Promise<void> {
-  await hooks.onStopRecording(page, botConfig as BotConfig);
+  await hooksFor(botConfig).onStopRecording(page, botConfig as BotConfig);
 }

@@ -108,7 +108,7 @@ function Notice({ sessionId, meetUrl }: { sessionId: string; meetUrl?: string })
       <div className="flex items-center gap-3">
         <Link
           href={`/calls?session=${encodeURIComponent(sessionId)}`}
-          className="inline-flex items-center gap-1 rounded-pill bg-primary px-3 py-1.5 text-xs font-medium text-primary-ink"
+          className="inline-flex items-center gap-1 rounded-pill bg-primary px-3 py-1.5 text-xs font-medium text-white"
         >
           {dead ? 'Ver en Llamadas' : 'Abrir en Llamadas'} <ArrowUpRight className="h-3.5 w-3.5" />
         </Link>

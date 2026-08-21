@@ -2,7 +2,7 @@
 
 import { usePanel } from '@/components/panel/PanelHost';
 import { panelForWaiting } from '@/lib/waiting-panel';
-import { hasWaitingWork, type WaitingNoticeData, waitingQuestion } from '@/lib/waiting-shape';
+import { type WaitingNoticeData, hasWaitingWork, waitingQuestion } from '@/lib/waiting-shape';
 import { clsx } from 'clsx';
 
 /**

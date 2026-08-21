@@ -415,9 +415,9 @@ export function VoiceMode({ onClose }: { onClose: () => void }) {
                 <div
                   className={`grid h-16 w-16 place-items-center rounded-full ${
                     phase === 'listening'
-                      ? 'animate-pulse bg-primary text-primary-ink'
+                      ? 'animate-pulse bg-primary text-white'
                       : phase === 'speaking'
-                        ? 'bg-emerald text-primary-ink'
+                        ? 'bg-emerald text-white'
                         : 'bg-surface text-ink-muted'
                   }`}
                 >

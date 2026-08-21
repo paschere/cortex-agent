@@ -775,7 +775,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
             type="button"
             disabled={busy || !secretValue}
             onClick={() => void submitSecret()}
-            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-ink disabled:opacity-50"
+            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-white disabled:opacity-50"
           >
             Escribir
           </button>
@@ -807,7 +807,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
             type="button"
             disabled={busy || (Boolean(tab.fills) && !answer.trim())}
             onClick={() => void resumeCheckpoint()}
-            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-ink disabled:opacity-50"
+            className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-white disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Continuar el trámite'}
           </button>
@@ -841,7 +841,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
                 type="button"
                 disabled={busy}
                 onClick={() => void setDriver('release')}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-ink disabled:opacity-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-white disabled:opacity-50"
               >
                 <X className="h-3.5 w-3.5" /> Devolver el control
               </button>
@@ -904,7 +904,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
                   type="button"
                   disabled={busy}
                   onClick={() => void setDriver('release')}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-ink disabled:opacity-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-white disabled:opacity-50"
                 >
                   <X className="h-3.5 w-3.5" /> Devolver el control
                 </button>

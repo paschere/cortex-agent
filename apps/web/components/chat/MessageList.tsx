@@ -3,8 +3,8 @@
 import type { BrainSource } from '@/lib/brain-sources-shape';
 import { type ExercisedMandate, planNotices } from '@/lib/mandates/delegation';
 import type { ScreenFrame } from '@/lib/screen-marks';
-import type { WaitingNoticeData } from '@/lib/waiting-shape';
 import { toolDisplayName } from '@/lib/tool-labels';
+import type { WaitingNoticeData } from '@/lib/waiting-shape';
 import type { Message } from 'ai';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from './EmptyState';

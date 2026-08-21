@@ -247,9 +247,7 @@ export function StepEditor({
                         A veces no aparece
                       </button>
                     ) : (
-                      <span className="text-micro text-ink-faint">
-                        El arranque corre siempre.
-                      </span>
+                      <span className="text-micro text-ink-faint">El arranque corre siempre.</span>
                     )}
                     {step.optional && (
                       <span className="text-micro text-ink-muted">

@@ -75,9 +75,7 @@ export async function WhatsappInBrain({ organizationId }: { organizationId: stri
       <ul className="mt-3 grid gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-2">
         {rows.map((g) => (
           <li key={g.id} className="flex items-baseline justify-between gap-3 bg-surface px-3 py-2">
-            <span className="truncate text-xs text-ink">
-              {g.subject ?? 'Grupo sin nombre'}
-            </span>
+            <span className="truncate text-xs text-ink">{g.subject ?? 'Grupo sin nombre'}</span>
             <span className="shrink-0 font-mono text-micro text-ink-faint">
               {g.space_id ? (names.get(g.space_id) ?? 'espacio borrado') : 'sin espacio'}
             </span>

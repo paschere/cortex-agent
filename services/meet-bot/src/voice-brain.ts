@@ -33,8 +33,23 @@ import { synthesize } from './tts';
  * silencio es el default seguro.
  */
 
+/**
+ * El nombre en CUALQUIER parte de la frase, no solo al inicio: en una reunión
+ * real se dice «entonces, Cortex, ¿cuánto le cotizamos?» o «¿qué opinas,
+ * Cortex?». Lo que va después del nombre es la pregunta; si el nombre cierra
+ * la frase, la pregunta es la frase entera.
+ */
 const NAME_TRIGGER =
-  /^\s*(oye,?\s+|hey,?\s+|ok,?\s+|ey,?\s+|eh,?\s+)?(c[oó]rtex|coartex|kortex|korteks)[\s,:.\-!]*/i;
+  /(?:^|[\s,;:¿¡"(])(?:oye,?\s+|hey,?\s+|ok,?\s+|ey,?\s+|eh,?\s+)?(c[oó]rtex|coartex|kortex|korteks|córtex)\b[\s,:.\-!?¿¡]*/i;
+
+export function extractQuestion(text: string): string | null {
+  const m = NAME_TRIGGER.exec(text);
+  if (!m) return null;
+  const after = text.slice(m.index + m[0].length).trim();
+  const before = text.slice(0, m.index).trim();
+  if (after.length >= 3) return after;
+  return before.length >= 3 ? before : '';
+}
 
 export interface VoiceDeps {
   config: Config;
@@ -64,12 +79,13 @@ export class VoiceBrain {
   /** Se llama con cada frase FINAL. Decide si le hablaron a Cortex. */
   async onFinalLine(line: Transcript): Promise<void> {
     if (this.muted || this.busy) return;
-    if (!NAME_TRIGGER.test(line.text)) return;
+    const extracted = extractQuestion(line.text);
+    if (extracted === null) return;
     this.busy = true;
     console.log(`[cortex-meet] voice trigger «${line.text}»`);
     try {
       const question =
-        line.text.replace(NAME_TRIGGER, '').trim() ||
+        extracted ||
         'Te nombraron en la reunión. Pregunta si te necesitan y ofrece ayuda en una frase.';
       const answer = await this.askCortex(question);
       if (!answer) return;

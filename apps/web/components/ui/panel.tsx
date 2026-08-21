@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { clsx } from 'clsx';
+import type { ReactNode } from 'react';
 
 /**
  * The base surface: white, rounded, and lifted off the canvas.
@@ -133,7 +133,5 @@ export function ProgressRow({
 
 /** Tiny uppercase section label. */
 export function Eyebrow({ children }: { children: ReactNode }) {
-  return (
-    <div className="field-label">{children}</div>
-  );
+  return <div className="field-label">{children}</div>;
 }

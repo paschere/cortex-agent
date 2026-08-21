@@ -348,9 +348,7 @@ export function AttachmentTray({
   );
 
   return (
-    <div
-      {...getRootProps({ className: 'relative' })}
-    >
+    <div {...getRootProps({ className: 'relative' })}>
       <input {...getInputProps()} />
       {tray}
       {children}

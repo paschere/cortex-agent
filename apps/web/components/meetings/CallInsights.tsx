@@ -135,7 +135,7 @@ export function BrainDecision({
             type="button"
             disabled={busy}
             onClick={() => void act('keep')}
-            className="inline-flex items-center gap-1 rounded-pill bg-primary px-3 py-1.5 text-xs font-medium text-primary-ink disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-pill bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           >
             {busy ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

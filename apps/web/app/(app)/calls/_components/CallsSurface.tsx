@@ -291,7 +291,7 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
           </p>
           <Link
             href="/chat"
-            className="mt-1 inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-ink"
+            className="mt-1 inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-sm font-medium text-white"
           >
             <MessageSquare className="h-4 w-4" /> Ir al chat
           </Link>
