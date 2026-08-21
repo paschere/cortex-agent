@@ -56,6 +56,12 @@ const PUBLIC_PATHS = [
   // the screens' own endpoints under /api/whatsapp stay behind the session.
   // Without WHATSAPP_BRIDGE_TOKEN set, every one of these routes refuses.
   '/api/whatsapp/bridge',
+  // El bot de reuniones (services/meet-bot en Railway) llama aquí con
+  // MEET_SERVICE_TOKEN, sin cookie: piensa la respuesta hablada y archiva el
+  // transcript al colgar. Un POST sin sesión caía en 307 → /login, y /login
+  // no acepta POST (405). Cortex oía «Oye, Cortex» y se quedaba mudo.
+  '/api/meetings/live/voice-answer',
+  '/api/meetings/live/archive',
   // Brand assets fetched by external services that have no session: Google
   // Chat renders the app avatar from /icon.png, and link unfurls hit these
   // too. They are public images by nature.

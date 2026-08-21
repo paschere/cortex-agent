@@ -293,6 +293,24 @@ export function startServer(config: Config): Server {
       return;
     }
 
+    const speakMatch = /^\/session\/([A-Za-z0-9_]+)\/speak$/.exec(path);
+    if (req.method === 'POST' && speakMatch) {
+      const m = ownedMeeting(speakMatch[1] ?? '');
+      if (!m) {
+        json(res, 404, { error: 'sesión no encontrada' });
+        return;
+      }
+      const body = await readBody(req);
+      const text = String(body.text ?? '').trim().slice(0, 500);
+      if (!text) {
+        json(res, 400, { error: 'falta el texto' });
+        return;
+      }
+      const result = await m.session.speakText(text);
+      json(res, result.ok ? 200 : 502, result);
+      return;
+    }
+
     const streamMatch = /^\/session\/([A-Za-z0-9_]+)\/stream$/.exec(path);
     if (req.method === 'GET' && streamMatch) {
       const m = ownedMeeting(streamMatch[1] ?? '');

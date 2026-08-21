@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { registerTool } from '../index';
 import { fetchEvent, normalizeEvent } from '../gcal/events';
+import { registerTool } from '../index';
 import {
   MEET_READONLY_SCOPE,
   fetchSpaceMeetingCode,
@@ -35,10 +35,7 @@ export const meetingsGetTranscript = registerTool({
   inputSchema: z
     .object({
       eventId: z.string().optional().describe('Calendar entry id for the meeting'),
-      meetCode: z
-        .string()
-        .optional()
-        .describe('Meet code from the join link, e.g. "abc-defg-hij"'),
+      meetCode: z.string().optional().describe('Meet code from the join link, e.g. "abc-defg-hij"'),
       calendarId: z.string().default('primary'),
       maxChars: z
         .number()
@@ -87,7 +84,10 @@ export const meetingsGetTranscript = registerTool({
     const maxChars = input.maxChars ?? 20_000;
     const lookbackDays = input.lookbackDays ?? 30;
 
-    const empty = (note: string, extra: Partial<{ title: string | null; meetingCode: string | null }> = {}) => ({
+    const empty = (
+      note: string,
+      extra: Partial<{ title: string | null; meetingCode: string | null }> = {},
+    ) => ({
       available: false,
       note,
       eventId: input.eventId ?? null,
@@ -133,7 +133,8 @@ export const meetingsGetTranscript = registerTool({
       .limit(1)
       .maybeSingle();
     if (!archived.error && archived.data) {
-      const lines = (archived.data.transcript as Array<{ text?: string; speaker?: string | null }>) ?? [];
+      const lines =
+        (archived.data.transcript as Array<{ text?: string; speaker?: string | null }>) ?? [];
       const body = lines
         .map((l) => `${l.speaker?.trim() ? `${l.speaker}: ` : 'Alguien: '}${l.text ?? ''}`)
         .join('\n')
@@ -157,7 +158,11 @@ export const meetingsGetTranscript = registerTool({
         const callTitle = title ?? (archived.data.title as string | null) ?? `Meet ${meetingCode}`;
         const markdown = [
           `# Transcript — ${callTitle}`,
-          [end ? `Ended ${end}` : null, duration != null ? `${duration} min` : null, names.length ? `${names.length} participant(s)` : null]
+          [
+            end ? `Ended ${end}` : null,
+            duration != null ? `${duration} min` : null,
+            names.length ? `${names.length} participant(s)` : null,
+          ]
             .filter(Boolean)
             .join(' · '),
           names.length ? `**Who was there:** ${names.join(', ')}` : '',
@@ -224,7 +229,9 @@ export const meetingsGetTranscript = registerTool({
           );
         }
 
-        const names = [...new Set(participants.map((p) => p.displayName).filter(Boolean))] as string[];
+        const names = [
+          ...new Set(participants.map((p) => p.displayName).filter(Boolean)),
+        ] as string[];
         const duration = recordDurationMinutes(record);
         const note = text.truncated
           ? `Transcript found. Showing the first ${maxChars.toLocaleString()} characters of a longer conversation.`

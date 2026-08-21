@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { archiveLiveMeeting } from '@cortex/agent-tools';
-import { logger, type UUID } from '@cortex/core';
+import { type UUID, logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -98,7 +98,10 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json(result);
   } catch (err) {
-    logger.error({ err: (err as Error).message, sessionId: body.sessionId }, 'live call archive failed');
+    logger.error(
+      { err: (err as Error).message, sessionId: body.sessionId },
+      'live call archive failed',
+    );
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 }

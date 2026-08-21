@@ -1,8 +1,8 @@
 import { z } from 'zod';
+import { type MeetingType, meetingTypeLabel } from '../gcal/classify';
+import { type NormalizedMeeting, collectUpcomingMeetings } from '../gcal/events';
 import { registerTool } from '../index';
 import type { ToolContext } from '../types';
-import { meetingTypeLabel, type MeetingType } from '../gcal/classify';
-import { collectUpcomingMeetings, type NormalizedMeeting } from '../gcal/events';
 
 /**
  * `meetings.schedule_briefings` — one alarm per meeting, not one cron for all.
@@ -180,11 +180,17 @@ export const meetingsScheduleBriefings = registerTool({
         continue;
       }
       if (!wanted.has(m.guessedType)) {
-        skip(m, `Looks like ${meetingTypeLabel(m.guessedType).toLowerCase()}, which is not on the list.`);
+        skip(
+          m,
+          `Looks like ${meetingTypeLabel(m.guessedType).toLowerCase()}, which is not on the list.`,
+        );
         continue;
       }
       if (m.durationMinutes < minMinutes) {
-        skip(m, `Only ${m.durationMinutes} minutes long — shorter than the ${minMinutes} minute cutoff.`);
+        skip(
+          m,
+          `Only ${m.durationMinutes} minutes long — shorter than the ${minMinutes} minute cutoff.`,
+        );
         continue;
       }
 

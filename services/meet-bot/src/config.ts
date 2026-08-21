@@ -69,6 +69,11 @@ export interface Config {
   uiInteractionMode: 'humanized' | 'synthetic';
   /** Cuánto esperar en la sala de espera antes de rendirse. */
   admissionTimeoutMs: number;
+  /**
+   * Si Cortex se queda solo en la llamada (los demás colgaron), cuánto esperar
+   * antes de salir. 0 = no salir por quedarse solo.
+   */
+  everyoneLeftTimeoutMs: number;
   /** Visitar Google antes de Meet para que el perfil parezca "vivido". */
   warmup: boolean;
   /**
@@ -109,6 +114,7 @@ export function loadConfig(): Config {
     timezone: process.env.MEET_TIMEZONE?.trim() || 'America/Bogota',
     uiInteractionMode: process.env.MEET_UI_MODE?.trim() === 'synthetic' ? 'synthetic' : 'humanized',
     admissionTimeoutMs: number('MEET_ADMISSION_TIMEOUT_MS', 180_000),
+    everyoneLeftTimeoutMs: number('MEET_EVERYONE_LEFT_MS', 45_000),
     warmup: process.env.MEET_WARMUP?.trim() !== 'false',
     browserServiceUrl: process.env.MEET_BROWSER_SERVICE_URL?.trim() || null,
   };

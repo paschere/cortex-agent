@@ -146,6 +146,10 @@ const ALLOWED = new Map<string, string>([
     'app/api/whatsapp/links/route.ts',
     'whatsapp_links is keyed by the phone number install-wide, so "already linked somewhere else" is invisible to a scoped read and would surface as a constraint error instead of an explanation. One read, for that message only; the write is scoped.',
   ],
+  [
+    'app/api/meetings/live/voice-answer/route.ts',
+    'The meet-bot posts here with a service token and an organization id, no session. Resolving that org to a directory user (the owner) is what the raw client is for; the turn itself then runs on a handle scoped to that workspace.',
+  ],
 ]);
 
 /** Files that mention the raw client only in order to police it. */

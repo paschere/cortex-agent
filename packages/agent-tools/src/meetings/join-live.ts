@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { readWorkspacePlan } from '../billing/usage';
-import { registerTool } from '../index';
-import { fetchEventsInRange, parseMeetCode, type RawGCalEvent } from '../gcal/events';
 import { gcalFetch } from '../gcal/client';
+import { type RawGCalEvent, fetchEventsInRange, parseMeetCode } from '../gcal/events';
+import { registerTool } from '../index';
 
 /**
  * ENTRAR A UNA REUNIÓN EN VIVO — la skill «Cortex, métete a esta llamada».
@@ -77,7 +77,10 @@ async function ensureBotOnInvite(
       maxResults: 50,
     });
   } catch (err) {
-    ctx.logger.warn({ err: (err as Error).message }, 'could not fetch calendar events for bot invite');
+    ctx.logger.warn(
+      { err: (err as Error).message },
+      'could not fetch calendar events for bot invite',
+    );
     return { added: false, eventId: null };
   }
 
@@ -90,15 +93,19 @@ async function ensureBotOnInvite(
   if (alreadyInvited) return { added: false, eventId: match.id };
 
   try {
-    await gcalFetch(ctx, `/calendars/primary/events/${encodeURIComponent(match.id)}?sendUpdates=none`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        attendees: [
-          ...(match.attendees ?? []),
-          { email: botEmail, displayName: 'Cortex', responseStatus: 'accepted' },
-        ],
-      }),
-    });
+    await gcalFetch(
+      ctx,
+      `/calendars/primary/events/${encodeURIComponent(match.id)}?sendUpdates=none`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          attendees: [
+            ...(match.attendees ?? []),
+            { email: botEmail, displayName: 'Cortex', responseStatus: 'accepted' },
+          ],
+        }),
+      },
+    );
     ctx.logger.info({ eventId: match.id, botEmail }, 'bot added to calendar invite');
     return { added: true, eventId: match.id };
   } catch (err) {
@@ -196,11 +203,17 @@ export const meetingsJoinLive = registerTool({
       });
     } catch (err) {
       ctx.logger.warn({ err: (err as Error).message }, 'meet join request failed');
-      return { ok: false, message: 'No pude comunicarme con el bot de reuniones. Puede estar reiniciándose.' };
+      return {
+        ok: false,
+        message: 'No pude comunicarme con el bot de reuniones. Puede estar reiniciándose.',
+      };
     }
     if (!res.ok) {
       if (res.status === 429) {
-        return { ok: false, message: 'El bot ya está en el máximo de reuniones a la vez. Espera a que una termine.' };
+        return {
+          ok: false,
+          message: 'El bot ya está en el máximo de reuniones a la vez. Espera a que una termine.',
+        };
       }
       return { ok: false, message: 'El bot de reuniones rechazó la solicitud.' };
     }

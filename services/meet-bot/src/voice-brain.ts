@@ -73,11 +73,38 @@ export class VoiceBrain {
         'Te nombraron en la reunión. Pregunta si te necesitan y ofrece ayuda en una frase.';
       const answer = await this.askCortex(question);
       if (!answer) return;
+      await this.deps.unmute();
       const speech = await synthesize(this.deps.config.deepgramKey, answer);
-      if (!speech) return;
+      if (!speech) {
+        console.error('[cortex-meet] TTS no devolvió audio');
+        return;
+      }
       await this.deps.speak(speech.mp3.toString('base64'));
-    } catch {
-      // Un turno de voz que falla no tumba la escucha. La reunión sigue.
+    } catch (err) {
+      console.error(`[cortex-meet] voice turn failed: ${(err as Error).message}`);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** Una frase pedida desde el chat, no desde el nombre en la sala. */
+  async speakText(text: string): Promise<boolean> {
+    const line = text.trim();
+    if (!line || this.busy) return false;
+    this.busy = true;
+    this.muted = false;
+    try {
+      await this.deps.unmute();
+      const speech = await synthesize(this.deps.config.deepgramKey, line);
+      if (!speech) {
+        console.error('[cortex-meet] TTS no devolvió audio');
+        return false;
+      }
+      await this.deps.speak(speech.mp3.toString('base64'));
+      return true;
+    } catch (err) {
+      console.error(`[cortex-meet] speakText failed: ${(err as Error).message}`);
+      return false;
     } finally {
       this.busy = false;
     }
@@ -119,12 +146,13 @@ export class VoiceBrain {
         },
       );
       if (!res.ok) {
-        console.error(`[cortex-meet] voice-answer HTTP ${res.status}`);
+        console.error(`[cortex-meet] voice-answer HTTP ${res.status} ${res.url}`);
         return null;
       }
       const data = (await res.json()) as { answer?: string };
       return data.answer?.trim() || null;
-    } catch {
+    } catch (err) {
+      console.error(`[cortex-meet] voice-answer failed: ${(err as Error).message}`);
       return null;
     }
   }

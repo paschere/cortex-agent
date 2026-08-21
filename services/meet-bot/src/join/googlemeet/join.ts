@@ -13,6 +13,7 @@ import {
 import { HumanizedInteractor, MOCAP_LIBRARY } from "./humanized";
 import { AdmissionError } from "../shared/admission";
 import { resolveBotUiLocale } from "../browser-args";
+import { locateGoogleMeetMicrophone, locateUnmuteBanner } from "./microphone";
 
 /** Thrown when authenticated mode detects a signed-out browser profile. Extends AdmissionError so
  *  the JoinDriver's single `instanceof` catch maps the typed `auth_session_missing` outcome to a
@@ -26,24 +27,56 @@ export class AuthSessionError extends AdmissionError {
 
 /**
  * Meet arranca a menudo con el micro APAGADO. Si Cortex tiene que hablar,
- * hay que pulsar «Turn on microphone»; si no, «Turn off». No es un toggle
- * ciego: el aria-label dice el estado actual.
+ * hay que pulsar el botón cuya etiqueta describe la ACCIÓN (Turn on /
+ * Activar). No es un toggle ciego, y no se asume «ya está» cuando el
+ * botón no aparece: la barra se esconde sola y hay que despertarla.
  */
 export async function setGoogleMeetMicrophone(page: Page, wantOn: boolean): Promise<void> {
-  const sel = wantOn
-    ? '[aria-label*="Turn on microphone"]'
-    : '[aria-label*="Turn off microphone"]';
-  try {
-    const loc = page.locator(sel).first();
-    if (!(await loc.isVisible({ timeout: 2500 }).catch(() => false))) {
-      log(wantOn ? "Microphone already on or not found." : "Microphone already muted or not found.");
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      await page.mouse.move(640, 360);
+      await page.mouse.move(960, 980);
+    } catch {
+      /* sin puntero: igual intentamos leer el DOM */
+    }
+    if (wantOn) {
+      const banner = await page.evaluate(locateUnmuteBanner).catch(() => ({ found: false, x: 0, y: 0 }));
+      if (banner.found) {
+        await page.mouse.click(banner.x, banner.y).catch(() => undefined);
+        log("Clicked Meet unmute banner.");
+      }
+    }
+    const loc = await page.evaluate(locateGoogleMeetMicrophone).catch(() => ({
+      found: false,
+      on: false,
+      x: 0,
+      y: 0,
+      label: "",
+    }));
+    log(`Microphone inspect #${attempt}: ${JSON.stringify(loc)}`);
+    if (!loc.found) {
+      await page.waitForTimeout(700);
+      continue;
+    }
+    if (loc.on === wantOn) {
+      log(wantOn ? "Microphone already on." : "Microphone already muted.");
       return;
     }
-    await loc.click({ timeout: 2000 });
-    log(wantOn ? "Microphone on (voice)." : "Microphone muted.");
-  } catch {
-    log(wantOn ? "Could not turn microphone on." : "Could not mute microphone.");
+    try {
+      await page.mouse.click(loc.x, loc.y);
+    } catch {
+      log(wantOn ? "Could not turn microphone on." : "Could not mute microphone.");
+      return;
+    }
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(locateGoogleMeetMicrophone).catch(() => loc);
+    log(`Microphone after click: ${JSON.stringify(after)}`);
+    if (after.found && after.on === wantOn) {
+      log(wantOn ? "Microphone on (voice)." : "Microphone muted.");
+      return;
+    }
   }
+  log(wantOn ? "Could not turn microphone on." : "Could not mute microphone.");
 }
 
 /**

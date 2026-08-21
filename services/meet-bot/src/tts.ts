@@ -29,7 +29,10 @@ export async function synthesize(
       body: JSON.stringify({ text }),
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`[cortex-meet] TTS HTTP ${res.status}`);
+      return null;
+    }
     const mp3 = Buffer.from(await res.arrayBuffer());
     return { mp3 };
   } catch {

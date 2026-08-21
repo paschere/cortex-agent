@@ -272,6 +272,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   // Reuniones.
   meetings_join_live: { label: 'Entrar a la reunión en vivo', icon: 'Radio' },
   meetings_live_status: { label: 'Ver cómo va la reunión', icon: 'Radio' },
+  meetings_speak: { label: 'Hablar en la reunión en vivo', icon: 'Volume2' },
   meetings_list_transcripts: { label: 'Ver qué reuniones dejaron transcripción', icon: 'Video' },
   meetings_get_transcript: { label: 'Leer la transcripción de la reunión', icon: 'ScrollText' },
   meetings_import_transcript: { label: 'Guardar la reunión en Brain Knowledge', icon: 'Mic' },

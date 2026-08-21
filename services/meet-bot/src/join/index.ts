@@ -8,7 +8,7 @@ import type { Page } from 'playwright';
 import { joinGoogleMeeting, setGoogleMeetMicrophone } from './googlemeet/join';
 import { waitForGoogleMeetingAdmission, checkForGoogleAdmissionSilent } from './googlemeet/admission';
 import { prepareForRecording, leaveGoogleMeet } from './googlemeet/leave';
-import { startGoogleRemovalMonitor } from './googlemeet/removal';
+import { startGoogleRemovalMonitor, inspectGoogleMeetCall } from './googlemeet/removal';
 import { startDebugView } from './shared/escalation';
 import { setHooks, type BotConfig, type Hooks, type JoinState } from './_host';
 import { JOIN_BROWSER_ARGS, getJoinBrowserArgs } from './browser-args';
@@ -75,6 +75,7 @@ export {
   prepareForRecording,
   leaveGoogleMeet,
   startGoogleRemovalMonitor,
+  inspectGoogleMeetCall,
 };
 export { AdmissionError } from './shared/admission';
 export type { AdmissionOutcome } from './shared/admission';

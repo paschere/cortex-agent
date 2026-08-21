@@ -25,7 +25,7 @@ function meetService(): { base: string; token: string } | null {
 export const meetingsLiveStatus = registerTool({
   id: 'meetings.live_status',
   description:
-      'Dice qué está pasando AHORA en las reuniones a las que Cortex entró en vivo: quién está en la sala, si sigue dentro, y las últimas frases (con quién las dijo). Úsala cuando pregunten «¿quién está en la reunión?», «¿qué va diciendo?», «¿de qué están hablando?», «¿qué dijo Mateo?». Solo lee; para entrar a una reunión es meetings.join_live.',
+    'Dice qué está pasando AHORA en las reuniones a las que Cortex entró en vivo: quién está en la sala, si sigue dentro, y las últimas frases (con quién las dijo). Úsala cuando pregunten «¿quién está en la reunión?», «¿qué va diciendo?», «¿de qué están hablando?», «¿qué dijo Mateo?». Solo lee; para entrar a una reunión es meetings.join_live.',
   inputSchema: z.object({
     sessionId: z
       .string()
@@ -107,7 +107,9 @@ export const meetingsLiveStatus = registerTool({
       sessionId: m.sessionId,
       status: m.status,
       people: (m.participants ?? []).map((p) => p.name),
-      recent: (m.transcript ?? []).slice(-(input.lines ?? 30)).map((l) => ({ speaker: l.speaker, text: l.text })),
+      recent: (m.transcript ?? [])
+        .slice(-(input.lines ?? 30))
+        .map((l) => ({ speaker: l.speaker, text: l.text })),
     }));
 
     return {
