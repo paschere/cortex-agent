@@ -177,7 +177,9 @@ export async function launchChrome(
   input: StealthLaunchInput,
   profileDir: string,
 ): Promise<{ process: ChildProcess; port: number }> {
-  const chromePath = chromium.executablePath({ channel: 'chrome' });
+  // Patchright 1.62 no tipa executablePath con options, pero en runtime lo soporta
+  // (es Playwright por debajo). Cast a any para no pelear con los tipos.
+  const chromePath = (chromium as unknown as { executablePath: (opts?: { channel?: string }) => string }).executablePath({ channel: 'chrome' });
   if (!chromePath) throw new Error('No se encontró Chrome (¿falta patchright install chrome?)');
   const port = 9300 + Math.floor(Math.random() * 700);
   const args = chromeCliArgs(input, profileDir, port);
