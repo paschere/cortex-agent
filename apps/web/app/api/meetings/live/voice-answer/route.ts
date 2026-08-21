@@ -2,8 +2,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
-import { chatModel, listTools, readWorkspacePlan, runTool } from '@cortex/agent-tools';
-import { ConfirmationRequiredError } from '@cortex/core';
+import { listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
+import { ConfirmationRequiredError, logger } from '@cortex/core';
 import { type CoreTool, generateText, tool } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -101,6 +101,7 @@ async function actorFor(orgId: string): Promise<{ userId: string; agentId: strin
 }
 
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
   if (!tokenOk(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'bad request' }, { status: 400 });
@@ -171,13 +172,26 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const { text } = await generateText({
-    model: chatModel(),
+  // voiceModel(): sin thinking. Con chatModel() un «hola, ¿cómo estás?» tardaba
+  // ~30 s y a veces volvía con text vacío (el bot callaba sin error, 21-08).
+  const { text, steps } = await generateText({
+    model: voiceModel(),
     system,
     prompt: `TE DIJERON EN LA REUNIÓN: ${question}`,
     tools: aiTools,
     maxSteps: 6,
   });
 
-  return NextResponse.json({ answer: text });
+  // Vacío nunca: si el modelo se quedó en una herramienta o no dijo nada, al
+  // menos que la sala oiga que está ahí.
+  const answer =
+    text.trim() ||
+    (steps.some((s) => s.toolCalls.length > 0)
+      ? 'Listo, ya lo hice.'
+      : 'Aquí estoy. ¿En qué te ayudo?');
+  logger.info(
+    { owner, sessionId: parsed.data.sessionId, ms: Date.now() - startedAt, chars: answer.length },
+    'voice-answer',
+  );
+  return NextResponse.json({ answer });
 }

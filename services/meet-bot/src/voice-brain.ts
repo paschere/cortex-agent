@@ -88,7 +88,11 @@ export class VoiceBrain {
         extracted ||
         'Te nombraron en la reunión. Pregunta si te necesitan y ofrece ayuda en una frase.';
       const answer = await this.askCortex(question);
-      if (!answer) return;
+      if (!answer) {
+        console.error('[cortex-meet] voice-answer sin texto: Cortex no dijo nada');
+        return;
+      }
+      console.log(`[cortex-meet] voice answer (${answer.length} chars): ${answer.slice(0, 80)}`);
       await this.deps.unmute();
       const speech = await synthesize(this.deps.config.deepgramKey, answer);
       if (!speech) {
