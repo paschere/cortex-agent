@@ -140,14 +140,20 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     // fluían y peak=0 durante toda una llamada). Por eso cada pista que se
     // engancha se reproduce además en un <audio> oculto a volumen 0.
     const wired = [];
-    function keepPlaying(t) {
+    const nodes = [];  // referencias vivas: sin esto el GC calla el audio.
+
+    // Cada pista remota se reproduce en su PROPIO <audio> y se captura de ESE
+    // elemento (createMediaElementSource), no de la pista suelta. En Chromium
+    // headless una MediaStreamSource de pista WebRTC remota entrega silencio;
+    // un elemento que ya la decodifica, no. El elemento queda a volumen real
+    // (el contenedor no tiene altavoces, nadie lo oye) para que Chromium no
+    // descarte la decodificación.
+    function wireTrack(t) {
+      if (!t || seenTrack.has(t.id)) return;
+      seenTrack.add(t.id);
       try {
         const el = document.createElement('audio');
         el.autoplay = true;
-        // volume=0 hace que Chromium NO decodifique la pista (21-08: peak=0
-        // con tracks>0). El contenedor no tiene altavoces, así que volumen
-        // real no se oye en ningún lado; solo mantiene la pista FLUYENDO para
-        // que createMediaStreamSource entregue muestras.
         el.volume = 1;
         el.muted = false;
         el.setAttribute('data-cortex-tap', '1');
@@ -156,21 +162,26 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
         document.body.appendChild(el);
         const p = el.play();
         if (p && p.catch) p.catch(() => {});
-      } catch (e) { /* sin DOM listo */ }
+        const srcNode = ctx.createMediaElementSource(el);
+        srcNode.connect(mixer);
+        nodes.push(srcNode);
+        wired.push(t);
+        state.tracks = wired.length;
+      } catch (e) {
+        // Si ya se le sacó un source al elemento, capturar la pista directo.
+        try {
+          const n = ctx.createMediaStreamSource(new MediaStream([t]));
+          n.connect(mixer);
+          nodes.push(n);
+          wired.push(t);
+          state.tracks = wired.length;
+        } catch (e2) { /* pista cerrada */ }
+      }
     }
     function wireStream(stream) {
       if (!stream) return;
       const tracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
-      for (const t of tracks) {
-        if (!t || seenTrack.has(t.id)) continue;
-        seenTrack.add(t.id);
-        try {
-          ctx.createMediaStreamSource(new MediaStream([t])).connect(mixer);
-          wired.push(t);
-          state.tracks = wired.length;
-          keepPlaying(t);
-        } catch (e) { /* pista cerrada */ }
-      }
+      for (const t of tracks) wireTrack(t);
     }
     function wireEl(el) {
       if (el && el.srcObject) wireStream(el.srcObject);
