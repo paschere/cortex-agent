@@ -4,6 +4,8 @@ import './import-transcript';
 import './list-transcripts';
 import './prepare-briefing';
 import './schedule-briefings';
+import './join-live';
+import './live-status';
 
 export { meetingsGetTranscript } from './get-transcript';
 export { meetingsJoinLive } from './join-live';
@@ -13,7 +15,15 @@ export { meetingsListTranscripts } from './list-transcripts';
 export { meetingsPrepareBriefing } from './prepare-briefing';
 export { meetingsScheduleBriefings } from './schedule-briefings';
 
-export { archiveLiveMeeting, linesToTurns, liveConferenceRecord } from './archive-live';
+export {
+  archiveLiveMeeting,
+  dropLiveCallFromBrain,
+  keepLiveCallInBrain,
+  linesToTurns,
+  liveConferenceRecord,
+} from './archive-live';
+export { analyzeLiveCall, InsightsSchema } from './analyze-live';
+export type { LiveInsights } from './analyze-live';
 export type { ArchiveLiveInput, ArchiveLiveResult, LiveLine, LivePerson } from './archive-live';
 
 // The importer's engine, for the callers that are not a model turn: the Inngest

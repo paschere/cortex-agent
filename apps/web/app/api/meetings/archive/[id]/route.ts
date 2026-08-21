@@ -1,12 +1,12 @@
-import { mustRead } from '@/lib/supabase/read';
 import { requireSession } from '@/lib/session';
+import { mustRead } from '@/lib/supabase/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
 const COLS =
-  'id, session_id, meet_url, meet_code, title, bot_name, started_at, ended_at, status, detail, participants, transcript, document_id';
+  'id, session_id, meet_url, meet_code, title, bot_name, started_at, ended_at, status, detail, participants, transcript, document_id, insights, analyzed_at, brain_status, brain_reason, brain_decided_by';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -24,6 +24,11 @@ type LiveCallRow = {
   participants: unknown;
   transcript: unknown;
   document_id: string | null;
+  insights: unknown;
+  analyzed_at: string | null;
+  brain_status: string;
+  brain_reason: string | null;
+  brain_decided_by: string | null;
 };
 
 /**
@@ -68,6 +73,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       participants: row.participants ?? [],
       transcript: row.transcript ?? [],
       documentId: row.document_id,
+      insights: row.insights ?? null,
+      analyzedAt: row.analyzed_at,
+      brainStatus: row.brain_status,
+      brainReason: row.brain_reason,
+      brainDecidedBy: row.brain_decided_by,
     },
     { headers: { 'cache-control': 'no-store' } },
   );

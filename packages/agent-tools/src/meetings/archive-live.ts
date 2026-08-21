@@ -5,6 +5,7 @@ import { embedDocuments } from '../kb/embedder';
 import { recordEmbeddingUsage } from '../kb/embedding-usage';
 import { ensurePersonalSpace } from '../kb/spaces';
 import type { SpeechTurn } from '../kb/transcribe';
+import { type LiveInsights, analyzeLiveCall, emptyInsights } from './analyze-live';
 import { buildChunks } from './import-transcript';
 import type { MeetingImportContext } from './import-transcript';
 
@@ -131,6 +132,29 @@ function liveHeader(input: {
     .join('\n');
 }
 
+/**
+ * La lectura de Cortex va DELANTE del transcript en el documento del Brain:
+ * es lo que una búsqueda debe encontrar primero («qué acordamos con Acme»),
+ * antes que la frase suelta donde se dijo.
+ */
+function withInsights(header: string, insights: LiveInsights | null): string {
+  if (!insights || !insights.summary) return header;
+  const block = [
+    '',
+    '## Lo que Cortex sacó de la reunión',
+    insights.summary,
+    insights.decisions.length ? `Decisiones: ${insights.decisions.join(' · ')}` : null,
+    insights.commitments.length
+      ? `Compromisos: ${insights.commitments
+          .map((c) => `${c.who} — ${c.what}${c.when ? ` (${c.when})` : ''}`)
+          .join(' · ')}`
+      : null,
+    insights.nextSteps.length ? `Próximos pasos: ${insights.nextSteps.join(' · ')}` : null,
+    insights.openQuestions.length ? `Abierto: ${insights.openQuestions.join(' · ')}` : null,
+  ].filter((l) => l !== null);
+  return `${header}\n${block.join('\n')}`;
+}
+
 function fullText(chunks: Array<{ content: string }>): string {
   return chunks.map((c) => c.content).join('\n\n');
 }
@@ -147,11 +171,7 @@ export async function archiveLiveMeeting(
     ? `Meet ${meetCode} — ${formatWhen(input.startedAt)}`
     : `Reunión — ${formatWhen(input.startedAt)}`;
   const names = [
-    ...new Set(
-      input.participants
-        .map((p) => p.name.trim())
-        .filter((n) => n.length > 0),
-    ),
+    ...new Set(input.participants.map((p) => p.name.trim()).filter((n) => n.length > 0)),
   ];
   const finals = input.transcript.filter((l) => l.text.trim().length > 0);
 
@@ -187,6 +207,16 @@ export async function archiveLiveMeeting(
 
   const turns = linesToTurns(finals);
   if (turns.length === 0) {
+    await ctx.db
+      .from('live_calls')
+      .update({
+        insights: emptyInsights('No hubo nada que transcribir.'),
+        analyzed_at: new Date().toISOString(),
+        brain_status: 'skipped',
+        brain_reason: 'No hubo nada que transcribir.',
+        brain_decided_by: 'cortex',
+      })
+      .eq('id', callId);
     return {
       callId,
       documentId,
@@ -196,19 +226,90 @@ export async function archiveLiveMeeting(
     };
   }
 
+  // LA LECTURA. Cortex lee la llamada una vez: título, resumen, decisiones,
+  // compromisos y un veredicto sobre si merece quedar en la memoria de la
+  // empresa. Si el modelo falla, la llamada queda guardada con el título
+  // genérico y «por decidir» — nunca se pierde la conversación por un resumen.
+  let insights: LiveInsights | null = null;
+  try {
+    insights = await analyzeLiveCall({
+      lines: finals,
+      participants: input.participants,
+      startedAt: input.startedAt,
+      endedAt: input.endedAt ?? Date.now(),
+      botName: input.botName,
+    });
+  } catch (err) {
+    ctx.logger.warn(
+      { err: (err as Error).message, sessionId },
+      'archiveLiveMeeting: analysis failed',
+    );
+  }
+
+  const finalTitle = insights?.title ? insights.title : title;
+  if (insights) {
+    const { error } = await ctx.db
+      .from('live_calls')
+      .update({
+        title: finalTitle,
+        insights,
+        analyzed_at: new Date().toISOString(),
+      })
+      .eq('id', callId);
+    if (error)
+      ctx.logger.warn({ err: error.message }, 'archiveLiveMeeting: could not save insights');
+  }
+
+  // Una lectura que decidió que no vale la pena: queda fuera, con su razón,
+  // y la persona puede darle la vuelta desde Llamadas.
+  if (insights && !insights.worthKeeping) {
+    await ctx.db
+      .from('live_calls')
+      .update({
+        brain_status: 'skipped',
+        brain_reason: insights.reason,
+        brain_decided_by: 'cortex',
+      })
+      .eq('id', callId);
+    return {
+      callId,
+      documentId,
+      title: finalTitle,
+      lines: finals.length,
+      note: `Guardé "${finalTitle}" (${finals.length} frases) en Llamadas. No la puse en Brain Knowledge: ${insights.reason}`,
+    };
+  }
+
+  // Sin lectura (el modelo falló) no decidimos por la persona: queda
+  // «por decidir» y no se indexa. Con lectura favorable, al Brain.
+  if (!insights) {
+    return {
+      callId,
+      documentId,
+      title: finalTitle,
+      lines: finals.length,
+      note: `Guardé "${finalTitle}" (${finals.length} frases). No pude analizarla; decide en Llamadas si va al Brain.`,
+    };
+  }
+
   try {
     documentId = await fileInKnowledgeBase(ctx, {
       callId,
       documentId,
       sessionId,
       meetCode,
-      title,
+      title: finalTitle,
       startedAt,
       endedAt,
       names,
       turns,
+      insights,
       userId: input.userId ?? ctx.userId,
     });
+    await ctx.db
+      .from('live_calls')
+      .update({ brain_status: 'kept', brain_reason: insights.reason, brain_decided_by: 'cortex' })
+      .eq('id', callId);
   } catch (err) {
     ctx.logger.error(
       { err: (err as Error).message, sessionId },
@@ -217,7 +318,7 @@ export async function archiveLiveMeeting(
     return {
       callId,
       documentId,
-      title,
+      title: finalTitle,
       lines: finals.length,
       note: `La llamada se guardó. No pude indexarla en Brain Knowledge: ${(err as Error).message}`,
     };
@@ -226,10 +327,107 @@ export async function archiveLiveMeeting(
   return {
     callId,
     documentId,
-    title,
+    title: finalTitle,
     lines: finals.length,
-    note: `Guardé "${title}" (${finals.length} frases). Ya puedes consultarlas en Llamadas y en el chat.`,
+    note: `Guardé "${finalTitle}" (${finals.length} frases) y la puse en Brain Knowledge: ${insights.reason}`,
   };
+}
+
+type LiveCallRow = {
+  id: string;
+  session_id: string;
+  meet_code: string | null;
+  title: string | null;
+  started_at: string;
+  ended_at: string | null;
+  participants: LivePerson[] | null;
+  transcript: LiveLine[] | null;
+  insights: LiveInsights | null;
+  document_id: string | null;
+  user_id: string | null;
+};
+
+const ROW_COLS =
+  'id, session_id, meet_code, title, started_at, ended_at, participants, transcript, insights, document_id, user_id';
+
+async function loadCall(ctx: MeetingImportContext, callId: string): Promise<LiveCallRow> {
+  const { data, error } = await ctx.db
+    .from('live_calls')
+    .select(ROW_COLS)
+    .eq('id', callId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Esa llamada no está guardada.');
+  return data as unknown as LiveCallRow;
+}
+
+/**
+ * La persona le da la vuelta al veredicto: «sí, guárdala». Indexa el
+ * transcript en Brain Knowledge (idempotente por sha) y deja constancia de
+ * que lo decidió una persona.
+ */
+export async function keepLiveCallInBrain(
+  ctx: MeetingImportContext,
+  callId: string,
+): Promise<{ documentId: string }> {
+  const row = await loadCall(ctx, callId);
+  const finals = (row.transcript ?? []).filter((l) => l.text.trim().length > 0);
+  const turns = linesToTurns(finals);
+  if (turns.length === 0) throw new Error('No hay nada transcrito que guardar.');
+  const names = [...new Set((row.participants ?? []).map((p) => p.name.trim()).filter(Boolean))];
+  const title = row.title ?? `Reunión — ${formatWhen(Date.parse(row.started_at))}`;
+  const documentId = await fileInKnowledgeBase(ctx, {
+    callId,
+    documentId: row.document_id,
+    sessionId: row.session_id,
+    meetCode: row.meet_code,
+    title,
+    startedAt: row.started_at,
+    endedAt: row.ended_at ?? new Date().toISOString(),
+    names,
+    turns,
+    insights: row.insights,
+    userId: row.user_id ?? ctx.userId,
+  });
+  const { error } = await ctx.db
+    .from('live_calls')
+    .update({
+      brain_status: 'kept',
+      brain_decided_by: 'person',
+      brain_reason: 'La guardaste tú desde Llamadas.',
+    })
+    .eq('id', callId);
+  if (error) throw new Error(error.message);
+  return { documentId };
+}
+
+/**
+ * «Sácala del Brain». Borra el documento (los chunks caen en cascada) y el
+ * asiento del ledger; la llamada y su transcript siguen en Llamadas.
+ */
+export async function dropLiveCallFromBrain(
+  ctx: MeetingImportContext,
+  callId: string,
+): Promise<void> {
+  const row = await loadCall(ctx, callId);
+  if (row.document_id) {
+    const { error: delErr } = await ctx.db.from('kb_documents').delete().eq('id', row.document_id);
+    if (delErr) throw new Error(delErr.message);
+    await ctx.db
+      .from('meeting_imports')
+      .delete()
+      .eq('conference_record', liveConferenceRecord(row.session_id));
+  }
+  const { error } = await ctx.db
+    .from('live_calls')
+    .update({
+      document_id: null,
+      brain_status: 'skipped',
+      brain_decided_by: 'person',
+      brain_reason: 'La sacaste tú desde Llamadas.',
+    })
+    .eq('id', callId);
+  if (error) throw new Error(error.message);
 }
 
 async function fileInKnowledgeBase(
@@ -244,6 +442,7 @@ async function fileInKnowledgeBase(
     endedAt: string;
     names: string[];
     turns: SpeechTurn[];
+    insights: LiveInsights | null;
     userId: string;
   },
 ): Promise<string> {
@@ -263,7 +462,7 @@ async function fileInKnowledgeBase(
     participants: args.names,
     sessionId: args.sessionId,
   });
-  const chunks = buildChunks(header, args.turns);
+  const chunks = buildChunks(withInsights(header, args.insights), args.turns);
   const sha256 = createHash('sha256').update(fullText(chunks)).digest('hex');
 
   let documentId = args.documentId;

@@ -1,5 +1,5 @@
-import { mustReadList } from '@/lib/supabase/read';
 import { requireSession } from '@/lib/session';
+import { mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { NextResponse } from 'next/server';
 
@@ -17,7 +17,7 @@ export async function GET() {
     await db
       .from('live_calls')
       .select(
-        'id, session_id, meet_url, meet_code, title, bot_name, started_at, ended_at, status, detail, participants, document_id',
+        'id, session_id, meet_url, meet_code, title, bot_name, started_at, ended_at, status, detail, participants, document_id, insights, analyzed_at, brain_status, brain_reason, brain_decided_by',
       )
       .order('started_at', { ascending: false })
       .limit(50),
@@ -39,6 +39,12 @@ export async function GET() {
         detail: r.detail,
         participants: r.participants ?? [],
         documentId: r.document_id,
+        // Solo lo que la lista necesita de la lectura; el detalle trae todo.
+        summary: (r.insights as { summary?: string } | null)?.summary ?? null,
+        analyzedAt: r.analyzed_at,
+        brainStatus: r.brain_status,
+        brainReason: r.brain_reason,
+        brainDecidedBy: r.brain_decided_by,
       })),
     },
     { headers: { 'cache-control': 'no-store' } },
