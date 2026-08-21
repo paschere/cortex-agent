@@ -91,8 +91,62 @@ export function pickHoldLine(random: () => number = Math.random): string {
   return HOLD_LINES[i] ?? 'Dame un minuto.';
 }
 
+/** Cuánto espera Cortex con la mano alzada a que le den el turno. */
+export const FLOOR_WAIT_MS = 90_000;
+
+/**
+ * «Sí, adelante Cortex», «te escuchamos», «go ahead». Solo se usa cuando
+ * Cortex YA pidió la palabra: un «sí» suelto no abre un turno nuevo.
+ */
+export function looksLikeFloorGrant(text: string, botName = 'Cortex'): boolean {
+  const q = normalizeSpoken(text);
+  if (!q) return false;
+  const name = botName.trim().toLowerCase();
+  const named =
+    (name.length >= 2 && q.includes(name)) ||
+    /\b(c[oó]rtex|coartex|kortex|korteks|córtex)\b/.test(q);
+  if (
+    /\b(adelante|go ahead|te escuchamos|tiene la palabra|tienes la palabra|the floor|when you.?re ready|puedes (hablar|decir|contar)|cu[eé]ntanos|cuenta pues|you can (speak|talk|go)|you.?re (up|on))\b/.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  if (named && /\b(s[ií]|ok|okay|listo|claro|dale|dime|yes|go|speak|talk|escuchamos)\b/.test(q)) {
+    return true;
+  }
+  return false;
+}
+
+export function normalizeSpoken(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[¿?¡!.,…;:"“”«»]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isBotSpeaker(speaker: string | null, botName: string): boolean {
+  if (!speaker) return false;
+  const a = speaker.trim().toLowerCase();
+  const b = botName.trim().toLowerCase();
+  if (b.length < 2) return false;
+  return a === b || a.includes(b);
+}
+
+export function isEchoOfBot(heard: string, said: string): boolean {
+  const a = normalizeSpoken(heard);
+  const b = normalizeSpoken(said);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 8 && b.includes(a)) return true;
+  if (b.length >= 8 && a.includes(b)) return true;
+  return false;
+}
+
 export interface VoiceDeps {
   config: Config;
+  botName?: string;
   /** Reproduce el wav completo (fallback si el WS de TTS no abre). */
   speak: (mp3B64: string) => Promise<void>;
   beginSpeak?: () => Promise<void>;
@@ -100,6 +154,10 @@ export interface VoiceDeps {
   endSpeak?: () => Promise<void>;
   mute: () => Promise<void>;
   unmute: () => Promise<void>;
+  raiseHand?: () => Promise<void>;
+  lowerHand?: () => Promise<void>;
+  /** Una línea que Cortex acaba de decir, para el transcript (no pasa por STT). */
+  onSpoken?: (text: string) => void;
   /** La cola reciente del transcript, para dársela a Cortex como contexto. */
   recentTranscript: () => Transcript[];
 }
@@ -107,6 +165,8 @@ export interface VoiceDeps {
 export class VoiceBrain {
   private busy = false;
   private muted = false;
+  private waitingFloor = false;
+  private floorWaiter: ((granted: boolean) => void) | null = null;
 
   constructor(
     private readonly owner: string,
@@ -121,12 +181,21 @@ export class VoiceBrain {
 
   /** Se llama con cada frase FINAL. Decide si le hablaron a Cortex. */
   async onFinalLine(line: Transcript): Promise<void> {
-    if (this.muted || this.busy) return;
+    if (this.muted) return;
+    if (this.waitingFloor) {
+      if (looksLikeFloorGrant(line.text, this.deps.botName || 'Cortex')) {
+        console.log(`[cortex-meet] floor grant «${line.text}»`);
+        this.grantFloor(true);
+      }
+      return;
+    }
+    if (this.busy) return;
     const extracted = extractQuestion(line.text);
     if (extracted === null) return;
     this.busy = true;
     const t0 = Date.now();
     console.log(`[cortex-meet] voice trigger «${line.text}»`);
+    let handUp = false;
     try {
       const question =
         extracted ||
@@ -141,6 +210,11 @@ export class VoiceBrain {
         const hold = pickHoldLine();
         console.log(`[cortex-meet] voice hold «${hold}»`);
         await this.speakAnswer(hold);
+        await this.deps.raiseHand?.();
+        handUp = true;
+        const granted = await this.waitForFloor(FLOOR_WAIT_MS);
+        console.log(`[cortex-meet] floor ${granted ? 'granted' : 'timeout'}`);
+        if (granted) await new Promise((r) => setTimeout(r, 400));
       } else {
         await unmuteP;
       }
@@ -164,8 +238,28 @@ export class VoiceBrain {
     } catch (err) {
       console.error(`[cortex-meet] voice turn failed: ${(err as Error).message}`);
     } finally {
+      if (handUp) await this.deps.lowerHand?.().catch(() => undefined);
+      this.grantFloor(false);
       this.busy = false;
     }
+  }
+
+  private grantFloor(granted: boolean): void {
+    this.waitingFloor = false;
+    const w = this.floorWaiter;
+    this.floorWaiter = null;
+    w?.(granted);
+  }
+
+  private waitForFloor(ms: number): Promise<boolean> {
+    this.waitingFloor = true;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => this.grantFloor(false), ms);
+      this.floorWaiter = (granted) => {
+        clearTimeout(timer);
+        resolve(granted);
+      };
+    });
   }
 
   /** Una frase pedida desde el chat, no desde el nombre en la sala. */
@@ -188,6 +282,7 @@ export class VoiceBrain {
 
   private async speakAnswer(
     text: string,
+    record = true,
   ): Promise<{ bytes: number; firstMs: number | null; stream: boolean }> {
     const t0 = Date.now();
     let firstMs: number | null = null;
@@ -199,6 +294,7 @@ export class VoiceBrain {
       });
       await this.deps.endSpeak();
       if (streamed && streamed.bytes > 0) {
+        if (record) this.deps.onSpoken?.(text.trim());
         return { bytes: streamed.bytes, firstMs, stream: true };
       }
     }
@@ -209,6 +305,7 @@ export class VoiceBrain {
     }
     firstMs = Date.now() - t0;
     await this.deps.speak(speech.mp3.toString('base64'));
+    if (record) this.deps.onSpoken?.(text.trim());
     return { bytes: speech.mp3.length, firstMs, stream: false };
   }
 
@@ -218,12 +315,14 @@ export class VoiceBrain {
     const t0 = Date.now();
     let firstMs: number | null = null;
     let n = 0;
+    const note = (line: string) => this.deps.onSpoken?.(line);
     const counted: AsyncIterable<string> = (async function* () {
       for await (const c of clauses) {
         const line = c.trim();
         if (!line) continue;
         n += 1;
         console.log(`[cortex-meet] voice clause «${line.slice(0, 80)}»`);
+        note(line);
         yield line;
       }
     })();
@@ -244,8 +343,8 @@ export class VoiceBrain {
     }
     const parts: string[] = [];
     for await (const c of counted) parts.push(c);
-    if (!parts.length) return { bytes: 0, firstMs: null, stream: false, clauses: 0 };
-    const rest = await this.speakAnswer(parts.join(' '));
+    if (!parts.length) return { bytes: 0, firstMs: null, stream: false, clauses: n };
+    const rest = await this.speakAnswer(parts.join(' '), false);
     return { ...rest, clauses: n || parts.length };
   }
 

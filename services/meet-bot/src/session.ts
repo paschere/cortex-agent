@@ -16,11 +16,12 @@ import {
   leaveGoogleMeet,
   resetEscalation,
   setGoogleMeetMicrophone,
+  setGoogleMeetHand,
   setHooks,
   waitForGoogleMeetingAdmission,
 } from './join';
 import { humanPause, launchPersistentBrowser, warmUpProfile } from './stealth';
-import { VoiceBrain } from './voice-brain';
+import { VoiceBrain, isBotSpeaker, isEchoOfBot } from './voice-brain';
 import { VOICE_INJECT_SCRIPT } from './voice-inject';
 
 /**
@@ -104,6 +105,8 @@ export class MeetSession {
   private voice: VoiceBrain | null = null;
   private voiceEnabled: boolean;
   private recent: Transcript[] = [];
+  private heardAt = Date.now();
+  private botSaid: Array<{ text: string; at: number }> = [];
   private botConfig: BotConfig | null = null;
   private stopRemoval: (() => void) | null = null;
   private xvfb: ChildProcess | null = null;
@@ -130,6 +133,51 @@ export class MeetSession {
   setVoiceMuted(muted: boolean): void {
     this.voice?.setMuted(muted);
     if (this.page) void setGoogleMeetMicrophone(this.page, !muted, this.botName, this.display);
+  }
+
+  /**
+   * Lo que Cortex dice no pasa por Deepgram (el tap no oye el micro inyectado,
+   * y si lo oye es un eco). Se escribe aquí para que viva en la sala, el
+   * archivo y el contexto del siguiente turno.
+   */
+  private recordBotSpeech(text: string): void {
+    const line = text.trim();
+    if (!line) return;
+    this.botSaid.push({ text: line, at: Date.now() });
+    if (this.botSaid.length > 40) this.botSaid.shift();
+    const t: Transcript = {
+      text: line,
+      isFinal: true,
+      speaker: this.botName,
+      at: (Date.now() - this.heardAt) / 1000,
+    };
+    this.recent.push(t);
+    if (this.recent.length > 200) this.recent.shift();
+    this.events.onTranscript(t);
+    console.log(`[cortex-meet] ${this.id} said ${this.botName}: ${line.slice(0, 80)}`);
+  }
+
+  private ingestHeard(t: Transcript): void {
+    const speaker =
+      t.speaker ||
+      this.roster.find((p) => p.speaking && !p.self)?.name ||
+      this.roster.find((p) => p.speaking)?.name ||
+      null;
+    const line = { ...t, speaker };
+    if (isBotSpeaker(line.speaker, this.botName)) return;
+    const cutoff = Date.now() - 20_000;
+    if (this.botSaid.some((s) => s.at >= cutoff && isEchoOfBot(line.text, s.text))) return;
+    if (line.isFinal) {
+      if (this.finalCount === 1 || this.finalCount % 25 === 0) {
+        console.log(
+          `[cortex-meet] ${this.id} transcript #${this.finalCount} ${speaker ?? '?'}: ${line.text.slice(0, 80)}`,
+        );
+      }
+      this.recent.push(line);
+      if (this.recent.length > 200) this.recent.shift();
+      if (this.voice) void this.voice.onFinalLine(line);
+    }
+    this.events.onTranscript(line);
   }
 
   /**
@@ -209,27 +257,7 @@ export class MeetSession {
     );
 
     this.deepgram = new DeepgramStream(this.config.deepgramKey, this.config.sttLanguage, (t) => {
-      const speaker =
-        t.speaker ||
-        this.roster.find((p) => p.speaking && !p.self)?.name ||
-        this.roster.find((p) => p.speaking)?.name ||
-        null;
-      const line = { ...t, speaker };
-      if (line.isFinal) {
-        // Rastro de que SÍ se oye: la primera frase y luego una de cada 25.
-        // Sin esto, «entra pero no transcribe» no se puede distinguir de
-        // «nadie habló» en los logs (pasó el 21-08).
-        this.finalCount += 1;
-        if (this.finalCount === 1 || this.finalCount % 25 === 0) {
-          console.log(
-            `[cortex-meet] ${this.id} transcript #${this.finalCount} ${speaker ?? '?'}: ${line.text.slice(0, 80)}`,
-          );
-        }
-        this.recent.push(line);
-        if (this.recent.length > 200) this.recent.shift();
-        if (this.voice) void this.voice.onFinalLine(line);
-      }
-      this.events.onTranscript(line);
+      this.ingestHeard(t);
     });
     this.deepgram.start();
 
@@ -528,7 +556,9 @@ export class MeetSession {
     if (this.voice) return true;
     this.voice = new VoiceBrain(this.owner, this.id, {
       config: this.config,
+      botName: this.botName,
       recentTranscript: () => this.recent,
+      onSpoken: (text) => this.recordBotSpeech(text),
       speak: async (mp3B64) => {
         const result = await page
           .evaluate(
@@ -594,6 +624,12 @@ export class MeetSession {
             ).__cortexVoice?.endSpeak?.(),
           )
           .catch(() => undefined);
+      },
+      raiseHand: async () => {
+        await setGoogleMeetHand(page, true, this.display);
+      },
+      lowerHand: async () => {
+        await setGoogleMeetHand(page, false, this.display);
       },
     });
     return true;

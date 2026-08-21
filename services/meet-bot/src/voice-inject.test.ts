@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { getJoinBrowserArgs, JOIN_BROWSER_ARGS, silentMicWavBytes } from './join/browser-args';
-import { extractQuestion, HOLD_LINES, looksLikeVoiceChitchat, pickHoldLine } from './voice-brain';
+import {
+  extractQuestion,
+  HOLD_LINES,
+  isBotSpeaker,
+  isEchoOfBot,
+  looksLikeFloorGrant,
+  looksLikeVoiceChitchat,
+  pickHoldLine,
+} from './voice-brain';
 import { VOICE_INJECT_SCRIPT } from './voice-inject';
 import { sseBlockToText, takeClauses } from './voice-stream';
 
@@ -27,6 +35,16 @@ check('a line without the name is not a trigger', extractQuestion('¿quién toma
 check('cómo estás is chitchat', looksLikeVoiceChitchat('cómo estás?'), true);
 check('puedes hablar is chitchat', looksLikeVoiceChitchat('puedes hablar?'), true);
 check('a CRM question is not chitchat', looksLikeVoiceChitchat('cuánto le cotizamos a Acme'), false);
+check('Cortex is the bot speaker', isBotSpeaker('Cortex', 'Cortex'), true);
+check('a person is not the bot speaker', isBotSpeaker('Mateo Angel', 'Cortex'), false);
+check('STT echo of a hold line is dropped', isEchoOfBot('dame un minuto', 'Dame un minuto.'), true);
+check('a different line is not an echo', isEchoOfBot('cuánto le cotizamos', 'Dame un minuto.'), false);
+check('sí adelante Cortex grants the floor', looksLikeFloorGrant('Sí, adelante Cortex'), true);
+check('te escuchamos grants the floor', looksLikeFloorGrant('Te escuchamos'), true);
+check('go ahead Cortex grants the floor', looksLikeFloorGrant('Go ahead Cortex'), true);
+check('ok Cortex grants the floor', looksLikeFloorGrant('Ok Cortex'), true);
+check('a yes alone does not grant the floor', looksLikeFloorGrant('sí'), false);
+check('the original question is not a floor grant', looksLikeFloorGrant('cuánto le cotizamos a Acme'), false);
 check('hold lines are short spoken asides', HOLD_LINES.every((l) => l.length >= 8 && l.length <= 40), true);
 check('pickHoldLine stays in the set', HOLD_LINES.includes(pickHoldLine(() => 0) as (typeof HOLD_LINES)[number]), true);
 

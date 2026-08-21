@@ -6,6 +6,7 @@
  */
 import type { Page } from 'playwright';
 import { joinGoogleMeeting, setGoogleMeetMicrophone } from './googlemeet/join';
+import { setGoogleMeetHand } from './googlemeet/hand';
 import { waitForGoogleMeetingAdmission, checkForGoogleAdmissionSilent } from './googlemeet/admission';
 import { prepareForRecording, leaveGoogleMeet } from './googlemeet/leave';
 import { startGoogleRemovalMonitor, inspectGoogleMeetCall } from './googlemeet/removal';
@@ -70,6 +71,7 @@ export async function joinMeeting(page: Page, opts: JoinOptions): Promise<JoinRe
 export {
   joinGoogleMeeting,
   setGoogleMeetMicrophone,
+  setGoogleMeetHand,
   waitForGoogleMeetingAdmission,
   checkForGoogleAdmissionSilent,
   prepareForRecording,
