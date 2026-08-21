@@ -59,13 +59,26 @@ export interface Config {
    * reunión abierta. MEET_MODE=account para el camino viejo.
    */
   mode: 'account' | 'guest';
-  /** Locale/timezone del Chrome. Un contenedor sale en UTC, y UTC es huella. */
+  /** Locale/timezone del Chrome. Pin en-US (Vexa #856) para que los selectores del lobby coincidan. */
   locale: string;
   timezone: string;
-  /** Conectar a Chrome por CDP en vez de launchPersistentContext. Más stealth. */
-  cdpConnect: boolean;
+  /**
+   * humanized = clicks reales por X11/xdotool (como Vexa, default en Google Meet).
+   * synthetic = clicks de Playwright. MEET_UI_MODE=synthetic para optar out.
+   */
+  uiInteractionMode: 'humanized' | 'synthetic';
+  /** Cuánto esperar en la sala de espera antes de rendirse. */
+  admissionTimeoutMs: number;
   /** Visitar Google antes de Meet para que el perfil parezca "vivido". */
   warmup: boolean;
+  /**
+   * URL del browser service (services/browser). Si está puesto y el perfil
+   * local no tiene sesión de Google, el bot le pide el perfil al browser
+   * service — donde un operador logueó la cuenta a mano en la pestaña
+   * interactiva. Así se evita el login automatizado desde la IP del datacenter,
+   * que Google bloquea. Formato: https://browser-production-xxx.up.railway.app
+   */
+  browserServiceUrl: string | null;
 }
 
 export function loadConfig(): Config {
@@ -92,9 +105,11 @@ export function loadConfig(): Config {
     proxyUsername: process.env.MEET_PROXY_USERNAME?.trim() || null,
     proxyPassword: process.env.MEET_PROXY_PASSWORD?.trim() || null,
     mode: process.env.MEET_MODE?.trim() === 'account' ? 'account' : 'guest',
-    locale: process.env.MEET_LOCALE?.trim() || 'es-CO',
+    locale: process.env.MEET_LOCALE?.trim() || process.env.BOT_UI_LOCALE?.trim() || 'en-US',
     timezone: process.env.MEET_TIMEZONE?.trim() || 'America/Bogota',
-    cdpConnect: process.env.MEET_CDP_CONNECT?.trim() === 'true',
+    uiInteractionMode: process.env.MEET_UI_MODE?.trim() === 'synthetic' ? 'synthetic' : 'humanized',
+    admissionTimeoutMs: number('MEET_ADMISSION_TIMEOUT_MS', 180_000),
     warmup: process.env.MEET_WARMUP?.trim() !== 'false',
+    browserServiceUrl: process.env.MEET_BROWSER_SERVICE_URL?.trim() || null,
   };
 }

@@ -1,4 +1,6 @@
 import { requireSession } from '@/lib/session';
+import { mustRead } from '@/lib/supabase/read';
+import { getOrgScopedClient } from '@/lib/supabase/service';
 import { chatModel } from '@cortex/agent-tools';
 import { generateText } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -36,7 +38,7 @@ interface TranscriptLine {
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  await requireSession();
+  const user = await requireSession();
   const { id } = await ctx.params;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
@@ -46,21 +48,54 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const base = process.env.MEET_SERVICE_URL?.replace(/\/+$/, '');
   const token = process.env.MEET_SERVICE_TOKEN;
-  if (!base || !token) {
-    return NextResponse.json(
-      { error: 'El bot de reuniones no está configurado.' },
-      { status: 503 },
-    );
+
+  // Primero el bot (la llamada sigue viva). Si ya colgó, el archivo.
+  let snap: {
+    transcript: TranscriptLine[];
+    status: string;
+    participants?: Array<{ name: string; speaking?: boolean }>;
+  } | null = null;
+
+  if (base && token) {
+    snap = await fetch(
+      `${base}/session/${encodeURIComponent(id)}?owner=${encodeURIComponent(user.organization.id)}`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+      },
+    )
+      .then((r) =>
+        r.ok
+          ? (r.json() as Promise<{
+              transcript: TranscriptLine[];
+              status: string;
+              participants?: Array<{ name: string; speaking?: boolean }>;
+            }>)
+          : null,
+      )
+      .catch(() => null);
   }
 
-  // El transcript acumulado hasta ahora — la única fuente de esta respuesta.
-  const snap = await fetch(`${base}/session/${encodeURIComponent(id)}/`, {
-    headers: { authorization: `Bearer ${token}` },
-  })
-    .then((r) =>
-      r.ok ? (r.json() as Promise<{ transcript: TranscriptLine[]; status: string }>) : null,
-    )
-    .catch(() => null);
+  if (!snap) {
+    const archived = mustRead(
+      await getOrgScopedClient(user.organization.id)
+        .from('live_calls')
+        .select('transcript, participants, status')
+        .eq('session_id', id)
+        .maybeSingle(),
+      'el transcript guardado de esa llamada',
+    ) as {
+      transcript: TranscriptLine[] | null;
+      participants: Array<{ name: string }> | null;
+      status: string | null;
+    } | null;
+    if (archived) {
+      snap = {
+        transcript: archived.transcript ?? [],
+        status: archived.status ?? 'ended',
+        participants: archived.participants ?? [],
+      };
+    }
+  }
 
   if (!snap) {
     return NextResponse.json({ error: 'Esa reunión ya no está disponible.' }, { status: 410 });
@@ -68,16 +103,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   // Solo la cola: una reunión larga no cabe entera y lo reciente es lo que casi
   // siempre importa. Las últimas ~120 líneas cubren bastante contexto.
+  const people = (snap.participants ?? []).map((p) =>
+    p.speaking ? `${p.name} (hablando ahora)` : p.name,
+  );
+  const peopleText = people.length ? people.join(', ') : '(aún no vi nombres en la sala)';
   const lines = snap.transcript.slice(-120);
   const transcriptText = lines.length
-    ? lines.map((l) => `${l.speaker ? `${l.speaker}: ` : ''}${l.text}`).join('\n')
+    ? lines.map((l) => `${l.speaker ? `${l.speaker}: ` : 'Alguien: '}${l.text}`).join('\n')
     : '(todavía no se ha dicho nada transcribible en la reunión)';
 
   const { text } = await generateText({
     model: chatModel(),
     system:
-      'Eres Cortex, escuchando una reunión en vivo junto a la persona. Responde SOLO con lo que aparece en el transcript de abajo — es lo que se ha dicho en la llamada hasta ahora. Si la respuesta no está en el transcript, dilo en una frase y no inventes. Sé breve y directo: esto se lee mientras la reunión sigue. Cita a quién lo dijo cuando ayude. Responde en español.',
-    prompt: `TRANSCRIPT DE LA REUNIÓN (hasta ahora):\n${transcriptText}\n\nPREGUNTA: ${parsed.data.question}`,
+      'Eres Cortex, junto a la persona, con el transcript de una reunión. Responde SOLO con lo que aparece abajo: quién estaba en la sala y el transcript. Si la respuesta no está ahí, dilo en una frase y no inventes. Sé breve y directo. Cita a quién lo dijo. Responde en español.',
+    prompt: `EN LA LLAMADA AHORA:\n${peopleText}\n\nTRANSCRIPT:\n${transcriptText}\n\nPREGUNTA: ${parsed.data.question}`,
   });
 
   return NextResponse.json({ answer: text });

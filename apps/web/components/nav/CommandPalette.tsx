@@ -68,6 +68,12 @@ const SECTIONS: Section[] = [
         keywords: 'cortex preguntar nueva conversacion ask consultar',
       },
       {
+        href: '/calls',
+        label: 'Llamadas',
+        note: 'Las reuniones en las que Cortex está ahora, en vivo',
+        keywords: 'llamadas reuniones meet en vivo transcript calls meeting live',
+      },
+      {
         href: '/approvals',
         label: 'Aprobaciones',
         note: 'Lo que Cortex quiere hacer y necesita tu permiso',

@@ -77,7 +77,7 @@ describe('el rail', () => {
   it('no hay plazas ganadas por defecto: el chat no comparte el bloque de arriba', () => {
     expect(DEFAULT_QUICK).toEqual([]);
     expect(buildRail([], false).quick).toEqual([]);
-    expect(PINNED.map((i) => i.href)).toEqual(['/chat', '/kb']);
+    expect(PINNED.map((i) => i.href)).toEqual(['/chat', '/calls', '/kb']);
   });
 
   it('Inicio vive en «Todo», no en las filas fijas', () => {

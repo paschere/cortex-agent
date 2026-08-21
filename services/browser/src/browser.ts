@@ -674,6 +674,15 @@ export class BrowserWorker {
     await this.profiles?.reset(owner);
   }
 
+  /**
+   * El path del perfil persistente del tenant, para empaquetarlo y entregárselo
+   * a otro servicio (meet-bot). Devuelve null si no hay perfil o la feature está
+   * apagada.
+   */
+  async exportProfile(owner: string): Promise<string | null> {
+    return this.profiles?.profilePathForExport(owner) ?? null;
+  }
+
   // -------------------------------------------------------------------------
   // El volante, los secretos y la pantalla en vivo. control.ts es la máquina;
   // esto es la máquina puesta sobre una pestaña de verdad.

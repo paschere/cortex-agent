@@ -87,6 +87,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   gdrive_sync_state: tenant(),
   meeting_imports: tenant(),
   meeting_briefings: tenant(),
+  // Calls Cortex joined live and kept after they ended (migration 0119). Tenant
+  // rather than derived from kb_documents: the Calls page lists a workspace's
+  // sittings without naming a document, and a call with no transcript still
+  // has a row (document_id is nullable).
+  live_calls: tenant(),
 
   // --- Chat and memory ------------------------------------------------------
   conversations: tenant(),

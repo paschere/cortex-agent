@@ -10,6 +10,7 @@ set -e
 # y se baja privilegios en la misma línea, igual que services/browser.
 
 export DISPLAY=:99
+mkdir -p /app/storage/screenshots
 Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
 sleep 1
 

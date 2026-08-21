@@ -10,11 +10,13 @@
     "start": "node dist/index.js",
     "spike": "tsx src/spike.ts",
     "login": "tsx src/login.ts",
+    "test": "tsx src/join/googlemeet/humanized/humanized.test.ts && tsx src/join/googlemeet/admission.test.ts",
     "lint": "biome check src",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "patchright": "1.62.1",
+    "playwright": "1.56.0",
+    "playwright-extra": "4.3.6",
     "ws": "8.18.0"
   },
   "devDependencies": {

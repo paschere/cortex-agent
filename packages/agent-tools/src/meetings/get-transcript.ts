@@ -31,7 +31,7 @@ const NOT_ENABLED_NOTE =
 export const meetingsGetTranscript = registerTool({
   id: 'meetings.get_transcript',
   description:
-    'Read the transcript of a past Google Meet call — the full conversation with who said what. Give it either the calendar entry for the meeting or the Meet code from the invite link, and it finds the most recent recorded session and returns the text, who took part, when it ended and how long it ran. Use it to answer "what did we agree on", "what did the client ask for", or to recap a call someone missed. If nobody turned on transcription there is nothing to read, and it will say so plainly instead of failing.',
+    'Read the transcript of a past Google Meet call — the full conversation with who said what. Give it either the calendar entry or the Meet code. It first looks at calls Cortex joined and kept, then at Google\'s own transcript if someone turned transcription on. Use it to answer "what did we agree on", "what did the client ask for", or to recap a call someone missed.',
   inputSchema: z
     .object({
       eventId: z.string().optional().describe('Calendar entry id for the meeting'),
@@ -124,6 +124,70 @@ export const meetingsGetTranscript = registerTool({
       }
     }
     if (!meetingCode) return empty('No Meet code was provided and none could be resolved.');
+
+    const archived = await ctx.db
+      .from('live_calls')
+      .select('title, meet_code, started_at, ended_at, participants, transcript')
+      .eq('meet_code', meetingCode)
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!archived.error && archived.data) {
+      const lines = (archived.data.transcript as Array<{ text?: string; speaker?: string | null }>) ?? [];
+      const body = lines
+        .map((l) => `${l.speaker?.trim() ? `${l.speaker}: ` : 'Alguien: '}${l.text ?? ''}`)
+        .join('\n')
+        .trim();
+      if (body) {
+        const names = [
+          ...new Set(
+            ((archived.data.participants as Array<{ name?: string }> | null) ?? [])
+              .map((p) => p.name)
+              .filter((n): n is string => Boolean(n)),
+          ),
+        ];
+        const start = archived.data.started_at as string | null;
+        const end = archived.data.ended_at as string | null;
+        const duration =
+          start && end
+            ? Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 60_000))
+            : null;
+        const shown = body.length > maxChars ? body.slice(0, maxChars) : body;
+        const truncated = body.length > maxChars;
+        const callTitle = title ?? (archived.data.title as string | null) ?? `Meet ${meetingCode}`;
+        const markdown = [
+          `# Transcript — ${callTitle}`,
+          [end ? `Ended ${end}` : null, duration != null ? `${duration} min` : null, names.length ? `${names.length} participant(s)` : null]
+            .filter(Boolean)
+            .join(' · '),
+          names.length ? `**Who was there:** ${names.join(', ')}` : '',
+          '',
+          shown,
+          truncated ? '\n_(transcript continues beyond this point)_' : '',
+        ]
+          .filter((l) => l !== '')
+          .join('\n');
+        return {
+          available: true,
+          note: truncated
+            ? `Transcript found (Cortex was in the call). Showing the first ${maxChars.toLocaleString()} characters.`
+            : 'Full transcript found. Cortex was in this call and kept what it heard.',
+          eventId: input.eventId ?? null,
+          title: callTitle,
+          meetingCode,
+          startedAt: start,
+          endedAt: end,
+          durationMinutes: duration,
+          participants: names,
+          transcript: shown,
+          truncated,
+          totalChars: body.length,
+          source: 'Cortex live',
+          fetchedAt,
+          markdown,
+        };
+      }
+    }
 
     try {
       const startAfter = new Date(Date.now() - lookbackDays * 86_400_000);

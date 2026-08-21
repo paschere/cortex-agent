@@ -1,0 +1,10 @@
+.git
+.pnpm-store
+**/node_modules
+.next
+.turbo
+**/*.tsbuildinfo
+apps/desktop
+infra
+docs
+.tmp-vexa-gmeet

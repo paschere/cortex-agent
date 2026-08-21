@@ -1,139 +1,203 @@
 /**
  * EL TAP: cómo un script DENTRO de la página de Meet saca el audio de la sala.
  *
- * ===========================================================================
- * LA APUESTA DE F0, Y POR QUÉ ESTA ANTES QUE PULSEAUDIO
- * ===========================================================================
- * La forma pesada de capturar el audio de un Chromium headless es la de la
- * industria: un servidor de sonido virtual (PulseAudio) al que Chromium
- * escribe, y ffmpeg leyendo el «monitor» de ese sink. Funciona, pero arrastra
- * un demonio de sonido, permisos y un contenedor que ya no es solo un
- * navegador.
+ * PCM linear16 a 16 kHz, no WebM. MediaRecorder en timeslices manda el header
+ * solo en el primer blob; Deepgram transcribe esa frase y luego se queda
+ * ciego (o con varios segundos de retraso). El ScriptProcessor emite PCM
+ * continuo: cada reconexión de Deepgram sigue entendiendo los bytes.
  *
- * Esta es la forma ligera, y si funciona nos ahorra todo eso: Meet reproduce
- * la voz de los demás con la Web Audio API, y esa API es interceptable DESDE
- * la propia página. `AudioContext.createMediaStreamDestination()` da un nodo
- * al que se puede enrutar cualquier audio que ya suena, y de ese destino sale
- * un MediaStream que un `MediaRecorder` corta en chunks de Opus. Sin Xvfb, sin
- * PulseAudio: el audio nunca sale de la memoria de Chromium hasta que ya es
- * Opus listo para Deepgram.
- *
- * DÓNDE PUEDE FALLAR, dicho antes de creerle: Meet podría reproducir con
- * elementos <audio> que no pasan por un AudioContext accesible, o por WebRTC
- * insertable streams fuera de alcance. Por eso F0 es binario: si el nivel de
- * audio que sale de aquí es silencio, el spike cae al plan B (PulseAudio) sin
- * discusión. La medida es el RMS del primer chunk con voz, no una opinión.
- *
- * ===========================================================================
- * EL TRUCO DEL HABLANTE, GRATIS
- * ===========================================================================
- * Diarizar audio (¿quién habló?) es caro y flojo. Meet ya lo resolvió y lo
- * pinta: el mosaico del hablante activo lleva una clase y el nombre está en el
- * DOM. Este script observa ese cambio y emite «ahora habla X» por el mismo
- * canal, para que el transcript salga atribuido por persona sin tocar el
- * audio. En F0 solo se registra que el observador engancha; F1 lo une al
- * transcript.
+ * Las pistas remotas se enganchan de dos formas: elementos <audio>/<video>
+ * que Meet ya montó, y el constructor de RTCPeerConnection (antes de que
+ * Meet corra, vía addInitScript).
  */
 
-/**
- * El script que corre en la página. Es una string y no un módulo porque se
- * evalúa dentro del navegador vía `page.evaluate` / `addInitScript`, igual que
- * `LOCATOR_INSTALL_SCRIPT` en services/browser/src/snapshot.ts. Expone dos
- * cosas en `window.__cortexTap`: arrancar la captura, y leer el nivel.
- *
- * El binding `__cortexAudioChunk` (base64 de un blob webm/opus) lo instala
- * Playwright con `exposeBinding`; aquí solo se llama.
- */
 export const AUDIO_TAP_SCRIPT = /* js */ `
 (() => {
   if (window.__cortexTap) return;
 
-  const state = { started: false, peak: 0, chunks: 0, speaker: null };
+  const pending = [];
+  const seenTrack = new Set();
+
+  const OrigPC = window.RTCPeerConnection;
+  if (OrigPC && !OrigPC.__cortexWrapped) {
+    const Wrapped = new Proxy(OrigPC, {
+      construct(Target, args) {
+        const pc = new Target(...args);
+        pc.addEventListener('track', (ev) => {
+          if (ev.track && ev.track.kind === 'audio') {
+            pending.push(ev.streams[0] || new MediaStream([ev.track]));
+          }
+        });
+        return pc;
+      },
+    });
+    Wrapped.__cortexWrapped = true;
+    window.RTCPeerConnection = Wrapped;
+  }
+
+  const state = { started: false, peak: 0, chunks: 0, speaker: null, roster: [] };
+
+  const EFFECTS = /visual_effects|backgrounds and effects|fondos y efectos/i;
+  const SPEAKING_SEL = '.Oaajhc, .HX2H7, .wEsLMd, .OgVli, [data-audio-level]:not([data-audio-level="0"])';
+
+  function cleanName(raw) {
+    if (!raw) return null;
+    let s = String(raw).replace(/\\s+/g, ' ').trim();
+    if (!s || EFFECTS.test(s)) return null;
+    s = s.replace(/\\s*\\((presenting|presentando)\\)\\s*$/i, '');
+    s = s.replace(/,?\\s*(muted|muteado|micr[oó]fono (off|apagado)|c[aá]mara apagada|speaking|hablando).*$/i, '');
+    s = s.replace(/^(you|t[uú])$/i, '');
+    return s.trim() || null;
+  }
+
+  function tileSpeaking(el) {
+    if (el.getAttribute('data-is-speaking') === 'true') return true;
+    const level = el.getAttribute('data-audio-level');
+    if (level && level !== '0') return true;
+    const aria = el.getAttribute('aria-label') || '';
+    if (/speaking|hablando/i.test(aria)) return true;
+    return Boolean(el.querySelector(SPEAKING_SEL));
+  }
+
+  function collectRoster() {
+    const byKey = new Map();
+    function add(id, name, speaking, self) {
+      const n = cleanName(name);
+      if (!n && !self) return;
+      const key = id || n || 'self';
+      const prev = byKey.get(key);
+      byKey.set(key, {
+        id: key,
+        name: n || prev?.name || 'Participante',
+        speaking: Boolean(speaking || prev?.speaking),
+        self: Boolean(self || prev?.self),
+      });
+    }
+    for (const el of document.querySelectorAll('[data-participant-id]')) {
+      const aria = el.getAttribute('aria-label') || '';
+      if (EFFECTS.test(aria)) continue;
+      const id = el.getAttribute('data-participant-id') || '';
+      const selfNode = el.hasAttribute('data-self-name')
+        ? el
+        : el.querySelector('[data-self-name]');
+      const selfName = selfNode ? selfNode.getAttribute('data-self-name') : null;
+      const labeled = el.querySelector('span.notranslate, .zWGUib, .cS7aqe');
+      add(id, selfName || labeled?.textContent || aria, tileSpeaking(el), Boolean(selfName));
+    }
+    for (const el of document.querySelectorAll('[data-self-name]')) {
+      const n = el.getAttribute('data-self-name');
+      if (n) add(el.getAttribute('data-participant-id') || 'self', n, tileSpeaking(el), true);
+    }
+    return [...byKey.values()];
+  }
+
+  function refreshRoster() {
+    const next = collectRoster();
+    state.roster = next;
+    const talking = next.find((p) => p.speaking && !p.self) || next.find((p) => p.speaking);
+    if (talking?.name) state.speaker = talking.name;
+  }
 
   async function start() {
     if (state.started) return { ok: false, reason: 'already-started' };
     state.started = true;
 
-    // Un AudioContext propio al que enrutar TODO lo que Meet ya está sonando.
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const dest = ctx.createMediaStreamDestination();
-
-    // El medidor: un AnalyserNode para saber, en números, si hay señal. Es lo
-    // que hace de F0 una prueba y no una esperanza.
+    if (ctx.state === 'suspended') await ctx.resume();
+    const mixer = ctx.createGain();
+    mixer.gain.value = 1;
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 512;
     const buf = new Float32Array(analyser.fftSize);
+    mixer.connect(analyser);
 
-    // Enrutar cada <audio>/<video> con sonido que Meet cree ahora o después.
-    // Meet monta un elemento por participante remoto; capturarlos a todos y
-    // mezclarlos en el mismo destino da «la sala» en una sola pista.
-    const wired = new WeakSet();
-    function wire(el) {
-      if (wired.has(el) || !el.srcObject) return;
-      try {
-        const src = ctx.createMediaStreamSource(el.srcObject);
-        src.connect(dest);
-        src.connect(analyser);
-        wired.add(el);
-      } catch (e) { /* una pista sin audio no se enruta; no pasa nada */ }
+    const processor = ctx.createScriptProcessor(4096, 1, 1);
+    mixer.connect(processor);
+    const silent = ctx.createGain();
+    silent.gain.value = 0;
+    processor.connect(silent);
+    silent.connect(ctx.destination);
+
+    processor.onaudioprocess = (ev) => {
+      const input = ev.inputBuffer.getChannelData(0);
+      let sum = 0;
+      for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+      const rms = Math.sqrt(sum / input.length);
+      if (rms > state.peak) state.peak = rms;
+      const pcm = downsampleTo16k(input, ctx.sampleRate);
+      if (!pcm.length) return;
+      state.chunks += 1;
+      const b64 = int16ToBase64(pcm);
+      if (window.__cortexAudioChunk) {
+        window.__cortexAudioChunk({ b64, rms, speaker: state.speaker });
+      }
+    };
+
+    function wireStream(stream) {
+      if (!stream) return;
+      const tracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
+      for (const t of tracks) {
+        if (!t || seenTrack.has(t.id)) continue;
+        seenTrack.add(t.id);
+        try {
+          ctx.createMediaStreamSource(new MediaStream([t])).connect(mixer);
+        } catch (e) { /* pista cerrada */ }
+      }
+    }
+    function wireEl(el) {
+      if (el && el.srcObject) wireStream(el.srcObject);
     }
     function sweep() {
-      for (const el of document.querySelectorAll('audio, video')) wire(el);
+      while (pending.length) wireStream(pending.pop());
+      for (const el of document.querySelectorAll('audio, video')) wireEl(el);
     }
     sweep();
-    setInterval(sweep, 1000);
+    setInterval(sweep, 500);
 
-    // El grabador: Opus en contenedor webm, chunks de 250ms. Cada chunk se
-    // manda a Node en base64 — pequeño, frecuente, y en el formato que
-    // Deepgram consume sin transcodificar.
-    const rec = new MediaRecorder(dest.stream, { mimeType: 'audio/webm;codecs=opus' });
-    rec.ondataavailable = async (ev) => {
-      if (!ev.data || ev.data.size === 0) return;
-      state.chunks += 1;
-      analyser.getFloatTimeDomainData(buf);
-      let sum = 0;
-      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-      const rms = Math.sqrt(sum / buf.length);
-      if (rms > state.peak) state.peak = rms;
-      const b64 = await blobToBase64(ev.data);
-      if (window.__cortexAudioChunk) window.__cortexAudioChunk({ b64, rms, speaker: state.speaker });
-    };
-    rec.start(250);
-
+    refreshRoster();
     watchSpeaker();
-    return { ok: true };
+    return { ok: true, sampleRate: ctx.sampleRate };
   }
 
-  function blobToBase64(blob) {
-    return new Promise((res) => {
-      const r = new FileReader();
-      r.onloadend = () => res(String(r.result).split(',')[1] || '');
-      r.readAsDataURL(blob);
-    });
+  function downsampleTo16k(float32, inRate) {
+    const target = 16000;
+    if (!inRate || inRate <= 0) return new Int16Array(0);
+    const ratio = inRate / target;
+    const n = Math.max(0, Math.floor(float32.length / ratio));
+    const out = new Int16Array(n);
+    for (let i = 0; i < n; i++) {
+      const s = Math.max(-1, Math.min(1, float32[Math.floor(i * ratio)] || 0));
+      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return out;
   }
 
-  // El hablante activo, leído del DOM. Los selectores son deliberadamente
-  // laxos y múltiples: Meet cambia sus clases, y aquí un fallo solo pierde la
-  // atribución de una frase, no el audio. Se centraliza para repararlo en un
-  // sitio, como los localizadores de trámites.
+  function int16ToBase64(pcm) {
+    const bytes = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+    let bin = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(bin);
+  }
+
   function watchSpeaker() {
-    const pick = () => {
-      const speaking = document.querySelector('[data-is-speaking="true"], [class*="speaking"]');
-      if (!speaking) return;
-      const name = speaking.querySelector('[data-self-name], [class*="name"]')?.textContent
-        || speaking.getAttribute('data-participant-id') || null;
-      if (name && name !== state.speaker) state.speaker = name.trim();
-    };
+    const pick = () => refreshRoster();
     new MutationObserver(pick).observe(document.body, {
       subtree: true, attributes: true, childList: true,
-      attributeFilter: ['data-is-speaking', 'class'],
+      attributeFilter: ['data-is-speaking', 'data-audio-level', 'aria-label', 'class'],
     });
-    setInterval(pick, 500);
+    setInterval(pick, 400);
   }
 
   window.__cortexTap = {
     start,
     level: () => ({ peak: state.peak, chunks: state.chunks, speaker: state.speaker }),
+    roster: () => {
+      refreshRoster();
+      return state.roster.slice();
+    },
   };
 })();
 `;

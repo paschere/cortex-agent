@@ -17,9 +17,9 @@ import { gcalFetch } from '../gcal/client';
  * cola de "riesgo potencial" que deniega por defecto desde marzo 2026. Es la
  * misma técnica que usan Recall.ai, Claap y todos los vendors comerciales.
  *
- * F0 (el spike) dejó probado el audio. Las mejoras de stealth (CDP, warmup,
- * humanización, retry de lobby) viven en services/meet-bot/src/ y ayudan con
- * el fingerprint del navegador. El invite del calendario es lo que hace que
+ * F0 (el spike) dejó probado el audio. El join en vivo es el de Vexa
+ * (Playwright 1.56, clicks humanizados por X11, selectores y admisión) en
+ * services/meet-bot/src/join. El invite del calendario es lo que hace que
  * Google deje entrar al bot sin pelear.
  */
 
@@ -110,7 +110,7 @@ async function ensureBotOnInvite(
 export const meetingsJoinLive = registerTool({
   id: 'meetings.join_live',
   description:
-    'Entra a una reunión de Google Meet EN VIVO como invitado anónimo (un nombre visible para todos, sin usar la cuenta de Google del workspace), escucha en tiempo real y abre una sala de seguimiento en el chat donde puedes preguntar sobre la llamada mientras pasa: «¿qué dijo Mateo del presupuesto?», «resúmeme lo que va», «¿quedó algún compromiso?». Úsala cuando te pidan «métete a esta reunión», «entra a este Meet y toma notas», «escucha esta llamada» y te den un link de meet.google.com. El bot aparece en la reunión con nombre propio y puede que alguien tenga que admitirlo. Al terminar el transcript queda guardado y alimenta los briefings. NO es para leer una transcripción vieja (meetings.get_transcript) ni para agendar (schedule): es para estar EN una reunión que ocurre ahora.',
+    'Entra a una reunión de Google Meet EN VIVO como invitado anónimo (un nombre visible para todos, sin usar la cuenta de Google del workspace), escucha en tiempo real y abre la sala en la pestaña «Llamadas» de la app (el menú, debajo de Chat), donde se ve todo lo que se dice en tiempo real y se puede preguntar sobre la llamada mientras pasa: «¿qué dijo Mateo del presupuesto?», «resúmeme lo que va», «¿quedó algún compromiso?». Úsala cuando te pidan «métete a esta reunión», «entra a este Meet y toma notas», «escucha esta llamada» y te den un link de meet.google.com. El bot aparece en la reunión con nombre propio y puede que alguien tenga que admitirlo. Al terminar el transcript queda guardado y alimenta los briefings. NO es para leer una transcripción vieja (meetings.get_transcript) ni para agendar (schedule): es para estar EN una reunión que ocurre ahora.',
   inputSchema: z.object({
     meetUrl: z
       .string()
@@ -175,6 +175,7 @@ export const meetingsJoinLive = registerTool({
         headers: { authorization: `Bearer ${svc.token}`, 'content-type': 'application/json' },
         body: JSON.stringify({
           owner: ctx.organizationId,
+          userId: ctx.userId,
           meetUrl: input.meetUrl,
           botName: input.botName,
           voiceEnabled,
@@ -201,8 +202,8 @@ export const meetingsJoinLive = registerTool({
       meetUrl: input.meetUrl,
       voiceEnabled,
       message: voiceEnabled
-        ? `Voy entrando a la reunión — puede que alguien tenga que admitirme.${inviteNote} Sigue la sala en vivo aquí en el chat: te muestro lo que se dice y puedes preguntarme sobre la llamada en tiempo real. Y como tienen voz activa, si alguien me nombra en la llamada («Cortex, …») respondo en voz alta ahí mismo; puedes silenciarme con un toque cuando quieras. Cuando termine, guardo el transcript y actualizo los briefings.`
-        : `Voy entrando a la reunión — puede que alguien tenga que admitirme.${inviteNote} Sigue la sala en vivo aquí en el chat: te muestro lo que se dice y puedes preguntarme sobre la llamada en tiempo real. Cuando termine, guardo el transcript y actualizo los briefings.`,
+        ? `Voy entrando a la reunión — puede que alguien tenga que admitirme.${inviteNote} Síguela en la pestaña «Llamadas» (en el menú, debajo de Chat): ahí ves todo lo que se dice en tiempo real y puedes preguntarme sobre la llamada mientras pasa. Y como tienen voz activa, si alguien me nombra en la llamada («Cortex, …») respondo en voz alta ahí mismo; puedes silenciarme con un toque cuando quieras. Cuando termine, guardo el transcript y actualizo los briefings.`
+        : `Voy entrando a la reunión — puede que alguien tenga que admitirme.${inviteNote} Síguela en la pestaña «Llamadas» (en el menú, debajo de Chat): ahí ves todo lo que se dice en tiempo real y puedes preguntarme sobre la llamada mientras pasa. Cuando termine, guardo el transcript y actualizo los briefings.`,
     };
   },
 });

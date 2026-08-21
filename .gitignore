@@ -17,6 +17,8 @@ playwright-report
 .supabase
 infra/supabase/.branches
 infra/supabase/.temp
+.tmp-vexa-gmeet
+.pnpm-store
 
 # Claude Code workspace (workflow worktrees, session state)
 .claude/

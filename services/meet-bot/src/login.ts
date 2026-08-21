@@ -9,8 +9,7 @@
  *     PROFILE_DIR=/tmp/cortex-meet-profile pnpm --filter @cortex/meet-bot login
  */
 
-import { chromium } from 'patchright';
-import { chromeLaunchOptions } from './stealth';
+import { launchPersistentBrowser } from './stealth';
 
 const PROFILE_DIR = process.env.PROFILE_DIR || '/tmp/cortex-meet-profile';
 
@@ -21,9 +20,7 @@ async function main(): Promise<void> {
     '[login] cuando termines y veas tu bandeja/cuenta, cierra la ventana o pulsa Ctrl+C aquí.',
   );
 
-  const context = await chromium.launchPersistentContext(PROFILE_DIR, chromeLaunchOptions());
-
-  const page = context.pages()[0] || (await context.newPage());
+  const { context, page } = await launchPersistentBrowser(PROFILE_DIR);
   await page.goto('https://accounts.google.com/', { waitUntil: 'domcontentloaded' });
 
   // Se queda abierto hasta que la persona cierre la ventana. Detectar el cierre

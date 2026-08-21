@@ -21,7 +21,7 @@ export const runtime = 'nodejs';
 const Body = z.object({ muted: z.boolean() });
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  await requireSession();
+  const user = await requireSession();
   const { id } = await ctx.params;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
@@ -33,11 +33,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const token = process.env.MEET_SERVICE_TOKEN;
   if (!base || !token) return NextResponse.json({ error: 'no configurado' }, { status: 503 });
 
-  await fetch(`${base}/session/${encodeURIComponent(id)}/voice`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ muted: parsed.data.muted }),
-  }).catch(() => undefined);
+  await fetch(
+    `${base}/session/${encodeURIComponent(id)}/voice?owner=${encodeURIComponent(user.organization.id)}`,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ muted: parsed.data.muted }),
+    },
+  ).catch(() => undefined);
 
   return NextResponse.json({ ok: true, muted: parsed.data.muted });
 }

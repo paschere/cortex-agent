@@ -1,4 +1,4 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { access, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type BrowserContext, chromium } from 'playwright';
 // Import circular con browser.ts, y seguro: ninguno usa al otro al evaluar el
@@ -226,6 +226,36 @@ export class ProfileManager {
     }
     await rm(join(this.root, key), { recursive: true, force: true });
     logger.warn({ profile: key }, 'perfil persistente BORRADO a pedido del dueño');
+  }
+
+  /**
+   * El path absoluto del perfil de un tenant, para que el browser service lo
+   * empaquete (tar.gz) y se lo entregue a otro servicio — concretamente el
+   * meet-bot, que necesita la sesión de Google que alguien logueó aquí a mano
+   * a través de la pestaña interactiva. Sin este puente, el meet-bot intenta
+   * loguearse solo desde una IP de datacenter y Google lo bloquea.
+   *
+   * Cierra el contexto si está abierto (flush de cookies a disco) ANTES de
+   * devolver el path — sin eso, el tar captura un perfil a medio escribir.
+   */
+  async profilePathForExport(owner: string): Promise<string | null> {
+    const key = profileKey(owner);
+    const entry = this.open.get(key);
+    if (entry) {
+      this.open.delete(key);
+      await entry.context.close().catch(() => undefined);
+      // El settle que closeAll documenta: Chrome flushea cookies de forma
+      // asíncrona al cerrarse. Sin esta espera el tar puede capturar un
+      // perfil sin las cookies más recientes.
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+    }
+    const dir = join(this.root, key);
+    try {
+      await access(dir);
+      return dir;
+    } catch {
+      return null;
+    }
   }
 
   /**

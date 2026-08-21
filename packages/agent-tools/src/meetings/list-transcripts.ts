@@ -128,7 +128,7 @@ export const meetingsListTranscripts = registerTool({
       );
     }
 
-    let records: Awaited<ReturnType<typeof listConferenceRecords>>;
+    let records: Awaited<ReturnType<typeof listConferenceRecords>> = [];
     try {
       records = await listConferenceRecords(ctx, { startAfter: since, pageSize: MAX_RECORDS_SCANNED });
     } catch (err) {
@@ -136,17 +136,62 @@ export const meetingsListTranscripts = registerTool({
         { err: (err as Error).message },
         'meetings.list_transcripts: Meet lookup failed',
       );
-      return bail(
-        "The meeting records could not be reached right now. This usually means the Google account needs to be reconnected with permission to read Meet recordings.",
-      );
     }
 
-    if (records.length === 0) {
-      return bail(`No Google Meet calls were found in the last ${days} day(s).`);
+    const liveRows =
+      (
+        await ctx.db
+          .from('live_calls')
+          .select('meet_code, title, started_at, ended_at, participants, transcript, session_id')
+          .gte('started_at', since.toISOString())
+          .order('started_at', { ascending: false })
+          .limit(limit)
+      ).data ?? [];
+
+    if (records.length === 0 && liveRows.length === 0) {
+      return bail(
+        `No transcripts were found in the last ${days} day(s). Cortex keeps the calls it joined; Google Meet only leaves a transcript when someone turns transcription on.`,
+      );
     }
 
     const out: Array<z.infer<typeof MeetingSchema>> = [];
     let scanned = 0;
+
+    for (const row of liveRows) {
+      if (out.length >= limit) break;
+      const lines = (row.transcript as Array<{ text?: string; speaker?: string | null }>) ?? [];
+      const excerpt = lines
+        .map((l) => `${l.speaker?.trim() ? `${l.speaker}: ` : ''}${l.text ?? ''}`)
+        .join('\n')
+        .trim()
+        .slice(0, excerptChars);
+      if (!excerpt) continue;
+      const names = [
+        ...new Set(
+          ((row.participants as Array<{ name?: string }> | null) ?? [])
+            .map((p) => p.name)
+            .filter((n): n is string => Boolean(n)),
+        ),
+      ];
+      if (needle) {
+        const hay = `${names.join(' ')} ${row.title ?? ''}`.toLowerCase();
+        if (!hay.includes(needle)) continue;
+      }
+      const start = row.started_at as string | null;
+      const end = row.ended_at as string | null;
+      out.push({
+        meetingCode: (row.meet_code as string | null) ?? null,
+        title: (row.title as string | null) ?? null,
+        eventId: null,
+        startedAt: start,
+        endedAt: end,
+        durationMinutes:
+          start && end ? Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 60_000)) : null,
+        participants: names,
+        excerpt: excerpt.length >= excerptChars ? `${excerpt}…` : excerpt,
+        conferenceRecord: `liveSessions/${row.session_id as string}`,
+      });
+    }
 
     for (const record of records.slice(0, MAX_RECORDS_SCANNED)) {
       if (out.length >= limit) break;
@@ -156,6 +201,7 @@ export const meetingsListTranscripts = registerTool({
         if (!transcript) continue;
 
         const code = record.space ? await fetchSpaceMeetingCode(ctx, record.space) : null;
+        if (code && out.some((m) => m.meetingCode === code.toLowerCase())) continue;
         const calendarMatch = code ? byCode.get(code.toLowerCase()) : undefined;
 
         const participants = await listParticipants(ctx, record.name);

@@ -13,6 +13,9 @@ export { meetingsListTranscripts } from './list-transcripts';
 export { meetingsPrepareBriefing } from './prepare-briefing';
 export { meetingsScheduleBriefings } from './schedule-briefings';
 
+export { archiveLiveMeeting, linesToTurns, liveConferenceRecord } from './archive-live';
+export type { ArchiveLiveInput, ArchiveLiveResult, LiveLine, LivePerson } from './archive-live';
+
 // The importer's engine, for the callers that are not a model turn: the Inngest
 // sweep and the Brain Knowledge page's manual import button.
 export {

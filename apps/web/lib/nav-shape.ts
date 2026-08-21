@@ -16,6 +16,7 @@ import {
   MessageCircle,
   MessageSquare,
   MoreHorizontal,
+  PhoneCall,
   Plug,
   Radar,
   Receipt,
@@ -167,8 +168,14 @@ export interface NavSection {
 /** Sigue existiendo. Ya no es la puerta: `/` autentica hacia `/chat`. */
 export const HOME: NavItem = { href: '/dashboard', label: 'Inicio', icon: LayoutDashboard };
 export const CHAT: NavItem = { href: '/chat', label: 'Chat', icon: MessageSquare };
+/**
+ * Llamadas: la sala de las reuniones en las que Cortex está metido AHORA. Va
+ * fija debajo del chat porque una llamada en vivo no se busca: se abre y se
+ * deja a la vista mientras pasa.
+ */
+export const CALLS: NavItem = { href: '/calls', label: 'Llamadas', icon: PhoneCall };
 export const BRAIN: NavItem = { href: '/kb', label: 'Brain Knowledge', icon: BookOpen };
-export const PINNED: NavItem[] = [CHAT, BRAIN];
+export const PINNED: NavItem[] = [CHAT, CALLS, BRAIN];
 
 const QUEUE_ICON: Record<WaitingQueue, NavIcon> = {
   approvals: Inbox,

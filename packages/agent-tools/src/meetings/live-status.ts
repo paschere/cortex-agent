@@ -25,7 +25,7 @@ function meetService(): { base: string; token: string } | null {
 export const meetingsLiveStatus = registerTool({
   id: 'meetings.live_status',
   description:
-    'Dice qué está pasando AHORA en las reuniones a las que Cortex entró en vivo: si sigue dentro, y las últimas frases de lo que se ha dicho. Úsala cuando pregunten desde el chat normal «¿qué va diciendo en la reunión?», «¿de qué están hablando?», «¿ya salió tal tema?», «resúmeme lo que va de la llamada» — sin tener que abrir la sala de la reunión. Solo lee; para entrar a una reunión es meetings.join_live.',
+      'Dice qué está pasando AHORA en las reuniones a las que Cortex entró en vivo: quién está en la sala, si sigue dentro, y las últimas frases (con quién las dijo). Úsala cuando pregunten «¿quién está en la reunión?», «¿qué va diciendo?», «¿de qué están hablando?», «¿qué dijo Mateo?». Solo lee; para entrar a una reunión es meetings.join_live.',
   inputSchema: z.object({
     sessionId: z
       .string()
@@ -44,6 +44,7 @@ export const meetingsLiveStatus = registerTool({
       z.object({
         sessionId: z.string(),
         status: z.string(),
+        people: z.array(z.string()),
         recent: z.array(z.object({ speaker: z.string().nullable(), text: z.string() })),
       }),
     ),
@@ -58,7 +59,7 @@ export const meetingsLiveStatus = registerTool({
     // El bot indexa por organización; se le pide la lista de las vivas de este
     // dueño (o una concreta si vino el id).
     const path = input.sessionId
-      ? `/session/${encodeURIComponent(input.sessionId)}`
+      ? `/session/${encodeURIComponent(input.sessionId)}?owner=${encodeURIComponent(ctx.organizationId)}`
       : `/live?owner=${encodeURIComponent(ctx.organizationId)}`;
     let res: Response;
     try {
@@ -74,26 +75,45 @@ export const meetingsLiveStatus = registerTool({
     }
 
     const data = (await res.json()) as
-      | { transcript?: Array<{ speaker: string | null; text: string }>; status?: string }
-      | { meetings?: Array<{ sessionId: string; status: string; transcript: Array<{ speaker: string | null; text: string }> }> };
+      | {
+          transcript?: Array<{ speaker: string | null; text: string }>;
+          status?: string;
+          participants?: Array<{ name: string }>;
+        }
+      | {
+          meetings?: Array<{
+            sessionId: string;
+            status: string;
+            transcript: Array<{ speaker: string | null; text: string }>;
+            participants?: Array<{ name: string }>;
+          }>;
+        };
 
     const list =
       'meetings' in data && data.meetings
         ? data.meetings
         : 'transcript' in data
-          ? [{ sessionId: input.sessionId ?? '', status: data.status ?? 'live', transcript: data.transcript ?? [] }]
+          ? [
+              {
+                sessionId: input.sessionId ?? '',
+                status: data.status ?? 'live',
+                transcript: data.transcript ?? [],
+                participants: data.participants,
+              },
+            ]
           : [];
 
     const meetings = list.map((m) => ({
       sessionId: m.sessionId,
       status: m.status,
+      people: (m.participants ?? []).map((p) => p.name),
       recent: (m.transcript ?? []).slice(-(input.lines ?? 30)).map((l) => ({ speaker: l.speaker, text: l.text })),
     }));
 
     return {
       meetings,
       guidance: meetings.length
-        ? 'Estas son las últimas frases de la(s) reunión(es) en vivo. Responde con lo que se dijo; si la respuesta no está aquí, dilo.'
+        ? 'Estas son las personas en la sala y las últimas frases, con quién las dijo. Responde con eso; si no está aquí, dilo.'
         : 'No hay ninguna reunión viva ahora mismo.',
     };
   },

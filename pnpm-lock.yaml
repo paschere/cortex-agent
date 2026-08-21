@@ -373,9 +373,12 @@ importers:
 
   services/meet-bot:
     dependencies:
-      patchright:
-        specifier: 1.62.1
-        version: 1.62.1
+      playwright:
+        specifier: 1.56.0
+        version: 1.56.0
+      playwright-extra:
+        specifier: 4.3.6
+        version: 4.3.6(playwright-core@1.56.0)(playwright@1.56.0)
       ws:
         specifier: 8.18.0
         version: 8.18.0
@@ -5299,16 +5302,6 @@ packages:
   parse-entities@4.0.2:
     resolution: {integrity: sha512-GG2AQYWoLgL877gQIKeRPGO1xF9+eG1ujIb5soS5gPvLQ1y2o8FL90w2QWNdf9I361Mpp7726c+lj3U0qK1uGw==}
 
-  patchright-core@1.62.1:
-    resolution: {integrity: sha512-zsrggmh1oAxk/NT+vLifVWatPjZXVloXHQksIZApoovAUgeJkmP35a0BfSzePDKGJTrl9zfzr19JIJTZdiMX0A==}
-    engines: {node: '>=20'}
-    hasBin: true
-
-  patchright@1.62.1:
-    resolution: {integrity: sha512-Q+Ng49ic7wzKLlOLxuy485TcE0Yx1GUyRXA0ua7lT3fCBRcMk1JIGmUKsiUPtGOeWkqI0KNI04zjUm1erq153g==}
-    engines: {node: '>=20'}
-    hasBin: true
-
   path-exists@4.0.0:
     resolution: {integrity: sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==}
     engines: {node: '>=8'}
@@ -5426,8 +5419,30 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  playwright-core@1.56.0:
+    resolution: {integrity: sha512-1SXl7pMfemAMSDn5rkPeZljxOCYAmQnYLBTExuh6E8USHXGSX3dx6lYZN/xPpTz1vimXmPA9CDnILvmJaB8aSQ==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright-extra@4.3.6:
+    resolution: {integrity: sha512-q2rVtcE8V8K3vPVF1zny4pvwZveHLH8KBuVU2MoE3Jw4OKVoBWsHI9CH9zPydovHHOCDxjGN2Vg+2m644q3ijA==}
+    engines: {node: '>=12'}
+    peerDependencies:
+      playwright: '*'
+      playwright-core: '*'
+    peerDependenciesMeta:
+      playwright:
+        optional: true
+      playwright-core:
+        optional: true
+
   playwright@1.49.1:
     resolution: {integrity: sha512-VYL8zLoNTBxVOrJBbDuRgDWa3i+mfQgDTrL8Ah9QXZ7ax4Dsj0MSq5bYgytRnDVVe+njoKnfsYkH3HzqVj5UZA==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.56.0:
+    resolution: {integrity: sha512-X5Q1b8lOdWIE4KAoHpW3SE8HvUB+ZZsUoN64ZhjnN8dOb1UpujxBtENGiZFE+9F/yhzJwYa+ca3u43FeLbboHA==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -11790,14 +11805,6 @@ snapshots:
       is-decimal: 2.0.1
       is-hexadecimal: 2.0.1
 
-  patchright-core@1.62.1: {}
-
-  patchright@1.62.1:
-    dependencies:
-      patchright-core: 1.62.1
-    optionalDependencies:
-      fsevents: 2.3.2
-
   path-exists@4.0.0: {}
 
   path-is-absolute@1.0.1: {}
@@ -11925,9 +11932,26 @@ snapshots:
 
   playwright-core@1.49.1: {}
 
+  playwright-core@1.56.0: {}
+
+  playwright-extra@4.3.6(playwright-core@1.56.0)(playwright@1.56.0):
+    dependencies:
+      debug: 4.4.3
+    optionalDependencies:
+      playwright: 1.56.0
+      playwright-core: 1.56.0
+    transitivePeerDependencies:
+      - supports-color
+
   playwright@1.49.1:
     dependencies:
       playwright-core: 1.49.1
+    optionalDependencies:
+      fsevents: 2.3.2
+
+  playwright@1.56.0:
+    dependencies:
+      playwright-core: 1.56.0
     optionalDependencies:
       fsevents: 2.3.2
 

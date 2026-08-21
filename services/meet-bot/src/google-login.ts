@@ -1,4 +1,4 @@
-import type { BrowserContext, Page } from 'patchright';
+import type { BrowserContext, Page } from 'playwright';
 
 /**
  * INICIAR SESIÓN DE GOOGLE, SOLO SI HACE FALTA.

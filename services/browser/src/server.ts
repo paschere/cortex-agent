@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
+import { spawn } from 'node:child_process';
 import { WebSocketServer } from 'ws';
 import { type BrowserWorker, BusyError, UnknownSession } from './browser';
 import type { Config } from './config';
@@ -208,6 +209,38 @@ async function handle(
       }
       await worker.resetProfile(owner);
       json(res, 200, { ok: true });
+      return;
+    }
+
+    // Exportar el perfil persistente del tenant como tar.gz. El meet-bot lo
+    // usa para heredar la sesión de Google que alguien logueó aquí a mano
+    // (la pestaña interactiva), sin tener que loguearse desde una IP de
+    // datacenter — Google bloquea eso. El flujo es: el operador loguea la
+    // cuenta del bot en una sesión interactiva del browser service, y el
+    // meet-bot importa ese perfil antes de entrar a Meet.
+    if (req.method === 'GET' && path === '/profile/export') {
+      if (!owner) {
+        json(res, 400, { error: 'x-cortex-owner is required' });
+        return;
+      }
+      const dir = await worker.exportProfile(owner);
+      if (!dir) {
+        json(res, 404, { error: 'No hay perfil para ese owner' });
+        return;
+      }
+      res.writeHead(200, {
+        'content-type': 'application/gzip',
+        'content-disposition': `attachment; filename="profile.tar.gz"`,
+      });
+      const tar = spawn('tar', ['-czf', '-', '-C', dir, '.']);
+      tar.stdout.pipe(res);
+      tar.stderr.on('data', (d) => logger.error({ err: d.toString() }, 'tar export error'));
+      tar.on('close', (code) => {
+        if (code !== 0 && !res.writableEnded) {
+          res.end();
+        }
+      });
+      req.on('close', () => tar.kill('SIGTERM'));
       return;
     }
 

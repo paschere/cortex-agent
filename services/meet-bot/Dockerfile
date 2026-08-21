@@ -5,14 +5,8 @@
 #
 #     docker build -f services/meet-bot/Dockerfile .
 #
-# POR QUÉ NO EN VERCEL, y por qué ni siquiera como el browser: además de
-# manejar un Chrome vivo por reunión (que un serverless no sostiene), este
-# proceso necesita AUDIO y una pantalla. F0 demostró que Meet degrada a los
-# clientes headless, así que el navegador corre bajo Xvfb — una pantalla
-# virtual que hace a Chrome «headful» ante los ojos de Meet sin abrir ninguna
-# ventana. El audio de la sala se saca con Web Audio dentro de la página
-# (services/meet-bot/src/audio-tap.ts), no con PulseAudio, así que no hace
-# falta un servidor de sonido — el spike lo probó.
+# Playwright 1.56 (mismo que Vexa) + Chrome real (códecs de Meet) + Xvfb + xdotool
+# para el input humanizado (XTEST, isTrusted=true).
 
 FROM node:20-slim AS build
 WORKDIR /repo
@@ -26,29 +20,31 @@ RUN pnpm --filter @cortex/meet-bot build
 
 # --- runtime ---------------------------------------------------------------
 #
-# La imagen de Patchright/Playwright trae el Chrome real (canal 'chrome') con
-# los códecs propietarios que Meet exige — la misma razón por la que F0 tuvo
-# que dejar el Chromium pelado. El tag debe casar con la versión de
-# `patchright` en package.json (1.62.x → imagen 1.62.0).
-FROM mcr.microsoft.com/playwright:v1.62.0-jammy AS runtime
+# La imagen oficial de Playwright trae Chromium; Meet exige Chrome real
+# (H.264/AAC). El tag casa con `playwright` en package.json (1.56.0).
+FROM mcr.microsoft.com/playwright:v1.56.0-jammy AS runtime
 USER root
 WORKDIR /app
 ENV NODE_ENV=production
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=America/Bogota
 
-# Xvfb: la pantalla virtual. Sin ella, Meet degrada el cliente y el audio no
-# fluye. `xvfb` a veces viene en la imagen; se instala explícito para no
-# depender de eso. Patchright habla el protocolo de Playwright 1.62 — el tag
-# de la imagen tiene que casar.
+# Xvfb: pantalla virtual (Meet degrada headless).
+# xdotool: clicks XTEST del join humanizado de Vexa.
+# x11vnc: vista en vivo si la admisión escala a needs_human_help.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends xvfb fonts-liberation \
+  && apt-get install -y --no-install-recommends xvfb fonts-liberation xdotool x11vnc \
   && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/meet-bot/package.json services/meet-bot/
 RUN pnpm install --filter @cortex/meet-bot --prod --frozen-lockfile
-RUN pnpm --filter @cortex/meet-bot exec patchright install chrome
+RUN pnpm --filter @cortex/meet-bot exec playwright install chrome
 COPY --from=build /repo/services/meet-bot/dist services/meet-bot/dist
+
+RUN mkdir -p /app/storage/screenshots /profiles \
+  && chown -R pwuser:pwuser /app/storage /profiles
 
 COPY services/meet-bot/docker-entrypoint.sh /usr/local/bin/cortex-meet-entrypoint
 RUN chmod +x /usr/local/bin/cortex-meet-entrypoint

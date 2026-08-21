@@ -33,7 +33,8 @@ import { synthesize } from './tts';
  * silencio es el default seguro.
  */
 
-const NAME_TRIGGER = /^\s*(oye,?\s+|hey,?\s+|ok,?\s+)?cortex[\s,:.\-]/i;
+const NAME_TRIGGER =
+  /^\s*(oye,?\s+|hey,?\s+|ok,?\s+|ey,?\s+|eh,?\s+)?(c[oó]rtex|coartex|kortex|korteks)[\s,:.\-!]*/i;
 
 export interface VoiceDeps {
   config: Config;
@@ -65,8 +66,11 @@ export class VoiceBrain {
     if (this.muted || this.busy) return;
     if (!NAME_TRIGGER.test(line.text)) return;
     this.busy = true;
+    console.log(`[cortex-meet] voice trigger «${line.text}»`);
     try {
-      const question = line.text.replace(NAME_TRIGGER, '').trim();
+      const question =
+        line.text.replace(NAME_TRIGGER, '').trim() ||
+        'Te nombraron en la reunión. Pregunta si te necesitan y ofrece ayuda en una frase.';
       const answer = await this.askCortex(question);
       if (!answer) return;
       const speech = await synthesize(this.deps.config.deepgramKey, answer);
@@ -114,7 +118,10 @@ export class VoiceBrain {
           signal: AbortSignal.timeout(40_000),
         },
       );
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.error(`[cortex-meet] voice-answer HTTP ${res.status}`);
+        return null;
+      }
       const data = (await res.json()) as { answer?: string };
       return data.answer?.trim() || null;
     } catch {

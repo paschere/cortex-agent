@@ -19,7 +19,7 @@ export const maxDuration = 300;
  * vivan más que una reunión.
  */
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  await requireSession();
+  const user = await requireSession();
   const { id } = await ctx.params;
 
   const base = process.env.MEET_SERVICE_URL?.replace(/\/+$/, '');
@@ -31,9 +31,12 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     );
   }
 
-  const upstream = await fetch(`${base}/session/${encodeURIComponent(id)}/stream`, {
-    headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' },
-  }).catch(() => null);
+  const upstream = await fetch(
+    `${base}/session/${encodeURIComponent(id)}/stream?owner=${encodeURIComponent(user.organization.id)}`,
+    {
+      headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' },
+    },
+  ).catch(() => null);
 
   if (!upstream || !upstream.ok || !upstream.body) {
     return NextResponse.json({ error: 'Esa reunión ya no está en vivo.' }, { status: 410 });
@@ -45,6 +48,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       'content-type': 'text/event-stream',
       'cache-control': 'no-cache, no-transform',
       connection: 'keep-alive',
+      'x-accel-buffering': 'no',
     },
   });
 }

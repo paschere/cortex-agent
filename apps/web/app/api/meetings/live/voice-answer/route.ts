@@ -2,12 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
-import {
-  chatModel,
-  listTools,
-  readWorkspacePlan,
-  runTool,
-} from '@cortex/agent-tools';
+import { chatModel, listTools, readWorkspacePlan, runTool } from '@cortex/agent-tools';
 import { ConfirmationRequiredError } from '@cortex/core';
 import { type CoreTool, generateText, tool } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -160,7 +155,12 @@ export async function POST(req: NextRequest) {
       execute: async (args, { abortSignal }) => {
         try {
           // MODO VOZ: auto-autoriza. Ver la cabecera para lo que abre.
-          return await runTool(def, args, { ...scopedCtx, signal: abortSignal }, { confirmed: true });
+          return await runTool(
+            def,
+            args,
+            { ...scopedCtx, signal: abortSignal },
+            { confirmed: true },
+          );
         } catch (err) {
           if (err instanceof ConfirmationRequiredError) {
             return { __error: true, message: 'necesitaba confirmación' };
