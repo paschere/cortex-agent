@@ -445,15 +445,19 @@ export class MeetSession {
       config: this.config,
       recentTranscript: () => this.recent,
       speak: async (mp3B64) => {
-        await page
+        const result = await page
           .evaluate(
             (b64) =>
               (
-                window as unknown as { __cortexVoice?: { speak: (b: string) => Promise<number> } }
-              ).__cortexVoice?.speak(b64),
+                window as unknown as { __cortexVoice?: { speak: (b: string) => Promise<unknown> } }
+              ).__cortexVoice?.speak(b64) ?? { error: 'sin __cortexVoice' },
             mp3B64,
           )
-          .catch(() => undefined);
+          .catch((err: Error) => ({ error: err.message }));
+        // Si esto dice duration>0, gumAudio>0 y track live, el audio SALIÓ por
+        // el micro suplantado; lo que quede es de Meet (micro apagado) o del
+        // anfitrión.
+        console.log(`[cortex-meet] ${this.id} speak ${JSON.stringify(result)}`);
       },
       mute: async () => {
         await setGoogleMeetMicrophone(page, false);

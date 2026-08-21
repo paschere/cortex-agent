@@ -21,7 +21,16 @@ export async function synthesize(
   text: string,
   voice = DEFAULT_VOICE,
 ): Promise<{ mp3: Buffer } | null> {
-  const params = new URLSearchParams({ model: voice, speed: DEFAULT_SPEED });
+  // WAV (linear16) y no mp3: decodeAudioData lo abre en cualquier Chromium,
+  // con o sin códecs propietarios. El mp3 pesa menos, pero una frase que no
+  // se decodifica es una frase que no se dice (21-08: speak devolvía 0).
+  const params = new URLSearchParams({
+    model: voice,
+    speed: DEFAULT_SPEED,
+    encoding: 'linear16',
+    sample_rate: '24000',
+    container: 'wav',
+  });
   try {
     const res = await fetch(`https://api.deepgram.com/v1/speak?${params}`, {
       method: 'POST',
@@ -34,6 +43,7 @@ export async function synthesize(
       return null;
     }
     const mp3 = Buffer.from(await res.arrayBuffer());
+    console.log(`[cortex-meet] TTS ok ${mp3.length} bytes`);
     return { mp3 };
   } catch {
     return null;

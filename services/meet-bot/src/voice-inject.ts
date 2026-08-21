@@ -33,11 +33,13 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
   // La pista de audio que Meet creerá que es el micrófono.
   const micTrack = dest.stream.getAudioTracks()[0];
 
+  let gumAudio = 0;
   const realGUM = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
   navigator.mediaDevices.getUserMedia = async (constraints) => {
     // Solo suplantamos el AUDIO. Si además pide video, se lo damos real/fake
     // como venga; nuestro bot va con cámara apagada, así que rara vez pasa.
     if (constraints && constraints.audio) {
+      gumAudio += 1;
       const stream = new MediaStream();
       stream.addTrack(micTrack);
       if (constraints.video) {
@@ -62,7 +64,7 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
     let buf;
     try {
       buf = await ctx.decodeAudioData(bytes.buffer);
-    } catch (e) { return 0; }
+    } catch (e) { return { duration: 0, error: 'decode: ' + (e && e.message) }; }
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(gain);
@@ -70,7 +72,14 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
     src.onended = () => { speaking = false; };
     if (ctx.state === 'suspended') await ctx.resume();
     src.start();
-    return buf.duration;
+    return {
+      duration: buf.duration,
+      ctx: ctx.state,
+      gumAudio,
+      track: micTrack.readyState,
+      trackEnabled: micTrack.enabled,
+      gain: gain.gain.value,
+    };
   }
 
   window.__cortexVoice = {
@@ -78,6 +87,7 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
     mute: () => { gain.gain.value = 0; },
     unmute: () => { gain.gain.value = 1; },
     isSpeaking: () => speaking,
+    status: () => ({ ctx: ctx.state, gumAudio, track: micTrack.readyState, gain: gain.gain.value }),
   };
 })();
 `;
