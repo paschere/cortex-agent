@@ -35,7 +35,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     window.RTCPeerConnection = Wrapped;
   }
 
-  const state = { started: false, peak: 0, chunks: 0, speaker: null, roster: [] };
+  const state = { started: false, peak: 0, chunks: 0, speaker: null, roster: [], tracks: 0, live: 0, elements: 0, ctxState: 'none' };
 
   const EFFECTS = /visual_effects|backgrounds and effects|fondos y efectos/i;
   const SPEAKING_SEL = '.Oaajhc, .HX2H7, .wEsLMd, .OgVli, [data-audio-level]:not([data-audio-level="0"])';
@@ -133,6 +133,26 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
       }
     };
 
+    // PISTAS REMOTAS EN CHROME: un MediaStreamAudioSourceNode de una pista
+    // WebRTC remota solo produce audio si esa pista TAMBIÉN está sonando en
+    // un <audio>/<video> (bug viejo de Chromium). Meet normalmente las tiene
+    // en elementos propios, pero no siempre ni para todas (21-08: chunks
+    // fluían y peak=0 durante toda una llamada). Por eso cada pista que se
+    // engancha se reproduce además en un <audio> oculto a volumen 0.
+    const wired = [];
+    function keepPlaying(t) {
+      try {
+        const el = document.createElement('audio');
+        el.autoplay = true;
+        el.volume = 0;
+        el.setAttribute('data-cortex-tap', '1');
+        el.style.display = 'none';
+        el.srcObject = new MediaStream([t]);
+        document.body.appendChild(el);
+        const p = el.play();
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) { /* sin DOM listo */ }
+    }
     function wireStream(stream) {
       if (!stream) return;
       const tracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
@@ -141,6 +161,9 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
         seenTrack.add(t.id);
         try {
           ctx.createMediaStreamSource(new MediaStream([t])).connect(mixer);
+          wired.push(t);
+          state.tracks = wired.length;
+          keepPlaying(t);
         } catch (e) { /* pista cerrada */ }
       }
     }
@@ -149,7 +172,12 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     }
     function sweep() {
       while (pending.length) wireStream(pending.pop());
-      for (const el of document.querySelectorAll('audio, video')) wireEl(el);
+      const els = document.querySelectorAll('audio:not([data-cortex-tap]), video');
+      state.elements = els.length;
+      for (const el of els) wireEl(el);
+      state.live = wired.filter((t) => t.readyState === 'live' && !t.muted).length;
+      state.ctxState = ctx.state;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     }
     sweep();
     setInterval(sweep, 500);
@@ -193,7 +221,15 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
 
   window.__cortexTap = {
     start,
-    level: () => ({ peak: state.peak, chunks: state.chunks, speaker: state.speaker }),
+    level: () => ({
+      peak: state.peak,
+      chunks: state.chunks,
+      speaker: state.speaker,
+      tracks: state.tracks,
+      live: state.live,
+      elements: state.elements,
+      ctx: state.ctxState,
+    }),
     roster: () => {
       refreshRoster();
       return state.roster.slice();
