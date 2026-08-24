@@ -2,8 +2,8 @@
  * SSE del cerebro (voice-answer) y corte en cláusulas para el TTS.
  */
 
-/** Igual que /api/voice/turn: mandar al TTS apenas hay una cláusula. */
-export const VOICE_CLAUSE = /^([\s\S]*?[.!?…,;:]+)(\s+)([\s\S]*)$/;
+/** Fin de oración, no miles/decimales ni comas de inciso. «4.247,52» no se parte. */
+export const VOICE_CLAUSE = /^([\s\S]*?(?<!\d)[.!?…]+)(\s+)([\s\S]*)$/;
 
 export function takeClauses(buf: string): { clauses: string[]; rest: string } {
   const clauses: string[] = [];

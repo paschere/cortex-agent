@@ -176,6 +176,8 @@ export class MeetSession {
       this.recent.push(line);
       if (this.recent.length > 200) this.recent.shift();
       if (this.voice) void this.voice.onFinalLine(line);
+    } else if (this.voice) {
+      this.voice.onInterim(line);
     }
     this.events.onTranscript(line);
   }
@@ -631,6 +633,7 @@ export class MeetSession {
       lowerHand: async () => {
         await setGoogleMeetHand(page, false, this.display);
       },
+      othersInCall: () => this.roster.filter((p) => !p.self).length,
     });
     return true;
   }

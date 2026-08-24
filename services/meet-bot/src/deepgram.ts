@@ -5,7 +5,7 @@ import WebSocket from 'ws';
  *
  * PCM en vez de WebM: cada frame es autónomo, Deepgram no espera un cluster,
  * y un socket que se reabre no pierde el resto de la reunión. Los parciales
- * llegan a ritmo de conversación; los finales, al callar ~300 ms.
+ * llegan a ritmo de conversación; los finales, al callar ~800 ms.
  *
  * Quién habló lo pinta Meet en el DOM (audio-tap.ts), no la diarización.
  */
@@ -41,7 +41,7 @@ export class DeepgramStream {
       encoding: 'linear16',
       sample_rate: '16000',
       channels: '1',
-      endpointing: '300',
+      endpointing: '800',
     });
     const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params}`, {
       headers: { Authorization: `Token ${this.apiKey}` },

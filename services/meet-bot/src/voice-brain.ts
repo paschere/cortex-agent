@@ -10,11 +10,17 @@ import { AsyncQueue, readVoiceAnswerStream } from './voice-stream';
  * LA REGLA SOCIAL ES LA FEATURE
  * ===========================================================================
  * Un bot que interrumpe una reunión una sola vez queda desinstalado para
- * siempre. Así que Cortex habla SOLO cuando lo nombran («Cortex, …») en una
- * frase FINAL del transcript, nunca por iniciativa propia, y una a la vez (no
- * se pisa). El disparador es deliberadamente estrecho: el nombre al principio
- * de la frase, o «oye/hey Cortex». Un «…y Cortex nos ayudó con eso» no lo
- * activa, porque no le están hablando A él.
+ * siempre. Cortex habla SOLO cuando lo nombran, nunca por iniciativa propia,
+ * y una a la vez. El primer «Cortex» no es la pregunta completa: Deepgram
+ * corta al callar ~800 ms («Cortex, podrías averiguar» / silencio / «cuánto
+ * le cotizamos»). Se junta lo que sigue del mismo hablante y se espera a
+ * que deje de hablar ANTES de abrir la boca.
+ *
+ * Dos clases de turno, no una:
+ *   - Chitchat («hola», «me oyes»): responde ya, sin mano.
+ *   - Trabajo en 1:1: espera a que terminen, dice un hold y responde.
+ *   - Trabajo en grupo (2+ humanos): levanta la mano EN SILENCIO y espera
+ *     «adelante». No dice «ahora lo busco» encima de la pregunta.
  *
  * ===========================================================================
  * LA RESPUESTA LA PIENSA CORTEX, NO ESTE PROCESO
@@ -53,22 +59,66 @@ export function extractQuestion(text: string): string | null {
 }
 
 /**
- * Saludos y «¿me oyes?» no necesitan el catálogo de tools: con tools, Sonnet
- * se queda mirando 80 funciones antes de decir «hola». Una pregunta de negocio
- * («cuánto le cotizamos») no entra aquí.
+ * Saludos y «¿me oyes?» no necesitan tools ni mano. Una pregunta a medias
+ * («podrías averiguar») NO es chitchat: el largo corto ya no cuenta.
  */
 export function looksLikeVoiceChitchat(question: string): boolean {
-  const q = question
-    .trim()
-    .toLowerCase()
-    .replace(/[¿?¡!.,…]/g, ' ')
+  const q = foldSpoken(question)
     .replace(/\bpor favor\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  if (q.length < 12) return true;
-  return /^(hola|buenas(?: noches| tardes| d[ií]as)?|buen[oa]s?\s*(d[ií]as|tardes|noches)?|qu[eé] tal|c[oó]mo est[aá]s(?: t[uú]| vos)?|c[oó]mo le va|puedes hablar|me escuchas|est[aá]s ah[ií]|hey|hi|hello|gracias)$/.test(
+  if (!q) return true;
+  return /^(hola|buenas(?: noches| tardes| dias)?|buenos dias|que tal|como estas(?: tu| vos)?|como le va|puedes hablar|me escuchas|me oyes|estas ahi|hey|hi|hello|gracias(?: mil)?|thank you|thanks|perfecto|listo|vale)$/.test(
     q,
   );
+}
+
+const HANGING_TAIL =
+  /\b(podrias|podria|puedes|puede|quisiera|quiero|necesito|averiguar|buscar|revisar|mirar|checar|decirme|contarme|explicar|si|de|para|por|con|a|y|o|que|como|cuanto|cual|quien|cuando|donde|el|la|los|las|un|una|me|le|nos|te)$/;
+
+/** La frase se cortó a mitad: «Cortex, podrías averiguar» todavía no es la pregunta. */
+export function looksLikeIncompleteQuestion(question: string): boolean {
+  const q = foldSpoken(question);
+  if (!q) return true;
+  if (looksLikeVoiceChitchat(question)) return false;
+  if (HANGING_TAIL.test(q)) return true;
+  const trimmed = question.trim();
+  if (/[,;:]$/.test(trimmed)) return true;
+  if (!/[.!?…]$/.test(trimmed) && q.split(/\s+/).length <= 4) return true;
+  return false;
+}
+
+export function joinUtterances(parts: string[]): string {
+  return parts
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ');
+}
+
+function sameSpeaker(a: string | null, b: string | null): boolean {
+  if (!a || !b) return true;
+  return a === b;
+}
+
+/** Chitchat: corto. Pregunta incompleta: más aire. Pregunta cerrada: un respiro. */
+export const CHITCHAT_GATHER_MS = 700;
+export const INCOMPLETE_GATHER_MS = 2_500;
+export const COMPLETE_GATHER_MS = 1_400;
+export const EMPTY_GATHER_MS = 4_000;
+export const QUESTION_MAX_GATHER_MS = 10_000;
+
+export function questionGatherMs(question: string): number {
+  if (!foldSpoken(question)) return EMPTY_GATHER_MS;
+  if (looksLikeIncompleteQuestion(question)) return INCOMPLETE_GATHER_MS;
+  if (looksLikeVoiceChitchat(question)) return CHITCHAT_GATHER_MS;
+  return COMPLETE_GATHER_MS;
+}
+
+/** Mano alzada solo en grupo, y solo si el turno pide trabajo. En 1:1 con Cortex, no. */
+export function shouldRaiseHand(question: string, othersInCall = 0): boolean {
+  if (looksLikeVoiceChitchat(question)) return false;
+  return othersInCall >= 2;
 }
 
 /** Frases cortas mientras Cortex piensa un turno que sí pide tools. */
@@ -97,22 +147,27 @@ export const FLOOR_WAIT_MS = 90_000;
 /**
  * «Sí, adelante Cortex», «te escuchamos», «go ahead». Solo se usa cuando
  * Cortex YA pidió la palabra: un «sí» suelto no abre un turno nuevo.
+ *
+ * Las fronteras `\b` de JS no tratan `í` como letra: «Sí, Cortex» (lo que
+ * Deepgram oyó el 21-08 cuando se dijo «adelante Cortex») NO hacía match.
+ * Se pliegan acentos y se corta por espacios.
  */
 export function looksLikeFloorGrant(text: string, botName = 'Cortex'): boolean {
-  const q = normalizeSpoken(text);
+  const q = foldSpoken(text);
   if (!q) return false;
-  const name = botName.trim().toLowerCase();
+  const name = foldSpoken(botName);
   const named =
     (name.length >= 2 && q.includes(name)) ||
-    /\b(c[oó]rtex|coartex|kortex|korteks|córtex)\b/.test(q);
+    /\b(cortex|coartex|kortex|korteks)\b/.test(q);
+  const tokens = ` ${q} `;
   if (
-    /\b(adelante|go ahead|te escuchamos|tiene la palabra|tienes la palabra|the floor|when you.?re ready|puedes (hablar|decir|contar)|cu[eé]ntanos|cuenta pues|you can (speak|talk|go)|you.?re (up|on))\b/.test(
-      q,
+    / (adelante|go ahead|te escuchamos|tiene la palabra|tienes la palabra|the floor|when youre ready|puedes hablar|puedes decir|puedes contar|cuentanos|cuenta pues|you can speak|you can talk|you can go|youre up|youre on) /.test(
+      tokens,
     )
   ) {
     return true;
   }
-  if (named && /\b(s[ií]|ok|okay|listo|claro|dale|dime|yes|go|speak|talk|escuchamos)\b/.test(q)) {
+  if (named && / (si|ok|okay|listo|claro|dale|dime|yes|go|speak|talk|escuchamos|adelante) /.test(tokens)) {
     return true;
   }
   return false;
@@ -124,6 +179,14 @@ export function normalizeSpoken(text: string): string {
     .replace(/[¿?¡!.,…;:"“”«»]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** Minúsculas, sin tildes: para que «sí» y «si» cuenten igual. */
+export function foldSpoken(text: string): string {
+  return normalizeSpoken(text)
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[''`´]/g, '');
 }
 
 export function isBotSpeaker(speaker: string | null, botName: string): boolean {
@@ -156,6 +219,8 @@ export interface VoiceDeps {
   unmute: () => Promise<void>;
   raiseHand?: () => Promise<void>;
   lowerHand?: () => Promise<void>;
+  /** Humanos en la sala, sin contar a Cortex. 1 = 1:1; 2+ = grupo. */
+  othersInCall?: () => number;
   /** Una línea que Cortex acaba de decir, para el transcript (no pasa por STT). */
   onSpoken?: (text: string) => void;
   /** La cola reciente del transcript, para dársela a Cortex como contexto. */
@@ -167,6 +232,12 @@ export class VoiceBrain {
   private muted = false;
   private waitingFloor = false;
   private floorWaiter: ((granted: boolean) => void) | null = null;
+  private collecting: {
+    speaker: string | null;
+    parts: string[];
+    timer: ReturnType<typeof setTimeout> | null;
+    startedAt: number;
+  } | null = null;
 
   constructor(
     private readonly owner: string,
@@ -176,47 +247,110 @@ export class VoiceBrain {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
+    if (muted) this.cancelCollect();
     void (muted ? this.deps.mute() : this.deps.unmute());
   }
 
-  /** Se llama con cada frase FINAL. Decide si le hablaron a Cortex. */
-  async onFinalLine(line: Transcript): Promise<void> {
+  /** Parciales: el hablante sigue, no dispares todavía. */
+  onInterim(line: Transcript): void {
+    if (this.muted || this.busy || this.waitingFloor) return;
+    if (!this.collecting) return;
+    if (!sameSpeaker(this.collecting.speaker, line.speaker)) return;
+    this.armFlush();
+  }
+
+  /** Se llama con cada frase FINAL. Junta la pregunta; no habla a mitad. */
+  onFinalLine(line: Transcript): void {
     if (this.muted) return;
     if (this.waitingFloor) {
       if (looksLikeFloorGrant(line.text, this.deps.botName || 'Cortex')) {
         console.log(`[cortex-meet] floor grant «${line.text}»`);
         this.grantFloor(true);
+      } else {
+        console.log(`[cortex-meet] floor wait heard «${line.text}»`);
       }
       return;
     }
     if (this.busy) return;
-    const extracted = extractQuestion(line.text);
+    if (this.collecting) {
+      if (!sameSpeaker(this.collecting.speaker, line.speaker)) return;
+      this.collecting.parts.push(line.text);
+      console.log(`[cortex-meet] voice gather +«${line.text.slice(0, 80)}»`);
+      this.armFlush();
+      return;
+    }
+    if (extractQuestion(line.text) === null) return;
+    this.collecting = {
+      speaker: line.speaker,
+      parts: [line.text],
+      timer: null,
+      startedAt: Date.now(),
+    };
+    console.log(`[cortex-meet] voice gather «${line.text.slice(0, 80)}»`);
+    this.armFlush();
+  }
+
+  private cancelCollect(): void {
+    if (!this.collecting) return;
+    if (this.collecting.timer) clearTimeout(this.collecting.timer);
+    this.collecting = null;
+  }
+
+  private armFlush(): void {
+    const bag = this.collecting;
+    if (!bag) return;
+    if (bag.timer) clearTimeout(bag.timer);
+    const joined = joinUtterances(bag.parts);
+    const extracted = extractQuestion(joined) ?? '';
+    const idle = questionGatherMs(extracted);
+    const elapsed = Date.now() - bag.startedAt;
+    const remaining = Math.max(0, QUESTION_MAX_GATHER_MS - elapsed);
+    const wait = Math.min(idle, remaining || idle);
+    bag.timer = setTimeout(() => void this.flushQuestion(), wait);
+  }
+
+  private async flushQuestion(): Promise<void> {
+    const bag = this.collecting;
+    if (!bag || this.busy) return;
+    if (bag.timer) clearTimeout(bag.timer);
+    this.collecting = null;
+    const joined = joinUtterances(bag.parts);
+    const extracted = extractQuestion(joined);
     if (extracted === null) return;
+    await this.runTurn(joined, extracted);
+  }
+
+  private async runTurn(joined: string, extracted: string): Promise<void> {
     this.busy = true;
     const t0 = Date.now();
-    console.log(`[cortex-meet] voice trigger «${line.text}»`);
+    console.log(`[cortex-meet] voice trigger «${joined}»`);
     let handUp = false;
     try {
       const question =
         extracted ||
         'Te nombraron en la reunión. Pregunta si te necesitan y ofrece ayuda en una frase.';
       const quick = looksLikeVoiceChitchat(extracted);
-      // El cerebro empieza YA: mientras suena el hold, van llegando cláusulas.
+      const others = this.deps.othersInCall?.() ?? 0;
+      const raiseHand = shouldRaiseHand(extracted, others);
       const clauses = this.startCortexStream(question, quick);
-      const unmuteP = this.deps.unmute();
       const thinkAt = Date.now();
-      if (!quick) {
-        await unmuteP;
-        const hold = pickHoldLine();
-        console.log(`[cortex-meet] voice hold «${hold}»`);
-        await this.speakAnswer(hold);
+      console.log(
+        `[cortex-meet] voice turn ${JSON.stringify({ quick, raiseHand, others })}`,
+      );
+      if (raiseHand) {
         await this.deps.raiseHand?.();
         handUp = true;
         const granted = await this.waitForFloor(FLOOR_WAIT_MS);
         console.log(`[cortex-meet] floor ${granted ? 'granted' : 'timeout'}`);
+        await this.deps.unmute();
         if (granted) await new Promise((r) => setTimeout(r, 400));
       } else {
-        await unmuteP;
+        await this.deps.unmute();
+        if (!quick) {
+          const hold = pickHoldLine();
+          console.log(`[cortex-meet] voice hold «${hold}»`);
+          await this.speakAnswer(hold);
+        }
       }
       const spoken = await this.speakClauses(clauses);
       const thinkMs = Date.now() - thinkAt;
@@ -233,6 +367,7 @@ export class VoiceBrain {
           clauses: spoken.clauses,
           totalMs: Date.now() - t0,
           stream: spoken.stream,
+          raiseHand,
         })}`,
       );
     } catch (err) {
@@ -266,6 +401,7 @@ export class VoiceBrain {
   async speakText(text: string): Promise<boolean> {
     const line = text.trim();
     if (!line || this.busy) return false;
+    this.cancelCollect();
     this.busy = true;
     this.muted = false;
     try {
@@ -385,7 +521,7 @@ export class VoiceBrain {
             transcript: tail,
             quick,
           }),
-          signal: AbortSignal.timeout(40_000),
+          signal: AbortSignal.timeout(quick ? 40_000 : 90_000),
         },
       );
       if (!res.ok) {

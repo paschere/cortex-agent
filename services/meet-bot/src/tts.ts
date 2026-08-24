@@ -1,6 +1,9 @@
 /**
  * HABLAR: texto → voz, por Deepgram Aura-2 sobre WebSocket.
  *
+ * Aura no tiene SSML. Las cifras se expanden a español (voice-figures.ts)
+ * justo antes de Speak; el transcript se queda con dígitos.
+ *
  * El REST `/v1/speak` espera el WAV entero. El WS (`Speak` / `Flush`) emite PCM
  * conforme sintetiza: la primera muestra sale en ~200 ms. Se puede mandar
  * cláusula a cláusula mientras el modelo todavía está generando — no hay que
@@ -8,6 +11,7 @@
  */
 
 import WebSocket from 'ws';
+import { figuresForTts } from './voice-figures';
 
 const DEFAULT_VOICE = process.env.MEET_TTS_VOICE || 'aura-2-celeste-es';
 const DEFAULT_SPEED = process.env.MEET_TTS_SPEED || '1';
@@ -29,7 +33,7 @@ export async function synthesize(
     const res = await fetch(`https://api.deepgram.com/v1/speak?${params}`, {
       method: 'POST',
       headers: { Authorization: `Token ${apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text: figuresForTts(text) }),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
@@ -95,7 +99,7 @@ export class AuraSocket {
   }
 
   speak(text: string): void {
-    const line = text.trim();
+    const line = figuresForTts(text.trim());
     if (!line || this.ws.readyState !== WebSocket.OPEN) return;
     this.ws.send(JSON.stringify({ type: 'Speak', text: line }));
     // Flush por cláusula: si no, Aura a veces no suelta PCM hasta el Flush

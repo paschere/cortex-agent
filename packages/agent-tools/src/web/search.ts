@@ -5,7 +5,7 @@ import { registerTool } from '../index';
 export const webSearch = registerTool({
   id: 'web.search',
   description:
-    'Search the web with Tavily. Returns an optional synthesized answer plus a ranked list of result titles, URLs, and content snippets. Use to research prospects, company news, funding, and tech stacks.',
+    'Search the web with Tavily. Use for anything that must be true TODAY or that is not in the company brain: TRM and other official rates, the DIAN, news, a company, a person, a page you do not have. Returns an optional synthesized answer plus titles, URLs, and snippets. For recent press specifically, prefer web.news. For prospects, company news, funding, and tech stacks, this is also the tool.',
   inputSchema: z.object({
     query: z.string().min(1),
     searchDepth: z.enum(['basic', 'advanced']).default('basic'),

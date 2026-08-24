@@ -2,6 +2,8 @@ import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
+import { takeSpokenClauses, VOICE_LIVE_FACTS } from '@/lib/voice-spoken';
+import { figuresForTts } from '@/lib/voice-figures';
 import { listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
 import { ConfirmationRequiredError, SecurityBlockedError } from '@cortex/core';
 import { type CoreTool, streamText, tool } from 'ai';
@@ -64,9 +66,6 @@ const TTS_VOICE = process.env.VOICE_TTS_VOICE || 'aura-2-celeste-es';
 /** Deepgram Aura entrega PCM crudo por WS; el cliente lo reproduce a esta tasa. */
 const SAMPLE_RATE = 24_000;
 
-/** Corta el texto en cláusulas: mandarlas al TTS apenas listas baja la latencia. */
-const CLAUSE = /^([\s\S]*?[.!?…,;:]+)(\s+)([\s\S]*)$/;
-
 export async function POST(req: NextRequest) {
   const user = await requireSession();
   const parsed = Body.safeParse(await req.json().catch(() => null));
@@ -110,7 +109,7 @@ export async function POST(req: NextRequest) {
       (agentRow.system_prompt as string) || 'Eres Cortex, el super-agente del espacio de trabajo.',
     audience: 'private',
     sections: [
-      'Estás en MODO VOZ: la persona te habla y tú le respondes EN VOZ ALTA. Contesta para decirse, no para leerse: una o dos frases, natural, sin listas ni markdown ni emojis ni URLs largas. Puedes usar tus herramientas y el cerebro de la empresa. Si actúas (mandar algo, crear algo, registrar algo), dilo en la misma frase. Si algo no se puede o queda bloqueado, dilo corto y ofrece la alternativa.',
+      `Estás en MODO VOZ: la persona te habla y tú le respondes EN VOZ ALTA. Contesta para decirse, no para leerse: natural, sin listas ni markdown ni emojis ni URLs largas. Puedes usar tus herramientas y el cerebro de la empresa. Si actúas (mandar algo, crear algo, registrar algo), dilo en la misma frase. Si algo no se puede o queda bloqueado, dilo corto y ofrece la alternativa. ${VOICE_LIVE_FACTS}`,
       `LO QUE VAN HABLADO EN ESTA CONVERSACIÓN DE VOZ:\n${historyText}`,
     ],
   }).catch(() => ({
@@ -171,12 +170,9 @@ export async function POST(req: NextRequest) {
           let buf = '';
           for await (const delta of result.textStream) {
             buf += delta;
-            let m = buf.match(CLAUSE);
-            while (m) {
-              send('text', { text: (m[1] ?? '').trim() });
-              buf = m[3] ?? '';
-              m = buf.match(CLAUSE);
-            }
+            const cut = takeSpokenClauses(buf);
+            for (const clause of cut.clauses) send('text', { text: clause });
+            buf = cut.rest;
           }
           if (buf.trim()) send('text', { text: buf.trim() });
           send('done', {});
@@ -227,12 +223,9 @@ export async function POST(req: NextRequest) {
           let buf = '';
           for await (const delta of result.textStream) {
             buf += delta;
-            let m = buf.match(CLAUSE);
-            while (m) {
-              send('text', { text: (m[1] ?? '').trim() });
-              buf = m[3] ?? '';
-              m = buf.match(CLAUSE);
-            }
+            const cut = takeSpokenClauses(buf);
+            for (const clause of cut.clauses) send('text', { text: clause });
+            buf = cut.rest;
           }
           if (buf.trim()) send('text', { text: buf.trim() });
           send('done', {});
@@ -245,16 +238,13 @@ export async function POST(req: NextRequest) {
           const clean = text.trim();
           if (!clean) return;
           send('text', { text: clean });
-          ws.send(JSON.stringify({ type: 'Speak', text: clean }));
+          ws.send(JSON.stringify({ type: 'Speak', text: figuresForTts(clean) }));
         };
         for await (const delta of result.textStream) {
           buf += delta;
-          let m = buf.match(CLAUSE);
-          while (m) {
-            speak(m[1] ?? '');
-            buf = m[3] ?? '';
-            m = buf.match(CLAUSE);
-          }
+          const cut = takeSpokenClauses(buf);
+          for (const clause of cut.clauses) speak(clause);
+          buf = cut.rest;
         }
         if (buf.trim()) speak(buf);
 

@@ -5,12 +5,17 @@ import {
   HOLD_LINES,
   isBotSpeaker,
   isEchoOfBot,
+  joinUtterances,
   looksLikeFloorGrant,
+  looksLikeIncompleteQuestion,
   looksLikeVoiceChitchat,
   pickHoldLine,
+  questionGatherMs,
+  shouldRaiseHand,
 } from './voice-brain';
 import { VOICE_INJECT_SCRIPT } from './voice-inject';
 import { sseBlockToText, takeClauses } from './voice-stream';
+import { figuresForTts, integerToSpanish } from './voice-figures';
 
 let passed = 0;
 let failed = 0;
@@ -35,6 +40,25 @@ check('a line without the name is not a trigger', extractQuestion('¿quién toma
 check('cómo estás is chitchat', looksLikeVoiceChitchat('cómo estás?'), true);
 check('puedes hablar is chitchat', looksLikeVoiceChitchat('puedes hablar?'), true);
 check('a CRM question is not chitchat', looksLikeVoiceChitchat('cuánto le cotizamos a Acme'), false);
+check('a short fragment is not chitchat', looksLikeVoiceChitchat('podrías'), false);
+check('podrías averiguar is still incomplete', looksLikeIncompleteQuestion('podrías averiguar'), true);
+check(
+  'a full CRM ask is complete',
+  looksLikeIncompleteQuestion('cuánto le cotizamos a Acme'),
+  false,
+);
+check('hola is a complete greeting', looksLikeIncompleteQuestion('hola'), false);
+check('just the name is incomplete', looksLikeIncompleteQuestion(''), true);
+check('a greeting does not raise the hand', shouldRaiseHand('hola', 5), false);
+check('a 1:1 CRM ask does not raise the hand', shouldRaiseHand('cuánto le cotizamos a Acme', 1), false);
+check('a group CRM ask raises the hand', shouldRaiseHand('cuánto le cotizamos a Acme', 2), true);
+check('incomplete wait is longer than a greeting', questionGatherMs('podrías averiguar') > questionGatherMs('hola'), true);
+check('just the name waits even longer', questionGatherMs('') > questionGatherMs('podrías averiguar'), true);
+check(
+  'two finals become one question',
+  extractQuestion(joinUtterances(['Cortex podrías averiguar', 'cuánto le cotizamos a Acme'])),
+  'podrías averiguar cuánto le cotizamos a Acme',
+);
 check('Cortex is the bot speaker', isBotSpeaker('Cortex', 'Cortex'), true);
 check('a person is not the bot speaker', isBotSpeaker('Mateo Angel', 'Cortex'), false);
 check('STT echo of a hold line is dropped', isEchoOfBot('dame un minuto', 'Dame un minuto.'), true);
@@ -43,6 +67,11 @@ check('sí adelante Cortex grants the floor', looksLikeFloorGrant('Sí, adelante
 check('te escuchamos grants the floor', looksLikeFloorGrant('Te escuchamos'), true);
 check('go ahead Cortex grants the floor', looksLikeFloorGrant('Go ahead Cortex'), true);
 check('ok Cortex grants the floor', looksLikeFloorGrant('Ok Cortex'), true);
+check(
+  'Sí Cortex grants the floor (prod STT of adelante Cortex)',
+  looksLikeFloorGrant('Sí, Cortex.'),
+  true,
+);
 check('a yes alone does not grant the floor', looksLikeFloorGrant('sí'), false);
 check('the original question is not a floor grant', looksLikeFloorGrant('cuánto le cotizamos a Acme'), false);
 check('hold lines are short spoken asides', HOLD_LINES.every((l) => l.length >= 8 && l.length <= 40), true);
@@ -91,11 +120,35 @@ check(
   { clauses: ['Hola.', 'Qué tal.'], rest: 'más' },
 );
 check(
+  'does not split a Colombian TRM at the first digit',
+  takeClauses('La TRM está en 4.247,52 pesos. Sobre la DIAN hay plazo.'),
+  { clauses: ['La TRM está en 4.247,52 pesos.'], rest: 'Sobre la DIAN hay plazo.' },
+);
+check(
   'SSE text events become clauses',
   sseBlockToText('event: text\ndata: {"text":"Dame un minuto."}'),
   { text: 'Dame un minuto.', done: false },
 );
 check('SSE done stops the stream', sseBlockToText('event: done\ndata: {}'), { text: null, done: true });
+
+check('4247 is four thousand in Spanish', integerToSpanish(4247), 'cuatro mil doscientos cuarenta y siete');
+check('21 thousand uses veintiún', integerToSpanish(21000, true), 'veintiún mil');
+check('one million', integerToSpanish(1_000_000), 'un millón');
+check(
+  'Colombian TRM becomes words for Aura',
+  figuresForTts('La TRM está en 4.247,52 pesos.'),
+  'La TRM está en cuatro mil doscientos cuarenta y siete con cincuenta y dos pesos.',
+);
+check(
+  'a dollar amount is spoken as pesos when marked with $',
+  figuresForTts('Son $1.250.000.'),
+  'Son un millón doscientos cincuenta mil pesos.',
+);
+check('percentages keep por ciento', figuresForTts('Subió 12,5%.'), 'Subió doce coma cinco por ciento.');
+check('a year is dos mil…', figuresForTts('En 2026 cerramos.'), 'En dos mil veintiséis cerramos.');
+check('small counts stay as digits', figuresForTts('Hay 3 opciones.'), 'Hay 3 opciones.');
+check('versions are left alone', figuresForTts('Usa la 1.2.3.'), 'Usa la 1.2.3.');
+check('a NIT is left alone', figuresForTts('NIT 900.123.456-7.'), 'NIT 900.123.456-7.');
 
 if (failed) {
   console.error(`\n${failed} failed, ${passed} passed`);

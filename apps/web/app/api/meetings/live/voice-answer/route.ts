@@ -2,14 +2,15 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
-import { listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
+import { takeSpokenClauses, VOICE_LIVE_FACTS, wantsLiveLookup } from '@/lib/voice-spoken';
+import { getTool, listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
 import { type CoreTool, streamText, tool } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 export const runtime = 'nodejs';
-export const maxDuration = 45;
+export const maxDuration = 60;
 
 /**
  * LA CABEZA DE LA VOZ — Cortex piensa lo que el bot va a decir en la reunión,
@@ -60,8 +61,7 @@ const Body = z.object({
   quick: z.boolean().optional(),
 });
 
-/** Corta el texto en cláusulas: mandarlas al TTS apenas listas baja la latencia. */
-const CLAUSE = /^([\s\S]*?[.!?…,;:]+)(\s+)([\s\S]*)$/;
+type UUID = `${string}-${string}-${string}-${string}-${string}`;
 
 const VOICE_PLANS = new Set((process.env.MEET_VOICE_PLANS || 'business,enterprise').split(','));
 
@@ -90,8 +90,6 @@ function tokenOk(req: NextRequest): boolean {
   return timingSafeEqual(a, b);
 }
 
-type UUID = `${string}-${string}-${string}-${string}-${string}`;
-
 /** El agente `cortex` y un usuario dueño de la org, para escopar el turno. */
 async function actorFor(orgId: string): Promise<{ userId: string; agentId: string } | null> {
   const db = getOrgScopedClient(orgId);
@@ -110,6 +108,32 @@ async function actorFor(orgId: string): Promise<{ userId: string; agentId: strin
   ]);
   if (!agent?.id || !member?.userId) return null;
   return { userId: member.userId as string, agentId: agent.id as string };
+}
+
+async function liveWebBrief(
+  question: string,
+  ctx: ReturnType<typeof buildToolContext>,
+): Promise<string> {
+  const def = getTool('web.search');
+  if (!def) return 'No hay buscador web. No inventes cifras.';
+  try {
+    const out = (await runTool(
+      def,
+      { query: question, searchDepth: 'basic', maxResults: 5, includeAnswer: true },
+      ctx,
+      { confirmed: true },
+    )) as {
+      answer: string | null;
+      results: Array<{ title: string; content: string }>;
+    };
+    const lines = [
+      out.answer ? `Resumen: ${out.answer}` : null,
+      ...out.results.slice(0, 5).map((r) => `- ${r.title}: ${r.content.slice(0, 280)}`),
+    ].filter(Boolean);
+    return lines.join('\n') || 'La búsqueda no trajo nada. No inventes cifras.';
+  } catch (err) {
+    return `La consulta web falló (${(err as Error).message}). No inventes cifras.`;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -142,6 +166,10 @@ export async function POST(req: NextRequest) {
     .eq('id', actor.agentId)
     .maybeSingle();
 
+  const live = !quick && wantsLiveLookup(question);
+  const brief = live ? await liveWebBrief(question, scopedCtx) : null;
+  if (live) logger.info({ owner, sessionId: parsed.data.sessionId }, 'voice-answer live lookup');
+
   const { system } = await buildSystemPrompt({
     organizationId: owner,
     userId: actor.userId,
@@ -151,8 +179,11 @@ export async function POST(req: NextRequest) {
     // privada de alguien (el mismo guard que en un grupo de WhatsApp).
     audience: 'group',
     sections: [
-      'Estás EN una reunión por voz, y alguien te acaba de nombrar. Responde para DECIRSE EN VOZ ALTA: una o dos frases, natural, sin listas ni markdown ni emojis. Puedes usar tus herramientas y el cerebro de la empresa. Si actúas (mandar algo, crear algo), dilo en la misma frase. Si no sabes, dilo corto.',
+      `Estás EN una reunión por voz, y alguien te acaba de nombrar. Responde para DECIRSE EN VOZ ALTA: natural, sin listas ni markdown ni emojis. Puedes usar tus herramientas y el cerebro de la empresa. Si actúas (mandar algo, crear algo), dilo en la misma frase. ${VOICE_LIVE_FACTS}`,
       `TRANSCRIPT RECIENTE DE LA REUNIÓN:\n${transcript || '(nada aún)'}`,
+      ...(brief
+        ? [`CONSULTA WEB YA HECHA (fuente de las cifras; no uses un número que no esté aquí):\n${brief}`]
+        : []),
     ],
   }).catch(() => ({
     system: 'Eres Cortex, en una reunión por voz. Responde corto, para decirse en voz alta.',
@@ -206,16 +237,12 @@ export async function POST(req: NextRequest) {
         let sent = 0;
         for await (const delta of result.textStream) {
           buf += delta;
-          let m = buf.match(CLAUSE);
-          while (m) {
-            const clause = (m[1] ?? '').trim();
-            if (clause) {
-              send('text', { text: clause });
-              sent += 1;
-            }
-            buf = m[3] ?? '';
-            m = buf.match(CLAUSE);
+          const cut = takeSpokenClauses(buf);
+          for (const clause of cut.clauses) {
+            send('text', { text: clause });
+            sent += 1;
           }
+          buf = cut.rest;
         }
         if (buf.trim()) {
           send('text', { text: buf.trim() });
@@ -230,6 +257,7 @@ export async function POST(req: NextRequest) {
             ms: Date.now() - startedAt,
             clauses: sent,
             quick: Boolean(quick),
+            liveLookup: live,
           },
           'voice-answer',
         );

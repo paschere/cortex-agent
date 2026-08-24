@@ -261,6 +261,12 @@ export async function setGoogleMeetHand(
       log(wantRaised ? "Hand raised." : "Hand lowered.");
       return;
     }
+    if (!loc.found) {
+      await shortcut();
+      await page.waitForTimeout(400);
+      log(wantRaised ? "Hand shortcut (no button)." : "Hand shortcut (no button).");
+      return;
+    }
     const clicked = await clickHand();
     if (!clicked) await shortcut();
     await page.waitForTimeout(500);
