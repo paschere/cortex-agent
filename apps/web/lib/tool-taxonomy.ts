@@ -161,7 +161,8 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
   },
   gmail: {
     name: 'Gmail',
-    blurb: 'Leer el buzón, buscar hilos, preparar borradores y enviar los que se aprueben.',
+    blurb:
+      'Leer el buzón, buscar hilos, preparar borradores y enviar los que se aprueben — y aprender del buzón entero: guardarlo en tu cerebro y leer cada día lo nuevo.',
     tone: 'rose',
     icon: 'Mail',
   },

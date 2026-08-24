@@ -56,6 +56,9 @@ export const JOBS: JobSpec[] = [
   { name: 'drive/sync', cron: '*/10 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'kb/embeddings.reindex', cron: '*/15 * * * *', retryLimit: 3, concurrency: 1 },
   { name: 'meetings/import', cron: '*/30 * * * *', retryLimit: 1, concurrency: 1 },
+  // El buzón de Gmail de cada quien, cada mañana a las 6:10 de Bogotá: archiva
+  // lo que llegó desde el puntero de ayer y propone qué contestar (0121).
+  { name: 'gmail/sweep', cron: '10 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'memory/derive.dispatch', cron: '0 7 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'turn-context/purge', cron: '40 8 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'turn-latency/purge', cron: '50 8 * * *', retryLimit: 1, concurrency: 1 },
@@ -88,6 +91,11 @@ export const JOBS: JobSpec[] = [
   { name: 'goals/watch.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'learning/pass.workspace', retryLimit: 1, concurrency: 1 },
   { name: 'memory/derive.user', retryLimit: 1, concurrency: 5 },
+  // Una tanda de la carga histórica de un buzón. Se re-encola a sí misma
+  // mientras queden páginas; `singletonKeyFrom` evita que dos tandas de la
+  // misma persona corran a la vez y se pisen el cursor.
+  { name: 'gmail/backfill.user', retryLimit: 1, concurrency: 3, singletonKeyFrom: 'userId' },
+  { name: 'gmail/sweep.user', retryLimit: 1, concurrency: 5, singletonKeyFrom: 'userId' },
   { name: 'reports/weekly.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'dev/task.intake', retryLimit: 1, concurrency: 5 },
   { name: 'dev/task.queued', retryLimit: 0, concurrency: 2, singletonKeyFrom: 'taskId' },

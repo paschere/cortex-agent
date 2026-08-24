@@ -479,3 +479,52 @@ export async function noteWeeklyReportUndelivered(
     'el parte semanal',
   );
 }
+
+// ---------------------------------------------------------------------------
+// El buzón que Cortex ya no puede leer
+// ---------------------------------------------------------------------------
+
+export interface MailboxLearningNote {
+  userId: string;
+  /** La dirección, para que el aviso diga CUÁL cuenta se cayó. */
+  mailbox: string | null;
+}
+
+/**
+ * Cortex dejó de poder leer el buzón de alguien y apagó el aprendizaje.
+ *
+ * PASA LOS DOS FILTROS DE ESTE MÓDULO, que es la única razón por la que existe:
+ * es un FRACASO, y PIDE ALGO de la persona (volver a conectar su cuenta). Todo
+ * lo demás que produce el barrido de correo —lo que archivó, lo que propuso— es
+ * cola y estado, vive en /actions y en el cerebro, y no se avisa.
+ *
+ * `routine_failed` y no una clase nueva: para el que lo lee esto ES una rutina
+ * suya que dejó de correr, y añadir una clase obliga a una migración que
+ * ensancha un `check` compartido para no decir nada distinto.
+ *
+ * SE AGRUPA POR PERSONA Y NO POR DÍA. Un permiso revocado sigue revocado mañana
+ * y pasado; sin este agrupado, la campana tendría una línea idéntica cada
+ * mañana hasta que alguien la mirara, que es justo cómo se aprende a no
+ * mirarla.
+ */
+export async function noteMailboxLearningStopped(
+  db: SupabaseClient,
+  note: MailboxLearningNote,
+): Promise<void> {
+  if (!note.userId) return;
+
+  await quietly(
+    db,
+    {
+      userId: note.userId,
+      kind: 'routine_failed',
+      title: note.mailbox
+        ? `Cortex dejó de poder leer ${short(note.mailbox, 80)}`
+        : 'Cortex dejó de poder leer tu correo',
+      body: 'Se cayó el permiso de tu cuenta de Google y pausé el aprendizaje de tu buzón. Vuelve a conectarla y sigo donde iba: nada de lo aprendido se borró.',
+      href: '/settings',
+      groupKey: `gmail-mailbox:${note.userId}`,
+    },
+    'el aprendizaje del buzón',
+  );
+}

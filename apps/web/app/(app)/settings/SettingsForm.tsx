@@ -10,6 +10,7 @@ import { Eyebrow, Panel } from '@/components/ui/panel';
 import { clsx } from 'clsx';
 import {
   Check,
+  ChevronDown,
   Loader2,
   Mail,
   MessageCircle,
@@ -94,6 +95,7 @@ export function SettingsForm({
   chatDm: ChatDmStatus;
 }) {
   const [prefs, setPrefs] = useState<PreferencesView>(initial);
+  const [saved, setSaved] = useState<PreferencesView>(initial);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [testStatus, setTestStatus] = useState<Status>({ kind: 'idle' });
   const [testDmStatus, setTestDmStatus] = useState<Status>({ kind: 'idle' });
@@ -132,7 +134,13 @@ export function SettingsForm({
         });
         return;
       }
-      if (json.preferences) setPrefs(json.preferences);
+      // Lo que contestó el servidor ES lo guardado: si normalizó algo —una hora
+      // a HH:MM, una URL con espacios de más— la comparación de «sin guardar»
+      // tiene que hacerse contra eso y no contra lo que se tecleó, o el aviso se
+      // quedaría encendido para siempre después de guardar bien.
+      const stored = json.preferences ?? prefs;
+      setPrefs(stored);
+      setSaved(stored);
       setStatus({ kind: 'saved' });
     } catch {
       setStatus({ kind: 'error', message: 'No se pudo conectar con Cortex. Revisa tu conexión.' });
@@ -190,6 +198,20 @@ export function SettingsForm({
   const on = prefs.inboxDigestEnabled;
   const dmReady = chatDm.configured && chatDm.linked;
 
+  /**
+   * SI HAY ALGO SIN GUARDAR, comparado contra lo último que el servidor
+   * confirmó y no contra lo que se cargó al abrir. Es lo que decide si aparece
+   * la barra de abajo, y por tanto lo único que impide el fallo que esta
+   * pantalla tenía: cambiar una hora, irse a otra página y descubrir tres días
+   * después que el resumen sigue llegando a la hora vieja. El botón «Guardar»
+   * estaba al final de siete paneles; nada avisaba de que faltaba pulsarlo.
+   *
+   * Comparación por JSON y no campo a campo: son nueve valores planos, el orden
+   * de las claves lo fija el propio objeto, y una lista de nueve `!==` es una
+   * lista a la que alguien olvidará añadir el décimo campo.
+   */
+  const dirty = JSON.stringify(prefs) !== JSON.stringify(saved);
+
   return (
     <div className="space-y-4">
       {/* ---- The opt-in, and exactly what it means ------------------------- */}
@@ -201,12 +223,19 @@ export function SettingsForm({
           description="Una vez al día Cortex lee tu correo reciente y te manda un resumen corto: qué está esperando tu respuesta, qué estás esperando tú de otros y qué vale la pena saber."
         />
 
-        <div className="mt-4 rounded-sm border border-border bg-surface-2 p-4">
-          <div className="flex items-center gap-2">
+        {/* PLEGADO, Y NO BORRADO. Estas cinco frases son la concesión que se
+            está pidiendo —dejar que un programa lea un buzón— así que no pueden
+            desaparecer de la pantalla. Pero abiertas ocupaban más que todos los
+            controles juntos, y lo que hay que leer una vez no debería estorbar
+            todos los días. `<details>` y no un estado de React: se abre sin
+            JavaScript, Ctrl+F lo encuentra dentro, y se imprime abierto. */}
+        <details className="group mt-4 rounded-sm border border-border bg-surface-2">
+          <summary className="flex cursor-pointer items-center gap-2 p-4 text-ink-muted transition-colors hover:text-ink">
             <ShieldCheck className="h-4 w-4 text-primary" />
             <Eyebrow>Qué lee Cortex y qué no</Eyebrow>
-          </div>
-          <ul className="mt-2.5 space-y-1.5 text-xs leading-relaxed text-ink-muted">
+            <ChevronDown className="ml-auto h-4 w-4 transition-transform group-open:rotate-180" />
+          </summary>
+          <ul className="space-y-1.5 px-4 pb-4 text-xs leading-relaxed text-ink-muted">
             <li>
               <strong className="text-ink">Solo tu buzón.</strong> Cortex lee las conversaciones
               recientes de tu propio correo —quién escribió, cuándo, el asunto y el contenido— con
@@ -214,9 +243,8 @@ export function SettingsForm({
             </li>
             <li>
               <strong className="text-ink">Se resume de nuestro lado.</strong> Los mensajes se
-              condensan en nuestros servidores para armar el resumen que recibes. El correo en sí
-              no se guarda, no entra a Brain Knowledge y no se le pasa al asistente con el que
-              chateas.
+              condensan en nuestros servidores para armar el resumen que recibes. El correo en sí no
+              se guarda, no entra a Brain Knowledge y no se le pasa al asistente con el que chateas.
             </li>
             <li>
               <strong className="text-ink">Te llega solo a ti.</strong> El resumen va a tu correo, a
@@ -232,7 +260,7 @@ export function SettingsForm({
               Cortex deja de leer tu correo de una vez.
             </li>
           </ul>
-        </div>
+        </details>
       </Panel>
 
       {/* ---- When ---------------------------------------------------------- */}
@@ -510,25 +538,59 @@ export function SettingsForm({
         </p>
       </Panel>
 
-      {/* ---- Save ---------------------------------------------------------- */}
-      <div className="flex flex-wrap items-center gap-3 pb-2">
-        <Button type="button" onClick={save} disabled={status.kind === 'saving'}>
-          {status.kind === 'saving' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Guardar
-        </Button>
-        {status.kind === 'saved' && (
-          <span className="flex items-center gap-1.5 text-xs font-medium text-emerald">
-            <Check className="h-3.5 w-3.5" />
-            Guardado.
-          </span>
-        )}
-        {status.kind === 'error' && (
-          <span className="flex items-start gap-1.5 text-xs text-rose">
-            <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            {status.message}
-          </span>
-        )}
-      </div>
+      {/* ---- Guardar ------------------------------------------------------- */}
+      {/* PEGADA ABAJO Y SÓLO CUANDO HAY ALGO QUE GUARDAR.
+          Antes era un botón al final de siete paneles: quien cambiaba la hora
+          arriba tenía que bajar hasta el fondo, y quien no bajaba se iba
+          creyendo que había guardado. Ahora la barra aparece en cuanto algo
+          cambia y sigue a la vista mientras se sigue tocando la pantalla — el
+          botón está donde están los ojos.
+          Cuando no hay cambios no hay barra: una franja permanente con un botón
+          que no hace nada es ruido en todas las visitas para servir a una. */}
+      {(dirty || status.kind !== 'idle') && (
+        <div className="sticky bottom-4 z-10 pb-2">
+          <div className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface/95 px-4 py-3 shadow-card backdrop-blur">
+            {dirty ? (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-amber">
+                <TriangleAlert className="h-3.5 w-3.5" />
+                Tienes cambios sin guardar.
+              </span>
+            ) : status.kind === 'saved' ? (
+              <span className="flex items-center gap-1.5 text-xs font-medium text-emerald">
+                <Check className="h-3.5 w-3.5" />
+                Guardado.
+              </span>
+            ) : null}
+
+            {status.kind === 'error' && (
+              <span className="flex items-start gap-1.5 text-xs text-rose">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {status.message}
+              </span>
+            )}
+
+            <div className="ml-auto flex items-center gap-2">
+              {dirty && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setPrefs(saved);
+                    setStatus({ kind: 'idle' });
+                  }}
+                  disabled={status.kind === 'saving'}
+                >
+                  Descartar
+                </Button>
+              )}
+              <Button type="button" onClick={save} disabled={!dirty || status.kind === 'saving'}>
+                {status.kind === 'saving' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

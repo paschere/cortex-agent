@@ -103,6 +103,10 @@ const ALLOWED = new Map<string, string>([
     'Cron. Scans every Google connection in the install; the per-user sweep is scoped to the workspace that granted it.',
   ],
   [
+    'inngest/functions/gmail-learn.ts',
+    'Cron. "Qué buzones de Gmail hay conectados" abarca todo el install y no hay sesión detrás de un cron; el handle crudo hace un SELECT de (user_id, organization_id) y todo lo demás corre con un handle clavado al espacio que nombra cada fila.',
+  ],
+  [
     'inngest/functions/memory-derive.ts',
     "Cron. Scans yesterday's activity across the install; the workspace rides on the per-person event.",
   ],

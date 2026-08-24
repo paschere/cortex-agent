@@ -240,6 +240,22 @@ const TOOL_OVERRIDES: Record<string, ToolOverride> = {
   // widening of who can read it, so it is a write rather than the read its
   // 'archive' verb would otherwise imply.
   'outlook.archive_thread': { blastRadius: 'internal_write' },
+  // El gemelo de Gmail, clasificado igual por la misma razón: una barrera que
+  // depende de qué proveedor de correo compró el cliente no es una barrera.
+  'gmail.archive_thread': { blastRadius: 'internal_write' },
+  // ENCENDER EL APRENDIZAJE DE UN BUZÓN ENTERO (migración 0121). Es la lectura
+  // más grande que este producto sabe hacer —hasta un año de correspondencia,
+  // interna incluida— y además la escribe en el cerebro. El verbo 'train' no
+  // está en WRITE_VERBS, así que sin esta fila se leería como una consulta.
+  //
+  // `pii` no es una etiqueta cómoda y por eso está: un buzón contiene datos
+  // personales de todos los que escribieron a esa persona, no sólo de ella.
+  // Combinado con 'bulk', eso hace que encenderlo SIN NADIE DELANTE —desde una
+  // rutina programada, por ejemplo— sea lo peor que este modelo contempla, que
+  // es exactamente el caso que no debe poder ocurrir por accidente. Con una
+  // persona en la conversación es una confirmación, que es lo correcto: es su
+  // buzón y su decisión.
+  'gmail.train_brain': { sensitivity: 'pii', blastRadius: 'bulk' },
   'mscal.create_event': { blastRadius: 'internal_write' },
   // A channel is opaque — Slack Connect channels include client guests — so a
   // post always counts as leaving the company.

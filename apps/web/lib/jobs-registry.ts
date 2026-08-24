@@ -34,6 +34,11 @@ import { devTaskStatusJob } from '@/inngest/functions/dev-task-status';
 import { driveSyncJob } from '@/inngest/functions/drive-sync';
 import { errandRunJob } from '@/inngest/functions/errand-run';
 import { errandSweepJob } from '@/inngest/functions/errand-sweep';
+import {
+  gmailBackfillUserJob,
+  gmailSweepDispatchJob,
+  gmailSweepUserJob,
+} from '@/inngest/functions/gmail-learn';
 import { goalsWatchDispatchJob, goalsWatchWorkspaceJob } from '@/inngest/functions/goals-watch';
 import { ingestDocumentJob } from '@/inngest/functions/ingest-document';
 import {
@@ -61,6 +66,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'orchestrator/sweep': orchestratorSweepJob,
   'drive/sync': driveSyncJob,
   'meetings/import': meetingImportSweepJob,
+  'gmail/sweep': gmailSweepDispatchJob,
   'memory/derive.dispatch': memoryDeriveDispatchJob,
   'commitments/watch.dispatch': commitmentsWatchDispatchJob,
   'actions/sweep.dispatch': actionsSweepDispatchJob,
@@ -82,6 +88,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'commitments/watch.workspace': commitmentsWatchWorkspaceJob,
   'goals/watch.workspace': goalsWatchWorkspaceJob,
   'memory/derive.user': memoryDeriveUserJob,
+  'gmail/backfill.user': gmailBackfillUserJob,
+  'gmail/sweep.user': gmailSweepUserJob,
   'reports/weekly.workspace': weeklyReportWorkspaceJob,
   'dev/task.intake': devTaskIntakeJob,
   'dev/task.queued': devTaskRunJob,

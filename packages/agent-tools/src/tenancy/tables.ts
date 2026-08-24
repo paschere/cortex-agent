@@ -304,6 +304,15 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // archived, which document it became, and which client it belongs to. Tenant
   // in the strongest sense — the row names a client's correspondence.
   microsoft_mail_ingests: tenant(),
+  // Lo mismo para Gmail (migración 0121), con una diferencia que importa: aquí
+  // SÍ hay filas de correo interno, porque el destino puede ser el espacio
+  // personal de quien conectó el buzón. Tenant igual — la fila nombra
+  // correspondencia de una empresa — y la privacidad de más la pone el espacio,
+  // que sólo su dueño puede leer.
+  gmail_thread_ingests: tenant(),
+  // El marcapáginas de cada buzón conectado: por dónde va la carga histórica y
+  // por dónde va el barrido diario.
+  gmail_sync_state: tenant(),
 
   // --- Clients (migration 0075) ---------------------------------------------
   // The customer companies everything else hangs off, and the three tables that

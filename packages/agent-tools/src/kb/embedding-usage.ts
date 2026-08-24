@@ -33,7 +33,10 @@ export type EmbeddingUsageSource =
   | 'whatsapp'
   | 'note'
   // Outlook mail threads archived into Brain Knowledge (migration 0078).
-  | 'outlook';
+  | 'outlook'
+  // Hilos de Gmail doblados dentro de Brain Knowledge (migración 0121): la
+  // carga histórica de un buzón al conectarlo, y el barrido de cada mañana.
+  | 'gmail';
 
 export interface RecordEmbeddingUsage {
   /**

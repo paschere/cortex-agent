@@ -1,36 +1,14 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { gmailFetch } from './client';
-
-type MimePart = {
-  mimeType?: string;
-  body?: { data?: string };
-  parts?: MimePart[];
-};
-
-function decodeBase64Url(s: string): string {
-  const norm = s.replace(/-/g, '+').replace(/_/g, '/');
-  return Buffer.from(norm, 'base64').toString('utf-8');
-}
-
-function extractText(payload: MimePart | undefined): string {
-  if (!payload) return '';
-  if (payload.body?.data && payload.mimeType?.startsWith('text/plain')) {
-    return decodeBase64Url(payload.body.data);
-  }
-  if (payload.parts) {
-    for (const p of payload.parts) {
-      const t = extractText(p);
-      if (t) return t;
-    }
-  }
-  if (payload.body?.data) return decodeBase64Url(payload.body.data);
-  return '';
-}
+// El desenvolvedor de MIME vive en ./mime desde la 0121, porque la ingesta al
+// cerebro lee los mismos cuerpos y dos copias acabarían leyendo distinto.
+import { type MimePart, extractText } from './mime';
 
 export const gmailReadThread = registerTool({
   id: 'gmail.read_thread',
-  description: 'Read a full Gmail thread by threadId — returns ordered messages with from/to/date/body.',
+  description:
+    'Read a full Gmail thread by threadId — returns ordered messages with from/to/date/body.',
   inputSchema: z.object({ threadId: z.string() }),
   outputSchema: z.object({
     thread: z.object({
@@ -46,7 +24,9 @@ export const gmailReadThread = registerTool({
       ),
     }),
   }),
-  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] }],
+  requiredScopes: [
+    { provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] },
+  ],
   rateLimit: { perMinute: 60 },
   handler: async (input, ctx) => {
     type GmailThread = {

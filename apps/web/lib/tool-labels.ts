@@ -24,6 +24,9 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   // que se pararon a medio ejecutar y siguen paradas.
   approvals_list: { label: 'Ver lo que espera tu permiso para ejecutarse', icon: 'ShieldAlert' },
   gmail_list_threads: { label: 'Listar conversaciones de correo', icon: 'Inbox' },
+  gmail_archive_thread: { label: 'Guardar el hilo en el cerebro', icon: 'BookOpen' },
+  gmail_train_brain: { label: 'Aprender de tu buzón', icon: 'Brain' },
+  gmail_training_status: { label: 'Ver cómo va el aprendizaje del buzón', icon: 'Gauge' },
   gcal_list_events: { label: 'Ver eventos del calendario', icon: 'Calendar' },
   gcal_create_event: { label: 'Crear evento en el calendario', icon: 'CalendarPlus' },
   gsheets_read_range: { label: 'Leer hoja de cálculo', icon: 'Table' },

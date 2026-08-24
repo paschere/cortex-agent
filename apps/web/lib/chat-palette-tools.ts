@@ -138,7 +138,10 @@ export const TOOL_PHRASE: Record<string, string> = {
   'gmail.draft': 'Redáctame un correo para ',
   'gmail.list_threads': 'Muéstrame los correos con ',
   'gmail.read_thread': 'Léeme el hilo de correo ',
+  'gmail.archive_thread': 'Guarda en el cerebro el hilo de correo ',
   'gmail.search': 'Busca en Gmail ',
+  'gmail.train_brain': 'Aprende de mi correo de ',
+  'gmail.training_status': 'Cuéntame cómo va el aprendizaje de mi buzón',
   'gmail.send_draft': 'Envía el borrador de Gmail ',
   'gmail.send_message': 'Manda este correo tal cual: ',
 
