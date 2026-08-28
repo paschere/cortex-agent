@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { everyoneGrant } from '../../kb/__tests__/space-fake';
 import {
   getVisibleDocument,
   getVisibleSpace,
@@ -56,6 +57,13 @@ function fixture(): Tables {
         name: 'Ana',
         role: 'org_admin',
       },
+    ],
+    // La 0123 le escribió esta fila a todo espacio que ya era global: desde
+    // entonces «lo ve toda la empresa» es una concesión, no una propiedad del
+    // scope. Un fixture sin ella describe un estado que producción no tiene.
+    kb_space_grants: [
+      everyoneGrant(SPACE_ACME_GENERAL, ACME),
+      everyoneGrant(SPACE_GLOBEX_GENERAL, GLOBEX),
     ],
     kb_collections: [
       {

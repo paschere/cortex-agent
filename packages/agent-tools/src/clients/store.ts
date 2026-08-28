@@ -23,8 +23,8 @@ import {
   type LinkMethod,
   type LinkRow,
   type LinkState,
-  type MatchableClient,
   METHOD_CONFIDENCE,
+  type MatchableClient,
   domainOf,
   isPublicDomain,
   matchByText,
@@ -113,10 +113,7 @@ export async function getClient(db: SupabaseClient, id: string): Promise<ClientR
   return row ?? null;
 }
 
-export async function findClientByNit(
-  db: SupabaseClient,
-  nit: string,
-): Promise<ClientRow | null> {
+export async function findClientByNit(db: SupabaseClient, nit: string): Promise<ClientRow | null> {
   const digits = normalizeNit(nit);
   if (!digits) return null;
   const { data, error } = await db
@@ -395,10 +392,7 @@ export async function updateClient(
 // Domains: the statement everything automatic rests on
 // ---------------------------------------------------------------------------
 
-export async function listDomains(
-  db: SupabaseClient,
-  clientId?: string,
-): Promise<DomainRow[]> {
+export async function listDomains(db: SupabaseClient, clientId?: string): Promise<DomainRow[]> {
   let q = db.from('client_domains').select(DOMAIN_COLUMNS);
   if (clientId) q = q.eq('client_id', clientId);
   const { data, error } = await q.order('domain', { ascending: true }).limit(500);
@@ -422,7 +416,9 @@ export async function addDomain(
 ): Promise<DomainRow> {
   const domain = normalizeDomain(input.domain);
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(domain)) {
-    throw new ValidationError(`"${input.domain}" no es un dominio. Escribe algo como coltrans.com.`);
+    throw new ValidationError(
+      `"${input.domain}" no es un dominio. Escribe algo como coltrans.com.`,
+    );
   }
   if (isPublicDomain(domain)) {
     throw new ValidationError(
@@ -442,7 +438,8 @@ export async function addDomain(
       `${domain} ya está registrado a nombre de ${other?.name ?? 'otro cliente'}. Un dominio solo puede ser de un cliente: si está mal, quítalo de allá primero.`,
     );
   }
-  if (owner) return (await listDomains(db, input.clientId)).find((d) => d.domain === domain) as DomainRow;
+  if (owner)
+    return (await listDomains(db, input.clientId)).find((d) => d.domain === domain) as DomainRow;
 
   const { data, error } = await db
     .from('client_domains')
@@ -526,10 +523,7 @@ export async function clientForEmail(
 // Contacts
 // ---------------------------------------------------------------------------
 
-export async function listContacts(
-  db: SupabaseClient,
-  clientId: string,
-): Promise<ContactRow[]> {
+export async function listContacts(db: SupabaseClient, clientId: string): Promise<ContactRow[]> {
   const { data, error } = await db
     .from('client_contacts')
     .select(CONTACT_COLUMNS)
@@ -564,18 +558,14 @@ export interface ContactInput {
  * address in a thread) and a manual one (somebody filling in the card) to write
  * through the same function.
  */
-export async function upsertContact(
-  db: SupabaseClient,
-  input: ContactInput,
-): Promise<ContactRow> {
+export async function upsertContact(db: SupabaseClient, input: ContactInput): Promise<ContactRow> {
   const email = normalizeEmail(input.email);
   const name = input.fullName?.trim();
   if (!name || name.length < 2) throw new ValidationError('El contacto necesita un nombre.');
 
   const existing = email
-    ? ((
-        await db.from('client_contacts').select(CONTACT_COLUMNS).eq('email', email).maybeSingle()
-      ).data as ContactRow | null)
+    ? ((await db.from('client_contacts').select(CONTACT_COLUMNS).eq('email', email).maybeSingle())
+        .data as ContactRow | null)
     : null;
 
   const now = input.seenAt ?? new Date().toISOString();
@@ -690,10 +680,7 @@ export interface LinkOutcome {
  *   applied                   the method repeats a human statement.
  *   proposed                  everything else. Waits in the review list.
  */
-export async function applyOrPropose(
-  db: SupabaseClient,
-  input: LinkInput,
-): Promise<LinkOutcome> {
+export async function applyOrPropose(db: SupabaseClient, input: LinkInput): Promise<LinkOutcome> {
   const key = input.id ?? input.ref;
   if (!key) throw new ValidationError('No se puede vincular algo sin identificarlo.');
   if (input.kind === 'email_thread' && !input.ref) {
@@ -776,11 +763,7 @@ export async function applyOrPropose(
     created_by: input.createdBy ?? witness,
   };
 
-  const { data, error } = await db
-    .from('client_links')
-    .insert(row)
-    .select(LINK_COLUMNS)
-    .single();
+  const { data, error } = await db.from('client_links').insert(row).select(LINK_COLUMNS).single();
 
   if (error) {
     // The same proposal by the same route already exists. Idempotent by index,
@@ -985,7 +968,9 @@ export async function matchCommitmentsToClients(
   opts: { onlyClientId?: string; limit?: number } = {},
 ): Promise<CounterpartyMatchResult> {
   const clients = await listClients(db, { limit: 1000 });
-  const pool = (opts.onlyClientId ? clients.filter((c) => c.id === opts.onlyClientId) : clients).map(
+  const pool = (
+    opts.onlyClientId ? clients.filter((c) => c.id === opts.onlyClientId) : clients
+  ).map(
     (c): MatchableClient => ({
       id: c.id,
       name: c.name,

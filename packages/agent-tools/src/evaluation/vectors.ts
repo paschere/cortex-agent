@@ -141,7 +141,10 @@ export function fixtureDrift(fixture: VectorFixture, digest: string, queries: st
   const missing = queries.filter((q) => !fixture.queries[q]);
   if (missing.length > 0) {
     drift.push(
-      `${missing.length} pregunta(s) no están en la medición y no se pueden calificar sin volver a medir: ${missing.slice(0, 3).map((q) => `«${q}»`).join(', ')}${missing.length > 3 ? '…' : ''}.`,
+      `${missing.length} pregunta(s) no están en la medición y no se pueden calificar sin volver a medir: ${missing
+        .slice(0, 3)
+        .map((q) => `«${q}»`)
+        .join(', ')}${missing.length > 3 ? '…' : ''}.`,
     );
   }
   return drift;

@@ -2,6 +2,12 @@ import { ValidationError } from '@cortex/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runTool } from '../index';
 import type { ToolContext, ToolDef } from '../types';
+import {
+  type FakeStore,
+  everyoneGrant,
+  fakeSpaceRpcs,
+  fakeSpacesFor,
+} from './__tests__/space-fake';
 import type { kbSearch as KbSearchType } from './search';
 
 /**
@@ -109,10 +115,26 @@ function chunkIdOf(c: ChunkRow): string {
 }
 
 /** The rule, once: every global space plus the caller's own personal ones. */
+/**
+ * El directorio y las concesiones, que desde la 0123 son parte de la respuesta a
+ * «¿qué ve esta persona?»: un espacio común lo es porque existe la concesión a
+ * toda la empresa, no porque su scope diga 'global'.
+ */
+const STORE: FakeStore = {
+  users: [
+    { id: ANA, organization_id: 'org-test', email: 'ana@acme.test', role: 'member' },
+    { id: BEN, organization_id: 'org-test', email: 'ben@acme.test', role: 'member' },
+  ],
+  kb_collections: SPACES.map((s) => ({ ...s, organization_id: 'org-test' })),
+  kb_space_grants: [everyoneGrant(SPACE_GENERAL, 'org-test')],
+};
+
 function visibleSpaceIds(userId: string | null): string[] {
   if (!userId) return [];
-  return SPACES.filter((s) => s.scope === 'global' || s.scope_id === userId).map((s) => s.id);
+  return fakeSpacesFor(STORE, userId).map((s) => s.id as string);
 }
+
+const SPACE_RPCS = fakeSpaceRpcs(() => STORE);
 
 // ---------------------------------------------------------------------------
 // A db double that enforces the rule the way Postgres does
@@ -143,6 +165,11 @@ function makeCtx(userId: string) {
     // conflict probe correctly finds nothing. It is answered rather than left
     // undefined because kb.search calls it on every strong hit.
     if (fn === 'kb_conflict_candidates') return { data: [], error: null };
+    // La frontera de acceso vive en la base de datos desde la 0123, y este doble
+    // la finge con el mismo espejo que todos los demás.
+    const spaceRpc = SPACE_RPCS[fn];
+    if (spaceRpc)
+      return { data: spaceRpc(args as unknown as Record<string, unknown>), error: null };
     if (fn !== 'kb_search_scoped') return { data: null, error: null };
 
     // Mirrors kb_search_scoped: the visible set is derived from p_user_id, and
@@ -267,7 +294,7 @@ type SearchTool = ToolDef<
       documentId: string;
       documentTitle: string;
       space: string;
-      spaceKind: 'global' | 'personal';
+      spaceKind: 'global' | 'shared' | 'personal';
       chunkIndex: number;
       content: string;
       score: number;

@@ -24,7 +24,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { EvalRun, EvalTier, RetrievalScore, SelectionScore, AnswerScore } from './types';
+import type { AnswerScore, EvalRun, EvalTier, RetrievalScore, SelectionScore } from './types';
 
 export const EVALUATION_RUNS_TABLE = 'evaluation_runs';
 export const EVALUATION_CASE_RESULTS_TABLE = 'evaluation_case_results';
@@ -124,30 +124,28 @@ export async function saveRun(db: SupabaseClient, run: EvalRun): Promise<string>
   // row with no workspace at all.
   const runId = randomUUID();
 
-  const { error } = await db
-    .from(EVALUATION_RUNS_TABLE)
-    .insert({
-      id: runId,
-      started_at: run.startedAt,
-      tier: run.tier,
-      suite_id: run.identity.suiteId,
-      suite_digest: run.identity.suiteDigest,
-      embedding_model: run.identity.embeddingModel,
-      strong_match: run.identity.calibration.strongMatch,
-      weak_floor: run.identity.calibration.weakFloor,
-      calibration_measured: run.identity.calibration.measured,
-      chat_model: run.identity.chatModel,
-      judge_model: run.identity.judgeModel,
-      answer_prompt_digest: run.identity.answerPromptDigest,
-      judge_prompt_digest: run.identity.judgePromptDigest,
-      vector_source: run.vectorSource,
-      retrieval: summariseRetrieval(run.retrieval),
-      selection: summariseSelection(run.selection),
-      answers: summariseAnswers(run.answers),
-      cost_usd: run.costUsd,
-      elapsed_ms: run.elapsedMs,
-      warnings: run.warnings,
-    });
+  const { error } = await db.from(EVALUATION_RUNS_TABLE).insert({
+    id: runId,
+    started_at: run.startedAt,
+    tier: run.tier,
+    suite_id: run.identity.suiteId,
+    suite_digest: run.identity.suiteDigest,
+    embedding_model: run.identity.embeddingModel,
+    strong_match: run.identity.calibration.strongMatch,
+    weak_floor: run.identity.calibration.weakFloor,
+    calibration_measured: run.identity.calibration.measured,
+    chat_model: run.identity.chatModel,
+    judge_model: run.identity.judgeModel,
+    answer_prompt_digest: run.identity.answerPromptDigest,
+    judge_prompt_digest: run.identity.judgePromptDigest,
+    vector_source: run.vectorSource,
+    retrieval: summariseRetrieval(run.retrieval),
+    selection: summariseSelection(run.selection),
+    answers: summariseAnswers(run.answers),
+    cost_usd: run.costUsd,
+    elapsed_ms: run.elapsedMs,
+    warnings: run.warnings,
+  });
 
   if (error) {
     throw new Error(`No se pudo guardar la corrida de evaluación: ${error.message}`);
@@ -293,14 +291,16 @@ export async function loadCaseResults(
     .order('layer', { ascending: true })
     .order('case_id', { ascending: true });
   if (error) throw new Error(`No se pudo leer el detalle de la corrida: ${error.message}`);
-  return ((data ?? []) as Array<{
-    layer: 'retrieval' | 'selection' | 'answer';
-    case_id: string;
-    case_group: string;
-    query: string;
-    passed: boolean;
-    detail: Record<string, unknown>;
-  }>).map((r) => ({
+  return (
+    (data ?? []) as Array<{
+      layer: 'retrieval' | 'selection' | 'answer';
+      case_id: string;
+      case_group: string;
+      query: string;
+      passed: boolean;
+      detail: Record<string, unknown>;
+    }>
+  ).map((r) => ({
     layer: r.layer,
     caseId: r.case_id,
     caseGroup: r.case_group,

@@ -250,7 +250,7 @@ export async function saveAnswerAsReportAction(input: {
 export interface SpaceChoice {
   id: string;
   name: string;
-  kind: 'global' | 'personal';
+  kind: 'global' | 'shared' | 'personal';
   /** False when this person may read the space but not write to it. */
   writable: boolean;
 }
@@ -312,7 +312,7 @@ export async function listWritableSpacesAction(): Promise<SpaceChoice[]> {
 export interface ScopeSpace {
   id: string;
   name: string;
-  kind: 'global' | 'personal';
+  kind: 'global' | 'shared' | 'personal';
 }
 
 /** Every space this person may retrieve from — the only things they may filter to. */

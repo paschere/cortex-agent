@@ -190,7 +190,13 @@ export interface AnswerCaseResult {
   /** Literal checks decided in code. Never delegated. */
   literals: Array<{ needle: string; kind: 'contains' | 'absent'; passed: boolean }>;
   /** Rubric checks decided by the judge, with the quote it justified each with. */
-  rubric: Array<{ id: string; expect: boolean; verdict: boolean; evidence: string | null; passed: boolean }>;
+  rubric: Array<{
+    id: string;
+    expect: boolean;
+    verdict: boolean;
+    evidence: string | null;
+    passed: boolean;
+  }>;
   passed: boolean;
 }
 

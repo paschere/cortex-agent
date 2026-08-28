@@ -1,3 +1,4 @@
+import { logger } from '@cortex/core';
 /**
  * Reglas CEL por tenant sobre el choke point: la frontera que el administrador
  * escribe con sus palabras, no la que nosotros preprogramamos.
@@ -33,7 +34,6 @@
  * etiqueta suministrada por el llamador es decoración.
  */
 import { evaluate as celEvaluate } from 'cel-js';
-import { logger } from '@cortex/core';
 import type { BlastRadius, RiskLevel, Sensitivity, Surface } from './policy.js';
 
 export type ActionPolicyMode = 'dry-run' | 'enforce';

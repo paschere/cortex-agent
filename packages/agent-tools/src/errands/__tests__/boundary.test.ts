@@ -235,9 +235,7 @@ describe('un encargo y los trámites web', () => {
   it('la puerta abierta no se lleva por delante nada más', () => {
     // Admitir un trámite no puede ser una forma indirecta de admitir un correo.
     const admitted = { admittedFlows: ['certificado-dian'] };
-    expect(() => assertProposalOnly(['gmail.send_message'], admitted)).toThrow(
-      OutboundToolRefused,
-    );
+    expect(() => assertProposalOnly(['gmail.send_message'], admitted)).toThrow(OutboundToolRefused);
     expect(() => assertProposalOnly(['errands.start'], admitted)).toThrow(OutboundToolRefused);
   });
 

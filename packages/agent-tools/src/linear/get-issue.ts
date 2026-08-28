@@ -89,7 +89,9 @@ export const getIssue = registerTool({
       state: { name: i.state.name, type: i.state.type },
       assignee: i.assignee ? { id: i.assignee.id, name: i.assignee.name } : null,
       labels: i.labels.nodes.map((l) => l.name),
-      cycle: i.cycle ? { id: i.cycle.id, number: i.cycle.number, name: i.cycle.name ?? null } : null,
+      cycle: i.cycle
+        ? { id: i.cycle.id, number: i.cycle.number, name: i.cycle.name ?? null }
+        : null,
       project: i.project ? { id: i.project.id, name: i.project.name } : null,
     };
   },

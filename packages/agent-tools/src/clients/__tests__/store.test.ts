@@ -195,7 +195,7 @@ beforeEach(() => {
   globex = createOrgScopedClient(fake.client, GLOBEX);
 });
 
-describe('a workspace cannot see another workspace\'s clients', () => {
+describe("a workspace cannot see another workspace's clients", () => {
   it('lists only its own, even when the names are identical', async () => {
     const mine = await listClients(acme);
     expect(mine.map((c) => c.id).sort()).toEqual([ACME_COLTRANS, ACME_ALPHA].sort());
@@ -204,7 +204,7 @@ describe('a workspace cannot see another workspace\'s clients', () => {
     expect(theirs.map((c) => c.id)).toEqual([GLOBEX_COLTRANS]);
   });
 
-  it('refuses to fetch another workspace\'s client by id', async () => {
+  it("refuses to fetch another workspace's client by id", async () => {
     expect(await getClient(acme, GLOBEX_COLTRANS)).toBeNull();
     expect(await getClient(globex, ACME_COLTRANS)).toBeNull();
   });

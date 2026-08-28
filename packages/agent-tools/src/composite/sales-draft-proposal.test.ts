@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerTool } from '../index';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { registerTool } from '../index';
 import type { ToolContext } from '../types.js';
 
 // --- Shared ctx factory (mirrors runtool.test.ts pattern) ---
@@ -205,7 +205,6 @@ describe('sales.draft_proposal composite tool', () => {
     registerFakeTools();
   });
 
-
   it('calls kb.search with a derived query', async () => {
     const { getTool } = await import('../index');
     const tool = getTool('sales.draft_proposal');
@@ -272,5 +271,4 @@ describe('sales.draft_proposal composite tool', () => {
     expect(result.similarCases[0]!.title).toBe('Acme Proposal 2025');
     expect(result.markdown).toContain('Acme Proposal 2025');
   });
-
 });

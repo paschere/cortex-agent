@@ -25,9 +25,9 @@
 import { describe, expect, it } from 'vitest';
 import { listTools } from '../../registry';
 import type { SelectableTool } from '../../tool-selection';
+import { corpusChunks } from '../corpus';
 import { measure } from '../measure';
 import { suiteDigest, suiteQueries } from '../suite';
-import { corpusChunks } from '../corpus';
 import '../../index';
 
 const enabled = process.env.EVAL_MEASURE === '1';

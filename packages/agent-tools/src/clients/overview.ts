@@ -1,8 +1,8 @@
 import { NotFoundError } from '@cortex/core';
 import { z } from 'zod';
-import { registerTool } from '../index';
 import { KIND_LABEL, STATE_LABEL, cop, whenPhrase } from '../commitments/shape';
-import { daysBetween, bogotaToday } from '../commitments/shape';
+import { bogotaToday, daysBetween } from '../commitments/shape';
+import { registerTool } from '../index';
 import {
   ENTITY_KIND_LABEL,
   type LinkEntityKind,
@@ -80,7 +80,8 @@ export const clientsOverview = registerTool({
     lines.push(
       `**${client.name}**${client.nit ? ` — NIT ${client.nit}` : ''} · ${client.statusLabel}`,
     );
-    if (client.city) lines.push(`${client.city}${client.department ? `, ${client.department}` : ''}`);
+    if (client.city)
+      lines.push(`${client.city}${client.department ? `, ${client.department}` : ''}`);
     if (client.owner) lines.push(`Responsable acá: ${client.owner}`);
 
     if (contacts.length > 0) {

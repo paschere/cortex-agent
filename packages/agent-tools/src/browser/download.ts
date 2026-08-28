@@ -65,7 +65,12 @@ export function separateDownload(output: Record<string, unknown>): {
   const refused = typeof raw.refused === 'string' ? raw.refused : undefined;
   const base64 = typeof raw.base64 === 'string' && raw.base64.length > 0 ? raw.base64 : null;
 
-  const summary: DownloadSummary = { filename, mimeType, sizeBytes, ...(refused ? { refused } : {}) };
+  const summary: DownloadSummary = {
+    filename,
+    mimeType,
+    sizeBytes,
+    ...(refused ? { refused } : {}),
+  };
   return {
     output: { ...output, download: summary },
     file: base64 ? { filename, mimeType, sizeBytes, base64 } : null,

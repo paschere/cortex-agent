@@ -28,7 +28,7 @@ const SourceSchema = z.object({
   documentId: z.string(),
   documentTitle: z.string(),
   space: z.string(),
-  spaceKind: z.enum(['global', 'personal']),
+  spaceKind: z.enum(['global', 'shared', 'personal']),
   bestScore: z.number(),
   /** 'strong' when at least one excerpt really answers the topic. */
   relevance: z.enum(['strong', 'weak']),
@@ -111,7 +111,7 @@ export const kbContext = registerTool({
       {
         title: string;
         space: string;
-        spaceKind: 'global' | 'personal';
+        spaceKind: Hit['spaceKind'];
         best: number;
         strong: boolean;
         age?: string;

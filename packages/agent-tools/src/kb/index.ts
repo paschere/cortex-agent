@@ -69,16 +69,32 @@ export {
 export type { Conflict, ConflictRival, ConflictSourceHit } from './conflicts';
 export { ingestMarkdown, OVER_DOCUMENT_LIMIT_MESSAGE } from './ingest';
 export { kbListSpaces } from './list-spaces';
+export { kbShareSpace } from './share-space';
 export { kbCreateDocument } from './create-document';
 export { kbContext } from './context';
 export {
+  assertCanAdminSpace,
   assertCanWriteToSpace,
+  atLeast,
   ensurePersonalSpace,
   getVisibleDocument,
   getVisibleSpace,
+  grantSpaceAccess,
   isOrgAdmin,
+  listSpaceAccess,
   listVisibleSpaces,
   resolveSpaceByName,
+  revokeSpaceAccess,
   searchSpaces,
+  spaceLevel,
 } from './spaces';
-export type { Space, SpaceHit, SpaceKind, SearchSpacesOptions } from './spaces';
+export type {
+  GrantSubject,
+  SearchSpacesOptions,
+  Space,
+  SpaceGrant,
+  SpaceHit,
+  SpaceKind,
+  SpaceLevel,
+  SpaceSummary,
+} from './spaces';

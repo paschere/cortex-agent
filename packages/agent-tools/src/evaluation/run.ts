@@ -50,11 +50,24 @@ import {
 import { corpusChunks } from './corpus';
 import { JUDGE_MODEL, JUDGE_PROMPT_DIGEST, calibrateJudge } from './judge';
 import { measure } from './measure';
-import { RETRIEVAL_LIMIT, calibrationFor, gradeRetrievalCase, replayHits, scoreRetrieval } from './retrieval';
+import {
+  RETRIEVAL_LIMIT,
+  calibrationFor,
+  gradeRetrievalCase,
+  replayHits,
+  scoreRetrieval,
+} from './retrieval';
 import { currentToolHashes, gradeSelection, staleRequiredTools } from './selection';
-import { ANSWER_CASES, RETRIEVAL_CASES, SELECTION_CASES, SUITE_ID, suiteDigest, suiteQueries } from './suite';
+import {
+  ANSWER_CASES,
+  RETRIEVAL_CASES,
+  SELECTION_CASES,
+  SUITE_ID,
+  suiteDigest,
+  suiteQueries,
+} from './suite';
 import type { AnswerCaseResult, EvalRun, EvalTier, RetrievalCaseResult } from './types';
-import { fixtureDrift, loadFixture, type VectorFixture } from './vectors';
+import { type VectorFixture, fixtureDrift, loadFixture } from './vectors';
 
 /** Claude Sonnet 5, USD per million tokens. Used only for the cost line. */
 const CHAT_PRICE = { input: 3, output: 15 } as const;
@@ -117,7 +130,12 @@ export async function runEvaluation({
       `${stale.length} herramienta(s) de las familias que evalúa la selección cambiaron de descripción desde la medición (${stale.slice(0, 4).join(', ')}${stale.length > 4 ? '…' : ''}). El puntaje de selección está midiendo un texto que ya no existe: vuelve a medir.`,
     );
   }
-  const selection = gradeSelection({ cases: SELECTION_CASES, tools, fixture: measured, currentHashes: hashes });
+  const selection = gradeSelection({
+    cases: SELECTION_CASES,
+    tools,
+    fixture: measured,
+    currentHashes: hashes,
+  });
 
   /* --------------------------------------------------------------- answers */
   let answers: EvalRun['answers'] = null;
@@ -146,7 +164,9 @@ export async function runEvaluation({
           material: produced.material,
         }),
       );
-      log(`Respuesta ${results.length}/${ANSWER_CASES.length}: ${c.id} → ${results[results.length - 1]?.passed ? 'bien' : 'mal'}`);
+      log(
+        `Respuesta ${results.length}/${ANSWER_CASES.length}: ${c.id} → ${results[results.length - 1]?.passed ? 'bien' : 'mal'}`,
+      );
     }
     answers = scoreAnswers(results, judge);
   }

@@ -5,14 +5,18 @@ import { listVisibleSpaces } from './spaces';
 export const kbListSpaces = registerTool({
   id: 'kb.list_spaces',
   description:
-    'List the Brain Knowledge spaces the person can reach: every company-wide space, plus their own personal ones. Use it before saving something, so you can say where it went, and when someone asks what the company has on file. Never read the ids back to anyone — refer to spaces by name.',
+    'List the Brain Knowledge spaces the person can reach, each with what they may DO there. Use it before saving something, so you can say where it went — and so you never offer to save into a space they can only read. Never read the ids back to anyone; refer to spaces by name. ' +
+    "`kind` says who else is in there, and it changes how you may quote what you find: 'global' is the whole company, 'shared' is a space given to some teams or people (material from it must not be repeated to somebody outside that circle), 'personal' is this person's own notebook. " +
+    "`can` is 'view' (search and read), 'contribute' (also save here) or 'admin' (also decide who else gets in).",
   inputSchema: z.object({}),
   outputSchema: z.object({
     spaces: z.array(
       z.object({
         id: z.string().uuid(),
         name: z.string(),
-        kind: z.enum(['global', 'personal']),
+        kind: z.enum(['global', 'shared', 'personal']),
+        /** Lo que esta persona puede hacer aquí. Ver la migración 0123. */
+        can: z.enum(['view', 'contribute', 'admin']),
         description: z.string().nullable(),
         documents: z.number().int(),
       }),
@@ -45,6 +49,7 @@ export const kbListSpaces = registerTool({
         id: s.id,
         name: s.name,
         kind: s.kind,
+        can: s.level,
         description: s.description,
         documents: counts.get(s.id) ?? 0,
       })),

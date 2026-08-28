@@ -26,6 +26,13 @@ export function SpaceDialog({
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * La decisión de verdad de un espacio de la empresa, desde la 0123: ¿lo ve la
+   * empresa entera, o solo quien se lo den? Empieza encendido porque es lo que
+   * este diálogo hacía antes y es lo que la mayoría quiere; apagarlo crea el
+   * espacio cerrado, y luego se reparte desde «Quién lo ve».
+   */
+  const [everyone, setEveryone] = useState(true);
 
   const isGlobal = kind === 'global';
 
@@ -33,7 +40,7 @@ export function SpaceDialog({
     if (!name.trim() || saving) return;
     setSaving(true);
     setError(null);
-    const res = await createSpace(name, description, kind);
+    const res = await createSpace(name, description, kind, everyone);
     setSaving(false);
     if (!res.ok) {
       setError(res.error);
@@ -64,7 +71,11 @@ export function SpaceDialog({
                   {isGlobal ? 'Nuevo espacio común' : 'Nuevo espacio propio'}
                 </Dialog.Title>
                 <Dialog.Description className="text-micro text-ink-faint">
-                  {isGlobal ? 'Lo va a leer toda la empresa' : `Solo ${viewerName} lo va a leer`}
+                  {isGlobal
+                    ? everyone
+                      ? 'Lo va a leer toda la empresa'
+                      : 'Solo lo va a leer quien tú digas'
+                    : `Solo ${viewerName} lo va a leer`}
                 </Dialog.Description>
               </div>
             </div>
@@ -77,7 +88,7 @@ export function SpaceDialog({
           </div>
 
           <div className="scroll-slim min-h-0 flex-1 space-y-4 overflow-auto px-5 py-4">
-            {isGlobal && (
+            {isGlobal && everyone && (
               <p className="rounded-card border border-amber/30 bg-amber-soft px-3 py-2.5 text-xs leading-relaxed text-ink">
                 Lo que dejes aquí se vuelve la respuesta oficial: cuando alguien le pregunte a
                 Cortex del tema, va a citar esto. Los borradores, déjalos en un espacio propio hasta
@@ -111,6 +122,27 @@ export function SpaceDialog({
               />
             </label>
 
+            {isGlobal && (
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-card border border-border px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={everyone}
+                  onChange={(e) => setEveryone(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
+                />
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold text-ink">
+                    Que lo vea toda la empresa
+                  </span>
+                  <span className="block text-micro leading-relaxed text-ink-faint">
+                    Apágalo y el espacio nace cerrado: entra solo quien tú añadas después, por
+                    equipos o por personas. Se puede abrir más tarde; lo publicado no se puede
+                    despublicar de las respuestas que Cortex ya dio.
+                  </span>
+                </span>
+              </label>
+            )}
+
             {error && (
               <p className="rounded-card border border-rose/30 bg-rose-soft px-3 py-2 text-xs text-rose">
                 {error}
@@ -133,7 +165,7 @@ export function SpaceDialog({
               className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-1.5 text-xs font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {isGlobal ? 'Publicar para todos' : 'Crear el espacio'}
+              {isGlobal ? (everyone ? 'Publicar para todos' : 'Crear cerrado') : 'Crear el espacio'}
             </button>
           </div>
         </Dialog.Content>

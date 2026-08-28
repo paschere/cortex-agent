@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
-import { fieldLabel, typeLabel } from './types';
 import {
   type FieldDecision,
   confirmExtraction,
@@ -11,6 +10,7 @@ import {
   listFields,
   rejectExtraction,
 } from './store';
+import { fieldLabel, typeLabel } from './types';
 
 /**
  * The waiting room, and the door out of it.
@@ -200,7 +200,8 @@ export const documentsConfirm = registerTool({
       userId: ctx.userId,
       decisions: input.decisions as FieldDecision[],
     });
-    const fields = (await listFields(ctx.db, [result.extraction.id])).get(result.extraction.id) ?? [];
+    const fields =
+      (await listFields(ctx.db, [result.extraction.id])).get(result.extraction.id) ?? [];
     const stillPending = fields.filter((f) => f.review_state === 'pending').length;
 
     const clientMatch =

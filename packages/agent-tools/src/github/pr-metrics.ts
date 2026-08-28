@@ -65,7 +65,8 @@ export const prMetrics = registerTool({
       for (const p of data) {
         if (p.state === 'open') openPrNumbers.push(p.number);
         if (p.merged_at && p.merged_at >= since) {
-          const hrs = (new Date(p.merged_at).getTime() - new Date(p.created_at).getTime()) / 3_600_000;
+          const hrs =
+            (new Date(p.merged_at).getTime() - new Date(p.created_at).getTime()) / 3_600_000;
           if (Number.isFinite(hrs) && hrs >= 0) mergeDurationsHours.push(hrs);
         }
         if (p.updated_at < since) reachedWindow = true;

@@ -61,9 +61,7 @@ export const payrollExpensesReport = registerTool({
     lines.push(
       `- **${money(t.totalUsd)}** USD across **${t.count ?? 0}** expenses from ${t.employees ?? 0} people`,
     );
-    lines.push(
-      `- Avg ${money(t.avgPerMonthUsd)}/month · ${money(t.avgPerExpenseUsd)} per expense`,
-    );
+    lines.push(`- Avg ${money(t.avgPerMonthUsd)}/month · ${money(t.avgPerExpenseUsd)} per expense`);
 
     const lastMonth = byMonth[byMonth.length - 1];
     const prevMonth = byMonth[byMonth.length - 2];
@@ -71,9 +69,7 @@ export const payrollExpensesReport = registerTool({
       const last = lastMonth;
       const prev = prevMonth;
       const delta =
-        prev.totalUsd > 0
-          ? Math.round(((last.totalUsd - prev.totalUsd) / prev.totalUsd) * 100)
-          : 0;
+        prev.totalUsd > 0 ? Math.round(((last.totalUsd - prev.totalUsd) / prev.totalUsd) * 100) : 0;
       lines.push(
         `- Latest month (${last.month}): ${money(last.totalUsd)} — ${delta >= 0 ? '+' : ''}${delta}% vs ${prev.month}`,
       );
@@ -110,7 +106,9 @@ export const payrollExpensesReport = registerTool({
     }
 
     lines.push('');
-    lines.push('_Spend data is confidential — do not share externally without explicit confirmation._');
+    lines.push(
+      '_Spend data is confidential — do not share externally without explicit confirmation._',
+    );
 
     return { report: data, markdown: lines.join('\n') };
   },

@@ -99,9 +99,7 @@ describe('a chart drawn in the chat', () => {
   it('refuses to build a chart with no table, because that is the accessible copy', () => {
     // `chartSectionSchema` requires it; this proves the requirement survives
     // the path a chat chart takes rather than only the one a report takes.
-    expect(() =>
-      chatChartDocument(input({ table: { columns: [], rows: [] } })),
-    ).toThrow();
+    expect(() => chatChartDocument(input({ table: { columns: [], rows: [] } }))).toThrow();
   });
 
   /**

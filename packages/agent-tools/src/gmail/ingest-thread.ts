@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { approxTokens } from '../kb/chunker';
 import { embedDocuments } from '../kb/embedder';
 import { recordEmbeddingUsage } from '../kb/embedding-usage';
-import { assertCanWriteToSpace } from '../kb/spaces';
+import { type SpaceKind, assertCanWriteToSpace } from '../kb/spaces';
 import type { SpeechTurn } from '../kb/transcribe';
 import { chunkTranscript } from '../kb/transcript-chunker';
 import {
@@ -311,7 +311,12 @@ export async function ingestThread(
   // volver personal o entregar a otra persona, y un archivo que siguiera
   // escribiendo en él publicaría correspondencia en un sitio que su dueño nunca
   // aceptó. Además devuelve el espacio, que es lo que decide la regla siguiente.
-  let space: { kind: 'global' | 'personal'; ownerId: string | null; name: string };
+  // `SpaceKind` y no un par escrito a mano: desde la 0123 hay una tercera clase
+  // —'shared', el espacio de la organización repartido a unos equipos— y la
+  // regla de más abajo la trata como lo que es, un sitio compartido donde el
+  // correo interno no entra. Escribir el par a mano aquí era exactamente la
+  // forma de que esa tercera clase se colara como si fuera un cuaderno.
+  let space: { kind: SpaceKind; ownerId: string | null; name: string };
   try {
     space = await assertCanWriteToSpace(db, ctx.userId, input.spaceId);
   } catch (err) {

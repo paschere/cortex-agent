@@ -396,7 +396,11 @@ export const securityGetActionPolicy = registerTool({
   inputSchema: z.object({}),
   outputSchema: z.object({
     policy: z
-      .object({ mode: z.enum(['dry-run', 'enforce']), deny: z.array(z.string()), allow: z.array(z.string()) })
+      .object({
+        mode: z.enum(['dry-run', 'enforce']),
+        deny: z.array(z.string()),
+        allow: z.array(z.string()),
+      })
       .nullable(),
     markdown: z.string(),
   }),
@@ -459,7 +463,11 @@ export const securitySetActionPolicy = registerTool({
   outputSchema: z.object({
     saved: z.boolean(),
     policy: z
-      .object({ mode: z.enum(['dry-run', 'enforce']), deny: z.array(z.string()), allow: z.array(z.string()) })
+      .object({
+        mode: z.enum(['dry-run', 'enforce']),
+        deny: z.array(z.string()),
+        allow: z.array(z.string()),
+      })
       .nullable(),
     /** Reglas que no evaluaron limpio contra un contexto de prueba — typos probables. */
     warnings: z.array(z.string()),
@@ -505,11 +513,21 @@ export const securitySetActionPolicy = registerTool({
     const { error } = await ctx.db
       .from('security_policies')
       .upsert(
-        { key: 'action_policy', value: policy, updated_by: ctx.userId, updated_at: new Date().toISOString() },
+        {
+          key: 'action_policy',
+          value: policy,
+          updated_by: ctx.userId,
+          updated_at: new Date().toISOString(),
+        },
         { onConflict: 'organization_id,key' },
       );
     if (error) {
-      return { saved: false, policy: null, warnings, markdown: `Could not save the policy: ${error.message}` };
+      return {
+        saved: false,
+        policy: null,
+        warnings,
+        markdown: `Could not save the policy: ${error.message}`,
+      };
     }
     // Que rija YA en este proceso; otros procesos la recogen al expirar su caché (≤60s).
     resetPolicyCache();
@@ -524,7 +542,11 @@ export const securitySetActionPolicy = registerTool({
           ? 'Nothing is refused yet: matches land in the security log. Review them with security.recent_events, then switch to enforce.'
           : 'Deny matches now refuse the call. Other running instances pick this up within a minute.',
         ...(warnings.length
-          ? ['', '⚠️ These rules did not evaluate cleanly against a sample call (probable typo — they will fail CLOSED in enforce):', ...warnings.map((w) => `- ${w}`)]
+          ? [
+              '',
+              '⚠️ These rules did not evaluate cleanly against a sample call (probable typo — they will fail CLOSED in enforce):',
+              ...warnings.map((w) => `- ${w}`),
+            ]
           : []),
       ].join('\n'),
     };

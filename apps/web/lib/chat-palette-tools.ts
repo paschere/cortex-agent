@@ -194,6 +194,7 @@ export const TOOL_PHRASE: Record<string, string> = {
 
   'kb.context': 'Ármame el contexto de Brain Knowledge sobre ',
   'kb.create_document': 'Guarda esto en Brain Knowledge: ',
+  'kb.share_space': 'Dale acceso al espacio ',
   'kb.list_spaces': 'Muéstrame los espacios de Brain Knowledge',
   'kb.search': 'Busca en Brain Knowledge ',
 

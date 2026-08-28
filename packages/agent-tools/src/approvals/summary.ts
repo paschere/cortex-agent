@@ -139,6 +139,7 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   linear_create_comment: 'Comentar en la tarea',
   kb_list_spaces: 'Ver los espacios de Brain Knowledge',
   kb_create_document: 'Guardar en Brain Knowledge',
+  kb_share_space: 'Cambiar quién ve un espacio',
   kb_context: 'Reunir contexto de Brain Knowledge',
   attachments_promote: 'Guardar el adjunto en Brain Knowledge',
   payroll_team_overview: 'Ver el tamaño del equipo',

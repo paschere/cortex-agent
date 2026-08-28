@@ -26,7 +26,9 @@ export const getCompany = registerTool({
   description: 'Get full HubSpot company by id including recent deals associated.',
   inputSchema: z.object({ id: z.string() }),
   outputSchema: Output,
-  requiredScopes: [{ provider: 'hubspot', scopes: ['crm.objects.companies.read', 'crm.objects.deals.read'] }],
+  requiredScopes: [
+    { provider: 'hubspot', scopes: ['crm.objects.companies.read', 'crm.objects.deals.read'] },
+  ],
   rateLimit: { perMinute: 60 },
   handler: async (input, ctx) => {
     type C = {
@@ -62,7 +64,9 @@ export const getCompany = registerTool({
       name: company.properties.name ?? null,
       domain: company.properties.domain ?? null,
       industry: company.properties.industry ?? null,
-      numEmployees: company.properties.numberofemployees ? Number(company.properties.numberofemployees) : null,
+      numEmployees: company.properties.numberofemployees
+        ? Number(company.properties.numberofemployees)
+        : null,
       country: company.properties.country ?? null,
       ownerId: company.properties.hubspot_owner_id ?? null,
       recentDeals,

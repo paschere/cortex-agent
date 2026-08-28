@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { setupServer } from 'msw/node';
-import { http, HttpResponse } from 'msw';
-import { sheetsReadRange } from '../read-range';
-import { sheetsAppendRow } from '../append-row';
-import { runTool } from '../../index';
 import { ConfirmationRequiredError } from '@cortex/core';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { runTool } from '../../index';
 import type { ToolContext } from '../../types';
+import { sheetsAppendRow } from '../append-row';
+import { sheetsReadRange } from '../read-range';
 
 function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
   const noRow = { data: null, error: null };
@@ -28,8 +28,12 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     hasScopes: vi.fn().mockResolvedValue(true),
   };
   const logger = {
-    info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn(),
-    trace: vi.fn(), fatal: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    trace: vi.fn(),
+    fatal: vi.fn(),
   };
   return {
     organizationId: 'org-test',
@@ -47,11 +51,16 @@ const SPREADSHEET_ID = 'sheet-abc123';
 
 const server = setupServer(
   http.get(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/:range`, () =>
-    HttpResponse.json({ range: 'Sheet1!A1:B2', values: [['a', 'b'], ['c', 'd']] }),
+    HttpResponse.json({
+      range: 'Sheet1!A1:B2',
+      values: [
+        ['a', 'b'],
+        ['c', 'd'],
+      ],
+    }),
   ),
-  http.post(
-    `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/:range`,
-    () => HttpResponse.json({ updates: { updatedRange: 'Sheet1!A3:B3', updatedRows: 1 } }),
+  http.post(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/:range`, () =>
+    HttpResponse.json({ updates: { updatedRange: 'Sheet1!A3:B3', updatedRows: 1 } }),
   ),
 );
 
@@ -61,14 +70,24 @@ afterAll(() => server.close());
 describe('gsheets', () => {
   it('reads a range', async () => {
     const ctx = makeCtx();
-    const out = await sheetsReadRange.handler({ spreadsheetId: SPREADSHEET_ID, range: 'Sheet1!A1:B2' }, ctx);
-    expect(out.values).toEqual([['a', 'b'], ['c', 'd']]);
+    const out = await sheetsReadRange.handler(
+      { spreadsheetId: SPREADSHEET_ID, range: 'Sheet1!A1:B2' },
+      ctx,
+    );
+    expect(out.values).toEqual([
+      ['a', 'b'],
+      ['c', 'd'],
+    ]);
   });
 
   it('append_row requires confirmation', async () => {
     const ctx = makeCtx();
     await expect(
-      runTool(sheetsAppendRow, { spreadsheetId: SPREADSHEET_ID, range: 'Sheet1!A1', values: ['x', 'y'] }, ctx),
+      runTool(
+        sheetsAppendRow,
+        { spreadsheetId: SPREADSHEET_ID, range: 'Sheet1!A1', values: ['x', 'y'] },
+        ctx,
+      ),
     ).rejects.toBeInstanceOf(ConfirmationRequiredError);
   });
 

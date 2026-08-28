@@ -159,7 +159,9 @@ export async function readWorkspacePlan(db: SupabaseClient): Promise<WorkspacePl
       : null;
 
   const plan =
-    plans === null ? UNMETERED_PLAN : (plans.find((p) => p.code === row?.plan_code) ?? FALLBACK_PLAN);
+    plans === null
+      ? UNMETERED_PLAN
+      : (plans.find((p) => p.code === row?.plan_code) ?? FALLBACK_PLAN);
 
   return {
     plan,

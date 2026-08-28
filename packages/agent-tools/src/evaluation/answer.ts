@@ -36,9 +36,9 @@
  */
 
 import { generateText } from 'ai';
-import { CHAT_MODEL, chatModel } from '../model';
-import type { SpaceHit } from '../kb/spaces';
 import { type CoverageVerdict, assessCoverage } from '../kb/relevance';
+import type { SpaceHit } from '../kb/spaces';
+import { CHAT_MODEL, chatModel } from '../model';
 import { judgeAnswer, promptDigest } from './judge';
 import type { AnswerCaseResult, AnswerScore, EvalCase, JudgeCalibration } from './types';
 
@@ -189,10 +189,7 @@ export async function gradeAnswerCase({
   };
 }
 
-export function scoreAnswers(
-  results: AnswerCaseResult[],
-  judge: JudgeCalibration,
-): AnswerScore {
+export function scoreAnswers(results: AnswerCaseResult[], judge: JudgeCalibration): AnswerScore {
   const answerable = results.filter((r) => r.group === 'answered');
   const unanswerable = results.filter((r) => r.group !== 'answered');
   const ratio = (hit: number, of: number) => (of === 0 ? 1 : hit / of);

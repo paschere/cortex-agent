@@ -76,7 +76,7 @@ interface Group {
 interface Space {
   id: string;
   name: string;
-  kind: 'global' | 'personal';
+  kind: 'global' | 'shared' | 'personal';
 }
 
 interface NumberLink {

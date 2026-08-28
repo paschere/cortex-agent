@@ -1,4 +1,4 @@
-import { ForbiddenError, NotFoundError } from '@cortex/core';
+import { ForbiddenError, NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { embedQuery } from './embedder';
 
@@ -21,8 +21,44 @@ import { embedQuery } from './embedder';
  *     database entry point that takes "which spaces" as an argument.
  */
 
-/** What a space is, in the only two flavours that exist. */
-export type SpaceKind = 'global' | 'personal';
+/**
+ * De quién es un espacio y, por tanto, qué significa encontrarse algo en él.
+ *
+ *   'global'    un espacio de la organización abierto a toda la empresa. Lo que
+ *               se encuentra aquí es lo que la empresa ya acordó.
+ *   'shared'    un espacio de la organización repartido a unos equipos o a unas
+ *               personas. Es conocimiento de la empresa, pero de un círculo, y
+ *               citarlo delante de quien no lo ve es filtrarlo.
+ *   'personal'  el cuaderno de una persona. Nadie más lo ve salvo que su dueño
+ *               lo preste, y ni un administrador puede prestarlo por ella.
+ *
+ * 'global' y 'shared' son la MISMA fila en la base de datos — las dos con
+ * `scope = 'global'` — y lo único que las separa es si existe la concesión de
+ * sujeto «todo el mundo». Ver la migración 0123: la visibilidad se concede, no
+ * se deduce del scope.
+ */
+export type SpaceKind = 'global' | 'shared' | 'personal';
+
+/**
+ * Lo que una persona puede hacer en un espacio, de menos a más:
+ *
+ *   'view'        buscar y leer.
+ *   'contribute'  además, guardar documentos aquí.
+ *   'admin'       además, repartir el acceso, renombrar y borrar.
+ *
+ * El orden lo decide la base de datos (`kb_grant_rank`, migración 0123) porque
+ * es la base de datos la que resuelve el nivel efectivo cuando a alguien le
+ * llega por varios caminos. `RANK` de más abajo es su espejo y no puede
+ * discrepar sin que se conceda de más, así que los dos se leen juntos.
+ */
+export type SpaceLevel = 'view' | 'contribute' | 'admin';
+
+const RANK: Record<SpaceLevel, number> = { view: 1, contribute: 2, admin: 3 };
+
+/** ¿Alcanza este nivel para lo que se quiere hacer? Un nivel nulo nunca alcanza. */
+export function atLeast(level: SpaceLevel | null, needed: SpaceLevel): boolean {
+  return level !== null && RANK[level] >= RANK[needed];
+}
 
 export interface Space {
   id: string;
@@ -33,6 +69,31 @@ export interface Space {
   ownerId: string | null;
   createdBy: string | null;
   createdAt: string;
+  /**
+   * Lo que puede hacer aquí LA PERSONA POR LA QUE SE PIDIÓ este espacio. Viaja
+   * pegado al espacio y no aparte porque la pregunta «¿puedo escribir aquí?» se
+   * hace siempre justo después de «¿cuál es este espacio?», y separarlas es como
+   * se acaba pintando un botón que el servidor va a rechazar.
+   */
+  level: SpaceLevel;
+}
+
+/** Un espacio en una lista, con lo que hace falta para pintar «quién lo ve». */
+export interface SpaceSummary extends Space {
+  /** Cuántos equipos y personas tienen acceso, sin contar «toda la empresa». */
+  grantCount: number;
+}
+
+/** Una línea del panel «quién ve esto». */
+export interface SpaceGrant {
+  id: string;
+  subjectKind: 'everyone' | 'team' | 'user';
+  /** Null cuando el sujeto es toda la empresa. */
+  subjectId: string | null;
+  /** El nombre del equipo o de la persona, ya resuelto por la base de datos. */
+  subjectName: string;
+  level: SpaceLevel;
+  grantedAt: string;
 }
 
 export interface SpaceHit {
@@ -98,37 +159,100 @@ type SpaceRow = {
   description: string | null;
   created_by: string | null;
   created_at: string;
+  /**
+   * Espejo de «existe la concesión a todo el mundo» (migración 0123 § 1bis).
+   * Opcional en el tipo, y no por descuido: un despliegue al que le falte una
+   * migración debe perder la distinción entre 'global' y 'shared', no romperse
+   * en cada lectura. Ausente se lee como falso, que es el lado prudente — un
+   * espacio se pinta como repartido, nunca como público, cuando no se sabe.
+   */
+  everyone?: boolean | null;
+  level?: string | null;
+  grant_count?: number | null;
 };
 
-function toSpace(row: SpaceRow): Space {
+function kindOf(scope: string, everyone: boolean | null | undefined): SpaceKind {
+  if (scope !== 'global') return 'personal';
+  return everyone ? 'global' : 'shared';
+}
+
+function toSpace(row: SpaceRow, level: SpaceLevel): Space {
   return {
     id: row.id,
     name: row.name,
-    kind: row.scope === 'global' ? 'global' : 'personal',
+    kind: kindOf(row.scope, row.everyone),
     description: row.description,
     ownerId: row.scope_id,
     createdBy: row.created_by,
     createdAt: row.created_at,
+    level,
   };
 }
 
-const SPACE_COLUMNS = 'id, name, scope, scope_id, description, created_by, created_at';
+/**
+ * Todos los espacios de los que esta persona puede recuperar: los suyos, más
+ * todo lo que se le haya concedido — a ella, a un equipo suyo, o a toda la
+ * empresa — más, si administra la organización, los espacios comunes de esa
+ * organización.
+ *
+ * SE PREGUNTA A LA BASE DE DATOS, no se arma aquí. Antes esta función escribía
+ * el filtro a mano (`scope.eq.global,and(scope.eq.user,scope_id.eq.X)`) porque
+ * la regla cabía en una línea. Con concesiones ya no cabe: haría falta traerse
+ * los equipos de la persona, luego sus concesiones, luego los espacios, y
+ * cualquiera de los tres pasos escrito de otra manera en otro sitio sería una
+ * segunda definición de quién ve qué. `kb_spaces_for` se apoya en
+ * `kb_visible_space_ids` — la misma función de la que sale la búsqueda — así
+ * que esta lista NO PUEDE contener un espacio del que la búsqueda no
+ * recuperaría, ni al revés. Esa es toda la razón de que sea una llamada y no
+ * una consulta.
+ */
+export async function listVisibleSpaces(
+  db: SupabaseClient,
+  userId: string,
+): Promise<SpaceSummary[]> {
+  if (!userId) return [];
+  const { data, error } = await db.rpc('kb_spaces_for', { p_user_id: userId });
+  if (error) throw error;
+  return ((data ?? []) as SpaceRow[]).map((row) => ({
+    ...toSpace(row, (row.level as SpaceLevel | null) ?? 'view'),
+    grantCount: row.grant_count ?? 0,
+  }));
+}
 
 /**
- * Every space this person may retrieve from: all global spaces plus their own
- * personal ones. Deliberately has no admin branch — an org admin publishes
- * global spaces, which is not the same as being able to read everyone's notes.
+ * Un espacio con el nivel de quien pregunta, o null si ni siquiera lo ve.
+ *
+ * UN SOLO VIAJE, y es deliberado: «tráeme este espacio» y «¿qué puedo hacer
+ * aquí?» son siempre la misma pregunta hecha seguida, y por este camino pasa
+ * cada lectura de cada documento. El nivel puede llegar por su equipo, por ella
+ * misma, por estar el espacio abierto a toda la empresa o por su rol, y gana el
+ * más alto; esa resolución vive entera en la base de datos.
  */
-export async function listVisibleSpaces(db: SupabaseClient, userId: string): Promise<Space[]> {
-  if (!userId) return [];
-  const { data, error } = await db
-    .from('kb_collections')
-    .select(SPACE_COLUMNS)
-    .or(`scope.eq.global,and(scope.eq.user,scope_id.eq.${userId})`)
-    .order('scope', { ascending: true })
-    .order('name', { ascending: true });
+async function fetchSpace(
+  db: SupabaseClient,
+  userId: string,
+  spaceId: string,
+): Promise<{ row: SpaceRow; level: SpaceLevel } | null> {
+  if (!userId || !spaceId) return null;
+  const { data, error } = await db.rpc('kb_space_for', {
+    p_user_id: userId,
+    p_space_id: spaceId,
+  });
   if (error) throw error;
-  return ((data ?? []) as SpaceRow[]).map(toSpace);
+  const row = (Array.isArray(data) ? data[0] : data) as SpaceRow | null | undefined;
+  if (!row) return null;
+  const level = row.level;
+  if (level !== 'view' && level !== 'contribute' && level !== 'admin') return null;
+  return { row, level };
+}
+
+/** Lo que esta persona puede hacer en este espacio, o null si ni siquiera lo ve. */
+export async function spaceLevel(
+  db: SupabaseClient,
+  userId: string,
+  spaceId: string,
+): Promise<SpaceLevel | null> {
+  return (await fetchSpace(db, userId, spaceId))?.level ?? null;
 }
 
 /**
@@ -142,25 +266,25 @@ export async function getVisibleSpace(
   userId: string,
   spaceId: string,
 ): Promise<Space> {
-  const { data, error } = await db
-    .from('kb_collections')
-    .select(SPACE_COLUMNS)
-    .eq('id', spaceId)
-    .maybeSingle();
-  if (error) throw error;
-  const row = data as SpaceRow | null;
-  if (!row) throw new NotFoundError('That space no longer exists.');
-  const space = toSpace(row);
-  if (space.kind === 'personal' && space.ownerId !== userId) {
-    throw new NotFoundError('That space no longer exists.');
-  }
-  return space;
+  const found = await fetchSpace(db, userId, spaceId);
+  // «No existe» y «existe pero no es tuyo» salen por la misma puerta, y por eso
+  // la función de la base de datos devuelve cero filas en los dos casos en vez
+  // de distinguirlos: si el mensaje de error los separara, sería una manera de
+  // confirmar que el espacio privado de un compañero existe.
+  if (!found) throw new NotFoundError('That space no longer exists.');
+  return toSpace(found.row, found.level);
 }
 
 /**
- * Who may put a document into a space, and who may rename or delete it.
- * Personal: its owner. Global: an org admin, because a global space is what
- * everybody's Cortex answers from.
+ * Quién puede meter un documento en un espacio: quien tenga 'contribute' o más.
+ *
+ * Antes de la 0123 esta pregunta se contestaba con dos ramas fijas — el dueño
+ * en un espacio personal, un administrador de la organización en uno común — y
+ * ésa era exactamente la rigidez que hacía imposible «Finanzas mantiene
+ * Tarifas». Ahora se contesta con el nivel efectivo, que ya incluye las dos
+ * ramas viejas: el dueño de su cuaderno resuelve 'admin', y un administrador de
+ * la organización resuelve 'admin' sobre los espacios comunes. Nadie pierde
+ * nada de lo que podía hacer ayer.
  */
 export async function assertCanWriteToSpace(
   db: SupabaseClient,
@@ -168,13 +292,35 @@ export async function assertCanWriteToSpace(
   spaceId: string,
 ): Promise<Space> {
   const space = await getVisibleSpace(db, userId, spaceId);
-  if (space.kind === 'personal') {
-    if (space.ownerId !== userId) throw new NotFoundError('That space no longer exists.');
-    return space;
-  }
-  if (!(await isOrgAdmin(db, userId))) {
+  if (!atLeast(space.level, 'contribute')) {
     throw new ForbiddenError(
-      'Only an org admin can add to a company-wide space. Save it to one of your own spaces instead.',
+      space.kind === 'personal'
+        ? 'Ese espacio es el cuaderno de otra persona: te lo prestó para leer, no para escribir en él.'
+        : `Puedes leer «${space.name}» pero no guardar ahí. Pídele acceso de aportación a quien lo administra, o guárdalo en uno de tus espacios.`,
+    );
+  }
+  return space;
+}
+
+/**
+ * Quién puede repartir el acceso a un espacio, renombrarlo o borrarlo.
+ *
+ * Se separa de escribir a propósito: aportar un documento y decidir quién lee
+ * el espacio entero son decisiones de tamaños distintos, y juntarlas es como un
+ * espacio de equipo acaba abierto a la empresa porque alguien tenía que subir
+ * un PDF.
+ */
+export async function assertCanAdminSpace(
+  db: SupabaseClient,
+  userId: string,
+  spaceId: string,
+): Promise<Space> {
+  const space = await getVisibleSpace(db, userId, spaceId);
+  if (space.level !== 'admin') {
+    throw new ForbiddenError(
+      space.kind === 'personal'
+        ? 'Las notas de otra persona las reparte esa persona, y nadie más.'
+        : `No administras «${space.name}», así que no puedes cambiar quién lo ve.`,
     );
   }
   return space;
@@ -355,6 +501,7 @@ export async function searchSpaces(
     space_id: string;
     space_name: string;
     space_scope: string;
+    space_everyone?: boolean | null;
     chunk_index: number;
     content: string;
     score: number;
@@ -375,7 +522,12 @@ export async function searchSpaces(
     documentTitle: r.document_title,
     spaceId: r.space_id,
     spaceName: r.space_name,
-    spaceKind: r.space_scope === 'global' ? ('global' as const) : ('personal' as const),
+    // 'shared' sólo puede llegar de un despliegue con la 0125 puesta, que es
+    // la migración donde `kb_search_scoped` empezó a decir si el espacio está
+    // abierto a toda la empresa. Sin ella la columna no viene y un espacio
+    // común se lee como 'global', que es lo que era antes de que existiera la
+    // distinción — degradar, no romper.
+    spaceKind: kindOf(r.space_scope, r.space_everyone ?? r.space_scope === 'global'),
     chunkIndex: r.chunk_index,
     content: r.content,
     score: Number(r.score),
@@ -471,4 +623,146 @@ export async function getVisibleDocument(
     uploadedBy: (data.uploaded_by as string | null) ?? null,
     space,
   };
+}
+
+/**
+ * ===========================================================================
+ * REPARTIR EL ACCESO
+ * ===========================================================================
+ * Las tres funciones que escriben en `kb_space_grants`. Todas empiezan por
+ * `assertCanAdminSpace` y ninguna acepta una organización: la fila la coloca en
+ * su empresa el disparador de la 0123, que la deriva del espacio. Un llamador
+ * no puede conceder acceso a través de una frontera de empresa ni equivocándose
+ * a propósito.
+ */
+
+/** Quién ve este espacio. Vacío si quien pregunta no lo administra. */
+export async function listSpaceAccess(
+  db: SupabaseClient,
+  userId: string,
+  spaceId: string,
+): Promise<SpaceGrant[]> {
+  await assertCanAdminSpace(db, userId, spaceId);
+  const { data, error } = await db.rpc('kb_space_access', {
+    p_user_id: userId,
+    p_space_id: spaceId,
+  });
+  if (error) throw error;
+  type Row = {
+    grant_id: string;
+    subject_kind: string;
+    subject_id: string | null;
+    subject_name: string | null;
+    level: string;
+    granted_at: string;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    id: r.grant_id,
+    subjectKind: r.subject_kind as SpaceGrant['subjectKind'],
+    subjectId: r.subject_id,
+    // Un equipo borrado deja la concesión huérfana un instante, entre el borrado
+    // y la cascada. Mejor una línea que dice que no sabe quién es que una fila
+    // que desaparece de un panel de permisos sin explicación.
+    subjectName: r.subject_name ?? 'Alguien que ya no está',
+    level: r.level as SpaceLevel,
+    grantedAt: r.granted_at,
+  }));
+}
+
+export interface GrantSubject {
+  kind: 'everyone' | 'team' | 'user';
+  /** Obligatorio salvo para «toda la empresa», que no tiene id. */
+  id?: string | null;
+}
+
+/**
+ * Conceder, o cambiar el nivel de una concesión que ya existía.
+ *
+ * Se hace leyendo y luego escribiendo, en vez de con un upsert, porque la
+ * unicidad de esta tabla se apoya en dos índices PARCIALES (uno para los
+ * sujetos con id, otro para «toda la empresa») y un índice parcial no sirve de
+ * blanco de conflicto por PostgREST. Dos viajes bien entendidos son mejores que
+ * un upsert que en producción resulta que inserta duplicados.
+ */
+export async function grantSpaceAccess(
+  db: SupabaseClient,
+  userId: string,
+  spaceId: string,
+  subject: GrantSubject,
+  level: SpaceLevel,
+): Promise<void> {
+  const space = await assertCanAdminSpace(db, userId, spaceId);
+
+  if (subject.kind !== 'everyone' && !subject.id) {
+    throw new ValidationError('Falta decir a quién.');
+  }
+  // Las dos reglas del cuaderno personal, dichas aquí en castellano antes de
+  // que el disparador las diga en forma de excepción de Postgres. La valla de
+  // abajo sigue estando; ésta existe para que el mensaje sea legible.
+  if (space.kind === 'personal') {
+    if (subject.kind === 'everyone') {
+      throw new ForbiddenError(
+        'Un espacio personal no se abre a toda la empresa. Mueve el documento a un espacio común si eso es lo que quieres.',
+      );
+    }
+    if (level === 'admin') {
+      throw new ForbiddenError(
+        'Puedes prestar tus notas, pero no delegar quién más las ve: eso te queda a ti.',
+      );
+    }
+  }
+
+  const subjectId = subject.kind === 'everyone' ? null : (subject.id ?? null);
+
+  const existing = await db
+    .from('kb_space_grants')
+    .select('id')
+    .eq('space_id', spaceId)
+    .eq('subject_kind', subject.kind)
+    .filter('subject_id', subjectId === null ? 'is' : 'eq', subjectId === null ? null : subjectId)
+    .maybeSingle();
+  if (existing.error) throw existing.error;
+
+  if (existing.data) {
+    const { error } = await db
+      .from('kb_space_grants')
+      .update({ level, granted_by: userId })
+      .eq('id', (existing.data as { id: string }).id);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await db.from('kb_space_grants').insert({
+    space_id: spaceId,
+    subject_kind: subject.kind,
+    subject_id: subjectId,
+    level,
+    granted_by: userId,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Quitar el acceso. Se identifica por sujeto y no por el id de la fila porque
+ * el que llama razona en «quítale esto a Finanzas», y hacerle buscar antes el
+ * id de la concesión es darle una manera de borrar la concesión equivocada.
+ */
+export async function revokeSpaceAccess(
+  db: SupabaseClient,
+  userId: string,
+  spaceId: string,
+  subject: GrantSubject,
+): Promise<void> {
+  await assertCanAdminSpace(db, userId, spaceId);
+  const subjectId = subject.kind === 'everyone' ? null : (subject.id ?? null);
+  if (subject.kind !== 'everyone' && !subjectId) {
+    throw new ValidationError('Falta decir a quién.');
+  }
+  const { error } = await db
+    .from('kb_space_grants')
+    .delete()
+    .eq('space_id', spaceId)
+    .eq('subject_kind', subject.kind)
+    .filter('subject_id', subjectId === null ? 'is' : 'eq', subjectId === null ? null : subjectId);
+  if (error) throw error;
 }

@@ -53,7 +53,9 @@ export const getContact = registerTool({
   description: 'Get a HubSpot contact by id, including associated companies and deals.',
   inputSchema: z.object({ id: z.string() }),
   outputSchema: Output,
-  requiredScopes: [{ provider: 'hubspot', scopes: ['crm.objects.contacts.read', 'crm.objects.companies.read'] }],
+  requiredScopes: [
+    { provider: 'hubspot', scopes: ['crm.objects.contacts.read', 'crm.objects.companies.read'] },
+  ],
   rateLimit: { perMinute: 60 },
   handler: async (input, ctx) => {
     type C = {

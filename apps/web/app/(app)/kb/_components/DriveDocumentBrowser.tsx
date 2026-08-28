@@ -245,9 +245,7 @@ export function DriveDocumentBrowser({
                     <span className="grid h-6 w-6 place-items-center text-amber">
                       <FolderClosed className="h-4 w-4" />
                     </span>
-                    <span className="flex-1 truncate text-sm font-medium text-ink">
-                      {f.name}
-                    </span>
+                    <span className="flex-1 truncate text-sm font-medium text-ink">{f.name}</span>
                     <ChevronRight className="h-4 w-4 text-ink-faint" />
                   </button>
                 </li>

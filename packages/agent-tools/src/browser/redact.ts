@@ -205,8 +205,7 @@ export function pauseForOneTimeCodes(steps: Step[]): { steps: Step[]; added: str
         ? /^\{\{\s*([a-zA-Z0-9_]+)\s*\}\}$/.exec(step.value.text)?.[1]
         : undefined;
     const isCode = name !== undefined && looksLikeOneTimeCode(step.label);
-    const alreadyAsked =
-      isCode && out.some((s) => s.action === 'pause' && s.extractAs === name);
+    const alreadyAsked = isCode && out.some((s) => s.action === 'pause' && s.extractAs === name);
 
     if (isCode && !alreadyAsked && name) {
       out.push({

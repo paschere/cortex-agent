@@ -26,10 +26,14 @@ export const searchDeals = registerTool({
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     const filters: Array<{ propertyName: string; operator: string; value?: string }> = [];
-    if (input.stage) filters.push({ propertyName: 'dealstage', operator: 'EQ', value: input.stage });
-    if (input.ownerId) filters.push({ propertyName: 'hubspot_owner_id', operator: 'EQ', value: input.ownerId });
-    if (input.minAmount != null) filters.push({ propertyName: 'amount', operator: 'GTE', value: String(input.minAmount) });
-    if (input.maxAmount != null) filters.push({ propertyName: 'amount', operator: 'LTE', value: String(input.maxAmount) });
+    if (input.stage)
+      filters.push({ propertyName: 'dealstage', operator: 'EQ', value: input.stage });
+    if (input.ownerId)
+      filters.push({ propertyName: 'hubspot_owner_id', operator: 'EQ', value: input.ownerId });
+    if (input.minAmount != null)
+      filters.push({ propertyName: 'amount', operator: 'GTE', value: String(input.minAmount) });
+    if (input.maxAmount != null)
+      filters.push({ propertyName: 'amount', operator: 'LTE', value: String(input.maxAmount) });
     type R = {
       results: Array<{
         id: string;

@@ -39,7 +39,7 @@ export interface FragmentView {
   documentId: string;
   documentTitle: string;
   spaceName: string;
-  spaceKind: 'global' | 'personal';
+  spaceKind: 'global' | 'shared' | 'personal';
   chunkIndex: number;
   cosine: number | null;
   keyword: number;
@@ -164,7 +164,7 @@ export interface AdjustView {
 export interface SpaceOption {
   id: string;
   name: string;
-  kind: 'global' | 'personal';
+  kind: 'global' | 'shared' | 'personal';
 }
 
 /** What the label reads for each part, in the reader's words. */

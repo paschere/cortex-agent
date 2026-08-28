@@ -27,7 +27,7 @@ import { applyOrPropose } from './store';
 export const clientsLink = registerTool({
   id: 'clients.link',
   description:
-    "Attach something Cortex already stored — an email thread, a meeting, a document, a WhatsApp group, a vehicle — to a client, so it shows up on their card. Use it when the person tells you what something belongs to. It records that THEY said so; it never claims the link came from a domain or a NIT. If the thing is already attached to a different client, nothing is written and you are told which one — say so and ask, do not reattach. Requires confirmation.",
+    'Attach something Cortex already stored — an email thread, a meeting, a document, a WhatsApp group, a vehicle — to a client, so it shows up on their card. Use it when the person tells you what something belongs to. It records that THEY said so; it never claims the link came from a domain or a NIT. If the thing is already attached to a different client, nothing is written and you are told which one — say so and ask, do not reattach. Requires confirmation.',
   inputSchema: z.object({
     client: z.string().min(2).describe('Client id, name or NIT'),
     kind: z

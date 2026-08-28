@@ -121,7 +121,12 @@ describe('which signals may be applied', () => {
 });
 
 describe('matching free text to a client', () => {
-  const COLTRANS = { id: 'c1', name: 'Coltrans', legal_name: 'Colombiana de Transportes S.A.S.', tax_id: '890903938' };
+  const COLTRANS = {
+    id: 'c1',
+    name: 'Coltrans',
+    legal_name: 'Colombiana de Transportes S.A.S.',
+    tax_id: '890903938',
+  };
   const ALPHA = { id: 'c2', name: 'Alpha Cargo', legal_name: null, tax_id: '899999068' };
   const COLTRANS_LOG = { id: 'c3', name: 'Coltrans Logística', legal_name: null, tax_id: null };
 

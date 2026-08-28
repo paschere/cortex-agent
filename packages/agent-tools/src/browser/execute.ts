@@ -2,15 +2,6 @@ import type { Logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Actor } from './access';
 import { canRunFlow } from './access';
-import { classifyFailure, hasLoginSteps } from './classify';
-import type { BrowserTransport } from './client';
-import { unlockForRun } from './credentials';
-import {
-  type DocumentSink,
-  type DownloadedFile,
-  currentDocumentSink,
-  separateDownload,
-} from './download';
 import {
   type Checkpoint,
   closeCheckpoint,
@@ -20,12 +11,20 @@ import {
   openCheckpoint,
   secondsLeft,
 } from './checkpoint';
+import { classifyFailure, hasLoginSteps } from './classify';
+import type { BrowserTransport } from './client';
+import { unlockForRun } from './credentials';
+import {
+  type DocumentSink,
+  type DownloadedFile,
+  currentDocumentSink,
+  separateDownload,
+} from './download';
 import { safeInputs } from './redact';
 import { refineFromDom, refinementNote } from './refine';
 import type { Repairer } from './repair';
 import { modelRepairer } from './repair';
 import { fillSlots, runnableSlots, slotComplaint } from './slots';
-import { consumesDocument, resolveUploads } from './uploads';
 import {
   countRepair,
   finishRun,
@@ -41,6 +40,7 @@ import {
 } from './store';
 import type { BrowserHandoff, Flow, ModelSpend, Step, StepOutcome } from './types';
 import { EMPTY_SPEND } from './types';
+import { consumesDocument, resolveUploads } from './uploads';
 
 /**
  * Running a learned errand, end to end.

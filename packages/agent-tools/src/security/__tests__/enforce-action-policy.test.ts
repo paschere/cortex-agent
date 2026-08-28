@@ -58,7 +58,12 @@ describe('blockExplanation', () => {
   it('nombra la regla cuando el bloqueo vino de la política del tenant', () => {
     const ev = evaluation({
       decision: 'block',
-      actionPolicy: { ...DRY_RUN_DENY, mode: 'enforce', forward: false, reason: 'la regla X manda' },
+      actionPolicy: {
+        ...DRY_RUN_DENY,
+        mode: 'enforce',
+        forward: false,
+        reason: 'la regla X manda',
+      },
     });
     expect(blockExplanation(ev)).toBe('la regla X manda');
   });

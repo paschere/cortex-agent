@@ -60,7 +60,15 @@
 
 export * from './types';
 export { CORPUS, CORPUS_BY_ID, corpusChunks, type CorpusChunk, type EvalDocument } from './corpus';
-export { CASES, RETRIEVAL_CASES, SELECTION_CASES, ANSWER_CASES, SUITE_ID, suiteDigest, suiteQueries } from './suite';
+export {
+  CASES,
+  RETRIEVAL_CASES,
+  SELECTION_CASES,
+  ANSWER_CASES,
+  SUITE_ID,
+  suiteDigest,
+  suiteQueries,
+} from './suite';
 export {
   type VectorFixture,
   type FixtureChunk,

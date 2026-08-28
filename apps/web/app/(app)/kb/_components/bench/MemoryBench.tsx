@@ -247,9 +247,7 @@ export function MemoryBench({
             <div className={clsx('rounded-card border px-3.5 py-3', COVERAGE[probe.coverage].tone)}>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className={clsx('h-2 w-2 rounded-full', COVERAGE[probe.coverage].dot)} />
-                <span className="text-sm font-bold text-ink">
-                  {COVERAGE[probe.coverage].title}
-                </span>
+                <span className="text-sm font-bold text-ink">{COVERAGE[probe.coverage].title}</span>
                 <span className="tabular ml-auto text-micro text-ink-faint">
                   {num(probe.elapsedMs)} ms · {num(reached)}/{num(window)} citables
                 </span>

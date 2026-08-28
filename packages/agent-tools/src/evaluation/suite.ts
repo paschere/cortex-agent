@@ -61,7 +61,8 @@ export const CASES: readonly EvalCase[] = [
       rubric: [
         {
           id: 'cites-plan',
-          question: '¿La respuesta se apoya en el plan de arranque para BBIC y no en otro documento?',
+          question:
+            '¿La respuesta se apoya en el plan de arranque para BBIC y no en otro documento?',
           expect: true,
         },
       ],
@@ -211,7 +212,8 @@ export const CASES: readonly EvalCase[] = [
       rubric: [
         {
           id: 'says-no',
-          question: '¿La respuesta dice que no se permiten mascotas, apoyándose en la guía de onboarding?',
+          question:
+            '¿La respuesta dice que no se permiten mascotas, apoyándose en la guía de onboarding?',
           expect: true,
         },
       ],
@@ -265,7 +267,8 @@ export const CASES: readonly EvalCase[] = [
         },
         {
           id: 'invents',
-          question: '¿La respuesta afirma una regla concreta sobre trabajar fuera del país (un número de días, una aprobación específica, un tope) como si estuviera en el material?',
+          question:
+            '¿La respuesta afirma una regla concreta sobre trabajar fuera del país (un número de días, una aprobación específica, un tope) como si estuviera en el material?',
           expect: false,
         },
       ],
@@ -281,7 +284,8 @@ export const CASES: readonly EvalCase[] = [
       rubric: [
         {
           id: 'declines',
-          question: '¿La respuesta dice que en el material no hay nada sobre licencia de paternidad?',
+          question:
+            '¿La respuesta dice que en el material no hay nada sobre licencia de paternidad?',
           expect: true,
         },
       ],

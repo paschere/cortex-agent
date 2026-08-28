@@ -91,7 +91,13 @@ function otpFlow() {
     name: 'Extracto del banco',
     steps: OTP_STEPS,
     variables: [
-      { name: 'codigo', label: 'el código que te llega al celular', example: '483920', required: true, type: 'code' },
+      {
+        name: 'codigo',
+        label: 'el código que te llega al celular',
+        example: '483920',
+        required: true,
+        type: 'code',
+      },
     ],
   });
 }

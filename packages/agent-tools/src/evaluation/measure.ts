@@ -24,13 +24,13 @@
 
 import { writeFileSync } from 'node:fs';
 import { approxTokens } from '../kb/chunker';
-import { embedDocuments, embeddingConfig, embeddingModelId, embedQuery } from '../kb/embedder';
-import { toolEmbedText, toolFamily, type SelectableTool } from '../tool-selection';
-import { hashText } from '../tool-selection/store';
+import { embedDocuments, embedQuery, embeddingConfig, embeddingModelId } from '../kb/embedder';
+import { type SelectableTool, toolEmbedText, toolFamily } from '../tool-selection';
 import { cosine } from '../tool-selection/rank';
+import { hashText } from '../tool-selection/store';
 import { corpusChunks } from './corpus';
 import { SELECTION_CASES, suiteDigest, suiteQueries } from './suite';
-import { fixturePath, type FixtureTool, type VectorFixture } from './vectors';
+import { type FixtureTool, type VectorFixture, fixturePath } from './vectors';
 
 export interface MeasureOptions {
   /** Everything the ranker could be offered. Usually `listTools()`. */
@@ -167,7 +167,9 @@ export async function measure({
   const queries = suiteQueries();
   const chunks = corpusChunks();
 
-  log(`Midiendo contra ${modelId}: ${chunks.length} fragmentos, ${queries.length} preguntas, ${tools.length} herramientas.`);
+  log(
+    `Midiendo contra ${modelId}: ${chunks.length} fragmentos, ${queries.length} preguntas, ${tools.length} herramientas.`,
+  );
 
   let tokens = 0;
   const pacer = new Pacer(log);
@@ -185,13 +187,18 @@ export async function measure({
    * dropped a batch would produce a fixture with a hole in it, and a hole in a
    * fixture reads as a low cosine, which reads as a retrieval failure.
    */
-  const attempt = async <T>(what: string, call: () => Promise<{ ok: boolean; reason?: string } & T>): Promise<T> => {
+  const attempt = async <T>(
+    what: string,
+    call: () => Promise<{ ok: boolean; reason?: string } & T>,
+  ): Promise<T> => {
     let last = 'sin intentos';
     for (let i = 0; i < ATTEMPTS; i++) {
       const result = await call();
       if (result.ok) return result;
       last = result.reason ?? 'sin motivo';
-      log(`${what}: rechazado (${last}). Esperando ${COOLDOWN_MS / 1000} s y reintentando (${i + 1}/${ATTEMPTS}).`);
+      log(
+        `${what}: rechazado (${last}). Esperando ${COOLDOWN_MS / 1000} s y reintentando (${i + 1}/${ATTEMPTS}).`,
+      );
       await pause(COOLDOWN_MS);
       pacer.reset();
     }
@@ -201,9 +208,12 @@ export async function measure({
   const embedGroup = async (texts: string[], what: string): Promise<number[][]> => {
     const embedded = await attempt(what, async () => {
       await pacer.take(texts.reduce((sum, t) => sum + approxTokens(t), 0));
-      return embedDocuments(texts) as Promise<
-        { ok: boolean; reason?: string; data?: number[][]; usage?: { tokens: number } }
-      >;
+      return embedDocuments(texts) as Promise<{
+        ok: boolean;
+        reason?: string;
+        data?: number[][];
+        usage?: { tokens: number };
+      }>;
     });
     tokens += embedded.usage?.tokens ?? 0;
     return embedded.data ?? [];
@@ -212,7 +222,12 @@ export async function measure({
   const chunkTexts = chunks.map((c) => c.content);
   const passageVecs: number[][] = [];
   for (const [n, group] of batchByTokens(chunkTexts).entries()) {
-    passageVecs.push(...(await embedGroup(group.map((i) => chunkTexts[i] as string), 'los fragmentos')));
+    passageVecs.push(
+      ...(await embedGroup(
+        group.map((i) => chunkTexts[i] as string),
+        'los fragmentos',
+      )),
+    );
     log(`Fragmentos: ${passageVecs.length}/${chunkTexts.length} (grupo ${n + 1}).`);
   }
 
@@ -223,7 +238,12 @@ export async function measure({
   const toolTexts = tools.map((t) => toolEmbedText(t));
   const toolVecs: number[][] = [];
   for (const group of batchByTokens(toolTexts)) {
-    toolVecs.push(...(await embedGroup(group.map((i) => toolTexts[i] as string), 'las herramientas')));
+    toolVecs.push(
+      ...(await embedGroup(
+        group.map((i) => toolTexts[i] as string),
+        'las herramientas',
+      )),
+    );
     log(`Herramientas: ${toolVecs.length}/${toolTexts.length}.`);
   }
 
@@ -237,9 +257,12 @@ export async function measure({
   for (const [i, query] of queries.entries()) {
     const embedded = await attempt(`la pregunta «${query}»`, async () => {
       await pacer.take(approxTokens(query));
-      return embedQuery(query) as Promise<
-        { ok: boolean; reason?: string; data?: number[]; usage?: { tokens: number } }
-      >;
+      return embedQuery(query) as Promise<{
+        ok: boolean;
+        reason?: string;
+        data?: number[];
+        usage?: { tokens: number };
+      }>;
     });
     tokens += embedded.usage?.tokens ?? 0;
     queryVectors.push(embedded.data ?? []);

@@ -302,7 +302,10 @@ export async function resolveUploads(
 
     const resolved = await resolveUpload(db, userId, entry.ref);
     if (!resolved.ok) {
-      return { ok: false, why: `No pude adjuntar el archivo de «${entry.label}»: ${resolved.why}.` };
+      return {
+        ok: false,
+        why: `No pude adjuntar el archivo de «${entry.label}»: ${resolved.why}.`,
+      };
     }
     files[String(entry.index)] = resolved.payload;
   }

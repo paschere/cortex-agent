@@ -39,7 +39,7 @@ export const payrollCostProjection = registerTool({
   description:
     'Project what a team will cost over the next few years, starting from the real payroll baseline (current headcount and monthly cost, optionally filtered to one client or division) and applying explicit assumptions: salary inflation, headcount growth and expense growth. ' +
     'Returns a year-by-year series for three scenarios (conservative / base / aggressive) plus the assumptions used — ready to chart or drop into a report. Use it for "what will this team cost us in 3 years", "project the cost of <client>", or budget planning. ' +
-    'ALWAYS present the result as a scenario with its assumptions stated, never as a prediction, and offer to re-run with the user\'s own numbers. ' +
+    "ALWAYS present the result as a scenario with its assumptions stated, never as a prediction, and offer to re-run with the user's own numbers. " +
     COMP_SENSITIVITY_NOTE,
   inputSchema: z.object({
     client: z.string().optional().describe('Scope to one client (payroll "department")'),
@@ -104,7 +104,10 @@ export const payrollCostProjection = registerTool({
     }
 
     const scope =
-      [input.client ? `client "${input.client}"` : null, input.division ? `division "${input.division}"` : null]
+      [
+        input.client ? `client "${input.client}"` : null,
+        input.division ? `division "${input.division}"` : null,
+      ]
         .filter(Boolean)
         .join(' · ') || 'the whole team';
 
@@ -151,7 +154,9 @@ export const payrollCostProjection = registerTool({
     lines.push('');
     lines.push(
       `**Baseline today:** ${headcount} people · ${money(monthlyCostUsd)}/month · ${money(annualPayrollUsd)} payroll/year` +
-        (includeExpenses ? ` + ${money(annualExpensesUsd)} expenses/year = **${money(annualTotalUsd)}**` : ''),
+        (includeExpenses
+          ? ` + ${money(annualExpensesUsd)} expenses/year = **${money(annualTotalUsd)}**`
+          : ''),
     );
     lines.push('');
     lines.push(

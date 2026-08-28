@@ -718,7 +718,10 @@ export interface MatchableClient {
  * and a caller that wants to show the ambiguity has to ask for `candidates`
  * explicitly.
  */
-export function matchByText(text: string | null | undefined, clients: MatchableClient[]): MatchResult {
+export function matchByText(
+  text: string | null | undefined,
+  clients: MatchableClient[],
+): MatchResult {
   const raw = (text ?? '').trim();
   if (!raw) return { candidates: [], only: null, ambiguous: false };
 

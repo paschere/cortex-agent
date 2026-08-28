@@ -194,9 +194,7 @@ export function RelationsPanel({
 
       <div className="mt-3 border-t border-border">
         {isLoading ? (
-          <p className="px-5 py-8 text-center text-xs text-ink-faint">
-            Leyendo las relaciones…
-          </p>
+          <p className="px-5 py-8 text-center text-xs text-ink-faint">Leyendo las relaciones…</p>
         ) : isError || !data ? (
           <p className="px-5 py-8 text-center text-xs text-rose">
             No se pudieron leer las relaciones. Vuelve a intentar.
@@ -948,9 +946,7 @@ function NodeDetail({
                   onClick={() => onPick(other.id)}
                   className="block w-full py-1.5 text-left transition-colors hover:bg-surface-2"
                 >
-                  <span className="block truncate text-xs font-medium text-ink">
-                    {other.title}
-                  </span>
+                  <span className="block truncate text-xs font-medium text-ink">{other.title}</span>
                   <span className="block text-micro text-ink-faint">{names.join(', ')}</span>
                 </button>
               </li>
@@ -960,9 +956,7 @@ function NodeDetail({
       )}
 
       {node.speakers.length > 0 && (
-        <p className="mt-3 text-micro text-ink-faint">
-          Voces en esta: {node.speakers.join(', ')}.
-        </p>
+        <p className="mt-3 text-micro text-ink-faint">Voces en esta: {node.speakers.join(', ')}.</p>
       )}
     </div>
   );

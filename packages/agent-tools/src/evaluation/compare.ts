@@ -84,11 +84,23 @@ export function compareRuns(before: EvalRun, after: EvalRun): Comparison {
     if ((a ?? '—') !== (b ?? '—')) changed.push({ field, before: a ?? '—', after: b ?? '—' });
   };
   note('modelo de embeddings', before.identity.embeddingModel, after.identity.embeddingModel);
-  note('corte fuerte', String(before.identity.calibration.strongMatch), String(after.identity.calibration.strongMatch));
-  note('piso débil', String(before.identity.calibration.weakFloor), String(after.identity.calibration.weakFloor));
+  note(
+    'corte fuerte',
+    String(before.identity.calibration.strongMatch),
+    String(after.identity.calibration.strongMatch),
+  );
+  note(
+    'piso débil',
+    String(before.identity.calibration.weakFloor),
+    String(after.identity.calibration.weakFloor),
+  );
   note('modelo de chat', before.identity.chatModel, after.identity.chatModel);
   note('modelo del juez', before.identity.judgeModel, after.identity.judgeModel);
-  note('prompt de respuesta', before.identity.answerPromptDigest, after.identity.answerPromptDigest);
+  note(
+    'prompt de respuesta',
+    before.identity.answerPromptDigest,
+    after.identity.answerPromptDigest,
+  );
   note('prompt del juez', before.identity.judgePromptDigest, after.identity.judgePromptDigest);
 
   const retrieval = [
@@ -173,7 +185,9 @@ export function formatRun(run: EvalRun): string {
   if (missed.length > 0) {
     lines.push('', 'Selección, familias que no llegaron al modelo:');
     for (const m of missed) {
-      lines.push(`  ${m.caseId} «${m.query}» → falta ${m.needsFamily} (puntaje ${m.familyScore?.toFixed(3) ?? 'sin medir'})`);
+      lines.push(
+        `  ${m.caseId} «${m.query}» → falta ${m.needsFamily} (puntaje ${m.familyScore?.toFixed(3) ?? 'sin medir'})`,
+      );
     }
   }
   // The answer layer prints its failures in FULL — the criterion that failed and
@@ -190,7 +204,9 @@ export function formatRun(run: EvalRun): string {
         lines.push(`    · ${l.kind === 'contains' ? 'falta' : 'sobra'} «${l.needle}»`);
       }
       for (const r of w.rubric.filter((x) => !x.passed)) {
-        lines.push(`    · ${r.id}: se esperaba ${r.expect ? 'sí' : 'no'} y el juez dijo ${r.verdict ? 'sí' : 'no'}${r.evidence ? ` («${r.evidence}»)` : ''}`);
+        lines.push(
+          `    · ${r.id}: se esperaba ${r.expect ? 'sí' : 'no'} y el juez dijo ${r.verdict ? 'sí' : 'no'}${r.evidence ? ` («${r.evidence}»)` : ''}`,
+        );
       }
       lines.push(`    respuesta: ${w.answer.replaceAll(/\s+/g, ' ').slice(0, 400)}`);
     }

@@ -33,7 +33,9 @@ export const getPipelineSummary = registerTool({
     'Get a full pipeline health overview: per-stage deal count and total amount, plus stage labels and win probabilities. Aggregates up to 2000 deals.',
   inputSchema: z.object({ pipelineId: z.string().default('default') }),
   outputSchema: Output,
-  requiredScopes: [{ provider: 'hubspot', scopes: ['crm.objects.deals.read', 'crm.schemas.deals.read'] }],
+  requiredScopes: [
+    { provider: 'hubspot', scopes: ['crm.objects.deals.read', 'crm.schemas.deals.read'] },
+  ],
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     type Pipeline = {
@@ -50,7 +52,9 @@ export const getPipelineSummary = registerTool({
     let after: string | undefined;
     for (let page = 0; page < MAX_PAGES; page++) {
       const body: Record<string, unknown> = {
-        filterGroups: [{ filters: [{ propertyName: 'pipeline', operator: 'EQ', value: input.pipelineId }] }],
+        filterGroups: [
+          { filters: [{ propertyName: 'pipeline', operator: 'EQ', value: input.pipelineId }] },
+        ],
         properties: ['dealstage', 'amount'],
         limit: 200,
       };

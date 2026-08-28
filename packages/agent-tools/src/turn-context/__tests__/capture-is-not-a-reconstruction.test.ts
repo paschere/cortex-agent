@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import { createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
+import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import type { RetrievalObservation } from '../../types';
 import { TurnContextRecorder, familiesFrom, fragmentKey } from '../recorder';
 

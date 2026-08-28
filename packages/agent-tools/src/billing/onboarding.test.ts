@@ -88,13 +88,7 @@ describe('the one question changes what happens next', () => {
     ];
     const state = await readOnboarding(scoped(tables, ACME));
     expect(state.goal).toBe('email');
-    expect(state.steps.map((s) => s.id)).toEqual([
-      'goal',
-      'source',
-      'answer',
-      'knowledge',
-      'team',
-    ]);
+    expect(state.steps.map((s) => s.id)).toEqual(['goal', 'source', 'answer', 'knowledge', 'team']);
     expect(state.next).toBe('source');
   });
 
@@ -104,13 +98,7 @@ describe('the one question changes what happens next', () => {
       { organization_id: ACME, primary_goal: 'documents', company_name: null, dismissed_at: null },
     ];
     const state = await readOnboarding(scoped(tables, ACME));
-    expect(state.steps.map((s) => s.id)).toEqual([
-      'goal',
-      'knowledge',
-      'answer',
-      'source',
-      'team',
-    ]);
+    expect(state.steps.map((s) => s.id)).toEqual(['goal', 'knowledge', 'answer', 'source', 'team']);
     expect(state.next).toBe('knowledge');
   });
 

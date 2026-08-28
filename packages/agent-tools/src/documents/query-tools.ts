@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { bogotaToday } from '../commitments/shape';
 import { registerTool } from '../index';
-import { documentTypeIds, money, typeLabel } from './types';
 import {
   type ExtractionRecord,
   type GroupBy,
@@ -9,6 +8,7 @@ import {
   aggregateRecords,
   queryRecords,
 } from './store';
+import { documentTypeIds, money, typeLabel } from './types';
 
 /**
  * The documents, as data.
@@ -66,7 +66,9 @@ const filterSchema = {
   overdueOnly: z
     .boolean()
     .default(false)
-    .describe('Only documents whose deadline has already passed. Answers "guías con plazo vencido".'),
+    .describe(
+      'Only documents whose deadline has already passed. Answers "guías con plazo vencido".',
+    ),
   minAmount: z.number().min(0).optional(),
 };
 
@@ -206,8 +208,7 @@ export const documentsTotals = registerTool({
       currency: g.currency,
       count: g.count,
       total: g.total,
-      totalLabel:
-        metric === 'count' ? `${g.total} documento(s)` : money(g.total, g.currency),
+      totalLabel: metric === 'count' ? `${g.total} documento(s)` : money(g.total, g.currency),
     }));
 
     return {

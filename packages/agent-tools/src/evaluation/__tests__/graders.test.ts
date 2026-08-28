@@ -50,7 +50,12 @@ describe('grading one retrieval', () => {
     // came back FIRST, scored 0.436, and was thrown away because the floor was
     // 0.45. "Retrieved and discarded" and "never retrieved" have different
     // causes and different fixes, so they are counted separately.
-    const hits = replayHits(chunks, cosinesFavouring('plan-bbic', WEAK_FLOOR - 0.01, 0.05), 8, modelId);
+    const hits = replayHits(
+      chunks,
+      cosinesFavouring('plan-bbic', WEAK_FLOOR - 0.01, 0.05),
+      8,
+      modelId,
+    );
     const result = gradeRetrievalCase(answered, hits, modelId);
     expect(result.goldRank).toBe(1);
     expect(result.goldKept).toBe(false);
@@ -74,17 +79,32 @@ describe('grading one retrieval', () => {
     // The neighbouring document IS the one to read; it just has no rule. See
     // the argument in kb/relevance.ts for why demanding `nothing` here would
     // push the floor up until real questions started failing.
-    const thin = replayHits(chunks, cosinesFavouring('policy-vacaciones', WEAK_FLOOR + 0.01, 0.05), 8, modelId);
+    const thin = replayHits(
+      chunks,
+      cosinesFavouring('policy-vacaciones', WEAK_FLOOR + 0.01, 0.05),
+      8,
+      modelId,
+    );
     expect(gradeRetrievalCase(absent, thin, modelId).coverage).toBe('thin');
     expect(gradeRetrievalCase(absent, thin, modelId).passed).toBe(true);
 
-    const nothing = replayHits(chunks, chunks.map(() => 0.05), 8, modelId);
+    const nothing = replayHits(
+      chunks,
+      chunks.map(() => 0.05),
+      8,
+      modelId,
+    );
     expect(gradeRetrievalCase(absent, nothing, modelId).coverage).toBe('nothing');
     expect(gradeRetrievalCase(absent, nothing, modelId).passed).toBe(true);
   });
 
   it('counts an unanswerable question sold as answered', () => {
-    const hits = replayHits(chunks, cosinesFavouring('policy-vacaciones', STRONG_MATCH + 0.05), 8, modelId);
+    const hits = replayHits(
+      chunks,
+      cosinesFavouring('policy-vacaciones', STRONG_MATCH + 0.05),
+      8,
+      modelId,
+    );
     const result = gradeRetrievalCase(absent, hits, modelId);
     expect(result.overclaimed).toBe(true);
     expect(result.passed).toBe(false);
@@ -97,7 +117,12 @@ describe('scoring a set of retrievals', () => {
     // confidently is perfect on one and hopeless on the other, and one figure
     // would put it level with an honest mediocre system.
     const yes = replayHits(chunks, cosinesFavouring('plan-bbic', STRONG_MATCH + 0.05), 8, modelId);
-    const alsoYes = replayHits(chunks, cosinesFavouring('policy-vacaciones', STRONG_MATCH + 0.05), 8, modelId);
+    const alsoYes = replayHits(
+      chunks,
+      cosinesFavouring('policy-vacaciones', STRONG_MATCH + 0.05),
+      8,
+      modelId,
+    );
     const score = scoreRetrieval([
       gradeRetrievalCase(answered, yes, modelId),
       gradeRetrievalCase(absent, alsoYes, modelId),

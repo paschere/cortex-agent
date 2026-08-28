@@ -29,7 +29,7 @@ import { b64url, buildRfc822 } from './draft';
 export const gmailSendMessage = registerTool({
   id: 'gmail.send_message',
   description:
-    'Send an email with EXACTLY this subject and body, from the user\'s Gmail. Requires confirmation. Unlike gmail_send_draft (which sends whatever a stored draft currently contains), the message is the input — use this whenever the text being approved must be the text that goes out. Pass threadId to reply inside an existing conversation.',
+    "Send an email with EXACTLY this subject and body, from the user's Gmail. Requires confirmation. Unlike gmail_send_draft (which sends whatever a stored draft currently contains), the message is the input — use this whenever the text being approved must be the text that goes out. Pass threadId to reply inside an existing conversation.",
   inputSchema: z.object({
     to: z.array(z.string().email()).min(1).max(10),
     subject: z.string().min(1).max(300),

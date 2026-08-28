@@ -1,11 +1,5 @@
 import { renderChart } from './charts';
-import type {
-  Figure,
-  ReportDocument,
-  ReportSection,
-  ReportTable,
-  Tone,
-} from './document';
+import type { Figure, ReportDocument, ReportSection, ReportTable, Tone } from './document';
 import { REPORT_KIND_LABEL, sourceIndex, validateDocument } from './document';
 import { longDate, stamp } from './format';
 import { escapeHtml, join } from './html';
@@ -245,9 +239,10 @@ function figure(doc: ReportDocument, fig: Figure, idPrefix: string): string {
   const label = source
     ? `Fuente ${n}: ${source.system}. ${fig.method}`
     : `Sin fuente declarada. ${fig.method}`;
-  const marker = n > 0
-    ? `<a class="rp-cite" href="#${escapeHtml(idPrefix)}-src-${n}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${n}</a>`
-    : '';
+  const marker =
+    n > 0
+      ? `<a class="rp-cite" href="#${escapeHtml(idPrefix)}-src-${n}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${n}</a>`
+      : '';
   return `${escapeHtml(fig.display)}${marker}`;
 }
 

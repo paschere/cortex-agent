@@ -235,7 +235,10 @@ export class TurnClock {
    * workspace whose migrations lag by one must not see a turn fail because the
    * measurement of it could not be filed.
    */
-  async save(db: SupabaseClient, opts: { messageId: string | null } = { messageId: null }): Promise<void> {
+  async save(
+    db: SupabaseClient,
+    opts: { messageId: string | null } = { messageId: null },
+  ): Promise<void> {
     try {
       const m = this.snapshot();
       const purgeAt = new Date(Date.now() + LATENCY_KEEP_DAYS * 86_400_000).toISOString();

@@ -3,8 +3,8 @@ import { bogotaToday } from '../commitments/shape';
 import { registerTool } from '../index';
 import { getVisibleDocument } from '../kb/spaces';
 import { readDocument } from './extract';
-import { documentTypeIds, fieldLabel, typeLabel } from './types';
 import { displayValue, listFields, saveReading } from './store';
+import { documentTypeIds, fieldLabel, typeLabel } from './types';
 import type { DocumentChunk } from './verify';
 
 /**

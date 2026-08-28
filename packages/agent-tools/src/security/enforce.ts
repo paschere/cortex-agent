@@ -13,12 +13,12 @@
 
 import { type UUID, logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { hashInput } from '../audit.js';
 import {
   type ActionPolicy,
   type ActionPolicyDecision,
   evaluateActionPolicy,
 } from './action-policy.js';
-import { hashInput } from '../audit.js';
 import { isHighFrequency, noteSensitiveCall, sensitiveCallCount } from './frequency.js';
 import { loadMandates } from './mandate-store.js';
 import { type MandateGrant, type MandateTool, applyMandate } from './mandate.js';

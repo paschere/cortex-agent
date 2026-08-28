@@ -59,7 +59,8 @@ export const meetingsSpeak = registerTool({
       const live = (data.meetings ?? []).filter(
         (m) => m.status === 'live' || m.status === 'waiting-admit',
       );
-      if (live.length === 0) return { ok: false, message: 'No hay ninguna reunión viva ahora mismo.' };
+      if (live.length === 0)
+        return { ok: false, message: 'No hay ninguna reunión viva ahora mismo.' };
       if (live.length > 1) {
         return { ok: false, message: 'Hay más de una reunión viva. Dime en cuál hablar.' };
       }

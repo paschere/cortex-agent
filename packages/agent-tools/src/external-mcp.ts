@@ -23,8 +23,8 @@
  * assertNotPrivateResolved) before invoking callExternalTool.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { decryptToken, logger } from '@cortex/core';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { consumeToken } from './rate-limit';
 
 // ---------------------------------------------------------------------------
@@ -266,7 +266,8 @@ async function rpcOverSse(
   if (contentType.includes('application/json')) {
     const inline = (await post.json()) as { result?: unknown; error?: { message?: string } };
     if (inline && (inline.result !== undefined || inline.error !== undefined)) {
-      if (inline.error) throw new Error(`MCP ${method} error: ${inline.error.message ?? 'unknown'}`);
+      if (inline.error)
+        throw new Error(`MCP ${method} error: ${inline.error.message ?? 'unknown'}`);
       return inline.result;
     }
   }
@@ -319,11 +320,17 @@ async function mcpHandshake(
   headers: Record<string, string>,
   signal: AbortSignal,
 ): Promise<void> {
-  await rpcOverSse(conn, headers, 'initialize', {
-    protocolVersion: '2024-11-05',
-    capabilities: {},
-    clientInfo: { name: 'cortex-agent-external-mcp', version: '1.0.0' },
-  }, signal);
+  await rpcOverSse(
+    conn,
+    headers,
+    'initialize',
+    {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'cortex-agent-external-mcp', version: '1.0.0' },
+    },
+    signal,
+  );
   await notifyOverSse(conn, headers, 'notifications/initialized', signal);
 }
 

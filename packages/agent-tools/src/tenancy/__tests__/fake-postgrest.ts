@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { type FakeStore, fakeSpaceRpcs } from '../../kb/__tests__/space-fake';
 
 /**
  * A small in-memory stand-in for PostgREST, good enough to run real product
@@ -349,13 +350,22 @@ export function createFakeSupabase(
   rpcs: Record<string, RpcImpl> = {},
 ): FakeSupabase {
   const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  // La visibilidad de los espacios del cerebro viene de serie. No es una
+  // comodidad: desde la 0123 esa regla vive entera en la base de datos, y un
+  // doble que no la finja convierte cualquier test que toque un documento en un
+  // test sobre un `rpc` que no existe. Lo que el llamador pase gana, para que un
+  // test pueda seguir probando qué hace el código cuando la frontera contesta
+  // otra cosa.
+  const spaceRpcs = fakeSpaceRpcs(() => tables as FakeStore);
   const client = {
     from: (table: string) => new Query(tables, table),
     rpc: async (fn: string, args: Record<string, unknown> = {}) => {
       rpcCalls.push({ fn, args });
       const impl = rpcs[fn];
-      if (!impl) return { data: null, error: { message: `no fake for rpc ${fn}` } };
-      return { data: impl(args, tables), error: null };
+      if (impl) return { data: impl(args, tables), error: null };
+      const fallback = spaceRpcs[fn];
+      if (fallback) return { data: fallback(args), error: null };
+      return { data: null, error: { message: `no fake for rpc ${fn}` } };
     },
   } as unknown as SupabaseClient;
   return { client, tables, rpcCalls };

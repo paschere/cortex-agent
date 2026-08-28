@@ -297,9 +297,7 @@ function Piece({ fragment, focused }: { fragment: Fragment; focused: boolean }) 
             </div>
           )}
 
-          <p className="whitespace-pre-wrap text-sm leading-[1.75] text-ink">
-            {fragment.content}
-          </p>
+          <p className="whitespace-pre-wrap text-sm leading-[1.75] text-ink">{fragment.content}</p>
 
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-faint">
             <span className="tabular">{num(fragment.tokens)} tokens</span>

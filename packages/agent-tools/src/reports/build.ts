@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // `../documents`: those barrels register tools by the mere fact of being
 // imported, and a report builder has no business dragging the tool registry in
 // behind it.
-import { type ActionRow, KIND_LABEL as ACTION_KIND_LABEL } from '../actions/shape';
+import { KIND_LABEL as ACTION_KIND_LABEL, type ActionRow } from '../actions/shape';
 import { listActions } from '../actions/store';
 import {
   type CommitmentRow,
@@ -1722,7 +1722,9 @@ export async function buildWeekly(input: WeeklyInput): Promise<ReportDocument> {
   const dismissedThisWeek = actionRows.filter(
     (a) => a.state === 'dismissed' && inWeek(a.decided_at),
   );
-  const sentThisWeek = actionRows.filter((a) => inWeek(a.executed_at) && a.execution_status === 'ok');
+  const sentThisWeek = actionRows.filter(
+    (a) => inWeek(a.executed_at) && a.execution_status === 'ok',
+  );
   const answeredThisWeek = sentThisWeek.filter(
     (a) => a.outcome === 'replied' || a.outcome === 'resolved',
   );
@@ -2082,21 +2084,23 @@ export async function buildWeekly(input: WeeklyInput): Promise<ReportDocument> {
         { label: 'Tecnomecánica', align: 'left', mono: true },
         { label: 'RUNT consultado', align: 'left', mono: true },
       ],
-      rows: fleet.slice(0, 60).map((v) => [
-        cell(v.plate),
-        cell(
-          v.soat_expires_at ? shortDate(v.soat_expires_at.slice(0, 10)) : 'sin consultar',
-          classify(v.soat_expires_at),
-        ),
-        cell(
-          v.rtm_expires_at ? shortDate(v.rtm_expires_at.slice(0, 10)) : 'sin consultar',
-          classify(v.rtm_expires_at),
-        ),
-        cell(
-          v.last_runt_sync ? v.last_runt_sync.slice(0, 10) : 'nunca',
-          v.last_runt_sync ? null : 'amber',
-        ),
-      ]),
+      rows: fleet
+        .slice(0, 60)
+        .map((v) => [
+          cell(v.plate),
+          cell(
+            v.soat_expires_at ? shortDate(v.soat_expires_at.slice(0, 10)) : 'sin consultar',
+            classify(v.soat_expires_at),
+          ),
+          cell(
+            v.rtm_expires_at ? shortDate(v.rtm_expires_at.slice(0, 10)) : 'sin consultar',
+            classify(v.rtm_expires_at),
+          ),
+          cell(
+            v.last_runt_sync ? v.last_runt_sync.slice(0, 10) : 'nunca',
+            v.last_runt_sync ? null : 'amber',
+          ),
+        ]),
       sourceId: SRC_FLEET,
       method: fleetMethod,
       caption:
@@ -2107,7 +2111,10 @@ export async function buildWeekly(input: WeeklyInput): Promise<ReportDocument> {
   };
 
   // --- 8. Dónde me equivoco leyendo ---------------------------------------
-  const fixTally = new Map<string, { docType: string | null; field: string; n: number; thrown: number }>();
+  const fixTally = new Map<
+    string,
+    { docType: string | null; field: string; n: number; thrown: number }
+  >();
   for (const f of fixes) {
     const key = `${f.doc_type ?? '—'}#${f.field_key}`;
     const entry = fixTally.get(key) ?? {
@@ -2183,7 +2190,17 @@ export async function buildWeekly(input: WeeklyInput): Promise<ReportDocument> {
     {
       type: 'prose',
       heading: null,
-      paragraphs: [weeklyLede({ overdue: overdue.length, nextWeek: nextWeek.length, met: metRows.length, silences: silenceRows.length, pending: pending.length, weekStart, weekEnd })],
+      paragraphs: [
+        weeklyLede({
+          overdue: overdue.length,
+          nextWeek: nextWeek.length,
+          met: metRows.length,
+          silences: silenceRows.length,
+          pending: pending.length,
+          weekStart,
+          weekEnd,
+        }),
+      ],
     },
     metrics,
     dueSection,

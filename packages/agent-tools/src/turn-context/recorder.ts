@@ -34,7 +34,14 @@ import { createHash } from 'node:crypto';
 import type { Logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { RetrievalObservation } from '../types';
-import { EXCERPT_CHARS, MAX_FRAGMENTS, MAX_OFFERED_TOOLS, MEMORY_CHARS, excerpt, retentionFrom } from './policy';
+import {
+  EXCERPT_CHARS,
+  MAX_FRAGMENTS,
+  MAX_OFFERED_TOOLS,
+  MEMORY_CHARS,
+  excerpt,
+  retentionFrom,
+} from './policy';
 import type {
   CapturedFamily,
   CapturedFragment,
@@ -151,23 +158,21 @@ export class TurnContextRecorder {
    * thing this module may not do.
    */
   retrieved(observation: RetrievalObservation, prepended: ReadonlySet<string>): void {
-    const fragments: CapturedFragment[] = observation.hits
-      .slice(0, MAX_FRAGMENTS)
-      .map((h) => ({
-        chunkId: h.chunkId,
-        documentId: h.documentId,
-        documentTitle: h.documentTitle,
-        spaceId: h.spaceId,
-        spaceName: h.spaceName,
-        spaceKind: h.spaceKind,
-        chunkIndex: h.chunkIndex,
-        cosine: h.cosine,
-        keyword: h.keyword,
-        blended: h.blended,
-        verdict: h.verdict,
-        prepended: prepended.has(fragmentKey(h.documentId, h.chunkIndex)),
-        excerpt: excerpt(h.content, EXCERPT_CHARS),
-      }));
+    const fragments: CapturedFragment[] = observation.hits.slice(0, MAX_FRAGMENTS).map((h) => ({
+      chunkId: h.chunkId,
+      documentId: h.documentId,
+      documentTitle: h.documentTitle,
+      spaceId: h.spaceId,
+      spaceName: h.spaceName,
+      spaceKind: h.spaceKind,
+      chunkIndex: h.chunkIndex,
+      cosine: h.cosine,
+      keyword: h.keyword,
+      blended: h.blended,
+      verdict: h.verdict,
+      prepended: prepended.has(fragmentKey(h.documentId, h.chunkIndex)),
+      excerpt: excerpt(h.content, EXCERPT_CHARS),
+    }));
 
     this.retrieval = {
       ran: true,

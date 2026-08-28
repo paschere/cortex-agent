@@ -115,7 +115,12 @@ function hostileDocument(): ReportDocument {
             { label: `Col ${XSS}`, align: 'left', mono: false },
             { label: `Col ${ATTR_BREAK}`, align: 'right', mono: true },
           ],
-          rows: [[{ display: `Celda ${XSS}`, tone: null }, { display: `9 ${SVG_BREAK}`, tone: 'rose' }]],
+          rows: [
+            [
+              { display: `Celda ${XSS}`, tone: null },
+              { display: `9 ${SVG_BREAK}`, tone: 'rose' },
+            ],
+          ],
           sourceId: 'src',
           method: `Método ${STYLE_BREAK}`,
           caption: `Leyenda ${XSS}`,
@@ -152,7 +157,9 @@ function hostileDocument(): ReportDocument {
         heading: 'Composición',
         chart: {
           type: 'composition',
-          slices: [{ label: `Trozo ${XSS}`, value: 3, display: `3 ${ATTR_BREAK}`, tone: 'emerald' }],
+          slices: [
+            { label: `Trozo ${XSS}`, value: 3, display: `3 ${ATTR_BREAK}`, tone: 'emerald' },
+          ],
         },
         altText: 'alt',
         caption: null,
@@ -284,7 +291,12 @@ describe('the report cannot be poisoned by its content', () => {
         {
           type: 'chart',
           heading: 'Vacío',
-          chart: { type: 'timeseries', points: [{ label: 'x', value: 0 }], valueUnit: null, tone: 'primary' },
+          chart: {
+            type: 'timeseries',
+            points: [{ label: 'x', value: 0 }],
+            valueUnit: null,
+            tone: 'primary',
+          },
           altText: 'sin datos',
           caption: null,
           table: {

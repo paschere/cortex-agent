@@ -211,9 +211,7 @@ export function MeetingImportPanel({ spaceId, spaceName }: { spaceId: string; sp
                     {m.error ?? 'Esta no se pudo guardar. Se vuelve a intentar sola.'}
                   </div>
                 )}
-                <div className="mt-0.5 text-micro text-ink-faint">
-                  Guardada {ago(m.importedAt)}
-                </div>
+                <div className="mt-0.5 text-micro text-ink-faint">Guardada {ago(m.importedAt)}</div>
               </div>
             </div>
           ))}

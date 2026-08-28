@@ -299,10 +299,7 @@ export function auditSlots(
  * that has not been sent yet. This is the list the tool descriptions advertise
  * and the list `missingSlots` is computed against.
  */
-export function callerSlots(
-  variables: readonly Variable[],
-  steps: readonly Step[],
-): Variable[] {
+export function callerSlots(variables: readonly Variable[], steps: readonly Step[]): Variable[] {
   const filledByPause = pauseFilled(steps);
   return variables.filter((v) => !filledByPause.has(v.name));
 }
@@ -327,10 +324,7 @@ function pauseFilled(steps: readonly Step[]): Set<string> {
  * a test caught: the value was silently discarded and the run stopped to ask
  * for something it had been handed.
  */
-export function runnableSlots(
-  variables: readonly Variable[],
-  steps: readonly Step[],
-): Variable[] {
+export function runnableSlots(variables: readonly Variable[], steps: readonly Step[]): Variable[] {
   const filledByPause = pauseFilled(steps);
   return variables.map((v) => (filledByPause.has(v.name) ? { ...v, required: false } : v));
 }

@@ -112,34 +112,128 @@ function fixture(acmeAnswers = 3): Tables {
     plans: PLAN_ROWS.map((p) => ({ ...p })),
 
     organization_subscriptions: [
-      { organization_id: ACME, plan_code: 'free', status: 'active', started_at: '2026-08-01T00:00:00Z', billing_customer_ref: null, contracted_seats: null },
+      {
+        organization_id: ACME,
+        plan_code: 'free',
+        status: 'active',
+        started_at: '2026-08-01T00:00:00Z',
+        billing_customer_ref: null,
+        contracted_seats: null,
+      },
       // The grandfathered workspace: the plan migration 0085 § 7 wrote for
       // every organization that already existed, repointed at `enterprise` by
       // 0086 § 3 with its limits still null.
-      { organization_id: GLOBEX, plan_code: 'enterprise', status: 'active', started_at: '2026-01-01T00:00:00Z', billing_customer_ref: null, contracted_seats: null },
+      {
+        organization_id: GLOBEX,
+        plan_code: 'enterprise',
+        status: 'active',
+        started_at: '2026-01-01T00:00:00Z',
+        billing_customer_ref: null,
+        contracted_seats: null,
+      },
     ],
 
     // Globex's numbers are deliberately far larger than Acme's, and in the same
     // period. Acme's two free seats allow 100 answers; Globex's 900 would blow
     // straight through them.
     usage_counters: [
-      { organization_id: ACME, period: PERIOD, meter: 'answers', used: acmeAnswers, first_at: '2026-08-01T10:00:00Z', last_at: '2026-08-07T10:00:00Z' },
-      { organization_id: ACME, period: PERIOD, meter: 'documents', used: 1, first_at: '2026-08-02T10:00:00Z', last_at: '2026-08-02T10:00:00Z' },
-      { organization_id: GLOBEX, period: PERIOD, meter: 'answers', used: 900, first_at: '2026-08-01T10:00:00Z', last_at: '2026-08-07T10:00:00Z' },
-      { organization_id: GLOBEX, period: PERIOD, meter: 'documents', used: 4000, first_at: '2026-08-01T10:00:00Z', last_at: '2026-08-07T10:00:00Z' },
+      {
+        organization_id: ACME,
+        period: PERIOD,
+        meter: 'answers',
+        used: acmeAnswers,
+        first_at: '2026-08-01T10:00:00Z',
+        last_at: '2026-08-07T10:00:00Z',
+      },
+      {
+        organization_id: ACME,
+        period: PERIOD,
+        meter: 'documents',
+        used: 1,
+        first_at: '2026-08-02T10:00:00Z',
+        last_at: '2026-08-02T10:00:00Z',
+      },
+      {
+        organization_id: GLOBEX,
+        period: PERIOD,
+        meter: 'answers',
+        used: 900,
+        first_at: '2026-08-01T10:00:00Z',
+        last_at: '2026-08-07T10:00:00Z',
+      },
+      {
+        organization_id: GLOBEX,
+        period: PERIOD,
+        meter: 'documents',
+        used: 4000,
+        first_at: '2026-08-01T10:00:00Z',
+        last_at: '2026-08-07T10:00:00Z',
+      },
     ],
 
     // The high-water marks migration 0086 § 5 keeps by trigger.
     organization_seat_periods: [
-      { organization_id: ACME, period: PERIOD, peak_seats: 2, first_at: '2026-08-01T00:00:00Z', last_at: '2026-08-01T00:00:00Z' },
-      { organization_id: GLOBEX, period: PERIOD, peak_seats: 50, first_at: '2026-08-01T00:00:00Z', last_at: '2026-08-01T00:00:00Z' },
+      {
+        organization_id: ACME,
+        period: PERIOD,
+        peak_seats: 2,
+        first_at: '2026-08-01T00:00:00Z',
+        last_at: '2026-08-01T00:00:00Z',
+      },
+      {
+        organization_id: GLOBEX,
+        period: PERIOD,
+        peak_seats: 50,
+        first_at: '2026-08-01T00:00:00Z',
+        last_at: '2026-08-01T00:00:00Z',
+      },
     ],
 
     usage_events: [
-      { id: 'e1', organization_id: ACME, meter: 'answers', quantity: 1, subject_table: 'messages', subject_id: MSG_ACME_1, source: 'web', occurred_at: '2026-08-07T10:00:00Z', period: PERIOD },
-      { id: 'e2', organization_id: ACME, meter: 'answers', quantity: 1, subject_table: 'messages', subject_id: MSG_ACME_2, source: 'web', occurred_at: '2026-08-06T10:00:00Z', period: PERIOD },
-      { id: 'e3', organization_id: ACME, meter: 'documents', quantity: 1, subject_table: 'kb_documents', subject_id: DOC_ACME, source: 'upload', occurred_at: '2026-08-02T10:00:00Z', period: PERIOD },
-      { id: 'e4', organization_id: GLOBEX, meter: 'answers', quantity: 1, subject_table: 'messages', subject_id: MSG_GLOBEX, source: 'mcp', occurred_at: '2026-08-07T11:00:00Z', period: PERIOD },
+      {
+        id: 'e1',
+        organization_id: ACME,
+        meter: 'answers',
+        quantity: 1,
+        subject_table: 'messages',
+        subject_id: MSG_ACME_1,
+        source: 'web',
+        occurred_at: '2026-08-07T10:00:00Z',
+        period: PERIOD,
+      },
+      {
+        id: 'e2',
+        organization_id: ACME,
+        meter: 'answers',
+        quantity: 1,
+        subject_table: 'messages',
+        subject_id: MSG_ACME_2,
+        source: 'web',
+        occurred_at: '2026-08-06T10:00:00Z',
+        period: PERIOD,
+      },
+      {
+        id: 'e3',
+        organization_id: ACME,
+        meter: 'documents',
+        quantity: 1,
+        subject_table: 'kb_documents',
+        subject_id: DOC_ACME,
+        source: 'upload',
+        occurred_at: '2026-08-02T10:00:00Z',
+        period: PERIOD,
+      },
+      {
+        id: 'e4',
+        organization_id: GLOBEX,
+        meter: 'answers',
+        quantity: 1,
+        subject_table: 'messages',
+        subject_id: MSG_GLOBEX,
+        source: 'mcp',
+        occurred_at: '2026-08-07T11:00:00Z',
+        period: PERIOD,
+      },
     ],
 
     // Both companies have a conversation called the same thing, so a lost
@@ -155,7 +249,11 @@ function fixture(acmeAnswers = 3): Tables {
     ],
     kb_documents: [
       { id: DOC_ACME, organization_id: ACME, title: 'Contrato Acme 2026' },
-      { id: '33330000-0000-4000-8000-000000000009', organization_id: GLOBEX, title: 'Contrato Globex 2026' },
+      {
+        id: '33330000-0000-4000-8000-000000000009',
+        organization_id: GLOBEX,
+        title: 'Contrato Globex 2026',
+      },
     ],
 
     users: [
@@ -235,7 +333,7 @@ describe("one company never sees another's consumption", () => {
     expect(acme.meters.documents.limit).toBe(30);
   });
 
-  it('would let a blocked workspace through if it borrowed the neighbour\'s seats — it does not', async () => {
+  it("would let a blocked workspace through if it borrowed the neighbour's seats — it does not", async () => {
     // 111 answers is past 100 + a margin of 10. With Globex's fifty seats it
     // would be 111 of 2.500 and sail through, which is exactly the failure this
     // fixture is shaped to catch.
@@ -264,7 +362,9 @@ describe("one company never sees another's consumption", () => {
     const acme = await readWorkspaceUsage(scoped(tables, ACME), ACME, NOW);
     expect(acme.meters.answers.used).toBe(0);
     expect(acme.meters.documents.used).toBe(0);
-    expect(await listUsageEvents(scoped(tables, ACME), { meter: 'answers', period: PERIOD })).toEqual([]);
+    expect(
+      await listUsageEvents(scoped(tables, ACME), { meter: 'answers', period: PERIOD }),
+    ).toEqual([]);
   });
 });
 
@@ -304,7 +404,10 @@ describe('the count is exact', () => {
   });
 
   it('every ledger row names a subject the customer can open', async () => {
-    const rows = await listUsageEvents(scoped(fixture(), ACME), { meter: 'documents', period: PERIOD });
+    const rows = await listUsageEvents(scoped(fixture(), ACME), {
+      meter: 'documents',
+      period: PERIOD,
+    });
     expect(rows).toHaveLength(1);
     expect(rows[0]?.subjectTable).toBe('kb_documents');
     expect(rows[0]?.subjectId).toBe(DOC_ACME);

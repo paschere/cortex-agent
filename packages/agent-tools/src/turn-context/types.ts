@@ -86,7 +86,7 @@ export interface CapturedFragment {
   documentTitle: string;
   spaceId: string;
   spaceName: string;
-  spaceKind: 'global' | 'personal';
+  spaceKind: 'global' | 'shared' | 'personal';
   chunkIndex: number;
   /** Raw cosine. Null when the semantic arm did not run for this row. */
   cosine: number | null;

@@ -2,6 +2,7 @@ import { IntegrationError } from '@cortex/core';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { type FakeStore, fakeSpaceRpcs } from '../../kb/__tests__/space-fake';
 import type { TranscriptEntry } from '../client';
 import {
   type MeetingImportContext,
@@ -171,8 +172,17 @@ function makeCtx(seed: Partial<Record<string, Row[]>> = {}): MeetingImportContex
     users: [{ id: USER_ID, role: 'member' }],
     ...seed,
   };
+  // La frontera de acceso al cerebro se resuelve en la base de datos desde la
+  // 0123 (`assertCanWriteToSpace` pregunta por RPC), así que el doble tiene que
+  // saber contestarla. Ver src/kb/__tests__/space-fake.ts.
+  const spaceRpcs = fakeSpaceRpcs(() => store as FakeStore);
   const db = {
     from: (table: string) => new FakeQuery(store, table, () => `id_${++counter}`),
+    rpc: async (fn: string, args: Record<string, unknown> = {}) => {
+      const impl = spaceRpcs[fn];
+      if (!impl) return { data: null, error: { message: `no fake for rpc ${fn}` } };
+      return { data: impl(args), error: null };
+    },
   };
   const logger = {
     info: () => {},

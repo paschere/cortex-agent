@@ -78,6 +78,11 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
 
   // --- Brain Knowledge ------------------------------------------------------
   kb_collections: tenant(),
+  // Quién ve cada espacio (migración 0123). Tenant y no derivada de
+  // `kb_collections`, por la misma razón que `team_members` lleva la columna en
+  // vez de heredarla: se lee al revés — «qué espacios alcanza esta persona» —
+  // sin un espacio en la mano.
+  kb_space_grants: tenant(),
   kb_documents: tenant(),
   kb_chunks: derived('kb_documents', 'document_id'),
   // Tenant rather than derived even though most rows name a document: the whole
@@ -502,6 +507,13 @@ export type RpcTenancy = 'organization' | 'person' | 'maintenance';
 
 export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   kb_visible_space_ids: 'person',
+  // Migración 0123. Las tres derivan lo que se puede ver del usuario, igual que
+  // la búsqueda: `kb_space_access` lleva el usuario dentro justamente para no
+  // ser «cuéntame quién tiene acceso a este espacio» sin más.
+  kb_spaces_for: 'person',
+  kb_space_level: 'person',
+  kb_space_for: 'person',
+  kb_space_access: 'person',
   kb_search_scoped: 'person',
   kb_brain_graph: 'person',
   kb_conflict_candidates: 'person',

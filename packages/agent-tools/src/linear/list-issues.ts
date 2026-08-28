@@ -54,9 +54,7 @@ export const listIssues = registerTool({
     teamId: z.string().optional(),
     cycleId: z.string().optional(),
     assigneeId: z.string().optional(),
-    stateType: z
-      .enum(['backlog', 'unstarted', 'started', 'completed', 'canceled'])
-      .optional(),
+    stateType: z.enum(['backlog', 'unstarted', 'started', 'completed', 'canceled']).optional(),
   }),
   outputSchema: Output,
   requiredScopes: [{ provider: 'linear', scopes: ['read'] }],

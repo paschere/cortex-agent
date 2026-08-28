@@ -138,7 +138,9 @@ describe('an extraction before anybody has looked at it', () => {
 
   it('records the NIT it read but links no client until a person confirms it', async () => {
     const w = world({
-      clients: [{ id: 'cli-1', organization_id: ORG, name: 'Coltrans S.A.S.', tax_id: '900123456' }],
+      clients: [
+        { id: 'cli-1', organization_id: ORG, name: 'Coltrans S.A.S.', tax_id: '900123456' },
+      ],
     });
     const row = await saveReading(w.db, { documentId: 'doc-1', reading: reading() });
     expect(row.client_nit).toBe('9001234568');
@@ -170,7 +172,9 @@ describe('once a person confirms it', () => {
 
   it('files it under the client whose NIT it carries', async () => {
     const w = world({
-      clients: [{ id: 'cli-1', organization_id: ORG, name: 'Coltrans S.A.S.', tax_id: '900123456' }],
+      clients: [
+        { id: 'cli-1', organization_id: ORG, name: 'Coltrans S.A.S.', tax_id: '900123456' },
+      ],
     });
     const row = await saveReading(w.db, { documentId: 'doc-1', reading: reading() });
     const result = await confirmAll(w.db, row.id);

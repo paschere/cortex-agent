@@ -73,7 +73,13 @@ export function fixture(): Tables {
       { id: ANA, organization_id: ACME, email: 'ana@acme.com', name: 'Ana', role: 'org_admin' },
       // Same display name, other company. A missing filter names the wrong
       // person as the source of a date, which is a citation that reads fine.
-      { id: CARLA, organization_id: GLOBEX, email: 'ana@globex.com', name: 'Ana', role: 'org_admin' },
+      {
+        id: CARLA,
+        organization_id: GLOBEX,
+        email: 'ana@globex.com',
+        name: 'Ana',
+        role: 'org_admin',
+      },
     ],
 
     commitments: [

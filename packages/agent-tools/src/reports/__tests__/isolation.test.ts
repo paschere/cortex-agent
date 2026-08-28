@@ -145,7 +145,9 @@ describe('a saved report belongs to exactly one workspace', () => {
       document: await buildReport('fleet', { db: w.db(ACME), today: TODAY, now: NOW }),
       params: {},
     });
-    const stored = (w.tables.reports as Array<Record<string, unknown>>).find((r) => r.id === row.id);
+    const stored = (w.tables.reports as Array<Record<string, unknown>>).find(
+      (r) => r.id === row.id,
+    );
     expect(stored?.organization_id).toBe(ACME);
   });
 });

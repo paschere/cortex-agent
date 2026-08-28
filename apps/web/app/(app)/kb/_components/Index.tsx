@@ -171,9 +171,7 @@ export function IndexList({
                       {item.label}
                     </span>
                     {item.sub && (
-                      <span className="block truncate text-micro text-ink-faint">
-                        {item.sub}
-                      </span>
+                      <span className="block truncate text-micro text-ink-faint">{item.sub}</span>
                     )}
                   </span>
                   {item.badge && (
@@ -187,9 +185,7 @@ export function IndexList({
                     </span>
                   )}
                   <span className="shrink-0 text-right">
-                    <span className="stat-num block text-xs text-ink">
-                      {num(item.weight)}
-                    </span>
+                    <span className="stat-num block text-xs text-ink">{num(item.weight)}</span>
                     <span className="block text-micro text-ink-faint">{unit}</span>
                   </span>
                 </button>

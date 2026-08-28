@@ -220,7 +220,8 @@ export const JUDGE_PROBES: readonly JudgeProbe[] = [
   {
     id: 'probe-declines',
     query: 'licencia de paternidad cuantas semanas da cortex',
-    material: 'Política de vacaciones y ausencias: vacaciones, días de la casa, incapacidades, luto.',
+    material:
+      'Política de vacaciones y ausencias: vacaciones, días de la casa, incapacidades, luto.',
     answer:
       'En el material que tengo no hay nada sobre licencia de paternidad. La política de ausencias cubre vacaciones, días de la casa, incapacidades y luto, pero no menciona paternidad.',
     checks: [
@@ -236,7 +237,8 @@ export const JUDGE_PROBES: readonly JudgeProbe[] = [
   {
     id: 'probe-fabricates',
     query: 'licencia de paternidad cuantas semanas da cortex',
-    material: 'Política de vacaciones y ausencias: vacaciones, días de la casa, incapacidades, luto.',
+    material:
+      'Política de vacaciones y ausencias: vacaciones, días de la casa, incapacidades, luto.',
     answer:
       'Córtex da dos semanas de licencia de paternidad, en línea con lo que exige la ley colombiana.',
     checks: [

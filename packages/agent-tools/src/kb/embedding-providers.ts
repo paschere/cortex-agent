@@ -477,8 +477,7 @@ const GOOGLE: EmbeddingProvider = {
       (_row, fallback) => fallback,
       'Gemini',
     ),
-  reportedTokens: (json) =>
-    numberOrNull(asRecord(asRecord(json).usageMetadata).promptTokenCount),
+  reportedTokens: (json) => numberOrNull(asRecord(asRecord(json).usageMetadata).promptTokenCount),
   describeFailure: (status, body) => {
     if (status === 401 || status === 403) {
       return {
@@ -496,7 +495,10 @@ const GOOGLE: EmbeddingProvider = {
     // because a rate limit that is really a quota simply fails again a moment
     // later, whereas a quota treated as fatal would stall a healthy install.
     if (status === 429) {
-      if (/quota_exceeded/i.test(body) || (/RESOURCE_EXHAUSTED/.test(body) && /daily/i.test(body))) {
+      if (
+        /quota_exceeded/i.test(body) ||
+        (/RESOURCE_EXHAUSTED/.test(body) && /daily/i.test(body))
+      ) {
         return {
           reason:
             'The Google project has used up its embedding quota for the day. Raising the quota or enabling billing is the only thing that clears it; search still works on keywords in the meantime.',

@@ -13,6 +13,7 @@ import {
   Plus,
   Quote,
   ScanSearch,
+  Users,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { THIN_CORPUS, focusStats } from '../_lib/view';
@@ -37,6 +38,7 @@ import type {
   IntakeKey,
   KnowledgeShape,
   ProbeResult,
+  SpaceKind,
   SpaceSummary,
   StaleDocument,
 } from './types';
@@ -821,18 +823,29 @@ function FirstRunStep({
   );
 }
 
-/** Still exported here: `SpaceTools` and the intake panels both use it. */
-export function SpaceChip({ kind, label }: { kind: 'global' | 'personal'; label?: string }) {
-  const Icon = kind === 'global' ? Building2 : Lock;
+/**
+ * Still exported here: `SpaceTools` and the intake panels both use it.
+ *
+ * Tres formas y no dos desde la 0123, y la del medio es la que hay que poder
+ * distinguir de un vistazo: un espacio «Repartido» es conocimiento de la
+ * empresa que NO ve la empresa entera, y confundirlo con uno común es citarlo
+ * delante de quien no debía verlo.
+ */
+export function SpaceChip({ kind, label }: { kind: SpaceKind; label?: string }) {
+  const Icon = kind === 'global' ? Building2 : kind === 'shared' ? Users : Lock;
   return (
     <span
       className={clsx(
         'inline-flex shrink-0 items-center gap-1 rounded-pill px-2 py-0.5 text-micro font-bold',
-        kind === 'global' ? 'bg-primary-soft text-primary' : 'bg-surface-2 text-ink-muted',
+        kind === 'global'
+          ? 'bg-primary-soft text-primary'
+          : kind === 'shared'
+            ? 'bg-accent-soft text-accent'
+            : 'bg-surface-2 text-ink-muted',
       )}
     >
       <Icon className="h-3 w-3" />
-      {label ?? (kind === 'global' ? 'Común' : 'Propio')}
+      {label ?? (kind === 'global' ? 'Común' : kind === 'shared' ? 'Repartido' : 'Propio')}
     </span>
   );
 }

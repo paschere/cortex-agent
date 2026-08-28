@@ -124,7 +124,8 @@ function timeSeries(
   const step = niceStep(max / 3);
   const ceiling = Math.max(step, Math.ceil(max / step) * step);
 
-  const x = (i: number) => (pts.length === 1 ? padL + plotW / 2 : padL + (i * plotW) / (pts.length - 1));
+  const x = (i: number) =>
+    pts.length === 1 ? padL + plotW / 2 : padL + (i * plotW) / (pts.length - 1);
   const y = (v: number) => padT + plotH - (v / ceiling) * plotH;
 
   const grid: string[] = [];

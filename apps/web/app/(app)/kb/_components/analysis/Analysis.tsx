@@ -234,9 +234,7 @@ function BadlyCut({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-xs font-semibold text-ink">{defect.label}</span>
-                <span className="block text-micro leading-snug text-ink-faint">
-                  {defect.why}
-                </span>
+                <span className="block text-micro leading-snug text-ink-faint">{defect.why}</span>
               </span>
               <span className="stat-num shrink-0 text-base text-ink">{num(defect.value)}</span>
               {defect.value > 0 && (
@@ -383,9 +381,7 @@ function Column({
         <div className="text-micro text-ink-faint">{hint}</div>
       </div>
       {rows.length === 0 ? (
-        <p className="px-5 pt-2 text-micro text-ink-faint">
-          {empty ?? 'Todavía nada que medir.'}
-        </p>
+        <p className="px-5 pt-2 text-micro text-ink-faint">{empty ?? 'Todavía nada que medir.'}</p>
       ) : (
         <ul className="mt-1">
           {rows.map((row) => (
@@ -454,12 +450,8 @@ function Stale({
                 className="flex w-full items-center justify-between gap-3 px-5 py-2 text-left transition-colors hover:bg-surface-2"
               >
                 <span className="min-w-0">
-                  <span className="block truncate text-xs font-semibold text-ink">
-                    {doc.title}
-                  </span>
-                  <span className="block truncate text-micro text-ink-faint">
-                    {doc.spaceName}
-                  </span>
+                  <span className="block truncate text-xs font-semibold text-ink">{doc.title}</span>
+                  <span className="block truncate text-micro text-ink-faint">{doc.spaceName}</span>
                 </span>
                 <span className={clsx('shrink-0 text-right text-micro', STALE_TONE[doc.status])}>
                   {doc.label}

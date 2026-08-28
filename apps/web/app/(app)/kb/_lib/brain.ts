@@ -1,4 +1,4 @@
-import { type Space, listVisibleSpaces } from '@cortex/agent-tools';
+import { type SpaceSummary, listVisibleSpaces } from '@cortex/agent-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   BrainStats,
@@ -52,7 +52,12 @@ export interface SpaceFacts {
 }
 
 export interface BrainReading {
-  spaces: Space[];
+  /**
+   * `SpaceSummary` y no `Space`: la página necesita, además del espacio, el
+   * nivel de quien mira y a cuántos se repartió — es lo que decide qué botones
+   * existen. Viene resuelto de la base de datos en la misma llamada.
+   */
+  spaces: SpaceSummary[];
   facts: Map<string, SpaceFacts>;
   stats: BrainStats;
 }

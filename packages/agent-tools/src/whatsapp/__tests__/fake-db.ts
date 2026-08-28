@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { type FakeStore, fakeSpaceRpcs } from '../../kb/__tests__/space-fake';
 
 /**
  * A Supabase stand-in with just enough behaviour to be wrong in the same ways.
@@ -199,9 +200,17 @@ export function makeDb(
 ): SupabaseClient {
   const counter = COUNTER.get(store) ?? { n: 0 };
   COUNTER.set(store, counter);
+  const spaceRpcs = fakeSpaceRpcs(() => store as FakeStore);
   return {
     from: (table: string) =>
       new FakeQuery(store, table, () => `id_${++counter.n}`, uniqueBy[table] ?? null),
+    // `assertCanWriteToSpace` pregunta a la base de datos quién ve qué desde la
+    // 0123. Ver src/kb/__tests__/space-fake.ts.
+    rpc: async (fn: string, args: Record<string, unknown> = {}) => {
+      const impl = spaceRpcs[fn];
+      if (!impl) return { data: null, error: { message: `no fake for rpc ${fn}` } };
+      return { data: impl(args), error: null };
+    },
   } as unknown as SupabaseClient;
 }
 

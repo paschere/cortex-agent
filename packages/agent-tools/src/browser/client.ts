@@ -231,7 +231,13 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
         c.owner,
       ),
     read: (sessionId, owner) =>
-      call<PageSnapshot>(`/session/${encodeURIComponent(sessionId)}`, 'GET', undefined, 30_000, owner),
+      call<PageSnapshot>(
+        `/session/${encodeURIComponent(sessionId)}`,
+        'GET',
+        undefined,
+        30_000,
+        owner,
+      ),
     control: (sessionId, op, reason, owner) =>
       op === 'get'
         ? call<ControlView>(

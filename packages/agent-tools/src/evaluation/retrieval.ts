@@ -35,8 +35,8 @@
  * only `nothing` is right: there is no document to read.
  */
 
-import { type SpaceHit } from '../kb/spaces';
 import { assessCoverage, calibrationFor } from '../kb/relevance';
+import type { SpaceHit } from '../kb/spaces';
 import type { CorpusChunk } from './corpus';
 import type { EvalCase, RetrievalCaseResult, RetrievalScore } from './types';
 
@@ -120,8 +120,7 @@ export function gradeRetrievalCase(
   // the `answered` verdict. Keeping it under a `thin` verdict is still a
   // failure — the model is told the material does not answer the question, so
   // it will hedge over the document that does.
-  const passed =
-    evalCase.group === 'answered' ? goldKept && coverageCorrect : coverageCorrect;
+  const passed = evalCase.group === 'answered' ? goldKept && coverageCorrect : coverageCorrect;
 
   return {
     caseId: evalCase.id,

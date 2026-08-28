@@ -67,8 +67,15 @@ export default async function KnowledgeBasePage() {
       pendingCount: f?.pendingCount ?? 0,
       failedCount: f?.failedCount ?? 0,
       lastAddedAt: f?.lastAddedAt ?? null,
-      // Everyone reads the company spaces; only an admin adds to them.
-      canWrite: s.kind === 'global' ? isAdmin : isMine,
+      // Lo que puede hacer aquí sale del nivel efectivo que resolvió la base de
+      // datos (0123), no de una regla escrita otra vez en el navegador: si esta
+      // página dedujera «común ⇒ sólo el admin escribe» seguiría pintando un
+      // botón que el servidor rechaza en cuanto alguien concede 'contribute' a
+      // un equipo.
+      canWrite: s.level === 'contribute' || s.level === 'admin',
+      canShare: s.level === 'admin',
+      everyone: s.kind === 'global',
+      sharedWith: s.grantCount,
       chunkCount: f?.chunkCount ?? null,
       spokenSeconds: f?.spokenSeconds ?? 0,
       intake: f?.intake ?? { upload: 0, record: 0, meeting: 0, drive: 0 },

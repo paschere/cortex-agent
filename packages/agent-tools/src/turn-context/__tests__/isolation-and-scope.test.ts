@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { everyoneGrant } from '../../kb/__tests__/space-fake';
 import { createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
 import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import { TABLE_TENANCY } from '../../tenancy/tables';
@@ -109,6 +110,27 @@ function world() {
         redacted_at: null,
       },
     ],
+    // Desde la 0123 la visibilidad de un espacio se resuelve cruzando las
+    // concesiones con el DIRECTORIO — quién es esta persona y de qué empresa —
+    // así que el fixture necesita las dos cosas. Antes bastaba con los espacios
+    // porque «global» quería decir «de todos», que es justamente la rigidez que
+    // la 0123 quitó.
+    users: [
+      { id: 'user-ana', organization_id: ACME, email: 'ana@acme.com', name: 'Ana', role: 'member' },
+      // Carlos también es de Acme: puede abrir esta conversación, y aun así el
+      // cuaderno de Ana no es suyo. Es el caso que este archivo existe para
+      // probar.
+      {
+        id: 'user-carlos',
+        organization_id: ACME,
+        email: 'carlos@acme.com',
+        name: 'Carlos',
+        role: 'member',
+      },
+    ],
+    // Lo que la 0123 le escribió a todo espacio que ya era global: «lo ve toda
+    // la empresa» es una concesión desde entonces, no una propiedad del scope.
+    kb_space_grants: [everyoneGrant('space-acme-global', ACME)],
     kb_collections: [
       {
         id: 'space-acme-global',

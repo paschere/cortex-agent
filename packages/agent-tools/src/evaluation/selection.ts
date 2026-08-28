@@ -34,7 +34,6 @@
  * suite names are all fresh. A stale ranking is not graded as a pass.
  */
 
-import { cosine as dot } from '../tool-selection/rank';
 import {
   BASE_FAMILIES,
   type SelectableTool,
@@ -42,6 +41,7 @@ import {
   toolEmbedText,
   toolFamily,
 } from '../tool-selection';
+import { cosine as dot } from '../tool-selection/rank';
 import { hashText } from '../tool-selection/store';
 import type { EvalCase, SelectionCaseResult, SelectionScore } from './types';
 import type { VectorFixture } from './vectors';

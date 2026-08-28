@@ -1,8 +1,8 @@
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { bogotaToday } from '../commitments/shape';
 import { nitDv, normalizeNit } from '../clients/shape';
 import { findClientByNit } from '../clients/store';
+import { bogotaToday } from '../commitments/shape';
 // El puente hacia pagos (migración 0098). Va en este sentido a propósito:
 // `payments/receipt.ts` no importa nada de este módulo — recibe datos planos —,
 // así que no hay ciclo entre dos módulos que se escriben el uno al otro.
@@ -298,10 +298,7 @@ export async function listFields(
  * de Coltrans, confírmalo y queda vinculado" — a suggestion the reviewer can
  * act on, rather than a link they never made.
  */
-async function describeNitMatch(
-  db: SupabaseClient,
-  nit: string | null,
-): Promise<ClientMatchState> {
+async function describeNitMatch(db: SupabaseClient, nit: string | null): Promise<ClientMatchState> {
   if (!nit) return 'no_nit';
   return (await resolveClientByNit(db, nit)).state;
 }
@@ -469,9 +466,7 @@ export async function confirmExtraction(
     const change = diff(field, decision);
     if (change) {
       Object.assign(patch, change.columns);
-      corrections.push(
-        correctionRow(extraction, field, change.display, input.userId, 'corrected'),
-      );
+      corrections.push(correctionRow(extraction, field, change.display, input.userId, 'corrected'));
       corrected += 1;
       Object.assign(field, change.columns);
     }
@@ -711,9 +706,7 @@ export async function listExtractions(
   if (Array.isArray(opts.reviewState)) q = q.in('review_state', opts.reviewState);
   else if (opts.reviewState) q = q.eq('review_state', opts.reviewState);
   if (opts.docType) q = q.eq('doc_type', opts.docType);
-  const { data, error } = await q
-    .order('created_at', { ascending: true })
-    .limit(opts.limit ?? 200);
+  const { data, error } = await q.order('created_at', { ascending: true }).limit(opts.limit ?? 200);
   if (error) throw error;
   return (data ?? []) as ExtractionRow[];
 }
@@ -728,10 +721,7 @@ export async function listExtractions(
  * scoped client pins differently, and because a client row that is not visible
  * here should leave a blank rather than leak a name.
  */
-export async function hydrate(
-  db: SupabaseClient,
-  rows: ExtractionRow[],
-): Promise<ExtractionRow[]> {
+export async function hydrate(db: SupabaseClient, rows: ExtractionRow[]): Promise<ExtractionRow[]> {
   if (rows.length === 0) return rows;
   const docIds = [...new Set(rows.map((r) => r.document_id))];
   const clientIds = [...new Set(rows.map((r) => r.client_id).filter(Boolean))] as string[];

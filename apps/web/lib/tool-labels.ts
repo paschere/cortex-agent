@@ -148,6 +148,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   // producían «Kb · Context», el renglón que empezó todo esto.
   kb_list_spaces: { label: 'Ver los espacios de Brain Knowledge', icon: 'Library' },
   kb_create_document: { label: 'Guardar en Brain Knowledge', icon: 'BookPlus' },
+  kb_share_space: { label: 'Cambiar quién ve un espacio', icon: 'Users' },
   kb_context: { label: 'Reunir contexto de Brain Knowledge', icon: 'BookMarked' },
   // El adjunto de un turno mudándose al cerebro. Dice «el adjunto» y no «el
   // archivo» porque quien lo pide acaba de subirlo en esta misma conversación.

@@ -193,7 +193,8 @@ export async function saveOnboarding(
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (patch.goal) row.primary_goal = patch.goal;
   if (patch.companyName) row.company_name = patch.companyName.slice(0, 200);
-  if (patch.dismissed !== undefined) row.dismissed_at = patch.dismissed ? new Date().toISOString() : null;
+  if (patch.dismissed !== undefined)
+    row.dismissed_at = patch.dismissed ? new Date().toISOString() : null;
   await db.from('organization_onboarding').upsert(row, { onConflict: 'organization_id' });
 }
 

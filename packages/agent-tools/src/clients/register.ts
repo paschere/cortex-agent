@@ -34,7 +34,7 @@ import { addDomain, matchCommitmentsToClients, registerClient } from './store';
 export const clientsRegister = registerTool({
   id: 'clients.register',
   description:
-    "Register a customer company, or update the one that is already there. The NIT is the identity: give it with its verification digit when you have it (\"830025281-7\") and Cortex refuses the pair if they disagree, which is what stops a mistyped NIT becoming a second copy of the same client. Registering the same NIT or name again UPDATES instead of duplicating. Registering the client's email domain is what makes their mail attach itself afterwards — do it whenever the person can tell you the domain. Only for CUSTOMERS: the DIAN, an insurer or a supplier are counterparties on a commitment, not clients. Requires confirmation.",
+    'Register a customer company, or update the one that is already there. The NIT is the identity: give it with its verification digit when you have it ("830025281-7") and Cortex refuses the pair if they disagree, which is what stops a mistyped NIT becoming a second copy of the same client. Registering the same NIT or name again UPDATES instead of duplicating. Registering the client\'s email domain is what makes their mail attach itself afterwards — do it whenever the person can tell you the domain. Only for CUSTOMERS: the DIAN, an insurer or a supplier are counterparties on a commitment, not clients. Requires confirmation.',
   inputSchema: z.object({
     name: z.string().min(2).max(160).describe('What people call them out loud, e.g. "Coltrans"'),
     legalName: z
@@ -88,7 +88,11 @@ export const clientsRegister = registerTool({
   requiresConfirmation: true,
   rateLimit: { perMinute: 20 },
   handler: async (input, ctx) => {
-    const { client: row, created, nearDuplicates } = await registerClient(ctx.db, {
+    const {
+      client: row,
+      created,
+      nearDuplicates,
+    } = await registerClient(ctx.db, {
       name: input.name,
       legalName: input.legalName ?? null,
       nit: input.nit ?? null,

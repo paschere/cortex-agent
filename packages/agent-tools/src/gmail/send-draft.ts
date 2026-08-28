@@ -17,7 +17,9 @@ export const gmailSendDraft = registerTool({
     snippet: z.string(),
   }),
   requiresConfirmation: true,
-  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.compose'] }],
+  requiredScopes: [
+    { provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.compose'] },
+  ],
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     // Pre-flight: fetch draft metadata so the confirmation prompt can show to/subject/snippet.

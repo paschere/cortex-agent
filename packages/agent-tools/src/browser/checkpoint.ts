@@ -175,10 +175,7 @@ export function defaultAsk(reason: HandoffReason): string {
     : 'El trámite necesita un dato que sólo tú tienes en este momento.';
 }
 
-export async function getCheckpoint(
-  db: SupabaseClient,
-  id: string,
-): Promise<Checkpoint | null> {
+export async function getCheckpoint(db: SupabaseClient, id: string): Promise<Checkpoint | null> {
   const { data } = await db
     .from('browser_flow_checkpoints')
     .select(COLUMNS)

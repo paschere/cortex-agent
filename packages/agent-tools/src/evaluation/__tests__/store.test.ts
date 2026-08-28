@@ -21,14 +21,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CALIBRATION } from '../../kb/relevance';
-import { createOrgScopedClient } from '../../tenancy/scoped-client';
 import { type Tables, createFakeSupabase } from '../../tenancy/__tests__/fake-postgrest';
-import {
-  EVALUATION_CASE_RESULTS_TABLE,
-  latestRuns,
-  loadCaseResults,
-  saveRun,
-} from '../store';
+import { createOrgScopedClient } from '../../tenancy/scoped-client';
+import { EVALUATION_CASE_RESULTS_TABLE, latestRuns, loadCaseResults, saveRun } from '../store';
 import type { EvalRun } from '../types';
 
 const ACME = 'org-acme';

@@ -1,5 +1,5 @@
-import type { Tables } from '../../tenancy/__tests__/fake-postgrest';
 import { describe, expect, it } from 'vitest';
+import type { Tables } from '../../tenancy/__tests__/fake-postgrest';
 import { type GroupByPerson, buildWeekly, mondayOf } from '../build';
 import { figuresOf } from '../document';
 import { renderReportHtml } from '../render';
@@ -346,7 +346,8 @@ describe('el parte de una empresa con datos', () => {
 
     const people = doc.sections.find((s) => s.type === 'table' && s.heading === 'Quién debe qué');
     expect(people?.type).toBe('table');
-    const ana = people?.type === 'table' ? people.table.rows.find((r) => r[0]?.display === 'Ana') : undefined;
+    const ana =
+      people?.type === 'table' ? people.table.rows.find((r) => r[0]?.display === 'Ana') : undefined;
     // Columnas: persona, papeles, papeles vencidos, promesas, promesas vencidas.
     expect(ana?.[1]?.display).toBe('1'); // la póliza
     expect(ana?.[3]?.display).toBe('1'); // la promesa, contada aparte

@@ -64,9 +64,10 @@ describe('the suite', () => {
     // A family in BASE_FAMILIES is sent on every turn by construction, so
     // asserting on it would be asserting that a constant is itself.
     for (const c of SELECTION_CASES) {
-      expect(BASE_FAMILIES, `${c.id} evalúa «${c.needsFamily}», que se manda siempre`).not.toContain(
-        c.needsFamily,
-      );
+      expect(
+        BASE_FAMILIES,
+        `${c.id} evalúa «${c.needsFamily}», que se manda siempre`,
+      ).not.toContain(c.needsFamily);
     }
     expect(SELECTION_CASES.length).toBeGreaterThanOrEqual(4);
   });
@@ -88,7 +89,9 @@ describe('the suite', () => {
     const vague = /\b(buena|bien escrita|útil|clara|calidad|adecuada|apropiada)\b/i;
     for (const c of CASES) {
       for (const check of c.answer?.rubric ?? []) {
-        expect(check.question, `${c.id}/${check.id} le pide una opinión al juez`).not.toMatch(vague);
+        expect(check.question, `${c.id}/${check.id} le pide una opinión al juez`).not.toMatch(
+          vague,
+        );
       }
     }
   });

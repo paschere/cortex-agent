@@ -20,7 +20,9 @@ describe('a dónde el navegador se niega a ir', () => {
   it('bloquea metadata bajo TODA configuración: no hay variable que lo abra', () => {
     process.env.BROWSER_ALLOW_PRIVATE_HOSTS = 'true';
     expect(forbiddenTargetReason('http://169.254.169.254/latest/meta-data')).not.toBeNull();
-    expect(forbiddenTargetReason('http://metadata.google.internal/computeMetadata/v1/')).not.toBeNull();
+    expect(
+      forbiddenTargetReason('http://metadata.google.internal/computeMetadata/v1/'),
+    ).not.toBeNull();
     expect(forbiddenTargetReason('http://100.100.100.200/')).not.toBeNull();
   });
 

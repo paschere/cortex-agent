@@ -5,6 +5,7 @@ import { Loader2, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { deleteSpace } from '../actions';
+import { AccessPanel } from './AccessPanel';
 import { DocumentList } from './DocumentList';
 import { IntakePanel } from './Intake';
 import { RelationsPanel } from './RelationsGraph';
@@ -66,10 +67,12 @@ export function SpaceTools({
         <IntakePanel space={space} active={intake} onActiveChange={onIntakeChange} />
       ) : (
         <Panel className="px-5 py-4 text-xs leading-relaxed text-ink-faint">
-          Puedes leerlo todo y Cortex responde con esto, pero solo un administrador añade o quita.
-          Si quieres tu propia copia, guárdala en uno de tus espacios.
+          Puedes leerlo todo y Cortex responde con esto, pero aquí no guardas: te dieron acceso de
+          lectura. Pídele «aportar» a quien lo administra, o guarda tu copia en uno de tus espacios.
         </Panel>
       )}
+
+      {space.canShare && <AccessPanel space={space} />}
 
       <RelationsPanel spaceId={space.id} onOpenDocument={(t) => onOpenDocument(t.documentId)} />
 
@@ -90,7 +93,7 @@ export function SpaceTools({
         </div>
       </Panel>
 
-      {space.canWrite && (
+      {space.canShare && (
         <Panel className="px-5 py-3">
           {confirming ? (
             <div className="rounded-card border border-rose/30 bg-rose-soft px-3.5 py-3">
@@ -102,7 +105,9 @@ export function SpaceTools({
                 y todo lo que Cortex aprendió de ellos.{' '}
                 {space.kind === 'global'
                   ? 'Toda la empresa pierde esas respuestas, no solo tú.'
-                  : 'No se puede deshacer.'}
+                  : space.kind === 'shared'
+                    ? `Lo pierden también los ${space.sharedWith} accesos que tiene dados.`
+                    : 'No se puede deshacer.'}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button

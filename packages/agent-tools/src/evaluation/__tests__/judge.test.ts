@@ -18,8 +18,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const generateText = vi.hoisted(() => vi.fn());
 vi.mock('ai', () => ({ generateText }));
 
-import { JUDGE_PROBES, calibrateJudge, judgeAnswer } from '../judge';
 import { matchesLiteral } from '../answer';
+import { JUDGE_PROBES, calibrateJudge, judgeAnswer } from '../judge';
 
 const reply = (body: unknown) => generateText.mockResolvedValue({ text: JSON.stringify(body) });
 
@@ -62,7 +62,12 @@ describe('the evidence guard', () => {
 
   it('turns a yes with no quote at all into a no', async () => {
     reply({ checks: [{ id: 'cites', verdict: 'si', evidence: null }] });
-    const [verdict] = await judgeAnswer({ query: 'q', material: 'm', answer: 'cualquier cosa', checks });
+    const [verdict] = await judgeAnswer({
+      query: 'q',
+      material: 'm',
+      answer: 'cualquier cosa',
+      checks,
+    });
     expect(verdict?.verdict).toBe(false);
     expect(verdict?.fabricatedEvidence).toBe(true);
   });

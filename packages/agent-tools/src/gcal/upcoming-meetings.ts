@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { meetingTypeLabel } from './classify';
-import { collectUpcomingMeetings, type NormalizedMeeting } from './events';
+import { type NormalizedMeeting, collectUpcomingMeetings } from './events';
 
 /**
  * `gcal.upcoming_meetings` — the "what's on my plate" view.

@@ -7,7 +7,33 @@
  * everything and hands down these props.
  */
 
-export type SpaceKind = 'global' | 'personal';
+/**
+ * De quién es un espacio: de la empresa entera ('global'), de la empresa pero
+ * repartido a unos equipos o personas ('shared'), o de una sola persona
+ * ('personal'). Espejo del mismo tipo en @cortex/agent-tools.
+ */
+export type SpaceKind = 'global' | 'shared' | 'personal';
+
+/** Lo que alguien puede hacer en un espacio. Ver la migración 0123. */
+export type SpaceLevel = 'view' | 'contribute' | 'admin';
+
+/** Un renglón del panel «quién lo ve». */
+export interface AccessRow {
+  id: string;
+  subjectKind: 'everyone' | 'team' | 'user';
+  subjectId: string | null;
+  subjectName: string;
+  level: SpaceLevel;
+}
+
+/** A quién se le puede dar acceso: los equipos y la gente del espacio de trabajo. */
+export interface Candidate {
+  id: string;
+  name: string;
+  kind: 'team' | 'user';
+  /** Sólo para personas: sirve para distinguir dos «Ana». */
+  hint?: string;
+}
 
 /**
  * Where a document is in the cycle that turns a file into something Cortex can
@@ -117,8 +143,18 @@ export interface SpaceSummary {
   pendingCount: number;
   failedCount: number;
   lastAddedAt: string | null;
-  /** Whether the viewer may add to, move into, or delete this space. */
+  /** Whether the viewer may add to or move into this space. */
   canWrite: boolean;
+  /**
+   * Whether the viewer may change WHO SEES this space, renombrarlo o borrarlo.
+   * Separado de `canWrite` a propósito desde la 0123: subir un PDF y decidir
+   * quién lee el espacio entero son decisiones de tamaños distintos.
+   */
+  canShare: boolean;
+  /** True cuando el espacio está abierto a toda la empresa. */
+  everyone: boolean;
+  /** Cuántos equipos y personas tienen acceso, sin contar «toda la empresa». */
+  sharedWith: number;
   /** Retrievable fragments in this space; null when the count is unavailable. */
   chunkCount: number | null;
   /** Seconds of digested audio filed here. */

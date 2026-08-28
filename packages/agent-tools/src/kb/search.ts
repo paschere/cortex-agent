@@ -22,7 +22,7 @@ const HitSchema = z.object({
   documentId: z.string().uuid(),
   documentTitle: z.string(),
   space: z.string(),
-  spaceKind: z.enum(['global', 'personal']),
+  spaceKind: z.enum(['global', 'shared', 'personal']),
   chunkIndex: z.number().int(),
   content: z.string(),
   score: z.number(),

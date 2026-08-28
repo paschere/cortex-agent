@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { registerTool } from '../index';
 import type { ToolContext } from '../types';
 import {
-  type ReportDocument,
   REPORT_DOCUMENT_VERSION,
+  type ReportDocument,
   chartBodySchema,
   tableCellSchema,
   tableColumnSchema,
@@ -309,10 +309,7 @@ export async function saveChartAsReport(
     conversationId: stored.row.conversation_id,
   });
 
-  await ctx.db
-    .from(CHAT_CHARTS_TABLE)
-    .update({ saved_report_id: row.id })
-    .eq('id', chartId);
+  await ctx.db.from(CHAT_CHARTS_TABLE).update({ saved_report_id: row.id }).eq('id', chartId);
 
   return { row, reportId: row.id, alreadySaved: false };
 }
@@ -353,7 +350,9 @@ export const reportsChart = registerTool({
       .string()
       .min(1)
       .max(120)
-      .describe('Título del gráfico, en español y en minúscula de oración. Di qué muestra, no "Gráfico".'),
+      .describe(
+        'Título del gráfico, en español y en minúscula de oración. Di qué muestra, no "Gráfico".',
+      ),
     periodLabel: z
       .string()
       .min(1)

@@ -9,13 +9,7 @@ import {
   slotComplaint,
 } from '../slots';
 import type { Step, Variable } from '../types';
-import {
-  consumesDocument,
-  extensionOf,
-  parseFileRef,
-  planUploads,
-  renderRef,
-} from '../uploads';
+import { consumesDocument, extensionOf, parseFileRef, planUploads, renderRef } from '../uploads';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -174,7 +168,9 @@ describe('lo que el trámite declara contra lo que de verdad usa', () => {
   it('encuentra los huecos en URLs, plantillas y referencias de archivo', () => {
     expect(holesIn(steps)).toEqual(['nit', 'desde', 'codigo']);
     expect(
-      holesIn([step({ action: 'upload', label: 'adjuntar', value: { kind: 'file', from: '{{rut}}' } })]),
+      holesIn([
+        step({ action: 'upload', label: 'adjuntar', value: { kind: 'file', from: '{{rut}}' } }),
+      ]),
     ).toEqual(['rut']);
   });
 
@@ -207,10 +203,7 @@ describe('lo que el trámite declara contra lo que de verdad usa', () => {
   });
 
   it('no le pide al que llama el dato que va a dictar una persona', () => {
-    const declared = [
-      slot({ name: 'nit', type: 'nit' }),
-      slot({ name: 'codigo', type: 'code' }),
-    ];
+    const declared = [slot({ name: 'nit', type: 'nit' }), slot({ name: 'codigo', type: 'code' })];
     expect(callerSlots(declared, steps).map((v) => v.name)).toEqual(['nit']);
   });
 });
@@ -223,10 +216,10 @@ describe('el código de un solo uso no se escribe en ninguna fila', () => {
     // cifrado en esta misma base. Escribirlo en `browser_flow_runs.inputs`,
     // que se pinta en la pantalla de historial para siempre, pondría las dos
     // mitades de un ingreso bancario en la misma página.
-    const stored = safeInputs(
-      { nit: '900123456', codigo: '483920' },
-      [slot({ name: 'nit', type: 'nit' }), slot({ name: 'codigo', type: 'code' })],
-    );
+    const stored = safeInputs({ nit: '900123456', codigo: '483920' }, [
+      slot({ name: 'nit', type: 'nit' }),
+      slot({ name: 'codigo', type: 'code' }),
+    ]);
     expect(stored).toEqual({ nit: '900123456', codigo: REDACTED });
   });
 
@@ -363,7 +356,11 @@ describe('de dónde salen los bytes de un archivo que se sube', () => {
     const steps: Step[] = [
       step({ action: 'goto', label: 'abrir', url: 'https://x.co' }),
       step({ action: 'download', label: 'bajar el certificado' }),
-      step({ action: 'upload', label: 'adjuntar lo bajado', value: { kind: 'file', from: 'download' } }),
+      step({
+        action: 'upload',
+        label: 'adjuntar lo bajado',
+        value: { kind: 'file', from: 'download' },
+      }),
       step({
         action: 'upload',
         label: 'adjuntar el RUT',
@@ -382,7 +379,9 @@ describe('de dónde salen los bytes de un archivo que se sube', () => {
   it('sabe si un trámite mete un archivo antes de haberlo corrido nunca', () => {
     expect(consumesDocument([step({ action: 'click', label: 'x' })])).toBe(false);
     expect(
-      consumesDocument([step({ action: 'upload', label: 'adjuntar', value: { kind: 'file', from: 'download' } })]),
+      consumesDocument([
+        step({ action: 'upload', label: 'adjuntar', value: { kind: 'file', from: 'download' } }),
+      ]),
     ).toBe(true);
   });
 

@@ -214,7 +214,8 @@ export function planEmbeddingBatches(
   provider?: EmbeddingProvider,
 ): Array<{ start: number; end: number }> {
   const cfg = embeddingConfig();
-  const p = provider ?? ('error' in cfg ? EMBEDDING_PROVIDERS[DEFAULT_EMBEDDING_PROVIDER] : cfg.provider);
+  const p =
+    provider ?? ('error' in cfg ? EMBEDDING_PROVIDERS[DEFAULT_EMBEDDING_PROVIDER] : cfg.provider);
   const batches: Array<{ start: number; end: number }> = [];
   let start = 0;
   let tokens = 0;

@@ -3,6 +3,7 @@
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
+  assertCanAdminSpace,
   assertCanWriteToSpace,
   assessCoverage,
   assessFreshness,
@@ -11,14 +12,19 @@ import {
   formatOffset,
   getVisibleDocument,
   getVisibleSpace,
+  grantSpaceAccess,
+  listSpaceAccess,
   rateHit,
   removeFiles,
+  revokeSpaceAccess,
   searchSpaces,
 } from '@cortex/agent-tools';
 import { ForbiddenError, NotFoundError } from '@cortex/core';
 import { revalidatePath } from 'next/cache';
 import type {
+  AccessRow,
   ActionResult,
+  Candidate,
   Fragment,
   FragmentPage,
   IntakeKey,
@@ -27,6 +33,7 @@ import type {
   ProbeResult,
   SimpleActionResult,
   SpaceKind,
+  SpaceLevel,
   SpineBucket,
 } from './_components/types';
 import { TINY_FRAGMENT_TOKENS } from './_components/types';
@@ -52,35 +59,177 @@ function describe(err: unknown, fallback: string): string {
   return message && message.length < 160 ? message : fallback;
 }
 
+/**
+ * Crear un espacio.
+ *
+ * `everyone` sólo tiene sentido en un espacio de la empresa, y es la decisión de
+ * verdad: un espacio común nace abierto, uno repartido nace cerrado y se abre a
+ * mano desde el panel de acceso. Nace cerrado y no al revés porque abrir es
+ * reversible y publicar no — las respuestas que ya dio Cortex con ese material
+ * no se pueden recoger.
+ */
 export async function createSpace(
   name: string,
   description: string,
   kind: SpaceKind,
+  everyone = true,
 ): Promise<SimpleActionResult> {
   const user = await requireSession();
   const trimmed = name.trim();
   if (!trimmed) return { ok: false, error: 'Ponle un nombre primero.' };
   if (trimmed.length > 200) return { ok: false, error: 'Ese nombre es muy largo.' };
 
+  const orgOwned = kind !== 'personal';
+
   // The same gate the admin section uses: role on the session row, nothing else.
-  if (kind === 'global' && user.role !== 'org_admin') {
+  if (orgOwned && user.role !== 'org_admin') {
     return {
       ok: false,
-      error: 'Solo un administrador puede crear un espacio común.',
+      error: 'Solo un administrador puede crear un espacio de la empresa.',
     };
   }
 
   const db = getOrgScopedClient(user.organization.id);
-  const { error } = await db.from('kb_collections').insert({
-    scope: kind === 'global' ? 'global' : 'user',
-    scope_id: kind === 'global' ? null : user.id,
-    name: trimmed,
-    description: description.trim() || null,
-    created_by: user.id,
-  });
+  const { data, error } = await db
+    .from('kb_collections')
+    .insert({
+      scope: orgOwned ? 'global' : 'user',
+      scope_id: orgOwned ? null : user.id,
+      name: trimmed,
+      description: description.trim() || null,
+      created_by: user.id,
+    })
+    .select('id')
+    .single();
 
-  if (error) return { ok: false, error: describe(error, 'No se pudo crear el espacio.') };
+  if (error || !data) return { ok: false, error: describe(error, 'No se pudo crear el espacio.') };
 
+  // «Lo ve toda la empresa» es una concesión desde la 0123, no una propiedad del
+  // scope, así que un espacio común hay que abrirlo explícitamente. Si esto
+  // fallara, el espacio queda creado y cerrado — que es el lado prudente del
+  // fallo — y se puede abrir desde el panel de acceso.
+  if (orgOwned && everyone) {
+    try {
+      await grantSpaceAccess(
+        db,
+        user.id,
+        (data as { id: string }).id,
+        { kind: 'everyone' },
+        'view',
+      );
+    } catch (err) {
+      revalidatePath(PATH);
+      return {
+        ok: false,
+        error: `Se creó «${trimmed}», pero no se pudo abrir a toda la empresa: ${describe(err, 'inténtalo desde «Quién lo ve».')}`,
+      };
+    }
+  }
+
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+/**
+ * ===========================================================================
+ * QUIÉN LO VE
+ * ===========================================================================
+ * Las cuatro acciones del panel de acceso. Ninguna comprueba permisos por su
+ * cuenta: las cuatro delegan en `kb/spaces.ts`, que a su vez delega en la base
+ * de datos. Es la misma frontera que usa la búsqueda, y por eso no puede
+ * conceder algo que la búsqueda no respete.
+ */
+
+export async function readSpaceAccess(
+  spaceId: string,
+): Promise<ActionResult<{ rows: AccessRow[] }>> {
+  const user = await requireSession();
+  const db = getOrgScopedClient(user.organization.id);
+  try {
+    const grants = await listSpaceAccess(db, user.id, spaceId);
+    return {
+      ok: true,
+      rows: grants.map((g) => ({
+        id: g.id,
+        subjectKind: g.subjectKind,
+        subjectId: g.subjectId,
+        subjectName: g.subjectName,
+        level: g.level,
+      })),
+    };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo leer quién ve este espacio.') };
+  }
+}
+
+/**
+ * A quién se le puede dar acceso: los equipos y la gente de este espacio de
+ * trabajo. Va detrás del mismo permiso que el panel — la lista de personas de
+ * una empresa no es pública dentro del producto sólo porque quepa en un menú.
+ */
+export async function accessCandidates(
+  spaceId: string,
+): Promise<ActionResult<{ candidates: Candidate[] }>> {
+  const user = await requireSession();
+  const db = getOrgScopedClient(user.organization.id);
+  try {
+    await assertCanAdminSpace(db, user.id, spaceId);
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No puedes repartir este espacio.') };
+  }
+
+  const [teams, people] = await Promise.all([
+    db.from('teams').select('id, name').order('name'),
+    db.from('users').select('id, name, email').order('email'),
+  ]);
+
+  const candidates: Candidate[] = [
+    ...((teams.data ?? []) as Array<{ id: string; name: string }>).map((t) => ({
+      id: t.id,
+      name: t.name,
+      kind: 'team' as const,
+    })),
+    ...((people.data ?? []) as Array<{ id: string; name: string | null; email: string }>)
+      // Uno mismo no: administrar ya implica ver, y ofrecerse a sí mismo en la
+      // lista es la manera de que alguien crea que se quitó el acceso.
+      .filter((p) => p.id !== user.id)
+      .map((p) => ({
+        id: p.id,
+        name: p.name?.trim() || p.email,
+        kind: 'user' as const,
+        hint: p.email,
+      })),
+  ];
+  return { ok: true, candidates };
+}
+
+export async function shareSpace(
+  spaceId: string,
+  subject: { kind: 'everyone' | 'team' | 'user'; id?: string | null },
+  level: SpaceLevel,
+): Promise<SimpleActionResult> {
+  const user = await requireSession();
+  const db = getOrgScopedClient(user.organization.id);
+  try {
+    await grantSpaceAccess(db, user.id, spaceId, subject, level);
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo dar el acceso.') };
+  }
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+export async function unshareSpace(
+  spaceId: string,
+  subject: { kind: 'everyone' | 'team' | 'user'; id?: string | null },
+): Promise<SimpleActionResult> {
+  const user = await requireSession();
+  const db = getOrgScopedClient(user.organization.id);
+  try {
+    await revokeSpaceAccess(db, user.id, spaceId, subject);
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo quitar el acceso.') };
+  }
   revalidatePath(PATH);
   return { ok: true };
 }
@@ -90,7 +239,10 @@ export async function deleteSpace(spaceId: string): Promise<SimpleActionResult> 
   const db = getOrgScopedClient(user.organization.id);
 
   try {
-    await assertCanWriteToSpace(db, user.id, spaceId);
+    // Administrar, no aportar: desde la 0123 alguien puede tener permiso para
+    // guardar documentos en un espacio sin tenerlo para borrarlo con todo lo
+    // que hay dentro.
+    await assertCanAdminSpace(db, user.id, spaceId);
   } catch (err) {
     return { ok: false, error: describe(err, 'No se pudo borrar el espacio.') };
   }

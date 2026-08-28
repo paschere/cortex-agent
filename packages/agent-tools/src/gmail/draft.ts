@@ -65,7 +65,9 @@ export const gmailDraft = registerTool({
     messageId: z.string(),
     deepLink: z.string(),
   }),
-  requiredScopes: [{ provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.compose'] }],
+  requiredScopes: [
+    { provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.compose'] },
+  ],
   rateLimit: { perMinute: 30 },
   handler: async (input, ctx) => {
     const raw = b64url(buildRfc822(input));
