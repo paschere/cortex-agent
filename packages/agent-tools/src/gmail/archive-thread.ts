@@ -2,6 +2,7 @@ import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { ensurePersonalSpace, resolveSpaceByName } from '../kb/spaces';
+import { fetchGmailAttachment } from './attachments';
 import { ingestThread } from './ingest-thread';
 import { fetchThreadMessages } from './threads';
 
@@ -31,6 +32,17 @@ export const gmailArchiveThread = registerTool({
     chunks: z.number(),
     messages: z.number(),
     participants: z.array(z.string()),
+    /**
+     * Lo que venía colgando del hilo y entró como documento aparte. `skipped`
+     * cuenta lo que se vio y se descartó a propósito — un vídeo, un .zip, un
+     * escaneo sin texto — y merece decirse: quien preguntó por «el contrato»
+     * necesita saber si se descartó, no sólo si no apareció.
+     */
+    attachments: z.object({
+      archived: z.number(),
+      skipped: z.number(),
+      failed: z.number(),
+    }),
   }),
   requiredScopes: [
     { provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] },
@@ -65,6 +77,11 @@ export const gmailArchiveThread = registerTool({
         logger: ctx.logger,
       },
       { threadId: input.threadId, spaceId: space.id, messages },
+      // Con esto, lo que venía colgando del hilo —el contrato, la propuesta, el
+      // pliego— entra al cerebro como documento propio y no como la frase «te
+      // adjunto el contrato». Ver mail/attachments.ts.
+      { fetchAttachment: (messageId, attachmentId) =>
+          fetchGmailAttachment(ctx, messageId, attachmentId) },
     );
 
     return {
@@ -80,6 +97,7 @@ export const gmailArchiveThread = registerTool({
       chunks: result.chunks,
       messages: result.messages,
       participants: result.participants,
+      attachments: result.attachments,
     };
   },
 });

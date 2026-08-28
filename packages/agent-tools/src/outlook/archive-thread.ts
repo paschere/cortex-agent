@@ -2,6 +2,7 @@ import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { ensurePersonalSpace, resolveSpaceByName } from '../kb/spaces';
+import { fetchOutlookAttachment, listOutlookAttachments } from './attachments';
 import { GRAPH_SCOPES } from '../msgraph/client';
 import { ingestThread } from './ingest-thread';
 import { fetchConversation } from './threads';
@@ -34,6 +35,17 @@ export const outlookArchiveThread = registerTool({
     chunks: z.number(),
     messages: z.number(),
     participants: z.array(z.string()),
+    /**
+     * Lo que venía colgando del hilo y entró como documento aparte. `skipped`
+     * cuenta lo que se vio y se descartó a propósito — un vídeo, un .zip, un
+     * escaneo sin texto — y merece decirse: quien preguntó por «el contrato»
+     * necesita saber si se descartó, no sólo si no apareció.
+     */
+    attachments: z.object({
+      archived: z.number(),
+      skipped: z.number(),
+      failed: z.number(),
+    }),
   }),
   requiredScopes: [{ provider: 'microsoft', scopes: [GRAPH_SCOPES.MAIL_READ] }],
   rateLimit: { perMinute: 10 },
@@ -66,6 +78,16 @@ export const outlookArchiveThread = registerTool({
         logger: ctx.logger,
       },
       { conversationId: input.threadId, spaceId: space.id, messages },
+      // What was hanging off the thread — the contract, the proposal, the
+      // quote — enters the brain as its own document instead of as the sentence
+      // "please find attached". See mail/attachments.ts.
+      {
+        attachments: {
+          list: (messageId) => listOutlookAttachments(ctx, messageId),
+          fetch: (messageId, attachmentId) =>
+            fetchOutlookAttachment(ctx, messageId, attachmentId),
+        },
+      },
     );
 
     return {
@@ -80,6 +102,7 @@ export const outlookArchiveThread = registerTool({
       chunks: result.chunks,
       messages: result.messages,
       participants: result.participants,
+      attachments: result.attachments,
     };
   },
 });

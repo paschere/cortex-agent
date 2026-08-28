@@ -1,6 +1,12 @@
 import { type MailHeader, headerValue, parseAddress, parseAddressList } from '../inbox/filters';
 import { type GmailFetchContext, gmailFetch } from './client';
-import { type MimePart, extractText, stripQuotedReply } from './mime';
+import {
+  type MimePart,
+  type RawAttachment,
+  collectAttachments,
+  extractText,
+  stripQuotedReply,
+} from './mime';
 
 /**
  * Los hilos de Gmail, en la forma que necesita todo lo que NO es una respuesta
@@ -31,6 +37,13 @@ export interface MailMessage {
   labelIds: string[];
   body: string;
   headers: MailHeader[];
+  /**
+   * Lo que venía colgando de este mensaje, ya enumerado pero sin descargar
+   * (0124). Se lleva en el mensaje y no se vuelve a leer del árbol más tarde
+   * porque el árbol se descarta en cuanto se normaliza, y volver a pedirlo a
+   * Gmail para saber si había un PDF sería una llamada por mensaje.
+   */
+  attachments: RawAttachment[];
 }
 
 interface RawMessage {
@@ -83,6 +96,7 @@ export function normalizeMessage(raw: RawMessage): MailMessage {
     labelIds: raw.labelIds ?? [],
     body: stripQuotedReply(extractText(raw.payload).trim()),
     headers,
+    attachments: collectAttachments(raw.payload),
   };
 }
 

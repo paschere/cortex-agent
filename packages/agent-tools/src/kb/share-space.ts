@@ -129,14 +129,18 @@ export const kbShareSpace = registerTool({
       }
     }
 
+    // zod deja el campo opcional en el tipo de ENTRADA aunque tenga `.default()`,
+    // así que el defecto se vuelve a decir aquí en vez de afirmar que ya está.
+    const level = input.level ?? 'view';
+
     if (input.remove) {
       await revokeSpaceAccess(ctx.db, ctx.userId, space.id, subject);
     } else {
-      await grantSpaceAccess(ctx.db, ctx.userId, space.id, subject, input.level);
+      await grantSpaceAccess(ctx.db, ctx.userId, space.id, subject, level);
     }
 
     const access = await listSpaceAccess(ctx.db, ctx.userId, space.id);
-    const verb = { view: 'ver', contribute: 'aportar a', admin: 'administrar' }[input.level];
+    const verb = { view: 'ver', contribute: 'aportar a', admin: 'administrar' }[level];
 
     return {
       space: space.name,

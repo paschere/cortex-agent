@@ -5,6 +5,7 @@ import { approxTokens } from '../kb/chunker';
 import { embedDocuments } from '../kb/embedder';
 import { recordEmbeddingUsage } from '../kb/embedding-usage';
 import { type SpaceKind, assertCanWriteToSpace } from '../kb/spaces';
+import { type MailAttachmentRef, ingestAttachments } from '../mail/attachments';
 import type { SpeechTurn } from '../kb/transcribe';
 import { chunkTranscript } from '../kb/transcript-chunker';
 import {
@@ -95,6 +96,11 @@ export type ThreadIngestOutcome =
 
 export interface ThreadIngestResult {
   outcome: ThreadIngestOutcome;
+  /**
+   * Lo que venía colgando del hilo. Cuenta aparte del hilo porque son documentos
+   * aparte: un hilo puede quedar 'unchanged' y traer un contrato nuevo.
+   */
+  attachments: { archived: number; skipped: number; failed: number };
   /** Una frase sobre la que una persona (o un modelo) pueda actuar. Nunca una traza. */
   note: string;
   threadId: string;
@@ -274,6 +280,19 @@ async function findLedger(
 
 export interface IngestThreadOptions {
   timeZone?: string;
+  /**
+   * Cómo bajarse los bytes de un adjunto. Opcional, y su ausencia SIGNIFICA
+   * algo: sin esto no se archiva ningún adjunto, y el hilo entra como entraba
+   * antes de la 0124.
+   *
+   * Va aquí en vez de dentro del contexto porque `ingestThread` recibe los
+   * mensajes ya leídos, a propósito, para poder ejercitarse sin Gmail de por
+   * medio (ver la cabecera de la función). Una dependencia de red en el
+   * contexto obligaría a fingir Gmail entero en cada prueba; una función que se
+   * pasa se finge en una línea, y no pasarla es un caso real —el que no quiere
+   * adjuntos— y no un agujero.
+   */
+  fetchAttachment?: (messageId: string, attachmentId: string) => Promise<Buffer>;
 }
 
 /**
@@ -305,6 +324,7 @@ export async function ingestThread(
     counterpartDomain: null as string | null,
     clientId: null as string | null,
     internalOnly: !audience.undecidable && audience.external.length === 0,
+    attachments: { archived: 0, skipped: 0, failed: 0 },
   };
 
   // EL PERMISO ES LO PRIMERO y no es un trámite. Un espacio se puede renombrar,
@@ -420,10 +440,23 @@ export async function ingestThread(
   }
 
   if (documentId && currentSha === sha256) {
+    // El texto no cambió, pero un adjunto puede no haber entrado nunca — porque
+    // se archivó antes de la 0124, o porque aquel día falló la descarga. Cuesta
+    // una consulta al libro por adjunto y es la diferencia entre que el contrato
+    // entre algún día o no entre jamás.
+    const attachments = await archiveAttachments(ctx, input, opts, {
+      messages,
+      subject,
+      documentId,
+    });
     return {
       ...base,
+      attachments,
       outcome: 'unchanged',
-      note: 'Ese hilo ya estaba archivado y no ha cambiado desde entonces, así que no se volvió a indexar nada.',
+      note:
+        attachments.archived > 0
+          ? `Ese hilo ya estaba archivado y no ha cambiado, pero traía ${attachments.archived} adjunto${attachments.archived === 1 ? '' : 's'} que todavía no estaba${attachments.archived === 1 ? '' : 'n'} en el cerebro. Ya está${attachments.archived === 1 ? '' : 'n'}.`
+          : 'Ese hilo ya estaba archivado y no ha cambiado desde entonces, así que no se volvió a indexar nada.',
       documentId,
       chunks: 0,
       messages: messages.length,
@@ -528,9 +561,16 @@ export async function ingestThread(
       error: embedded.ok ? null : embedded.reason,
     });
 
+    const attachments = await archiveAttachments(ctx, input, opts, {
+      messages,
+      subject,
+      documentId,
+    });
+
     const outcome: ThreadIngestOutcome = ledger?.document_id ? 'updated' : 'imported';
     return {
       ...base,
+      attachments,
       outcome,
       note: embedded.ok
         ? `${outcome === 'updated' ? 'Actualicé' : 'Guardé'} ${messages.length} mensaje${messages.length === 1 ? '' : 's'} de "${subject}" como un solo hilo: ${chunks.length} pasajes buscables, cada uno con quién lo escribió y cuándo.${clientId ? ' Vinculado al cliente dueño de ese dominio.' : ''}`
@@ -638,4 +678,54 @@ async function recordIngest(
   }
   const { error } = await db.from('gmail_thread_ingests').insert(fields);
   if (error) throw new Error(`no se pudo anotar el hilo en el libro de Gmail: ${error.message}`);
+}
+
+/**
+ * Los adjuntos del hilo, si el llamador dijo cómo bajarlos.
+ *
+ * Aparte de `ingestThread` y no dentro por una razón de responsabilidad: si un
+ * PDF viene corrupto, eso no puede tumbar el archivo de la correspondencia que
+ * ya está guardada. Aquí no se lanza nunca — se cuenta y se sigue.
+ */
+async function archiveAttachments(
+  ctx: GmailIngestContext,
+  input: { threadId: string; spaceId: string },
+  opts: IngestThreadOptions,
+  thread: { messages: MailMessage[]; subject: string; documentId: string | null },
+): Promise<{ archived: number; skipped: number; failed: number }> {
+  const fetchAttachment = opts.fetchAttachment;
+  if (!fetchAttachment) return { archived: 0, skipped: 0, failed: 0 };
+
+  const refs: MailAttachmentRef[] = thread.messages.flatMap((m) =>
+    m.attachments.map((a) => ({
+      key: a.key,
+      filename: a.filename,
+      mime: a.mime,
+      sizeBytes: a.sizeBytes,
+      messageId: m.id,
+      ms: m.ms,
+    })),
+  );
+  if (refs.length === 0) return { archived: 0, skipped: 0, failed: 0 };
+
+  const result = await ingestAttachments(
+    { organizationId: ctx.organizationId, userId: ctx.userId, db: ctx.db, logger: ctx.logger },
+    {
+      provider: 'gmail',
+      threadId: input.threadId,
+      spaceId: input.spaceId,
+      parentDocumentId: thread.documentId,
+      subject: thread.subject,
+      attachments: refs,
+      fetchBytes: async (ref) => {
+        // Sin `key` no hay nada que pedirle a Gmail: el contenido de esa parte
+        // venía en línea, y una parte en línea con nombre de archivo es, casi
+        // siempre, el logo de una firma. `worthKeeping` ya se llevó la mayoría
+        // por tipo; esto cierra el resto sin inventarse una descarga.
+        if (!ref.key) throw new Error('ese adjunto venía incrustado, sin contenido que pedir');
+        return fetchAttachment(ref.messageId, ref.key);
+      },
+    },
+  );
+  return { archived: result.archived, skipped: result.skipped, failed: result.failed };
 }

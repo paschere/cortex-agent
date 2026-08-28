@@ -318,6 +318,10 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // El marcapáginas de cada buzón conectado: por dónde va la carga histórica y
   // por dónde va el barrido diario.
   gmail_sync_state: tenant(),
+  // Los adjuntos vistos, archivados o descartados (migración 0124). Tenant por
+  // lo mismo que los hilos: la fila nombra correspondencia de una empresa, y
+  // además dice el nombre del archivo, que a veces ya lo dice todo.
+  mail_attachment_ingests: tenant(),
 
   // --- Clients (migration 0075) ---------------------------------------------
   // The customer companies everything else hangs off, and the three tables that

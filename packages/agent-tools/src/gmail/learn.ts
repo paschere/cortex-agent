@@ -1,6 +1,7 @@
 import type { Logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MailHeader } from '../inbox/filters';
+import { fetchGmailAttachment } from './attachments';
 import type { GmailFetchContext } from './client';
 import { type ThreadIngestOutcome, ingestThread } from './ingest-thread';
 import {
@@ -69,10 +70,24 @@ export interface IngestTally {
   internal: number;
   empty: number;
   failed: number;
+  /**
+   * Adjuntos archivados como documento propio, sumando toda la tanda (0124).
+   * Aparte de `imported` porque no son hilos: una tanda puede no traer ningún
+   * hilo nuevo y sí tres contratos que nunca habían entrado.
+   */
+  attachments: number;
 }
 
 function emptyTally(): IngestTally {
-  return { imported: 0, updated: 0, unchanged: 0, internal: 0, empty: 0, failed: 0 };
+  return {
+    imported: 0,
+    updated: 0,
+    unchanged: 0,
+    internal: 0,
+    empty: 0,
+    failed: 0,
+    attachments: 0,
+  };
 }
 
 /**
@@ -115,8 +130,13 @@ export async function ingestThreads(
         logger: ctx.logger,
       },
       { threadId, spaceId: input.spaceId, messages },
+      // La carga histórica y el barrido diario traen también los adjuntos: es
+      // donde de verdad está el contrato del que habla el correo (0124).
+      { fetchAttachment: (messageId, attachmentId) =>
+          fetchGmailAttachment(ctx, messageId, attachmentId) },
     );
     tally[result.outcome] += 1;
+    tally.attachments += result.attachments.archived;
 
     if (result.outcome === 'imported' || result.outcome === 'updated') {
       const last = messages[messages.length - 1];

@@ -22,6 +22,35 @@ y cómo se apaga.
 
 ---
 
+## Lo que venía adjunto
+
+Desde la migración 0124, **los archivos que trae el correo entran también** —
+cada uno como su propio documento del cerebro, colgado del hilo que lo trajo.
+Antes quedaba archivada la frase «te adjunto el contrato» y no el contrato.
+
+| Entra | No entra |
+|---|---|
+| PDF, DOCX, TXT, MD, CSV | Todo lo demás (hojas de cálculo, .zip, vídeo…) |
+| Hasta 25 MB | Más de 25 MB |
+| Adjuntos de verdad | Firmas, logos incrustados, `.ics`, `.vcf`, `smime.p7s` |
+
+Un adjunto **descartado también deja constancia**, con el motivo, en
+`mail_attachment_ingests`. Sin eso el barrido volvería a descargarse el mismo
+vídeo de 30 MB cada mañana para volver a tirarlo — y nadie podría contestar «¿por
+qué no está la propuesta que me mandaron?».
+
+Un PDF escaneado sin capa de texto se anota como *«no tiene texto dentro (puede
+ser un escaneo sin OCR)»*: no es un fallo, es algo que hoy no se sabe leer.
+
+El **archivo original se guarda**, no sólo su texto, así que se puede abrir,
+descargar y volver a extraer el día que haya un parser mejor. El mismo archivo
+reenviado tres veces es **un** documento: se de-duplica por `sha256` dentro del
+espacio.
+
+Lo mismo vale para Outlook, con el mismo código (`mail/attachments.ts`).
+
+---
+
 ## Qué correo entra, y dónde queda
 
 | Destino | Qué entra | Quién lo puede buscar |
@@ -80,6 +109,8 @@ documento corta antes de gastar un embedding.
 | Tablas | `gmail_sync_state` (un buzón, su puntero y su cursor), `gmail_thread_ingests` (un hilo archivado, su documento y su hash) |
 | Migraciones | `0121_gmail_brain.sql`, `0122_gmail_index.sql` |
 | La ingesta | `packages/agent-tools/src/gmail/ingest-thread.ts` |
+| Los adjuntos | `packages/agent-tools/src/mail/attachments.ts` (compartido con Outlook), `gmail/attachments.ts`, `outlook/attachments.ts` |
+| El libro de adjuntos | `mail_attachment_ingests` (migración 0124) |
 | La carga y el barrido | `packages/agent-tools/src/gmail/learn.ts` |
 | Qué se propone | `packages/agent-tools/src/gmail/propose-replies.ts` |
 | Los trabajos | `apps/web/inngest/functions/gmail-learn.ts` (`gmail/backfill.user`, `gmail/sweep`, `gmail/sweep.user`) |

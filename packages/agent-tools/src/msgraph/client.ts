@@ -202,6 +202,8 @@ export interface GraphRecipient {
 
 export interface GraphMessage {
   id: string;
+  /** Si trae algo colgando. Es lo que evita una llamada por mensaje (0124). */
+  hasAttachments?: boolean;
   conversationId?: string;
   internetMessageId?: string;
   subject?: string | null;
@@ -261,4 +263,4 @@ export function searchTerm(value: string): string {
 
 /** The `$select` every mail read uses. Narrow on purpose: less over the wire. */
 export const MESSAGE_SELECT =
-  'id,conversationId,internetMessageId,subject,bodyPreview,receivedDateTime,sentDateTime,webLink,isDraft,from,toRecipients,ccRecipients';
+  'id,conversationId,internetMessageId,subject,bodyPreview,receivedDateTime,sentDateTime,webLink,isDraft,hasAttachments,from,toRecipients,ccRecipients';

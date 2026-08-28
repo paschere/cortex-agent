@@ -13,7 +13,12 @@ import type { MailHeader } from '../inbox/filters';
 
 export type MimePart = {
   mimeType?: string;
-  body?: { data?: string; size?: number };
+  /**
+   * `attachmentId` está aquí desde que los adjuntos entran al cerebro (0124):
+   * es el asa con la que se piden los bytes de esta parte, y sólo viene cuando
+   * el contenido NO está en línea.
+   */
+  body?: { data?: string; size?: number; attachmentId?: string };
   parts?: MimePart[];
   filename?: string;
   headers?: MailHeader[];
@@ -95,4 +100,46 @@ export function stripQuotedReply(text: string): string {
   // Un mensaje que sólo era cita se queda como estaba: perder el texto entero
   // es peor que guardarlo repetido.
   return kept.trim().length > 0 ? kept : text.trimEnd();
+}
+
+/**
+ * Los adjuntos del árbol MIME, sin bajarse ni un byte.
+ *
+ * Gmail no devuelve el contenido de un adjunto dentro del mensaje: devuelve la
+ * PARTE, con su nombre, su tipo, su tamaño y un `attachmentId` con el que se
+ * pide aparte. Eso es exactamente lo que hace falta para decidir si merece la
+ * pena pedirlo, que es todo el sentido de enumerarlos antes de descargarlos.
+ *
+ * QUÉ CUENTA COMO ADJUNTO, aquí: una parte con nombre de archivo. Sin nombre es
+ * el cuerpo del mensaje en alguna de sus versiones, y con nombre pero sin
+ * `attachmentId` es una parte incrustada cuyo contenido ya venía en línea —
+ * típicamente el logo de una firma. Las dos se dejan pasar hacia el filtro de
+ * `mail/attachments.ts`, que es quien decide; esto sólo LEE el árbol, y una
+ * función que lee un árbol no debería además tener opiniones.
+ */
+export type RawAttachment = {
+  key: string | null;
+  filename: string;
+  mime: string;
+  sizeBytes: number;
+};
+
+export function collectAttachments(payload: MimePart | undefined): RawAttachment[] {
+  const out: RawAttachment[] = [];
+  walk(payload, out);
+  return out;
+}
+
+function walk(part: MimePart | undefined, out: RawAttachment[]): void {
+  if (!part) return;
+  const filename = (part.filename ?? '').trim();
+  if (filename) {
+    out.push({
+      key: (part.body as { attachmentId?: string } | undefined)?.attachmentId ?? null,
+      filename,
+      mime: part.mimeType ?? '',
+      sizeBytes: part.body?.size ?? 0,
+    });
+  }
+  for (const child of part.parts ?? []) walk(child, out);
 }

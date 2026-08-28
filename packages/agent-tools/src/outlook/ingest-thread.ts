@@ -5,6 +5,7 @@ import { approxTokens } from '../kb/chunker';
 import { embedDocuments } from '../kb/embedder';
 import { recordEmbeddingUsage } from '../kb/embedding-usage';
 import { assertCanWriteToSpace } from '../kb/spaces';
+import { type MailAttachmentRef, ingestAttachments } from '../mail/attachments';
 import type { SpeechTurn } from '../kb/transcribe';
 import { chunkTranscript } from '../kb/transcript-chunker';
 import {
@@ -89,6 +90,12 @@ export type ThreadIngestOutcome =
 
 export interface ThreadIngestResult {
   outcome: ThreadIngestOutcome;
+  /**
+   * What was hanging off the thread. Counted apart from the thread because they
+   * are separate documents: a thread can come back 'unchanged' and still bring a
+   * contract that was never archived.
+   */
+  attachments: { archived: number; skipped: number; failed: number };
   /** One sentence a person (or a model) can act on. Never a stack trace. */
   note: string;
   conversationId: string;
@@ -276,6 +283,19 @@ async function findLedger(db: SupabaseClient, conversationId: string): Promise<L
 
 export interface IngestThreadOptions {
   timeZone?: string;
+  /**
+   * Cómo enumerar y bajar los adjuntos de un mensaje. Opcional, y su ausencia
+   * SIGNIFICA algo: sin esto el hilo entra como entraba antes de la 0124, sólo
+   * texto. Mismo trato que en `gmail/ingest-thread.ts`, y por el mismo motivo:
+   * esta función recibe los mensajes ya leídos para poder ejercitarse sin Graph
+   * de por medio, y una dependencia de red en el contexto rompería eso.
+   */
+  attachments?: {
+    list: (messageId: string) => Promise<
+      Array<{ key: string | null; filename: string; mime: string; sizeBytes: number }>
+    >;
+    fetch: (messageId: string, attachmentId: string) => Promise<Buffer>;
+  };
 }
 
 /**
@@ -305,6 +325,7 @@ export async function ingestThread(
     participants,
     counterpartDomain: null as string | null,
     clientId: null as string | null,
+    attachments: { archived: 0, skipped: 0, failed: 0 },
   };
 
   if (audience.undecidable) {
@@ -408,10 +429,23 @@ export async function ingestThread(
   }
 
   if (documentId && currentSha === sha256) {
+    // The text did not change, but an attachment may never have entered — it was
+    // archived before 0124, or that day's download failed. One ledger lookup per
+    // attachment, and it is the difference between the contract getting in one
+    // day and never getting in at all.
+    const attachments = await archiveAttachments(ctx, input, opts, {
+      messages,
+      subject,
+      documentId,
+    });
     return {
       ...base,
+      attachments,
       outcome: 'unchanged',
-      note: 'That thread was already archived and has not changed since, so nothing was re-indexed.',
+      note:
+        attachments.archived > 0
+          ? `That thread was already archived and has not changed, but it carried ${attachments.archived} attachment${attachments.archived === 1 ? '' : 's'} that were not in the brain yet. They are now.`
+          : 'That thread was already archived and has not changed since, so nothing was re-indexed.',
       documentId,
       chunks: 0,
       messages: messages.length,
@@ -519,9 +553,16 @@ export async function ingestThread(
       error: embedded.ok ? null : embedded.reason,
     });
 
+    const attachments = await archiveAttachments(ctx, input, opts, {
+      messages,
+      subject,
+      documentId,
+    });
+
     const outcome: ThreadIngestOutcome = ledger?.document_id ? 'updated' : 'imported';
     return {
       ...base,
+      attachments,
       outcome,
       note: embedded.ok
         ? `${outcome === 'updated' ? 'Refreshed' : 'Saved'} ${messages.length} message${messages.length === 1 ? '' : 's'} from "${subject}" as one thread: ${chunks.length} searchable passages, each tagged with who wrote it and when.${clientId ? ' Linked to the client that owns that domain.' : ''}`
@@ -635,4 +676,69 @@ async function recordIngest(
 /** Addresses on a message, for callers that only hold one. */
 export function messageAddresses(m: GraphMessage): string[] {
   return addressesOf(m.from ?? m.sender, m.toRecipients, m.ccRecipients);
+}
+
+/**
+ * The thread's attachments, when the caller said how to reach them.
+ *
+ * Outside `ingestThread` and never throwing, for the same reason as its Gmail
+ * twin: a corrupt PDF must not take down correspondence that is already safely
+ * archived.
+ */
+async function archiveAttachments(
+  ctx: OutlookIngestContext,
+  input: { conversationId: string; spaceId: string },
+  opts: IngestThreadOptions,
+  thread: { messages: GraphMessage[]; subject: string; documentId: string | null },
+): Promise<{ archived: number; skipped: number; failed: number }> {
+  const provider = opts.attachments;
+  if (!provider) return { archived: 0, skipped: 0, failed: 0 };
+
+  // Only the messages that say they carry something. Without this filter it is
+  // one Graph call per message in the thread, nearly all of them to be told the
+  // list is empty.
+  const carriers = thread.messages.filter((m) => m.hasAttachments === true);
+  if (carriers.length === 0) return { archived: 0, skipped: 0, failed: 0 };
+
+  const refs: MailAttachmentRef[] = [];
+  for (const m of carriers) {
+    try {
+      const listed = await provider.list(m.id);
+      for (const a of listed) {
+        refs.push({
+          key: a.key,
+          filename: a.filename,
+          mime: a.mime,
+          sizeBytes: a.sizeBytes,
+          messageId: m.id,
+          ms: momentMs(m),
+        });
+      }
+    } catch (err) {
+      // One message whose attachment list cannot be read is one message, not a
+      // failed thread.
+      ctx.logger.warn(
+        { err, message: m.id, thread: input.conversationId },
+        'outlook: could not list a message’s attachments',
+      );
+    }
+  }
+  if (refs.length === 0) return { archived: 0, skipped: 0, failed: 0 };
+
+  const result = await ingestAttachments(
+    { organizationId: ctx.organizationId, userId: ctx.userId, db: ctx.db, logger: ctx.logger },
+    {
+      provider: 'outlook',
+      threadId: input.conversationId,
+      spaceId: input.spaceId,
+      parentDocumentId: thread.documentId,
+      subject: thread.subject,
+      attachments: refs,
+      fetchBytes: async (ref) => {
+        if (!ref.key) throw new Error('that attachment came without an id to fetch it by');
+        return provider.fetch(ref.messageId, ref.key);
+      },
+    },
+  );
+  return { archived: result.archived, skipped: result.skipped, failed: result.failed };
 }
