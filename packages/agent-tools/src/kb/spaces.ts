@@ -789,13 +789,18 @@ export async function grantSpaceAccess(
 
   const subjectId = subject.kind === 'everyone' ? null : (subject.id ?? null);
 
-  const existing = await db
+  // `.is(col, null)` y `.eq(col, valor)` son filtros distintos en PostgREST, y un
+  // `eq` contra null no compara: no devuelve nada. Se ramifica en vez de pasar
+  // el operador por variable, porque el fallo de equivocarse aquí es silencioso
+  // y consiste en duplicar la concesión de «toda la empresa».
+  const lookup = db
     .from('kb_space_grants')
     .select('id')
     .eq('space_id', spaceId)
-    .eq('subject_kind', subject.kind)
-    .filter('subject_id', subjectId === null ? 'is' : 'eq', subjectId === null ? null : subjectId)
-    .maybeSingle();
+    .eq('subject_kind', subject.kind);
+  const existing = await (
+    subjectId === null ? lookup.is('subject_id', null) : lookup.eq('subject_id', subjectId)
+  ).maybeSingle();
   if (existing.error) throw existing.error;
 
   if (existing.data) {
@@ -833,11 +838,15 @@ export async function revokeSpaceAccess(
   if (subject.kind !== 'everyone' && !subjectId) {
     throw new ValidationError('Falta decir a quién.');
   }
-  const { error } = await db
+  const target = db
     .from('kb_space_grants')
     .delete()
     .eq('space_id', spaceId)
-    .eq('subject_kind', subject.kind)
-    .filter('subject_id', subjectId === null ? 'is' : 'eq', subjectId === null ? null : subjectId);
+    .eq('subject_kind', subject.kind);
+  // Mismo cuidado que al conceder: con null hay que usar `is`, y un `eq` contra
+  // null no borraría nada y lo diría como éxito.
+  const { error } = await (
+    subjectId === null ? target.is('subject_id', null) : target.eq('subject_id', subjectId)
+  );
   if (error) throw error;
 }

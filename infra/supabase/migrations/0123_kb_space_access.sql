@@ -267,8 +267,18 @@ returns trigger
 language plpgsql
 as $$
 declare
-  target uuid := coalesce(new.space_id, old.space_id);
+  target uuid;
 begin
+  -- Se mira TG_OP en vez de un coalesce sobre las dos filas: en un disparador de
+  -- DELETE la fila `new` no está asignada, y leerle un campo no devuelve nulo,
+  -- levanta una excepción. El coalesce parece más corto y sólo funciona en dos
+  -- de los tres casos.
+  if tg_op = 'DELETE' then
+    target := old.space_id;
+  else
+    target := new.space_id;
+  end if;
+
   update public.kb_collections c
   set everyone = exists (
         select 1 from public.kb_space_grants g

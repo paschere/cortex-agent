@@ -375,7 +375,6 @@ async function ingestOne(
         title: titleOf(ref.filename, input.subject),
         mime: verdict.mime,
         sha256,
-        pages: pages ?? null,
         uploaded_by: ctx.userId,
         status: 'pending',
         error_message: null,
@@ -403,6 +402,8 @@ async function ingestOne(
         // se conserva igual y se busca por palabra.
         embedding: embedded.ok ? embedded.data[i] : null,
         embedding_model: embedded.ok ? embedded.usage.modelId : null,
+        // `{pages}` va en el trozo y no en el documento: es donde vive desde la
+        // 0003 y es lo que una cita necesita para decir «página 4».
         metadata: pages ? { pages } : {},
       })),
     );

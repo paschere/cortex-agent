@@ -175,10 +175,12 @@ as $$
     join public.kb_documents d on d.id = ch.document_id
     cross join q
     where d.collection_id in (select id from targets)
-      -- Una pregunta que se queda en nada después de quitarle las palabras
-      -- vacías («¿y eso?») produce una tsquery vacía, que no casa con nada. Es
-      -- lo correcto: el arm semántico sigue contestando.
-      and q.tsq is not null
+      -- Una pregunta que se queda en nada al quitarle las palabras vacías
+      -- («¿y eso?») produce una tsquery VACÍA — no nula — que no casa con
+      -- ninguna fila. Se descarta explícitamente para no recorrer el índice
+      -- buscando algo que por construcción no está, y porque el comportamiento
+      -- correcto ya lo da el otro arm: el significado sigue contestando.
+      and q.tsq::text <> ''
       and to_tsvector('public.es_unaccent', ch.content) @@ q.tsq
     order by fts_score desc
     limit p_limit * 4
