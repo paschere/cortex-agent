@@ -5,9 +5,9 @@ import { approxTokens } from '../kb/chunker';
 import { embedDocuments } from '../kb/embedder';
 import { recordEmbeddingUsage } from '../kb/embedding-usage';
 import { type SpaceKind, assertCanWriteToSpace } from '../kb/spaces';
-import { type MailAttachmentRef, ingestAttachments } from '../mail/attachments';
 import type { SpeechTurn } from '../kb/transcribe';
 import { chunkTranscript } from '../kb/transcript-chunker';
+import { type MailAttachmentRef, ingestAttachments } from '../mail/attachments';
 import {
   type ThreadAudience,
   classifyAudience,

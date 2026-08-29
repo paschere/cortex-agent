@@ -33,7 +33,7 @@ import {
 export const kbShareSpace = registerTool({
   id: 'kb.share_space',
   description:
-    "Change who can reach one Brain Knowledge space, by name. Use it when somebody asks to give — or take away — access to a space: \"que Comercial vea Tarifas\", \"deja que Ana guarde ahí\", \"quítale el acceso a Finanzas\", \"que esto no lo vea toda la empresa\". " +
+    'Change who can reach one Brain Knowledge space, by name. Use it when somebody asks to give — or take away — access to a space: "que Comercial vea Tarifas", "deja que Ana guarde ahí", "quítale el acceso a Finanzas", "que esto no lo vea toda la empresa". ' +
     "`subject` is a TEAM name, a PERSON's name or email, or the word \"everyone\" for the whole company. `level` is 'view' (search and read), 'contribute' (also save documents there) or 'admin' (also decide who else gets in). Pass `remove: true` to take the access away instead. " +
     'You must administer the space to do this — check `can` in kb.list_spaces first, and if it is not "admin", say who they should ask instead of trying. A personal notebook can be lent (view or contribute) but never opened to the whole company and never delegated. ' +
     'Say out loud what changed and for whom: an access change nobody announced is one nobody can undo.',
@@ -105,8 +105,7 @@ export const kbShareSpace = registerTool({
         (people.data ?? []) as Array<{ id: string; name: string | null; email: string }>
       ).find(
         (p) =>
-          p.email.trim().toLowerCase() === wanted ||
-          (p.name ?? '').trim().toLowerCase() === wanted,
+          p.email.trim().toLowerCase() === wanted || (p.name ?? '').trim().toLowerCase() === wanted,
       );
 
       // Un equipo y una persona con el mismo nombre es raro y no se adivina: dar

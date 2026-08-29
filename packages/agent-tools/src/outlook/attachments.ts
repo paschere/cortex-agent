@@ -1,5 +1,5 @@
-import type { ToolContext } from '../types';
 import { graphFetch } from '../msgraph/client';
+import type { ToolContext } from '../types';
 
 /**
  * Los adjuntos de un mensaje de Outlook.
@@ -39,21 +39,23 @@ export async function listOutlookAttachments(
     ctx,
     `/me/messages/${encodeURIComponent(messageId)}/attachments?$select=id,name,contentType,size,isInline`,
   );
-  return (res?.value ?? [])
-    // Un `itemAttachment` es otro correo o una cita pegada dentro, y un
-    // `referenceAttachment` es un enlace a OneDrive sin bytes detrás. Ninguno de
-    // los dos es un archivo que se pueda abrir aquí, y tratarlos como si lo
-    // fueran produce una descarga que falla todos los días.
-    .filter((a) => (a['@odata.type'] ?? '').includes('fileAttachment'))
-    // Incrustado quiere decir que va dentro del cuerpo: la firma, el logo, la
-    // imagen pegada en mitad del texto. Nunca es el contrato.
-    .filter((a) => a.isInline !== true)
-    .map((a) => ({
-      key: a.id ?? null,
-      filename: (a.name ?? '').trim(),
-      mime: a.contentType ?? '',
-      sizeBytes: a.size ?? 0,
-    }));
+  return (
+    (res?.value ?? [])
+      // Un `itemAttachment` es otro correo o una cita pegada dentro, y un
+      // `referenceAttachment` es un enlace a OneDrive sin bytes detrás. Ninguno de
+      // los dos es un archivo que se pueda abrir aquí, y tratarlos como si lo
+      // fueran produce una descarga que falla todos los días.
+      .filter((a) => (a['@odata.type'] ?? '').includes('fileAttachment'))
+      // Incrustado quiere decir que va dentro del cuerpo: la firma, el logo, la
+      // imagen pegada en mitad del texto. Nunca es el contrato.
+      .filter((a) => a.isInline !== true)
+      .map((a) => ({
+        key: a.id ?? null,
+        filename: (a.name ?? '').trim(),
+        mime: a.contentType ?? '',
+        sizeBytes: a.size ?? 0,
+      }))
+  );
 }
 
 /**

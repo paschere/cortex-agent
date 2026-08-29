@@ -2,8 +2,8 @@ import { NotFoundError, ValidationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { ensurePersonalSpace, resolveSpaceByName } from '../kb/spaces';
-import { fetchOutlookAttachment, listOutlookAttachments } from './attachments';
 import { GRAPH_SCOPES } from '../msgraph/client';
+import { fetchOutlookAttachment, listOutlookAttachments } from './attachments';
 import { ingestThread } from './ingest-thread';
 import { fetchConversation } from './threads';
 
@@ -84,8 +84,7 @@ export const outlookArchiveThread = registerTool({
       {
         attachments: {
           list: (messageId) => listOutlookAttachments(ctx, messageId),
-          fetch: (messageId, attachmentId) =>
-            fetchOutlookAttachment(ctx, messageId, attachmentId),
+          fetch: (messageId, attachmentId) => fetchOutlookAttachment(ctx, messageId, attachmentId),
         },
       },
     );

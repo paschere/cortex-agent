@@ -8,6 +8,7 @@ import { assessFreshness } from './freshness';
 import { assessCoverage, calibrationFor, rateHit } from './relevance';
 import { type SpaceHit, listVisibleSpaces, resolveSpaceByName, searchSpaces } from './spaces';
 import { chunkOffsetMs, formatOffset } from './transcript-chunker';
+import { widenExcerpts } from './widen';
 
 /**
  * How many fragments a caller gets when it does not say. Named rather than
@@ -194,6 +195,14 @@ export const kbSearch = registerTool({
       // memory bench — deliberately does not, so "fragments Cortex has never
       // used" keeps meaning what it says. See migration 0073.
       recordRetrieval: true,
+      // El segundo lector (kb/reranker.ts). Se enciende AQUÍ y no en
+      // `searchSpaces` porque ésta es la búsqueda que contesta a alguien: la
+      // caja de búsqueda de la página de Brain Knowledge y su banco de memoria
+      // miden la recuperación cruda a propósito y no deben pagar la llamada ni
+      // ver un orden distinto del que produce el índice.
+      secondReader: true,
+      logger: ctx.logger,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
       onDegraded: (reason) => {
         degraded = reason;
         ctx.logger.warn({ reason }, 'kb.search fell back to keyword-only retrieval');
@@ -261,6 +270,20 @@ export const kbSearch = registerTool({
     }
 
     const now = new Date();
+
+    // Los bordes de los vecinos, pegados DESPUÉS del corte y del suelo: esto no
+    // cambia qué se recupera ni cómo se puntúa, sólo evita entregar media
+    // cláusula. Ver kb/widen.ts.
+    const widened = await widenExcerpts(
+      ctx.db,
+      verdict.kept.map(({ hit }) => ({
+        documentId: hit.documentId,
+        chunkIndex: hit.chunkIndex,
+        content: hit.content,
+        metadata: hit.metadata,
+      })),
+    );
+
     const hits = verdict.kept.map(({ hit, relevance }) => {
       const offsetMs = chunkOffsetMs(hit.metadata);
       const spokenAt = offsetMs === null ? undefined : formatOffset(offsetMs);
@@ -276,7 +299,7 @@ export const kbSearch = registerTool({
         space: hit.spaceName,
         spaceKind: hit.spaceKind,
         chunkIndex: hit.chunkIndex,
-        content: hit.content,
+        content: widened.get(`${hit.documentId}#${hit.chunkIndex}`) ?? hit.content,
         score: hit.score,
         relevance,
         ...(freshness.label ? { age: freshness.label } : {}),

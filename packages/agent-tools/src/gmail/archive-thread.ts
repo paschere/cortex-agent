@@ -80,8 +80,10 @@ export const gmailArchiveThread = registerTool({
       // Con esto, lo que venía colgando del hilo —el contrato, la propuesta, el
       // pliego— entra al cerebro como documento propio y no como la frase «te
       // adjunto el contrato». Ver mail/attachments.ts.
-      { fetchAttachment: (messageId, attachmentId) =>
-          fetchGmailAttachment(ctx, messageId, attachmentId) },
+      {
+        fetchAttachment: (messageId, attachmentId) =>
+          fetchGmailAttachment(ctx, messageId, attachmentId),
+      },
     );
 
     return {

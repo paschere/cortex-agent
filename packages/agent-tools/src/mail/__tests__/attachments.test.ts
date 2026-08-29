@@ -153,10 +153,16 @@ describe('ingestAttachments', () => {
 
   it('anota lo descartado con su motivo, para no volver a bajarlo mañana', async () => {
     const { tables, db } = world();
-    const fetchBytes = vi.fn(async () => Buffer.from('x'));
+    // `Buffer.alloc` y no un `Buffer` construido desde una cadena corta: el
+    // escáner de tenancy/__tests__/registry.test.ts lee cualquier `.from('…')`
+    // como el nombre de una tabla, incluso dentro de un comentario.
+    const fetchBytes = vi.fn(async () => Buffer.alloc(8));
     const res = await ingestAttachments(
       { organizationId: ORG, userId: ANA, db, logger: silentLogger },
-      input([ref({ filename: 'demo.mp4', mime: 'video/mp4', sizeBytes: 40 * 1024 * 1024 })], fetchBytes),
+      input(
+        [ref({ filename: 'demo.mp4', mime: 'video/mp4', sizeBytes: 40 * 1024 * 1024 })],
+        fetchBytes,
+      ),
     );
 
     expect(res.skipped).toBe(1);
@@ -185,9 +191,7 @@ describe('ingestAttachments', () => {
     expect(tables.kb_documents?.filter((d) => d.id !== THREAD_DOC)).toHaveLength(1);
     const row = (tables.mail_attachment_ingests ?? []).find((r) => r.thread_id === 'thread-2');
     expect(row?.status).toBe('ready');
-    expect(row?.document_id).toBe(
-      tables.kb_documents?.find((d) => d.id !== THREAD_DOC)?.id,
-    );
+    expect(row?.document_id).toBe(tables.kb_documents?.find((d) => d.id !== THREAD_DOC)?.id);
   });
 
   it('un adjunto que falla no se lleva por delante a los demás', async () => {

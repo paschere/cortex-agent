@@ -5,9 +5,9 @@ import { approxTokens } from '../kb/chunker';
 import { embedDocuments } from '../kb/embedder';
 import { recordEmbeddingUsage } from '../kb/embedding-usage';
 import { assertCanWriteToSpace } from '../kb/spaces';
-import { type MailAttachmentRef, ingestAttachments } from '../mail/attachments';
 import type { SpeechTurn } from '../kb/transcribe';
 import { chunkTranscript } from '../kb/transcript-chunker';
+import { type MailAttachmentRef, ingestAttachments } from '../mail/attachments';
 import {
   type ThreadAudience,
   classifyAudience,
@@ -291,9 +291,9 @@ export interface IngestThreadOptions {
    * de por medio, y una dependencia de red en el contexto rompería eso.
    */
   attachments?: {
-    list: (messageId: string) => Promise<
-      Array<{ key: string | null; filename: string; mime: string; sizeBytes: number }>
-    >;
+    list: (
+      messageId: string,
+    ) => Promise<Array<{ key: string | null; filename: string; mime: string; sizeBytes: number }>>;
     fetch: (messageId: string, attachmentId: string) => Promise<Buffer>;
   };
 }

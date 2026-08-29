@@ -1,6 +1,7 @@
-import { ForbiddenError, NotFoundError, ValidationError } from '@cortex/core';
+import { ForbiddenError, type Logger, NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { embedQuery } from './embedder';
+import { rerankByMeaning, rerankerAvailable } from './reranker';
 
 /**
  * The Brain Knowledge access boundary. Everything that reads or writes KB
@@ -437,6 +438,28 @@ export interface SearchSpacesOptions {
    * from moving a fragment across a relevance band. See learning/apply.ts.
    */
   rerank?: (hits: SpaceHit[]) => SpaceHit[];
+  /**
+   * Pasarle los candidatos a un segundo lector antes de cortar (ver
+   * `kb/reranker.ts`).
+   *
+   * QUÉ CAMBIA DE VERDAD. Con esto encendido la consulta pide MÁS filas de las
+   * que va a devolver —`CANDIDATE_FACTOR` veces más— y deja que el reordenador
+   * decida cuáles de ellas sobreviven al corte. Ése es todo el valor: sin la
+   * horquilla ancha, un reordenador sólo baraja lo que se iba a usar de todos
+   * modos y no puede cambiar QUÉ fragmentos ve el modelo, que es lo único que
+   * merece la pena cambiar. Es la misma lección que ya está escrita para
+   * `rerank`, aplicada a una horquilla mucho más ancha porque este lector es
+   * mucho mejor juez.
+   *
+   * Apagado por defecto. Cuesta una llamada de red por búsqueda, y hay dos
+   * llamadores que no deben pagarla: el banco de memoria de la página de Brain
+   * Knowledge, que mide la recuperación cruda a propósito, y cualquier barrido
+   * que busque en lote.
+   */
+  secondReader?: boolean;
+  /** Para poder decir que el segundo lector no corrió. Nunca para fallar. */
+  logger?: Logger;
+  signal?: AbortSignal;
 }
 
 /**
@@ -452,6 +475,20 @@ export interface SearchSpacesOptions {
 const RERANK_MARGIN = 3;
 
 /**
+ * Cuántos candidatos se traen cuando hay segundo lector, por cada resultado que
+ * se va a devolver.
+ *
+ * Cuatro es donde se cruzan dos costes. Por debajo, el reordenador apenas tiene
+ * de dónde elegir y su lectura se desperdicia; por encima, cada candidato es un
+ * pasaje más que Postgres ordena, que viaja, y que el reordenador lee y cobra —
+ * y el que estaba en el puesto treinta rara vez era la respuesta.
+ */
+const CANDIDATE_FACTOR = 4;
+
+/** Y un techo absoluto, para que un `limit` grande no dispare una llamada enorme. */
+const MAX_CANDIDATES = 40;
+
+/**
  * The single retrieval entry point. Embeds the query and hands the USER — not
  * a list of spaces — to Postgres, which decides what is searchable.
  *
@@ -462,7 +499,18 @@ const RERANK_MARGIN = 3;
  */
 export async function searchSpaces(
   db: SupabaseClient,
-  { userId, query, spaceIds, limit = 8, onDegraded, recordRetrieval, rerank }: SearchSpacesOptions,
+  {
+    userId,
+    query,
+    spaceIds,
+    limit = 8,
+    onDegraded,
+    recordRetrieval,
+    rerank,
+    secondReader,
+    logger,
+    signal,
+  }: SearchSpacesOptions,
 ): Promise<SpaceHit[]> {
   // A caller that has lost track of who it is asking for must retrieve
   // nothing, not everything.
@@ -477,13 +525,22 @@ export async function searchSpaces(
   const embedded = await embedQuery(query);
   if (!embedded.ok) onDegraded?.(embedded.reason);
 
+  // Con segundo lector se pide de más, porque de eso vive: ver más candidatos de
+  // los que caben para poder cambiar cuáles caben. Ver `secondReader`.
+  const deep = secondReader === true && rerankerAvailable();
+  const askFor = deep
+    ? Math.min(limit * CANDIDATE_FACTOR, MAX_CANDIDATES)
+    : rerank
+      ? limit + RERANK_MARGIN
+      : limit;
+
   const { data, error } = await db.rpc('kb_search_scoped', {
     p_user_id: userId,
     p_query_embedding: embedded.ok ? embedded.data : null,
     p_query_text: query,
     // The surplus exists only so a reranker has something to choose from, and
-    // it never leaves this function. See `rerank` above.
-    p_limit: rerank ? limit + RERANK_MARGIN : limit,
+    // it never leaves this function. See `rerank` and `secondReader` above.
+    p_limit: askFor,
     p_space_ids: spaceIds ?? null,
     // The vector and the model that produced it always travel together. A query
     // vector from voyage-4-lite scored against a chunk from voyage-3-large does
@@ -559,11 +616,29 @@ export async function searchSpaces(
   // an acceptable answer, and the loop that supplies this hook is an
   // improvement on retrieval, never a precondition for it.
   let ordered = mapped;
+
+  // PRIMERO EL SEGUNDO LECTOR, LUEGO LO APRENDIDO, y en ese orden a propósito.
+  // El lector juzga la pregunta contra el pasaje, que es una opinión general;
+  // lo aprendido es lo que ESTA empresa corrigió a mano sobre SU material, que
+  // es una opinión particular y más cara de conseguir. La particular va última
+  // porque la última es la que manda.
+  if (deep) {
+    ordered = await rerankByMeaning(query, ordered, (h) => h.content, {
+      ...(logger ? { logger } : {}),
+      ...(signal ? { signal } : {}),
+    });
+    // Se estrecha a lo que el reordenador de aprendizaje espera ver: su
+    // horquilla es de tres, no de cuarenta, y darle cuarenta convertiría un
+    // ajuste fino en una segunda búsqueda.
+    ordered = ordered.slice(0, rerank ? limit + RERANK_MARGIN : limit);
+  }
+
   if (rerank) {
+    const before = ordered;
     try {
-      ordered = rerank(mapped);
+      ordered = rerank(before);
     } catch {
-      ordered = mapped;
+      ordered = before;
     }
     ordered = ordered.slice(0, limit);
   }

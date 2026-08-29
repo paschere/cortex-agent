@@ -132,8 +132,10 @@ export async function ingestThreads(
       { threadId, spaceId: input.spaceId, messages },
       // La carga histórica y el barrido diario traen también los adjuntos: es
       // donde de verdad está el contrato del que habla el correo (0124).
-      { fetchAttachment: (messageId, attachmentId) =>
-          fetchGmailAttachment(ctx, messageId, attachmentId) },
+      {
+        fetchAttachment: (messageId, attachmentId) =>
+          fetchGmailAttachment(ctx, messageId, attachmentId),
+      },
     );
     tally[result.outcome] += 1;
     tally.attachments += result.attachments.archived;
