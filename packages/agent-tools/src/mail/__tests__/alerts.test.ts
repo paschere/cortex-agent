@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { planMailAlerts, withinQuietHours } from '../alerts';
-import { type AttentionThread, needsYourAttention } from '../attention';
+import { type AttentionThread, needsYourAttention, worthRemembering } from '../attention';
 
 const MAILBOX = 'ana@acme.com';
 
@@ -164,5 +164,47 @@ describe('withinQuietHours', () => {
   it('una franja que no se entiende no calla a nadie', () => {
     expect(withinQuietHours(oneAm, bogota, 'ayer', 'mañana')).toBe(true);
     expect(withinQuietHours(oneAm, 'Zona/Inventada', '07:00', '21:00')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Qué merece ser memoria
+// ---------------------------------------------------------------------------
+
+const human = {
+  from: 'jefe@coltrans.com',
+  labelIds: ['INBOX'],
+  headers: [] as { name: string; value: string }[],
+};
+const newsletter = {
+  from: 'news@marca.com',
+  labelIds: ['INBOX', 'CATEGORY_PROMOTIONS'],
+  headers: [{ name: 'List-Unsubscribe', value: '<mailto:baja@marca.com>' }],
+};
+
+describe('worthRemembering', () => {
+  it('un boletín no entra al cerebro', () => {
+    const verdict = worthRemembering([newsletter]);
+    expect(verdict.remember).toBe(false);
+    if (!verdict.remember) expect(verdict.reason).toBeTruthy();
+  });
+
+  it('una conversación con una persona sí', () => {
+    expect(worthRemembering([human]).remember).toBe(true);
+  });
+
+  it('si contestaste el boletín, el hilo se queda entero', () => {
+    // Es el caso que obliga a mirar el hilo y no el último mensaje: preguntar
+    // «¿cuánto vale el plan de arriba?» convierte una campaña en
+    // correspondencia, y el último en hablar suele volver a ser el robot.
+    expect(worthRemembering([newsletter, human, newsletter]).remember).toBe(true);
+  });
+
+  it('una campaña de doce mensajes sigue siendo una campaña', () => {
+    expect(worthRemembering(Array(12).fill(newsletter)).remember).toBe(false);
+  });
+
+  it('un hilo sin mensajes no es memoria', () => {
+    expect(worthRemembering([]).remember).toBe(false);
   });
 });

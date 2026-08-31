@@ -191,6 +191,13 @@ export async function listThreadPage(
  * remitente reconocible y sin asunto. `in:anywhere` para que entre también lo
  * archivado y lo que está en la papelera de otro año, que es donde vive la
  * mitad de un histórico real.
+ *
+ * `-in:spam` SÍ, y es la excepción a la frase anterior. Lo archivado y la
+ * papelera contienen correo real que alguien guardó o descartó; el spam es, por
+ * definición, lo que ya se juzgó que no era correspondencia. Traerlo para
+ * volver a juzgarlo con `worthRemembering` funcionaría, pero significa
+ * descargar miles de mensajes para tirarlos — y el filtro de Gmail acierta más
+ * que cualquier heurística que se escriba aquí.
  */
 export const BACKFILL_WINDOWS = {
   '1m': 30,
@@ -204,7 +211,7 @@ export type BackfillWindow = keyof typeof BACKFILL_WINDOWS;
 export function backfillQuery(window: BackfillWindow, now = new Date()): string {
   const days = BACKFILL_WINDOWS[window];
   const since = new Date(now.getTime() - days * 86_400_000);
-  return `in:anywhere -in:chats after:${gmailDate(since)}`;
+  return `in:anywhere -in:chats -in:spam after:${gmailDate(since)}`;
 }
 
 /** Gmail quiere `YYYY/MM/DD` y no ISO. */

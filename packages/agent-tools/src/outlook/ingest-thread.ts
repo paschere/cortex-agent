@@ -301,6 +301,18 @@ export interface IngestThreadOptions {
 /**
  * Fold one Outlook conversation into Brain Knowledge.
  *
+ * NO BULK FILTER HERE, AND THAT IS A GAP WITH A DATE ON IT. Gmail's ingest
+ * refuses newsletters and campaigns (`worthRemembering` in mail/attention.ts)
+ * because its backfill and sweep pull a whole mailbox unattended, and a whole
+ * mailbox is mostly campaigns. This path is still MANUAL — somebody asks for
+ * one named thread — so nothing floods in on its own, and the cost of the
+ * missing filter is one archived newsletter that a person chose to archive.
+ *
+ * The day Outlook gets its own sweep, the filter has to come with it, and it
+ * needs one thing this code does not fetch today: `internetMessageHeaders` in
+ * MESSAGE_SELECT. `List-Unsubscribe`, `Precedence` and `Auto-Submitted` are
+ * where the decision lives, and Graph does not return them unless asked.
+ *
  * Takes the messages rather than fetching them, so the tool, a future sweep and
  * the tests all drive the same code with no Graph in the way.
  */

@@ -71,3 +71,84 @@ export function needsYourAttention(thread: AttentionThread, mailbox: string): At
 
   return { needsYou: true, from };
 }
+
+/**
+ * ¿MERECE ESTE HILO SER MEMORIA?
+ *
+ * ===========================================================================
+ * EL ERROR QUE ESTO CORRIGE
+ * ===========================================================================
+ * Hasta aquí, archivar no filtraba NADA. La carga histórica pedía
+ * `in:anywhere` —correo, archivado, papelera y spam— y metía el buzón entero
+ * en el espacio personal, con el argumento de que «archivar es memoria y no
+ * molesta a nadie porque nadie más lo lee».
+ *
+ * Ese argumento es falso en tres sitios, y los tres se vieron el mismo día:
+ *
+ *   LA RECUPERACIÓN. Cada promoción es un documento más compitiendo en cada
+ *   búsqueda. Preguntas por una tarifa y pelea un correo de marketing que usa
+ *   la misma palabra.
+ *
+ *   EL DINERO. Cada hilo se trocea y se vectoriza. Un mes de buzón personal es
+ *   mayoritariamente campañas, y la cuenta de embeddings se agotó indexando
+ *   «50% de descuento este fin de semana».
+ *
+ *   LA CONFIANZA. El día que Cortex cite un boletín como si fuera conocimiento
+ *   de la empresa, deja de creérsele. Con razón.
+ *
+ * Y lo peor: el criterio ya existía. `classifyBulk` decide desde hace tiempo
+ * qué NO sale en el resumen diario. Estaba escrito, probado y en uso; sólo que
+ * nadie lo cruzó con la ingesta, porque las dos cosas se construyeron en
+ * momentos distintos.
+ *
+ * ===========================================================================
+ * LA REGLA: SE MIRA EL HILO ENTERO, NO EL ÚLTIMO MENSAJE
+ * ===========================================================================
+ * Un hilo se descarta sólo si NINGUNO de sus mensajes parece escrito por una
+ * persona. Basta con que uno lo parezca para archivarlo entero.
+ *
+ * Es la dirección segura, y la diferencia importa: contestarle a un boletín
+ * —«¿me pueden dar de baja de esto?», «¿cuánto vale el plan de arriba?»—
+ * convierte una campaña en correspondencia. Mirar sólo el último mensaje se
+ * equivocaría en los dos sentidos: descartaría ese hilo si el último en hablar
+ * fue el robot, y guardaría una campaña entera porque el primero de doce venía
+ * limpio.
+ *
+ * LO INTERNO NO SE TOCA AQUÍ. Un correo entre colegas no es basura: es el
+ * trabajo de esa persona, y en su cuaderno privado es exactamente lo que quiere
+ * que Cortex sepa. Quien decide si lo interno entra a un espacio COMPARTIDO es
+ * la regla de audiencia (`mail/audience.ts`), que no cambia.
+ *
+ * LO QUE SE DESCARTA NO SE PIERDE. Sigue en Gmail, y Cortex sabe buscarlo en
+ * vivo con `gmail.search` cuando alguien lo pida. La diferencia entre archivar
+ * y no archivar no es «tenerlo o no tenerlo»: es si vale la pena convertirlo en
+ * memoria permanente, con lo que eso cuesta en dinero y en ruido.
+ */
+export interface RememberableMessage {
+  from: string | null;
+  lastFrom?: string | null;
+  labelIds: string[];
+  headers: MailHeader[];
+}
+
+export type RememberVerdict =
+  | { remember: true }
+  /** `reason` está escrito para poder enseñárselo a una persona. */
+  | { remember: false; reason: string };
+
+export function worthRemembering(messages: RememberableMessage[]): RememberVerdict {
+  if (messages.length === 0) return { remember: false, reason: 'no traía ningún mensaje' };
+
+  let lastReason = 'es correo masivo, no correspondencia';
+  for (const m of messages) {
+    const verdict = classifyBulk({
+      headers: m.headers,
+      labelIds: m.labelIds,
+      from: parseAddress(m.lastFrom ?? m.from ?? ''),
+    });
+    // Uno solo que parezca humano salva el hilo entero.
+    if (!verdict.bulk) return { remember: true };
+    if (verdict.reason) lastReason = verdict.reason;
+  }
+  return { remember: false, reason: lastReason };
+}

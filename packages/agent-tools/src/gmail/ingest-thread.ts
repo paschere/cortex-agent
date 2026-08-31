@@ -8,6 +8,7 @@ import { type SpaceKind, assertCanWriteToSpace } from '../kb/spaces';
 import type { SpeechTurn } from '../kb/transcribe';
 import { chunkTranscript } from '../kb/transcript-chunker';
 import { type MailAttachmentRef, ingestAttachments } from '../mail/attachments';
+import { worthRemembering } from '../mail/attention';
 import {
   type ThreadAudience,
   classifyAudience,
@@ -89,6 +90,8 @@ export type ThreadIngestOutcome =
   | 'unchanged'
   /** Todos los del hilo trabajan aquí Y el destino era un espacio compartido. */
   | 'internal'
+  /** Es correo masivo: boletín, campaña, notificación de una plataforma. */
+  | 'bulk'
   /** No había nada que guardar (todos los mensajes venían vacíos). */
   | 'empty'
   /** Se leyó pero no se pudo guardar. Queda anotado para poder reintentar. */
@@ -347,6 +350,28 @@ export async function ingestThread(
       documentId: null,
       chunks: 0,
       messages: 0,
+    };
+  }
+
+  // LO QUE NO MERECE SER MEMORIA NO ENTRA, NI SIQUIERA AL CUADERNO PROPIO.
+  //
+  // Va ANTES que la regla de audiencia y antes de tocar un solo embedding,
+  // porque el coste que evita es justo ése. Y va aquí y no en la consulta de
+  // Gmail porque la consulta no ve las cabeceras: `List-Unsubscribe`,
+  // `Precedence: bulk` y la categoría con la que Gmail archivó el mensaje sólo
+  // existen cuando el mensaje ya está en la mano.
+  //
+  // Descartar no es perder: el correo sigue en Gmail y `gmail.search` lo
+  // encuentra en vivo el día que alguien pregunte. Ver mail/attention.ts.
+  const keep = worthRemembering(ordered);
+  if (!keep.remember) {
+    return {
+      ...base,
+      outcome: 'bulk',
+      note: `Ese hilo no se archivó porque ${keep.reason}. Sigue en tu buzón y lo puedo buscar ahí cuando lo necesites.`,
+      documentId: null,
+      chunks: 0,
+      messages: ordered.length,
     };
   }
 

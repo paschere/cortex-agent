@@ -98,6 +98,30 @@ interface PendingChunk {
  * los fija el manifiesto del worker.
  */
 export const reindexEmbeddingsJob: JobHandler = async ({ step }) => {
+  // EL FRENO DE MANO.
+  //
+  // Existe porque este trabajo es el único que puede gastar mucho dinero solo,
+  // cada quince minutos, sin que nadie lo pida — y el día que hace falta pararlo
+  // es siempre un día en el que no se quiere desplegar código a las prisas. Con
+  // `KB_REINDEX_PAUSED` puesto en el entorno se apaga en el siguiente ciclo, y
+  // se vuelve a encender quitándola: ninguna de las dos cosas necesita un
+  // despliegue.
+  //
+  // POR QUÉ EXISTE DE VERDAD. Un barrido de correo sin filtrar metió cientos de
+  // boletines al cerebro y agotó el cupo de embeddings. Al arreglar el modelo,
+  // este trabajo habría vuelto a comprar vectores para toda esa basura antes de
+  // que a nadie le diera tiempo a borrarla — porque «no tiene vector» es
+  // exactamente su definición de trabajo pendiente. La pausa es lo que da
+  // tiempo a limpiar primero.
+  //
+  // NO PIERDE NADA: los trozos siguen guardados y buscables por palabra; lo
+  // único que se aplaza es comprarles el vector. Al reanudar, el pendiente es
+  // el mismo, porque el trabajo pendiente ES la fila.
+  if ((process.env.KB_REINDEX_PAUSED ?? '').trim()) {
+    logger.warn('kb-reindex: en pausa por KB_REINDEX_PAUSED; no se compra ningún embedding');
+    return { paused: true, embedded: 0, batches: 0 };
+  }
+
   const sb = getSupabaseServiceClient();
   const modelId = embeddingModelId();
 

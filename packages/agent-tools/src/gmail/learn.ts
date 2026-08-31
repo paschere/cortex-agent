@@ -68,6 +68,8 @@ export interface IngestTally {
   updated: number;
   unchanged: number;
   internal: number;
+  /** Descartados por ser correo masivo: boletines, campañas, plataformas. */
+  bulk: number;
   empty: number;
   failed: number;
   /**
@@ -84,6 +86,7 @@ function emptyTally(): IngestTally {
     updated: 0,
     unchanged: 0,
     internal: 0,
+    bulk: 0,
     empty: 0,
     failed: 0,
     attachments: 0,
