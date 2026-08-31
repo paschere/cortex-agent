@@ -528,3 +528,65 @@ export async function noteMailboxLearningStopped(
     'el aprendizaje del buzón',
   );
 }
+
+export interface MailWorthSeeingNote {
+  userId: string;
+  /** El hilo, para agrupar: un hilo suena una vez. */
+  threadId: string;
+  subject: string;
+  /** Quién escribió, ya legible. */
+  from: string;
+  /** Por qué esto no puede esperar al resumen. Sale de `mail/alerts.ts`. */
+  detail: string;
+  /** Enlace al hilo en el buzón. Es externo, así que va en el cuerpo. */
+  permalink: string | null;
+}
+
+/**
+ * Llegó al buzón algo que no puede esperar al resumen de mañana.
+ *
+ * ES LA EXCEPCIÓN A LA REGLA DE ESTE MÓDULO, y conviene decir por qué. Aquí
+ * está escrito que nada que sea una COLA se avisa: lo que sigue siendo verdad
+ * mañana vive en una pantalla con su contador. Un correo entrante ES una cola —
+ * la de siempre, la bandeja — y por eso durante todo este tiempo el barrido no
+ * avisó de nada.
+ *
+ * Lo que cambia con la 0126 no es la regla sino el sujeto: no se avisa de que
+ * llegó correo, se avisa de que llegó algo con un RELOJ ya corriendo — un
+ * compromiso con fecha, un cliente registrado esperando respuesta. Eso no es
+ * una cola, es un plazo, y un plazo del que uno se entera ocho horas después es
+ * un plazo del que se entera tarde.
+ *
+ * La grieta se mantiene estrecha fuera de aquí, y a propósito: `mail/alerts.ts`
+ * decide QUÉ, y los tres frenos de la 0126 —techo diario, franja horaria y una
+ * vez por hilo— deciden CUÁNTO. Este productor sólo escribe.
+ *
+ * SE AGRUPA POR HILO. Si llegan tres mensajes al mismo hilo antes de que nadie
+ * mire, es un aviso con su contador y no tres líneas iguales — que es
+ * exactamente cómo se aprende a no mirar la campana.
+ */
+export async function noteMailWorthSeeing(
+  db: SupabaseClient,
+  note: MailWorthSeeingNote,
+): Promise<void> {
+  if (!note.userId || !note.threadId) return;
+
+  const body = [note.detail, note.permalink ? `Abrirlo: ${note.permalink}` : null]
+    .filter(Boolean)
+    .join('\n');
+
+  await quietly(
+    db,
+    {
+      userId: note.userId,
+      kind: 'mail_worth_seeing',
+      title: short(note.subject?.trim() || `Correo de ${note.from}`, 120),
+      body,
+      // No hay href: el destino real está en Gmail y `safeHref` sólo admite
+      // rutas internas — con razón. El enlace va en el cuerpo, donde se ve y se
+      // puede copiar, en vez de inventar una pantalla intermedia que no aporta.
+      groupKey: `mail-worth-seeing:${note.threadId}`,
+    },
+    'un correo que merece verse',
+  );
+}

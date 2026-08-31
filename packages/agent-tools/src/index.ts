@@ -44,6 +44,16 @@ export * from './linear';
 // this package.
 export * from './learning';
 export * from './kb';
+// La regla de qué correo merece interrumpir a alguien, y a quién le toca un
+// hilo. Viven en `mail/` porque no dependen de quién sirve el buzón.
+export {
+  type AlertReason,
+  type MailAlert,
+  type PlanAlertsInput,
+  planMailAlerts,
+  withinQuietHours,
+} from './mail/alerts';
+export { type AttentionThread, needsYourAttention } from './mail/attention';
 // Arrepentirse de «sólo este chat». Va detrás de ./kb porque entra por la misma
 // puerta de ingesta y por la misma frontera de espacios.
 export * from './attachments';

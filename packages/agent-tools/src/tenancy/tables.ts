@@ -322,6 +322,10 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // lo mismo que los hilos: la fila nombra correspondencia de una empresa, y
   // además dice el nombre del archivo, que a veces ya lo dice todo.
   mail_attachment_ingests: tenant(),
+  // Los avisos de correo que se mandaron (migración 0126). Tenant: la fila
+  // nombra un hilo de correspondencia de una empresa y el motivo por el que
+  // interrumpió a alguien.
+  mail_alerts: tenant(),
 
   // --- Clients (migration 0075) ---------------------------------------------
   // The customer companies everything else hangs off, and the three tables that

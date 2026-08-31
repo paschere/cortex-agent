@@ -45,6 +45,16 @@ export const NOTIFICATION_KINDS = [
    * lo repite. Ver la 0100, sección 3.
    */
   'report_ready',
+  /**
+   * Llegó al buzón algo que no puede esperar al resumen de mañana: toca a un
+   * cliente, a un compromiso con fecha, o alguien de fuera está esperando.
+   *
+   * Es la única clase que NO habla de un desenlace de Cortex sino de un hecho
+   * del mundo, y la única con tres frenos propios — techo diario, franja
+   * horaria y una vez por hilo — porque es la única que puede sonar sola. Ver
+   * la migración 0126 y `mail/alerts.ts`.
+   */
+  'mail_worth_seeing',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -82,6 +92,9 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   // Ámbar y no verde: lo que cuenta no es que el informe exista, es que no
   // llegó a quien tenía que leerlo.
   report_ready: 'warning',
+  // Ámbar: no es una mala noticia, es una que no puede esperar. El verde diría
+  // «ya está resuelto» y esto es exactamente lo contrario.
+  mail_worth_seeing: 'warning',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -96,6 +109,7 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   action_sent: 'Acción',
   action_failed: 'Acción',
   report_ready: 'Informe',
+  mail_worth_seeing: 'Correo',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */

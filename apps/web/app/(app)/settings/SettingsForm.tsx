@@ -121,6 +121,10 @@ export function SettingsForm({
           deliverChatDm: prefs.deliverChatDm,
           digestFocus: prefs.digestFocus,
           weeklyReportEnabled: prefs.weeklyReportEnabled,
+          mailAlertsEnabled: prefs.mailAlertsEnabled,
+          mailAlertsMaxPerDay: prefs.mailAlertsMaxPerDay,
+          mailAlertsFrom: prefs.mailAlertsFrom,
+          mailAlertsTo: prefs.mailAlertsTo,
         }),
       });
       const json = (await res.json()) as {
@@ -518,6 +522,74 @@ export function SettingsForm({
         <div className="tabular mt-1 text-right text-micro text-ink-faint">
           {prefs.digestFocus.length}/600
         </div>
+      </Panel>
+
+      {/* ---- Avisos en el momento ------------------------------------------ */}
+      {/* FUERA DEL BLOQUE ATENUADO POR `on`, y es una decisión, no un descuido:
+          esto no es el resumen a otra hora, es lo contrario. El resumen se lee
+          cuando la persona quiere; esto suena cuando Cortex quiere. Por eso se
+          concede aparte, viene apagado, y trae sus dos frenos a la vista —
+          cuántos y entre qué horas— en la misma tarjeta donde se enciende: un
+          interruptor que puede interrumpirte no puede esconder su techo en otra
+          pantalla. */}
+      <Panel className="p-5">
+        <Toggle
+          checked={prefs.mailAlertsEnabled}
+          onChange={(v) => set('mailAlertsEnabled', v)}
+          label="Avisarme en el momento"
+          description="Cuando llegue al correo algo que no puede esperar al resumen — un cliente registrado esperando respuesta, o alguien con quien tienes un compromiso con fecha — Cortex te avisa en cuanto lo ve, no a la mañana siguiente."
+        />
+
+        <div
+          className={clsx(
+            'mt-4 grid gap-4 transition-opacity sm:grid-cols-3',
+            !prefs.mailAlertsEnabled && 'opacity-55',
+          )}
+        >
+          <label className="block">
+            <span className="text-micro font-semibold uppercase tracking-[0.12em] text-ink-faint">
+              Como mucho al día
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              value={prefs.mailAlertsMaxPerDay}
+              disabled={!prefs.mailAlertsEnabled}
+              onChange={(e) => set('mailAlertsMaxPerDay', Number(e.target.value))}
+              className={clsx(FIELD, 'tabular mt-1.5')}
+            />
+          </label>
+          <label className="block">
+            <span className="text-micro font-semibold uppercase tracking-[0.12em] text-ink-faint">
+              Desde
+            </span>
+            <input
+              type="time"
+              value={prefs.mailAlertsFrom}
+              disabled={!prefs.mailAlertsEnabled}
+              onChange={(e) => set('mailAlertsFrom', e.target.value)}
+              className={clsx(FIELD, 'tabular mt-1.5')}
+            />
+          </label>
+          <label className="block">
+            <span className="text-micro font-semibold uppercase tracking-[0.12em] text-ink-faint">
+              Hasta
+            </span>
+            <input
+              type="time"
+              value={prefs.mailAlertsTo}
+              disabled={!prefs.mailAlertsEnabled}
+              onChange={(e) => set('mailAlertsTo', e.target.value)}
+              className={clsx(FIELD, 'tabular mt-1.5')}
+            />
+          </label>
+        </div>
+
+        <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+          Un hilo te avisa una sola vez, y fuera de esas horas nada suena: el correo se guarda igual
+          y lo ves en el resumen. Las horas son las de tu zona ({prefs.timezone}).
+        </p>
       </Panel>
 
       {/* ---- El parte semanal ---------------------------------------------- */}

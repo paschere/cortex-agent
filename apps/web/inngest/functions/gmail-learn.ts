@@ -1,19 +1,24 @@
 import { buildToolContext } from '@/lib/agent';
 import { type JobHandler, enqueueJob } from '@/lib/jobs';
-import { noteMailboxLearningStopped } from '@/lib/notifications/producers';
+import { noteMailWorthSeeing, noteMailboxLearningStopped } from '@/lib/notifications/producers';
 import { mustRead, mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import {
   type ArchivedThread,
+  GMAIL_PERMALINK_PREFIX,
   type LearnContext,
+  MAX_PROPOSALS_PER_DAY,
   createIntegrationsClient,
   draftReply,
   getSyncState,
+  loadDigestPreferences,
   pauseOnLostAccess,
+  planMailAlerts,
   planReplyProposals,
   proposeAction,
   runBackfillBatch,
   runDailySweep,
+  withinQuietHours,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
 
@@ -57,8 +62,25 @@ import { logger } from '@cortex/core';
  * buzón.
  */
 
-/** Cada mañana a las 6:10 en Bogotá, antes de que nadie abra el correo. */
-export const GMAIL_SWEEP_CRON = '10 11 * * *';
+/**
+ * Cada diez minutos, y ya no cada mañana.
+ *
+ * ERA DIARIO (6:10 en Bogotá) porque lo único que hacía era archivar, y archivar
+ * puede esperar a mañana. Desde la 0126 este mismo barrido decide además de qué
+ * INTERRUMPIR, y un aviso que llega ocho horas tarde no es un aviso. Diez
+ * minutos y «al instante» son lo mismo para una persona; para Gmail son una
+ * llamada al historial por buzón, que devuelve vacío casi siempre y no cuesta
+ * cuota apreciable. El empuje de Gmail (Pub/Sub `users.watch`) daría segundos en
+ * vez de minutos y se monta encima de esto sin tirar nada: el cron seguiría
+ * siendo la red de seguridad de la que hoy es el único camino.
+ *
+ * LO QUE HUBO QUE MOVER AL CAMBIAR ESTO: el techo de propuestas de respuesta era
+ * «cinco por barrido», que con un barrido diario es cinco al día y con uno cada
+ * diez minutos son setecientas veinte. Ahora es un presupuesto de 24 horas que
+ * se calcula abajo. Un número que sólo era correcto por la cadencia es
+ * exactamente lo que se rompe al cambiarla.
+ */
+export const GMAIL_SWEEP_CRON = '*/10 * * * *';
 
 /**
  * Cuántas personas barre una ejecución del reparto. Un techo por si un día hay
@@ -198,7 +220,14 @@ export const gmailSweepUserJob: JobHandler = async ({ event, step }) => {
     return { skipped: swept?.skipped ?? 'acceso perdido' };
   }
 
-  // 2. De qué merece la pena proponer algo ---------------------------------
+  // 2. De qué hay que enterarse AHORA --------------------------------------
+  // Antes que proponer, y en su propio paso: un aviso llega tarde por minutos,
+  // un borrador no. Si el modelo que redacta se cae, la interrupción ya salió.
+  const alerted = await step.run('alert-worth-seeing', async () =>
+    alertForMailbox(organizationId, userId, swept.documents),
+  );
+
+  // 3. De qué merece la pena proponer algo ---------------------------------
   // Paso aparte a propósito, con la misma disciplina que `actions-sweep`: si el
   // modelo que redacta se cae, o la cuota se agota, eso no puede costarle a la
   // persona lo ya archivado, que es la parte irrecuperable.
@@ -210,6 +239,7 @@ export const gmailSweepUserJob: JobHandler = async ({ event, step }) => {
     via: swept.via,
     threads: swept.threads,
     capped: swept.capped,
+    alerted,
     proposed,
     ...swept.tally,
   };
@@ -256,10 +286,28 @@ async function proposeForMailbox(
   ) as { name: string | null } | null;
   const authorName = (me?.name ?? '').trim() || null;
 
+  // EL TECHO ES DE 24 HORAS, no de este barrido. Con el barrido corriendo cada
+  // diez minutos (0126), «cinco por barrido» serían setecientas veinte al día.
+  // Ventana móvil y no día natural, por lo mismo que en los avisos: un techo que
+  // se reinicia a medianoche deja pasar diez en veinte minutos.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const recent = mustReadList(
+    await db
+      .from('actions')
+      .select('id')
+      .eq('origin_kind', 'email_thread')
+      .gte('created_at', since)
+      .limit(MAX_PROPOSALS_PER_DAY + 1),
+    'las propuestas de correo de las últimas 24 horas',
+  ) as Array<{ id: string }>;
+  const budget = MAX_PROPOSALS_PER_DAY - recent.length;
+  if (budget <= 0) return 0;
+
   const candidates = planReplyProposals({
     threads: documents,
     mailbox: state.emailAddress,
     alreadyProposed,
+    budget,
   });
 
   let count = 0;
@@ -318,4 +366,151 @@ async function notifyLostAccess(organizationId: string, userId: string): Promise
   const db = getOrgScopedClient(organizationId);
   const state = await getSyncState(db, userId).catch(() => null);
   await noteMailboxLearningStopped(db, { userId, mailbox: state?.emailAddress ?? null });
+}
+
+/**
+ * DE QUÉ HAY QUE ENTERARSE AHORA.
+ *
+ * Todo lo que decide QUÉ está en `mail/alerts.ts`, que es una función pura y se
+ * puede auditar sin levantar un buzón. Aquí vive lo que esa función no puede
+ * saber: quién quiere que le interrumpan, a qué horas, cuántas veces ya se le
+ * interrumpió hoy, y qué dominios son de un cliente.
+ *
+ * NUNCA LANZA. Un aviso que no sale es un aviso que no sale; lo archivado —la
+ * parte irrecuperable— ya está guardado antes de llegar aquí, y perderlo por un
+ * fallo del directorio de clientes sería cambiar una molestia por una pérdida.
+ */
+async function alertForMailbox(
+  organizationId: string,
+  userId: string,
+  documents: ArchivedThread[],
+): Promise<number> {
+  if (documents.length === 0) return 0;
+
+  try {
+    const db = getOrgScopedClient(organizationId);
+
+    const prefs = await loadDigestPreferences(db, userId);
+    if (!prefs.mailAlertsEnabled || prefs.mailAlertsMaxPerDay <= 0) return 0;
+    // Fuera de la franja el correo no se pierde: se archivó igual y sale en el
+    // resumen. Lo único que no pasa es que suene a las tres de la mañana.
+    if (!withinQuietHours(new Date(), prefs.timezone, prefs.mailAlertsFrom, prefs.mailAlertsTo)) {
+      return 0;
+    }
+
+    const state = await getSyncState(db, userId);
+    if (!state?.emailAddress) return 0;
+
+    // Ventana móvil de 24 horas y no día natural: un techo que se reinicia a
+    // medianoche permite cinco a las 23:50 y cinco a las 00:10.
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const [recent, everAlerted, domains, commitments] = await Promise.all([
+      db
+        .from('mail_alerts')
+        .select('id')
+        .eq('user_id', userId)
+        .gte('notified_at', since)
+        .limit(prefs.mailAlertsMaxPerDay + 1),
+      // Sin ventana: un hilo interrumpe UNA vez, no una vez al día.
+      db
+        .from('mail_alerts')
+        .select('thread_id')
+        .eq('user_id', userId)
+        .limit(5000),
+      db.from('client_domains').select('domain, clients(name)').limit(2000),
+      db
+        .from('commitments')
+        .select('title, counterparty, due_on, state')
+        .in('state', ['due_soon', 'overdue'])
+        .limit(500),
+    ]);
+
+    // Una lectura que falla aquí NO se lee como vacía: creer que nadie ha sido
+    // avisado nunca es exactamente cómo se vuelve a avisar de todo.
+    if (recent.error || everAlerted.error) return 0;
+
+    const budget = prefs.mailAlertsMaxPerDay - (recent.data?.length ?? 0);
+    if (budget <= 0) return 0;
+
+    const alreadyAlerted = new Set(
+      ((everAlerted.data ?? []) as Array<{ thread_id: string }>).map((r) => r.thread_id),
+    );
+
+    // El directorio de clientes y los compromisos SÍ pueden faltar sin que pase
+    // nada: sin ellos quedan las razones más anchas, no ninguna.
+    const clientsByDomain = new Map<string, string>();
+    for (const row of (domains.data ?? []) as Array<{
+      domain: string;
+      clients: { name: string } | { name: string }[] | null;
+    }>) {
+      const client = Array.isArray(row.clients) ? row.clients[0] : row.clients;
+      const name = client?.name?.trim();
+      if (row.domain && name) clientsByDomain.set(row.domain.toLowerCase(), name);
+    }
+
+    const commitmentsByClient = new Map<string, { title: string; dueLabel: string }>();
+    for (const row of (commitments.data ?? []) as Array<{
+      title: string;
+      counterparty: string | null;
+      due_on: string;
+      state: string;
+    }>) {
+      const who = row.counterparty?.trim().toLowerCase();
+      if (!who) continue;
+      // El primero gana: la consulta no ordena, y de dos compromisos con el
+      // mismo cliente cualquiera de los dos justifica igual la interrupción.
+      if (commitmentsByClient.has(who)) continue;
+      commitmentsByClient.set(who, {
+        title: row.title,
+        dueLabel: row.state === 'overdue' ? `vencido el ${row.due_on}` : `para el ${row.due_on}`,
+      });
+    }
+
+    const alerts = planMailAlerts({
+      threads: documents,
+      mailbox: state.emailAddress,
+      alreadyAlerted,
+      clientsByDomain,
+      commitmentsByClient,
+      budget,
+    });
+
+    let sent = 0;
+    for (const alert of alerts) {
+      // La fila del libro PRIMERO. Si se escribiera después y el aviso saliera,
+      // un fallo aquí dejaría un hilo que puede volver a interrumpir mañana; al
+      // revés, lo peor que pasa es un hilo que no interrumpió nunca — que es el
+      // lado bueno de equivocarse cuando lo que está en juego es molestar.
+      const { error } = await db.from('mail_alerts').insert({
+        user_id: userId,
+        provider: 'gmail',
+        thread_id: alert.thread.threadId,
+        reason: alert.reason,
+        detail: alert.detail,
+        subject: alert.thread.subject,
+      });
+      // El índice único es la carrera perdida entre dos barridos solapados: si
+      // otro ya lo anotó, ya lo avisó.
+      if (error) continue;
+
+      await noteMailWorthSeeing(db, {
+        userId,
+        threadId: alert.thread.threadId,
+        subject: alert.thread.subject,
+        from: alert.thread.lastFrom ?? alert.from,
+        detail: alert.detail,
+        permalink: `${GMAIL_PERMALINK_PREFIX}${alert.thread.threadId}`,
+      });
+      sent += 1;
+    }
+
+    return sent;
+  } catch (err) {
+    logger.warn('gmail-sweep: no se pudo decidir de qué avisar', {
+      organizationId,
+      userId,
+      error: (err as Error).message,
+    });
+    return 0;
+  }
 }

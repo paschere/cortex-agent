@@ -32,6 +32,10 @@ function toView(
     deliverChatDm: p.deliverChatDm,
     digestFocus: p.digestFocus ?? '',
     weeklyReportEnabled: p.weeklyReportEnabled,
+    mailAlertsEnabled: p.mailAlertsEnabled,
+    mailAlertsMaxPerDay: p.mailAlertsMaxPerDay,
+    mailAlertsFrom: p.mailAlertsFrom,
+    mailAlertsTo: p.mailAlertsTo,
     email,
   };
 }
@@ -86,6 +90,10 @@ async function upsert(req: NextRequest) {
   if (p.deliverChatDm !== undefined) patch.deliver_chat_dm = p.deliverChatDm;
   if (p.digestFocus !== undefined) patch.digest_focus = p.digestFocus || null;
   if (p.weeklyReportEnabled !== undefined) patch.weekly_report_enabled = p.weeklyReportEnabled;
+  if (p.mailAlertsEnabled !== undefined) patch.mail_alerts_enabled = p.mailAlertsEnabled;
+  if (p.mailAlertsMaxPerDay !== undefined) patch.mail_alerts_max_per_day = p.mailAlertsMaxPerDay;
+  if (p.mailAlertsFrom !== undefined) patch.mail_alerts_from = p.mailAlertsFrom;
+  if (p.mailAlertsTo !== undefined) patch.mail_alerts_to = p.mailAlertsTo;
 
   const db = getOrgScopedClient(user.organization.id);
   const { data, error } = await db

@@ -78,6 +78,15 @@ export const PreferencesBody = z
      * aplicación. Ver la migración 0100, sección 4.
      */
     weeklyReportEnabled: z.boolean(),
+    /**
+     * Que Cortex INTERRUMPA cuando llegue al buzón algo que no puede esperar al
+     * resumen (migración 0126). Apagado por defecto y, a diferencia del resumen,
+     * sin canal que elegir: suena en la campana de la aplicación.
+     */
+    mailAlertsEnabled: z.boolean(),
+    mailAlertsMaxPerDay: z.number().int().min(0).max(20),
+    mailAlertsFrom: z.string().regex(HHMM, 'Usa una hora de 24 horas, como 07:00'),
+    mailAlertsTo: z.string().regex(HHMM, 'Usa una hora de 24 horas, como 21:00'),
   })
   .partial()
   .refine((b) => !b.chatWebhookUrl || isGoogleChatWebhookUrl(b.chatWebhookUrl), {
@@ -103,6 +112,10 @@ export interface PreferencesView {
   deliverChatDm: boolean;
   digestFocus: string;
   weeklyReportEnabled: boolean;
+  mailAlertsEnabled: boolean;
+  mailAlertsMaxPerDay: number;
+  mailAlertsFrom: string;
+  mailAlertsTo: string;
   /** The address the email digest would go to — shown, never edited here. */
   email: string;
 }

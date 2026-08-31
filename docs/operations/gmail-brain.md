@@ -12,13 +12,49 @@ y cómo se apaga.
 1. **La carga histórica.** Al encenderlo, se trae hasta un año de
    correspondencia y la convierte en documentos buscables del cerebro: cada hilo
    es un documento, con quién escribió cada mensaje y cuándo.
-2. **El barrido diario.** Cada mañana a las 6:10 (hora de Bogotá) lee lo que
-   entró desde el puntero del día anterior y lo archiva igual.
-3. **Lo que propone.** De ese correo nuevo, elige como mucho **cinco** hilos de
-   gente de fuera que están esperando respuesta y deja un borrador en
-   `/actions`, para que una persona lo apruebe, lo edite o lo descarte.
+2. **El barrido.** Cada diez minutos lee lo que entró desde el puntero anterior
+   y lo archiva igual.
+3. **Lo que propone.** De ese correo nuevo, elige como mucho **cinco al día**
+   (ventana móvil de 24 h) de hilos de gente de fuera que están esperando
+   respuesta y deja un borrador en `/actions`, para que una persona lo apruebe,
+   lo edite o lo descarte.
+4. **De qué avisa en el momento.** Ver más abajo; viene apagado.
 
 **Nunca envía nada solo.** Aprobar es siempre un acto humano.
+
+---
+
+## Avisarte en el momento
+
+El barrido corre **cada diez minutos** (antes era una vez al día). De lo que
+encuentra, Cortex **interrumpe** solo cuando hay una razón para no esperar al
+resumen de mañana:
+
+| Razón | Cuándo |
+|---|---|
+| **Compromiso** | Escribió alguien con quien tienes algo prometido con fecha |
+| **Cliente** | El dominio de quien escribe está registrado a nombre de un cliente |
+| **Espera** | Alguien de fuera escribió y la respuesta está de tu lado |
+
+Antes de eso pasa los filtros de siempre: lo interno no cuenta, los boletines no
+cuentan, y si el último que habló fuiste tú tampoco. Es **el mismo criterio** con
+el que se decide qué respuesta proponer (`mail/attention.ts`), a propósito: si
+algo no merece un borrador, tampoco merece una interrupción.
+
+**Los tres frenos**, en *Ajustes → Avisarme en el momento*:
+
+- **Un hilo avisa una sola vez.** La segunda ya no es noticia, es seguimiento.
+- **Un techo**, cinco por defecto, en una ventana móvil de 24 horas — no por día
+  natural, que se puede agotar a las 23:50 y llenarse otra vez a las 00:10.
+- **Una franja horaria**, la de tu zona. Fuera de ella no suena nada.
+
+**Viene apagado.** Y lo que no avisa no se pierde: se archivó igual y sale en el
+resumen de la mañana. La diferencia entre avisar y no avisar es *cuándo* te
+enteras, nunca *si* te enteras.
+
+> Al pasar de diario a cada diez minutos hubo que mover el techo de propuestas de
+> respuesta: era «cinco por barrido», que con esta cadencia serían 720 al día.
+> Ahora es un presupuesto de 24 horas.
 
 ---
 
@@ -114,7 +150,8 @@ documento corta antes de gastar un embedding.
 | La carga y el barrido | `packages/agent-tools/src/gmail/learn.ts` |
 | Qué se propone | `packages/agent-tools/src/gmail/propose-replies.ts` |
 | Los trabajos | `apps/web/inngest/functions/gmail-learn.ts` (`gmail/backfill.user`, `gmail/sweep`, `gmail/sweep.user`) |
-| El cron | `services/jobs/src/manifest.ts` — `gmail/sweep`, `10 11 * * *` UTC (6:10 en Bogotá) |
+| El cron | `services/jobs/src/manifest.ts` — `gmail/sweep`, `*/10 * * * *` |
+| Los avisos | `packages/agent-tools/src/mail/alerts.ts` (qué), `mail_alerts` (libro), migración 0126 |
 
 **Preguntas frecuentes al diagnosticar:**
 

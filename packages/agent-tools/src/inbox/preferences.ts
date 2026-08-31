@@ -44,10 +44,22 @@ export interface DigestPreferences {
    * como esté esta columna.
    */
   weeklyReportEnabled: boolean;
+
+  /**
+   * Si Cortex puede INTERRUMPIR a esta persona cuando llegue al buzón algo que
+   * lo merece (migración 0126). Apagado por defecto, y con más razón que el
+   * resto: el resumen se lee cuando se puede, esto suena.
+   */
+  mailAlertsEnabled: boolean;
+  /** Cuántos avisos como mucho en un día. 0 equivale a apagarlo. */
+  mailAlertsMaxPerDay: number;
+  /** La franja en la que se puede interrumpir, en `timezone`. */
+  mailAlertsFrom: string;
+  mailAlertsTo: string;
 }
 
 export const PREFERENCE_COLUMNS =
-  'user_id, inbox_digest_enabled, inbox_digest_time, timezone, deliver_email, deliver_chat, chat_webhook_url, deliver_chat_dm, digest_focus, weekly_report_enabled';
+  'user_id, inbox_digest_enabled, inbox_digest_time, timezone, deliver_email, deliver_chat, chat_webhook_url, deliver_chat_dm, digest_focus, weekly_report_enabled, mail_alerts_enabled, mail_alerts_max_per_day, mail_alerts_from, mail_alerts_to';
 
 export const DEFAULT_PREFERENCES: Omit<DigestPreferences, 'userId'> = {
   enabled: false,
@@ -59,6 +71,10 @@ export const DEFAULT_PREFERENCES: Omit<DigestPreferences, 'userId'> = {
   deliverChatDm: false,
   digestFocus: null,
   weeklyReportEnabled: true,
+  mailAlertsEnabled: false,
+  mailAlertsMaxPerDay: 5,
+  mailAlertsFrom: '07:00',
+  mailAlertsTo: '21:00',
 };
 
 type PreferenceRow = Record<string, unknown>;
@@ -85,6 +101,20 @@ export function rowToPreferences(userId: string, row: PreferenceRow | null): Dig
     // lectura que `deliver_email` y por la misma razón: una fila escrita antes
     // de que la columna existiera no es una renuncia.
     weeklyReportEnabled: row.weekly_report_enabled !== false,
+    // Éste sí es `=== true` y no `!== false`: una fila escrita antes de que la
+    // columna existiera NO es un permiso para interrumpir a nadie. La
+    // diferencia con las dos de arriba es deliberada y es la de siempre — nada
+    // que moleste se enciende solo.
+    mailAlertsEnabled: row.mail_alerts_enabled === true,
+    mailAlertsMaxPerDay:
+      typeof row.mail_alerts_max_per_day === 'number'
+        ? row.mail_alerts_max_per_day
+        : DEFAULT_PREFERENCES.mailAlertsMaxPerDay,
+    mailAlertsFrom:
+      str(row.mail_alerts_from, DEFAULT_PREFERENCES.mailAlertsFrom) ??
+      DEFAULT_PREFERENCES.mailAlertsFrom,
+    mailAlertsTo:
+      str(row.mail_alerts_to, DEFAULT_PREFERENCES.mailAlertsTo) ?? DEFAULT_PREFERENCES.mailAlertsTo,
   };
 }
 

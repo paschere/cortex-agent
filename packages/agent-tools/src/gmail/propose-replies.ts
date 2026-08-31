@@ -1,7 +1,6 @@
-import { isInternalEmailDomain } from '@cortex/core';
 import { generateText } from 'ai';
 import type { Draft } from '../actions/draft';
-import { classifyBulk, parseAddress } from '../inbox/filters';
+import { needsYourAttention } from '../mail/attention';
 import { utilityModel } from '../model';
 import type { ArchivedThread } from './learn';
 
@@ -37,12 +36,21 @@ import type { ArchivedThread } from './learn';
  * ===========================================================================
  * Y EL TECHO
  * ===========================================================================
- * Cinco al día, como mucho. La misma cifra y la misma razón que en
- * `memory-derive.ts`: una cola que nadie puede enfrentar es una cola que nadie
- * vacía, y un trabajo desatendido es muy bueno produciendo una.
+ * Cinco al día, como mucho — al DÍA, no por barrido; ver `MAX_PROPOSALS_PER_DAY`
+ * más abajo. La misma cifra y la misma razón que en `memory-derive.ts`: una cola
+ * que nadie puede enfrentar es una cola que nadie vacía, y un trabajo
+ * desatendido es muy bueno produciendo una.
  */
 
-export const MAX_PROPOSALS_PER_SWEEP = 5;
+/**
+ * Cinco, y desde la 0126 es POR VENTANA DE 24 HORAS y no por barrido.
+ *
+ * Era lo mismo mientras el barrido corría una vez al día. Al pasar a cada diez
+ * minutos dejó de serlo: cinco por barrido son setecientas veinte al día, que
+ * no es un techo, es un grifo. El presupuesto que queda lo calcula quien llama
+ * —contando lo ya propuesto— y entra por `budget`.
+ */
+export const MAX_PROPOSALS_PER_DAY = 5;
 
 export interface ReplyCandidate {
   thread: ArchivedThread;
@@ -56,6 +64,12 @@ export interface PlanReplyInput {
   mailbox: string;
   /** Hilos sobre los que ya se propuso algo alguna vez. */
   alreadyProposed: Set<string>;
+  /**
+   * Cuántas propuestas caben todavía. Omitido significa el techo entero, que es
+   * lo correcto para un barrido diario y lo que hacía esta función antes de que
+   * el barrido pasara a correr cada diez minutos.
+   */
+  budget?: number;
 }
 
 /**
@@ -67,32 +81,24 @@ export function planReplyProposals(input: PlanReplyInput): ReplyCandidate[] {
   const out: ReplyCandidate[] = [];
 
   for (const thread of input.threads) {
-    if (thread.internalOnly) continue;
     if (input.alreadyProposed.has(thread.threadId)) continue;
 
-    const from = thread.lastFromEmail?.trim().toLowerCase() ?? null;
-    if (!from) continue;
-    // La pelota es suya sólo si el último que habló NO fue él.
-    if (from === mailbox) continue;
-    // Y el que habló tiene que ser de fuera: un hilo con un cliente donde el
-    // último mensaje lo puso un colega se contesta entre colegas.
-    if (isInternalEmailDomain(from)) continue;
+    // Los filtros 1 a 3 viven ahora en `mail/attention.ts`, porque desde la
+    // 0126 los usa también quien decide de qué AVISAR. Escritos dos veces se
+    // habrían separado el día que alguien afinara uno, y el síntoma sería
+    // visible y sin explicación: Cortex proponiendo responder a un boletín del
+    // que no avisó, o avisando de un correo interno que no propondría contestar.
+    const verdict = needsYourAttention(thread, mailbox);
+    if (!verdict.needsYou) continue;
 
-    const verdict = classifyBulk({
-      headers: thread.lastHeaders,
-      labelIds: thread.lastLabelIds,
-      from: parseAddress(thread.lastFrom ?? from),
-    });
-    if (verdict.bulk) continue;
-
-    out.push({ thread, to: from });
+    out.push({ thread, to: verdict.from });
   }
 
   // Lo más reciente primero: un correo de anoche se contesta hoy, y uno de hace
   // una semana ya perdió el momento en que la respuesta valía.
   return out
     .sort((a, b) => b.thread.lastMessageAt.localeCompare(a.thread.lastMessageAt))
-    .slice(0, MAX_PROPOSALS_PER_SWEEP);
+    .slice(0, Math.max(0, input.budget ?? MAX_PROPOSALS_PER_DAY));
 }
 
 /**

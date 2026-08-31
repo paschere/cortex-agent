@@ -58,7 +58,10 @@ export const JOBS: JobSpec[] = [
   { name: 'meetings/import', cron: '*/30 * * * *', retryLimit: 1, concurrency: 1 },
   // El buzón de Gmail de cada quien, cada mañana a las 6:10 de Bogotá: archiva
   // lo que llegó desde el puntero de ayer y propone qué contestar (0121).
-  { name: 'gmail/sweep', cron: '10 11 * * *', retryLimit: 1, concurrency: 1 },
+  // Cada diez minutos desde la 0126: este barrido ya no sólo archiva, también
+  // decide de qué interrumpir, y un aviso de la mañana siguiente no es un aviso.
+  // Ver GMAIL_SWEEP_CRON en apps/web/inngest/functions/gmail-learn.ts.
+  { name: 'gmail/sweep', cron: '*/10 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'memory/derive.dispatch', cron: '0 7 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'turn-context/purge', cron: '40 8 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'turn-latency/purge', cron: '50 8 * * *', retryLimit: 1, concurrency: 1 },

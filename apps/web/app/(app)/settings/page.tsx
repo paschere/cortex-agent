@@ -136,6 +136,10 @@ export default async function SettingsPage() {
     chatWebhookUrl: p.chatWebhookUrl ?? '',
     deliverChatDm: p.deliverChatDm,
     digestFocus: p.digestFocus ?? '',
+    mailAlertsEnabled: p.mailAlertsEnabled,
+    mailAlertsMaxPerDay: p.mailAlertsMaxPerDay,
+    mailAlertsFrom: p.mailAlertsFrom,
+    mailAlertsTo: p.mailAlertsTo,
     weeklyReportEnabled: p.weeklyReportEnabled,
     email: user.email,
   };
