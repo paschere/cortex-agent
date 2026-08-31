@@ -210,7 +210,21 @@ export type BackfillWindow = keyof typeof BACKFILL_WINDOWS;
 
 export function backfillQuery(window: BackfillWindow, now = new Date()): string {
   const days = BACKFILL_WINDOWS[window];
-  const since = new Date(now.getTime() - days * 86_400_000);
+  return mailboxQuery(new Date(now.getTime() - days * 86_400_000));
+}
+
+/**
+ * La consulta, en un solo sitio.
+ *
+ * ESTABA ESCRITA DOS VECES —aquí y en el plan B del barrido diario, en
+ * learn.ts— y las dos copias se separaron en cuanto se tocó una: al excluir el
+ * spam del histórico, el barrido siguió pidiéndolo. El filtro de
+ * `worthRemembering` lo habría tirado igual, así que no era un fallo visible,
+ * sólo dinero y ancho de banda gastados en bajarse spam para reconocerlo. Es
+ * exactamente la clase de divergencia silenciosa por la que la regla de «quién
+ * merece atención» vive en `mail/attention.ts` y no copiada en dos ingestas.
+ */
+export function mailboxQuery(since: Date): string {
   return `in:anywhere -in:chats -in:spam after:${gmailDate(since)}`;
 }
 

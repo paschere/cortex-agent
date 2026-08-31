@@ -16,9 +16,9 @@ import {
   backfillQuery,
   fetchProfile,
   fetchThreadMessages,
-  gmailDate,
   listHistoryThreadIds,
   listThreadPage,
+  mailboxQuery,
 } from './threads';
 
 /**
@@ -351,7 +351,7 @@ async function selectThreads(
   const since = state.lastSyncedAt ? new Date(state.lastSyncedAt) : new Date();
   since.setTime(since.getTime() - 86_400_000);
   const page = await listThreadPage(ctx, {
-    query: `in:anywhere -in:chats after:${gmailDate(since)}`,
+    query: mailboxQuery(since),
     pageSize: MAX_SWEEP_THREADS,
   });
 

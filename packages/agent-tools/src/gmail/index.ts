@@ -37,6 +37,7 @@ export {
   type HistoryResult,
   BACKFILL_WINDOWS,
   backfillQuery,
+  mailboxQuery,
   fetchProfile,
   fetchThreadMessages,
   gmailDate,
