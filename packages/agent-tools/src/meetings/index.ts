@@ -27,6 +27,21 @@ export {
 export { analyzeLiveCall, InsightsSchema } from './analyze-live';
 export type { LiveInsights } from './analyze-live';
 export type { ArchiveLiveInput, ArchiveLiveResult, LiveLine, LivePerson } from './archive-live';
+export {
+  CALL_EVENT_KINDS,
+  LIVE_CALLS_BUCKET,
+  clockAt,
+  formatTimelineForPrompt,
+  liveCallObjectPath,
+  looksLikePresenting,
+  normalizeTimeline,
+  presentingFrames,
+  rosterDiff,
+  shouldTakeFrame,
+} from './timeline';
+export type { CallEvent, CallEventKind, RosterPerson } from './timeline';
+export { applyCaptions, captionCallFrames } from './caption-frames';
+export type { CaptionableFrame } from './caption-frames';
 
 // The importer's engine, for the callers that are not a model turn: the Inngest
 // sweep and the Brain Knowledge page's manual import button.

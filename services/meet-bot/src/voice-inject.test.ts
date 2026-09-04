@@ -11,7 +11,10 @@ import {
   looksLikeVoiceChitchat,
   pickHoldLine,
   questionGatherMs,
+  roomHasHumanSpeech,
+  samePerson,
   shouldRaiseHand,
+  someoneElseSpeakingOnRoster,
 } from './voice-brain';
 import { VOICE_INJECT_SCRIPT } from './voice-inject';
 import { sseBlockToText, takeClauses } from './voice-stream';
@@ -49,9 +52,52 @@ check(
 );
 check('hola is a complete greeting', looksLikeIncompleteQuestion('hola'), false);
 check('just the name is incomplete', looksLikeIncompleteQuestion(''), true);
-check('a greeting does not raise the hand', shouldRaiseHand('hola', 5), false);
-check('a 1:1 CRM ask does not raise the hand', shouldRaiseHand('cuánto le cotizamos a Acme', 1), false);
-check('a group CRM ask raises the hand', shouldRaiseHand('cuánto le cotizamos a Acme', 2), true);
+check(
+  'a greeting does not raise the hand even if someone is talking',
+  shouldRaiseHand('hola', { someoneElseSpeaking: true }),
+  false,
+);
+check(
+  'a CRM ask in a quiet room does not raise the hand',
+  shouldRaiseHand('cuánto le cotizamos a Acme', { someoneElseSpeaking: false }),
+  false,
+);
+check(
+  'a CRM ask raises the hand only if someone else is talking',
+  shouldRaiseHand('cuánto le cotizamos a Acme', { someoneElseSpeaking: true }),
+  true,
+);
+check('Mateo and Mateo Angel are the same person', samePerson('Mateo', 'Mateo Angel'), true);
+check(
+  'the asker speaking is not someone else',
+  someoneElseSpeakingOnRoster(
+    [
+      { name: 'Ana', speaking: true },
+      { name: 'Juan', speaking: false },
+    ],
+    'Ana',
+  ),
+  false,
+);
+check(
+  'Juan talking after Ana asked is someone else',
+  someoneElseSpeakingOnRoster(
+    [
+      { name: 'Ana', speaking: false },
+      { name: 'Juan', speaking: true },
+    ],
+    'Ana',
+  ),
+  true,
+);
+check(
+  'a silent mosaic is not a busy floor',
+  roomHasHumanSpeech([
+    { name: 'Ana', speaking: false },
+    { name: 'Juan', speaking: false },
+  ]),
+  false,
+);
 check('incomplete wait is longer than a greeting', questionGatherMs('podrías averiguar') > questionGatherMs('hola'), true);
 check('just the name waits even longer', questionGatherMs('') > questionGatherMs('podrías averiguar'), true);
 check(
@@ -90,6 +136,11 @@ check(
 check(
   'keeps the destination track alive so WebRTC does not freeze a muted mic',
   VOICE_INJECT_SCRIPT.includes('createConstantSource'),
+  true,
+);
+check(
+  'exposes the TTS track id so the tap does not mix it into STT',
+  VOICE_INJECT_SCRIPT.includes('__cortexLocalTrackId'),
   true,
 );
 check(

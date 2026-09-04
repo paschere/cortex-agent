@@ -17,7 +17,7 @@ export async function GET() {
     await db
       .from('live_calls')
       .select(
-        'id, session_id, meet_url, meet_code, title, bot_name, started_at, ended_at, status, detail, participants, document_id, insights, analyzed_at, brain_status, brain_reason, brain_decided_by',
+        'id, session_id, meet_url, meet_code, title, bot_name, started_at, ended_at, status, detail, participants, document_id, insights, analyzed_at, brain_status, brain_reason, brain_decided_by, source',
       )
       .order('started_at', { ascending: false })
       .limit(50),
@@ -45,6 +45,7 @@ export async function GET() {
         brainStatus: r.brain_status,
         brainReason: r.brain_reason,
         brainDecidedBy: r.brain_decided_by,
+        source: (r.source as string | null) ?? 'live',
       })),
     },
     { headers: { 'cache-control': 'no-store' } },

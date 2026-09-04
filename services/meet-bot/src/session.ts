@@ -21,7 +21,19 @@ import {
   waitForGoogleMeetingAdmission,
 } from './join';
 import { humanPause, launchPersistentBrowser, warmUpProfile } from './stealth';
-import { VoiceBrain, isBotSpeaker, isEchoOfBot } from './voice-brain';
+import {
+  VoiceBrain,
+  isBotSpeaker,
+  isEchoOfBot,
+  roomHasHumanSpeech,
+  someoneElseSpeakingOnRoster,
+} from './voice-brain';
+import {
+  type CallEvent,
+  rosterDiff,
+  shouldTakeFrame,
+  uploadVisualFrame,
+} from './visual-log';
 import { VOICE_INJECT_SCRIPT } from './voice-inject';
 
 /**
@@ -36,12 +48,14 @@ export interface MeetingParticipant {
   name: string;
   speaking: boolean;
   self: boolean;
+  presenting?: boolean;
 }
 
 export interface MeetSessionEvents {
   onTranscript: (t: Transcript) => void;
   onStatus: (status: MeetStatus, detail?: string) => void;
   onRoster: (people: MeetingParticipant[]) => void;
+  onVisual?: (event: CallEvent) => void;
 }
 
 export type MeetStatus = 'joining' | 'waiting-admit' | 'live' | 'ended' | 'failed';
@@ -113,7 +127,12 @@ export class MeetSession {
   private display: string | undefined;
   private rosterTimer: ReturnType<typeof setInterval> | null = null;
   private captureTimer: ReturnType<typeof setInterval> | null = null;
+  private visualTimer: ReturnType<typeof setInterval> | null = null;
   private roster: MeetingParticipant[] = [];
+  private timeline: CallEvent[] = [];
+  private lastPresenting: string | null = null;
+  private lastFrameAt = -100;
+  private framesTaken = 0;
   private finishing = false;
   private sawOthers = false;
   private aloneSince: number | null = null;
@@ -195,6 +214,10 @@ export class MeetSession {
 
   currentStatus(): { status: MeetStatus; detail: string | null } {
     return { status: this.status, detail: this.endedReason };
+  }
+
+  snapshotTimeline(): CallEvent[] {
+    return this.timeline.slice();
   }
 
   private setStatus(status: MeetStatus, detail?: string): void {
@@ -353,6 +376,7 @@ export class MeetSession {
     await this.armAudioTap(page);
     this.startRosterWatch(page);
     this.startCaptureWatch(page);
+    this.startVisualWatch(page);
     if (this.voiceEnabled) await this.ensureVoiceReady();
     this.startCallEndWatch(page);
     this.setStatus('live');
@@ -472,6 +496,69 @@ export class MeetSession {
     this.captureTimer = setInterval(() => void tick(), 10_000);
   }
 
+  private rememberEvent(event: CallEvent): void {
+    this.timeline.push(event);
+    if (this.timeline.length > 400) this.timeline.shift();
+    this.events.onVisual?.(event);
+  }
+
+  private startVisualWatch(page: Page): void {
+    const tick = async () => {
+      if (this.status !== 'live' || page.isClosed()) return;
+      const scene = (await page
+        .evaluate(
+          '(window.__cortexTap && window.__cortexTap.scene && window.__cortexTap.scene()) || {presenting:null}',
+        )
+        .catch(() => null)) as { presenting?: string | null } | null;
+      const presenting = scene?.presenting?.trim() || null;
+      const at = (Date.now() - this.heardAt) / 1000;
+      const presentingChanged = presenting !== this.lastPresenting;
+      this.lastPresenting = presenting;
+      if (
+        !shouldTakeFrame({
+          presentingChanged,
+          presenting: Boolean(presenting),
+          secondsSinceFrame: at - this.lastFrameAt,
+          framesTaken: this.framesTaken,
+        })
+      ) {
+        return;
+      }
+      await this.captureFrame(page, at, presenting);
+    };
+    void tick();
+    this.visualTimer = setInterval(() => void tick(), 5_000);
+  }
+
+  private async captureFrame(page: Page, at: number, speaker: string | null): Promise<void> {
+    if (page.isClosed()) return;
+    let jpeg: Buffer;
+    try {
+      jpeg = await page.screenshot({ type: 'jpeg', quality: 42, scale: 'css' });
+    } catch (err) {
+      console.log(`[cortex-meet] ${this.id} screenshot failed ${(err as Error).message}`);
+      return;
+    }
+    const label = speaker ? `${speaker} · pantalla compartida` : 'Sala';
+    const path = await uploadVisualFrame({
+      cortexBaseUrl: this.config.cortexBaseUrl,
+      serviceToken: this.config.serviceToken,
+      owner: this.owner,
+      sessionId: this.id,
+      at,
+      kind: 'frame',
+      label,
+      speaker,
+      jpeg,
+    });
+    this.framesTaken += 1;
+    this.lastFrameAt = at;
+    this.rememberEvent({ at, kind: 'frame', label, speaker, path });
+    console.log(
+      `[cortex-meet] ${this.id} visual frame at=${at.toFixed(0)}s speaker=${speaker ?? '-'} path=${path ?? 'no'}`,
+    );
+  }
+
   private startRosterWatch(page: Page): void {
     const tick = async () => {
       const people = (await page
@@ -481,6 +568,8 @@ export class MeetSession {
         .catch(() => [])) as MeetingParticipant[];
       const json = JSON.stringify(people);
       if (json !== JSON.stringify(this.roster)) {
+        const at = (Date.now() - this.heardAt) / 1000;
+        for (const ev of rosterDiff(this.roster, people, at)) this.rememberEvent(ev);
         this.roster = people;
         this.events.onRoster(people);
       }
@@ -634,6 +723,9 @@ export class MeetSession {
         await setGoogleMeetHand(page, false, this.display);
       },
       othersInCall: () => this.roster.filter((p) => !p.self).length,
+      someoneElseSpeaking: (except) =>
+        someoneElseSpeakingOnRoster(this.roster, except, this.botName),
+      roomSpeaking: () => roomHasHumanSpeech(this.roster, this.botName),
     });
     return true;
   }
@@ -648,6 +740,10 @@ export class MeetSession {
     if (this.captureTimer) {
       clearInterval(this.captureTimer);
       this.captureTimer = null;
+    }
+    if (this.visualTimer) {
+      clearInterval(this.visualTimer);
+      this.visualTimer = null;
     }
     this.stopRemoval?.();
     this.stopRemoval = null;

@@ -31,7 +31,7 @@ const NOT_ENABLED_NOTE =
 export const meetingsGetTranscript = registerTool({
   id: 'meetings.get_transcript',
   description:
-    'Read the transcript of a past Google Meet call — the full conversation with who said what. Give it either the calendar entry or the Meet code. It first looks at calls Cortex joined and kept, then at Google\'s own transcript if someone turned transcription on. Use it to answer "what did we agree on", "what did the client ask for", or to recap a call someone missed.',
+    'Read the transcript of a past Google Meet call — who said what, at which minute, and (when Cortex was in the call) who shared their screen and what was on it. Give it either the calendar entry or the Meet code. It first looks at calls Cortex joined and kept, then at Google\'s own transcript if someone turned transcription on. Use it to answer "what did we agree on", "what did they show", "what did the client ask for", or to recap a call someone missed.',
   inputSchema: z
     .object({
       eventId: z.string().optional().describe('Calendar entry id for the meeting'),
@@ -127,16 +127,26 @@ export const meetingsGetTranscript = registerTool({
 
     const archived = await ctx.db
       .from('live_calls')
-      .select('title, meet_code, started_at, ended_at, participants, transcript')
+      .select('title, meet_code, started_at, ended_at, participants, transcript, timeline, insights')
       .eq('meet_code', meetingCode)
       .order('started_at', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (!archived.error && archived.data) {
       const lines =
-        (archived.data.transcript as Array<{ text?: string; speaker?: string | null }>) ?? [];
+        (archived.data.transcript as Array<{
+          text?: string;
+          speaker?: string | null;
+          at?: number;
+        }>) ?? [];
       const body = lines
-        .map((l) => `${l.speaker?.trim() ? `${l.speaker}: ` : 'Alguien: '}${l.text ?? ''}`)
+        .map((l) => {
+          const when =
+            typeof l.at === 'number'
+              ? `[${Math.floor(l.at / 60)}:${String(Math.floor(l.at) % 60).padStart(2, '0')}] `
+              : '';
+          return `${when}${l.speaker?.trim() ? `${l.speaker}: ` : 'Alguien: '}${l.text ?? ''}`;
+        })
         .join('\n')
         .trim();
       if (body) {
@@ -156,6 +166,20 @@ export const meetingsGetTranscript = registerTool({
         const shown = body.length > maxChars ? body.slice(0, maxChars) : body;
         const truncated = body.length > maxChars;
         const callTitle = title ?? (archived.data.title as string | null) ?? `Meet ${meetingCode}`;
+        const timeline = archived.data.timeline as Array<{
+          at?: number;
+          kind?: string;
+          label?: string;
+          caption?: string | null;
+        }> | null;
+        const visual = (timeline ?? [])
+          .filter((e) => e.kind === 'presenting' || e.caption)
+          .map((e) => {
+            const at = typeof e.at === 'number' ? e.at : 0;
+            const clock = `${Math.floor(at / 60)}:${String(Math.floor(at) % 60).padStart(2, '0')}`;
+            return `- [${clock}] ${e.label ?? e.kind}${e.caption ? ` — ${e.caption}` : ''}`;
+          })
+          .join('\n');
         const markdown = [
           `# Transcript — ${callTitle}`,
           [
@@ -166,6 +190,7 @@ export const meetingsGetTranscript = registerTool({
             .filter(Boolean)
             .join(' · '),
           names.length ? `**Who was there:** ${names.join(', ')}` : '',
+          visual ? `\n## On screen\n${visual}` : '',
           '',
           shown,
           truncated ? '\n_(transcript continues beyond this point)_' : '',

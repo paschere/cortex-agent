@@ -31,7 +31,10 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
   } catch (e) { /* ConstantSource no existe en un Chrome viejo */ }
 
   const micTrack = dest.stream.getAudioTracks()[0];
-  if (micTrack) micTrack.enabled = true;
+  if (micTrack) {
+    micTrack.enabled = true;
+    try { window.__cortexLocalTrackId = micTrack.id; } catch (e) { /* */ }
+  }
 
   let gumAudio = 0;
   const voicePcs = [];

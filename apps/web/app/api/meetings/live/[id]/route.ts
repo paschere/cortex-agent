@@ -1,3 +1,4 @@
+import { decorateTimeline } from '@/lib/call-media';
 import { requireSession } from '@/lib/session';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -29,7 +30,9 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   if (!upstream || !upstream.ok) {
     return NextResponse.json({ error: 'Esa reunión ya no está en vivo.' }, { status: 410 });
   }
-  return NextResponse.json(await upstream.json(), {
-    headers: { 'cache-control': 'no-store' },
-  });
+  const data = (await upstream.json()) as { timeline?: unknown };
+  return NextResponse.json(
+    { ...data, timeline: decorateTimeline(data.timeline) },
+    { headers: { 'cache-control': 'no-store' } },
+  );
 }

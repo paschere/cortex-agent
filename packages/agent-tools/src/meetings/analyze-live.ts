@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { utilityModel } from '../model';
 import { repairStructured } from '../structured';
 import type { LiveLine, LivePerson } from './archive-live';
+import { type CallEvent, formatTimelineForPrompt } from './timeline';
 
 /**
  * Lo que Cortex saca de una llamada cuando cuelga.
@@ -101,6 +102,7 @@ export async function analyzeLiveCall(input: {
   startedAt: number;
   endedAt: number;
   botName?: string | null;
+  timeline?: CallEvent[];
 }): Promise<LiveInsights> {
   if (tooShortToAnalyze(input.lines)) {
     return emptyInsights('Casi no se habló: no hay nada que valga la pena recordar.');
@@ -129,6 +131,7 @@ export async function analyzeLiveCall(input: {
     'Eres Cortex, el agente del espacio de trabajo. Acabas de estar en una reunión de Google Meet escuchando y ahora la resumes para el equipo.',
     'Escribe en español neutro, concreto, con nombres y cifras tal como se dijeron. No inventes: si algo no se dijo, no está.',
     'Los hablantes vienen del mosaico de Meet y pueden estar mal atribuidos; si dudas de quién dijo algo, no lo atribuyas.',
+    'Si hay una línea de tiempo visual, úsala: quién compartió pantalla y qué se vio cuenta como parte de la reunión.',
     `Tu propio nombre en la llamada era «${input.botName ?? 'Cortex'}»: lo que dijiste tú no es un compromiso de nadie.`,
     'Decide con criterio si la llamada merece quedar en la memoria de la empresa (Brain Knowledge): sí cuando hay decisiones, acuerdos, cifras, compromisos o contexto de un cliente, proveedor o proyecto; no cuando fue una prueba, una charla social, o no se dijo nada que alguien vaya a querer buscar después.',
   ].join('\n');
@@ -136,11 +139,16 @@ export async function analyzeLiveCall(input: {
   const prompt = [
     `REUNIÓN · ${minutes} min · ${names.length ? `con ${names.join(', ')}` : 'participantes sin nombre'}`,
     '',
+    input.timeline?.length
+      ? `LO QUE PASÓ EN PANTALLA\n${formatTimelineForPrompt(input.timeline)}`
+      : null,
     'TRANSCRIPT',
     transcript,
     '',
     'Devuelve la lectura de la reunión.',
-  ].join('\n');
+  ]
+    .filter((line) => line !== null)
+    .join('\n');
 
   const { object } = await generateObject({
     model: utilityModel(),

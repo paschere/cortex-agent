@@ -14,13 +14,21 @@ export function ParticipantStrip({ people }: { people: MeetingParticipant[] }) {
             className={`inline-flex items-center gap-1.5 rounded-pill px-2 py-1 text-xs font-medium ${tone.chip} ${
               p.speaking ? 'ring-2 ring-emerald/50' : ''
             }`}
-            title={p.speaking ? `${p.name} está hablando` : p.name}
+            title={
+              p.presenting
+                ? `${p.name} está compartiendo`
+                : p.speaking
+                  ? `${p.name} está hablando`
+                  : p.name
+            }
           >
             <span className="grid h-5 w-5 place-items-center rounded-full bg-surface/70 text-[10px] font-bold">
               {speakerInitials(p.name)}
             </span>
             <span className="max-w-[9rem] truncate">{p.self ? `${p.name} · bot` : p.name}</span>
-            {p.speaking ? (
+            {p.presenting ? (
+              <span className="text-[10px] font-semibold uppercase tracking-wide">comparte</span>
+            ) : p.speaking ? (
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" aria-hidden />
             ) : null}
           </li>

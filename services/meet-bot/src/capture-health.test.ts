@@ -61,9 +61,8 @@ check(
 );
 
 check(
-  'AudioWorklet replaces ScriptProcessor as the primary path',
-  AUDIO_TAP_SCRIPT.includes('AudioWorkletProcessor') &&
-    AUDIO_TAP_SCRIPT.includes('createMediaStreamSource'),
+  'AudioWorklet is the capture processor',
+  AUDIO_TAP_SCRIPT.includes('AudioWorkletProcessor'),
   true,
 );
 check(
@@ -72,9 +71,15 @@ check(
   false,
 );
 check(
-  'MediaElementSource is not the primary tap (muted/paused element = silence)',
-  AUDIO_TAP_SCRIPT.includes('createMediaElementSource'),
-  false,
+  'headless Chromium needs MediaElementSource of an unmuted sink',
+  AUDIO_TAP_SCRIPT.includes('createMediaElementSource') &&
+    AUDIO_TAP_SCRIPT.includes('el.muted = false'),
+  true,
+);
+check(
+  'local TTS mic is not mixed into STT',
+  AUDIO_TAP_SCRIPT.includes('__cortexLocalTrackId'),
+  true,
 );
 check(
   'ended tracks are forgotten so Meet can recycle them',
@@ -82,6 +87,11 @@ check(
   true,
 );
 check('watchdog can rewire and restart the graph', AUDIO_TAP_SCRIPT.includes('rewire') && AUDIO_TAP_SCRIPT.includes('restart'), true);
+check(
+  'scene() reports who is presenting so the visual log can fire',
+  AUDIO_TAP_SCRIPT.includes('scene:') && AUDIO_TAP_SCRIPT.includes('presenting'),
+  true,
+);
 
 if (failed) {
   console.error(`\n${failed} failed, ${passed} passed`);

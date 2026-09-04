@@ -68,8 +68,9 @@ export const JOIN_BROWSER_ARGS: readonly string[] = [
   // Sin esto Chrome en Docker no enumera ningún audioinput (no hay hardware).
   // Meet ve «no microphone found» y deja el botón apagado para siempre.
   "--use-fake-device-for-media-stream",
-  // Start AudioContexts in 'running', not 'suspended' — the capture taps remote participant audio
-  // via createMediaStreamSource; without this the worklet never fires and no PCM flows. (L4.)
+  // Start AudioContexts in 'running', not 'suspended' — the capture taps remote
+  // participant audio via an unmuted <audio> + MediaElementSource; without this
+  // the worklet never fires and no PCM flows. (L4.)
   "--autoplay-policy=no-user-gesture-required",
   "--use-file-for-fake-video-capture=/dev/null",
   "--disable-blink-features=AutomationControlled",

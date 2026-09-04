@@ -1,5 +1,6 @@
 'use client';
 
+import { CallTimeline, type VisibleEvent } from '@/components/meetings/CallTimeline';
 import { ParticipantStrip } from '@/components/meetings/ParticipantStrip';
 import { type MeetingParticipant, speakerTone } from '@/components/meetings/speakers';
 import { Loader2, Mic, MicOff, Radio, Send, Sparkles, Users, Volume2, X } from 'lucide-react';
@@ -105,7 +106,12 @@ export function LiveRoom({
   /** La sesión ya no existe en el bot (terminó hace rato) y no hay archivo. */
   onGone?: () => void;
   /** Una llamada ya guardada: se pinta sin pulso ni SSE. */
-  snapshot?: { lines: Line[]; people: MeetingParticipant[] };
+  snapshot?: {
+    lines: Line[];
+    people: MeetingParticipant[];
+    timeline?: VisibleEvent[];
+    recordingUrl?: string | null;
+  };
 }) {
   const [status, setStatus] = useState<LiveStatus>(snapshot ? 'ended' : 'joining');
   const [detail, setDetail] = useState<string | null>(null);
@@ -118,7 +124,19 @@ export function LiveRoom({
   const [people, setPeople] = useState<MeetingParticipant[]>(snapshot?.people ?? []);
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
+  const lineRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
+  const [timeline, setTimeline] = useState<VisibleEvent[]>(snapshot?.timeline ?? []);
   const frozen = Boolean(snapshot);
+
+  const seek = useCallback((at: number) => {
+    const keys = [...lineRefs.current.keys()].sort((a, b) => a - b);
+    const hit = keys.reduce((best, k) => (k <= at ? k : best), keys[0] ?? 0);
+    lineRefs.current.get(hit)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, []);
+
+  useEffect(() => {
+    if (snapshot?.timeline) setTimeline(snapshot.timeline);
+  }, [snapshot?.timeline]);
 
   useEffect(() => {
     if (frozen) return;
@@ -140,10 +158,12 @@ export function LiveRoom({
             const data = (await archived.json()) as {
               transcript?: Line[];
               participants?: MeetingParticipant[];
+              timeline?: VisibleEvent[];
             };
             setStatus('ended');
             setLines((data.transcript ?? []).filter((t) => t.isFinal !== false));
             if (Array.isArray(data.participants)) setPeople(data.participants);
+            if (Array.isArray(data.timeline)) setTimeline(data.timeline);
             setPartial(null);
             if (timer) clearInterval(timer);
             return;
@@ -159,11 +179,13 @@ export function LiveRoom({
           detail?: string | null;
           transcript?: Line[];
           participants?: MeetingParticipant[];
+          timeline?: VisibleEvent[];
         };
         if (data.status) setStatus(data.status);
         if (data.detail !== undefined) setDetail(data.detail ?? null);
         setLines((data.transcript ?? []).filter((t) => t.isFinal !== false));
         if (Array.isArray(data.participants)) setPeople(data.participants);
+        if (Array.isArray(data.timeline)) setTimeline(data.timeline);
       } catch {
         // Un poll fallido no tumba la sala; el siguiente lo reintenta.
       }
@@ -189,6 +211,14 @@ export function LiveRoom({
     });
     es.addEventListener('roster', (e) => {
       setPeople(JSON.parse((e as MessageEvent).data) as MeetingParticipant[]);
+    });
+    es.addEventListener('visual', (e) => {
+      const ev = JSON.parse((e as MessageEvent).data) as VisibleEvent;
+      setTimeline((prev) =>
+        prev.some((p) => p.at === ev.at && p.kind === ev.kind && p.label === ev.label)
+          ? prev
+          : [...prev, ev],
+      );
     });
     es.addEventListener('transcript', (e) => {
       const t = JSON.parse((e as MessageEvent).data) as Line;
@@ -308,6 +338,18 @@ export function LiveRoom({
         </div>
       ) : null}
 
+      {snapshot?.recordingUrl ? (
+        <div className="border-b border-border px-4 py-2.5">
+          <audio controls src={snapshot.recordingUrl} className="w-full" preload="metadata" />
+        </div>
+      ) : null}
+
+      {timeline.length > 0 ? (
+        <div className="border-b border-border">
+          <CallTimeline events={timeline} onSeek={seek} />
+        </div>
+      ) : null}
+
       {status === 'live' || people.length > 0 ? (
         <div className="border-b border-border px-4 py-2.5">
           <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
@@ -346,8 +388,21 @@ export function LiveRoom({
             {lines.map((l, i) => {
               const tone = l.speaker ? speakerTone(l.speaker) : null;
               return (
-                <p key={`${l.at}-${i}`} className="text-sm leading-snug text-ink">
-                  <span className="mr-2 font-mono text-[11px] text-ink-faint">{clock(l.at)}</span>
+                <p
+                  key={`${l.at}-${i}`}
+                  ref={(el) => {
+                    if (el) lineRefs.current.set(l.at, el);
+                    else lineRefs.current.delete(l.at);
+                  }}
+                  className="text-sm leading-snug text-ink"
+                >
+                  <button
+                    type="button"
+                    onClick={() => seek(l.at)}
+                    className="mr-2 font-mono text-[11px] text-ink-faint hover:text-ink"
+                  >
+                    {clock(l.at)}
+                  </button>
                   <span className={`font-semibold ${tone?.text ?? 'text-ink-faint'}`}>
                     {l.speaker ?? 'Alguien'}:{' '}
                   </span>
@@ -378,8 +433,8 @@ export function LiveRoom({
           <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-2">
             {chat.length === 0 ? (
               <p className="text-sm text-ink-faint">
-                Mientras la reunión pasa, pregúntame lo que quieras: «resúmeme lo que va», «¿quedó
-                algún compromiso?», «¿qué dijo del precio?».
+                Pregúntame lo que quieras: «resúmeme», «¿qué se decidió?», «¿qué mostraron
+                cuando compartieron?», «¿a qué minuto hablaron del precio?».
               </p>
             ) : null}
             {chat.map((m, i) => (

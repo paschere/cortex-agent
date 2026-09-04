@@ -7,6 +7,7 @@ import {
   CallInsights,
   type Insights,
 } from '@/components/meetings/CallInsights';
+import { CallUpload } from '@/components/meetings/CallUpload';
 import {
   type Line,
   LiveRoom,
@@ -14,6 +15,7 @@ import {
   StatusPill,
   meetCode,
 } from '@/components/meetings/LiveRoom';
+import type { VisibleEvent } from '@/components/meetings/CallTimeline';
 import {
   type MeetingParticipant,
   speakerInitials,
@@ -81,12 +83,15 @@ interface ArchivedCall {
   brainStatus: BrainStatus;
   brainReason: string | null;
   brainDecidedBy: 'cortex' | 'person' | null;
+  source?: 'live' | 'upload';
 }
 
 interface ArchivedDetail extends ArchivedCall {
   transcript: Line[];
   insights: Insights | null;
   botName: string | null;
+  timeline?: VisibleEvent[];
+  recordingUrl?: string | null;
 }
 
 type Feed =
@@ -197,17 +202,22 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
     };
   }, []);
 
+  const refreshArchive = useCallback(async () => {
+    try {
+      const res = await fetch('/api/meetings/archive', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = (await res.json()) as { calls?: ArchivedCall[] };
+      setArchive(data.calls ?? []);
+    } catch {
+      // El archivo no tumba la pantalla de las vivas.
+    }
+  }, []);
+
   useEffect(() => {
     let stop = false;
     const pull = async () => {
-      try {
-        const res = await fetch('/api/meetings/archive', { cache: 'no-store' });
-        if (stop || !res.ok) return;
-        const data = (await res.json()) as { calls?: ArchivedCall[] };
-        setArchive(data.calls ?? []);
-      } catch {
-        // El archivo no tumba la pantalla de las vivas.
-      }
+      if (stop) return;
+      await refreshArchive();
     };
     void pull();
     const timer = setInterval(pull, 5_000);
@@ -215,7 +225,7 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
       stop = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [refreshArchive]);
 
   const live = feed.state === 'ok' ? feed.calls : EMPTY_LIVE;
   const liveIds = useMemo(() => new Set(live.map((c) => c.sessionId)), [live]);
@@ -285,31 +295,46 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
           </div>
           <p className="text-sm font-semibold text-ink">Todavía no hay llamadas</p>
           <p className="max-w-md text-sm text-ink-muted">
-            Pégale a Cortex el enlace de Google Meet en el chat y dile «métete a esta reunión». La
-            sala aparece aquí en vivo; al terminar, Cortex la lee, saca lo importante y decide si
-            vale la pena guardarla en Brain Knowledge.
+            Pégale a Cortex el enlace de Google Meet en el chat y dile «métete a esta reunión».
+            También puedes subir una grabación que ya tengas: la transcribe, la lee y la deja
+            consultable aquí, con minutos y un chat.
           </p>
-          <Link
-            href="/chat"
-            className="mt-1 inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-sm font-medium text-white"
-          >
-            <MessageSquare className="h-4 w-4" /> Ir al chat
-          </Link>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+            <Link
+              href="/chat"
+              className="inline-flex items-center gap-1.5 rounded-pill bg-primary px-3.5 py-1.5 text-sm font-medium text-white"
+            >
+              <MessageSquare className="h-4 w-4" /> Ir al chat
+            </Link>
+            <CallUpload
+              onDone={(id) => {
+                void refreshArchive().then(() => pick(id));
+              }}
+            />
+          </div>
         </Panel>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
           {/* LA LISTA */}
           <aside className="flex max-h-[calc(100vh-14rem)] min-h-0 flex-col overflow-hidden rounded-card border border-border bg-surface shadow-card lg:sticky lg:top-4">
-            <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-3.5 py-2.5">
               <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
                 {live.length + past.length}{' '}
                 {live.length + past.length === 1 ? 'llamada' : 'llamadas'}
               </span>
-              {pendingCount > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-pill bg-amber-soft px-2 py-0.5 text-[11px] font-medium text-amber">
-                  <Brain className="h-3 w-3" /> {pendingCount} por decidir
-                </span>
-              ) : null}
+              <div className="flex items-center gap-2">
+                {pendingCount > 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded-pill bg-amber-soft px-2 py-0.5 text-[11px] font-medium text-amber">
+                    <Brain className="h-3 w-3" /> {pendingCount} por decidir
+                  </span>
+                ) : null}
+                <CallUpload
+                  compact
+                  onDone={(id) => {
+                    void refreshArchive().then(() => pick(id));
+                  }}
+                />
+              </div>
             </div>
             <div className="scroll-slim min-h-0 flex-1 overflow-y-auto p-2">
               {live.length > 0 ? (
@@ -408,6 +433,7 @@ export function CallsSurface({ initialSession }: { initialSession: string | null
                                   ? ` · ${duration(c.startedAt, c.endedAt)}`
                                   : ''}
                                 {c.status === 'failed' ? ' · no entró' : ''}
+                                {c.source === 'upload' ? ' · subida' : ''}
                               </span>
                             </div>
                           </button>
@@ -568,6 +594,8 @@ function PastCall({
             snapshot={{
               lines: detail.transcript ?? [],
               people: detail.participants ?? [],
+              timeline: detail.timeline ?? [],
+              recordingUrl: detail.recordingUrl ?? null,
             }}
           />
         ) : failed ? (

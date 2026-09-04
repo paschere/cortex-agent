@@ -6,14 +6,17 @@
  * chunks dejan de salir, Whisper se queda en 0). AudioWorklet corre en el hilo
  * de audio. El PCM sale a 16 kHz linear16 para Deepgram.
  *
- * Cómo se engancha cada pista (el fallo del 21-08: chunks>0, peak=0, playing=0):
- *  1. Los <audio>/<video> que Meet YA está reproduciendo — createMediaStreamSource
- *     sobre su srcObject, igual que Vexa.
- *  2. Los receivers de RTCPeerConnection, porque Meet a veces no monta elementos
- *     (elements:0). Un <audio> sink 1×1 MUTED tira del jitter buffer; el tap es
- *     MediaStreamSource de la pista, NUNCA MediaElementSource (un elemento mudo
- *     o con display:none entrega silencio).
- *  3. Al `ended`, se olvida el id para que Meet pueda reciclar la pista.
+ * Cómo se engancha cada pista (el fallo del 21-08 y otra vez el 02-09:
+ * chunks>0, peak=0, Deepgram mudo):
+ *  1. En Chromium headless, createMediaStreamSource de una pista WebRTC remota
+ *     entrega silencio si nadie la reproduce de verdad. El sink tiene que
+ *     estar unmuted (muted=true o display:none cortan la decodificación).
+ *  2. Se captura con createMediaElementSource de ESE <audio>, que es el nodo
+ *     que oye lo ya decodificado. Fallback a MediaStreamSource si el elemento
+ *     ya tiene source.
+ *  3. Los <audio>/<video> que Meet YA reproduce, y los receivers de cada
+ *     RTCPeerConnection si Meet no monta elementos.
+ *  4. Al `ended`, se olvida el id para que Meet pueda reciclar la pista.
  */
 
 export const AUDIO_TAP_SCRIPT = /* js */ `
@@ -86,6 +89,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
   function collectRoster() {
     const byKey = new Map();
     function add(id, name, speaking, self) {
+      const presenting = /\\b(presenting|presentando|compartiendo|sharing (the )?screen|sharing a window)\\b/i.test(name || '');
       const n = cleanName(name);
       if (!n && !self) return;
       const key = id || n || 'self';
@@ -95,6 +99,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
         name: n || prev?.name || 'Participante',
         speaking: Boolean(speaking || prev?.speaking),
         self: Boolean(self || prev?.self),
+        presenting: Boolean(presenting || prev?.presenting),
       });
     }
     for (const el of document.querySelectorAll('[data-participant-id]')) {
@@ -204,7 +209,8 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     const el = document.createElement('audio');
     el.autoplay = true;
     el.playsInline = true;
-    el.muted = true;
+    // muted=true / volume=0: Chromium deja de decodificar (21-08 y 02-09: peak=0).
+    el.muted = false;
     el.volume = 1;
     el.setAttribute('data-cortex-tap', '1');
     el.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';
@@ -216,15 +222,27 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     return el;
   }
 
+  function isLocalVoice(t) {
+    try {
+      return Boolean(window.__cortexLocalTrackId && t && t.id === window.__cortexLocalTrackId);
+    } catch (e) { return false; }
+  }
+
   function wireTrack(t) {
     if (!t || t.kind !== 'audio' || t.readyState === 'ended') return;
+    if (isLocalVoice(t)) return;
     if (seenTrack.has(t.id)) return;
     if (!mixerHold.current || !ctx) return;
     seenTrack.add(t.id);
     let el = null;
     try {
       el = attachSink(t);
-      const src = ctx.createMediaStreamSource(new MediaStream([t]));
+      let src = null;
+      try {
+        src = ctx.createMediaElementSource(el);
+      } catch (e) {
+        src = ctx.createMediaStreamSource(new MediaStream([t]));
+      }
       src.connect(mixerHold.current);
       const entry = { trackId: t.id, track: t, node: src, el };
       sinks.push(entry);
@@ -391,6 +409,12 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     roster: () => {
       refreshRoster();
       return state.roster.slice();
+    },
+    scene: () => {
+      refreshRoster();
+      const presenter = state.roster.find((p) => p.presenting && !p.self)
+        || state.roster.find((p) => p.presenting);
+      return { presenting: presenter ? presenter.name : null, roster: state.roster.slice() };
     },
   };
 })();

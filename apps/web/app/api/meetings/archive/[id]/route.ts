@@ -1,3 +1,4 @@
+import { decorateTimeline, recordingUrl } from '@/lib/call-media';
 import { requireSession } from '@/lib/session';
 import { mustRead } from '@/lib/supabase/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -6,7 +7,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 
 const COLS =
-  'id, session_id, meet_url, meet_code, title, bot_name, started_at, ended_at, status, detail, participants, transcript, document_id, insights, analyzed_at, brain_status, brain_reason, brain_decided_by';
+  'id, session_id, meet_url, meet_code, title, bot_name, started_at, ended_at, status, detail, participants, transcript, document_id, insights, analyzed_at, brain_status, brain_reason, brain_decided_by, source, timeline, recording_path, recording_content_type';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -29,6 +30,10 @@ type LiveCallRow = {
   brain_status: string;
   brain_reason: string | null;
   brain_decided_by: string | null;
+  source: string | null;
+  timeline: unknown;
+  recording_path: string | null;
+  recording_content_type: string | null;
 };
 
 /**
@@ -78,6 +83,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       brainStatus: row.brain_status,
       brainReason: row.brain_reason,
       brainDecidedBy: row.brain_decided_by,
+      source: row.source ?? 'live',
+      timeline: decorateTimeline(row.timeline),
+      recordingUrl: recordingUrl(row.recording_path),
+      recordingContentType: row.recording_content_type,
     },
     { headers: { 'cache-control': 'no-store' } },
   );

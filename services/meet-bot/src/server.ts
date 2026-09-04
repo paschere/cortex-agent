@@ -100,6 +100,7 @@ export function startServer(config: Config): Server {
           detail: m.detail,
           participants: m.participants.map((p) => ({ id: p.id, name: p.name, self: p.self })),
           transcript: m.transcript.map((t) => ({ text: t.text, speaker: t.speaker, at: t.at })),
+          timeline: m.session.snapshotTimeline(),
         }),
         signal: AbortSignal.timeout(90_000),
       });
@@ -249,6 +250,9 @@ export function startServer(config: Config): Server {
             m.participants = people;
             push(m, 'roster', people);
           },
+          onVisual: (event) => {
+            push(m, 'visual', event);
+          },
         },
         voiceEnabled,
       );
@@ -379,6 +383,7 @@ export function startServer(config: Config): Server {
         voiceEnabled: m.voiceEnabled,
         participants: m.participants,
         transcript: m.transcript,
+        timeline: m.session.snapshotTimeline(),
       });
       return;
     }

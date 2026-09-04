@@ -18,9 +18,11 @@ import { AsyncQueue, readVoiceAnswerStream } from './voice-stream';
  *
  * Dos clases de turno, no una:
  *   - Chitchat («hola», «me oyes»): responde ya, sin mano.
- *   - Trabajo en 1:1: espera a que terminen, dice un hold y responde.
- *   - Trabajo en grupo (2+ humanos): levanta la mano EN SILENCIO y espera
- *     «adelante». No dice «ahora lo busco» encima de la pregunta.
+ *   - Sala en silencio (aunque haya diez personas): habla. Nadie tiene el
+ *     turno; alzar la mano y esperar «adelante» es quedarse mudo frente a
+ *     una sala que ya le está dando la palabra.
+ *   - Alguien más sigue hablando: levanta la mano EN SILENCIO y espera
+ *     «adelante» o a que se haga silencio. No dice «ahora lo busco» encima.
  *
  * ===========================================================================
  * LA RESPUESTA LA PIENSA CORTEX, NO ESTE PROCESO
@@ -115,10 +117,51 @@ export function questionGatherMs(question: string): number {
   return COMPLETE_GATHER_MS;
 }
 
-/** Mano alzada solo en grupo, y solo si el turno pide trabajo. En 1:1 con Cortex, no. */
-export function shouldRaiseHand(question: string, othersInCall = 0): boolean {
+export type FloorState = {
+  /** Alguien que no es el que preguntó ni Cortex tiene el turno ahora. */
+  someoneElseSpeaking: boolean;
+};
+
+/**
+ * Mano alzada solo si el turno pide trabajo Y alguien más tiene la palabra.
+ * El tamaño de la sala no cuenta: un grupo callado ya le dio el turno.
+ */
+export function shouldRaiseHand(question: string, floor: FloorState | number = { someoneElseSpeaking: false }): boolean {
   if (looksLikeVoiceChitchat(question)) return false;
-  return othersInCall >= 2;
+  if (typeof floor === 'number') return false;
+  return floor.someoneElseSpeaking === true;
+}
+
+export function samePerson(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const x = foldSpoken(a);
+  const y = foldSpoken(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (x.length >= 4 && y.includes(x)) return true;
+  if (y.length >= 4 && x.includes(y)) return true;
+  return false;
+}
+
+export function someoneElseSpeakingOnRoster(
+  roster: Array<{ name: string; speaking?: boolean; self?: boolean }>,
+  asker?: string | null,
+  botName = 'Cortex',
+): boolean {
+  return roster.some((p) => {
+    if (p.self || !p.speaking) return false;
+    if (isBotSpeaker(p.name, botName)) return false;
+    if (samePerson(p.name, asker)) return false;
+    return true;
+  });
+}
+
+/** Mientras la mano está alzada: ¿sigue habiendo voz humana en la sala? */
+export function roomHasHumanSpeech(
+  roster: Array<{ name: string; speaking?: boolean; self?: boolean }>,
+  botName = 'Cortex',
+): boolean {
+  return roster.some((p) => p.speaking && !p.self && !isBotSpeaker(p.name, botName));
 }
 
 /** Frases cortas mientras Cortex piensa un turno que sí pide tools. */
@@ -143,6 +186,8 @@ export function pickHoldLine(random: () => number = Math.random): string {
 
 /** Cuánto espera Cortex con la mano alzada a que le den el turno. */
 export const FLOOR_WAIT_MS = 90_000;
+/** Silencio seguido, con la mano alzada, se toma como el turno. */
+export const FLOOR_SILENCE_MS = 1_600;
 
 /**
  * «Sí, adelante Cortex», «te escuchamos», «go ahead». Solo se usa cuando
@@ -219,8 +264,15 @@ export interface VoiceDeps {
   unmute: () => Promise<void>;
   raiseHand?: () => Promise<void>;
   lowerHand?: () => Promise<void>;
-  /** Humanos en la sala, sin contar a Cortex. 1 = 1:1; 2+ = grupo. */
+  /** Humanos en la sala, sin contar a Cortex. */
   othersInCall?: () => number;
+  /**
+   * ¿Hay alguien hablando que no sea `except` ni Cortex? El mosaico de Meet
+   * (`speaking`) es la señal; except es quien acaba de preguntar.
+   */
+  someoneElseSpeaking?: (except?: string | null) => boolean;
+  /** Cualquier humano con el tile en «hablando», para soltar la mano en silencio. */
+  roomSpeaking?: () => boolean;
   /** Una línea que Cortex acaba de decir, para el transcript (no pasa por STT). */
   onSpoken?: (text: string) => void;
   /** La cola reciente del transcript, para dársela a Cortex como contexto. */
@@ -237,6 +289,7 @@ export class VoiceBrain {
     parts: string[];
     timer: ReturnType<typeof setTimeout> | null;
     startedAt: number;
+    floorBusy: boolean;
   } | null = null;
 
   constructor(
@@ -255,7 +308,10 @@ export class VoiceBrain {
   onInterim(line: Transcript): void {
     if (this.muted || this.busy || this.waitingFloor) return;
     if (!this.collecting) return;
-    if (!sameSpeaker(this.collecting.speaker, line.speaker)) return;
+    if (!sameSpeaker(this.collecting.speaker, line.speaker)) {
+      this.collecting.floorBusy = true;
+      return;
+    }
     this.armFlush();
   }
 
@@ -273,7 +329,10 @@ export class VoiceBrain {
     }
     if (this.busy) return;
     if (this.collecting) {
-      if (!sameSpeaker(this.collecting.speaker, line.speaker)) return;
+      if (!sameSpeaker(this.collecting.speaker, line.speaker)) {
+        this.collecting.floorBusy = true;
+        return;
+      }
       this.collecting.parts.push(line.text);
       console.log(`[cortex-meet] voice gather +«${line.text.slice(0, 80)}»`);
       this.armFlush();
@@ -285,6 +344,7 @@ export class VoiceBrain {
       parts: [line.text],
       timer: null,
       startedAt: Date.now(),
+      floorBusy: false,
     };
     console.log(`[cortex-meet] voice gather «${line.text.slice(0, 80)}»`);
     this.armFlush();
@@ -317,10 +377,21 @@ export class VoiceBrain {
     const joined = joinUtterances(bag.parts);
     const extracted = extractQuestion(joined);
     if (extracted === null) return;
-    await this.runTurn(joined, extracted);
+    await this.runTurn(joined, extracted, bag.speaker, bag.floorBusy);
   }
 
-  private async runTurn(joined: string, extracted: string): Promise<void> {
+  private floorBusyNow(asker: string | null, heardOther: boolean): boolean {
+    if (heardOther) return true;
+    if (this.deps.someoneElseSpeaking) return this.deps.someoneElseSpeaking(asker);
+    return false;
+  }
+
+  private async runTurn(
+    joined: string,
+    extracted: string,
+    asker: string | null,
+    heardOther: boolean,
+  ): Promise<void> {
     this.busy = true;
     const t0 = Date.now();
     console.log(`[cortex-meet] voice trigger «${joined}»`);
@@ -331,25 +402,36 @@ export class VoiceBrain {
         'Te nombraron en la reunión. Pregunta si te necesitan y ofrece ayuda en una frase.';
       const quick = looksLikeVoiceChitchat(extracted);
       const others = this.deps.othersInCall?.() ?? 0;
-      const raiseHand = shouldRaiseHand(extracted, others);
+      let raiseHand = shouldRaiseHand(extracted, {
+        someoneElseSpeaking: this.floorBusyNow(asker, heardOther),
+      });
       const clauses = this.startCortexStream(question, quick);
       const thinkAt = Date.now();
       console.log(
-        `[cortex-meet] voice turn ${JSON.stringify({ quick, raiseHand, others })}`,
+        `[cortex-meet] voice turn ${JSON.stringify({ quick, raiseHand, others, asker, heardOther })}`,
       );
       if (raiseHand) {
         await this.deps.raiseHand?.();
         handUp = true;
         const granted = await this.waitForFloor(FLOOR_WAIT_MS);
-        console.log(`[cortex-meet] floor ${granted ? 'granted' : 'timeout'}`);
+        console.log(`[cortex-meet] floor ${granted ? 'granted' : 'timeout-or-quiet'}`);
         await this.deps.unmute();
         if (granted) await new Promise((r) => setTimeout(r, 400));
       } else {
-        await this.deps.unmute();
-        if (!quick) {
-          const hold = pickHoldLine();
-          console.log(`[cortex-meet] voice hold «${hold}»`);
-          await this.speakAnswer(hold);
+        if (!quick && this.floorBusyNow(asker, false)) {
+          raiseHand = true;
+          await this.deps.raiseHand?.();
+          handUp = true;
+          const granted = await this.waitForFloor(FLOOR_WAIT_MS);
+          console.log(`[cortex-meet] floor late ${granted ? 'granted' : 'timeout-or-quiet'}`);
+          await this.deps.unmute();
+        } else {
+          await this.deps.unmute();
+          if (!quick) {
+            const hold = pickHoldLine();
+            console.log(`[cortex-meet] voice hold «${hold}»`);
+            await this.speakAnswer(hold);
+          }
         }
       }
       const spoken = await this.speakClauses(clauses);
@@ -390,8 +472,21 @@ export class VoiceBrain {
     this.waitingFloor = true;
     return new Promise((resolve) => {
       const timer = setTimeout(() => this.grantFloor(false), ms);
+      let quietSince: number | null = null;
+      const poll = setInterval(() => {
+        const busy = this.deps.roomSpeaking?.() ?? this.deps.someoneElseSpeaking?.() ?? false;
+        if (busy) {
+          quietSince = null;
+          return;
+        }
+        quietSince ??= Date.now();
+        if (Date.now() - quietSince >= FLOOR_SILENCE_MS) {
+          this.grantFloor(true);
+        }
+      }, 250);
       this.floorWaiter = (granted) => {
         clearTimeout(timer);
+        clearInterval(poll);
         resolve(granted);
       };
     });

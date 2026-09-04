@@ -8,6 +8,7 @@ import type { SpeechTurn } from '../kb/transcribe';
 import { type LiveInsights, analyzeLiveCall, emptyInsights } from './analyze-live';
 import { buildChunks } from './import-transcript';
 import type { MeetingImportContext } from './import-transcript';
+import { type CallEvent, formatTimelineForPrompt, normalizeTimeline } from './timeline';
 
 /**
  * Keeping a live call after Cortex hangs up.
@@ -46,6 +47,10 @@ export interface ArchiveLiveInput {
   detail?: string | null;
   participants: LivePerson[];
   transcript: LiveLine[];
+  source?: 'live' | 'upload';
+  timeline?: CallEvent[];
+  recordingPath?: string | null;
+  recordingContentType?: string | null;
 }
 
 export interface ArchiveLiveResult {
@@ -126,7 +131,7 @@ function liveHeader(input: {
     input.meetingCode ? `Meeting code: ${input.meetingCode}` : null,
     `Live session: ${input.sessionId}`,
     '',
-    'What follows is the transcript Cortex heard in the call, in order, with the speaker and the time into the call.',
+    'What follows is the transcript Cortex heard in the call, in order, with the speaker and the time into the call. Visual events (who shared, what was on screen) sit in the header when we have them.',
   ]
     .filter((line) => line !== null)
     .join('\n');
@@ -137,6 +142,14 @@ function liveHeader(input: {
  * es lo que una búsqueda debe encontrar primero («qué acordamos con Acme»),
  * antes que la frase suelta donde se dijo.
  */
+function withTimeline(header: string, events: CallEvent[]): string {
+  const visual = events.filter(
+    (e) => e.kind === 'presenting' || e.kind === 'presenting-end' || e.caption,
+  );
+  if (visual.length === 0) return header;
+  return `${header}\n\n## Lo que pasó en pantalla\n${formatTimelineForPrompt(visual)}`;
+}
+
 function withInsights(header: string, insights: LiveInsights | null): string {
   if (!insights || !insights.summary) return header;
   const block = [
@@ -174,6 +187,7 @@ export async function archiveLiveMeeting(
     ...new Set(input.participants.map((p) => p.name.trim()).filter((n) => n.length > 0)),
   ];
   const finals = input.transcript.filter((l) => l.text.trim().length > 0);
+  const timeline = normalizeTimeline(input.timeline);
 
   const { data: saved, error: saveErr } = await ctx.db
     .from('live_calls')
@@ -191,6 +205,10 @@ export async function archiveLiveMeeting(
         detail: input.detail ?? null,
         participants: input.participants,
         transcript: finals,
+        source: input.source ?? 'live',
+        timeline,
+        recording_path: input.recordingPath ?? null,
+        recording_content_type: input.recordingContentType ?? null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'organization_id,session_id' },
@@ -238,6 +256,7 @@ export async function archiveLiveMeeting(
       startedAt: input.startedAt,
       endedAt: input.endedAt ?? Date.now(),
       botName: input.botName,
+      timeline,
     });
   } catch (err) {
     ctx.logger.warn(
@@ -304,6 +323,7 @@ export async function archiveLiveMeeting(
       names,
       turns,
       insights,
+      timeline,
       userId: input.userId ?? ctx.userId,
     });
     await ctx.db
@@ -345,10 +365,11 @@ type LiveCallRow = {
   insights: LiveInsights | null;
   document_id: string | null;
   user_id: string | null;
+  timeline?: CallEvent[] | null;
 };
 
 const ROW_COLS =
-  'id, session_id, meet_code, title, started_at, ended_at, participants, transcript, insights, document_id, user_id';
+  'id, session_id, meet_code, title, started_at, ended_at, participants, transcript, insights, document_id, user_id, timeline';
 
 async function loadCall(ctx: MeetingImportContext, callId: string): Promise<LiveCallRow> {
   const { data, error } = await ctx.db
@@ -387,6 +408,7 @@ export async function keepLiveCallInBrain(
     names,
     turns,
     insights: row.insights,
+    timeline: normalizeTimeline(row.timeline),
     userId: row.user_id ?? ctx.userId,
   });
   const { error } = await ctx.db
@@ -443,6 +465,7 @@ async function fileInKnowledgeBase(
     names: string[];
     turns: SpeechTurn[];
     insights: LiveInsights | null;
+    timeline?: CallEvent[];
     userId: string;
   },
 ): Promise<string> {
@@ -462,7 +485,10 @@ async function fileInKnowledgeBase(
     participants: args.names,
     sessionId: args.sessionId,
   });
-  const chunks = buildChunks(withInsights(header, args.insights), args.turns);
+  const chunks = buildChunks(
+    withTimeline(withInsights(header, args.insights), args.timeline ?? []),
+    args.turns,
+  );
   const sha256 = createHash('sha256').update(fullText(chunks)).digest('hex');
 
   let documentId = args.documentId;

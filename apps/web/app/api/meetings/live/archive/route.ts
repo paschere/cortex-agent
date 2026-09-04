@@ -1,6 +1,14 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { getFileDirect } from '@/lib/files-db';
 import { getOrgScopedClient } from '@/lib/supabase/service';
-import { archiveLiveMeeting } from '@cortex/agent-tools';
+import {
+  LIVE_CALLS_BUCKET,
+  applyCaptions,
+  archiveLiveMeeting,
+  captionCallFrames,
+  normalizeTimeline,
+  presentingFrames,
+} from '@cortex/agent-tools';
 import { type UUID, logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -26,6 +34,15 @@ const Person = z.object({
   self: z.boolean().optional(),
 });
 
+const Event = z.object({
+  at: z.number(),
+  kind: z.enum(['joined', 'left', 'presenting', 'presenting-end', 'frame']),
+  label: z.string().max(240),
+  speaker: z.string().max(80).nullable().optional(),
+  path: z.string().max(240).nullable().optional(),
+  caption: z.string().max(280).nullable().optional(),
+});
+
 const Body = z.object({
   owner: z.string().min(1),
   userId: z.string().uuid().optional(),
@@ -38,6 +55,7 @@ const Body = z.object({
   detail: z.string().max(500).nullable().optional(),
   participants: z.array(Person).max(80).default([]),
   transcript: z.array(Line).max(8_000).default([]),
+  timeline: z.array(Event).max(400).default([]),
 });
 
 function tokenOk(req: NextRequest): boolean {
@@ -58,6 +76,33 @@ async function actorUserId(orgId: string, presented?: string): Promise<string | 
   return (data?.id as string | undefined) ?? null;
 }
 
+async function captionSavedTimeline(
+  orgId: string,
+  callId: string,
+  raw: unknown,
+): Promise<void> {
+  const timeline = normalizeTimeline(raw);
+  const frames = presentingFrames(timeline, 5);
+  if (frames.length === 0) return;
+  const loaded = [];
+  for (const frame of frames) {
+    if (!frame.path) continue;
+    const file = await getFileDirect(LIVE_CALLS_BUCKET, frame.path);
+    if (!file) continue;
+    loaded.push({
+      at: frame.at,
+      label: frame.label,
+      speaker: frame.speaker,
+      image: file.content.toString('base64'),
+      mimeType: file.contentType ?? 'image/jpeg',
+    });
+  }
+  if (loaded.length === 0) return;
+  const captions = await captionCallFrames(loaded);
+  const next = applyCaptions(timeline, loaded, captions);
+  await getOrgScopedClient(orgId).from('live_calls').update({ timeline: next }).eq('id', callId);
+}
+
 export async function POST(req: NextRequest) {
   if (!tokenOk(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
@@ -68,6 +113,8 @@ export async function POST(req: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: 'no-actor' }, { status: 500 });
   }
+
+  const timeline = normalizeTimeline(body.timeline);
 
   try {
     const result = await archiveLiveMeeting(
@@ -94,8 +141,17 @@ export async function POST(req: NextRequest) {
         detail: body.detail ?? null,
         participants: body.participants,
         transcript: body.transcript,
+        timeline,
       },
     );
+    try {
+      await captionSavedTimeline(body.owner, result.callId, timeline);
+    } catch (err) {
+      logger.warn(
+        { err: (err as Error).message, sessionId: body.sessionId },
+        'live call frame captions failed',
+      );
+    }
     return NextResponse.json(result);
   } catch (err) {
     logger.error(

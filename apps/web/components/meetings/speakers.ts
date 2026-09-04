@@ -3,6 +3,7 @@ export type MeetingParticipant = {
   name: string;
   speaking: boolean;
   self: boolean;
+  presenting?: boolean;
 };
 
 const TONES = [

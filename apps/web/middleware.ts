@@ -62,6 +62,7 @@ const PUBLIC_PATHS = [
   // no acepta POST (405). Cortex oía «Oye, Cortex» y se quedaba mudo.
   '/api/meetings/live/voice-answer',
   '/api/meetings/live/archive',
+  '/api/meetings/live/visual',
   // Brand assets fetched by external services that have no session: Google
   // Chat renders the app avatar from /icon.png, and link unfurls hit these
   // too. They are public images by nature.

@@ -31,7 +31,7 @@ export default async function CallsPage({
     <>
       <PageHeader
         title="Llamadas"
-        subtitle="Las reuniones en las que Cortex está ahora, y las que ya escuchó: quién estaba, lo que se dijo y un chat para preguntar."
+        subtitle="En vivo y después: transcript con minutos, lo que se compartió en pantalla, y un chat que recuerda la llamada. También puedes subir una grabación."
         icon={<PhoneCall className="h-5 w-5" />}
       />
       <CallsSurface initialSession={session ?? null} />
