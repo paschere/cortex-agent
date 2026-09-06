@@ -45,9 +45,9 @@ import { readOnboarding } from '@cortex/agent-tools';
  */
 
 export const metadata: Metadata = {
-  title: 'Cortex — un asistente para cada persona de tu empresa',
+  title: 'Cortex — inteligencia para dirigir tu empresa',
   description:
-    'Cortex ya leyó los correos, los contratos, las reuniones y los grupos de WhatsApp de tu empresa. Preguntas en español y contesta citando de dónde salió: el documento, el día y el minuto.',
+    'Conecta la información, los procesos y las decisiones de tu empresa. Consulta documentos, enseña trámites y revisa las propuestas de Cortex con sus fuentes.',
 };
 
 // better-auth names the session cookie `better-auth.session_token`, prefixed
