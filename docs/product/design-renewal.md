@@ -45,3 +45,11 @@ Paleta del espacio autenticado: vacío `#0A0C13`, grafito `#121621`, tinta clara
 La revisión del plan evitó limitarse a invertir los colores: menú flotante, banda de indicadores sin cajas, cabecera amplia, firma de líneas plegadas y agenda con profundidad diferenciada. La luz se concentra en la identidad y la selección; no hay movimiento ambiental ni estados de actividad inventados. El tema se aplica al espacio autenticado y sus portales; la impresión y las páginas públicas conservan su paleta legible.
 
 La revisión oscura pasó 20 pruebas de navegación y continuidad de paneles, typecheck web y recorridos Chromium de Gerencia, Feed, chat, menú móvil, portales e impresión. Capturas locales con datos de ejemplo; no desplegada.
+
+## Manuales como experiencia de trabajo
+
+La biblioteca de procesos sustituye la lista de formularios en Configuración. Mantiene el tema grafito y la tipografía de Cortex, con fichas por propósito, búsqueda y lectura del recorrido. La creación parte de un único espacio amplio para explicar o dictar; el micrófono está antes del cuadro de texto y la guía contextual queda al lado en escritorio.
+
+La propuesta se revisa como un documento: secciones completas resumidas, pasos y vacíos abiertos, dudas visibles y guardado explícito. La navegación conserva el borrador dentro de Gerencia y restablece la posición de lectura al cambiar de vista. El aviso al salir se reserva para borradores modificados. La vista de lectura distingue secuencia, condiciones, excepciones y evidencia de resultado.
+
+La prueba visual usa narración y respuesta del modelo simuladas. Se comprobaron biblioteca, lectura, entrada por voz, revisión, guardado y tamaños móviles; no se presenta como prueba de reconocimiento de voz real.

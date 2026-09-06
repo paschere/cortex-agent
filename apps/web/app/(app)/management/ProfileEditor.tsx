@@ -1,11 +1,6 @@
 'use client';
 import { Button } from '@/components/ui/button';
-import type {
-  ManagementPlaybookData,
-  ManagementProfile,
-  ManagementProfileData,
-} from '@/lib/management/shape';
-import { Plus } from 'lucide-react';
+import type { ManagementProfile, ManagementProfileData } from '@/lib/management/shape';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { saveProfile } from './actions';
@@ -15,20 +10,19 @@ export function ProfileEditor({
   people,
   isAdmin,
   onSaved,
-}: { profile: ManagementProfile; people: Person[]; isAdmin: boolean; onSaved: () => void }) {
+  onManageProcesses,
+}: {
+  profile: ManagementProfile;
+  people: Person[];
+  isAdmin: boolean;
+  onSaved: () => void;
+  onManageProcesses: () => void;
+}) {
   const [data, setData] = useState<ManagementProfileData>(profile.data);
-  const [processKeys, setProcessKeys] = useState(() =>
-    profile.data.playbooks.map(() => crypto.randomUUID()),
-  );
   const [error, setError] = useState('');
   const [pending, start] = useTransition();
   const field = <K extends keyof ManagementProfileData>(key: K, value: ManagementProfileData[K]) =>
     setData((d) => ({ ...d, [key]: value }));
-  const process = (i: number, key: keyof ManagementPlaybookData, value: string | null) =>
-    field(
-      'playbooks',
-      data.playbooks.map((p, n) => (n === i ? { ...p, [key]: value } : p)),
-    );
   return (
     <form
       className="max-w-4xl space-y-6"
@@ -115,82 +109,13 @@ export function ProfileEditor({
             </Link>
           </div>
         </div>
-        <div className="space-y-5 border-t border-border pt-5">
-          <h3 className="font-bold">Manuales de procesos</h3>
-          {data.playbooks.map((p, i) => (
-            <div key={processKeys[i]} className="space-y-4 rounded-lg border border-border p-4">
-              <Field
-                label={`Nombre del proceso ${i + 1}`}
-                value={p.name}
-                onChange={(v) => process(i, 'name', v)}
-                required
-              />
-              <div className="grid gap-4 md:grid-cols-2">
-                {(
-                  [
-                    ['purpose', 'Para qué sirve'],
-                    ['trigger', 'Cuándo debe empezar'],
-                    ['inputs', 'Fuentes y datos necesarios'],
-                    ['steps', 'Pasos y responsables'],
-                    ['successCriteria', 'Cómo verificar el resultado'],
-                    ['exceptions', 'Qué hacer si falla o falta información'],
-                    ['authority', 'Acciones permitidas y aprobaciones necesarias'],
-                  ] as const
-                ).map(([key, label]) => (
-                  <Field
-                    key={key}
-                    label={label}
-                    value={p[key]}
-                    onChange={(v) => process(i, key, v)}
-                    required
-                    multiline
-                  />
-                ))}
-              </div>
-              <Field
-                label="Enlace al trámite enseñado en el navegador (opcional)"
-                value={p.browserUrl ?? ''}
-                onChange={(v) => process(i, 'browserUrl', v || null)}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setProcessKeys((keys) => keys.filter((_, n) => n !== i));
-                  field(
-                    'playbooks',
-                    data.playbooks.filter((_, n) => n !== i),
-                  );
-                }}
-              >
-                Quitar este manual
-              </Button>
-            </div>
-          ))}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={data.playbooks.length >= 20}
-            onClick={() => {
-              setProcessKeys((keys) => [...keys, crypto.randomUUID()]);
-              field('playbooks', [
-                ...data.playbooks,
-                {
-                  name: '',
-                  purpose: '',
-                  trigger: '',
-                  inputs: '',
-                  steps: '',
-                  successCriteria: '',
-                  exceptions: '',
-                  authority: '',
-                  browserUrl: null,
-                },
-              ]);
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            Agregar proceso
+        <div className="rounded-2xl border border-border p-5">
+          <h3 className="font-semibold">Manuales de procesos</h3>
+          <p className="mt-2 text-sm text-ink-muted">
+            Cuenta, dicta y revisa cada proceso en su propio espacio.
+          </p>
+          <Button className="mt-4" type="button" variant="outline" onClick={onManageProcesses}>
+            Abrir biblioteca de procesos
           </Button>
         </div>
       </fieldset>

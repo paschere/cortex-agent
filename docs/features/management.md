@@ -68,3 +68,15 @@ Herramientas: `management.collection_status`, `management.start_collection`, `ma
 Para activar este recorrido hay que aplicar **0131 después de 0130**, desplegar web, registro de herramientas y worker de jobs, y verificar una cuenta de correo autorizada con su agente. Nada de eso se aplicó a producción en esta sesión. La aceptación debe incluir un cobro de prueba aprobado, respuesta real, pago parcial, pago final y rechazo de un borrador desactualizado.
 
 Este primer recorrido no convierte manuales arbitrarios en programas ejecutables: Drive → DIAN, mapeo universal de documentos y medición monetaria de ahorro requieren sus implementaciones y validación específicas. No se atribuye al sistema dinero recuperado ni horas ahorradas sin una fuente y un método de medición.
+
+## Manuales: biblioteca y dictado
+
+Los manuales ahora tienen una biblioteca independiente dentro de Gerencia, con búsqueda, lectura del recorrido y contexto de entradas, excepciones, permisos y evidencia. Desde Configuración se accede a esta biblioteca; el formulario repetido de manuales se retiró. Se conservan edición, eliminación explícita y creación de un asunto a partir de un manual.
+
+Un administrador puede contar un proceso completo en un solo cuadro, por texto o con dictado continuo del navegador, hasta 18.000 caracteres. El micrófono requiere un navegador compatible y permiso; el servicio de reconocimiento puede procesar audio remotamente. Cortex recibe la transcripción. Se puede escribir o editar directamente si el dictado no está disponible. Al detenerlo se espera el cierre del reconocimiento antes de habilitar el análisis, para recibir sus resultados finales.
+
+`organizeManual` usa el modelo configurado en la app, salida estructurada validada con Zod, límite de cuatro solicitudes por minuto por usuario, comprobación de disponibilidad del plan y timeout de 60 segundos. No ejecuta herramientas ni guarda el manual. Solicita campos vacíos ante información ausente o contradicciones no resueltas y hasta cuatro preguntas de aclaración; descarta enlaces que no aparezcan literalmente en la explicación.
+
+El borrador permite editar cada sección, revisar la explicación utilizada y ampliar la narración. Se señalan vacíos y se exige revisar las dudas propuestas antes de compartir. Guardar usa la revisión del perfil capturada al iniciar para evitar sobreescribir cambios concurrentes y mantiene la autorización de administrador en el servidor. El dictado se detiene al abandonar la pestaña; el borrador se conserva al cambiar de sección en Gerencia y se avisa antes de cerrar la página. No es almacenamiento persistente de borradores.
+
+Validación: 11 pruebas de contrato y fronteras del analizador, 20 pruebas de navegación/paneles, typecheck web y recorrido Chromium con voz/modelo simulados (dictar, conservar entre pestañas, analizar, completar vacíos, revisar dudas, guardar y móvil). La calidad de transcripción real depende del navegador y el análisis en producción requiere las credenciales del modelo configurado. No se hizo una llamada real al proveedor ni se compartieron manuales de clientes durante las pruebas.

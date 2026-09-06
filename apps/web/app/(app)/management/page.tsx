@@ -20,3 +20,6 @@ export default async function ManagementPage() {
     />
   );
 }
+
+// Narration organization runs here as a server action, with its own 60 s abort.
+export const maxDuration = 90;

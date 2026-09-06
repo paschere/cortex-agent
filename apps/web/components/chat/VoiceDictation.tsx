@@ -20,11 +20,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * ===========================================================================
  * THE BROWSER'S OWN, AND NOTHING ELSE
  * ===========================================================================
- * `SpeechRecognition` ships in the browser. The alternative — recording audio
- * and posting it to a transcription service — means a new key, a new bill, a
- * new upload path for someone's voice, and a new place where a private question
- * is stored. For a typing aid. So: no network call, no recording kept, nothing
- * to configure, and the audio never touches Cortex.
+ * The browser supplies SpeechRecognition. Cortex receives the resulting text,
+ * not an audio upload. The browser may use its own remote recognition service;
+ * this is not a promise of offline or device-only processing.
  *
  * The price is that Firefox has no implementation. The button therefore does
  * not render there AT ALL — a mic that greys out or throws "no compatible" is a
@@ -77,10 +75,14 @@ function recognitionCtor(): RecognitionCtor | null {
 
 export function VoiceDictation({
   disabled,
+  label,
+  onListeningChange,
   getBaseText,
   onText,
 }: {
   disabled?: boolean;
+  label?: string;
+  onListeningChange?: (listening: boolean) => void;
   /** The composer's current text, read at the moment dictation starts. */
   getBaseText: () => string;
   onText: (next: string) => void;
@@ -88,6 +90,9 @@ export function VoiceDictation({
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    onListeningChange?.(listening);
+  }, [listening, onListeningChange]);
   const recognitionRef = useRef<Recognition | null>(null);
   const baseRef = useRef('');
   const finalRef = useRef('');
@@ -98,8 +103,13 @@ export function VoiceDictation({
   }, []);
 
   const stop = useCallback(() => {
-    recognitionRef.current?.stop();
-    setListening(false);
+    try {
+      if (recognitionRef.current) recognitionRef.current.stop();
+      else setListening(false);
+    } catch {
+      recognitionRef.current?.abort();
+      setListening(false);
+    }
   }, []);
 
   // A recogniser left running when the composer unmounts keeps the microphone
@@ -136,12 +146,14 @@ export function VoiceDictation({
     finalRef.current = '';
 
     recognition.onresult = (event) => {
+      if (recognitionRef.current !== recognition) return;
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
         const result = event.results[i];
         if (!result) continue;
         const said = result[0].transcript;
-        if (result.isFinal) finalRef.current += said;
+        if (result.isFinal)
+          finalRef.current += `${finalRef.current && !finalRef.current.endsWith(' ') ? ' ' : ''}${said}`;
         else interim += said;
       }
       onText(`${baseRef.current}${finalRef.current}${interim}`);
@@ -160,7 +172,12 @@ export function VoiceDictation({
       setListening(false);
     };
 
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+        setListening(false);
+      }
+    };
 
     recognitionRef.current = recognition;
     try {
@@ -171,7 +188,13 @@ export function VoiceDictation({
     }
   }
 
-  if (!supported) return null;
+  if (!supported)
+    return label ? (
+      <span className="text-xs text-ink-muted">
+        El dictado no está disponible en este navegador. Puedes escribir o usar el dictado del
+        teclado.
+      </span>
+    ) : null;
 
   return (
     <>
@@ -180,10 +203,24 @@ export function VoiceDictation({
         disabled={disabled}
         onClick={() => (listening ? stop() : start())}
         aria-pressed={listening}
-        aria-label={listening ? 'Dejar de dictar' : 'Dictar la pregunta'}
-        title={listening ? 'Dejar de dictar' : 'Dictar la pregunta'}
+        aria-label={
+          listening
+            ? label
+              ? 'Terminar dictado'
+              : 'Dejar de dictar'
+            : (label ?? 'Dictar la pregunta')
+        }
+        title={
+          listening
+            ? label
+              ? 'Terminar dictado'
+              : 'Dejar de dictar'
+            : (label ?? 'Dictar la pregunta')
+        }
         className={clsx(
-          'grid h-8 w-8 place-items-center rounded-full transition-colors duration-150 disabled:opacity-40 motion-reduce:transition-none',
+          label
+            ? 'inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold disabled:opacity-40'
+            : 'grid h-8 w-8 place-items-center rounded-full transition-colors duration-150 disabled:opacity-40 motion-reduce:transition-none',
           listening
             ? 'bg-rose-soft text-rose ring-1 ring-inset ring-rose/30'
             : 'text-ink-faint hover:bg-surface-2 hover:text-ink',
@@ -194,6 +231,7 @@ export function VoiceDictation({
         ) : (
           <Mic className="h-4 w-4" aria-hidden />
         )}
+        {label && <span>{listening ? 'Terminar dictado' : label}</span>}
       </button>
 
       {/*
@@ -201,9 +239,9 @@ export function VoiceDictation({
         already turns red and the words are already appearing in the box — this
         exists so that somebody who sees neither is told the microphone is on.
       */}
-      <span role="status" aria-live="polite" className="sr-only">
-        {problem ?? (listening ? 'Micrófono abierto. Dicta tu pregunta.' : '')}
-      </span>
+      <output aria-live="polite" className="sr-only">
+        {problem ?? (listening ? 'Micrófono abierto. Puedes dictar.' : '')}
+      </output>
 
       {problem && (
         <span className="max-w-[16rem] truncate text-micro text-rose" title={problem}>

@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { CaseEditor } from './CaseEditor';
+import { ManualStudio } from './ManualStudio';
 import { ProfileEditor } from './ProfileEditor';
 import { startDailyBrief } from './actions';
 import { Alert, type Person, blankCase } from './form-fields';
@@ -88,7 +89,7 @@ export function ManagementBoard(props: Props) {
   }
   return (
     <div className="space-y-6">
-      <div className="management-intro">
+      <div className="management-intro" hidden={tab === 'processes'}>
         <CortexSignature className="management-signature" />
         <PageHeader
           title="Hoy en la empresa"
@@ -356,82 +357,28 @@ export function ManagementBoard(props: Props) {
           )}
         </>
       )}
-      {tab === 'processes' && (
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="font-bold">Cómo hacemos el trabajo</h2>
-              <p className="mt-1 text-sm text-ink-muted">
-                Cada manual explica qué hacer, por qué y cómo reconocer el resultado.
-              </p>
-            </div>
-            {isAdmin && (
-              <Button variant="outline" onClick={() => setTab('settings')}>
-                Editar manuales
-              </Button>
-            )}
-          </div>
-          {!profile.data.playbooks.length && (
-            <div className="rounded-lg border border-border p-8 text-sm text-ink-muted">
-              Agrega el primer proceso en Configuración: por ejemplo, cobro de cartera o
-              presentación de un trámite.
-            </div>
-          )}
-          {profile.data.playbooks.map((p, i) => (
-            <details
-              key={`${p.name}-${i}`}
-              className="rounded-lg border border-border bg-surface p-4"
-            >
-              <summary className="cursor-pointer font-semibold">{p.name}</summary>
-              <dl className="mt-4 grid gap-4 text-sm md:grid-cols-2">
-                {[
-                  ['Para qué', p.purpose],
-                  ['Cuándo empieza', p.trigger],
-                  ['Datos necesarios', p.inputs],
-                  ['Pasos', p.steps],
-                  ['Criterio de éxito', p.successCriteria],
-                  ['Si algo falla', p.exceptions],
-                  ['Permisos y límites', p.authority],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <dt className="mb-1 text-xs font-semibold text-ink-muted">{label}</dt>
-                    <dd className="whitespace-pre-wrap break-words">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Button
-                  onClick={() =>
-                    startCase({
-                      ...blankCase(today, profile.data.reviewAfterDays),
-                      title: p.name,
-                      objective: p.purpose,
-                      successCriteria: p.successCriteria,
-                      nextAction: p.steps.slice(0, 1000),
-                      sourceUrl: p.browserUrl,
-                    })
-                  }
-                >
-                  Crear asunto de este proceso
-                </Button>
-                {p.browserUrl && (
-                  <a
-                    href={p.browserUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="self-center text-sm text-primary"
-                  >
-                    Abrir trámite enseñado ↗
-                  </a>
-                )}
-              </div>
-            </details>
-          ))}
-        </section>
-      )}
+      <div hidden={tab !== 'processes'}>
+        <ManualStudio
+          activeTab={tab === 'processes'}
+          profile={profile}
+          isAdmin={isAdmin}
+          onSaved={() => router.refresh()}
+          onUse={(p) =>
+            startCase({
+              ...blankCase(today, profile.data.reviewAfterDays),
+              title: p.name,
+              objective: p.purpose,
+              successCriteria: p.successCriteria,
+              nextAction: p.steps.slice(0, 1000),
+              sourceUrl: p.browserUrl,
+            })
+          }
+        />
+      </div>
       {tab === 'settings' && (
         <ProfileEditor
           key={profile.revision}
+          onManageProcesses={() => setTab('processes')}
           profile={profile}
           people={people}
           isAdmin={isAdmin}

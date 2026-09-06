@@ -452,3 +452,48 @@ body {
   :root:has(.cortex-workspace) .bg-amber.text-white,
   :root:has(.cortex-workspace) .bg-sky.text-white { color: #10151d; }
 }
+
+.manual-intake {
+  background: radial-gradient(ellipse at 100% 0, rgb(var(--primary) / 0.12), transparent 65%), linear-gradient(140deg, rgb(var(--surface)), rgb(var(--canvas)));
+  border: 1px solid rgb(var(--border));
+  border-radius: 24px;
+}
+.manual-library-card { background: linear-gradient(155deg, rgb(var(--surface-2) / 0.75), rgb(var(--surface) / 0.35)); }
+.manual-timeline { position: relative; }
+.manual-timeline::before { content: ''; position: absolute; left: 15px; top: 12px; bottom: 36px; width: 1px; background: linear-gradient(rgb(var(--primary) / 0.55), rgb(var(--border))); }
+.manual-review-section textarea { background: transparent; border-color: transparent; padding-left: 0; line-height: 1.8; resize: vertical; }
+.manual-review-section textarea:focus { padding-left: 12px; background: rgb(var(--canvas) / 0.4); }
+
+/* One shared motion language for Cortex's signature. Animate SVG children so
+   the placement/rotation of the homepage illustration remains independent. */
+.cortex-signature-rotor,
+.cortex-signature-fold {
+  transform-box: view-box;
+  transform-origin: 120px 120px;
+}
+.cortex-signature-trace {
+  stroke-dasharray: 5 95;
+  opacity: 0;
+  pointer-events: none;
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  .cortex-signature-rotor { animation: cortex-signal-orbit 28s linear infinite; }
+  .cortex-signature-fold { animation: cortex-signal-breathe 8s ease-in-out infinite; }
+  .cortex-signature-trace {
+    animation: cortex-signal-travel 6s linear infinite;
+    color: #b5efff;
+  }
+  .workspace-rail .cortex-signature-rotor { animation-duration: 36s; }
+}
+@keyframes cortex-signal-orbit {
+  to { transform: rotate(360deg); }
+}
+@keyframes cortex-signal-breathe {
+  0%, 100% { transform: scale(0.985) rotate(-2deg); opacity: 0.65; }
+  50% { transform: scale(1.025) rotate(2deg); opacity: 1; }
+}
+@keyframes cortex-signal-travel {
+  0% { stroke-dashoffset: 100; opacity: 0; }
+  15%, 75% { opacity: 0.85; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
