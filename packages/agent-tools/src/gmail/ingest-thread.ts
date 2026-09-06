@@ -494,6 +494,7 @@ export async function ingestThread(
   const documentFields = {
     collection_id: input.spaceId,
     source: 'gmail',
+    mail_reference: false,
     // Identifica el hilo exacto, para poder rastrear un documento hasta el
     // buzón sin pasar por el libro.
     source_ref: `gmail:${input.threadId}`,

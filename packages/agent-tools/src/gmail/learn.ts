@@ -1,9 +1,11 @@
 import type { Logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MailHeader } from '../inbox/filters';
-import { fetchGmailAttachment } from './attachments';
+import { worthRemembering } from '../mail/attention';
+import { classifyAudience, counterpartDomainOf } from '../mail/audience';
 import type { GmailFetchContext } from './client';
-import { type ThreadIngestOutcome, ingestThread } from './ingest-thread';
+import { mailFingerprint, proposeMailLearning } from './learning-proposals';
+import { allowedMailMessages, readMailPolicy } from './mail-policy';
 import {
   type GmailSyncState,
   getSyncState,
@@ -19,32 +21,12 @@ import {
   listHistoryThreadIds,
   listThreadPage,
   mailboxQuery,
+  threadParticipants,
 } from './threads';
 
-/**
- * APRENDER DE UN BUZÓN: la carga histórica y el barrido de cada mañana.
- *
- * Las dos hacen lo mismo —traerse unos hilos y doblarlos dentro del cerebro— y
- * se diferencian sólo en CÓMO eligen los hilos:
- *
- *   la carga    va hacia atrás por una ventana de tiempo, paginando con el
- *               `pageToken` de Gmail, y termina.
- *   el barrido  va hacia adelante desde el `historyId` de ayer, y no termina
- *               nunca.
- *
- * POR QUÉ ESTÁ AQUÍ Y NO EN EL TRABAJO DE VERCEL. El trabajo sabe de colas,
- * reintentos y de a quién le toca; esto sabe de correo. Separarlos es lo que
- * permite probar la parte difícil —qué hilos entran, qué pasa cuando el puntero
- * caduca— sin una cola de por medio, y es la misma línea que ya trazan
- * `errands/worker.ts` y `learning/pass.ts`.
- *
- * EL LOTE TIENE TECHO Y ES A PROPÓSITO. El puente de trabajos de Vercel corre
- * con `maxDuration=800`; un buzón de doce meses son miles de hilos y cada uno
- * son dos llamadas a Google más una tanda de embeddings. Así que cada ejecución
- * hace UNA página y deja escrito por dónde iba: el trabajo se vuelve a encolar
- * a sí mismo y la carga avanza a trozos que siempre caben. Un proceso que se
- * pasa de tiempo no deja «la mitad del buzón»: deja un cursor.
- */
+/** Consulta de correo con cursor. No archiva hilos ni adjuntos; las propuestas
+ * opt-in conservan únicamente su texto y citas en una bandeja privada de revisión.
+ * El nombre histórico de las funciones se conserva para no romper los trabajos en cola. */
 
 export interface LearnContext extends GmailFetchContext {
   organizationId: string;
@@ -107,8 +89,17 @@ export async function ingestThreads(
 ): Promise<{ tally: IngestTally; documents: ArchivedThread[] }> {
   const tally = emptyTally();
   const documents: ArchivedThread[] = [];
+  let proposals = 0;
+  const purged = await ctx.db
+    .from('mail_consulted_threads')
+    .delete()
+    .eq('user_id', ctx.userId)
+    .lt('consulted_at', new Date(Date.now() - 90 * 86400000).toISOString());
+  if (purged.error) throw new Error('No se pudo limpiar el registro de consultas.');
 
   for (const threadId of input.threadIds) {
+    if ((await getSyncState(ctx.db, ctx.userId))?.paused)
+      throw new Error('El seguimiento está pausado.');
     let messages: MailMessage[];
     try {
       messages = await fetchThreadMessages(ctx, threadId);
@@ -125,42 +116,65 @@ export async function ingestThreads(
       continue;
     }
 
-    const result = await ingestThread(
-      {
-        organizationId: ctx.organizationId,
-        userId: ctx.userId,
-        db: ctx.db,
-        logger: ctx.logger,
-      },
-      { threadId, spaceId: input.spaceId, messages },
-      // La carga histórica y el barrido diario traen también los adjuntos: es
-      // donde de verdad está el contrato del que habla el correo (0124).
-      {
-        fetchAttachment: (messageId, attachmentId) =>
-          fetchGmailAttachment(ctx, messageId, attachmentId),
-      },
-    );
-    tally[result.outcome] += 1;
-    tally.attachments += result.attachments.archived;
-
-    if (result.outcome === 'imported' || result.outcome === 'updated') {
-      const last = messages[messages.length - 1];
-      documents.push({
-        threadId,
-        subject: messages[0]?.subject ?? '(sin asunto)',
-        lastMessageAt: new Date(last?.ms ?? 0).toISOString(),
-        participants: result.participants,
-        counterpartDomain: result.counterpartDomain,
-        internalOnly: result.internalOnly,
-        documentId: result.documentId,
-        lastFromEmail: last?.fromEmail ?? null,
-        lastFrom: last?.from ?? null,
-        lastLabelIds: last?.labelIds ?? [],
-        lastHeaders: last?.headers ?? [],
-        lastSnippet: (last?.body ?? '').slice(0, 600),
-        messages: messages.length,
-      });
+    const latestMailboxMessage = messages.at(-1);
+    const policy = await readMailPolicy(ctx.db, ctx.userId);
+    messages = allowedMailMessages(messages, policy);
+    if (!messages.length || !worthRemembering(messages).remember) {
+      tally.bulk++;
+      continue;
     }
+    const fingerprint = mailFingerprint(messages);
+    const prior = await ctx.db
+      .from('mail_consulted_threads')
+      .select('fingerprint')
+      .eq('user_id', ctx.userId)
+      .eq('thread_id', threadId)
+      .maybeSingle();
+    if (prior.error) throw new Error('No se pudo comprobar la consulta anterior.');
+    if (prior.data?.fingerprint === fingerprint) {
+      tally.unchanged++;
+      continue;
+    }
+    // Bodies stay transient. Only review proposals and explicitly approved records are retained.
+    if (policy.learning && proposals < 3) {
+      proposals++;
+      try {
+        await proposeMailLearning(ctx, threadId, messages, true);
+      } catch {
+        ctx.logger.warn({ threadId }, 'No se pudo preparar un aprendizaje; se reintentará.');
+        throw new Error('No se pudo preparar el aprendizaje; la consulta no avanza su cursor.');
+      }
+    }
+    const saved = await ctx.db.from('mail_consulted_threads').upsert(
+      {
+        user_id: ctx.userId,
+        thread_id: threadId,
+        fingerprint,
+        consulted_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,thread_id' },
+    );
+    if (saved.error) throw new Error('No se pudo registrar la consulta.');
+    tally.imported++;
+    const last = messages[messages.length - 1];
+    if (latestMailboxMessage?.id !== last?.id) continue; // Do not propose replies from an incomplete thread tail.
+    const participants = threadParticipants(messages);
+    const audience = classifyAudience(participants);
+    documents.push({
+      threadId,
+      subject: messages[0]?.subject ?? '(sin asunto)',
+      lastMessageAt: new Date(last?.ms ?? 0).toISOString(),
+      participants,
+      counterpartDomain: counterpartDomainOf(audience),
+      internalOnly: !audience.undecidable && audience.external.length === 0,
+      documentId: null,
+      lastFromEmail: last?.fromEmail ?? null,
+      lastFrom: last?.from ?? null,
+      lastLabelIds: last?.labelIds ?? [],
+      lastHeaders: last?.headers ?? [],
+      lastSnippet: (last?.body ?? '').slice(0, 600),
+      messages: messages.length,
+    });
   }
 
   return { tally, documents };
@@ -305,7 +319,7 @@ export async function runDailySweep(ctx: LearnContext): Promise<SweepResult> {
   await recordSweep(ctx.db, ctx.userId, {
     historyId,
     error: capped
-      ? `Llegaron más de ${MAX_SWEEP_THREADS} hilos de una vez; se archivaron los primeros y el resto entra en el próximo barrido.`
+      ? `Llegaron más de ${MAX_SWEEP_THREADS} hilos de una vez; la consulta fue parcial. Revisa ese período directamente en Gmail.`
       : null,
   });
 

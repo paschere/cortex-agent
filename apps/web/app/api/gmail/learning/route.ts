@@ -53,7 +53,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: true, paused: true });
   }
 
-  const window = (body.window ?? '12m') as BackfillWindow;
+  if (body.action !== 'start')
+    return NextResponse.json({ error: 'Acción inválida.' }, { status: 400 });
+  const window = (body.window ?? '1m') as BackfillWindow;
   if (!WINDOWS.includes(window)) {
     return NextResponse.json(
       { error: `Ventana no válida. Las que hay: ${WINDOWS.join(', ')}.` },

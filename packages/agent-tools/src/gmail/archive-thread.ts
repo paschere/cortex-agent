@@ -47,6 +47,7 @@ export const gmailArchiveThread = registerTool({
   requiredScopes: [
     { provider: 'google', scopes: ['https://www.googleapis.com/auth/gmail.readonly'] },
   ],
+  requiresConfirmation: true,
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     // Dónde aterriza, resuelto ANTES de traer nada. `assertCanWriteToSpace`
@@ -86,6 +87,21 @@ export const gmailArchiveThread = registerTool({
       },
     );
 
+    if (result.documentId && ['imported', 'updated', 'unchanged'].includes(result.outcome)) {
+      const kept = await ctx.db
+        .from('kb_documents')
+        .update({ mail_reference: false })
+        .eq('id', result.documentId);
+      const attached = await ctx.db
+        .from('kb_documents')
+        .update({ mail_reference: false })
+        .eq('parent_document_id', result.documentId)
+        .eq('source', 'gmail');
+      if (kept.error || attached.error)
+        throw new Error(
+          'El hilo sigue conservado como referencia; no se pudo incorporarlo a la búsqueda.',
+        );
+    }
     return {
       outcome: result.outcome,
       note: result.note,

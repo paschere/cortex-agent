@@ -196,7 +196,7 @@ export default async function SettingsPage() {
             <SectionHead
               icon={<Mail className="h-4 w-4" />}
               title="Tu correo"
-              blurb="Si Cortex aprende de tu buzón: se lo lee una vez, lo guarda donde sólo tú buscas, y desde entonces revisa cada mañana lo que llegó."
+              blurb="Consulta, seguimiento y aprendizaje, con controles separados y sin archivar todo en el cerebro."
             />
             <Panel className="p-5">
               <MailboxLearning

@@ -46,3 +46,8 @@ export {
   normalizeMessage,
   threadParticipants as gmailThreadParticipants,
 } from './threads';
+
+export * from './mail-policy';
+export * from './learning-proposals';
+
+export * from './propose-learning';

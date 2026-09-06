@@ -327,6 +327,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // El marcapáginas de cada buzón conectado: por dónde va la carga histórica y
   // por dónde va el barrido diario.
   gmail_sync_state: tenant(),
+  mail_policies: tenant(),
+  mail_consulted_threads: tenant(),
+  mail_learning_proposals: tenant(),
   // Los adjuntos vistos, archivados o descartados (migración 0124). Tenant por
   // lo mismo que los hilos: la fila nombra correspondencia de una empresa, y
   // además dice el nombre del archivo, que a veces ya lo dice todo.
@@ -525,6 +528,7 @@ export type RpcTenancy = 'organization' | 'person' | 'maintenance';
 export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   management_start_daily: 'organization',
   management_operate: 'organization',
+  mail_review_learning: 'organization',
   management_workflow_checkpoint: 'organization',
   management_workflow_start: 'organization',
   management_workflow_claim: 'organization',

@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { MailPolicyControls } from './MailPolicyControls';
 
 /**
  * APRENDER DE TU CORREO — el interruptor, con lo que hace escrito al lado.
@@ -52,7 +53,7 @@ export function MailboxLearning({
   googleConnected: boolean;
 }) {
   const router = useRouter();
-  const [window, setWindow] = useState<MailboxWindow>(state?.backfillWindow ?? '12m');
+  const [window, setWindow] = useState<MailboxWindow>(state?.backfillWindow ?? '1m');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,12 +89,11 @@ export function MailboxLearning({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-sm font-medium text-ink">Aprender de tu correo</h2>
+        <h2 className="text-sm font-medium text-ink">Tu correo, con criterio</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          Cortex lee tu buzón de Gmail —incluido el correo interno— y lo guarda en tu espacio
-          privado del cerebro, donde sólo buscas tú. Después, cada mañana lee lo que llegó desde el
-          día anterior, lo archiva y te propone hasta cinco respuestas que tú apruebas o descartas.
-          Nunca envía nada solo.
+          Cortex consulta tu correo sin copiar hilos ni adjuntos al cerebro. Elige abajo qué puede
+          revisar automáticamente, de qué debe avisarte y si puede proponerte aprendizajes. Las
+          propuestas requieren tu revisión antes de convertirse en conocimiento.
         </p>
       </div>
 
@@ -110,7 +110,7 @@ export function MailboxLearning({
             <dd className="text-ink">{state.emailAddress ?? '—'}</dd>
           </div>
           <div>
-            <dt className="text-ink-faint">Conversaciones</dt>
+            <dt className="text-ink-faint">Hilos revisados</dt>
             <dd className="text-ink">{state.backfillThreads.toLocaleString('es-CO')}</dd>
           </div>
           <div>
@@ -152,7 +152,7 @@ export function MailboxLearning({
         </select>
 
         <Button onClick={() => send('start')} disabled={busy || !googleConnected}>
-          {running ? 'Volver a cargar el histórico' : 'Empezar a aprender'}
+          {running ? 'Volver a revisar el histórico' : 'Activar la revisión'}
         </Button>
 
         {running ? (
@@ -165,9 +165,9 @@ export function MailboxLearning({
       {error ? <p className="text-sm text-amber">{error}</p> : null}
 
       <p className="text-xs text-ink-faint">
-        Apagarlo no borra nada de lo aprendido. Los documentos viven en el cerebro y se borran desde
-        ahí.
+        Pausar detiene las revisiones automáticas. No borra correos ni aprendizajes confirmados.
       </p>
+      <MailPolicyControls />
     </div>
   );
 }

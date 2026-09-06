@@ -3,6 +3,7 @@ import { type JobHandler, enqueueJob } from '@/lib/jobs';
 import { noteMailWorthSeeing, noteMailboxLearningStopped } from '@/lib/notifications/producers';
 import { mustRead, mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
+import { readMailPolicy } from '@cortex/agent-tools';
 import {
   type ArchivedThread,
   GMAIL_PERMALINK_PREFIX,
@@ -48,7 +49,7 @@ import { logger } from '@cortex/core';
  * ===========================================================================
  * QUÉ HACE, EN ORDEN, Y QUÉ NO HACE
  * ===========================================================================
- * ARCHIVA todo lo que llegó, al espacio personal de quien conectó el buzón.
+ * CONSULTA lo que llegó sin archivar hilos ni adjuntos. Las propuestas de aprendizaje son privadas y requieren confirmación.
  * PROPONE, como mucho cinco respuestas al día, sobre hilos de fuera que
  * esperan contestación — propuestas que quedan en /actions para que una persona
  * las apruebe, edite o descarte. NUNCA ENVÍA NADA solo.
@@ -202,8 +203,8 @@ export const gmailSweepUserJob: JobHandler = async ({ event, step }) => {
   const organizationId = event.data.organizationId as string | undefined;
   if (!userId || !organizationId) return { skipped: 'faltan usuario o espacio de trabajo' };
 
-  // 1. Lo que llegó, dentro del cerebro ------------------------------------
-  const swept = await step.run('archive-new-mail', async () => {
+  // 1. Consulta transitoria, sin archivar en el cerebro ------------------------------------
+  const swept = await step.run('consult-new-mail-v2', async () => {
     const ctx = learnContext(organizationId, userId);
     try {
       return await runDailySweep(ctx);
@@ -261,8 +262,9 @@ async function proposeForMailbox(
   if (documents.length === 0) return 0;
 
   const db = getOrgScopedClient(organizationId);
+  if (!(await readMailPolicy(db, userId)).replies) return 0;
   const state = await getSyncState(db, userId);
-  if (!state?.emailAddress) return 0;
+  if (!state?.emailAddress || state.paused) return 0;
 
   const agentId = await defaultAgentId(organizationId);
   if (!agentId) return 0;
@@ -390,6 +392,7 @@ async function alertForMailbox(
   try {
     const db = getOrgScopedClient(organizationId);
 
+    if (!(await readMailPolicy(db, userId)).alerts) return 0;
     const prefs = await loadDigestPreferences(db, userId);
     if (!prefs.mailAlertsEnabled || prefs.mailAlertsMaxPerDay <= 0) return 0;
     // Fuera de la franja el correo no se pierde: se archivó igual y sale en el
@@ -399,7 +402,7 @@ async function alertForMailbox(
     }
 
     const state = await getSyncState(db, userId);
-    if (!state?.emailAddress) return 0;
+    if (!state?.emailAddress || state.paused) return 0;
 
     // Ventana móvil de 24 horas y no día natural: un techo que se reinicia a
     // medianoche permite cinco a las 23:50 y cinco a las 00:10.

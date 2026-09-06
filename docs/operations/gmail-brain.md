@@ -171,3 +171,44 @@ documento corta antes de gastar un embedding.
 
 Ninguno nuevo. Usa `gmail.readonly`, que ya estaba en el conjunto que se otorga
 al conectar Google. La escritura ocurre en el cerebro de Cortex, no en Gmail.
+
+## Consulta, gestión y aprendizaje revisado (0136)
+
+El barrido y la carga histórica ya no llaman a `ingestThread`: consultan mensajes,
+filtran promociones/spam/papelera y aplican las etiquetas y remitentes elegidos
+para el procesamiento automático. Una búsqueda pedida expresamente en el chat
+sigue consultando Gmail en vivo. Estos filtros no modifican los permisos OAuth.
+
+`/settings#correo` separa avisos, borradores y propuestas de aprendizaje. Sin una
+preferencia guardada los tres están apagados. La migración conserva los avisos y borradores previamente autorizados de los buzones existentes; las nuevas propuestas de aprendizaje quedan apagadas. Se conservan los horarios y límites
+de avisos existentes. No se envían mensajes por activar estas opciones. El registro
+`mail_consulted_threads` guarda IDs/huellas, sin cuerpos, y se limpia a los 90 días
+en la siguiente tanda. El seguimiento puede conservar extractos en avisos,
+propuestas de acción y estados de trabajo; no equivale a retención cero.
+
+Los aprendizajes automáticos son opt-in, acotados a tres intentos por tanda y
+cinco propuestas por ventana diaria comprobada. La herramienta
+`gmail.propose_learning` permite elegir un hilo concreto con confirmación. La
+propuesta conserva título, texto, incertidumbre y citas comprobadas literalmente
+contra mensajes del hilo. No entra en búsqueda del cerebro mientras está pendiente.
+El texto de correo se procesa con el proveedor de IA configurado; no se descargan
+adjuntos por este flujo. El límite diario puede admitir concurrencia de tandas;
+no es una cuota de facturación transaccional.
+
+`/settings/mail-learning` muestra propuestas privadas de la persona actual:
+confirmar permite editar el texto y elegir su cuaderno o, para administradores,
+un espacio compartido. El RPC crea documento/fragmento y resolución atómicamente,
+impide resolver dos veces y comprueba propietario, empresa y permisos del destino.
+El documento se crea pendiente de embedding para el worker existente. Solo texto
+editado, criterio y trazabilidad del revisor se publican; no se copian las citas
+privadas ni el correo completo. Solo este caso/descartar no crean documento. Las
+resoluciones y propuestas se conservan para trazabilidad; no sustituyen manuales.
+La comparación con un manual vigente sigue siendo una revisión humana apoyada por
+los controles de fuentes existentes, no una detección exhaustiva de contradicciones.
+
+La migración marca los documentos históricos de origen Gmail (incluidos adjuntos)
+como `mail_reference`: siguen disponibles en sus espacios, pero se excluyen de los
+dos brazos de búsqueda de `kb_search_scoped` antes de ordenar/limitar. No se borran
+archivos ni vectores. Archivar deliberadamente un hilo con `gmail.archive_thread`
+requiere confirmación y puede incorporarlo a búsqueda. El resto del correo permanece
+en Gmail y no se importa al cerebro por estar conectado.
