@@ -85,3 +85,76 @@ con enlaces de Next adaptados para la previsualización. Se revisaron escritorio
 errores de shaders. Se instrumentaron las llamadas de dibujo para verificar
 pausa y suspensión fuera de vista; se comprobó también la alternativa sin WebGL.
 No incluye una publicación de producción ni pruebas nuevas de autenticación.
+
+## Creación de asuntos
+
+`NewCaseFields` separa la creación del seguimiento: resultado, criterio comprobable,
+próximo paso, responsable, impacto y fechas. Fuente, dependencia y bloqueo se
+pliegan en contexto adicional. La evidencia, los estados de cierre y el historial
+siguen en la edición existente. Se añade una vista previa de agenda y dictado por
+campo, con límites equivalentes al esquema y bloqueo de envío durante el dictado.
+La agenda retira encabezado y estadísticas mientras el editor está abierto.
+Errores de guardado reciben foco y se mantienen los datos introducidos.
+
+Validación con componentes reales y acciones simuladas en Chromium: campos
+obligatorios, dictado, revisión antes de guardar, conservación de fuente/fechas/
+responsable, móvil, cierre con evidencia, historial, reapertura y creación desde
+señales. No se ejecutaron escrituras en una empresa real.
+
+## Chat y voz inmersiva
+
+El chat presenta una portada con la firma de Cortex, compositor con más profundidad,
+acceso visible a Hablar y control para detener respuestas. `buildSystemPrompt`
+se inicia en paralelo a búsqueda y selección de herramientas; no cambia de modelo
+ni reduce permisos. La cancelación del cliente se propaga al modelo.
+
+La nueva sala de voz usa WebRTC con OpenAI Realtime: micrófono con cancelación de
+eco, detección semántica de turnos, interrupción, silencio, transcripción visible
+y firma visual sensible al nivel de audio. La transcripción permanece en memoria
+hasta que la persona elige llevarla al borrador; ese paso conserva texto previo
+y no envía el mensaje. El audio se transmite a OpenAI al conectar; se explica en
+la pantalla de entrada. Hay pausa por silencio del micrófono, cierre explícito,
+limpieza al desmontar y sesión de cliente limitada a 15 minutos.
+
+El servidor crea la conexión mediante `/v1/realtime/calls`, conserva la clave en
+el backend, comprueba sesión y plan, y usa el límite existente de conexiones por
+minuto. El modelo se configura con `OPENAI_REALTIME_MODEL` (por defecto
+`gpt-realtime-2.1`), voz `marin`, y requiere `OPENAI_API_KEY`. La configuración local
+revisada no contiene esta clave. El modo compatible anterior queda disponible
+por elección explícita; no se hicieron llamadas pagadas a proveedores.
+
+Para hechos de la empresa y trabajo, Realtime usa `consult_cortex`, que llama a
+la ruta de Cortex en modo texto, sin otra síntesis de voz. Mantiene identidad,
+espacios seleccionados y controles de herramientas. Se retiró la confirmación
+automática de la ruta de voz: una operación que necesita aprobación pide
+continuar en el chat. Consultar datos internos todavía incurre en la latencia
+de búsqueda y herramientas; no hay una cifra de latencia real medida aquí.
+
+Referencia de protocolo: https://developers.openai.com/api/docs/guides/realtime-webrtc
+Validación: TypeScript; pruebas de sesión, plan, secreto de API, errores del
+proveedor, lectura incremental SSE, ámbito, confirmación, cancelación y texto
+hablado. Chromium con WebRTC/micrófono simulados verificó conexión explícita,
+silencio, consulta, interrupción, transcripción, conservación del borrador,
+limpieza y móvil. Estas comprobaciones no requieren una llamada real y no sustituyen una prueba de audio de extremo
+a extremo con la cuenta de OpenAI configurada.
+
+### Conexión humana y espiral
+
+La portada espacial permanece. Debajo, `ConnectionStory` presenta una escena
+independiente dirigida por el scroll: retrato humano de filamentos, contacto con la
+espiral, dispersión y convergencia de partículas en Cortex. `ConnectionScene`
+usa una ilustración generada para este proyecto (`public/images/cortex-human-connection.png`)
+como textura y origen de las partículas; no es un humano articulado en 3D.
+Se retiró el uso del modelo robótico antiguo de esta landing. La nueva escena
+se carga al entrar en vista. El panel queda sticky mientras el scroll controla
+la conexión; retroceder revierte la animación y detenerse conserva el momento.
+Incluye indicador de avance, salto al producto y vuelta al inicio. No intercepta
+la rueda ni los gestos táctiles. Se detiene fuera de vista y deja una firma
+estática, sin tramo largo de scroll, sin WebGL o con movimiento reducido.
+
+El logo compartido vuelve a una sola espiral continua, con grosor variable,
+acabado perlado y giro lento, sin deformaciones de la silueta. Conserva los
+controles de pausa de la portada y la voz, y queda estático al imprimir.
+Validación local: TypeScript, Biome en los componentes cambiados y Chromium
+con WebGL real para avance y retroceso por scroll, posición sticky, salto,
+reinicio, ausencia de reproducción automática, escritorio y móvil.

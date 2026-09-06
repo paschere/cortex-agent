@@ -192,7 +192,7 @@ export function ChatRoot({
 
   const activeAgent = agents.find((a) => a.slug === agentSlug) ?? agents[0];
 
-  const { messages, append, reload, isLoading, setMessages } = useChat({
+  const { messages, append, reload, isLoading, setMessages, stop } = useChat({
     api: '/api/chat',
     initialMessages: initialMessages ?? [],
     body: { agentSlug, conversationId },
@@ -366,7 +366,7 @@ export function ChatRoot({
   );
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden bg-canvas">
+    <div className="cortex-chat relative flex h-full flex-col overflow-hidden bg-canvas">
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
         <button
           type="button"
@@ -445,6 +445,14 @@ export function ChatRoot({
 
       <InputBar
         onSend={handleSend}
+        onStop={stop}
+        voiceHistory={messages
+          .filter((message) => message.role === 'user' || message.role === 'assistant')
+          .slice(-10)
+          .map((message) => ({
+            role: message.role === 'user' ? 'you' : 'cortex',
+            text: message.content.slice(0, 2000),
+          }))}
         disabled={isLoading}
         conversationId={conversationId}
         agents={agents}

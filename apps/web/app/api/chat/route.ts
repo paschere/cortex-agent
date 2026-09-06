@@ -1,4 +1,3 @@
-import { isControlHandoffMessage } from '@/lib/confirmation-notes';
 import { buildToolContext } from '@/lib/agent';
 import {
   ASK_CHOICE_DESCRIPTION,
@@ -8,10 +7,11 @@ import {
   askChoiceResult,
 } from '@/lib/ask-choice';
 import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape';
-import { querySheet, tableQuerySchema } from '@/lib/feed/table-query';
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import { CITATION_RULE } from '@/lib/citations';
+import { isControlHandoffMessage } from '@/lib/confirmation-notes';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
+import { querySheet, tableQuerySchema } from '@/lib/feed/table-query';
 import { enqueueJobs } from '@/lib/jobs';
 // Solo para la persistencia de `onFinish`: la cronología del mensaje, recortada
 // a sus topes (100 KB por resultado, ~1 MB por mensaje — ver lib/message-parts.ts).
@@ -303,6 +303,22 @@ export async function POST(req: NextRequest) {
   // Session, plan check, agent row, conversation row, the user's message. All
   // of it before a single decision about the answer has been made.
   clock.setup();
+  // Load stable prompt context alongside retrieval and tool selection. Handle rejection
+  // immediately so a later early return cannot leave an unhandled promise.
+  const promptPending = clock
+    .span(
+      'prompt',
+      buildSystemPrompt({
+        organizationId: user.organization.id,
+        userId: user.id,
+        basePrompt: agent.systemPrompt,
+      }),
+    )
+    .then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+
   // The retrieval as it really came back, near-misses included. It can only be
   // taken from inside the search that ran: kb.search drops everything below the
   // floor before returning, and running a second search later would answer a
@@ -968,14 +984,9 @@ export async function POST(req: NextRequest) {
   // estable de la conversación (prompt del agente, ficha de la empresa,
   // memorias) y lo volátil viaja pegado al último mensaje, después del
   // breakpoint — ver `turnBlocks` más abajo.
-  const { system, memories, memoryBlock, companyBlock } = await clock.span(
-    'prompt',
-    buildSystemPrompt({
-      organizationId: user.organization.id,
-      userId: user.id,
-      basePrompt: agent.systemPrompt,
-    }),
-  );
+  const promptResult = await promptPending;
+  if (!promptResult.ok) throw promptResult.error;
+  const { system, memories, memoryBlock, companyBlock } = promptResult.value;
 
   // Weigh the turn from the strings that were really concatenated — every one
   // of these is the exact text that went into the request, so `chars` is a
@@ -1100,6 +1111,7 @@ export async function POST(req: NextRequest) {
     tools: aiTools,
     toolChoice: 'auto',
     maxSteps: 12,
+    abortSignal: req.signal,
     // The one measurement that has to happen mid-stream, because it is the only
     // moment that matters and it is over before `onFinish` runs. The callback is
     // a comparison and an assignment — the SDK pauses the stream until it

@@ -76,12 +76,17 @@ function recognitionCtor(): RecognitionCtor | null {
 export function VoiceDictation({
   disabled,
   label,
+  ariaLabel,
+  hideUnsupported = false,
   onListeningChange,
   getBaseText,
   onText,
 }: {
   disabled?: boolean;
   label?: string;
+  /** Optional field-specific name when several compact dictation controls appear together. */
+  ariaLabel?: string;
+  hideUnsupported?: boolean;
   onListeningChange?: (listening: boolean) => void;
   /** The composer's current text, read at the moment dictation starts. */
   getBaseText: () => string;
@@ -189,7 +194,7 @@ export function VoiceDictation({
   }
 
   if (!supported)
-    return label ? (
+    return label && !hideUnsupported ? (
       <span className="text-xs text-ink-muted">
         El dictado no está disponible en este navegador. Puedes escribir o usar el dictado del
         teclado.
@@ -208,14 +213,14 @@ export function VoiceDictation({
             ? label
               ? 'Terminar dictado'
               : 'Dejar de dictar'
-            : (label ?? 'Dictar la pregunta')
+            : (ariaLabel ?? label ?? 'Dictar la pregunta')
         }
         title={
           listening
             ? label
               ? 'Terminar dictado'
               : 'Dejar de dictar'
-            : (label ?? 'Dictar la pregunta')
+            : (ariaLabel ?? label ?? 'Dictar la pregunta')
         }
         className={clsx(
           label

@@ -89,7 +89,7 @@ export function ManagementBoard(props: Props) {
   }
   return (
     <div className="space-y-6">
-      <div className="management-intro" hidden={tab === 'processes'}>
+      <div className="management-intro" hidden={tab === 'processes' || !!editor}>
         <CortexSignature className="management-signature" />
         <PageHeader
           title="Hoy en la empresa"
@@ -165,7 +165,7 @@ export function ManagementBoard(props: Props) {
               visibles pueden estar incompletas.
             </Alert>
           )}
-          <div className="management-stats grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div hidden={!!editor} className="management-stats grid grid-cols-2 gap-3 lg:grid-cols-4">
             {(
               [
                 ['Por verificar', active.filter((c) => c.data.state === 'review').length, 'review'],

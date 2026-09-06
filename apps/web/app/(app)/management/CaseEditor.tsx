@@ -7,7 +7,8 @@ import {
   managementStateLabels,
 } from '@/lib/management/shape';
 import { X } from 'lucide-react';
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
+import { NewCaseFields } from './NewCaseFields';
 import { WorkflowPanel } from './WorkflowPanel';
 import { caseHistory, saveCase } from './actions';
 import { Alert, Field, type Person, PersonOptions, Select } from './form-fields';
@@ -33,7 +34,20 @@ export function CaseEditor({
   onSaved: () => void;
 }) {
   const [data, setData] = useState(initial);
+  const [dictating, setDictating] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus({ preventScroll: true });
+    heading.current?.scrollIntoView({ block: 'start' });
+  }, []);
   const [error, setError] = useState('');
+  const errorTarget = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) {
+      errorTarget.current?.focus({ preventScroll: true });
+      errorTarget.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [error]);
   const [pending, start] = useTransition();
   const [history, setHistory] = useState<ManagementEvent[] | null>(null);
   const editable = !item || isAdmin || item.created_by === userId || item.data.ownerId === userId;
@@ -41,20 +55,31 @@ export function CaseEditor({
   const field = <K extends keyof ManagementCaseData>(key: K, value: ManagementCaseData[K]) =>
     setData((d) => ({ ...d, [key]: value }));
   return (
-    <section className="rounded-lg border border-border bg-surface p-4 sm:p-6">
-      <div className="mb-5 flex items-center justify-between gap-3">
+    <section
+      className={item ? 'rounded-lg border border-border bg-surface p-4 sm:p-6' : 'case-create'}
+    >
+      <div
+        className={item ? 'mb-5 flex items-center justify-between gap-3' : 'case-create-heading'}
+      >
         <div>
-          <h2 className="font-bold">{item ? 'Gestionar asunto' : 'Organizar un asunto'}</h2>
+          <h2 ref={heading} tabIndex={-1} className="font-bold">
+            {item ? 'Gestionar asunto' : 'Dale dirección al asunto.'}
+          </h2>
           <p className="mt-1 text-xs text-ink-muted">
-            Visible para la empresa. Guarda referencias necesarias; los adjuntos del Feed no se
-            copian al cerebro.
+            {item
+              ? 'Visible para la empresa. Guarda referencias necesarias; los adjuntos del Feed no se copian al cerebro.'
+              : 'Un resultado claro, una persona responsable y el primer paso para avanzar.'}
           </p>
         </div>
-        <Button variant="ghost" onClick={onClose} aria-label="Cerrar editor">
+        <Button variant="ghost" onClick={onClose} disabled={pending} aria-label="Cerrar editor">
           <X className="h-4 w-4" />
         </Button>
       </div>
-      {error && <Alert>{error}</Alert>}
+      {error && (
+        <div ref={errorTarget} tabIndex={-1}>
+          <Alert>{error}</Alert>
+        </div>
+      )}
       {item && (
         <WorkflowPanel
           caseId={item.id}
@@ -67,6 +92,7 @@ export function CaseEditor({
         className="mt-4 space-y-5"
         onSubmit={(e) => {
           e.preventDefault();
+          if (dictating) return;
           setError('');
           start(async () => {
             try {
@@ -83,172 +109,190 @@ export function CaseEditor({
         }}
       >
         <fieldset disabled={!editable || pending || closed} className="space-y-5">
-          <Field label="Asunto" value={data.title} onChange={(v) => field('title', v)} required />
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field
-              label="Resultado que necesitamos"
-              value={data.objective}
-              onChange={(v) => field('objective', v)}
-              required
-              multiline
-            />
-            <Field
-              label="Cómo sabremos que se logró"
-              value={data.successCriteria}
-              onChange={(v) => field('successCriteria', v)}
-              required
-              multiline
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Select
-              label="Responsable"
-              value={data.ownerId ?? ''}
-              onChange={(v) => field('ownerId', v || null)}
-            >
-              <PersonOptions people={people} />
-            </Select>
-            <Field
-              label="Plazo"
-              type="date"
-              value={data.dueOn}
-              onChange={(v) => field('dueOn', v)}
-              required
-            />
-            <Field
-              label="Próxima revisión"
-              type="date"
-              value={data.nextReviewOn}
-              onChange={(v) => field('nextReviewOn', v)}
-              required
-            />
-            <Select
-              label="Impacto declarado"
-              value={data.impact}
-              onChange={(v) => field('impact', v as ManagementCaseData['impact'])}
-            >
-              <option value="high">Alto</option>
-              <option value="medium">Medio</option>
-              <option value="low">Bajo</option>
-            </Select>
-          </div>
-          <Field
-            label="Próximo paso concreto"
-            value={data.nextAction}
-            onChange={(v) => field('nextAction', v)}
-            required
-            multiline
-          />
-          <div className="grid gap-4 md:grid-cols-2">
-            <Select
-              label="Estado"
-              value={data.state}
-              onChange={(v) => field('state', v as ManagementCaseData['state'])}
-            >
-              {(closed
-                ? [item.data.state]
-                : item
-                  ? [
-                      'open',
-                      'working',
-                      'blocked',
-                      'review',
-                      'cancelled',
-                      ...(isAdmin && item.data.state === 'review' ? ['verified'] : []),
-                    ]
-                  : ['open']
-              ).map((s) => (
-                <option key={s} value={s}>
-                  {managementStateLabels[s as ManagementCaseData['state']]}
-                </option>
-              ))}
-            </Select>
-            <Select
-              label="Depende de"
-              value={data.dependsOn ?? ''}
-              onChange={(v) => field('dependsOn', v || null)}
-            >
-              <option value="">Sin dependencia</option>
-              {cases
-                .filter((c) => c.id !== item?.id)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.data.title}
-                  </option>
-                ))}
-            </Select>
-          </div>
-          <Field
-            label="Bloqueo o dato que falta"
-            value={data.blocker}
-            onChange={(v) => field('blocker', v)}
-            required={data.state === 'blocked'}
-            multiline
-          />
-          <Field
-            label="Enlace a la fuente o trabajo relacionado (opcional)"
-            value={data.sourceUrl ?? ''}
-            onChange={(v) => field('sourceUrl', v || null)}
-          />
-          <div className="space-y-4 border-t border-border pt-4">
-            <h3 className="text-sm font-semibold">Evidencia del resultado</h3>
-            <p className="text-xs text-ink-muted">
-              Referencia a un comprobante o registro y una observación concreta. Adjuntarla no
-              confirma su validez automáticamente.
-            </p>
-            <Field
-              label="Referencia de la evidencia (HTTPS o enlace interno)"
-              value={data.evidence?.reference ?? ''}
-              onChange={(v) =>
-                field('evidence', {
-                  reference: v,
-                  observation: data.evidence?.observation ?? '',
-                  observedOn: data.evidence?.observedOn ?? today,
-                })
-              }
-              required={['review', 'verified'].includes(data.state)}
-            />
-            <div className="grid gap-4 md:grid-cols-2">
+          {item ? (
+            <>
               <Field
-                label="Qué demuestra respecto al criterio de éxito"
-                value={data.evidence?.observation ?? ''}
-                onChange={(v) =>
-                  field('evidence', {
-                    reference: data.evidence?.reference ?? '',
-                    observation: v,
-                    observedOn: data.evidence?.observedOn ?? today,
-                  })
-                }
-                required={['review', 'verified'].includes(data.state)}
+                label="Asunto"
+                value={data.title}
+                onChange={(v) => field('title', v)}
+                required
+              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field
+                  label="Resultado que necesitamos"
+                  value={data.objective}
+                  onChange={(v) => field('objective', v)}
+                  required
+                  multiline
+                />
+                <Field
+                  label="Cómo sabremos que se logró"
+                  value={data.successCriteria}
+                  onChange={(v) => field('successCriteria', v)}
+                  required
+                  multiline
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Select
+                  label="Responsable"
+                  value={data.ownerId ?? ''}
+                  onChange={(v) => field('ownerId', v || null)}
+                >
+                  <PersonOptions people={people} />
+                </Select>
+                <Field
+                  label="Plazo"
+                  type="date"
+                  value={data.dueOn}
+                  onChange={(v) => field('dueOn', v)}
+                  required
+                />
+                <Field
+                  label="Próxima revisión"
+                  type="date"
+                  value={data.nextReviewOn}
+                  onChange={(v) => field('nextReviewOn', v)}
+                  required
+                />
+                <Select
+                  label="Impacto declarado"
+                  value={data.impact}
+                  onChange={(v) => field('impact', v as ManagementCaseData['impact'])}
+                >
+                  <option value="high">Alto</option>
+                  <option value="medium">Medio</option>
+                  <option value="low">Bajo</option>
+                </Select>
+              </div>
+              <Field
+                label="Próximo paso concreto"
+                value={data.nextAction}
+                onChange={(v) => field('nextAction', v)}
+                required
+                multiline
+              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <Select
+                  label="Estado"
+                  value={data.state}
+                  onChange={(v) => field('state', v as ManagementCaseData['state'])}
+                >
+                  {(closed
+                    ? [item.data.state]
+                    : item
+                      ? [
+                          'open',
+                          'working',
+                          'blocked',
+                          'review',
+                          'cancelled',
+                          ...(isAdmin && item.data.state === 'review' ? ['verified'] : []),
+                        ]
+                      : ['open']
+                  ).map((s) => (
+                    <option key={s} value={s}>
+                      {managementStateLabels[s as ManagementCaseData['state']]}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  label="Depende de"
+                  value={data.dependsOn ?? ''}
+                  onChange={(v) => field('dependsOn', v || null)}
+                >
+                  <option value="">Sin dependencia</option>
+                  {cases
+                    .filter((c) => c.id !== item?.id)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.data.title}
+                      </option>
+                    ))}
+                </Select>
+              </div>
+              <Field
+                label="Bloqueo o dato que falta"
+                value={data.blocker}
+                onChange={(v) => field('blocker', v)}
+                required={data.state === 'blocked'}
                 multiline
               />
               <Field
-                label="Fecha de observación"
-                type="date"
-                value={data.evidence?.observedOn ?? ''}
-                onChange={(v) =>
-                  field('evidence', {
-                    reference: data.evidence?.reference ?? '',
-                    observation: data.evidence?.observation ?? '',
-                    observedOn: v,
-                  })
-                }
-                required={['review', 'verified'].includes(data.state)}
+                label="Enlace a la fuente o trabajo relacionado (opcional)"
+                value={data.sourceUrl ?? ''}
+                onChange={(v) => field('sourceUrl', v || null)}
               />
-            </div>
-            {data.evidence && (
-              <Button type="button" variant="ghost" onClick={() => field('evidence', null)}>
-                Retirar evidencia propuesta
-              </Button>
-            )}
-            <Field
-              label="Veredicto de revisión o motivo de descarte"
-              value={data.reviewNote}
-              onChange={(v) => field('reviewNote', v)}
-              required={['verified', 'cancelled'].includes(data.state)}
-              multiline
+              <div className="space-y-4 border-t border-border pt-4">
+                <h3 className="text-sm font-semibold">Evidencia del resultado</h3>
+                <p className="text-xs text-ink-muted">
+                  Referencia a un comprobante o registro y una observación concreta. Adjuntarla no
+                  confirma su validez automáticamente.
+                </p>
+                <Field
+                  label="Referencia de la evidencia (HTTPS o enlace interno)"
+                  value={data.evidence?.reference ?? ''}
+                  onChange={(v) =>
+                    field('evidence', {
+                      reference: v,
+                      observation: data.evidence?.observation ?? '',
+                      observedOn: data.evidence?.observedOn ?? today,
+                    })
+                  }
+                  required={['review', 'verified'].includes(data.state)}
+                />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field
+                    label="Qué demuestra respecto al criterio de éxito"
+                    value={data.evidence?.observation ?? ''}
+                    onChange={(v) =>
+                      field('evidence', {
+                        reference: data.evidence?.reference ?? '',
+                        observation: v,
+                        observedOn: data.evidence?.observedOn ?? today,
+                      })
+                    }
+                    required={['review', 'verified'].includes(data.state)}
+                    multiline
+                  />
+                  <Field
+                    label="Fecha de observación"
+                    type="date"
+                    value={data.evidence?.observedOn ?? ''}
+                    onChange={(v) =>
+                      field('evidence', {
+                        reference: data.evidence?.reference ?? '',
+                        observation: data.evidence?.observation ?? '',
+                        observedOn: v,
+                      })
+                    }
+                    required={['review', 'verified'].includes(data.state)}
+                  />
+                </div>
+                {data.evidence && (
+                  <Button type="button" variant="ghost" onClick={() => field('evidence', null)}>
+                    Retirar evidencia propuesta
+                  </Button>
+                )}
+                <Field
+                  label="Veredicto de revisión o motivo de descarte"
+                  value={data.reviewNote}
+                  onChange={(v) => field('reviewNote', v)}
+                  required={['verified', 'cancelled'].includes(data.state)}
+                  multiline
+                />
+              </div>
+            </>
+          ) : (
+            <NewCaseFields
+              data={data}
+              field={field}
+              people={people}
+              cases={cases}
+              pending={pending}
+              onDictating={setDictating}
             />
-          </div>
+          )}
         </fieldset>
         {data.sourceUrl && (
           <a
@@ -275,14 +319,16 @@ export function CaseEditor({
             Solo el responsable, el creador o un administrador puede modificar este asunto.
           </p>
         )}
-        <div className="flex flex-wrap gap-3">
+        <div className={item ? 'flex flex-wrap gap-3' : 'case-create-footer'}>
           {editable && !closed && (
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || dictating}>
               {pending
                 ? 'Guardando…'
                 : data.state === 'verified'
                   ? 'Confirmar revisión y cerrar'
-                  : 'Guardar asunto'}
+                  : item
+                    ? 'Guardar asunto'
+                    : 'Crear asunto'}
             </Button>
           )}
           {editable && closed && (
@@ -307,9 +353,16 @@ export function CaseEditor({
               Reabrir asunto
             </Button>
           )}
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
             Volver a la agenda
           </Button>
+          {!item && (
+            <span className="case-save-note">
+              {dictating
+                ? 'Termina el dictado antes de crear el asunto.'
+                : 'Podrás añadir evidencia y seguimiento después.'}
+            </span>
+          )}
           {item && (
             <Button
               type="button"

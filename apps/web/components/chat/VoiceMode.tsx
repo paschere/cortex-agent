@@ -1,455 +1,508 @@
 'use client';
 
-import { Loader2, Mic, Sparkles, X } from 'lucide-react';
+import { CortexSignature } from '@/components/ui/cortex-signature';
+import { VOICE_SESSION_MS, readVoiceText } from '@/lib/voice-realtime';
+import * as Dialog from '@radix-ui/react-dialog';
+import { ArrowUpRight, Mic, MicOff, PhoneOff, Square, Volume2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { LegacyVoiceMode } from './LegacyVoiceMode';
 
-/**
- * MODO VOZ MANOS LIBRES — hablar con Cortex como una llamada, con streaming.
- *
- * ===========================================================================
- * EL LOOP
- * ===========================================================================
- * Abres el modo, hablas, Cortex nota que terminaste (un silencio corto tras la
- * última palabra), y responde EN VOZ mientras aún está pensando: el servidor
- * (/api/voice/turn) le manda frase por frase el audio ya sintetizado, y aquí se
- * reproduce en cola, sin cortes, en cuanto llega la primera. Time-to-first-word
- * de ~un segundo en vez de esperar el turno entero. Al terminar, vuelve a
- * escuchar. Sin tocar nada entre medias.
- *
- * ===========================================================================
- * LA TRANSCRIPCIÓN ES DEL NAVEGADOR — Y ESO DECIDE DÓNDE VIVE ESTO
- * ===========================================================================
- * Lo que TÚ dices lo transcribe `SpeechRecognition`, que ya vive en el
- * navegador (el mismo del dictado): sin subir tu voz, sin llave, sin factura por
- * escuchar. El precio es Firefox, que no lo trae — ahí el modo no se ofrece.
- * Solo la VOZ DE CORTEX pasa por Deepgram.
- *
- * ===========================================================================
- * EL AUDIO ES PCM EN FLUJO, ENCOLADO CON WEB AUDIO
- * ===========================================================================
- * El servidor manda audio como PCM linear16 crudo (del WS de Deepgram) en
- * trozos, con su sample rate en el evento `meta`. Cada trozo se convierte
- * Int16→Float32, se mete en un AudioBuffer y se programa tras el anterior en un
- * AudioContext (`nextStart`), así suenan pegados como una sola voz sin huecos.
- * Un byte suelto entre trozos (una muestra partida) se arrastra al siguiente.
- * Mientras Cortex habla, el reconocedor se DETIENE, y se reanuda cuando la cola
- * se vacía — si no, el micrófono lo oiría y le contestaría a Cortex.
- */
-
-type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
-
-interface Turn {
-  role: 'you' | 'cortex';
-  text: string;
-}
-
-interface RecognitionAlternative {
-  transcript: string;
-}
-interface RecognitionResult {
-  isFinal: boolean;
-  0: RecognitionAlternative;
-}
-interface RecognitionEvent {
-  resultIndex: number;
-  results: { length: number; [index: number]: RecognitionResult };
-}
-interface Recognition {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((event: RecognitionEvent) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-}
-type RecognitionCtor = new () => Recognition;
-
-function recognitionCtor(): RecognitionCtor | null {
-  if (typeof window === 'undefined') return null;
-  const w = window as unknown as {
-    SpeechRecognition?: RecognitionCtor;
-    webkitSpeechRecognition?: RecognitionCtor;
-  };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
-
-/** Silencio tras la última palabra que cuenta como «terminé de hablar». */
-const END_OF_TURN_MS = 800;
-
-const PHASE_LABEL: Record<Phase, string> = {
-  idle: 'Preparando…',
-  listening: 'Te escucho…',
-  thinking: 'Pensando…',
-  speaking: 'Cortex habla',
-  error: 'Algo salió mal',
+type RealtimeEvent = {
+  type: string;
+  transcript?: string;
+  item_id?: string;
+  delta?: string;
+  name?: string;
+  call_id?: string;
+  arguments?: string;
+  item?: { type?: string; name?: string; call_id?: string; arguments?: string };
+  error?: { code?: string };
 };
 
-function b64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
+type Turn = { role: 'you' | 'cortex'; text: string; id?: string };
+type Phase = 'idle' | 'connecting' | 'listening' | 'thinking' | 'consulting' | 'speaking' | 'error';
+const labels: Record<Phase, string> = {
+  idle: 'Conversemos.',
+  connecting: 'Conectando tu voz…',
+  listening: 'Te escucho.',
+  thinking: 'Un momento…',
+  consulting: 'Consultando a Cortex…',
+  speaking: 'Cortex está hablando.',
+  error: 'Retomemos la conexión.',
+};
 
-export function VoiceMode({ onClose }: { onClose: () => void }) {
+export function VoiceMode({
+  onClose,
+  history = [],
+  spaceIds = [],
+  onCompose,
+}: {
+  onClose: () => void;
+  history?: Turn[];
+  spaceIds?: string[];
+  onCompose?: (text: string) => void;
+}) {
   const [phase, setPhase] = useState<Phase>('idle');
-  const [supported, setSupported] = useState<boolean | null>(null);
-  const [liveText, setLiveText] = useState('');
-  const [reply, setReply] = useState('');
-  const [note, setNote] = useState<string | null>(null);
+  const [muted, setMuted] = useState(false);
+  const [note, setNote] = useState('');
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  const [transcript, setTranscript] = useState<Turn[]>([]);
+  const [legacy, setLegacy] = useState(false);
+  const peer = useRef<RTCPeerConnection | null>(null);
+  const channel = useRef<RTCDataChannel | null>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const audioContext = useRef<AudioContext | null>(null);
+  const aborts = useRef(new Set<AbortController>());
+  const sequence = useRef(0);
+  const speakingEpoch = useRef(0);
+  const connectionDeadline = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deadline = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const animation = useRef(0);
+  const orb = useRef<HTMLDivElement>(null);
+  const turns = useRef<Turn[]>(history.slice(-10));
 
-  const recRef = useRef<Recognition | null>(null);
-  const wantListenRef = useRef(false);
-  const finalRef = useRef('');
-  const silenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const historyRef = useRef<Turn[]>([]);
-  const closedRef = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
-
-  // Cola de audio (Web Audio). `pending` cuenta buffers aún sonando; cuando el
-  // stream terminó y no queda ninguno, se vuelve a escuchar.
-  const ctxRef = useRef<AudioContext | null>(null);
-  const nextStartRef = useRef(0);
-  const pendingRef = useRef(0);
-  const streamDoneRef = useRef(false);
-  const sampleRateRef = useRef(24_000);
-  // Un chunk de PCM puede partir una muestra de 16 bits por la mitad; el byte
-  // suelto se guarda para pegarlo al principio del siguiente chunk.
-  const leftoverRef = useRef<Uint8Array | null>(null);
-
-  const clearSilence = useCallback(() => {
-    if (silenceTimer.current) {
-      clearTimeout(silenceTimer.current);
-      silenceTimer.current = null;
+  const dispose = useCallback(() => {
+    sequence.current++;
+    if (deadline.current) clearTimeout(deadline.current);
+    if (connectionDeadline.current) clearTimeout(connectionDeadline.current);
+    cancelAnimationFrame(animation.current);
+    for (const controller of aborts.current) controller.abort();
+    aborts.current.clear();
+    channel.current?.close();
+    channel.current = null;
+    peer.current?.close();
+    peer.current = null;
+    for (const track of stream.current?.getTracks() ?? []) track.stop();
+    stream.current = null;
+    if (audio.current) {
+      audio.current.pause();
+      audio.current.srcObject = null;
     }
+    if (audioContext.current) void audioContext.current.close().catch(() => {});
+    audioContext.current = null;
+    orb.current?.style.setProperty('--voice-level', '0');
   }, []);
+  useEffect(() => dispose, [dispose]);
 
-  const startListening = useCallback(() => {
-    const rec = recRef.current;
-    if (!rec || closedRef.current) return;
-    finalRef.current = '';
-    setLiveText('');
-    wantListenRef.current = true;
+  const connect = async () => {
+    dispose();
+    const generation = sequence.current;
+    setPhase('connecting');
+    setNote('');
+    setMuted(false);
+    setAudioBlocked(false);
+    const alive = () => generation === sequence.current;
+    const controller = new AbortController();
+    aborts.current.add(controller);
+    let connectingTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      rec.start();
-      setPhase('listening');
-    } catch {
-      // start() lanza si ya estaba corriendo; el onend lo reencaminará.
-    }
-  }, []);
-
-  // Cuando el stream acabó y la cola de audio se vació, volvemos a escuchar.
-  const maybeResume = useCallback(() => {
-    if (closedRef.current) return;
-    if (streamDoneRef.current && pendingRef.current <= 0) startListening();
-  }, [startListening]);
-
-  // Un trozo de PCM linear16 (base64) → un AudioBuffer programado en cola.
-  // Deepgram Aura entrega PCM crudo por su WS, así que no hay decodeAudioData
-  // (eso es para contenedores como mp3): se convierte Int16 → Float32 a mano.
-  const enqueueAudio = useCallback(
-    async (b64: string) => {
-      if (closedRef.current) return;
-      let ctx = ctxRef.current;
-      if (!ctx) {
-        ctx = new (
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-        )();
-        ctxRef.current = ctx;
+      if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection)
+        throw new Error(
+          'Este navegador no permite llamadas de voz. Prueba con un navegador actualizado.',
+        );
+      const context = new AudioContext();
+      audioContext.current = context;
+      await context.resume();
+      const mic = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      if (!alive()) {
+        for (const track of mic.getTracks()) track.stop();
+        return;
       }
-      if (ctx.state === 'suspended') await ctx.resume();
-      if (closedRef.current) return;
-
-      // Pega el byte suelto del chunk anterior, y guarda el de este si queda uno.
-      let bytes = b64ToBytes(b64);
-      const prev = leftoverRef.current;
-      if (prev?.length) {
-        const joined = new Uint8Array(prev.length + bytes.length);
-        joined.set(prev, 0);
-        joined.set(bytes, prev.length);
-        bytes = joined;
-      }
-      const usable = bytes.length - (bytes.length % 2);
-      leftoverRef.current = usable < bytes.length ? bytes.slice(usable) : null;
-      if (usable < 2) return;
-
-      const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, usable / 2);
-      const f32 = new Float32Array(int16.length);
-      for (let i = 0; i < int16.length; i++) f32[i] = (int16[i] ?? 0) / 32768;
-
-      const buffer = ctx.createBuffer(1, f32.length, sampleRateRef.current);
-      buffer.copyToChannel(f32, 0);
-
-      const src = ctx.createBufferSource();
-      src.buffer = buffer;
-      src.connect(ctx.destination);
-      // Programa cada trozo tras el anterior; si la cola se vació, arranca ya
-      // (con un pelín de margen para no cortar el ataque).
-      const at = Math.max(ctx.currentTime + 0.02, nextStartRef.current);
-      pendingRef.current += 1;
-      src.onended = () => {
-        pendingRef.current -= 1;
-        maybeResume();
+      stream.current = mic;
+      const pc = new RTCPeerConnection();
+      peer.current = pc;
+      const input = context.createAnalyser();
+      input.fftSize = 256;
+      context.createMediaStreamSource(mic).connect(input);
+      const output = context.createAnalyser();
+      output.fftSize = 256;
+      const samples = new Uint8Array(256);
+      const level = (analyser: AnalyserNode) => {
+        analyser.getByteTimeDomainData(samples);
+        return Math.sqrt(
+          samples.reduce((sum, value) => sum + ((value - 128) / 128) ** 2, 0) / samples.length,
+        );
       };
-      src.start(at);
-      nextStartRef.current = at + buffer.duration;
-    },
-    [maybeResume],
-  );
-
-  // El turno: paramos de oír, pedimos la respuesta en streaming, la hablamos
-  // frase por frase, y cuando el audio se acaba volvemos a escuchar.
-  const runTurn = useCallback(
-    async (said: string) => {
-      const question = said.trim();
-      if (!question || closedRef.current) return;
-      clearSilence();
-      wantListenRef.current = false;
-      recRef.current?.stop();
-
-      setLiveText('');
-      setReply('');
-      setNote(null);
-      historyRef.current = [...historyRef.current, { role: 'you', text: question }];
-      setPhase('thinking');
-
-      // Reinicia la cola de audio para este turno.
-      streamDoneRef.current = false;
-      pendingRef.current = 0;
-      nextStartRef.current = 0;
-      leftoverRef.current = null;
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-      let full = '';
-      let firstChunk = true;
-
-      try {
-        const res = await fetch('/api/voice/turn', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ question, history: historyRef.current.slice(-12) }),
-          signal: controller.signal,
-        });
-        if (res.status === 402) {
-          wantListenRef.current = false;
-          setPhase('error');
-          setNote('El modo voz es una función premium. Habla con tu administrador para activarla.');
-          return;
+      const animate = () => {
+        if (!alive()) return;
+        if (!document.hidden)
+          orb.current?.style.setProperty(
+            '--voice-level',
+            String(Math.min(1, Math.max(level(input), level(output)) * 5)),
+          );
+        animation.current = requestAnimationFrame(animate);
+      };
+      animate();
+      pc.ontrack = (event) => {
+        if (!alive()) return;
+        const remote = event.streams[0] ?? new MediaStream([event.track]);
+        context.createMediaStreamSource(remote).connect(output);
+        if (audio.current) {
+          audio.current.srcObject = remote;
+          void audio.current.play().catch(() => {
+            if (alive()) setAudioBlocked(true);
+          });
         }
-        if (!res.ok || !res.body) {
-          setPhase('error');
-          setNote('No pude responder ahora mismo.');
-          return;
-        }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let sse = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done || closedRef.current) break;
-          sse += decoder.decode(value, { stream: true });
-          let sep = sse.indexOf('\n\n');
-          while (sep >= 0) {
-            const block = sse.slice(0, sep);
-            sse = sse.slice(sep + 2);
-            sep = sse.indexOf('\n\n');
-            const event = /event: (.*)/.exec(block)?.[1]?.trim();
-            const dataRaw = /data: (.*)/.exec(block)?.[1];
-            if (!event || dataRaw === undefined) continue;
-            let data: { text?: string; b64?: string; message?: string; sampleRate?: number } = {};
-            try {
-              data = JSON.parse(dataRaw);
-            } catch {
-              continue;
-            }
-            if (event === 'meta' && data.sampleRate) {
-              sampleRateRef.current = data.sampleRate;
-            } else if (event === 'text' && data.text) {
-              if (firstChunk) {
-                firstChunk = false;
-                setPhase('speaking');
-              }
-              full = `${full} ${data.text}`.trim();
-              setReply(full);
-            } else if (event === 'audio' && data.b64) {
-              void enqueueAudio(data.b64);
-            } else if (event === 'error') {
-              setNote(data.message ?? 'Algo se cortó.');
-            }
-          }
-        }
-      } catch {
-        if (!closedRef.current) {
-          setPhase('error');
-          setNote('Se me cayó la conexión un momento.');
-        }
-      } finally {
-        abortRef.current = null;
-      }
-
-      if (closedRef.current) return;
-      if (full) historyRef.current = [...historyRef.current, { role: 'cortex', text: full }];
-
-      // El stream terminó. Si hubo audio, `maybeResume` reanudará la escucha
-      // cuando la última frase acabe de sonar; si no hubo (sin voz), reanuda ya.
-      streamDoneRef.current = true;
-      if (pendingRef.current <= 0) {
-        if (!full) setNote((n) => n ?? 'No estoy seguro de eso.');
-        startListening();
-      }
-    },
-    [clearSilence, enqueueAudio, startListening],
-  );
-
-  // Montaje: detectar soporte, cablear el reconocedor, arrancar el loop.
-  useEffect(() => {
-    const Ctor = recognitionCtor();
-    if (!Ctor) {
-      setSupported(false);
-      setPhase('error');
-      return;
-    }
-    setSupported(true);
-    const rec = new Ctor();
-    rec.lang = 'es-CO';
-    rec.continuous = true;
-    rec.interimResults = true;
-
-    rec.onresult = (event) => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const r = event.results[i];
-        if (!r) continue;
-        const t = r[0]?.transcript ?? '';
-        if (r.isFinal) finalRef.current = `${finalRef.current} ${t}`.trim();
-        else interim += t;
-      }
-      setLiveText(`${finalRef.current} ${interim}`.trim());
-      clearSilence();
-      if (finalRef.current) {
-        silenceTimer.current = setTimeout(() => void runTurn(finalRef.current), END_OF_TURN_MS);
-      }
-    };
-    rec.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        setNote('Necesito permiso del micrófono para el modo voz.');
+      };
+      const fail = (message: string) => {
+        if (!alive()) return;
+        dispose();
+        setNote(message);
         setPhase('error');
-        wantListenRef.current = false;
-      }
-    };
-    rec.onend = () => {
-      if (wantListenRef.current && !closedRef.current) {
+      };
+      pc.onconnectionstatechange = () => {
+        if (!alive()) return;
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')
+          fail('Se perdió la conexión. Tu micrófono se ha cerrado; puedes volver a conectar.');
+      };
+      for (const track of mic.getAudioTracks()) pc.addTrack(track, mic);
+      const dc = pc.createDataChannel('oai-events');
+      channel.current = dc;
+      const send = (event: unknown) => {
+        if (alive() && dc.readyState === 'open') dc.send(JSON.stringify(event));
+      };
+
+      const calls = new Set<string>();
+      const addTurn = (turn: Turn) => {
+        turns.current = [...turns.current, turn].slice(-12);
+        setTranscript((previous) =>
+          [...previous.filter((item) => !turn.id || item.id !== turn.id), turn].slice(-20),
+        );
+      };
+      dc.onopen = () => {
+        if (!alive()) return;
+        clearTimeout(connectingTimer);
+        setPhase('listening');
+        deadline.current = setTimeout(
+          () => fail('Terminó esta sesión de 15 minutos. Puedes abrir otra cuando quieras.'),
+          VOICE_SESSION_MS,
+        );
+      };
+      dc.onclose = () => {
+        if (alive()) fail('La llamada terminó. Puedes volver a conectar.');
+      };
+      dc.onmessage = async (message) => {
+        if (!alive()) return;
+        let event: RealtimeEvent;
         try {
-          rec.start();
+          event = JSON.parse(message.data);
         } catch {
-          /* ya arrancando */
+          return;
         }
+        if (!event || typeof event.type !== 'string') return;
+        if (event.type === 'response.output_item.done' && event.item?.type === 'function_call') {
+          event = { ...event.item, type: 'response.function_call_arguments.done' };
+        }
+        switch (event.type) {
+          case 'input_audio_buffer.speech_started':
+            speakingEpoch.current++;
+            setPhase('listening');
+            break;
+          case 'response.created':
+            setPhase('thinking');
+            break;
+          case 'output_audio_buffer.started':
+            setPhase('speaking');
+            break;
+          case 'output_audio_buffer.stopped':
+            setPhase('listening');
+            break;
+          case 'conversation.item.input_audio_transcription.completed':
+            if (event.transcript)
+              addTurn({ role: 'you', text: event.transcript, id: event.item_id });
+            break;
+          case 'response.output_audio_transcript.delta':
+            setTranscript((previous) => {
+              const found = previous.find((item) => item.id === event.item_id);
+              return [
+                ...previous.filter((item) => item.id !== event.item_id),
+                {
+                  role: 'cortex' as const,
+                  id: event.item_id,
+                  text: (found?.text ?? '') + (event.delta ?? ''),
+                },
+              ].slice(-20);
+            });
+            break;
+          case 'response.output_audio_transcript.done':
+            if (event.transcript)
+              addTurn({ role: 'cortex', text: event.transcript, id: event.item_id });
+            break;
+          case 'response.function_call_arguments.done': {
+            if (
+              event.name !== 'consult_cortex' ||
+              !event.call_id ||
+              !event.arguments ||
+              calls.has(event.call_id)
+            )
+              return;
+            calls.add(event.call_id);
+            setPhase('consulting');
+            const epoch = speakingEpoch.current;
+            const task = new AbortController();
+            aborts.current.add(task);
+            let result: string;
+            try {
+              const args = JSON.parse(event.arguments);
+              if (
+                typeof args.question !== 'string' ||
+                !args.question.trim() ||
+                args.question.length > 1000
+              )
+                throw new Error('La consulta necesita una pregunta de hasta 1.000 caracteres.');
+              const response = await fetch('/api/voice/turn', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                  question: args.question,
+                  history: turns.current.map(({ role, text }) => ({
+                    role,
+                    text: text.slice(0, 2000),
+                  })),
+                  textOnly: true,
+                  spaceIds,
+                }),
+                signal: AbortSignal.any([task.signal, AbortSignal.timeout(60_000)]),
+              });
+              result = await readVoiceText(response);
+            } catch (error) {
+              result = `No se completó la consulta: ${(error as Error).message}. No confirmes ninguna acción.`;
+            } finally {
+              aborts.current.delete(task);
+            }
+            if (!alive()) return;
+            send({
+              type: 'conversation.item.create',
+              item: {
+                type: 'function_call_output',
+                call_id: event.call_id,
+                output: result.slice(0, 16000),
+              },
+            });
+            if (epoch === speakingEpoch.current) send({ type: 'response.create' });
+            break;
+          }
+          case 'error':
+            if (event.error?.code === 'response_cancel_not_active') break;
+            setNote('La voz encontró un problema. Puedes interrumpir o volver a conectar.');
+            break;
+        }
+      };
+      connectingTimer = setTimeout(
+        () => fail('La conexión tardó demasiado. Intenta de nuevo.'),
+        25_000,
+      );
+      connectionDeadline.current = connectingTimer;
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const response = await fetch('/api/voice/realtime', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sdp: offer.sdp,
+          history: turns.current.map(({ role, text }) => ({ role, text: text.slice(0, 2000) })),
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'No se pudo conectar.');
       }
-    };
-    recRef.current = rec;
-    startListening();
-
-    return () => {
-      closedRef.current = true;
-      wantListenRef.current = false;
-      clearSilence();
-      rec.onresult = null;
-      rec.onerror = null;
-      rec.onend = null;
-      try {
-        rec.abort();
-      } catch {
-        /* ya detenido */
-      }
-      abortRef.current?.abort();
-      void ctxRef.current?.close().catch(() => undefined);
-      ctxRef.current = null;
-    };
-  }, [runTurn, startListening, clearSilence]);
-
-  const close = useCallback(() => {
-    closedRef.current = true;
-    onClose();
-  }, [onClose]);
-
+      const sdp = await response.text();
+      if (alive()) await pc.setRemoteDescription({ type: 'answer', sdp });
+    } catch (error) {
+      if (!alive()) return;
+      clearTimeout(connectingTimer);
+      dispose();
+      setPhase('error');
+      setNote(
+        (error as Error).name === 'NotAllowedError'
+          ? 'Activa el permiso de micrófono en tu navegador para conversar.'
+          : (error as Error).message,
+      );
+    } finally {
+      aborts.current.delete(controller);
+    }
+  };
+  const connected = !['idle', 'connecting', 'error'].includes(phase);
+  const interrupt = () => {
+    speakingEpoch.current++;
+    for (const task of aborts.current) task.abort();
+    if (channel.current?.readyState !== 'open') return;
+    channel.current.send(JSON.stringify({ type: 'response.cancel' }));
+    channel.current.send(JSON.stringify({ type: 'output_audio_buffer.clear' }));
+    setPhase('listening');
+  };
+  if (legacy) return <LegacyVoiceMode onClose={onClose} />;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md overflow-hidden rounded-card border border-border bg-surface shadow-card">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="font-semibold text-ink">Modo voz</span>
-          <span className="ml-auto text-xs text-ink-faint">{PHASE_LABEL[phase]}</span>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Cerrar modo voz"
-            className="ml-1 grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-surface-2 hover:text-ink"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="flex flex-col items-center gap-4 px-5 py-7">
-          {supported === false ? (
-            <p className="text-center text-sm text-ink-muted">
-              Tu navegador no trae reconocimiento de voz (Firefox no lo tiene). Prueba en Chrome o
-              Safari.
-            </p>
-          ) : (
-            <>
+    <Dialog.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          dispose();
+          onClose();
+        }
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="voice-veil" />
+        <Dialog.Content className="voice-room" aria-describedby="voice-description">
+          <header className="voice-room__header">
+            <span>Cortex / Conversación de voz</span>
+            <Dialog.Close asChild>
+              <button type="button" aria-label="Cerrar modo voz">
+                <X size={20} />
+              </button>
+            </Dialog.Close>
+          </header>
+          <div className="voice-room__layout">
+            <div className="voice-room__stage">
               <div
-                className={`grid h-24 w-24 place-items-center rounded-full transition-colors ${
-                  phase === 'listening'
-                    ? 'bg-primary-soft'
-                    : phase === 'speaking'
-                      ? 'bg-emerald-soft'
-                      : 'bg-surface-2'
-                }`}
+                ref={orb}
+                className="voice-orb"
+                data-phase={phase}
+                data-muted={muted}
+                aria-hidden="true"
               >
-                <div
-                  className={`grid h-16 w-16 place-items-center rounded-full ${
-                    phase === 'listening'
-                      ? 'animate-pulse bg-primary text-white'
-                      : phase === 'speaking'
-                        ? 'bg-emerald text-white'
-                        : 'bg-surface text-ink-muted'
-                  }`}
+                <i />
+                <i />
+                <i />
+                <CortexSignature />
+              </div>
+              <Dialog.Title>
+                {muted && connected ? 'Micrófono en silencio.' : labels[phase]}
+              </Dialog.Title>
+              <Dialog.Description id="voice-description">
+                {connected
+                  ? 'Habla con naturalidad. Puedes interrumpir a Cortex cuando lo necesites.'
+                  : 'Una conversación con voz de IA. Al conectar, tu audio se transmite a OpenAI para responder en tiempo real.'}
+              </Dialog.Description>
+              {note && (
+                <p className="voice-note" role="alert">
+                  {note}
+                </p>
+              )}
+              {audioBlocked && (
+                <button
+                  type="button"
+                  className="voice-start"
+                  onClick={() =>
+                    void audio.current
+                      ?.play()
+                      .then(() => setAudioBlocked(false))
+                      .catch(() =>
+                        setNote('El navegador no permitió reproducir audio. Revisa sus permisos.'),
+                      )
+                  }
                 >
-                  {phase === 'thinking' ? (
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  ) : (
-                    <Mic className="h-6 w-6" />
-                  )}
-                </div>
+                  <Volume2 size={17} /> Activar audio
+                </button>
+              )}
+              <div className="voice-controls">
+                {connected ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-pressed={muted}
+                      aria-label={muted ? 'Activar micrófono' : 'Silenciar micrófono'}
+                      onClick={() => {
+                        for (const track of stream.current?.getAudioTracks() ?? [])
+                          track.enabled = muted;
+                        setMuted(!muted);
+                      }}
+                    >
+                      <span>{muted ? <MicOff /> : <Mic />}</span>
+                      {muted ? 'Activar' : 'Silenciar'}
+                    </button>
+                    <button type="button" onClick={interrupt}>
+                      <span>
+                        <Square size={19} />
+                      </span>
+                      Interrumpir
+                    </button>
+                    <button
+                      type="button"
+                      className="voice-end"
+                      onClick={() => {
+                        dispose();
+                        setPhase('idle');
+                      }}
+                    >
+                      <span>
+                        <PhoneOff />
+                      </span>
+                      Terminar
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="voice-start"
+                    disabled={phase === 'connecting'}
+                    onClick={() => void connect()}
+                  >
+                    <Mic size={19} />
+                    {phase === 'connecting' ? 'Conectando…' : 'Conectar mi voz'}
+                  </button>
+                )}
               </div>
-
-              <div className="min-h-[3.5rem] w-full text-center">
-                {phase === 'listening' || phase === 'idle' ? (
-                  <p className="text-sm text-ink">
-                    {liveText || <span className="text-ink-faint">Di algo… «¿qué tengo hoy?»</span>}
-                  </p>
-                ) : phase === 'thinking' ? (
-                  <p className="text-sm text-ink-faint">Cortex está pensando…</p>
-                ) : reply ? (
-                  <p className="text-sm font-medium text-ink">{reply}</p>
-                ) : null}
-              </div>
-
-              {note ? <p className="text-center text-xs text-amber">{note}</p> : null}
-
-              <p className="text-center text-xs text-ink-faint">
-                Habla natural; cuando hagas una pausa, te respondo. Cierra cuando quieras.
+              {!connected && phase !== 'connecting' && (
+                <button
+                  type="button"
+                  className="voice-compatible"
+                  onClick={() => {
+                    dispose();
+                    setLegacy(true);
+                  }}
+                >
+                  Usar modo compatible
+                </button>
+              )}
+            </div>
+            <aside className="voice-transcript">
+              <h3>La conversación, a la vista.</h3>
+              <p className="voice-transcript__hint">
+                Transcripción de esta sesión. Revísala antes de llevarla al chat.
               </p>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+              <div className="voice-transcript__turns">
+                {transcript.length ? (
+                  transcript.map((turn, i) => (
+                    <div key={turn.id ?? i} data-role={turn.role}>
+                      <span>{turn.role === 'you' ? 'Tú' : 'Cortex'}</span>
+                      <p>{turn.text}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="voice-transcript__empty">
+                    Tus palabras y las respuestas aparecerán aquí.
+                  </p>
+                )}
+              </div>
+              {onCompose && transcript.length > 0 && (
+                <button
+                  type="button"
+                  className="voice-to-chat"
+                  onClick={() => {
+                    onCompose(
+                      `Retomemos esta conversación de voz:\n\n${transcript.map((turn) => `${turn.role === 'you' ? 'Yo' : 'Cortex'}: ${turn.text}`).join('\n\n')}`,
+                    );
+                    dispose();
+                    onClose();
+                  }}
+                >
+                  Llevar al borrador del chat <ArrowUpRight size={15} />
+                </button>
+              )}
+            </aside>
+          </div>
+          {/* WebRTC audio is played directly; the analyser never feeds the microphone to speakers. */}
+          {/* biome-ignore lint/a11y/useMediaCaption: Live captions are rendered in the adjacent transcript; WebRTC has no caption file. */}
+          <audio ref={audio} autoPlay />
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

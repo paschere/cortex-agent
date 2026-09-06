@@ -1,15 +1,33 @@
 import { clsx } from 'clsx';
+import { useId } from 'react';
 
-const folds = [
-  'M52 153C19 89 65 35 130 52c64 17 80 108 25 136C101 216 37 157 62 97c26-61 121-52 130 14',
-  'M60 157C28 96 69 43 130 59c58 15 72 97 22 122-49 26-107-27-83-82 23-55 110-47 117 14',
-  'M68 160C39 103 74 52 131 67c51 14 64 84 18 108-43 22-94-24-73-74 21-49 99-42 104 14',
-  'M77 163C50 110 79 61 131 75c45 12 55 73 15 93-37 20-81-20-63-64 19-43 86-38 91 13',
-  'M86 165C61 118 85 70 131 83c38 10 47 60 12 78-31 16-68-16-53-54 16-37 74-33 78 13',
-];
+// One continuous, tapered spiral. The silhouette stays intact while rotating.
+const spiral = Array.from({ length: 221 }, (_, index) => {
+  const u = index / 220;
+  const angle = -Math.PI / 2 + u * Math.PI * 4.6;
+  const radius = 6 + 85 * u;
+  const width = (1.2 + 8 * Math.sqrt(u)) * Math.min(1, (1 - u) / 0.08 + 0.035);
+  const slope = 85 / (Math.PI * 4.6);
+  const normal = angle - Math.atan2(slope, radius);
+  return {
+    x: 120 + radius * Math.cos(angle),
+    y: 120 + radius * Math.sin(angle),
+    nx: (Math.cos(normal) * width) / 2,
+    ny: (Math.sin(normal) * width) / 2,
+  };
+});
+const edge = (side: number) =>
+  (side === 1 ? spiral : [...spiral].reverse())
+    .map(
+      ({ x, y, nx, ny }, index) =>
+        `${index === 0 && side === 1 ? 'M' : 'L'}${(x + nx * side).toFixed(2)} ${(y + ny * side).toFixed(2)}`,
+    )
+    .join(' ');
+const silhouette = `${edge(1)} ${edge(-1)} Z`;
 
-/** Brand motion, not an activity indicator. CSS respects reduced motion and print. */
+/** Decorative brand motion, controlled by the host's pause and reduce settings. */
 export function CortexSignature({ className }: { className?: string }) {
+  const id = `cortex-spiral-${useId().replace(/:/g, '')}`;
   return (
     <svg
       viewBox="0 0 240 240"
@@ -17,25 +35,15 @@ export function CortexSignature({ className }: { className?: string }) {
       aria-hidden="true"
       className={clsx('cortex-signature', className)}
     >
+      <defs>
+        <linearGradient id={id} x1="40" y1="35" x2="190" y2="210" gradientUnits="userSpaceOnUse">
+          <stop stopColor="currentColor" />
+          <stop offset=".44" stopColor="#f0edff" />
+          <stop offset="1" stopColor="currentColor" />
+        </linearGradient>
+      </defs>
       <g className="cortex-signature-rotor">
-        {folds.map((d, index) => (
-          <g
-            key={d}
-            className="cortex-signature-fold"
-            style={{ animationDelay: `${index * -1.2}s` }}
-          >
-            <path d={d} stroke="currentColor" strokeWidth={1.5 + index * 0.5} />
-            <path
-              d={d}
-              pathLength={100}
-              stroke="currentColor"
-              strokeWidth={2 + index * 0.5}
-              strokeLinecap="round"
-              className="cortex-signature-trace"
-              style={{ animationDelay: `${index * -1.2}s` }}
-            />
-          </g>
-        ))}
+        <path d={silhouette} fill={`url(#${id})`} className="cortex-signature-spiral" />
       </g>
     </svg>
   );

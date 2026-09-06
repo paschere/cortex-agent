@@ -39,6 +39,7 @@ import {
   Plus,
   Server,
   ShieldCheck,
+  Square,
   Target,
   Telescope,
   Terminal,
@@ -64,6 +65,8 @@ interface AgentInfo {
 interface InputBarProps {
   onSend: (text: string) => void;
   disabled: boolean;
+  onStop?: () => void;
+  voiceHistory?: { role: 'you' | 'cortex'; text: string }[];
   conversationId?: string;
   agents: AgentInfo[];
   agentSlug: string;
@@ -239,6 +242,8 @@ function expandBriefingCommand(value: string): string | null {
 export function InputBar({
   onSend,
   disabled,
+  onStop,
+  voiceHistory,
   conversationId,
   agents,
   agentSlug,
@@ -781,6 +786,15 @@ export function InputBar({
               <Plus className="h-4 w-4" aria-hidden />
             </button>
 
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setVoiceOpen(true)}
+              title="Modo voz: habla con Cortex y te responde con voz"
+              className="chat-voice-entry"
+            >
+              <Waves className="h-3.5 w-3.5" /> Hablar
+            </button>
             {(extras || screen?.live) && (
               <>
                 <ScopePicker selected={scope} onChange={onScopeChange} disabled={disabled} />
@@ -789,15 +803,6 @@ export function InputBar({
                   getBaseText={() => textRef.current}
                   onText={setComposerText}
                 />
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => setVoiceOpen(true)}
-                  title="Modo voz: habla con Cortex y te responde con voz"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-pill px-2.5 text-xs font-medium text-ink-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50"
-                >
-                  <Waves className="h-3.5 w-3.5" /> voz
-                </button>
                 <TeachFlowLink />
                 {screen && <ScreenViewButton session={screen} disabled={disabled} />}
               </>
@@ -805,6 +810,16 @@ export function InputBar({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {disabled && onStop && (
+              <button
+                type="button"
+                className="chat-stop"
+                onClick={onStop}
+                aria-label="Detener respuesta"
+              >
+                <Square size={16} />
+              </button>
+            )}
             {text.length > CHAR_COUNT_THRESHOLD && (
               <span className="tabular text-micro text-ink-faint">{text.length}</span>
             )}
@@ -827,8 +842,15 @@ export function InputBar({
   );
 
   return (
-    <div className="shrink-0 px-4 pb-4 pt-1">
-      {voiceOpen ? <VoiceMode onClose={() => setVoiceOpen(false)} /> : null}
+    <div className="chat-composer-dock shrink-0 px-4 pb-4 pt-1">
+      {voiceOpen ? (
+        <VoiceMode
+          history={voiceHistory}
+          spaceIds={scope.map((space) => space.id)}
+          onCompose={(voiceText) => setComposerText([textRef.current, voiceText].filter(Boolean).join('\n\n'))}
+          onClose={() => setVoiceOpen(false)}
+        />
+      ) : null}
       <div className="mx-auto w-full max-w-3xl">
         {/*
           EL COMPOSITOR VA DENTRO DE LA BANDEJA, no debajo. La bandeja es la

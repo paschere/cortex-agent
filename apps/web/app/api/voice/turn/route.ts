@@ -2,8 +2,8 @@ import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
-import { takeSpokenClauses, VOICE_LIVE_FACTS } from '@/lib/voice-spoken';
 import { figuresForTts } from '@/lib/voice-figures';
+import { VOICE_LIVE_FACTS, takeSpokenClauses } from '@/lib/voice-spoken';
 import { listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
 import { ConfirmationRequiredError, SecurityBlockedError } from '@cortex/core';
 import { type CoreTool, streamText, tool } from 'ai';
@@ -42,12 +42,14 @@ export const maxDuration = 60;
  * pintarla), `audio` (PCM linear16 en base64, para reproducir en cola) y
  * `done`. El cliente reproduce el PCM con Web Audio (ver VoiceMode.tsx).
  *
- * Modelo: `voiceModel()` (Sonnet 5 sin thinking). Auto-autoriza las tools como
- * en reuniones; la capa de seguridad sigue bloqueando lo que clasifica `block`.
+ * Modelo: `voiceModel()` (Sonnet 5 sin thinking). Las herramientas conservan sus
+ * controles de seguridad y confirmación; las aprobaciones se resuelven en el chat.
  */
 
 const Body = z.object({
   question: z.string().min(1).max(1_000),
+  textOnly: z.boolean().optional(),
+  spaceIds: z.array(z.string().uuid()).max(100).optional(),
   history: z
     .array(z.object({ role: z.enum(['you', 'cortex']), text: z.string().max(2_000) }))
     .max(20)
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'No entendí la pregunta.' }, { status: 400 });
   }
-  const { question, history } = parsed.data;
+  const { question, history, textOnly, spaceIds } = parsed.data;
 
   const orgId = user.organization.id;
   const db = getOrgScopedClient(orgId);
@@ -96,6 +98,7 @@ export async function POST(req: NextRequest) {
     userId: user.id as UUID,
     agentId: agentRow.id as UUID,
     surface: 'web',
+    kbSpaceIds: spaceIds?.length ? spaceIds : undefined,
   });
 
   const historyText = history?.length
@@ -129,13 +132,14 @@ export async function POST(req: NextRequest) {
             def,
             args,
             { ...scopedCtx, signal: abortSignal },
-            { confirmed: true },
+            { confirmed: false },
           );
         } catch (err) {
           if (err instanceof ConfirmationRequiredError) {
             return {
               __error: true,
-              message: 'necesitaba una confirmación que en voz no se puede pedir',
+              message:
+                'Esta acción requiere aprobación. Pídele a la persona continuar en el chat para revisarla; no se ha ejecutado.',
             };
           }
           if (err instanceof SecurityBlockedError) {
@@ -147,20 +151,28 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const streamAbort = new AbortController();
   const result = streamText({
     model: voiceModel(),
     system,
     prompt: `TE DIJO LA PERSONA: ${question}`,
     tools: aiTools,
     maxSteps: 6,
+    abortSignal: AbortSignal.any([req.signal, streamAbort.signal]),
   });
 
-  const apiKey = process.env.DEEPGRAM_API_KEY;
+  const apiKey = textOnly ? undefined : process.env.DEEPGRAM_API_KEY;
   const encoder = new TextEncoder();
 
+  let cancelled = false;
   const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+      streamAbort.abort();
+    },
     async start(controller) {
       const send = (event: string, data: unknown) => {
+        if (cancelled || req.signal.aborted) return;
         controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
       };
 
@@ -179,7 +191,7 @@ export async function POST(req: NextRequest) {
         } catch {
           send('error', { message: 'No pude responder.' });
         } finally {
-          controller.close();
+          if (!cancelled) controller.close();
         }
         return;
       }
@@ -188,6 +200,7 @@ export async function POST(req: NextRequest) {
 
       const dgUrl = `wss://api.deepgram.com/v1/speak?encoding=linear16&sample_rate=${SAMPLE_RATE}&model=${encodeURIComponent(TTS_VOICE)}`;
       const ws = new WebSocket(dgUrl, { headers: { Authorization: `Token ${apiKey}` } });
+      streamAbort.signal.addEventListener('abort', () => ws.close(), { once: true });
 
       // El audio (binario) se reenvía al cliente; un `Flushed` de control marca
       // que Deepgram terminó de sintetizar todo lo que se le mandó.
@@ -265,7 +278,7 @@ export async function POST(req: NextRequest) {
         } catch {
           /* ya cerrado */
         }
-        controller.close();
+        if (!cancelled) controller.close();
       }
     },
   });

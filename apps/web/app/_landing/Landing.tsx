@@ -1,6 +1,7 @@
 import { CortexSignature } from '@/components/ui/cortex-signature';
 import { ArrowDown, ArrowUpRight, AudioLines, Globe2, Paperclip, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
+import { ConnectionStory } from './ConnectionStory';
 import { MissionPreview } from './MissionPreview';
 import { SpaceHero } from './SpaceHero';
 
@@ -56,6 +57,7 @@ export function Landing() {
             </a>
           </div>
         </section>
+        <ConnectionStory />
         <section
           className="cosmos-product cosmos-wrap"
           id="experiencia"
