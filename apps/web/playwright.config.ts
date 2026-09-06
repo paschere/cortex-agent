@@ -53,9 +53,15 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
   },
   projects: [
+    {
+      name: 'public',
+      testMatch: /landing\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+    },
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
     {
       name: 'chromium',
+      testIgnore: /landing\.spec\.ts/,
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Chrome'],

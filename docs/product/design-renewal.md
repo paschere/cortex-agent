@@ -175,3 +175,10 @@ Los planos usan el progreso global del scroll sin otro bucle de animación.
 La galaxia añade puntos destacados con halo en su shader. El fondo es decorativo,
 no captura interacciones, reduce intensidad en móvil y se oculta con movimiento
 reducido o al imprimir. Se revisó visualmente el hero y el cierre en navegador.
+
+Corrección de producción: la textura literal `/images/cortex-human-connection.png`
+recibía un 307 a `/login` para visitantes anónimos, por lo que la escena mostraba
+solamente el logo de respaldo. Ahora se importa como asset estático de Next.js y
+se publica con hash bajo `/_next/static/media`, ruta pública ya existente. No se
+amplía la lista de rutas sin autenticación. La regresión está en
+`e2e/landing.spec.ts`, proyecto Playwright `public`, sin dependencia de login.

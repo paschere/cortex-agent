@@ -1,10 +1,13 @@
 'use client';
 
+import humanPortrait from '@/public/images/cortex-human-connection.png';
 import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber';
 import { type MutableRefObject, Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
-const HUMAN = '/images/cortex-human-connection.png';
+// Bundle under /_next/static/media so anonymous visitors can load the texture.
+// A literal /images URL is intercepted by the application's session middleware.
+const HUMAN = humanPortrait.src;
 const humanVertex = /* glsl */ `
   varying vec2 vUv;
   void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }

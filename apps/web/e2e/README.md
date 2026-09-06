@@ -64,3 +64,15 @@ hay panel —que es lo que pasaría si `PanelHost` se dibujara como padre de
 `{children}` en vez de como hermano— la prueba se pone roja, y roja por el
 motivo correcto: el stream termina en la red pero los mensajes ya no están en la
 pantalla. Es exactamente el fallo que esta suite existe para impedir.
+
+## Landing pública sin sesión
+
+Con Next.js iniciado, esta prueba no necesita usuarios ni una base de datos sembrada:
+
+```sh
+PLAYWRIGHT_BASE_URL=http://localhost:3100 pnpm --filter @cortex/web exec playwright test --project=public
+```
+
+Comprueba que la textura humana se sirve como imagen pública (200, sin redirección
+al login) y que la escena avanza y retrocede con el scroll. Debe ejecutarse contra
+Next.js: un servidor de archivos estáticos no reproduce el middleware de sesión.
