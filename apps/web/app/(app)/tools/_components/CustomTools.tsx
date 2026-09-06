@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { PrepareTool } from './PrepareTool';
 import {
   type CustomToolAuthType,
   type CustomToolBodyEncoding,
@@ -88,13 +89,18 @@ const HELP = 'mt-0.5 text-micro leading-relaxed text-ink-faint';
 const LABEL = 'block text-xs font-semibold text-ink';
 
 export function CustomTools() {
+  const [preparing, setPreparing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tools, setTools] = useState<CustomToolView[]>([]);
   const [canManage, setCanManage] = useState(false);
   const [atCapacity, setAtCapacity] = useState(false);
   const [maxTools, setMaxTools] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ id?: string; draft: CustomToolDraft } | null>(null);
+  const [editing, setEditing] = useState<{
+    id?: string;
+    draft: CustomToolDraft;
+    guided?: boolean;
+  } | null>(null);
   const [openTester, setOpenTester] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -142,13 +148,28 @@ export function CustomTools() {
             </p>
           </div>
         </div>
-        {canManage && !editing && (
-          <Button type="button" onClick={startCreate} disabled={atCapacity}>
-            <Plus className="h-4 w-4" />
-            Crear herramienta
-          </Button>
+        {canManage && !editing && !preparing && (
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={() => setPreparing(true)} disabled={atCapacity}>
+              Conectar con documentación
+            </Button>
+            <Button type="button" variant="outline" onClick={startCreate} disabled={atCapacity}>
+              <Plus className="h-4 w-4" />
+              Configurar manualmente
+            </Button>
+          </div>
         )}
       </div>
+
+      {preparing && canManage && (
+        <PrepareTool
+          onCancel={() => setPreparing(false)}
+          onPrepared={(draft) => {
+            setPreparing(false);
+            setEditing({ draft, guided: true });
+          }}
+        />
+      )}
 
       {loading && <p className="mt-3 text-xs text-ink-faint">Cargando…</p>}
 
@@ -171,7 +192,7 @@ export function CustomTools() {
         </p>
       )}
 
-      {!loading && !editing && tools.length === 0 && !loadError && (
+      {!loading && !editing && !preparing && tools.length === 0 && !loadError && (
         <div className="mt-3 rounded-card border border-dashed border-border-strong bg-surface-2 p-6 text-center">
           <p className="text-sm font-semibold text-ink">Todavía no hay ninguna</p>
           <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-muted">
@@ -180,9 +201,9 @@ export function CustomTools() {
             todo el mundo.
           </p>
           {canManage ? (
-            <Button type="button" className="mt-4" onClick={startCreate}>
+            <Button type="button" className="mt-4" onClick={() => setPreparing(true)}>
               <Plus className="h-4 w-4" />
-              Crear la primera
+              Conectar mi primer sistema
             </Button>
           ) : (
             <p className="mt-3 text-micro text-ink-faint">
@@ -197,6 +218,7 @@ export function CustomTools() {
         <CustomToolForm
           key={editing.id ?? 'new'}
           initial={editing.draft}
+          guided={editing.guided}
           editingId={editing.id}
           onCancel={() => setEditing(null)}
           onSaved={(tool, warning) => {
@@ -205,7 +227,13 @@ export function CustomTools() {
               return [...rest, tool].sort((a, b) => a.name.localeCompare(b.name, 'es'));
             });
             setEditing(null);
-            setNotice(warning);
+            setNotice(
+              warning ||
+                (editing.guided
+                  ? 'Conexión guardada y desactivada. Completa los datos de ejemplo y pulsa Correr la prueba. Si responde lo esperado, edítala para activarla.'
+                  : null),
+            );
+            if (editing.guided) setOpenTester(tool.id);
           }}
         />
       )}
@@ -447,9 +475,7 @@ function TestResult({ result }: { result: CustomToolTestResponse }) {
         ) : (
           <TriangleAlert className="h-4 w-4 text-rose" />
         )}
-        <span
-          className={clsx('text-xs font-semibold', result.ok ? 'text-emerald' : 'text-rose')}
-        >
+        <span className={clsx('text-xs font-semibold', result.ok ? 'text-emerald' : 'text-rose')}>
           {result.ok ? 'Respondió bien' : 'No funcionó'}
         </span>
         {result.response && (
@@ -461,6 +487,20 @@ function TestResult({ result }: { result: CustomToolTestResponse }) {
           <span className="tabular text-micro text-ink-muted">{result.elapsedMs} ms</span>
         )}
       </div>
+
+      {result.response && !result.ok && (
+        <p className="mt-2 text-sm text-ink">
+          {result.response.status === 401
+            ? 'Revisa la llave o token: la API no aceptó el acceso.'
+            : result.response.status === 403
+              ? 'La cuenta conectada no tiene permiso para esta operación. Pide ese permiso al administrador del sistema.'
+              : result.response.status === 404
+                ? 'Revisa la ruta y el identificador del registro: la API no los encontró.'
+                : result.response.status === 429
+                  ? 'La API alcanzó su límite de llamadas. Espera antes de repetir la prueba.'
+                  : 'Revisa los datos de ejemplo y la respuesta del sistema antes de activar la herramienta.'}
+        </p>
+      )}
 
       {result.error && <p className="mt-1 text-micro leading-snug text-rose">{result.error}</p>}
       {result.problems?.map((p) => (
@@ -514,11 +554,13 @@ function TestResult({ result }: { result: CustomToolTestResponse }) {
 
 function CustomToolForm({
   initial,
+  guided = false,
   editingId,
   onCancel,
   onSaved,
 }: {
   initial: CustomToolDraft;
+  guided?: boolean;
   editingId?: string;
   onCancel: () => void;
   onSaved: (tool: CustomToolView, warning: string | null) => void;
@@ -579,7 +621,10 @@ function CustomToolForm({
     if (found.length > 0) return;
 
     setSaving(true);
-    const res = await saveCustomTool(draft, editingId);
+    const res = await saveCustomTool(
+      guided ? { ...draft, enabled: false, requiresConfirmation: true } : draft,
+      editingId,
+    );
     setSaving(false);
     if (res.ok) onSaved(res.tool, res.warning);
     else {
@@ -597,11 +642,16 @@ function CustomToolForm({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-ink">
-            {editingId ? 'Editar herramienta' : 'Nueva herramienta'}
+            {editingId
+              ? 'Editar herramienta'
+              : guided
+                ? 'Completa el acceso y prueba la conexión'
+                : 'Nueva herramienta'}
           </h3>
           <p className={HELP}>
-            Le vas a describir a Cortex una llamada a la API de tu empresa. Son cuatro cosas: cómo
-            se llama, para qué sirve, a dónde llama y qué datos necesita.
+            {guided
+              ? 'La operación ya está preparada. Revisa para qué se usará y completa la credencial que entrega tu proveedor. Después de guardar podrás hacer una prueba real.'
+              : 'Describe cómo se llama, para qué sirve, a dónde llama y qué datos necesita.'}
           </p>
         </div>
         <button
@@ -643,10 +693,9 @@ function CustomToolForm({
           ¿Para qué sirve?
         </label>
         <p className="mt-0.5 text-micro leading-relaxed text-ink-muted">
-          <span className="font-semibold text-ink">Esto es lo único que Cortex lee</span> cuando
-          decide si esta herramienta es la indicada para lo que le pidieron. Si no queda claro
-          cuándo usarla, no la va a escoger nunca. Escribe en qué situación conviene, qué le tienes
-          que dar y qué devuelve.
+          {guided
+            ? 'Revisa cuándo debe usar esta fuente, qué datos necesita y qué respuesta esperas.'
+            : 'Explica en qué situación conviene usarla, qué datos necesita y qué devuelve. Cortex usa esta descripción para decidir cuándo consultar tu sistema.'}
         </p>
         <textarea
           id="ct-description"
@@ -669,191 +718,206 @@ function CustomToolForm({
         </p>
       </div>
 
-      {/* 3 — The call */}
-      <div className="mt-4">
-        <span className={LABEL}>¿A dónde llama?</span>
-        <p className={HELP}>
-          La dirección de tu API. Tiene que empezar por https:// y el dominio no puede cambiar. Para
-          meter un dato adentro, escríbelo entre llaves dobles:{' '}
-          <code className="tabular text-ink-muted">
-            https://api.tuempresa.com/inventario/{'{{sku}}'}
-          </code>
+      {guided && (
+        <p className="mt-4 text-sm text-ink-muted">
+          Cortex pedirá:{' '}
+          {draft.fields.map((f) => f.description || f.name).join('; ') || 'ningún dato adicional'}.
+          Completa el acceso a continuación.
         </p>
-        <div className="mt-1.5 flex flex-wrap gap-2">
-          <select
-            aria-label="Método HTTP"
-            value={draft.method}
-            onChange={(e) => patch({ method: e.target.value as CustomToolMethod })}
-            className={clsx(SELECT_CLASS, 'tabular')}
-          >
-            {METHODS.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <Input
-            className="tabular min-w-[240px] flex-1"
-            value={draft.urlTemplate}
-            placeholder="https://api.tuempresa.com/inventario/{{sku}}"
-            onChange={(e) => patch({ urlTemplate: e.target.value })}
-            aria-label="Dirección de la API"
-          />
-        </div>
-      </div>
-
-      {/* 4 — Fields */}
-      <div className="mt-4">
-        <span className={LABEL}>¿Qué datos necesita?</span>
-        <p className={HELP}>
-          Lo que Cortex tiene que averiguar antes de llamar. La descripción de cada dato también la
-          lee el modelo, así que dile de dónde sale y cómo se ve.
-        </p>
-
-        {draft.fields.length === 0 && (
-          <p className="mt-2 rounded-sm border border-dashed border-border-strong bg-surface px-3 py-2 text-micro text-ink-faint">
-            Ninguno todavía. Si tu API no necesita nada, déjalo así.
-          </p>
-        )}
-
-        <div className="mt-2 flex flex-col gap-2">
-          {draft.fields.map((field, i) => (
-            // Positional key: a name-based key would remount the input on every
-            // keystroke and lose the caret.
-            // biome-ignore lint/suspicious/noArrayIndexKey: rows are positional
-            <div key={i} className="rounded-sm border border-border bg-surface p-2.5">
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="min-w-[140px] flex-1" htmlFor={`ct-field-${i}-name`}>
-                  <span className="field-label">Nombre del dato</span>
-                  <Input
-                    id={`ct-field-${i}-name`}
-                    className="tabular mt-1"
-                    value={field.name}
-                    placeholder="sku"
-                    onChange={(e) => patchField(i, { name: e.target.value })}
-                  />
-                </label>
-                <label>
-                  <span className="field-label">Tipo</span>
-                  <select
-                    value={field.type}
-                    onChange={(e) => patchField(i, { type: e.target.value as CustomToolFieldType })}
-                    className={clsx(SELECT_CLASS, 'mt-1 block')}
-                  >
-                    {(Object.keys(FIELD_TYPE_LABEL) as CustomToolFieldType[]).map((k) => (
-                      <option key={k} value={k}>
-                        {FIELD_TYPE_LABEL[k]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex items-center gap-1.5 pb-2.5 text-xs text-ink-muted">
-                  <input
-                    type="checkbox"
-                    checked={field.required}
-                    onChange={(e) => patchField(i, { required: e.target.checked })}
-                    className={CHECKBOX_CLASS}
-                  />
-                  Obligatorio
-                </label>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDraft((d) => ({ ...d, fields: d.fields.filter((_, j) => j !== i) }))
-                  }
-                  aria-label={`Quitar el dato ${field.name || i + 1}`}
-                  className="ml-auto mb-1.5 rounded-pill p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-rose motion-reduce:transition-none"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <label className="mt-2 block" htmlFor={`ct-field-${i}-desc`}>
-                <span className="field-label">Qué va acá</span>
-                <Input
-                  id={`ct-field-${i}-desc`}
-                  className="mt-1"
-                  value={field.description}
-                  maxLength={300}
-                  placeholder="El código SKU del producto, como aparece en la factura. Ej: ABC-123"
-                  onChange={(e) => patchField(i, { description: e.target.value })}
-                />
-              </label>
-              {field.type === 'string' && (
-                <label className="mt-2 block" htmlFor={`ct-field-${i}-enum`}>
-                  <span className="field-label">Opciones fijas (opcional, separadas por coma)</span>
-                  <Input
-                    id={`ct-field-${i}-enum`}
-                    className="tabular mt-1"
-                    value={(field.enum ?? []).join(', ')}
-                    placeholder="pendiente, despachado, entregado"
-                    onChange={(e) =>
-                      patchField(i, {
-                        enum: e.target.value
-                          .split(',')
-                          .map((s) => s.trim())
-                          .filter(Boolean),
-                      })
-                    }
-                  />
-                  <span className="mt-0.5 block text-micro text-ink-faint">
-                    Si solo hay unos valores posibles, ponlos: el modelo no podrá inventarse uno que
-                    tu sistema no conoce.
-                  </span>
-                </label>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <Button
-          type="button"
-          variant="outline"
-          className="mt-2"
-          onClick={() => setDraft((d) => ({ ...d, fields: [...d.fields, { ...EMPTY_FIELD }] }))}
-        >
-          <Plus className="h-4 w-4" />
-          Agregar un dato
-        </Button>
-      </div>
-
-      {/* 5 — Body, only where it can exist */}
-      {draft.method !== 'GET' && (
-        <div className="mt-4">
-          <span className={LABEL}>¿Qué le manda en el cuerpo?</span>
-          <p className={HELP}>
-            Lo que va dentro de la petición. Usa las mismas llaves dobles para meter un dato:{' '}
-            <code className="tabular text-ink-muted">{'{"sku": "{{sku}}"}'}</code>
-          </p>
-          <select
-            aria-label="Formato del cuerpo"
-            value={draft.bodyEncoding}
-            onChange={(e) => patch({ bodyEncoding: e.target.value as CustomToolBodyEncoding })}
-            className={clsx(SELECT_CLASS, 'mt-1.5')}
-          >
-            {(Object.keys(BODY_LABEL) as CustomToolBodyEncoding[]).map((k) => (
-              <option key={k} value={k}>
-                {BODY_LABEL[k]}
-              </option>
-            ))}
-          </select>
-          {draft.bodyEncoding !== 'none' && (
-            <>
-              <textarea
-                rows={4}
-                aria-label="Contenido del cuerpo"
-                className={clsx(TEXTAREA_CLASS, 'tabular mt-2')}
-                value={bodyText}
-                placeholder={'{\n  "sku": "{{sku}}",\n  "cantidad": "{{cantidad}}"\n}'}
-                onChange={(e) => setBody(e.target.value)}
-              />
-              {bodyError && (
-                <p className="mt-1 text-micro font-semibold text-rose">{bodyError}</p>
-              )}
-            </>
-          )}
-        </div>
       )}
+      <details open={guided ? undefined : true} className="mt-4">
+        <summary className="cursor-pointer text-sm font-semibold">
+          Revisar detalles de la operación
+        </summary>
+        {/* 3 — The call */}
+        <div className="mt-4">
+          <span className={LABEL}>¿A dónde llama?</span>
+          <p className={HELP}>
+            La dirección de tu API. Tiene que empezar por https:// y el dominio no puede cambiar.
+            Para meter un dato adentro, escríbelo entre llaves dobles:{' '}
+            <code className="tabular text-ink-muted">
+              https://api.tuempresa.com/inventario/{'{{sku}}'}
+            </code>
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            <select
+              aria-label="Método HTTP"
+              value={draft.method}
+              onChange={(e) => patch({ method: e.target.value as CustomToolMethod })}
+              className={clsx(SELECT_CLASS, 'tabular')}
+            >
+              {METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <Input
+              className="tabular min-w-[240px] flex-1"
+              value={draft.urlTemplate}
+              placeholder="https://api.tuempresa.com/inventario/{{sku}}"
+              onChange={(e) => patch({ urlTemplate: e.target.value })}
+              aria-label="Dirección de la API"
+            />
+          </div>
+        </div>
 
+        {/* 4 — Fields */}
+        <div className="mt-4">
+          <span className={LABEL}>¿Qué datos necesita?</span>
+          <p className={HELP}>
+            Lo que Cortex tiene que averiguar antes de llamar. La descripción de cada dato también
+            la lee el modelo, así que dile de dónde sale y cómo se ve.
+          </p>
+
+          {draft.fields.length === 0 && (
+            <p className="mt-2 rounded-sm border border-dashed border-border-strong bg-surface px-3 py-2 text-micro text-ink-faint">
+              Ninguno todavía. Si tu API no necesita nada, déjalo así.
+            </p>
+          )}
+
+          <div className="mt-2 flex flex-col gap-2">
+            {draft.fields.map((field, i) => (
+              // Positional key: a name-based key would remount the input on every
+              // keystroke and lose the caret.
+              // biome-ignore lint/suspicious/noArrayIndexKey: rows are positional
+              <div key={i} className="rounded-sm border border-border bg-surface p-2.5">
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="min-w-[140px] flex-1" htmlFor={`ct-field-${i}-name`}>
+                    <span className="field-label">Nombre del dato</span>
+                    <Input
+                      id={`ct-field-${i}-name`}
+                      className="tabular mt-1"
+                      value={field.name}
+                      placeholder="sku"
+                      onChange={(e) => patchField(i, { name: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    <span className="field-label">Tipo</span>
+                    <select
+                      value={field.type}
+                      onChange={(e) =>
+                        patchField(i, { type: e.target.value as CustomToolFieldType })
+                      }
+                      className={clsx(SELECT_CLASS, 'mt-1 block')}
+                    >
+                      {(Object.keys(FIELD_TYPE_LABEL) as CustomToolFieldType[]).map((k) => (
+                        <option key={k} value={k}>
+                          {FIELD_TYPE_LABEL[k]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-1.5 pb-2.5 text-xs text-ink-muted">
+                    <input
+                      type="checkbox"
+                      checked={field.required}
+                      onChange={(e) => patchField(i, { required: e.target.checked })}
+                      className={CHECKBOX_CLASS}
+                    />
+                    Obligatorio
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDraft((d) => ({ ...d, fields: d.fields.filter((_, j) => j !== i) }))
+                    }
+                    aria-label={`Quitar el dato ${field.name || i + 1}`}
+                    className="ml-auto mb-1.5 rounded-pill p-1.5 text-ink-faint transition-colors hover:bg-surface-2 hover:text-rose motion-reduce:transition-none"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <label className="mt-2 block" htmlFor={`ct-field-${i}-desc`}>
+                  <span className="field-label">Qué va acá</span>
+                  <Input
+                    id={`ct-field-${i}-desc`}
+                    className="mt-1"
+                    value={field.description}
+                    maxLength={300}
+                    placeholder="El código SKU del producto, como aparece en la factura. Ej: ABC-123"
+                    onChange={(e) => patchField(i, { description: e.target.value })}
+                  />
+                </label>
+                {field.type === 'string' && (
+                  <label className="mt-2 block" htmlFor={`ct-field-${i}-enum`}>
+                    <span className="field-label">
+                      Opciones fijas (opcional, separadas por coma)
+                    </span>
+                    <Input
+                      id={`ct-field-${i}-enum`}
+                      className="tabular mt-1"
+                      value={(field.enum ?? []).join(', ')}
+                      placeholder="pendiente, despachado, entregado"
+                      onChange={(e) =>
+                        patchField(i, {
+                          enum: e.target.value
+                            .split(',')
+                            .map((s) => s.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                    />
+                    <span className="mt-0.5 block text-micro text-ink-faint">
+                      Si solo hay unos valores posibles, ponlos: el modelo no podrá inventarse uno
+                      que tu sistema no conoce.
+                    </span>
+                  </label>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-2"
+            onClick={() => setDraft((d) => ({ ...d, fields: [...d.fields, { ...EMPTY_FIELD }] }))}
+          >
+            <Plus className="h-4 w-4" />
+            Agregar un dato
+          </Button>
+        </div>
+
+        {/* 5 — Body, only where it can exist */}
+        {draft.method !== 'GET' && (
+          <div className="mt-4">
+            <span className={LABEL}>¿Qué le manda en el cuerpo?</span>
+            <p className={HELP}>
+              Lo que va dentro de la petición. Usa las mismas llaves dobles para meter un dato:{' '}
+              <code className="tabular text-ink-muted">{'{"sku": "{{sku}}"}'}</code>
+            </p>
+            <select
+              aria-label="Formato del cuerpo"
+              value={draft.bodyEncoding}
+              onChange={(e) => patch({ bodyEncoding: e.target.value as CustomToolBodyEncoding })}
+              className={clsx(SELECT_CLASS, 'mt-1.5')}
+            >
+              {(Object.keys(BODY_LABEL) as CustomToolBodyEncoding[]).map((k) => (
+                <option key={k} value={k}>
+                  {BODY_LABEL[k]}
+                </option>
+              ))}
+            </select>
+            {draft.bodyEncoding !== 'none' && (
+              <>
+                <textarea
+                  rows={4}
+                  aria-label="Contenido del cuerpo"
+                  className={clsx(TEXTAREA_CLASS, 'tabular mt-2')}
+                  value={bodyText}
+                  placeholder={'{\n  "sku": "{{sku}}",\n  "cantidad": "{{cantidad}}"\n}'}
+                  onChange={(e) => setBody(e.target.value)}
+                />
+                {bodyError && (
+                  <p className="mt-1 text-micro font-semibold text-rose">{bodyError}</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </details>
       {/* 6 — Auth */}
       <div className="mt-4">
         <label className={LABEL} htmlFor="ct-auth">
@@ -933,6 +997,7 @@ function CustomToolForm({
           <input
             type="checkbox"
             checked={gated}
+            disabled={guided}
             onChange={(e) => patch({ requiresConfirmation: e.target.checked })}
             className={clsx(CHECKBOX_CLASS, 'mt-0.5')}
           />
@@ -1098,7 +1163,13 @@ function CustomToolForm({
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Button type="submit" disabled={saving}>
-          {saving ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Crear herramienta'}
+          {saving
+            ? 'Guardando…'
+            : editingId
+              ? 'Guardar cambios'
+              : guided
+                ? 'Guardar y pasar a la prueba'
+                : 'Crear herramienta'}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar
@@ -1107,10 +1178,11 @@ function CustomToolForm({
           <input
             type="checkbox"
             checked={draft.enabled}
+            disabled={guided}
             onChange={(e) => patch({ enabled: e.target.checked })}
             className={CHECKBOX_CLASS}
           />
-          Dejarla encendida
+          {guided ? 'Se activa después de revisar la prueba' : 'Dejarla encendida'}
         </label>
       </div>
     </form>

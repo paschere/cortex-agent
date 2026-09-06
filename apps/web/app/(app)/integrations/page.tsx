@@ -461,9 +461,7 @@ export default async function IntegrationsPage({
                 <s.icon className={clsx('h-3.5 w-3.5', s.tone)} />
                 <span className="field-label">{s.label}</span>
               </div>
-              <div className={clsx('stat-num mt-1.5 text-xl leading-none', s.tone)}>
-                {s.value}
-              </div>
+              <div className={clsx('stat-num mt-1.5 text-xl leading-none', s.tone)}>{s.value}</div>
               <div className="mt-1.5 line-clamp-2 text-micro leading-snug text-ink-faint">
                 {s.sub}
               </div>
@@ -702,6 +700,20 @@ export default async function IntegrationsPage({
           );
         })}
       </div>
+
+      <section className="rounded-xl border border-primary/25 bg-primary-soft p-5">
+        <h2 className="text-lg font-semibold">Conecta el sistema de tu empresa</h2>
+        <p className="mt-2 max-w-2xl text-sm text-ink-muted">
+          ¿Tu ERP, inventario o sistema de pedidos tiene una API? Comparte su documentación y
+          prepara las herramientas que Cortex podrá usar en esta empresa.
+        </p>
+        <a
+          className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white"
+          href="/tools#herramientas-propias"
+        >
+          Conectar una API propia →
+        </a>
+      </section>
 
       {/* Advanced: external MCP servers are just another inbound source of
           tools — same direction as an integration, so they live here. */}
