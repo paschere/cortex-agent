@@ -34,7 +34,7 @@ export default async function ReviewPage() {
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">
           Revisión semanal
         </p>
-        <h1 className="mt-2 text-2xl font-bold">Resultados que puedes comprobar.</h1>
+        <h1 className="mt-2 text-2xl font-bold">Resultados que puedes comprobar.</h1><a className="text-sm text-primary" href="/management/operation">Revisar ciclo de 30 días, decisiones y aprendizajes →</a>
         <p className="mt-2 text-sm text-ink-muted">
           Última semana cerrada: {start} a {addDays(end, -1)} · Bogotá
         </p>

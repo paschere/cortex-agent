@@ -242,6 +242,10 @@ export function buildLaunchPlan(e: LaunchEvidence): LaunchStep[] {
       action: { label: 'Preparar la primera misión', href: '/management/mission' },
       alternatives: [
         {
+          label: 'Acordar una operación de 30 días',
+          href: '/management/operation',
+        },
+        {
           label: 'Planearla con Cortex',
           href: '/chat?prompt=Ay%C3%BAdame%20a%20preparar%20la%20primera%20misi%C3%B3n%20de%20mi%20empresa.%20Revisa%20el%20contexto%20existente%20y%20prop%C3%B3n%20un%20asunto%20acotado%20con%20responsable%2C%20fecha%20y%20evidencia%20de%20cierre.',
         },

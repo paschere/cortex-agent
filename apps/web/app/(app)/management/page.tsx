@@ -5,8 +5,8 @@ import { ManagementBoard } from './ManagementBoard';
 export const dynamic = 'force-dynamic';
 export default async function ManagementPage({
   searchParams,
-}: { searchParams: Promise<{ tab?: string }> }) {
-  const { tab } = await searchParams;
+}: { searchParams: Promise<{ tab?: string; case?: string }> }) {
+  const { tab, case: caseId } = await searchParams;
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
   const [board, sources] = await Promise.all([
@@ -15,7 +15,8 @@ export default async function ManagementPage({
   ]);
   return (
     <ManagementBoard
-      key={tab ?? 'today'}
+      key={`${tab ?? 'today'}-${caseId ?? ''}`}
+      initialCaseId={caseId}
       initialTab={tab === 'settings' || tab === 'processes' ? tab : 'today'}
       {...board}
       {...sources}

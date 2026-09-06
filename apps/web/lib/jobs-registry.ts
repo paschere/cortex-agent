@@ -1,4 +1,8 @@
-import { managementWorkflowDispatchJob, managementWorkflowAdvanceJob } from '@/inngest/functions/management-workflow';
+import {
+  managementOperationReviewJob,
+  managementWorkflowAdvanceJob,
+  managementWorkflowDispatchJob,
+} from '@/inngest/functions/management-workflow';
 /**
  * EL REGISTRO: nombre de trabajo → handler que lo ejecuta.
  *
@@ -73,6 +77,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'actions/sweep.dispatch': actionsSweepDispatchJob,
   'management/workflow.dispatch': managementWorkflowDispatchJob,
   'management/workflow.advance': managementWorkflowAdvanceJob,
+  'management/operation.review': managementOperationReviewJob,
   'goals/watch.dispatch': goalsWatchDispatchJob,
   'reports/weekly.dispatch': weeklyReportDispatchJob,
 

@@ -16,12 +16,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { CaseEditor } from './CaseEditor';
+import { ExecutiveFocus } from './ExecutiveFocus';
 import { ManualStudio } from './ManualStudio';
 import { ProfileEditor } from './ProfileEditor';
 import { startDailyBrief } from './actions';
 import { Alert, type Person, blankCase } from './form-fields';
 
 type Props = {
+  initialCaseId?: string;
   initialTab?: 'today' | 'processes' | 'settings';
   cases: ManagementCase[];
   profile: ManagementProfile;
@@ -40,8 +42,9 @@ export function ManagementBoard(props: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<'today' | 'processes' | 'settings'>(props.initialTab ?? 'today');
   const [filter, setFilter] = useState<'all' | 'risk' | 'review' | 'working' | 'verified'>('all');
+  const initialItem = cases.find((c) => c.id === props.initialCaseId);
   const [editor, setEditor] = useState<{ item?: ManagementCase; data: ManagementCaseData } | null>(
-    null,
+    initialItem ? { item: initialItem, data: initialItem.data } : null,
   );
   const [notice, setNotice] = useState('');
   const [refreshing, startRefresh] = useTransition();
@@ -167,11 +170,21 @@ export function ManagementBoard(props: Props) {
             <Link href="/approvals">Aprobaciones</Link>
             <Link href="/schedules">Rutinas</Link>
             <Link href="/feed">Consultar datos</Link>
+            <Link href="/management/operation">Operación de 30 días</Link>
             <Link href="/management/mission">Primera misión</Link>
             <Link href="/management/control">Autonomía y calidad</Link>
             <Link href="/management/review">Revisión semanal</Link>
           </nav>
         </section>
+      )}
+      {tab === 'today' && !editor && (
+        <ExecutiveFocus
+          cases={cases}
+          userId={userId}
+          today={today}
+          isAdmin={isAdmin}
+          onOpen={(c) => startCase(c.data, c)}
+        />
       )}
       {notice && (
         <output className="flex items-center gap-2 text-sm text-emerald">

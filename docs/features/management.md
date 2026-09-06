@@ -157,3 +157,36 @@ requiere retirar la anterior y crear otra. Se declaran fallos y truncamiento.
 
 La validación completa de cobro necesita factura, cuenta de correo y destinatario
 autorizados. Las pruebas de componentes y SQL aisladas no sustituyen ese ensayo.
+
+### Ciclo gerencial de 30 días (0135)
+
+`/management/operation` conecta un acuerdo medible con 1–30 asuntos existentes y
+una meta opcional. Un administrador puede preparar el borrador a partir de una
+narración, corregir datos faltantes y acordar responsable, línea base, resultado,
+fuente y límites. El texto del acuerdo no concede mandatos. Solo se permite un
+ciclo activo o pausado por empresa; cancelar conserva el historial.
+
+Los responsables registran aceptación, avance o bloqueo sobre su propio asunto.
+El RPC actualiza asunto y evento en la misma transacción, con revisión esperada
+para ambos. Decisiones con alternativas requieren evidencia e incertidumbre;
+el veredicto es del administrador y no ejecuta la alternativa. Revisiones de los
+días 7, 14, 21 y 30 guardan medición, evidencia, siguiente paso y aprendizaje.
+Completar exige las cuatro revisiones, asuntos verificados y decisiones resueltas.
+Los aprendizajes se consultan con `management.operation`; el chat puede proponer
+mejoras, pero no se aplican automáticamente a manuales ni se atribuyen ahorros.
+
+Los avisos internos son opt-in al crear el acuerdo. El dispatcher de 15 minutos
+pagina los ciclos activos por empresa y usa el worker `management/operation.review`.
+Reintentos comparten claves de deduplicación. Pausar detiene siguientes avisos del
+ciclo, no otras rutinas. No se envían correos o mensajes externos desde este ciclo.
+Se conserva el flujo de aprobaciones y verificación del asunto existente.
+
+La lista muestra los últimos 20 ciclos; un enlace por ID permite consultar uno
+anterior. El historial muestra hasta 300 eventos y declara truncamiento; ante una
+lectura parcial el worker no envía avisos. El acuerdo no se edita después de iniciar:
+para cambiar su alcance se cancela y se acuerda un nuevo ciclo.
+
+Validación: pruebas SQL aisladas en `operation.sql-test.mjs`, pruebas de límites
+de avisos en `operation-attention.test.ts`, regresiones de gerencia y registro de
+jobs, compilación del worker y typecheck web. La prueba de un ciclo empresarial
+real de 30 días sigue siendo una validación operativa distinta.

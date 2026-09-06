@@ -75,6 +75,8 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   management_workflow_events: tenant(),
   management_profiles: tenant(),
   management_cases: tenant(),
+  management_operations: tenant(),
+  management_operation_events: tenant(),
   management_events: tenant(),
   users: tenant(),
   teams: tenant(),
@@ -522,6 +524,7 @@ export type RpcTenancy = 'organization' | 'person' | 'maintenance';
 
 export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   management_start_daily: 'organization',
+  management_operate: 'organization',
   management_workflow_checkpoint: 'organization',
   management_workflow_start: 'organization',
   management_workflow_claim: 'organization',

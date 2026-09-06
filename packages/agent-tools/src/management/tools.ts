@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { bogotaToday } from '../commitments/shape';
 import { registerTool } from '../registry';
+import { decisionSchema } from './operation-shape';
+import { commandOperation, readOperationEvents, readOperations } from './operation-store';
 import {
   managementCaseSchema,
   managementDailyReport,
@@ -31,15 +33,17 @@ export const managementBrief = registerTool({
   outputSchema: z.object({ overview: z.unknown() }),
   rateLimit: { perMinute: 20 },
   handler: async (_input, ctx) => {
-    const [board, sources] = await Promise.all([
+    const [board, sources, cycles] = await Promise.all([
       readManagement(ctx.db),
       readManagementSignals(ctx.db, ctx.userId),
+      readOperations(ctx.db),
     ]);
     const today = bogotaToday();
     return {
       overview: {
         ...board,
         ...sources,
+        operations: cycles,
         sourceConflicts: managementSourceConflicts(sources.signals, board.cases),
         today,
         cases: board.cases
@@ -88,15 +92,27 @@ export const managementDailyBrief = registerTool({
   outputSchema: z.object({ report: z.string() }),
   rateLimit: { perMinute: 10 },
   handler: async (_input, ctx) => {
-    const board = await readManagement(ctx.db);
+    const [board, cycles] = await Promise.all([readManagement(ctx.db), readOperations(ctx.db)]);
+    const cycle = cycles.operations.find((o) => o.state === 'active');
+    const history = cycle ? await readOperationEvents(ctx.db, cycle.id) : null;
+    const pending =
+      history?.events.filter(
+        (e) =>
+          e.data.kind === 'decision' &&
+          !history.events.some((r) => r.data.kind === 'resolve' && r.data.decisionId === e.id),
+      ).length ?? 0;
     return {
-      report: managementDailyReport(
-        board.cases,
-        board.people,
-        board.profile.data,
-        bogotaToday(),
-        board.truncated,
-      ),
+      report:
+        managementDailyReport(
+          board.cases,
+          board.people,
+          board.profile.data,
+          bogotaToday(),
+          board.truncated,
+        ) +
+        (cycle
+          ? `\n\n## Ciclo de 30 días\n${cycle.data.name.replace(/[\r\n]/g, ' ')}. ${pending} decisiones pendientes${history?.truncated ? ' en una lectura parcial' : ''}. Consulta /management/operation para revisar acuerdos, avances y aprendizajes. Este parte no solicita avances ni envía mensajes a responsables.`
+          : ''),
     };
   },
 });
@@ -139,4 +155,44 @@ export const managementAdvanceCollection = registerTool({
     else await advanceCollectionWorkflow(ctx.db, run.id);
     return { run: await readCollectionWorkflow(ctx.db, caseId) };
   },
+});
+
+export const managementOperation = registerTool({
+  id: 'management.operation',
+  description:
+    'Consulta los ciclos gerenciales de 30 días de esta empresa, acuerdos, decisiones humanas, avances, revisiones y aprendizajes. Son registros compartidos. Revisa esto al priorizar, preparar alternativas o proponer mejoras del proceso; los aprendizajes no cambian manuales ni permisos por sí solos.',
+  inputSchema: z.object({ id: z.string().uuid().optional() }),
+  outputSchema: z.object({ operations: z.unknown(), history: z.unknown() }),
+  handler: async ({ id }, ctx) => {
+    const cycles = await readOperations(ctx.db);
+    const selected = id
+      ? cycles.operations.find((o) => o.id === id)
+      : cycles.operations.find((o) => o.state === 'active');
+    if (id && !selected) throw new Error('El ciclo no está en la lectura de esta empresa.');
+    return {
+      operations: cycles,
+      history: selected ? await readOperationEvents(ctx.db, selected.id) : null,
+    };
+  },
+});
+export const managementProposeDecision = registerTool({
+  id: 'management.propose_decision',
+  description:
+    'Por petición del usuario, registra una propuesta de decisión COMPARTIDA en el ciclo de su empresa: alternativas, consecuencias, evidencia, incertidumbre y fecha. Consulta management.operation primero. No decide ni ejecuta ninguna alternativa. Un administrador registra el veredicto en /management/operation. No copies datos privados sin indicación de compartir.',
+  inputSchema: z.object({
+    id: z.string().uuid(),
+    revision: z.number().int().min(1),
+    decision: decisionSchema,
+  }),
+  outputSchema: z.object({ operation: z.unknown() }),
+  requiresConfirmation: true,
+  handler: async ({ id, revision, decision }, ctx) => ({
+    operation: await commandOperation(
+      ctx.db,
+      ctx.userId,
+      { kind: 'decision', decision },
+      id,
+      revision,
+    ),
+  }),
 });
