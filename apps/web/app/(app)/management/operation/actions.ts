@@ -64,6 +64,7 @@ export async function prepareOperation(narration: string) {
       error:
         'Cuenta el objetivo, cómo trabajan hoy y qué resultado esperas (30 a 12.000 caracteres).',
     };
+  let stage = 'access';
   try {
     const db = getOrgScopedClient(user.organization.id);
     await consumeToken(db, user.id, 'management.prepare_operation', 3);
@@ -74,6 +75,7 @@ export async function prepareOperation(narration: string) {
           'No quedan respuestas disponibles en el plan. Puedes completar el acuerdo manualmente.',
       };
     const board = await readManagement(db);
+    stage = 'model';
     const request = {
       model: utilityModel(),
       schema: draftSchema,
@@ -92,7 +94,12 @@ export async function prepareOperation(narration: string) {
       });
     });
     return { ok: true as const, draft: result.object };
-  } catch {
+  } catch (error) {
+    console.warn('management.prepare_operation', {
+      stage,
+      name: error instanceof Error ? error.name : 'Unknown',
+      status: (error as { statusCode?: number } | null)?.statusCode,
+    });
     return {
       ok: false as const,
       error: 'No se pudo preparar el encargo. Puedes completar el acuerdo manualmente.',
