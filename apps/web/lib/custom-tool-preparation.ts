@@ -2,7 +2,20 @@ import { DefinitionSchema, checkDefinition } from '@cortex/agent-tools';
 
 /** Generated configuration is a disabled draft, never an authority grant. */
 export function validatePreparedTool(raw: unknown, apiUrl: string) {
-  const candidate = DefinitionSchema.parse(raw);
+  // Models sometimes emit empty optional fields even when asked to omit them.
+  // Required authentication metadata is still checked by checkDefinition below.
+  const normalized =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? ({ ...raw } as Record<string, unknown>)
+      : raw;
+  if (normalized && typeof normalized === 'object' && !Array.isArray(normalized)) {
+    for (const key of ['authHeaderName', 'authUsername', 'authSecret', 'responsePath']) {
+      const value = (normalized as Record<string, unknown>)[key];
+      if (value == null || (typeof value === 'string' && !value.trim()))
+        delete (normalized as Record<string, unknown>)[key];
+    }
+  }
+  const candidate = DefinitionSchema.parse(normalized);
   const base = new URL(apiUrl);
   const target = new URL(candidate.urlTemplate.replace(/\{\{[^}]+\}\}/g, 'sample'));
   if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash)

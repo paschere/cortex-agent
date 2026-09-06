@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       { error: 'Usa una API HTTPS pública sin credenciales ni parámetros en la URL.' },
       { status: 400 },
     );
+  let stage = 'access';
   try {
     const db = getOrgScopedClient(user.organization.id);
     await consumeToken(db, user.id, 'custom_tools.prepare', 3);
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
       );
     let documentation = input.documentation;
     if (input.documentationUrl) {
+      stage = 'documentation';
       const source = new URL(input.documentationUrl);
       if (source.username || source.password || source.search || source.hash)
         throw new Error('documentation');
@@ -98,6 +100,7 @@ export async function POST(req: NextRequest) {
         },
         { status: 400 },
       );
+    stage = 'model';
     const result = await generateObject({
       model: chatModel(),
       experimental_providerMetadata: NO_THINKING,
@@ -123,6 +126,7 @@ Devuelve definitionJson como JSON con slug (letras minúsculas y guiones bajos, 
         questions: result.object.questions,
         explanation: result.object.explanation,
       });
+    stage = 'validation';
     const draft = validatePreparedTool(JSON.parse(result.object.definitionJson), input.apiUrl);
     return NextResponse.json({
       draft,
@@ -133,7 +137,13 @@ Devuelve definitionJson como JSON con slug (letras minúsculas y guiones bajos, 
     return NextResponse.json(
       {
         error:
-          'No se pudo preparar una configuración válida. Revisa la documentación, la cuota y el dominio de la API. Puedes usar la configuración manual.',
+          stage === 'model'
+            ? 'El modelo no pudo completar la preparación. Inténtalo de nuevo en un momento.'
+            : stage === 'validation'
+              ? 'La propuesta no cumple el formato de una herramienta. Incluye el endpoint, método, parámetros y autenticación de la operación.'
+              : stage === 'documentation'
+                ? 'No se pudo leer ese enlace. Pega la documentación o carga un archivo de texto.'
+                : 'No se pudo iniciar el análisis. Revisa la cuota o espera un minuto antes de repetir.',
       },
       { status: 422 },
     );

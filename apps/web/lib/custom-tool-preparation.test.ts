@@ -59,3 +59,17 @@ it('leaves basic-auth identity for the administrator to complete', () => {
   expect(result.authUsername).toBeUndefined();
   expect(result.authSecret).toBeUndefined();
 });
+it('normalizes empty optional model fields without allowing missing required headers', () => {
+  expect(
+    validatePreparedTool(
+      { ...draft, authType: 'bearer', authHeaderName: '', authUsername: null, responsePath: '' },
+      'https://api.example.com',
+    ).authType,
+  ).toBe('bearer');
+  expect(() =>
+    validatePreparedTool(
+      { ...draft, authType: 'header', authHeaderName: '' },
+      'https://api.example.com',
+    ),
+  ).toThrow();
+});
