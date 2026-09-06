@@ -167,6 +167,9 @@ export function ManagementBoard(props: Props) {
             <Link href="/approvals">Aprobaciones</Link>
             <Link href="/schedules">Rutinas</Link>
             <Link href="/feed">Consultar datos</Link>
+            <Link href="/management/mission">Primera misión</Link>
+            <Link href="/management/control">Autonomía y calidad</Link>
+            <Link href="/management/review">Revisión semanal</Link>
           </nav>
         </section>
       )}

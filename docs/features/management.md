@@ -102,3 +102,38 @@ El inicio `/` con una sesión válida siempre abre la puesta en marcha. El enlac
 Las etapas consultan datos con alcance de empresa; perfiles del navegador y rutinas respetan propiedad personal/compartida. Solo un administrador recibe el conteo de mandatos. Cada lectura fallida se representa como desconocida. El progreso señala bases disponibles, no acredita calidad, sincronización, disponibilidad del portal ni un proceso probado. El resultado final exige un asunto verificado. Se ofrece comprobación explícita y se conserva la etapa seleccionada en la URL.
 
 No se agregaron tablas ni se modificaron permisos o datos de clientes. El encargo se edita con las acciones existentes y su control de revisión. Los formularios de las demás etapas permanecen en su módulo de origen, con enlaces de continuación.
+
+### Diagnóstico, misión y revisión de resultados
+
+La puesta en marcha ejecuta comprobaciones de lectura personales y por empresa:
+conexiones registradas, documentos de espacios visibles, tabla de procesos,
+rutinas activas y salud del servicio de navegador. Cada resultado explica la
+operación afectada y distingue bloqueo de verificación pendiente. La salud HTTP
+no certifica la credencial, Chromium ni el acceso a un portal; tener OAuth
+registrado tampoco certifica que el proveedor acepte los permisos.
+
+`/management/mission` reutiliza CaseEditor y el proceso de cartera. Después de
+guardar conserva el asunto creado para continuar al cobro, las aprobaciones y
+la evidencia. `/management/control` explica sus permisos efectivos, muestra los
+mandatos existentes (de empresa, no aislados por proceso), documentos visibles
+con vigencia/reemplazo y las inconsistencias entre asuntos y señales.
+
+El worker deja avisos dentro de Cortex por respuesta, falta de respuesta,
+bloqueo y evidencia lista. No infiere destinatarios externos ni manda correos.
+La migración 0132 agrega identidad permanente a los avisos: reintentar el mismo
+suceso no incrementa su contador ni revive uno leído. El proceso conserva el
+resultado y la respuesta dentro del asunto; nunca verifica un pago por respuesta.
+
+`/management/review` consulta la última semana cerrada en Bogotá. Los cierres
+requieren transición documentada a verified y evidencia, con revisión anterior
+exacta; editar un asunto ya verificado no cuenta como cierre nuevo. La lectura
+está acotada a 100 revisiones y declara truncamiento o antecedentes faltantes.
+Los informes semanales guardados incorporan el mismo bloque. Los bloqueos y las
+decisiones en la pantalla son la situación actual y se identifican como tal.
+No se atribuyen ahorros o ingresos sin medición acordada.
+
+Límites todavía vigentes: no hay aislamiento de mandatos por proceso; las metas
+muestran mediciones, no historial de cambios de definición; la revisión de
+calidad no detecta automáticamente todas las contradicciones documentales. La
+validación completa de cobro necesita factura, cuenta de correo y destinatario
+autorizados. Los tests SQL aislados no sustituyen esa prueba autenticada.

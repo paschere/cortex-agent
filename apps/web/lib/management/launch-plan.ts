@@ -239,7 +239,7 @@ export function buildLaunchPlan(e: LaunchEvidence): LaunchStep[] {
       evidence: countCopy(e.verified, 'asuntos verificados con revisión humana'),
       state: countState(e.verified),
       required: true,
-      action: { label: 'Preparar la primera misión', href: '/management' },
+      action: { label: 'Preparar la primera misión', href: '/management/mission' },
       alternatives: [
         {
           label: 'Planearla con Cortex',

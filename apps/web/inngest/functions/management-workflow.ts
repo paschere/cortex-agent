@@ -1,5 +1,6 @@
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
+import { notifyWorkflowAttention } from '@/lib/management/workflow-attention';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { advanceCollectionWorkflow } from '@cortex/agent-tools';
 import { z } from 'zod';
@@ -31,9 +32,13 @@ export const managementWorkflowAdvanceJob: JobHandler = async ({ event, step }) 
   const data = z
     .object({ id: z.string().uuid(), organizationId: z.string().min(1) })
     .parse(event.data);
-  return step.run('advance', () =>
+  const run = await step.run('advance', () =>
     advanceCollectionWorkflow(getOrgScopedClient(data.organizationId), data.id),
   );
+  await step.run('notify-attention', () =>
+    notifyWorkflowAttention(getOrgScopedClient(data.organizationId), run),
+  );
+  return run;
 };
 export const managementWorkflowDispatch = inngest.createFunction(
   { id: 'management-workflow-dispatch' },

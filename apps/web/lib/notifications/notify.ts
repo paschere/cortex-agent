@@ -76,6 +76,8 @@ export class NotificationContractError extends Error {
 }
 
 export interface NotifyInput {
+  /** Immutable event identity; retries never fold or revive this notification. */
+  dedupeKey?: string;
   /** A quién. Obligatorio: un aviso sin destinatario no es un aviso. */
   userId: string;
   kind: NotificationKind;
@@ -170,6 +172,38 @@ export async function notify(db: SupabaseClient, input: NotifyInput): Promise<st
   const occurredAt = (input.occurredAt ?? new Date()).toISOString();
 
   const shared = { kind: input.kind, tone, title, body, href, occurred_at: occurredAt };
+
+  if (input.dedupeKey) {
+    const dedupeKey = clip(input.dedupeKey, 200);
+    const inserted = await db
+      .from('notifications')
+      .insert({
+        user_id: userId,
+        dedupe_key: dedupeKey,
+        group_key: dedupeKey,
+        source_kind: source?.kind ?? null,
+        source_id: source?.id ?? null,
+        occurrences: 1,
+        ...shared,
+      })
+      .select('id')
+      .single();
+    if (!inserted.error) return (inserted.data as { id: string } | null)?.id ?? null;
+    if (inserted.error.code === '23505') {
+      const existing = await db
+        .from('notifications')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('dedupe_key', dedupeKey)
+        .maybeSingle();
+      return existing.error ? null : ((existing.data as { id: string } | null)?.id ?? null);
+    }
+    logger.error('notifications: no se pudo guardar el evento', {
+      kind: input.kind,
+      error: inserted.error.message,
+    });
+    return null;
+  }
 
   // ── 1. ¿Ya hay uno igual sin leer? ────────────────────────────────────────
   // Se funde con él: sube el contador y se refresca el texto y la hora, para

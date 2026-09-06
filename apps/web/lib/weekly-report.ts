@@ -2,6 +2,7 @@ import 'server-only';
 import { buildPeopleLoad } from '@/app/(app)/commitments/_lib/people';
 import { sendEmail } from '@/lib/email';
 import { renderWeeklyReportEmail } from '@/lib/email-templates';
+import { readWeeklyManagement } from '@/lib/management/weekly-review';
 import { noteWeeklyReportUndelivered } from '@/lib/notifications/producers';
 import { mustReadList } from '@/lib/supabase/read';
 import {
@@ -68,12 +69,15 @@ export interface WeeklyRecipient {
   email: string;
 }
 
-export interface WeeklyMailer {
-  (opts: { to: string; subject: string; text: string; html: string }): Promise<{
-    sent: boolean;
-    reason?: string;
-  }>;
-}
+export type WeeklyMailer = (opts: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}) => Promise<{
+  sent: boolean;
+  reason?: string;
+}>;
 
 export interface RunWeeklyReportInput {
   /** Handle con alcance de espacio de trabajo. */
@@ -113,7 +117,9 @@ export function summarizeForEmail(doc: ReportDocument): {
 } {
   const prose = doc.sections.find((s) => s.type === 'prose');
   const lede =
-    prose && prose.type === 'prose' ? (prose.paragraphs[0] ?? doc.subtitle ?? '') : (doc.subtitle ?? '');
+    prose && prose.type === 'prose'
+      ? (prose.paragraphs[0] ?? doc.subtitle ?? '')
+      : (doc.subtitle ?? '');
 
   const metrics = doc.sections.find((s) => s.type === 'metrics');
   const figures =
@@ -236,9 +242,7 @@ export async function weeklyRecipients(db: SupabaseClient): Promise<WeeklyRecipi
     .map((a) => ({ userId: a.id, email: a.email.trim() }));
 }
 
-export async function runWeeklyReport(
-  input: RunWeeklyReportInput,
-): Promise<RunWeeklyReportResult> {
+export async function runWeeklyReport(input: RunWeeklyReportInput): Promise<RunWeeklyReportResult> {
   const { db } = input;
   const now = input.now ?? new Date();
   const today = input.today ?? bogotaToday(now);
@@ -254,6 +258,32 @@ export async function runWeeklyReport(
     weekStart,
     groupByPerson: buildPeopleLoad,
   });
+
+  // Shared with the review screen. A missing migration is disclosed, never counted as zero.
+  try {
+    const management = await readWeeklyManagement(
+      db,
+      `${weekStart}T05:00:00Z`,
+      `${addDays(weekStart, 7)}T05:00:00Z`,
+    );
+    document.sections.push({
+      type: 'prose',
+      heading: 'Cierres de gerencia con evidencia',
+      paragraphs: management.paragraphs,
+    });
+    document.sources.push({
+      id: 'management_weekly_events',
+      system: 'Cortex · Gerencia',
+      detail: `Transiciones registradas desde ${weekStart}, siete días en Bogotá.`,
+      readAt: now.toISOString(),
+      rowCount: management.rows,
+      caveat: management.partial ? 'Últimas 100 revisiones: vista parcial.' : null,
+    });
+  } catch {
+    document.notes.push(
+      'No se pudo comprobar el historial de gerencia; los cierres de asuntos no están incluidos.',
+    );
+  }
 
   // 2. La reclamación. A partir de esta línea la semana es nuestra o no lo es,
   //    y la base es quien lo dice.

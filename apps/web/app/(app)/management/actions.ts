@@ -26,12 +26,14 @@ export async function saveCase(input: unknown, options: unknown = {}) {
   const user = await requireSession();
   try {
     const parsed = optionsSchema.parse(options);
-    await saveManagementCase(getOrgScopedClient(user.organization.id), user.id, input, {
+    const item = await saveManagementCase(getOrgScopedClient(user.organization.id), user.id, input, {
       ...parsed,
       humanReview: true,
     });
     revalidatePath('/management');
-    return { ok: true as const };
+    revalidatePath('/management/mission');
+    revalidatePath('/onboarding');
+    return { ok: true as const, item };
   } catch (error) {
     return {
       ok: false as const,

@@ -31,7 +31,7 @@ export function CaseEditor({
   isAdmin: boolean;
   today: string;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (item?: ManagementCase) => void;
 }) {
   const [data, setData] = useState(initial);
   const [dictating, setDictating] = useState(false);
@@ -100,7 +100,7 @@ export function CaseEditor({
                 data,
                 item ? { id: item.id, revision: item.revision } : {},
               );
-              if (result.ok) onSaved();
+              if (result.ok) onSaved(result.item);
               else setError(result.error);
             } catch {
               setError('No se pudo guardar. Intenta de nuevo.');
@@ -342,7 +342,7 @@ export function CaseEditor({
                       { ...data, state: 'open', reviewNote: '', evidence: null },
                       { id: item.id, revision: item.revision },
                     );
-                    if (r.ok) onSaved();
+                    if (r.ok) onSaved(r.item);
                     else setError(r.error);
                   } catch {
                     setError('No se pudo reabrir.');

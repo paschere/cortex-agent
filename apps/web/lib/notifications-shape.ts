@@ -55,6 +55,7 @@ export const NOTIFICATION_KINDS = [
    * la migración 0126 y `mail/alerts.ts`.
    */
   'mail_worth_seeing',
+  'management_attention',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -95,6 +96,7 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   // Ámbar: no es una mala noticia, es una que no puede esperar. El verde diría
   // «ya está resuelto» y esto es exactamente lo contrario.
   mail_worth_seeing: 'warning',
+  management_attention: 'warning',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -110,6 +112,7 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   action_failed: 'Acción',
   report_ready: 'Informe',
   mail_worth_seeing: 'Correo',
+  management_attention: 'Gerencia',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */
