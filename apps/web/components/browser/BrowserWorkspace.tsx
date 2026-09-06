@@ -96,6 +96,8 @@ export function BrowserWorkspace() {
     });
   return (
     <section
+      id="cortex-browser"
+      tabIndex={-1}
       className="mb-8 overflow-hidden rounded-xl border border-border bg-surface"
       aria-label="Navegador de Cortex"
     >
@@ -106,7 +108,8 @@ export function BrowserWorkspace() {
               <Globe className="h-5 w-5" /> Navegador de Cortex
             </h2>
             <p className="mt-1 text-sm text-ink-muted">
-              Tu sesión de trabajo. Abre un portal y enséñale el trámite a Cortex mientras lo haces.
+              Abre el portal aquí y enséñale el trámite a Cortex mientras lo haces. Las acciones se
+              aprenden en este navegador; no necesitas compartir tu pantalla.
             </p>
           </div>
           <span className="flex items-center gap-1.5 rounded-full bg-surface-raised px-3 py-1 text-xs">
@@ -118,6 +121,36 @@ export function BrowserWorkspace() {
             {profile?.shared ? 'Compartido con la compañía' : 'Perfil privado'}
           </span>
         </div>
+        {!sessionId && !draft && (
+          <ol
+            className="mt-5 grid gap-3 text-sm sm:grid-cols-3"
+            aria-label="Cómo enseñar un trámite"
+          >
+            {[
+              [
+                '01',
+                'Elige tu perfil',
+                'Tus cuentas quedan en tu perfil; tú decides si lo compartes.',
+              ],
+              [
+                '02',
+                'Abre e inicia sesión',
+                'Entra al portal dentro de Cortex antes de comenzar la enseñanza.',
+              ],
+              [
+                '03',
+                'Hazlo y explícalo',
+                'Recorre varios sitios, añade contexto y revisa los pasos antes de guardarlos.',
+              ],
+            ].map(([number, title, description]) => (
+              <li key={number} className="rounded-xl border border-border bg-canvas/50 p-4">
+                <span className="text-xs font-mono text-primary">{number}</span>
+                <p className="mt-2 font-semibold">{title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-muted">{description}</p>
+              </li>
+            ))}
+          </ol>
+        )}
         <div className="mt-5 flex flex-wrap items-center gap-2">
           <label className="text-sm" htmlFor="browser-profile">
             Perfil
@@ -364,7 +397,9 @@ export function BrowserWorkspace() {
                     Indica de dónde sale el dato y para qué se usa. La explicación aporta contexto;
                     no configura una lectura automática de Drive.
                   </p>
-                  <Button disabled={busy}>Añadir explicación</Button>
+                  <Button disabled={busy || !lesson.steps.length || !noteText.trim()}>
+                    Añadir explicación
+                  </Button>
                 </form>
               </aside>
             )}

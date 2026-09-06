@@ -517,7 +517,7 @@ function ValueField({
             Cancelar
           </button>
           <p className="basis-full text-micro leading-snug text-ink-faint">
-            Lo que escribiste al grabar queda como el valor de la prueba, y en cada corrida se
+            Lo que escribiste al enseñar queda como el valor de la prueba, y en cada corrida se
             reemplaza por el que te pidan.
           </p>
         </div>

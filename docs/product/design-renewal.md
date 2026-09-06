@@ -53,3 +53,9 @@ La biblioteca de procesos sustituye la lista de formularios en Configuración. M
 La propuesta se revisa como un documento: secciones completas resumidas, pasos y vacíos abiertos, dudas visibles y guardado explícito. La navegación conserva el borrador dentro de Gerencia y restablece la posición de lectura al cambiar de vista. El aviso al salir se reserva para borradores modificados. La vista de lectura distingue secuencia, condiciones, excepciones y evidencia de resultado.
 
 La prueba visual usa narración y respuesta del modelo simuladas. Se comprobaron biblioteca, lectura, entrada por voz, revisión, guardado y tamaños móviles; no se presenta como prueba de reconocimiento de voz real.
+
+## Movimiento de marca
+
+Por petición del usuario, la firma de Cortex ahora gira, respira y lleva un destello a través de sus trazos. El movimiento se comparte en portada, menú, chat y manuales: órbita de 28 segundos (36 en el menú), respiración de 8 segundos y recorrido luminoso de 6 segundos. Se anima el grupo interior del SVG, conservando la posición y rotación que cada pantalla ya usa.
+
+Es identidad de marca, no una indicación de ejecución. No utiliza temporizadores ni bucles JavaScript. El navegador muestra el símbolo estático con reducción de movimiento y al imprimir. Validado en Chromium comprobando cambios reales de transformación y la desactivación al cambiar las preferencias; se generó un video local de vista previa.

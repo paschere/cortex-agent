@@ -2,6 +2,20 @@
 
 ## Experiencia
 
+Todos los accesos de enseñanza usan `BrowserWorkspace`. El botón del chat abre
+`/browser#cortex-browser` en otra pestaña para conservar el borrador de la
+conversación; el botón de la biblioteca enfoca el navegador ya montado.
+Se retiraron `TeachFlow` y `TeachFlowDialog`, que aún iniciaban la grabación de
+la pestaña personal. La transmisión del navegador remoto sigue siendo necesaria
+para interactuar con el portal, pero enseñar no llama a `getDisplayMedia`.
+El control independiente de compartir pantalla del chat conserva su función de
+consulta y no inicia una enseñanza de trámites.
+
+Validación de estos accesos: TypeScript y 44 pruebas de contratos de navegador;
+Chromium con API remota simulada comprobó apertura, inicio, fin y revisión de
+enseñanza, navegación desde chat y foco desde biblioteca, bloqueando explícitamente
+`getDisplayMedia`. No constituye una prueba de extremo a extremo contra la DIAN.
+
 En **Trámites**, el navegador de Cortex permite crear perfiles privados, abrir
 un portal e iniciar sesión dentro de Cortex. La persona dueña puede compartir
 un perfil con su compañía; eso concede el uso de sus sesiones iniciadas y de los

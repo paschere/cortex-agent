@@ -505,8 +505,9 @@ pnpm browser:cases -- --two-pass    # segmentar y después detallar
 ```
 
 - **Pareja**: el tope es de imágenes, no de momentos, así que veinte cuadros en
-  pareja cubren diez momentos en vez de veinte. Encenderlo es un argumento en
-  `TeachFlow` (`pairs: true`).
+  pareja cubren diez momentos en vez de veinte. El antiguo grabador `TeachFlow` usaba
+  `pairs: true`; ese componente fue retirado. Estas pruebas corresponden al
+  extractor histórico de imágenes, no a la enseñanza actual por acciones.
 - **Dos pases**: manda los cuadros **dos veces** — el doble de tokens de entrada
   y casi el doble de latencia en una llamada que ya tarda casi un minuto con una
   persona esperando. Es la que menos evidencia tiene de compensarlo. **Si el

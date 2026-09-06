@@ -1,7 +1,7 @@
 'use client';
 
 import type { ScopeSpace } from '@/app/(chat)/chat/actions';
-import { TeachFlowDialog } from '@/components/browser/TeachFlowDialog';
+import { TeachFlowLink } from '@/components/browser/TeachFlowLink';
 import {
   MENTION_MIN_CHARS,
   type PaletteGroup,
@@ -798,7 +798,7 @@ export function InputBar({
                 >
                   <Waves className="h-3.5 w-3.5" /> voz
                 </button>
-                <TeachFlowDialog onCompose={setComposerText} />
+                <TeachFlowLink />
                 {screen && <ScreenViewButton session={screen} disabled={disabled} />}
               </>
             )}

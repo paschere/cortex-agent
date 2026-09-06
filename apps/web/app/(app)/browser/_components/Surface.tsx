@@ -1,43 +1,15 @@
 'use client';
 
-import { type SavedFlow, TeachFlow } from '@/components/browser/TeachFlow';
 import { Button } from '@/components/ui/button';
 import { Panel } from '@/components/ui/panel';
 import { type FlowSummary, MODULE } from '@/lib/browser-shape';
 import { clsx } from 'clsx';
-import { AlertTriangle, CheckCircle2, Loader2, Video, X } from 'lucide-react';
+import { Globe, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type Health, health } from '../_lib/flow-view';
 import { Flows } from './Flows';
 
-/**
- * The shelf of learned errands, and the one question it exists to answer.
- *
- * ---------------------------------------------------------------------------
- * WHAT SOMEBODY COMES HERE TO FIND OUT
- * ---------------------------------------------------------------------------
- * Not "what can Cortex do" — "WHICH OF THESE CAN I TRUST TO RUN WITHOUT ME".
- * Everything above the list is built to answer that in one look: how many are
- * proven, how many are still a reading of a recording, and how many are in
- * trouble right now. The list underneath is sorted by that same question, so
- * the row that needs a decision is never below the fold.
- *
- * The screen used to open with the teaching form, permanently expanded, on
- * every visit forever — a screen whose job on visit two onwards is inventory
- * greeting you with a five-block form. Teaching is one button here, and it is
- * the loud one; the panel only unfolds when somebody asks for it.
- *
- * ---------------------------------------------------------------------------
- * THE EMPTY SCREEN IS THE MAIN SCREEN
- * ---------------------------------------------------------------------------
- * A workspace has zero trámites for its first weeks, so the empty case is not
- * a degraded list — it IS the product for as long as it lasts, and it gets the
- * whole surface: the teaching panel opened, with the explanation of what a
- * recording captures and what it does not. There is no stat strip over four
- * zeros, no filter chips over nothing, and no separate "todavía no hay nada"
- * panel repeating the sentence the panel below it already says.
- */
-
+/** Saved lessons and their replay status. Teaching lives in BrowserWorkspace. */
 type Filter = 'todos' | 'probados' | 'propuestos' | 'problema' | 'sin-cuenta';
 
 const FILTERS: { id: Filter; label: string }[] = [
@@ -58,16 +30,9 @@ const MATCHES: Record<Filter, (flow: FlowSummary, h: Health) => boolean> = {
   'sin-cuenta': (flow) => flow.needsCredential,
 };
 
-interface Notice {
-  tone: 'emerald' | 'amber';
-  text: string;
-}
-
 export function Surface() {
   const [flows, setFlows] = useState<FlowSummary[] | null>(null);
   const [filter, setFilter] = useState<Filter>('todos');
-  const [teaching, setTeaching] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch('/api/browser/flows');
@@ -109,15 +74,6 @@ export function Surface() {
     [flows, filter],
   );
 
-  const onSaved = useCallback(
-    (saved: SavedFlow) => {
-      setNotice({ tone: saved.verified ? 'emerald' : 'amber', text: saved.message });
-      setTeaching(false);
-      void load();
-    },
-    [load],
-  );
-
   if (flows === null) {
     return (
       <Panel className="flex items-center gap-2 p-6">
@@ -127,11 +83,10 @@ export function Surface() {
     );
   }
 
-  // First run. The teaching panel is the page, not a block above an apology.
+  // The workspace above is the teaching entry even before the first saved flow.
   if (flows.length === 0) {
     return (
       <>
-        {notice && <NoticeBanner notice={notice} onClose={() => setNotice(null)} />}
         <p className="py-4 text-sm text-ink-muted">
           Tus trámites aparecerán aquí cuando guardes una enseñanza desde el navegador.
         </p>
@@ -141,8 +96,6 @@ export function Surface() {
 
   return (
     <>
-      {notice && <NoticeBanner notice={notice} onClose={() => setNotice(null)} />}
-
       {/* Hairlines come from the gap showing the border colour through, so the
           rules stay correct at every breakpoint the grid reflows to. */}
       <Panel className="mb-5 grid grid-cols-2 gap-px bg-border lg:grid-cols-4">
@@ -202,18 +155,18 @@ export function Surface() {
           </button>
         ))}
         <div className="ml-auto">
-          <Button onClick={() => setTeaching((open) => !open)} aria-expanded={teaching}>
-            <Video className="h-4 w-4" aria-hidden="true" />
+          <Button
+            onClick={() => {
+              const workspace = document.getElementById('cortex-browser');
+              workspace?.scrollIntoView({ block: 'start' });
+              workspace?.focus({ preventScroll: true });
+            }}
+          >
+            <Globe className="h-4 w-4" aria-hidden="true" />
             Enseñar un {MODULE.one}
           </Button>
         </div>
       </div>
-
-      {teaching && (
-        <div className="mb-5">
-          <TeachFlow onSaved={onSaved} onCancel={() => setTeaching(false)} />
-        </div>
-      )}
 
       <Flows flows={visible} total={flows.length} filtered={filter !== 'todos'} onChanged={load} />
     </>
@@ -249,39 +202,6 @@ function Stat({
         {value}
       </div>
       <div className="mt-1.5 line-clamp-2 text-micro leading-snug text-ink-faint">{sub}</div>
-    </div>
-  );
-}
-
-/**
- * What happened to the thing you just taught. Amber rather than emerald when
- * it saved but did not reproduce — the difference between propuesto and
- * probado is the whole screen, and a green tick over "no reproduce" would
- * teach people to stop reading it.
- */
-function NoticeBanner({ notice, onClose }: { notice: Notice; onClose: () => void }) {
-  const good = notice.tone === 'emerald';
-  return (
-    <div
-      className={clsx(
-        'mb-5 flex items-start gap-2 rounded-card border px-4 py-3',
-        good ? 'border-emerald/20 bg-emerald-soft' : 'border-amber/20 bg-amber-soft',
-      )}
-    >
-      {good ? (
-        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald" aria-hidden="true" />
-      ) : (
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" aria-hidden="true" />
-      )}
-      <p className="flex-1 text-sm leading-relaxed text-ink">{notice.text}</p>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Cerrar el aviso"
-        className="-mr-1 -mt-1 shrink-0 rounded-pill p-1 text-ink-faint transition-colors duration-150 hover:bg-surface/60 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
-      >
-        <X className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
     </div>
   );
 }

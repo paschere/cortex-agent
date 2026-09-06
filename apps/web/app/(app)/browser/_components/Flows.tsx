@@ -124,7 +124,7 @@ export function Flows({
           <p className="mx-auto mt-1 max-w-[420px] text-sm leading-snug text-ink-muted">
             {filtered
               ? `Tienes ${total} ${total === 1 ? MODULE.one : MODULE.many} en total. Quita el filtro para verlos.`
-              : 'Enseña el primero grabando la pestaña del portal.'}
+              : 'Enseña el primero desde el navegador de Cortex.'}
           </p>
         </div>
       ) : (
@@ -366,9 +366,9 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
     <div className="divide-y divide-border border-t border-border bg-surface-2/40">
       {flow.status === 'draft' && (
         <p className="bg-amber-soft/60 px-5 py-3 text-xs leading-relaxed text-ink-muted">
-          Salió de una grabación y todavía <strong className="text-ink">no ha reproducido</strong>.
-          Se puede correr a mano desde aquí, pero el agente no lo ve en el chat y no se puede
-          programar hasta que funcione una vez completo.
+          Es una propuesta y todavía <strong className="text-ink">no ha reproducido</strong>. Se
+          puede correr a mano desde aquí, pero el agente no lo ve en el chat y no se puede programar
+          hasta que funcione una vez completo.
           {flow.lastError && (
             <>
               {' '}
