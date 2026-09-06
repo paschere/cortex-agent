@@ -1,10 +1,12 @@
 'use client';
+import { VoiceDictation } from '@/components/chat/VoiceDictation';
 import { Button } from '@/components/ui/button';
 import type { ManagementProfile, ManagementProfileData } from '@/lib/management/shape';
 import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { saveProfile } from './actions';
 import { Alert, Field, type Person, PersonOptions, Select } from './form-fields';
+import { organizeCompany } from './profile-analysis';
 export function ProfileEditor({
   profile,
   people,
@@ -20,6 +22,12 @@ export function ProfileEditor({
 }) {
   const [data, setData] = useState<ManagementProfileData>(profile.data);
   const [error, setError] = useState('');
+  const [narration, setNarration] = useState('');
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [organizing, setOrganizing] = useState(false);
+  const [dictating, setDictating] = useState(false);
+  const [reviewed, setReviewed] = useState(true);
+  const [hasDraft, setHasDraft] = useState(false);
   const [pending, start] = useTransition();
   const field = <K extends keyof ManagementProfileData>(key: K, value: ManagementProfileData[K]) =>
     setData((d) => ({ ...d, [key]: value }));
@@ -31,6 +39,7 @@ export function ProfileEditor({
         setError('');
         start(async () => {
           try {
+            if (organizing || dictating || !reviewed) return;
             const r = await saveProfile(data, profile.revision);
             if (r.ok) onSaved();
             else setError(r.error);
@@ -46,8 +55,88 @@ export function ProfileEditor({
           Acuerda el alcance con el cliente y documenta cómo se evaluará el servicio.
         </p>
       </div>
+      {isAdmin && (
+        <section className="company-narration">
+          <h3>Cuéntalo de una vez.</h3>
+          <p>
+            Qué hace tu empresa, qué quieres delegar y qué tendría que mejorar. Cortex organiza tu
+            explicación en los campos de abajo para que los revises.
+          </p>
+          <label htmlFor="company-narration" className="sr-only">
+            Cómo trabaja tu empresa
+          </label>
+          <textarea
+            id="company-narration"
+            value={narration}
+            onChange={(e) => setNarration(e.target.value)}
+            maxLength={18000}
+            rows={5}
+            disabled={organizing || pending}
+            placeholder="Somos una distribuidora. Quiero dar seguimiento a los cobros, pero los envíos los aprueba nuestra administradora…"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <VoiceDictation
+              onListeningChange={setDictating}
+              disabled={organizing || pending}
+              getBaseText={() => narration}
+              onText={setNarration}
+            />
+            <Button
+              type="button"
+              disabled={organizing || pending || dictating || narration.trim().length < 40}
+              onClick={async () => {
+                setOrganizing(true);
+                setError('');
+                try {
+                  const result = await organizeCompany(narration);
+                  if (!result.ok) {
+                    setError(result.error);
+                    return;
+                  }
+                  setData((current) => ({
+                    ...current,
+                    scope: result.draft.scope,
+                    priorities: result.draft.priorities,
+                    successMeasures: result.draft.successMeasures,
+                  }));
+                  setQuestions(result.draft.questions);
+                  setHasDraft(true);
+                  setReviewed(false);
+                } catch {
+                  setError('No se pudo organizar la explicación. Intenta otra vez.');
+                } finally {
+                  setOrganizing(false);
+                }
+              }}
+            >
+              {organizing ? 'Organizando tu explicación…' : 'Preparar configuración'}
+            </Button>
+          </div>
+          {questions.length > 0 && (
+            <div className="mt-4">
+              <h4 className="font-semibold">Falta aclarar</h4>
+              <ul className="mt-2 list-disc space-y-2 pl-5">
+                {questions.map((q) => (
+                  <li key={q}>{q}</li>
+                ))}
+              </ul>
+              <p>Amplía tu explicación y vuelve a preparar, o completa los campos directamente.</p>
+            </div>
+          )}
+          {hasDraft && (
+            <label className="mt-4 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={reviewed}
+                onChange={(e) => setReviewed(e.target.checked)}
+              />
+              Revisé el borrador y resolví las dudas en los campos antes de compartirlo.
+            </label>
+          )}
+        </section>
+      )}
       {error && <Alert>{error}</Alert>}
-      <fieldset disabled={!isAdmin || pending} className="space-y-5">
+      <fieldset disabled={!isAdmin || pending || organizing} className="space-y-5">
         <Field
           label="Qué gestiona Cortex y qué queda fuera del alcance"
           value={data.scope}
@@ -120,7 +209,7 @@ export function ProfileEditor({
         </div>
       </fieldset>
       {isAdmin ? (
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || organizing || dictating || !reviewed}>
           {pending ? 'Guardando…' : 'Guardar configuración'}
         </Button>
       ) : (

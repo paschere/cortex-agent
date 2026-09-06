@@ -22,6 +22,7 @@ import { startDailyBrief } from './actions';
 import { Alert, type Person, blankCase } from './form-fields';
 
 type Props = {
+  initialTab?: 'today' | 'processes' | 'settings';
   cases: ManagementCase[];
   profile: ManagementProfile;
   people: Person[];
@@ -37,7 +38,7 @@ export function ManagementBoard(props: Props) {
   const { cases, profile, people, signals, warnings, truncated, readAt, today, userId, isAdmin } =
     props;
   const router = useRouter();
-  const [tab, setTab] = useState<'today' | 'processes' | 'settings'>('today');
+  const [tab, setTab] = useState<'today' | 'processes' | 'settings'>(props.initialTab ?? 'today');
   const [filter, setFilter] = useState<'all' | 'risk' | 'review' | 'working' | 'verified'>('all');
   const [editor, setEditor] = useState<{ item?: ManagementCase; data: ManagementCaseData } | null>(
     null,
@@ -92,7 +93,7 @@ export function ManagementBoard(props: Props) {
       <div className="management-intro" hidden={tab === 'processes' || !!editor}>
         <CortexSignature className="management-signature" />
         <PageHeader
-          title="Hoy en la empresa"
+          title="Agenda de gerencia"
           subtitle="Prioridades, responsables y resultados que puedes comprobar."
           icon={<Briefcase className="h-5 w-5" />}
           actions={
@@ -138,6 +139,37 @@ export function ManagementBoard(props: Props) {
           </button>
         ))}
       </div>
+      {tab === 'today' && !editor && (
+        <section className="manager-agenda" aria-label="Siguiente paso de gerencia">
+          <div>
+            <h2>
+              {active.some(risk)
+                ? 'Empecemos por lo que necesita atención.'
+                : active.length
+                  ? 'Cada compromiso, con un siguiente paso.'
+                  : 'Preparemos el primer encargo.'}
+            </h2>
+            <p>
+              {active.filter(risk).length} asuntos requieren atención ·{' '}
+              {active.filter((c) => c.data.state === 'review').length} esperan verificación humana.
+              Consulta las señales antes de concluir que todo está al día.
+            </p>
+          </div>
+          <div className="manager-agenda__actions">
+            <Link href="/chat?prompt=Revisa%20management.brief%20y%20ay%C3%BAdame%20a%20priorizar%20la%20agenda%20de%20hoy.%20Distingue%20hechos%2C%20datos%20faltantes%20y%20el%20siguiente%20paso.">
+              Revisar con Cortex
+            </Link>
+            <Link href="/onboarding">Configurar empresa</Link>
+          </div>
+          <nav aria-label="Fuentes de la agenda">
+            <Link href="/goals">Metas</Link>
+            <Link href="/commitments">Compromisos</Link>
+            <Link href="/approvals">Aprobaciones</Link>
+            <Link href="/schedules">Rutinas</Link>
+            <Link href="/feed">Consultar datos</Link>
+          </nav>
+        </section>
+      )}
       {notice && (
         <output className="flex items-center gap-2 text-sm text-emerald">
           <CheckCircle2 className="h-4 w-4" />

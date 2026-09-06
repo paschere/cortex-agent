@@ -9,7 +9,10 @@ import { listAgents } from '@cortex/agents';
  * Los conteos salen de `countNavSignals`; el nombre propio es una lectura más
  * — el primer elemento de la primera cola, ver `readWaitingNotice`.
  */
-export default async function NewChatPage() {
+export default async function NewChatPage({
+  searchParams,
+}: { searchParams: Promise<{ prompt?: string }> }) {
+  const { prompt } = await searchParams;
   const user = await requireSession();
   const agents = listAgents().map((a) => ({
     slug: a.id,
@@ -17,5 +20,11 @@ export default async function NewChatPage() {
     greeting: a.greeting,
   }));
   const waiting = await readWaitingNotice(user.organization.id, user.id);
-  return <ChatRoot agents={agents} waiting={waiting} />;
+  return (
+    <ChatRoot
+      initialDraft={typeof prompt === 'string' ? prompt.slice(0, 4000) : undefined}
+      agents={agents}
+      waiting={waiting}
+    />
+  );
 }

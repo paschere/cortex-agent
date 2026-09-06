@@ -1,4 +1,5 @@
 'use client';
+import { ConversationStarts } from './ConversationStarts';
 
 import { usePanel } from '@/components/panel/PanelHost';
 import { CortexSignature } from '@/components/ui/cortex-signature';
@@ -101,9 +102,9 @@ const COPY: Record<string, { title: string; subtitle: string }> = { cortex: CORT
 
 /** El espacio recién creado. También en primera persona, y sin fingir nada. */
 const BLANK_COPY = {
-  title: 'Todavía no tengo nada tuyo que leer',
+  title: 'Empecemos por tu empresa.',
   subtitle:
-    'Contesto con lo que tenga tu empresa adentro, y este espacio está recién creado. Empieza por aquí y la próxima vez abro esta pantalla con preguntas sacadas de tus propios documentos.',
+    'Cuéntame qué quieres resolver. Puedes escribir, dictar o traer un archivo; te ayudaré a organizar el siguiente paso.',
 };
 
 /** Cinco minutos: lo que tarda en aparecer un documento subido en otra pestaña. */
@@ -307,6 +308,7 @@ export function EmptyState({
         </p>
       ) : null}
 
+      <ConversationStarts onCompose={onSuggestion} />
       {blank ? (
         <div className="w-full max-w-md text-left">
           {(data?.firstSteps ?? []).map((step, i) => (

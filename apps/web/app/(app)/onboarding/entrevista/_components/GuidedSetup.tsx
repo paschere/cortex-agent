@@ -4,8 +4,8 @@ import { VoiceDictation } from '@/components/chat/VoiceDictation';
 import { Panel } from '@/components/ui/panel';
 import { Provenance } from '@/components/ui/provenance';
 import {
-  type Handoff,
   HANDOFF_COPY,
+  type Handoff,
   KIND_COPY,
   MAX_QUESTIONS,
   type OutOfScope,
@@ -26,8 +26,8 @@ import {
   Clock,
   CornerDownLeft,
   Loader2,
-  Route,
   RotateCcw,
+  Route,
   Undo2,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -204,16 +204,19 @@ export function GuidedSetup(props: Props) {
 
   return (
     <div className="space-y-5">
+      <nav className="setup-journey" aria-label="Recorrido de configuración">
+        <span aria-current="step">1. Entender tu empresa</span>
+        <span>2. Revisar propuestas</span>
+        <span>3. Activar y comprobar</span>
+      </nav>
       {opening ? (
         <Panel className="overflow-hidden">
-          <div className="hero-mesh px-6 py-8 sm:px-8 sm:py-10">
-            <p className="text-micro font-semibold uppercase tracking-field text-white/60">
-              Puesta en marcha
-            </p>
-            <h2 className="mt-2 max-w-2xl text-xl font-semibold leading-tight text-white sm:text-display">
+          <div className="company-interview-intro px-6 py-8 sm:px-8 sm:py-10">
+            <p className="text-xs font-medium text-ink-muted">Puesta en marcha</p>
+            <h2 className="mt-2 max-w-2xl text-xl font-semibold leading-tight text-ink sm:text-display">
               {props.firstName}, cuéntame cómo trabajan.
             </h2>
-            <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/80">
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-ink-muted">
               Qué hace la empresa, qué se les vence, qué revisan cada semana, qué se les enreda.
               Como se lo contarías a alguien que entra mañana. Con eso te propongo qué dejar
               configurado, y tú decides qué se crea.
@@ -318,10 +321,7 @@ function Transcript({ turns }: { turns: Turn[] }) {
     <Panel className="p-5 sm:p-6">
       <ol className="space-y-5">
         {turns.map((turn, i) => (
-          <li
-            key={`${turn.at}-${i}`}
-            className="grid gap-1 sm:grid-cols-[58px_1fr] sm:gap-4"
-          >
+          <li key={`${turn.at}-${i}`} className="grid gap-1 sm:grid-cols-[58px_1fr] sm:gap-4">
             <div className="field-label pt-1 sm:text-right">
               {turn.role === 'person' ? 'Tú' : 'Cortex'}
             </div>
@@ -413,9 +413,9 @@ function Plan({
             No tengo nada que proponerte todavía.
           </h2>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-ink-muted">
-            Prefiero decirte esto a inventarme tres configuraciones para que la pantalla no se
-            vea vacía. Cuéntame algo más concreto — una fecha que se les vence, algo que revisan
-            cada semana, un procedimiento que siguen — y vuelvo a intentarlo.
+            Prefiero decirte esto a inventarme tres configuraciones para que la pantalla no se vea
+            vacía. Cuéntame algo más concreto — una fecha que se les vence, algo que revisan cada
+            semana, un procedimiento que siguen — y vuelvo a intentarlo.
           </p>
           <Link
             href="/onboarding/entrevista?nueva=1"
@@ -427,9 +427,7 @@ function Plan({
       ) : (
         <section>
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-base font-semibold text-ink">
-              Esto es lo que dejaría configurado
-            </h2>
+            <h2 className="text-base font-semibold text-ink">Esto es lo que dejaría configurado</h2>
             <p className="text-xs text-ink-faint">
               Nada de esto existe todavía. Desmarca lo que no quieras.
             </p>
@@ -477,7 +475,11 @@ function Plan({
               disabled={busy || chosen.size === 0}
               className="inline-flex items-center gap-2 rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px disabled:pointer-events-none disabled:opacity-40 motion-reduce:transform-none motion-reduce:transition-none"
             >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {busy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Check className="h-3.5 w-3.5" />
+              )}
               Crear {chosen.size > 0 ? chosen.size : ''}
             </button>
           </div>
@@ -574,12 +576,8 @@ function Limits({ handoffs, outOfScope }: { handoffs: Handoff[]; outOfScope: Out
                   <Panel className="flex flex-wrap items-start justify-between gap-3 p-4">
                     <div className="min-w-0 max-w-xl">
                       <p className="text-sm font-semibold text-ink">{copy.title}</p>
-                      {h.want && (
-                        <p className="mt-1 text-xs italic text-ink-muted">«{h.want}»</p>
-                      )}
-                      <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
-                        {copy.why}
-                      </p>
+                      {h.want && <p className="mt-1 text-xs italic text-ink-muted">«{h.want}»</p>}
+                      <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">{copy.why}</p>
                     </div>
                     <Link
                       href={copy.href}
@@ -611,8 +609,8 @@ function Limits({ handoffs, outOfScope }: { handoffs: Handoff[]; outOfScope: Out
             ))}
           </Panel>
           <p className="mt-2 text-micro leading-relaxed text-ink-faint">
-            Lo dejo anotado tal como lo dijiste. Prefiero decírtelo hoy a montarte algo que
-            parezca que lo resuelve.
+            Lo dejo anotado tal como lo dijiste. Prefiero decírtelo hoy a montarte algo que parezca
+            que lo resuelve.
           </p>
         </section>
       )}
@@ -671,8 +669,8 @@ function Receipt({
             : `Listo. ${live.length} ${live.length === 1 ? 'cosa quedó' : 'cosas quedaron'} en su sitio.`}
         </p>
         <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
-          Cada una vive en su módulo de siempre: ábrela, cámbiala o bórrala desde ahí como
-          cualquier otra. Si algo no era, deshazlo aquí mismo.
+          Cada una vive en su módulo de siempre: ábrela, cámbiala o bórrala desde ahí como cualquier
+          otra. Si algo no era, deshazlo aquí mismo.
         </p>
       </Panel>
 
@@ -693,9 +691,7 @@ function Receipt({
                       <Provenance source={copy.where} detail={copy.noun} />
                     </div>
                     {item.status === 'merged' && (
-                      <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
-                        {undo.note}
-                      </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">{undo.note}</p>
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">

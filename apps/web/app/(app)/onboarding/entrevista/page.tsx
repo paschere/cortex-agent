@@ -62,14 +62,11 @@ export default async function EntrevistaPage({
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <PageHeader
-        title="Cuéntale cómo trabajan"
+        title="Configuremos Cortex hablando"
         subtitle="Hablas, Cortex pregunta lo que le falte, y al final te propone qué dejar configurado. Tú decides qué se crea."
         icon={<MessagesSquare className="h-4 w-4" />}
         actions={
-          <Link
-            href="/onboarding"
-            className="text-xs font-semibold text-ink-muted hover:text-ink"
-          >
+          <Link href="/onboarding" className="text-xs font-semibold text-ink-muted hover:text-ink">
             Primeros pasos
           </Link>
         }
@@ -89,8 +86,8 @@ export default async function EntrevistaPage({
 
       <Panel className="p-4">
         <p className="text-xs leading-relaxed text-ink-muted">
-          Nada de lo que cuentes aquí sale de tu empresa, y nada se crea sin que lo apruebes en
-          pantalla. Lo que se cree queda en su módulo de siempre y lo puedes deshacer.
+          Cortex analiza tu explicación para proponer una configuración. Revisa qué se creará y
+          dónde antes de aprobar. Los permisos para actuar se administran por separado.
         </p>
       </Panel>
     </div>

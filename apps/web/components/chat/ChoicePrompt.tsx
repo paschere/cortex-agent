@@ -1,4 +1,5 @@
 'use client';
+import { VoiceDictation } from './VoiceDictation';
 
 import type { ChoiceOption } from '@/lib/ask-choice';
 import { clsx } from 'clsx';
@@ -78,6 +79,7 @@ export function ChoicePrompt({
 }) {
   const [writing, setWriting] = useState(false);
   const [text, setText] = useState('');
+  const [dictating, setDictating] = useState(false);
   const [sent, setSent] = useState<string | null>(null);
   const groupRef = useRef<HTMLDivElement>(null);
 
@@ -95,7 +97,7 @@ export function ChoicePrompt({
 
   function answer(value: string) {
     const clean = value.trim();
-    if (!clean) return;
+    if (!clean || dictating) return;
     setSent(clean);
     onAnswer?.(clean);
   }
@@ -126,7 +128,7 @@ export function ChoicePrompt({
     <div
       role="group"
       aria-label="Cortex necesita que decidas"
-      className="mt-2 overflow-hidden rounded-card border border-primary/20 bg-surface shadow-card"
+      className="chat-question mt-2 overflow-hidden rounded-card border border-primary/20 bg-surface shadow-card"
     >
       {/*
         Lo que anuncia un lector de pantalla cuando la tarjeta aparece.
@@ -146,7 +148,7 @@ export function ChoicePrompt({
         <div className="min-w-0 flex-1">
           {/* Nombra el estado del bloque entero, no un valor debajo — por eso
               no es `.field-label`, igual que en ConfirmationPrompt. */}
-          <div className="text-micro font-semibold text-primary-ink">Necesito que decidas</div>
+          <div className="text-micro font-semibold text-primary-ink">Una pregunta para avanzar</div>
           <p className="mt-1 text-sm font-semibold text-ink">{question}</p>
         </div>
       </div>
@@ -166,7 +168,7 @@ export function ChoicePrompt({
                 // Lo que distingue una opción de otra suele ser un NIT, una
                 // ciudad o una fecha — evidencia, regla 3 del sistema de
                 // diseño, así que va en monoespaciada.
-                <span className="tabular mt-0.5 block truncate font-mono text-micro text-ink-faint">
+                <span className="tabular mt-0.5 block whitespace-normal text-xs leading-relaxed text-ink-muted">
                   {option.detail}
                 </span>
               )}
@@ -181,20 +183,26 @@ export function ChoicePrompt({
               event.preventDefault();
               answer(text);
             }}
-            className="flex items-center gap-2 pt-0.5"
+            className="flex flex-wrap items-center gap-2 pt-0.5"
           >
-            <input
+            <textarea
               // biome-ignore lint/a11y/noAutofocus: el campo no existe hasta que la persona lo pide con un clic o con Enter, así que no roba el foco a nadie; aparecer sin él obligaría a un segundo gesto para nada.
               autoFocus
               value={text}
               onChange={(event) => setText(event.target.value)}
+              rows={2}
               aria-label="Tu respuesta"
-              placeholder="Ninguna de ésas — te digo yo…"
+              placeholder="Escribe tu respuesta…"
               className="min-w-0 flex-1 rounded-pill border border-border bg-surface-2 px-3.5 py-2 text-sm text-ink placeholder:text-ink-faint focus:outline-none"
+            />
+            <VoiceDictation
+              onListeningChange={setDictating}
+              getBaseText={() => text}
+              onText={setText}
             />
             <button
               type="submit"
-              disabled={text.trim().length === 0}
+              disabled={dictating || text.trim().length === 0}
               className="shrink-0 rounded-pill bg-primary px-4 py-2 text-sm font-semibold text-white shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong disabled:opacity-40 disabled:shadow-none motion-reduce:transform-none motion-reduce:transition-none"
             >
               Responder
@@ -210,7 +218,7 @@ export function ChoicePrompt({
               'transition-colors duration-150 hover:bg-surface-2 hover:text-ink motion-reduce:transition-none',
             )}
           >
-            Ninguna — te digo yo
+            Responder con mis palabras
           </button>
         )}
       </div>

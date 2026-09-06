@@ -672,7 +672,7 @@ export function InputBar({
                 dentro. Las dos siguen nombradas, que es lo que las hace
                 descubribles.
               */
-          placeholder="Pregúntame. @ nombra algo, / comandos"
+          placeholder="Cuéntame qué necesitas resolver…"
           disabled={disabled}
           rows={1}
           role="combobox"
@@ -847,7 +847,9 @@ export function InputBar({
         <VoiceMode
           history={voiceHistory}
           spaceIds={scope.map((space) => space.id)}
-          onCompose={(voiceText) => setComposerText([textRef.current, voiceText].filter(Boolean).join('\n\n'))}
+          onCompose={(voiceText) =>
+            setComposerText([textRef.current, voiceText].filter(Boolean).join('\n\n'))
+          }
           onClose={() => setVoiceOpen(false)}
         />
       ) : null}
@@ -873,7 +875,7 @@ export function InputBar({
         )}
 
         <p className="mt-1.5 text-center text-micro text-ink-faint">
-          Cada respuesta trae su fuente: revísala antes de actuar.
+          Revisa las fuentes disponibles antes de decidir.
         </p>
       </div>
     </div>

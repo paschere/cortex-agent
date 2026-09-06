@@ -1,11 +1,14 @@
 import { InviteTeam } from '@/components/team/InviteTeam';
+import { CompanyLaunch } from '@/components/ui/company-launch';
 import { PageHeader } from '@/components/ui/page-header';
 import { IconChip, Panel, PanelHead } from '@/components/ui/panel';
 import { reviewGuidedSetup } from '@/lib/guided-setup/store';
+import { managementReadiness } from '@/lib/management/readiness';
 import { GOAL_FIRST_QUESTION, type OnboardingGoal, type OnboardingStepId } from '@/lib/plan-shape';
 import { requireSession } from '@/lib/session';
 import { chipClass } from '@/lib/status-chip';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { readManagement } from '@cortex/agent-tools';
 import { readOnboarding, readSeats, readWorkspacePlan } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
 import {
@@ -134,120 +137,149 @@ export default async function OnboardingPage() {
     readWorkspacePlan(db),
     reviewGuidedSetup(db).catch(() => null),
   ]);
+  const [management, goalResult] = await Promise.all([
+    readManagement(db).catch(() => null),
+    db.from('goals').select('id', { count: 'exact', head: true }).eq('state', 'active'),
+  ]);
+  const launchSteps = managementReadiness({
+    configured: management ? management.profile.revision > 0 : null,
+    owner: management ? !!management.profile.data.escalationOwnerId : null,
+    manuals: management?.profile.data.playbooks.length ?? null,
+    goals: goalResult.error ? null : (goalResult.count ?? 0),
+    sources: !!state.steps.find((s) => s.id === 'source')?.done,
+    knowledge: !!state.steps.find((s) => s.id === 'knowledge')?.done,
+    verified: management
+      ? management.cases.some((c) => c.data.state === 'verified')
+        ? 1
+        : management.truncated
+          ? null
+          : 0
+      : null,
+  });
   const seats = await readSeats(db, user.organization.id, plan, contractedSeats);
 
-  const doneCount = state.steps.filter((s) => s.done).length;
+  const doneCount = launchSteps.filter((s) => s.state === 'ready').length;
   const firstName = (user.name ?? '').trim().split(' ')[0] || 'Hola';
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Primeros pasos"
+        title="Configurar mi empresa"
         subtitle={
-          state.done
-            ? 'Ya está todo listo. Esta guía se queda aquí por si entra alguien nuevo.'
+          doneCount === launchSteps.length
+            ? 'Las bases están preparadas. Revisa el alcance y los permisos antes de ampliar la operación.'
             : `${firstName}, esto es lo que hace que Cortex sirva desde hoy y no dentro de un mes.`
         }
         icon={<Rocket className="h-4 w-4" />}
         actions={
-          <span className={chipClass(state.done ? 'emerald' : 'primary')}>
+          <span className={chipClass(doneCount === launchSteps.length ? 'emerald' : 'primary')}>
             <span className="tabular">
-              {doneCount} de {state.steps.length}
+              {doneCount} de {launchSteps.length} bases
             </span>
           </span>
         }
       />
 
-      {/* The empty-brain warning, said once and only while it is true. */}
-      {!state.steps.find((s) => s.id === 'knowledge')?.done &&
-        !state.steps.find((s) => s.id === 'source')?.done && (
-          <Panel className="border-primary/20 bg-primary-soft/40 p-4">
-            <p className="text-sm leading-relaxed text-primary-ink">
-              Ahora mismo Cortex no sabe nada de{' '}
-              <span className="font-semibold">{user.organization.name}</span>. No es que esté vacío
-              el panel: es que todavía no le has dado de dónde responder. Los dos primeros pasos de
-              abajo lo arreglan.
-            </p>
-          </Panel>
-        )}
-
-      <ol className="space-y-3">
-        {state.steps.map((step, index) => {
-          const copy = stepCopy(step.id, state.goal);
-          const isNext = state.next === step.id;
-          return (
-            <li key={step.id}>
-              <Panel
-                className={clsx(
-                  'overflow-hidden',
-                  isNext && 'ring-1 ring-primary/25',
-                  step.done && 'opacity-[0.72]',
-                )}
-              >
-                <div className="flex gap-3.5 p-5">
-                  <div className="shrink-0">
-                    {step.done ? (
-                      <span className="grid h-8 w-8 place-items-center rounded-sm bg-emerald-soft text-emerald">
-                        <Check className="h-4 w-4" />
-                      </span>
-                    ) : (
-                      <IconChip tone={isNext ? 'primary' : 'sky'}>{copy.icon}</IconChip>
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="tabular text-micro font-semibold text-ink-faint">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                      <h2 className="text-base font-semibold text-ink">{copy.title}</h2>
-                      {isNext && <span className={chipClass('primary')}>Sigue esto</span>}
-                    </div>
-
-                    <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
-                      {step.done ? copy.doneNote : copy.body}
-                    </p>
-
-                    {step.id === 'goal' && !step.done && (
-                      <div className="mt-3.5">
-                        <GoalPicker current={state.goal} />
-                      </div>
-                    )}
-                    {step.id === 'goal' && step.done && state.goal && (
-                      <div className="mt-3.5">
-                        <GoalPicker current={state.goal} />
-                      </div>
-                    )}
-
-                    {step.id === 'team' && !step.done && (
-                      <div className="mt-3.5">
-                        <InviteTeam
-                          seatsUsed={seats.used}
-                          seatsMaximum={seats.maximum}
-                          perSeatAnswers={plan.perSeat.answers}
-                          priceCopPerSeat={plan.priceCopPerSeat}
-                          canInvite={user.role === 'org_admin'}
-                        />
-                      </div>
-                    )}
-
-                    {copy.action && !step.done && (
-                      <Link
-                        href={copy.action.href}
-                        className="mt-3.5 inline-flex items-center rounded-pill bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
-                      >
-                        {copy.action.label}
-                      </Link>
-                    )}
-                  </div>
-                </div>
+      <CompanyLaunch
+        name={user.organization.name}
+        steps={launchSteps}
+        isAdmin={user.role === 'org_admin'}
+      />
+      <details className="rounded-2xl border border-border p-5">
+        <summary className="cursor-pointer font-semibold text-ink">
+          Fuentes, equipo y primeros pasos
+        </summary>
+        <div className="mt-5 space-y-5">
+          {/* The empty-brain warning, said once and only while it is true. */}
+          {!state.steps.find((s) => s.id === 'knowledge')?.done &&
+            !state.steps.find((s) => s.id === 'source')?.done && (
+              <Panel className="border-primary/20 bg-primary-soft/40 p-4">
+                <p className="text-sm leading-relaxed text-primary-ink">
+                  Ahora mismo Cortex no sabe nada de{' '}
+                  <span className="font-semibold">{user.organization.name}</span>. No es que esté
+                  vacío el panel: es que todavía no le has dado de dónde responder. Los dos primeros
+                  pasos de abajo lo arreglan.
+                </p>
               </Panel>
-            </li>
-          );
-        })}
-      </ol>
+            )}
 
-      {/*
+          <ol className="space-y-3">
+            {state.steps.map((step, index) => {
+              const copy = stepCopy(step.id, state.goal);
+              const isNext = state.next === step.id;
+              return (
+                <li key={step.id}>
+                  <Panel
+                    className={clsx(
+                      'overflow-hidden',
+                      isNext && 'ring-1 ring-primary/25',
+                      step.done && 'opacity-[0.72]',
+                    )}
+                  >
+                    <div className="flex gap-3.5 p-5">
+                      <div className="shrink-0">
+                        {step.done ? (
+                          <span className="grid h-8 w-8 place-items-center rounded-sm bg-emerald-soft text-emerald">
+                            <Check className="h-4 w-4" />
+                          </span>
+                        ) : (
+                          <IconChip tone={isNext ? 'primary' : 'sky'}>{copy.icon}</IconChip>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="tabular text-micro font-semibold text-ink-faint">
+                            {String(index + 1).padStart(2, '0')}
+                          </span>
+                          <h2 className="text-base font-semibold text-ink">{copy.title}</h2>
+                          {isNext && <span className={chipClass('primary')}>Sigue esto</span>}
+                        </div>
+
+                        <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
+                          {step.done ? copy.doneNote : copy.body}
+                        </p>
+
+                        {step.id === 'goal' && !step.done && (
+                          <div className="mt-3.5">
+                            <GoalPicker current={state.goal} />
+                          </div>
+                        )}
+                        {step.id === 'goal' && step.done && state.goal && (
+                          <div className="mt-3.5">
+                            <GoalPicker current={state.goal} />
+                          </div>
+                        )}
+
+                        {step.id === 'team' && !step.done && (
+                          <div className="mt-3.5">
+                            <InviteTeam
+                              seatsUsed={seats.used}
+                              seatsMaximum={seats.maximum}
+                              perSeatAnswers={plan.perSeat.answers}
+                              priceCopPerSeat={plan.priceCopPerSeat}
+                              canInvite={user.role === 'org_admin'}
+                            />
+                          </div>
+                        )}
+
+                        {copy.action && !step.done && (
+                          <Link
+                            href={copy.action.href}
+                            className="mt-3.5 inline-flex items-center rounded-pill bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
+                          >
+                            {copy.action.label}
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </Panel>
+                </li>
+              );
+            })}
+          </ol>
+
+          {/*
         La entrevista, ofrecida aquí y no metida en la lista de arriba.
 
         Los cinco pasos responden "¿de dónde saca Cortex lo que sabe?" y su
@@ -258,96 +290,97 @@ export default async function OnboardingPage() {
         ser una invitación y pasa a ser un resultado: cuántas de las cosas que
         se configuraron hablando siguen ahí, y cuántas alguien usó.
       */}
-      {setup && setup.created > 0 ? (
-        <Panel>
-          <PanelHead
-            title="Lo que configuraste hablando"
-            icon={<MessagesSquare className="h-4 w-4" />}
-            right={
-              <span className={chipClass(setup.used > 0 ? 'emerald' : 'neutral')}>
-                <span className="tabular">
-                  {setup.used} de {setup.created}
-                </span>
-                <span className="ml-1">en uso</span>
-              </span>
-            }
-          />
-          <div className="px-5 pb-5 pt-3">
-            <p className="max-w-2xl text-xs leading-relaxed text-ink-muted">
-              De las <span className="tabular font-semibold text-ink">{setup.created}</span> cosas
-              que se crearon desde la entrevista,{' '}
-              <span className="tabular font-semibold text-ink">{setup.alive}</span> siguen ahí y{' '}
-              <span className="tabular font-semibold text-ink">{setup.used}</span> se han usado. La
-              medida de que esto sirvió no es cuántas se crearon: es cuántas siguen vivas dentro de
-              unas semanas.
-            </p>
-            <ul className="mt-3 space-y-1.5">
-              {setup.rows.slice(0, 5).map((row) => (
-                <li
-                  key={row.item.id}
-                  className="flex flex-wrap items-baseline justify-between gap-2 text-xs"
-                >
-                  <span className={clsx('truncate', row.alive ? 'text-ink' : 'text-ink-faint')}>
-                    {row.item.title}
+          {setup && setup.created > 0 ? (
+            <Panel>
+              <PanelHead
+                title="Lo que configuraste hablando"
+                icon={<MessagesSquare className="h-4 w-4" />}
+                right={
+                  <span className={chipClass(setup.used > 0 ? 'emerald' : 'neutral')}>
+                    <span className="tabular">
+                      {setup.used} de {setup.created}
+                    </span>
+                    <span className="ml-1">en uso</span>
                   </span>
-                  <span className={clsx(row.used ? 'text-emerald' : 'text-ink-faint')}>
-                    {row.evidence}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <Link
-              href="/onboarding/entrevista"
-              className="mt-3.5 inline-block text-xs font-semibold text-primary hover:underline"
-            >
-              Contarle algo más
-            </Link>
-          </div>
-        </Panel>
-      ) : (
-        state.steps.find((s) => s.id === 'answer')?.done && (
-          <Panel className="overflow-hidden">
-            <div className="flex flex-wrap items-start justify-between gap-4 p-5">
-              <div className="min-w-0 max-w-xl">
-                <div className="flex items-center gap-2.5">
-                  <IconChip tone="primary">
-                    <MessagesSquare className="h-4 w-4" />
-                  </IconChip>
-                  <h2 className="text-base font-semibold text-ink">
-                    Ahora dile qué debería estar haciendo por ti
-                  </h2>
-                </div>
-                <p className="mt-2 text-xs leading-relaxed text-ink-muted">
-                  Cuéntale cómo trabajan — qué se les vence, qué revisan cada semana, qué
-                  procedimiento siguen — y te propone qué dejar configurado. Nada se crea sin que lo
-                  apruebes, y todo se puede deshacer.
+                }
+              />
+              <div className="px-5 pb-5 pt-3">
+                <p className="max-w-2xl text-xs leading-relaxed text-ink-muted">
+                  De las <span className="tabular font-semibold text-ink">{setup.created}</span>{' '}
+                  cosas que se crearon desde la entrevista,{' '}
+                  <span className="tabular font-semibold text-ink">{setup.alive}</span> siguen ahí y{' '}
+                  <span className="tabular font-semibold text-ink">{setup.used}</span> se han usado.
+                  La medida de que esto sirvió no es cuántas se crearon: es cuántas siguen vivas
+                  dentro de unas semanas.
                 </p>
+                <ul className="mt-3 space-y-1.5">
+                  {setup.rows.slice(0, 5).map((row) => (
+                    <li
+                      key={row.item.id}
+                      className="flex flex-wrap items-baseline justify-between gap-2 text-xs"
+                    >
+                      <span className={clsx('truncate', row.alive ? 'text-ink' : 'text-ink-faint')}>
+                        {row.item.title}
+                      </span>
+                      <span className={clsx(row.used ? 'text-emerald' : 'text-ink-faint')}>
+                        {row.evidence}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/onboarding/entrevista"
+                  className="mt-3.5 inline-block text-xs font-semibold text-primary hover:underline"
+                >
+                  Contarle algo más
+                </Link>
               </div>
-              <Link
-                href="/onboarding/entrevista"
-                className="inline-flex shrink-0 items-center rounded-pill bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
-              >
-                Empezar a contarle
+            </Panel>
+          ) : (
+            state.steps.find((s) => s.id === 'answer')?.done && (
+              <Panel className="overflow-hidden">
+                <div className="flex flex-wrap items-start justify-between gap-4 p-5">
+                  <div className="min-w-0 max-w-xl">
+                    <div className="flex items-center gap-2.5">
+                      <IconChip tone="primary">
+                        <MessagesSquare className="h-4 w-4" />
+                      </IconChip>
+                      <h2 className="text-base font-semibold text-ink">
+                        Ahora dile qué debería estar haciendo por ti
+                      </h2>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+                      Cuéntale cómo trabajan — qué se les vence, qué revisan cada semana, qué
+                      procedimiento siguen — y te propone qué dejar configurado. Nada se crea sin
+                      que lo apruebes, y todo se puede deshacer.
+                    </p>
+                  </div>
+                  <Link
+                    href="/onboarding/entrevista"
+                    className="inline-flex shrink-0 items-center rounded-pill bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px motion-reduce:transform-none motion-reduce:transition-none"
+                  >
+                    Empezar a contarle
+                  </Link>
+                </div>
+              </Panel>
+            )
+          )}
+
+          <Panel>
+            <PanelHead title="Tu plan mientras tanto" icon={<Rocket className="h-4 w-4" />} />
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5 pt-3">
+              <p className="max-w-xl text-xs leading-relaxed text-ink-muted">
+                Estás en el plan <span className="font-semibold text-ink">{plan.name}</span>. Se
+                mide por respuestas y documentos, no por tokens, y puedes ver de dónde sale cada
+                cifra cuando quieras.
+              </p>
+              <Link href="/plan" className="text-xs font-semibold text-primary hover:underline">
+                Ver plan y consumo
               </Link>
             </div>
           </Panel>
-        )
-      )}
-
-      <Panel>
-        <PanelHead title="Tu plan mientras tanto" icon={<Rocket className="h-4 w-4" />} />
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5 pt-3">
-          <p className="max-w-xl text-xs leading-relaxed text-ink-muted">
-            Estás en el plan <span className="font-semibold text-ink">{plan.name}</span>. Se mide
-            por respuestas y documentos, no por tokens, y puedes ver de dónde sale cada cifra cuando
-            quieras.
-          </p>
-          <Link href="/plan" className="text-xs font-semibold text-primary hover:underline">
-            Ver plan y consumo
-          </Link>
         </div>
-      </Panel>
-
+      </details>
       <div className="flex justify-center pb-2">
         <DismissGuide />
       </div>

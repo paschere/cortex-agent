@@ -322,7 +322,7 @@ export function MessageBubble({
     const headline = content.length <= HEADLINE_MAX_CHARS;
 
     return (
-      <header>
+      <header className="chat-person-message">
         {/*
           LA HORA ES UN ANTETÍTULO, Y ESTABA AL LADO.
 
@@ -409,7 +409,7 @@ export function MessageBubble({
       30px de ésta, que es la señal de que cada pieza de esta pantalla eligió su
       sitio por separado. Ahora hereda el carril, como todo lo demás.
     */
-    <div className="group flex items-stretch gap-3 sm:gap-4">
+    <div className="chat-cortex-message group flex items-stretch gap-3 sm:gap-4">
       {/*
         LA MISMA PRESENCIA QUE ESTABA TRABAJANDO, YA CALMADA.
 

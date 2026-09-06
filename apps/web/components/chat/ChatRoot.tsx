@@ -27,6 +27,7 @@ interface AgentInfo {
 }
 
 interface ChatRootProps {
+  initialDraft?: string;
   agents: AgentInfo[];
   conversationId?: string;
   initialMessages?: Message[];
@@ -84,6 +85,7 @@ interface ChatRootProps {
 }
 
 export function ChatRoot({
+  initialDraft,
   agents,
   conversationId: initialConvId,
   initialMessages,
@@ -97,7 +99,7 @@ export function ChatRoot({
 }: ChatRootProps) {
   const [agentSlug, setAgentSlug] = useState(initialAgentSlug ?? agents[0]?.slug ?? 'cortex');
   const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState(initialDraft ?? '');
   const [blocked, setBlocked] = useState<{ message: string; isLimit: boolean } | null>(null);
   const { setOpen: setSidebarOpen } = useMobileSidebar();
 
@@ -392,7 +394,13 @@ export function ChatRoot({
         {messages.length > 0 && waiting && (waiting.total > 0 || waiting.lead) ? (
           <WaitingNotice waiting={waiting} onAsk={handleSend} />
         ) : null}
-        <div className="ml-auto flex min-w-0 shrink items-center">
+        <div className="ml-auto flex min-w-0 shrink items-center gap-3">
+          <Link href="/management" className="chat-header-link">
+            Agenda
+          </Link>
+          <Link href="/onboarding" className="chat-header-link hidden sm:inline-flex">
+            Mi empresa
+          </Link>
           <ThreadHistory />
         </div>
       </header>
