@@ -6,17 +6,17 @@
  * chunks dejan de salir, Whisper se queda en 0). AudioWorklet corre en el hilo
  * de audio. El PCM sale a 16 kHz linear16 para Deepgram.
  *
- * Cómo se engancha cada pista (el fallo del 21-08 y otra vez el 02-09:
- * chunks>0, peak=0, Deepgram mudo):
- *  1. En Chromium headless, createMediaStreamSource de una pista WebRTC remota
- *     entrega silencio si nadie la reproduce de verdad. El sink tiene que
- *     estar unmuted (muted=true o display:none cortan la decodificación).
- *  2. Se captura con createMediaElementSource de ESE <audio>, que es el nodo
- *     que oye lo ya decodificado. Fallback a MediaStreamSource si el elemento
- *     ya tiene source.
- *  3. Los <audio>/<video> que Meet YA reproduce, y los receivers de cada
- *     RTCPeerConnection si Meet no monta elementos.
- *  4. Al `ended`, se olvida el id para que Meet pueda reciclar la pista.
+ * Cómo se engancha cada pista (21-08, 02-09 y 04-09: chunks>0, peak=0):
+ *  1. Chrome en Docker no decodifica WebRTC remoto sin un dispositivo de
+ *     salida. El entrypoint levanta PulseAudio + null sink; sin eso las
+ *     pistas se quedan muted (lM) y MediaElementSource entrega ceros.
+ *  2. Preferir createMediaElementSource de los <audio>/<video> que Meet ya
+ *     está decodificando (después de desmutearlos). Un sink paralelo sobre
+ *     la misma pista muted sigue en silencio.
+ *  3. El AudioContext va a 48 kHz nativo; forzar 16 kHz anula el decode de
+ *     Meet. El downsample a 16 kHz es solo al emitir PCM a Deepgram.
+ *  4. No mezclar senders locales (TTS / fake mic). Al `ended`, se olvida
+ *     el id para que Meet pueda reciclar la pista.
  */
 
 export const AUDIO_TAP_SCRIPT = /* js */ `
@@ -36,6 +36,27 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     document.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
     document.dispatchEvent(new Event('visibilitychange'));
   } catch (e) { /* algún getter no configurable */ }
+
+  // Meet deja de suscribir audio de tiles que cree fuera de pantalla.
+  try {
+    const NativeIO = window.IntersectionObserver;
+    if (NativeIO && !NativeIO.__cortexWrapped) {
+      const WrappedIO = function (cb, opts) {
+        return new NativeIO(function (entries, obs) {
+          for (const e of entries) {
+            try {
+              Object.defineProperty(e, 'isIntersecting', { get: () => true, configurable: true });
+              Object.defineProperty(e, 'intersectionRatio', { get: () => 1, configurable: true });
+            } catch (err) { /* */ }
+          }
+          return cb(entries, obs);
+        }, opts);
+      };
+      WrappedIO.prototype = NativeIO.prototype;
+      WrappedIO.__cortexWrapped = true;
+      window.IntersectionObserver = WrappedIO;
+    }
+  } catch (e) { /* */ }
 
   const pending = [];
   const seenTrack = new Set();
@@ -62,6 +83,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     started: false, peak: 0, recentPeak: 0, chunks: 0, speaker: null, roster: [],
     tracks: 0, live: 0, elements: 0, pcs: 0, mine: 0, playing: 0,
     trackInfo: '', vis: '', ctxState: 'none', capture: 'none', lastRms: 0,
+    sampleRate: 0, meetSrc: 0, meetPlay: '',
   };
 
   const EFFECTS = /visual_effects|backgrounds and effects|fondos y efectos/i;
@@ -131,6 +153,9 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
   const mixerHold = { current: null };
   const nodes = [];
   const sinks = [];
+  const meetNodes = [];
+  const sourcedEls = new WeakSet();
+  let sendersThisSweep = new Set();
   let sweepTimer = null;
   let speakerWatched = false;
 
@@ -167,8 +192,10 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
   }
 
   async function setupGraph() {
-    ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    // Native rate (48 kHz). Forcing 16 kHz here zeros MediaElementSource of Meet.
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
     if (ctx.state === 'suspended') await ctx.resume();
+    state.sampleRate = ctx.sampleRate;
     const mixer = ctx.createGain();
     mixer.gain.value = 1;
     mixerHold.current = mixer;
@@ -206,6 +233,8 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
   }
 
   function attachSink(track) {
+    const playable = (track.clone && track.clone()) || track;
+    try { playable.enabled = true; } catch (e) { /* */ }
     const el = document.createElement('audio');
     el.autoplay = true;
     el.playsInline = true;
@@ -214,17 +243,35 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     el.volume = 1;
     el.setAttribute('data-cortex-tap', '1');
     el.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';
-    el.srcObject = new MediaStream([track]);
+    el.srcObject = new MediaStream([playable]);
     (document.body || document.documentElement).appendChild(el);
     const play = () => { const p = el.play(); if (p && p.catch) p.catch(() => {}); };
     play();
     track.addEventListener('unmute', play);
+    playable.addEventListener('unmute', play);
     return el;
   }
 
-  function isLocalVoice(t) {
+  function senderIds() {
+    const ids = new Set();
     try {
-      return Boolean(window.__cortexLocalTrackId && t && t.id === window.__cortexLocalTrackId);
+      if (window.__cortexLocalTrackId) ids.add(window.__cortexLocalTrackId);
+    } catch (e) { /* */ }
+    for (const pc of pcs) {
+      try {
+        for (const s of pc.getSenders ? pc.getSenders() : []) {
+          if (s.track && s.track.kind === 'audio') ids.add(s.track.id);
+        }
+      } catch (e) { /* pc cerrada */ }
+    }
+    return ids;
+  }
+
+  function isLocalVoice(t) {
+    if (!t) return false;
+    if (sendersThisSweep.has(t.id)) return true;
+    try {
+      return Boolean(window.__cortexLocalTrackId && t.id === window.__cortexLocalTrackId);
     } catch (e) { return false; }
   }
 
@@ -269,15 +316,63 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     }
   }
 
+  function forceMeetPlay(el) {
+    try {
+      el.muted = false;
+      el.defaultMuted = false;
+      el.volume = 1;
+      const p = el.play();
+      if (p && p.catch) p.catch(() => {});
+    } catch (e) { /* */ }
+  }
+
+  function markMeetTracks(el) {
+    if (!el.srcObject || !el.srcObject.getAudioTracks) return;
+    for (const t of el.srcObject.getAudioTracks()) seenTrack.add(t.id);
+  }
+
+  function wireMeetElement(el) {
+    if (!el || el.getAttribute('data-cortex-tap') === '1') return;
+    forceMeetPlay(el);
+    if (!mixerHold.current || !ctx) return;
+    if (sourcedEls.has(el) && meetNodes.length) {
+      markMeetTracks(el);
+      return;
+    }
+    if (!sourcedEls.has(el)) {
+      try {
+        const src = ctx.createMediaElementSource(el);
+        src.connect(mixerHold.current);
+        sourcedEls.add(el);
+        meetNodes.push(src);
+        markMeetTracks(el);
+        return;
+      } catch (e) {
+        sourcedEls.add(el);
+      }
+    }
+    if (el.srcObject) wireStream(el.srcObject);
+  }
+
   function wireMeetElements() {
     const els = document.querySelectorAll('audio:not([data-cortex-tap]), video');
     state.elements = els.length;
-    for (const el of els) {
-      if (el.srcObject) wireStream(el.srcObject);
-    }
+    state.meetPlay = [...els].slice(0, 6).map((el) => {
+      const tracks = el.srcObject && el.srcObject.getAudioTracks
+        ? el.srcObject.getAudioTracks().length
+        : 0;
+      return (el.tagName[0] || '?')
+        + (el.muted ? 'm' : '')
+        + (el.paused ? 'p' : '')
+        + (el.volume < 0.1 ? 'v0' : '')
+        + tracks;
+    }).join(',');
+    for (const el of els) wireMeetElement(el);
   }
 
   function sweep() {
+    sendersThisSweep = senderIds();
+    wireMeetElements();
     while (pending.length) wireStream(pending.pop());
     for (const pc of pcs) {
       try {
@@ -286,21 +381,32 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
         }
       } catch (e) { /* pc cerrada */ }
     }
-    wireMeetElements();
-    const liveTracks = sinks.map((s) => s.track).filter(Boolean);
-    state.tracks = sinks.length;
-    state.live = liveTracks.filter((t) => t.readyState === 'live' && !t.muted).length;
+    const byId = new Map();
+    for (const s of sinks) {
+      if (s.track) byId.set(s.track.id, s.track);
+    }
+    for (const el of document.querySelectorAll('audio:not([data-cortex-tap]), video')) {
+      if (!el.srcObject || !el.srcObject.getAudioTracks) continue;
+      for (const t of el.srcObject.getAudioTracks()) {
+        if (!sendersThisSweep.has(t.id)) byId.set(t.id, t);
+      }
+    }
+    const liveTracks = [...byId.values()];
+    state.tracks = liveTracks.length;
+    state.live = liveTracks.filter((t) => t.readyState === 'live').length;
+    state.meetSrc = meetNodes.length;
     state.pcs = pcs.length;
     const mine = document.querySelectorAll('audio[data-cortex-tap]');
     state.mine = mine.length;
     state.playing = [...mine].filter((e) => !e.paused).length;
     state.trackInfo = liveTracks
       .slice(0, 8)
-      .map((t) => (t.readyState[0] || '?') + (t.muted ? 'M' : '') + (t.enabled ? '' : 'D'))
+      .map((t) => (t.readyState[0] || '?') + (t.muted ? 'M' : '') + (t.enabled ? '' : 'D') + (sendersThisSweep.has(t.id) ? 'S' : ''))
       .join(',');
     state.vis = document.visibilityState;
     if (ctx) {
       state.ctxState = ctx.state;
+      state.sampleRate = ctx.sampleRate;
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     }
   }
@@ -324,11 +430,14 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
   function rewire() {
     disconnectWires();
     sweep();
-    return { ok: true, tracks: state.tracks, capture: state.capture };
+    return { ok: true, tracks: state.tracks, meetSrc: meetNodes.length, capture: state.capture };
   }
 
   async function restart() {
     disconnectWires();
+    for (const n of meetNodes.splice(0)) {
+      try { n.disconnect(); } catch (e) { /* */ }
+    }
     for (const n of nodes.splice(0)) {
       try { n.disconnect(); } catch (e) { /* */ }
     }
@@ -397,6 +506,9 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
       ctx: state.ctxState,
       capture: state.capture,
       lastRms: state.lastRms,
+      sampleRate: state.sampleRate,
+      meetSrc: state.meetSrc,
+      meetPlay: state.meetPlay,
     };
   }
 

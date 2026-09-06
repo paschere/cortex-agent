@@ -1,3 +1,4 @@
+import { browserActorKey } from '@cortex/agent-tools/src/browser/profiles';
 import { requireSession } from '@/lib/session';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -41,7 +42,7 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ id: strin
       headers: {
         authorization: `Bearer ${token}`,
         accept: 'application/json',
-        'x-cortex-owner': session.organization.id,
+        'x-cortex-owner': browserActorKey(session.organization.id, session.id),
       },
       signal: AbortSignal.timeout(10_000),
     });

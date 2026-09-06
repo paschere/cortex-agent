@@ -192,7 +192,7 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
           >
             <span
               aria-hidden="true"
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-sm bg-primary/25 font-mono text-xs font-bold text-white"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-sm bg-primary-soft text-xs font-bold text-primary-ink"
             >
               {workspaceInitial(menu.active.name)}
             </span>

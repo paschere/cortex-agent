@@ -55,6 +55,7 @@ const SECTIONS: Section[] = [
   {
     heading: 'Todos los días',
     entries: [
+      { href: '/management', label: 'Gerencia', note: 'Prioridades, responsables y resultados con evidencia', keywords: 'gerente empresa hoy gestion operaciones seguimiento procesos' },
       {
         href: '/dashboard',
         label: 'Inicio',
@@ -102,6 +103,12 @@ const SECTIONS: Section[] = [
         label: 'Cartera',
         note: 'Quién debe, desde cuándo, y qué pagos están en disputa',
         keywords: 'pagos cartera cobros abonos recaudo facturas payments dso mora vencida siigo',
+      },
+      {
+        href: '/feed',
+        label: 'Feed',
+        note: 'Archivos, enlaces y texto para consultar con Cortex',
+        keywords: 'feed subir excel csv archivos enlaces urls consulta temporal',
       },
       {
         href: '/kb',

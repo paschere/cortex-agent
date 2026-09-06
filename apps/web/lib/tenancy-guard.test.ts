@@ -82,6 +82,7 @@ const ALLOWED = new Map<string, string>([
     'inngest/functions/commitments-watch.ts',
     'Cron. "Which workspaces have deadlines to watch" spans the install; each event then carries one workspace, and every handle inside the per-workspace function is built from it.',
   ],
+  ['inngest/functions/management-workflow.ts', 'Cron discovers due workflow IDs across companies; each execution uses a handle pinned to the organization on the event.'],
   [
     'inngest/functions/goals-watch.ts',
     'Cron. "Which workspaces have an active goal" spans the install and there is no session behind a cron; the dispatcher selects organization_id off goals and nothing else. Every id rides on its own event, and the per-workspace function builds every handle from it — so one company\'s readings can only ever be computed from that company\'s rows.',

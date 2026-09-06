@@ -205,6 +205,9 @@ interface ToolOverride {
  * heuristic need an entry here.
  */
 const TOOL_OVERRIDES: Record<string, ToolOverride> = {
+  'management.start_collection': { blastRadius: 'internal_write' },
+  'management.advance_collection': { blastRadius: 'internal_write' },
+  'management.record': { blastRadius: 'internal_write' },
   // --- content that can leave the company -----------------------------------
   // Sending is outbound by default, but a mail addressed only to colleagues is
   // an internal write — enumerable recipients let us tell the difference.

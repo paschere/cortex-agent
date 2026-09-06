@@ -8,6 +8,7 @@ import {
   askChoiceResult,
 } from '@/lib/ask-choice';
 import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape';
+import { querySheet, tableQuerySchema } from '@/lib/feed/table-query';
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import { CITATION_RULE } from '@/lib/citations';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
@@ -672,7 +673,7 @@ export async function POST(req: NextRequest) {
   // own: it is one indexed lookup by conversation_id, it depends on nothing,
   // and run here it costs the prelude no wall-clock at all. It never throws —
   // see lib/chat-attachments.ts.
-  const loadingAttachments = loadTurnAttachments(db, conversationId);
+  const loadingAttachments = loadTurnAttachments(db, conversationId, user.id);
 
   const [ragBlockResolved, { selection, allCandidates, stickyIds }, dbMessages, turnAttachments] =
     await Promise.all([retrieving, selecting, loadingHistory, loadingAttachments]);
@@ -856,6 +857,25 @@ export async function POST(req: NextRequest) {
           } as unknown as never;
         } finally {
           clock.toolFinished(performance.now() - toolStarted);
+        }
+      },
+    });
+  }
+
+  // Read-only analysis of the owner's attached tables, including rows beyond
+  // the prompt excerpt. No retrieval, persistence, or external execution.
+  if (turnAttachments.some((a) => a.tables?.length)) {
+    aiTools.feed_table_query = tool({
+      description:
+        'Read rows or calculate over a complete Feed spreadsheet attached to this conversation. Column and row indices start at 1. Verify headers and units. Does not save anything to memory.',
+      parameters: tableQuerySchema,
+      execute: async (input) => {
+        const attachment = turnAttachments.find((a) => a.id === input.attachmentId);
+        if (!attachment?.tables) return { error: 'La tabla no está adjunta a esta consulta.' };
+        try {
+          return querySheet(attachment.tables, input);
+        } catch (err) {
+          return { error: err instanceof Error ? err.message : 'No se pudo calcular.' };
         }
       },
     });

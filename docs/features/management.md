@@ -1,0 +1,70 @@
+# Gerencia de empresa
+
+## Producto implementado
+
+`/management`, accesible como **Gerencia** en el menú y la paleta. Reúne el trabajo de operación sin sustituir los módulos existentes.
+
+- **Hoy en la empresa:** asuntos priorizados por reglas explicables, responsables, plazos, impacto declarado, próximo paso, revisión pendiente y dependencias. Las cifras se calculan sobre los registros disponibles; no son pronósticos.
+- **Señales:** compromisos confirmados por vencer/vencidos, metas incumplidas o sin lectura del último período cerrado, aprobaciones propias sin resolver y encargos propios detenidos. Una fuente caída se muestra como no disponible. Convertir una señal en un asunto requiere una acción explícita; la base impide duplicarla. Si un compromiso, aprobación o encargo sigue pendiente después de cerrar su asunto, la mesa muestra la discrepancia y permite revisar/reabrir el cierre; las lecturas históricas de metas no se confunden con estado operativo actual.
+- **Gestión:** organizar → en gestión/bloqueado → por verificar → cerrado con evidencia. El responsable, el creador o un administrador pueden registrar avances. Un administrador revisa la referencia, registra su veredicto y cierra. Cortex puede proponer evidencia, pero no darse a sí mismo la aprobación humana. Reabrir conserva todas las revisiones.
+- **Dependencias:** misma empresa, sin ciclos. No se cierra un asunto cuya dependencia siga sin verificar.
+- **Personalización:** alcance, prioridades, medidas de éxito acordadas, responsable de escalamiento y plazo inicial de revisión. Las medidas declaradas no crean métricas: `/goals` conserva la medición con fuente y método.
+- **Manuales:** propósito, disparador, entradas, pasos, criterio de éxito, excepciones y autoridad. Se puede vincular un trámite enseñado y crear un asunto desde el manual. El manual es contexto; no concede permisos ni dispara el navegador.
+- **Parte diario opcional:** una persona puede activar su parte de lunes a viernes a las 08:00 de Bogotá, entregado en una conversación por el planificador existente. Llamada fija de solo lectura, sin modelo generativo, correos ni ejecución de acciones. Activaciones repetidas reutilizan la rutina activa o pausada. Pausa/cancelación y errores se consultan en Rutinas.
+- **Chat:** `management.brief`, `management.inspect`, `management.record`, `management.daily_brief`. El prompt orienta a consultar alcance y casos antes de proponer acciones. Registrar desde el chat pasa por la confirmación existente, igual que compromisos y metas. Los permisos por equipo y las reglas de seguridad siguen aplicándose.
+
+## Datos y permisos
+
+Migración `0130_management.sql`: `management_profiles`, `management_cases`, `management_events`; las tres clasificadas por empresa. RLS sin acceso para clientes anon/authenticated. Escrituras únicamente por RPC de servicio con empresa fijada por el cliente con alcance, validación de actor y miembros y bloqueo transaccional.
+
+Cada cambio guarda el estado completo y la identidad del actor en el historial, en la misma transacción que la revisión del asunto. Los clientes con revisión desactualizada no sobrescriben cambios. La tabla de eventos no concede modificaciones al rol de servicio. La configuración también comprueba su revisión.
+
+Los asuntos son compartidos con **todos los miembros de la empresa**. No son expedientes privados de RR. HH. Las aprobaciones y encargos originales siguen siendo personales; organizar una señal copia únicamente los datos que el usuario decide guardar en el asunto compartido. No se copian adjuntos, sesiones, cookies ni documentos al Brain. Una referencia de evidencia es un enlace con una observación humana, no una copia inmutable de su contenido externo ni una comprobación automática de autenticidad.
+
+Las lecturas tienen límites explícitos: 500 asuntos recientes, 1.000 personas, 100 señales por fuente y 500 lecturas de metas. La UI y el parte advierten cuando la vista es parcial. El historial muestra las últimas 100 revisiones por asunto; la base conserva el resto.
+
+## Alcance de la automatización
+
+Las señales se consultan al abrir/actualizar la mesa o usar `management.brief`. El parte diario consulta los asuntos compartidos ya organizados; no crea casos ni incorpora aprobaciones/encargos privados. La fecha de revisión identifica trabajo pendiente, no ejecuta una tarea programada. El responsable de escalamiento queda identificado; este módulo no le envía mensajes automáticamente.
+
+La ejecución de correos, cobros o trámites continúa en Acciones, Navegador, Flujos y sus herramientas, bajo los mandatos/aprobaciones existentes. Cerrar un asunto no marca como pagada una factura, cumplido un compromiso ni aprobado un trámite en la fuente original. Esas fuentes deben verificarse y actualizarse mediante su propio mecanismo.
+
+## Despliegue y aceptación
+
+1. Aplicar 0130 después de las migraciones anteriores en el entorno de prueba. No aplicada a ningún entorno compartido durante esta implementación.
+2. Desplegar web y consumidores de agent-tools; el planificador existente debe estar operativo para entregar el parte.
+3. Crear dos empresas y comprobar UI/API con usuarios diferentes; las pruebas aisladas cubren el motor SQL, pero no sustituyen la sesión real de Supabase/Better Auth.
+4. Configurar alcance, responsable de escalamiento y un manual. Organizar una señal, asignar, bloquear, proponer evidencia, verificar y reabrir. Comprobar el historial y las dos pestañas con una revisión desactualizada.
+5. Activar el parte con una cuenta de prueba, comprobar ejecución y conversación, pausar y cancelar. No se activó una rutina real en esta sesión.
+6. Ensayar el proceso completo del primer cliente contra sus portales y datos autorizados antes de prometer operación administrada.
+
+## Validación local
+
+- Pruebas de criterios, fechas, evidencia, prioridad, aislamiento de lectura y negativa a la autoverificación en `management.test.ts`.
+- Prueba PostgreSQL aislada `management.sql-test.mjs`: roles, aislamiento, concurrencia de revisión, duplicados, dependencias, historial, configuración y rutina idempotente. Usa PGlite instalado en `/tmp`, sin tocar las dependencias del proyecto ni una base de clientes.
+- UI real compilada con esbuild y ejecutada en Chromium, con acciones de servidor simuladas: escritorio/móvil, creación desde señal/manual, edición, cierre, reapertura, historial y activación del parte. No es una prueba integrada contra el backend desplegado.
+
+Para repetir la prueba SQL:
+
+```sh
+npm install --prefix /tmp/cortex-management-db --no-audit --no-fund @electric-sql/pglite
+PGLITE_MODULE=/tmp/cortex-management-db/node_modules/@electric-sql/pglite/dist/index.js node packages/agent-tools/src/management/management.sql-test.mjs
+```
+
+El control global `lib/unchecked-reads.test.ts` señala dos fallos previos a esta implementación: lecturas sin manejo de error en `meetings/live/archive`, `meetings/live/voice-answer`, `voice/turn` y `weekly-report`, y una entrada de baseline desactualizada en `chat/route`. Ninguno apunta a las nuevas rutas de Gerencia. No se amplió el baseline para ocultarlos.
+
+## Seguimiento ejecutable de cobro (0131)
+
+Desde un asunto guardado, **Preparar un cobro** permite elegir una de las 100 facturas confirmadas más recientes y escribir el destinatario. Cortex consulta los movimientos vinculados exactamente por ID de factura y prepara una propuesta personal en Acciones, ligada al agente Cortex activo. El usuario revisa destinatario y texto y aprueba el envío por el mecanismo existente. El proceso y su evidencia son compartidos con la empresa; el buzón y la aprobación mantienen sus permisos personales.
+
+El worker consulta procesos pendientes cada 15 minutos: propuesta pendiente, envío confirmado, respuesta o ausencia de respuesta, pagos confirmados. Una respuesta no demuestra pago. Los estados bloqueado, detenido y evidencia lista requieren intervención; no generan más mensajes. Un cobro fallido o ambiguo nunca se reenvía automáticamente. Detener es definitivo para ese proceso; un nuevo procedimiento requiere otro asunto.
+
+La conciliación usa importes exactos de hasta dos decimales, misma moneda y movimientos confirmados. Resta anulaciones; bloquea ante movimientos reportados, en disputa, monedas distintas o lecturas incompletas. No consulta bancos ni empareja nombres. Antes de enviar vuelve a comprobar saldo, estado del asunto y vigencia del proceso; un borrador con saldo antiguo se bloquea. Antes de copiar evidencia al cierre vuelve a consultar los pagos. La comprobación es fechada, no una garantía frente a cambios posteriores.
+
+El proceso conserva su posición y evidencia en PostgreSQL. El arrendamiento temporal y el token evitan que un worker antiguo registre avances; un disparador impide insertar una segunda propuesta para el mismo proceso incluso si la anterior fue aprobada o descartada. El saldo del borrador se guarda antes de crear la propuesta y también queda asociado a su justificación para recuperar interrupciones.
+
+Herramientas: `management.collection_status`, `management.start_collection`, `management.advance_collection`. Iniciar o avanzar requiere confirmación; el envío necesita su propia aprobación. El chat no puede cerrar la revisión humana.
+
+Para activar este recorrido hay que aplicar **0131 después de 0130**, desplegar web, registro de herramientas y worker de jobs, y verificar una cuenta de correo autorizada con su agente. Nada de eso se aplicó a producción en esta sesión. La aceptación debe incluir un cobro de prueba aprobado, respuesta real, pago parcial, pago final y rechazo de un borrador desactualizado.
+
+Este primer recorrido no convierte manuales arbitrarios en programas ejecutables: Drive → DIAN, mapeo universal de documentos y medición monetaria de ahorro requieren sus implementaciones y validación específicas. No se atribuye al sistema dinero recuperado ni horas ahorradas sin una fuente y un método de medición.

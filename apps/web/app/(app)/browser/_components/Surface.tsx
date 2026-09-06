@@ -77,6 +77,11 @@ export function Surface() {
 
   useEffect(() => {
     void load();
+    const refresh = () => {
+      void load();
+    };
+    window.addEventListener('browser-flows-changed', refresh);
+    return () => window.removeEventListener('browser-flows-changed', refresh);
   }, [load]);
 
   const counts = useMemo(() => {
@@ -127,7 +132,9 @@ export function Surface() {
     return (
       <>
         {notice && <NoticeBanner notice={notice} onClose={() => setNotice(null)} />}
-        <TeachFlow first onSaved={onSaved} />
+        <p className="py-4 text-sm text-ink-muted">
+          Tus trámites aparecerán aquí cuando guardes una enseñanza desde el navegador.
+        </p>
       </>
     );
   }

@@ -379,12 +379,14 @@ export interface FlowSummary {
 }
 
 export interface ProposedTarget {
+  framePath?: { url: string; name: string }[];
   kind: TargetKind;
   value: string;
   name?: string;
 }
 
 export interface ProposedStep {
+  explanation?: string;
   action: StepAction;
   label: string;
   targets: ProposedTarget[];

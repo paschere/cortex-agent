@@ -52,7 +52,7 @@ export const JOIN_BROWSER_ARGS: readonly string[] = [
   "--incognito",
   "--no-sandbox",
   "--disable-setuid-sandbox",
-  "--disable-features=IsolateOrigins,site-per-process",
+  "--disable-features=IsolateOrigins,site-per-process,AudioServiceOutOfProcess,AudioServiceSandbox",
   "--disable-infobars",
   "--disable-gpu",
   // Collapse Chromium's gpu-process work into the renderer — no separate

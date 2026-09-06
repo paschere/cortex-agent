@@ -1,3 +1,4 @@
+import { framePath } from './frame-path';
 import type { Locator, Page } from 'playwright';
 import type { Target } from './types';
 
@@ -174,6 +175,20 @@ async function findAcrossFrames(
     }
   };
 
+  if (target.framePath) {
+    const expected = JSON.stringify(target.framePath);
+    const matches = await Promise.all(
+      page
+        .frames()
+        .filter((f) => JSON.stringify(framePath(f)) === expected)
+        .map(count),
+    );
+    const total = matches.reduce((n, m) => n + m.matches, 0);
+    return {
+      locator: total === 1 ? matches.find((m) => m.matches === 1)!.locator : null,
+      matches: total,
+    };
+  }
   const main = await count(page);
   if (main.matches === 1) return { locator: main.locator, matches: 1 };
 

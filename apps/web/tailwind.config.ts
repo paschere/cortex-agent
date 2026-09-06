@@ -49,7 +49,7 @@ const config: Config = {
         // says small radius is 10px, so `rounded-sm` is bound to the token that
         // actually carries that value.
         sm: 'var(--radius-sm)',
-        pill: '999px',
+        pill: '8px',
       },
       boxShadow: {
         card: 'var(--shadow-card)',
@@ -228,13 +228,13 @@ const config: Config = {
         /** The workhorse: secondary text, table cells, most of the chrome. */
         xs: ['12.5px', { lineHeight: '1.5' }],
         /** Body text and anything somebody reads a paragraph of. */
-        sm: ['13px', { lineHeight: '1.6' }],
+        sm: ['14px', { lineHeight: '1.6' }],
         /** Emphasis inside a card; the name of the thing you are looking at. */
         base: ['15px', { lineHeight: '1.5' }],
         /** Section heading. */
         lg: ['19px', { lineHeight: '1.35' }],
         /** Page heading. */
-        xl: ['22px', { lineHeight: '1.25' }],
+        xl: ['24px', { lineHeight: '1.25' }],
         /** One per screen at most, and most screens have none. */
         display: ['32px', { lineHeight: '1.15' }],
       },

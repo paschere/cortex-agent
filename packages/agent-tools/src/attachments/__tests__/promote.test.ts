@@ -92,6 +92,10 @@ class Builder {
     this.filtered = this.filtered.filter((r) => r[col] === value);
     return this;
   }
+  gt(col: string, value: string) {
+    this.filtered = this.filtered.filter((r) => String(r[col]) > value);
+    return this;
+  }
   is(col: string, value: unknown) {
     this.filtered = this.filtered.filter((r) => (r[col] ?? null) === value);
     return this;
@@ -133,6 +137,8 @@ function makeDb(store: { chat_attachments: Row[]; kb_documents: Row[] }) {
 
 const ATTACHMENT: Row = {
   id: 'att-1',
+  created_by: 'user-1',
+  purge_at: '2099-01-01T00:00:00.000Z',
   disposition: 'turn',
   filename: 'contrato.pdf',
   mime: 'application/pdf',
@@ -387,4 +393,16 @@ describe('attachments.promote — la puerta de entrada', () => {
       }).success,
     ).toBe(true);
   });
+});
+
+describe('private temporary attachments', () => {
+  it.each([{ created_by: 'someone-else' }, { purge_at: '2000-01-01T00:00:00.000Z' }])(
+    'refuses inaccessible attachments: %o',
+    async (patch) => {
+      const { db } = makeDb({ chat_attachments: [{ ...ATTACHMENT, ...patch }], kb_documents: [] });
+      await expect(run(makeCtx(db), { attachmentId: 'att-1' })).rejects.toThrow('No encuentro');
+      expect(ingestMarkdown).not.toHaveBeenCalled();
+      expect(files.putFile).not.toHaveBeenCalled();
+    },
+  );
 });

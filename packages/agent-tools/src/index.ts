@@ -215,3 +215,5 @@ export type { ClaimResult } from './errands';
 // 0085). Registers no tools: it is what decides whether the rest of them may
 // run, and what a workspace is shown about what it has used.
 export * from './billing';
+
+export * from './management';

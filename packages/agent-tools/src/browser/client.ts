@@ -1,3 +1,4 @@
+import type { ProfileRef } from './profiles';
 import type { Logger } from '@cortex/core';
 import type { PageSnapshot, ReplayResponse, Step, Target } from './types';
 
@@ -18,6 +19,8 @@ import type { PageSnapshot, ReplayResponse, Step, Target } from './types';
  */
 
 export interface ReplayCall {
+  owner?: string;
+  profile?: ProfileRef;
   runId: string;
   startUrl: string;
   steps: Step[];
@@ -49,6 +52,7 @@ export interface ReplayCall {
  * service, next to the tab it belongs to.
  */
 export interface ResumeCall {
+  owner?: string;
   sessionId: string;
   fromIndex: number;
   /** Merged over the original run's inputs. Usually one key. */
@@ -81,7 +85,26 @@ export interface ControlView {
   title: string;
 }
 
+export interface PageContent {
+  text: string;
+  offset: number;
+  nextOffset: number | null;
+  totalCharacters: number;
+  sources: {
+    url: string;
+    path: { url: string; name: string }[];
+    characters: number;
+    readable: boolean;
+  }[];
+  omittedFrames: number;
+  limitation: string;
+}
 export interface BrowserTransport {
+  content?(
+    sessionId: string,
+    owner?: string,
+    offset?: number,
+  ): Promise<TransportResult<PageContent>>;
   configured(): boolean;
   replay(call: ReplayCall): Promise<TransportResult<ReplayResponse>>;
   /** Carry on in a tab held open at a pause. See `ResumeCall`. */
@@ -89,6 +112,7 @@ export interface BrowserTransport {
   openSession(
     startUrl: string,
     owner?: string,
+    profile?: ProfileRef,
   ): Promise<TransportResult<{ sessionId: string; snapshot: PageSnapshot }>>;
   act(call: ActCall): Promise<TransportResult<ActResult>>;
   /** La página como está ahora, sin actuar sobre ella. */
@@ -107,7 +131,7 @@ export interface BrowserTransport {
     label: string,
     owner?: string,
   ): Promise<TransportResult<{ ok: boolean }>>;
-  closeSession(sessionId: string): Promise<void>;
+  closeSession(sessionId: string, owner?: string): Promise<void>;
 }
 
 export type TransportResult<T> = { ok: true; data: T } | TransportFailure;
@@ -213,12 +237,13 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
         'POST',
         { fromIndex: c.fromIndex, inputs: c.inputs ?? {} },
         200_000,
+        c.owner,
       ),
-    openSession: (startUrl, owner) =>
+    openSession: (startUrl, owner, profile) =>
       call<{ sessionId: string; snapshot: PageSnapshot }>(
         '/session',
         'POST',
-        { startUrl, owner },
+        { startUrl, owner, profile },
         60_000,
         owner,
       ),
@@ -229,6 +254,14 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
         { action: c.action, target: c.target ?? null, text: c.text ?? '', url: c.url ?? '' },
         60_000,
         c.owner,
+      ),
+    content: (sessionId, owner, offset = 0) =>
+      call<PageContent>(
+        `/session/${encodeURIComponent(sessionId)}/content?offset=${offset}`,
+        'GET',
+        undefined,
+        30000,
+        owner,
       ),
     read: (sessionId, owner) =>
       call<PageSnapshot>(
@@ -262,8 +295,8 @@ export function createHttpTransport(logger: Logger, signal?: AbortSignal): Brows
         15_000,
         owner,
       ),
-    closeSession: async (sessionId) => {
-      await call(`/session/${encodeURIComponent(sessionId)}`, 'DELETE', undefined, 15_000);
+    closeSession: async (sessionId, owner) => {
+      await call(`/session/${encodeURIComponent(sessionId)}`, 'DELETE', undefined, 15_000, owner);
     },
   };
 }

@@ -12,7 +12,6 @@ import { Menu } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMobileSidebar } from '../nav/MobileSidebarContext';
-import { AmbientField } from './AmbientField';
 import { ChatComposeProvider } from './ChatCompose';
 import { InputBar } from './InputBar';
 import { MessageList } from './MessageList';
@@ -368,14 +367,6 @@ export function ChatRoot({
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-canvas">
-      {/* Sólo en la pantalla en blanco: con un mensaje en pantalla no dibuja
-          nada. Ver la cabecera de AmbientField, que explica por qué el fondo
-          animado detrás de una conversación era mala idea aunque el argumento
-          para tenerlo fuera bueno. Va aquí y no en MessageList porque el
-          contenedor de los mensajes es el que scrollea, y una capa absoluta
-          dentro de un scroll se va con el contenido. */}
-      <AmbientField mode={messages.length === 0 && !waiting?.lead ? 'open' : 'thread'} />
-
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface px-4">
         <button
           type="button"
@@ -432,8 +423,7 @@ export function ChatRoot({
       </ChatComposeProvider>
 
       {blocked && (
-        <div
-          role="status"
+        <output
           className={clsx(
             'mx-4 mb-2 rounded-card border px-4 py-3 text-xs leading-relaxed',
             blocked.isLimit
@@ -450,7 +440,7 @@ export function ChatRoot({
               </Link>
             </>
           )}
-        </div>
+        </output>
       )}
 
       <InputBar

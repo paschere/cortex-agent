@@ -1,3 +1,4 @@
+import { getBrowserProfile, visibleProfileFlows } from '@cortex/agent-tools/src/browser/profiles';
 import { readDeliveries, writeDelivery } from '@/lib/browser-delivery';
 import { DEFAULT_DELIVERY, type FlowDelivery } from '@/lib/browser-shape';
 import { checkProposal, withoutNulls } from '@/lib/browser-steps';
@@ -71,7 +72,7 @@ export async function GET(): Promise<NextResponse> {
   ]);
 
   return NextResponse.json({
-    flows: flows.map((flow) => {
+    flows: (await visibleProfileFlows(db, session.id, flows)).map((flow) => {
       const run = latest.get(flow.id);
       return {
         id: flow.id,
@@ -88,7 +89,7 @@ export async function GET(): Promise<NextResponse> {
         // The site wants a session this flow cannot create and no credential is
         // bound: it will ask rather than run. Exposed so the list can say so
         // before somebody presses the button.
-        needsCredential: flow.loginRequired && !flow.credentialId,
+        needsCredential: flow.loginRequired && !flow.credentialId && !flow.profileId,
         variables: flow.variables,
         stepCount: flow.steps.length,
         delivery: deliveries.get(flow.id) ?? DEFAULT_DELIVERY,
@@ -104,6 +105,8 @@ export async function GET(): Promise<NextResponse> {
 
 interface Body {
   proposal?: unknown;
+  profileId?: string;
+  liveTeaching?: boolean;
   /** Values to verify with. Not stored; used once, for the proving run. */
   sample?: Record<string, string>;
   credentialId?: string | null;
@@ -148,7 +151,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // and then immediately navigates to the one the model imagined.
   const proposal = alignFirstGoto(parsed.data);
 
+  if (
+    body.profileId &&
+    !(await getBrowserProfile(db, body.profileId, session.id).catch(() => null))
+  )
+    return NextResponse.json({ error: 'No tienes acceso a ese perfil.' }, { status: 403 });
+  if (body.liveTeaching && !body.profileId)
+    return NextResponse.json({ error: 'Elige un perfil.' }, { status: 400 });
   let flow = await createFlow(db, {
+    profileId: body.profileId,
     slug: slugify(proposal.name),
     name: proposal.name,
     description: proposal.description,
@@ -177,6 +188,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // anybody. Nobody wants an email announcing that the trámite they are
   // standing in front of, watching, has just been tested.
   if (body.delivery) await writeDelivery(db, flow.id, body.delivery);
+
+  if (body.liveTeaching)
+    return NextResponse.json({
+      id: flow.id,
+      status: 'draft',
+      verified: false,
+      message: 'Guardado como propuesto. Puedes revisarlo y probarlo desde la biblioteca.',
+    });
 
   // The proving run. Same machinery as any other execution, pointed at a flow
   // nobody has vouched for yet -- see `verifying` in execute.ts for the two

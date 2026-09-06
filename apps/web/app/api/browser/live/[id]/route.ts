@@ -1,3 +1,4 @@
+import { browserActorKey } from '@cortex/agent-tools/src/browser/profiles';
 import { requireSession } from '@/lib/session';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -100,7 +101,7 @@ async function forward(
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
   const { id } = await ctx.params;
-  const owner = session.organization.id;
+  const owner = browserActorKey(session.organization.id, session.id);
   const sid = encodeURIComponent(id);
 
   const control = await forward(`/session/${sid}/control`, owner, {
@@ -121,7 +122,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
   const { id } = await ctx.params;
-  const owner = session.organization.id;
+  const owner = browserActorKey(session.organization.id, session.id);
   const sid = encodeURIComponent(id);
 
   const parsed = Op.safeParse(await req.json().catch(() => null));
@@ -158,4 +159,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const session = await requireSession();
+  const { id } = await ctx.params;
+  try {
+    const { browserService } = await import('@/lib/browser-service');
+    return NextResponse.json(
+      await browserService(session, `/session/${encodeURIComponent(id)}`, 'DELETE'),
+    );
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 502 });
+  }
 }

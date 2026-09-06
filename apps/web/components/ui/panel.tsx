@@ -82,8 +82,8 @@ export function StatCard({
 }) {
   return (
     <div
-      className="animate-rise rounded-card border border-border bg-surface p-5 shadow-card"
-      style={{ animationDelay: `${delay}ms` }}
+      className="rounded-card border border-border bg-surface p-5"
+      data-appearance-order={delay}
     >
       <div className="flex items-start justify-between">
         <span className="text-sm font-medium text-ink-muted">{label}</span>

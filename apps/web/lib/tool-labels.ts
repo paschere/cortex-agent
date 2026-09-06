@@ -1,4 +1,11 @@
 export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
+  management_daily_brief: { label: 'Preparar el parte diario', icon: 'FileText' },
+  management_collection_status: { label: 'Consultar el seguimiento del cobro', icon: 'Wallet' },
+  management_start_collection: { label: 'Iniciar seguimiento y preparar un cobro', icon: 'Wallet' },
+  management_advance_collection: {
+    label: 'Actualizar o detener el seguimiento',
+    icon: 'RefreshCw',
+  },
   qualify_lead: { label: 'Calificar prospecto', icon: 'UserCheck' },
   hubspot_search_companies: { label: 'Buscar empresas en HubSpot', icon: 'Building2' },
   hubspot_get_company: { label: 'Ver detalle de la empresa', icon: 'Building2' },
@@ -46,6 +53,9 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   sales_draft_proposal: { label: 'Redactar propuesta', icon: 'FileText' },
   web_search: { label: 'Buscar en internet', icon: 'Globe' },
   web_scrape: { label: 'Abrir página web', icon: 'Link' },
+  management_brief: { label: 'Revisar la gerencia de la empresa', icon: 'Briefcase' },
+  management_inspect: { label: 'Consultar un asunto y su historial', icon: 'FileSearch' },
+  management_record: { label: 'Organizar y seguir un asunto', icon: 'ClipboardList' },
   browser_list_flows: { label: 'Ver los trámites aprendidos', icon: 'Globe' },
   browser_run_flow: { label: 'Hacer el trámite en el portal', icon: 'Globe' },
   browser_submit_flow: { label: 'Radicar el trámite en el portal', icon: 'Send' },
@@ -152,6 +162,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   kb_context: { label: 'Reunir contexto de Brain Knowledge', icon: 'BookMarked' },
   // El adjunto de un turno mudándose al cerebro. Dice «el adjunto» y no «el
   // archivo» porque quien lo pide acaba de subirlo en esta misma conversación.
+  feed_table_query: { label: 'Consultar la hoja de cálculo de Feed', icon: 'Table2' },
   attachments_promote: { label: 'Guardar el adjunto en Brain Knowledge', icon: 'BookPlus' },
 
   // Nómina y equipo. Es la familia que más cuidado necesita: cada una de estas

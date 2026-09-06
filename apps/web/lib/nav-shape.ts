@@ -175,7 +175,9 @@ export const CHAT: NavItem = { href: '/chat', label: 'Chat', icon: MessageSquare
  */
 export const CALLS: NavItem = { href: '/calls', label: 'Llamadas', icon: PhoneCall };
 export const BRAIN: NavItem = { href: '/kb', label: 'Brain Knowledge', icon: BookOpen };
-export const PINNED: NavItem[] = [CHAT, CALLS, BRAIN];
+export const FEED: NavItem = { href: '/feed', label: 'Feed', icon: Inbox };
+export const MANAGEMENT: NavItem = { href: '/management', label: 'Gerencia', icon: Briefcase };
+export const PINNED: NavItem[] = [MANAGEMENT, CHAT, FEED, CALLS, BRAIN];
 
 const QUEUE_ICON: Record<WaitingQueue, NavIcon> = {
   approvals: Inbox,

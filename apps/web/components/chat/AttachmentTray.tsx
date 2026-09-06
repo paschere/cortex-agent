@@ -186,13 +186,23 @@ export function AttachmentTray({
   }, [pending]);
 
   const refresh = useCallback(async () => {
-    const res = await fetch(
-      `/api/chat/attachments?conversationId=${encodeURIComponent(conversationId)}`,
-    );
-    if (!res.ok) return;
-    const data = (await res.json()) as { attachments: Attachment[] };
-    setAttachments(data.attachments ?? []);
+    try {
+      const res = await fetch(
+        `/api/chat/attachments?conversationId=${encodeURIComponent(conversationId)}`,
+      );
+      if (!res.ok) throw new Error('No se pudieron cargar los adjuntos.');
+      const data = (await res.json()) as { attachments: Attachment[] };
+      setAttachments(data.attachments ?? []);
+    } catch {
+      setError(
+        'No se pudieron cargar los adjuntos. Vuelve a abrir la conversación para intentarlo de nuevo.',
+      );
+    }
   }, [conversationId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   // Poll only while something is still being read, and stop the moment nothing
   // is — the same rule the Brain Knowledge list uses.

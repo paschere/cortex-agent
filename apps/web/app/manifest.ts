@@ -39,7 +39,7 @@ export default function manifest(): MetadataRoute.Manifest {
     // Los dos del sistema de diseño: `--canvas` como fondo de arranque y el
     // índigo de marca en la barra. Nada inventado aquí.
     background_color: '#f7f7fb',
-    theme_color: '#5850ec',
+    theme_color: '#176b68',
     categories: ['business', 'productivity'],
     icons: [
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

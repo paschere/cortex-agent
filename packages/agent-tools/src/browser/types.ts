@@ -55,6 +55,10 @@ export const targetSchema = z.object({
   value: z.string().min(1).max(400),
   /** Accessible name. Only meaningful when `kind` is `role`. */
   name: nullish(z.string().max(200)),
+  framePath: z
+    .array(z.object({ url: z.string().max(2000), name: z.string().max(200) }))
+    .max(12)
+    .optional(),
 });
 export type Target = z.infer<typeof targetSchema>;
 
@@ -138,6 +142,7 @@ export const STEP_ACTIONS = [
 export type StepAction = (typeof STEP_ACTIONS)[number];
 
 export const stepSchema = z.object({
+  explanation: nullish(z.string().max(2000)),
   action: z.enum(STEP_ACTIONS),
   label: z.string().min(1).max(200),
   targets: z.array(targetSchema).max(8).default([]),
@@ -241,6 +246,7 @@ export interface Flow {
   status: FlowStatus;
   source: 'recording' | 'manual';
   credentialId: string | null;
+  profileId?: string | null;
   /**
    * The site demands a session this flow cannot create on its own -- proven by
    * a run that landed on a login form with no login step to answer it. Set by

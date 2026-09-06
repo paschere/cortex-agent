@@ -1,3 +1,4 @@
+import { browserActorKey, defaultBrowserProfile, getBrowserProfile, profileRef } from './profiles';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { createHttpTransport } from './client';
@@ -67,7 +68,7 @@ const sessionField = z
  * prompt del sistema: snapshot→act→read; el texto largo se pide cuando toca
  * responder con él, no en cada click.
  */
-function viewOf(snapshot: PageSnapshot, size: 'full' | 'lite' = 'full') {
+function viewOf(snapshot: PageSnapshot, size: 'full' | 'lite' = 'full', elementOffset = 0) {
   const lite = size === 'lite';
   return {
     url: snapshot.url,
@@ -75,13 +76,19 @@ function viewOf(snapshot: PageSnapshot, size: 'full' | 'lite' = 'full') {
     ...(lite ? {} : { headings: snapshot.headings.slice(0, 8) }),
     alerts: snapshot.alerts.slice(0, 6),
     text: snapshot.text.slice(0, lite ? 700 : 2_500),
-    elements: snapshot.elements.slice(0, lite ? 35 : 50).map((el) => ({
-      ref: el.ref,
-      role: el.role,
-      name: el.name,
-      ...(el.value !== null && el.value !== '' ? { value: el.value } : {}),
-      ...(el.disabled ? { disabled: true } : {}),
-    })),
+    nextElementOffset:
+      elementOffset + (lite ? 35 : 50) < snapshot.elements.length
+        ? elementOffset + (lite ? 35 : 50)
+        : null,
+    elements: snapshot.elements
+      .slice(elementOffset, elementOffset + (lite ? 35 : 50))
+      .map((el) => ({
+        ref: el.ref,
+        role: el.role,
+        name: el.name,
+        ...(el.value !== null && el.value !== '' ? { value: el.value } : {}),
+        ...(el.disabled ? { disabled: true } : {}),
+      })),
   };
 }
 
@@ -94,6 +101,7 @@ const viewSchema = z.object({
   headings: z.array(z.string()).optional(),
   alerts: z.array(z.string()),
   text: z.string(),
+  nextElementOffset: z.number().nullable().optional(),
   elements: z.array(
     z.object({
       ref: z.string(),
@@ -148,6 +156,11 @@ export const browserOpenPage = registerTool({
     'Abre una página web en una pestaña VIVA que la persona ve en el chat mientras tú navegas — para sitios donde NO hay un trámite aprendido (browser.list_flows dice cuáles hay). Sirve para «entra al portal y mira», «revisa qué dice esa página cuando te logueas», «haz esta diligencia de una vez en este sitio»: navegar, llenar formularios, consultar resultados, con la persona mirando en vivo y pudiendo tomar el control cuando un paso sea suyo (un captcha, una clave). Devuelve el id de la pestaña y lo que hay en la página: úsalo con browser.act para actuar, browser.read_page para leer, browser.ask_person cuando necesites manos humanas y browser.request_secret cuando un campo pida una contraseña. NO es para búsquedas (web.search) ni para leer una página estática (web.scrape): es para OPERAR un sitio.',
   inputSchema: z.object({
     url: z.string().url().max(600).describe('La dirección completa, con https://'),
+    profileId: z
+      .string()
+      .uuid()
+      .optional()
+      .describe('Perfil al que tienes acceso; omite para tu navegador personal.'),
     purpose: z
       .string()
       .max(200)
@@ -174,7 +187,14 @@ export const browserOpenPage = registerTool({
     const forbidden = forbiddenTargetReason(input.url);
     if (forbidden) throw new Error(forbidden);
     const transport = createHttpTransport(ctx.logger);
-    const opened = await transport.openSession(input.url, ctx.organizationId);
+    const profile = input.profileId
+      ? await getBrowserProfile(ctx.db, input.profileId, ctx.userId)
+      : await defaultBrowserProfile(ctx.db, ctx.organizationId, ctx.userId);
+    const opened = await transport.openSession(
+      input.url,
+      browserActorKey(ctx.organizationId, ctx.userId),
+      profileRef(profile),
+    );
     if (!opened.ok) throw new Error(opened.reason);
     return {
       sessionId: opened.data.sessionId,
@@ -195,9 +215,22 @@ export const browserAct = registerTool({
   inputSchema: z.object({
     sessionId: sessionField,
     action: z
-      .enum(['click', 'fill', 'select', 'check', 'press', 'goto', 'wait'])
+      .enum([
+        'click',
+        'fill',
+        'select',
+        'check',
+        'press',
+        'goto',
+        'wait',
+        'select_text',
+        'copy',
+        'paste',
+        'copy_selection',
+        'scroll',
+      ])
       .describe(
-        'Qué gesto: click | fill (escribe text en el campo) | select (elige la opción text) | check | press (una tecla, en text) | goto (navega a url) | wait (deja cargar un segundo)',
+        'click | fill | select | check | press | goto | wait | select_text (selecciona el texto del elemento) | copy (selecciona y copia al portapapeles de esta sesión) | paste (pega ese portapapeles en el elemento destino) | copy_selection (copia la selección actual sin ref) | scroll (desplaza la página con scrollY sin ref)',
       ),
     ref: z
       .string()
@@ -217,6 +250,15 @@ export const browserAct = registerTool({
       .optional()
       .describe('El texto a escribir, la opción a elegir o la tecla a presionar.'),
     url: z.string().url().max(600).optional().describe('Solo para goto.'),
+    scrollY: z
+      .number()
+      .int()
+      .min(-3000)
+      .max(3000)
+      .optional()
+      .describe(
+        'Píxeles verticales para scroll; positivo baja. Luego usa read_page para leer lo que el sitio haya cargado.',
+      ),
   }),
   outputSchema: z.object({
     ok: z.boolean(),
@@ -226,7 +268,7 @@ export const browserAct = registerTool({
   rateLimit: { perMinute: 40 },
   handler: async (input, ctx) => {
     const transport = createHttpTransport(ctx.logger);
-    const owner = ctx.organizationId;
+    const owner = browserActorKey(ctx.organizationId, ctx.userId);
 
     if (input.action === 'goto' && input.url) {
       const forbidden = forbiddenTargetReason(input.url);
@@ -234,7 +276,7 @@ export const browserAct = registerTool({
     }
 
     let target: Target | null = null;
-    if (input.action !== 'goto' && input.action !== 'wait') {
+    if (!['goto', 'wait', 'copy_selection', 'scroll'].includes(input.action)) {
       if (!input.ref) {
         return {
           ok: false,
@@ -262,7 +304,7 @@ export const browserAct = registerTool({
       sessionId: input.sessionId,
       action: input.action === 'wait' ? 'wait_for' : input.action,
       target,
-      text: input.text ?? '',
+      text: input.action === 'scroll' ? String(input.scrollY ?? 800) : (input.text ?? ''),
       url: input.url ?? '',
       owner,
     });
@@ -281,15 +323,63 @@ export const browserAct = registerTool({
 export const browserReadPage = registerTool({
   id: 'browser.read_page',
   description:
-    'Vuelve a mirar la pestaña viva sin tocar nada: la URL donde quedó, el texto visible y los elementos con los que se puede actuar. Úsala después de que una persona condujo («ya terminé, sigue»), cuando un paso falló y necesitas orientarte, o para leer el resultado de una consulta antes de contárselo a la persona — la respuesta sale de lo que leíste aquí, no de mandar a nadie a mirar la página.',
-  inputSchema: z.object({ sessionId: sessionField }),
-  outputSchema: z.object({ page: viewSchema }),
+    'Lee el contenido cargado de la página y sus iframes en content.text; continúa con content.nextOffset hasta que sea null. Las limitaciones y marcos inaccesibles se indican explícitamente. También vuelve a mirar la pestaña viva sin tocar nada: la URL donde quedó, el texto visible y los elementos con los que se puede actuar. Úsala después de que una persona condujo («ya terminé, sigue»), cuando un paso falló y necesitas orientarte, o para leer el resultado de una consulta antes de contárselo a la persona — la respuesta sale de lo que leíste aquí, no de mandar a nadie a mirar la página.',
+  inputSchema: z.object({
+    sessionId: sessionField,
+    elementOffset: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe('Usa page.nextElementOffset para ver más controles del mismo snapshot.'),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        'Posición para continuar leyendo: usa content.nextOffset de la respuesta anterior.',
+      ),
+  }),
+  outputSchema: z.object({
+    page: viewSchema,
+    content: z
+      .object({
+        text: z.string(),
+        offset: z.number(),
+        nextOffset: z.number().nullable(),
+        totalCharacters: z.number(),
+        sources: z.array(
+          z.object({
+            url: z.string(),
+            path: z.array(z.object({ url: z.string(), name: z.string() })),
+            characters: z.number(),
+            readable: z.boolean(),
+          }),
+        ),
+        omittedFrames: z.number(),
+        limitation: z.string(),
+      })
+      .optional(),
+  }),
   rateLimit: { perMinute: 40 },
   handler: async (input, ctx) => {
     const transport = createHttpTransport(ctx.logger);
-    const fresh = await transport.read(input.sessionId, ctx.organizationId);
+    const fresh = await transport.read(
+      input.sessionId,
+      browserActorKey(ctx.organizationId, ctx.userId),
+    );
     if (!fresh.ok) throw new Error(fresh.reason);
-    return { page: viewOf(fresh.data) };
+    const content = await transport.content?.(
+      input.sessionId,
+      browserActorKey(ctx.organizationId, ctx.userId),
+      input.offset ?? 0,
+    );
+    if (content && !content.ok) throw new Error(content.reason);
+    return {
+      page: viewOf(fresh.data, 'full', input.elementOffset ?? 0),
+      ...(content?.ok ? { content: content.data } : {}),
+    };
   },
 });
 
@@ -320,7 +410,7 @@ export const browserAskPerson = registerTool({
       input.sessionId,
       'request',
       input.reason,
-      ctx.organizationId,
+      browserActorKey(ctx.organizationId, ctx.userId),
     );
     if (!asked.ok) throw new Error(asked.reason);
     return {
@@ -357,7 +447,7 @@ export const browserRequestSecret = registerTool({
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     const transport = createHttpTransport(ctx.logger);
-    const owner = ctx.organizationId;
+    const owner = browserActorKey(ctx.organizationId, ctx.userId);
     const fresh = await transport.read(input.sessionId, owner);
     if (!fresh.ok) throw new Error(fresh.reason);
     const resolved = resolveRef(fresh.data, input.ref, input.name);
@@ -389,7 +479,7 @@ export const browserClosePage = registerTool({
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
     const transport = createHttpTransport(ctx.logger);
-    await transport.closeSession(input.sessionId);
+    await transport.closeSession(input.sessionId, browserActorKey(ctx.organizationId, ctx.userId));
     return { ok: true };
   },
 });

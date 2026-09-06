@@ -69,7 +69,7 @@ export const metadata: Metadata = {
  * deja una franja en blanco donde debería estar el contenido.
  */
 export const viewport: Viewport = {
-  themeColor: '#5850ec',
+  themeColor: '#176b68',
   viewportFit: 'cover',
 };
 

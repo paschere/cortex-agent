@@ -180,6 +180,24 @@ export function StepEditor({
                     />
                   </div>
 
+                  {step.explanation !== undefined && (
+                    <label className="mt-3 block text-xs text-ink-muted">
+                      Explicación del paso
+                      <textarea
+                        className="mt-1 block min-h-20 w-full rounded border border-border bg-surface p-2 text-sm text-ink"
+                        maxLength={2000}
+                        value={step.explanation}
+                        onChange={(e) =>
+                          onChange({
+                            ...value,
+                            steps: steps.map((s, i) =>
+                              i === index ? { ...s, explanation: e.target.value } : s,
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                  )}
                   <ValueField
                     step={step}
                     index={index}

@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from 'node:child_process';
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import type { BrowserContext, Page } from 'playwright';
@@ -373,6 +373,8 @@ export class MeetSession {
       return;
     }
 
+    await this.keepPageAudible(page);
+    this.logPulseSinks();
     await this.armAudioTap(page);
     this.startRosterWatch(page);
     this.startCaptureWatch(page);
@@ -400,6 +402,34 @@ export class MeetSession {
     }
     this.xvfb = proc;
     return display;
+  }
+
+  private async keepPageAudible(page: Page): Promise<void> {
+    await page.bringToFront().catch(() => undefined);
+    try {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Page.setWebLifecycleState', { state: 'active' });
+      await cdp.detach().catch(() => undefined);
+    } catch {
+      /* Chrome viejo o CDP cortado */
+    }
+  }
+
+  private logPulseSinks(): void {
+    if (process.platform !== 'linux') return;
+    try {
+      const sinks = execFileSync('pactl', ['list', 'short', 'sinks'], {
+        encoding: 'utf8',
+        timeout: 2_000,
+      });
+      console.log(
+        `[cortex-meet] ${this.id} pulse sinks: ${sinks.replace(/\s+/g, ' ').trim() || '(vacío)'}`,
+      );
+    } catch (err) {
+      console.log(
+        `[cortex-meet] ${this.id} pulse ausente: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   private async armAudioTap(page: Page): Promise<void> {
@@ -449,6 +479,9 @@ export class MeetSession {
         speaker?: string | null;
         capture?: string;
         trackInfo?: string;
+        meetPlay?: string;
+        meetSrc?: number;
+        sampleRate?: number;
       } | null;
       if (!lvl) return;
       const chunks = lvl.chunks ?? 0;
@@ -465,7 +498,7 @@ export class MeetSession {
       else silentRounds = 0;
       snapshot.silentRounds = silentRounds;
       console.log(
-        `[cortex-meet] ${this.id} audio watch chunks=${chunks} live=${snapshot.live} recentPeak=${snapshot.recentPeak.toFixed(4)} stall=${stallRounds} silent=${silentRounds} capture=${lvl.capture ?? '?'} tracks=${lvl.trackInfo ?? ''}`,
+        `[cortex-meet] ${this.id} audio watch chunks=${chunks} live=${snapshot.live} recentPeak=${snapshot.recentPeak.toFixed(4)} stall=${stallRounds} silent=${silentRounds} capture=${lvl.capture ?? '?'} tracks=${lvl.trackInfo ?? ''} meet=${lvl.meetPlay ?? ''} src=${lvl.meetSrc ?? 0} sr=${lvl.sampleRate ?? 0}`,
       );
 
       if (shouldRestartCapture(stallRounds)) {

@@ -78,7 +78,7 @@ const BASELINE = new Map<string, number>([
   ['app/(app)/pipelines/[slug]/page.tsx', 2],
   ['app/(app)/tools/page.tsx', 2],
   ['app/api/chat-app/google/turn.ts', 2],
-  ['app/api/chat/attachments/route.ts', 2],
+  ['app/api/chat/attachments/route.ts', 1],
   ['app/api/chat/route.ts', 2],
   ['app/api/custom-tools/[id]/route.ts', 2],
   ['app/api/kb/drive/import-files/route.ts', 2],

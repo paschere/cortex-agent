@@ -4,6 +4,7 @@
 .next
 .turbo
 **/*.tsbuildinfo
+**/.test-out
 apps/desktop
 infra
 docs

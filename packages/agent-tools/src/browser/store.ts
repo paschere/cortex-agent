@@ -16,7 +16,7 @@ import type { FailureKind, Flow, ModelSpend, Step, StepOutcome, Variable } from 
 
 const FLOW_COLUMNS = `
   id, organization_id, slug, name, description, start_url, host, effect, status, source,
-  credential_id, login_required, errand_allowed, variables, steps, version, verified_at, verified_run_id,
+  profile_id, credential_id, login_required, errand_allowed, variables, steps, version, verified_at, verified_run_id,
   repairs_in_window, repair_window_started_at, last_run_at, last_run_status, last_error,
   recording_frames, extraction_cost_usd, created_by, created_at, updated_at
 `;
@@ -33,6 +33,7 @@ export function rowToFlow(row: Record<string, unknown>): Flow {
     effect: row.effect as Flow['effect'],
     status: row.status as Flow['status'],
     source: (row.source as Flow['source']) ?? 'recording',
+    profileId: (row.profile_id as string | null) ?? null,
     credentialId: (row.credential_id as string | null) ?? null,
     loginRequired: Boolean(row.login_required),
     errandAllowed: Boolean(row.errand_allowed),
@@ -92,6 +93,7 @@ export interface NewFlow {
   variables: Variable[];
   steps: Step[];
   credentialId?: string | null;
+  profileId?: string | null;
   source?: Flow['source'];
   recordingFrames?: number;
   extractionCostUsd?: number;
@@ -134,6 +136,7 @@ export async function createFlow(db: SupabaseClient, input: NewFlow): Promise<Fl
       status: 'draft',
       source: input.source ?? 'recording',
       credential_id: input.credentialId ?? null,
+      profile_id: input.profileId ?? null,
       variables: input.variables,
       steps,
       version: 1,

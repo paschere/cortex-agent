@@ -50,24 +50,6 @@ import Link from 'next/link';
  * —el pie y el lápiz que asoma al pasar por encima— porque una garantía que
  * nadie ve no tranquiliza a nadie.
  *
- * ---------------------------------------------------------------------------
- * POR QUÉ SE MUEVE, Y CUÁNDO PARA
- * ---------------------------------------------------------------------------
- * Esta pantalla se abre todos los días, varias veces. Así que el movimiento es
- * casi todo de ENTRADA y se acaba solo: la marca, el titular, el aviso, las
- * tarjetas y el pie suben escalonados con `animate-rise` y a los ~450 ms la
- * pantalla está quieta. Lo único que sigue después es la luz de detrás de la
- * marca (`cx-glow` en `globals.css`): siete segundos, muy poco recorrido y
- * desenfocada, para que se note que hay alguien ahí sin dar nada que mirar.
- *
- * El anillo que sale de la marca al montar es `kb-flare`, la misma pieza que
- * usa el mapa de memoria: se expande dos veces y para. Se apoya en `opacity-0`
- * como estado de reposo, así que cuando la animación termina —o cuando
- * `prefers-reduced-motion` la corta en seco— no queda un aro dibujado encima.
- *
- * `prefers-reduced-motion` apaga las tres cosas: la regla global de
- * `globals.css` neutraliza las duraciones y aquí además va `motion-reduce:` en
- * cada transformación, que es lo que evita que quede una tarjeta a medio subir.
  */
 
 interface AgentInfo {
@@ -110,9 +92,8 @@ function icon(name: string): typeof Brain {
  * frase del día es esa — no un catálogo de seis tarjetas.
  */
 const CORTEX_COPY = {
-  title: 'Ya leí lo tuyo. Pregúntame.',
-  subtitle:
-    'Tus correos, tus contratos, tus reuniones y lo que se te vence. Te contesto con eso y te digo de dónde salió cada dato.',
+  title: '¿Qué resolvemos hoy?',
+  subtitle: 'Revisemos una prioridad, preparemos una decisión o avancemos un asunto de tu empresa.',
 };
 
 const COPY: Record<string, { title: string; subtitle: string }> = { cortex: CORTEX_COPY };
@@ -183,7 +164,7 @@ function SuggestionLine({
     <button
       type="button"
       onClick={() => onSuggestion(text)}
-      className="animate-rise group max-w-lg text-pretty text-center"
+      className="group max-w-lg text-pretty text-center"
       style={rise(80)}
     >
       <span className="text-sm leading-snug text-ink-muted underline decoration-border underline-offset-4 transition-colors duration-150 group-hover:text-ink group-hover:decoration-primary/40 motion-reduce:transition-none">
@@ -199,7 +180,7 @@ function FirstStepCard({ step, index }: { step: FirstStep; index: number }) {
   return (
     <Link
       href={step.href}
-      className="animate-rise group flex items-start gap-3 px-1 py-2 text-left"
+      className="group flex items-start gap-3 px-1 py-2 text-left"
       style={rise(CARDS_AT_MS + index * STEP_MS)}
     >
       <span className="relative mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary ring-1 ring-inset ring-primary/15">
@@ -227,18 +208,8 @@ function FirstStepCard({ step, index }: { step: FirstStep; index: number }) {
  */
 function Mark() {
   return (
-    <span className="relative grid h-14 w-14 place-items-center">
-      <span
-        aria-hidden
-        className="cx-glow absolute -inset-5 rounded-pill bg-primary/25 opacity-55 blur-2xl motion-reduce:animate-none"
-      />
-      <span
-        aria-hidden
-        className="kb-flare absolute inset-0 rounded-card opacity-0 ring-2 ring-primary/40 motion-reduce:hidden"
-      />
-      <span className="relative grid h-14 w-14 place-items-center rounded-card bg-surface text-primary shadow-card ring-1 ring-inset ring-primary/15">
-        <Brain className="h-6 w-6" />
-      </span>
+    <span className="grid h-12 w-12 place-items-center rounded-xl border border-primary/20 bg-primary-soft text-primary">
+      <Brain className="h-6 w-6" />
     </span>
   );
 }
@@ -299,7 +270,7 @@ export function EmptyState({
 
   return (
     <div className="relative flex flex-1 flex-col items-center px-4 pb-8 pt-8 text-center [justify-content:safe_flex-end] sm:px-6 sm:pt-10">
-      <div className="animate-rise mb-6 flex flex-col items-center">
+      <div className="mb-6 flex flex-col items-center">
         {lead ? null : <Mark />}
         {waitingOn ? (
           <button
@@ -336,7 +307,7 @@ export function EmptyState({
 
       {data?.notice || openers.isError ? (
         <p
-          className="animate-rise mb-4 flex max-w-xl items-start gap-2 rounded-sm border border-amber/25 bg-amber-soft px-3 py-2 text-left text-xs leading-snug text-ink-muted"
+          className="mb-4 flex max-w-xl items-start gap-2 rounded-sm border border-amber/25 bg-amber-soft px-3 py-2 text-left text-xs leading-snug text-ink-muted"
           style={rise(60)}
         >
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" aria-hidden />

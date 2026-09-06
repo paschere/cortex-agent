@@ -20,7 +20,7 @@ import { readOnboarding } from '@cortex/agent-tools';
  *
  * That moves the decision here, where it belongs:
  *
- *   signed in  → /chat, unless the workspace still has the first-run guide
+ *   signed in  → /management, unless the workspace still has the first-run guide
  *                open (`readOnboarding().show`), in which case /onboarding.
  *                The login screen's `next` parameter defaults to '/', so this
  *                is the hop that lands somebody on the product after signing
@@ -62,7 +62,7 @@ export default async function RootPage() {
     const session = await getOptionalSession();
     if (session) {
       const onboarding = await readOnboarding(getOrgScopedClient(session.organization.id));
-      redirect(onboarding.show ? '/onboarding' : '/chat');
+      redirect(onboarding.show ? '/onboarding' : '/management');
     }
   }
 

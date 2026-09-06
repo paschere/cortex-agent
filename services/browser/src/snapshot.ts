@@ -1,3 +1,4 @@
+import { framePath } from './frame-path';
 import type { Locator, Page } from 'playwright';
 import type { PageSnapshot, Target } from './types';
 
@@ -323,7 +324,39 @@ export async function observeTargets(locator: Locator): Promise<Target[]> {
 /** Read the page. Never throws: a snapshot is diagnostics, not the errand. */
 export async function snapshotPage(page: Page): Promise<PageSnapshot> {
   try {
-    return (await page.evaluate(SNAPSHOT_SCRIPT)) as PageSnapshot;
+    const frames = page.frames().slice(0, 30);
+    const snapshots = await Promise.all(
+      frames.map(async (frame) => {
+        try {
+          return { frame, snapshot: (await frame.evaluate(SNAPSHOT_SCRIPT)) as PageSnapshot };
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const main = snapshots[0]?.snapshot;
+    if (!main) throw new Error('Page navigated');
+    const elements = snapshots
+      .flatMap((item) =>
+        item
+          ? item.snapshot.elements.map((el) => ({
+              ...el,
+              targets: el.targets.map((t) => ({ ...t, framePath: framePath(item.frame) })),
+            }))
+          : [],
+      )
+      .slice(0, 300)
+      .map((el, i) => ({ ...el, ref: `e${i + 1}` }));
+    return {
+      ...main,
+      elements,
+      headings: snapshots.flatMap((item) => item?.snapshot.headings ?? []).slice(0, 30),
+      alerts: snapshots.flatMap((item) => item?.snapshot.alerts ?? []).slice(0, 20),
+      text: snapshots
+        .map((item) => item?.snapshot.text ?? '')
+        .join(' ')
+        .slice(0, 12000),
+    };
   } catch {
     return {
       url: page.url(),

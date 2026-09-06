@@ -141,6 +141,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<PaletteRespons
       db
         .from('browser_flows')
         .select('slug, name, description, host, status, effect')
+        .is('profile_id', null)
         .neq('status', 'broken')
         .order('name', { ascending: true })
         .limit(PER_SECTION),

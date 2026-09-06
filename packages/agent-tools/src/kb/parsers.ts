@@ -1,12 +1,19 @@
 import { ValidationError } from '@cortex/core';
+import { type SheetData, XLSX_MIME, parseSpreadsheet, spreadsheetText } from './spreadsheets';
 
 export interface ParseResult {
   text: string;
   pages?: number;
+  tables?: SheetData[];
 }
 
 export async function parseDocument(buffer: Buffer, mime: string): Promise<ParseResult> {
   const m = mime.toLowerCase();
+
+  if (m === XLSX_MIME || m === 'text/csv') {
+    const tables = await parseSpreadsheet(buffer, m);
+    return { text: spreadsheetText(tables), tables };
+  }
 
   if (m === 'application/pdf') {
     // pdf-parse has a side-effect bug at its entry point — import from the lib directly
@@ -21,7 +28,7 @@ export async function parseDocument(buffer: Buffer, mime: string): Promise<Parse
     return { text: r.value };
   }
 
-  if (m === 'text/plain' || m === 'text/markdown' || m === 'text/csv') {
+  if (m === 'text/plain' || m === 'text/markdown') {
     return { text: buffer.toString('utf-8') };
   }
 

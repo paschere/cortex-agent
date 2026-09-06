@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AUDIO_TAP_SCRIPT } from './audio-tap';
 import {
   chunksStalled,
@@ -77,6 +79,21 @@ check(
   true,
 );
 check(
+  'AudioContext stays at native rate so Meet 48 kHz decode is not zeroed',
+  AUDIO_TAP_SCRIPT.includes('AudioContext)({ sampleRate: 16000 })'),
+  false,
+);
+check(
+  'Meet own media elements are tapped before parallel sinks',
+  AUDIO_TAP_SCRIPT.includes('wireMeetElement'),
+  true,
+);
+check(
+  'local senders are skipped so TTS is not counted as the live track',
+  AUDIO_TAP_SCRIPT.includes('getSenders'),
+  true,
+);
+check(
   'local TTS mic is not mixed into STT',
   AUDIO_TAP_SCRIPT.includes('__cortexLocalTrackId'),
   true,
@@ -90,6 +107,14 @@ check('watchdog can rewire and restart the graph', AUDIO_TAP_SCRIPT.includes('re
 check(
   'scene() reports who is presenting so the visual log can fire',
   AUDIO_TAP_SCRIPT.includes('scene:') && AUDIO_TAP_SCRIPT.includes('presenting'),
+  true,
+);
+
+const entry = readFileSync(join(process.cwd(), 'docker-entrypoint.sh'), 'utf8');
+const docker = readFileSync(join(process.cwd(), 'Dockerfile'), 'utf8');
+check(
+  'container starts a PulseAudio dummy sink so Chrome decodes WebRTC',
+  entry.includes('module-null-sink') && docker.includes('pulseaudio'),
   true,
 );
 

@@ -32,9 +32,20 @@ ENV TZ=America/Bogota
 # Xvfb: pantalla virtual (Meet degrada headless).
 # xdotool: clicks XTEST del join humanizado de Vexa.
 # x11vnc: vista en vivo si la admisión escala a needs_human_help.
+# PulseAudio: Chrome no decodifica WebRTC remoto sin un dispositivo de salida
+# (si no, pistas muted, peak=0, Deepgram mudo). Null sink, nadie lo oye.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends xvfb fonts-liberation xdotool x11vnc \
-  && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends xvfb fonts-liberation xdotool x11vnc pulseaudio pulseaudio-utils \
+  && rm -rf /var/lib/apt/lists/* \
+  && printf '%s\n' \
+    '#!/usr/bin/pulseaudio -nF' \
+    '.nofail' \
+    'load-module module-native-protocol-unix' \
+    'load-module module-null-sink sink_name=cortex_out sink_properties=device.description=CortexOut' \
+    'load-module module-always-sink' \
+    'set-default-sink cortex_out' \
+    > /etc/pulse/default.pa \
+  && printf '%s\n' 'exit-idle-time = -1' >> /etc/pulse/daemon.conf
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

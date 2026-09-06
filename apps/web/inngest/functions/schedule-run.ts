@@ -126,7 +126,12 @@ async function executeToolJob(job: JobRow): Promise<ExecResult> {
     const result = await runTool(toolDef, job.tool_input ?? {}, ctx, {
       confirmed: job.allow_unattended_writes,
     });
-    return { ok: true, output: truncate(JSON.stringify(result, null, 2)) };
+    const output =
+      job.tool_id === 'management.daily_brief' &&
+      typeof (result as { report?: unknown })?.report === 'string'
+        ? (result as { report: string }).report
+        : JSON.stringify(result, null, 2);
+    return { ok: true, output: truncate(output) };
   } catch (err) {
     logger.error('scheduled tool job failed', {
       jobId: job.id,

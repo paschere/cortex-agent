@@ -1,3 +1,4 @@
+import { managementWorkflowDispatch, managementWorkflowAdvance } from './management-workflow';
 import { actionsSweepDispatch, actionsSweepWorkspace } from './actions-sweep';
 import { commitmentsWatchDispatch, commitmentsWatchWorkspace } from './commitments-watch';
 import { devTaskIntake } from './dev-task-intake';
@@ -20,6 +21,7 @@ import { turnContextPurge, turnLatencyPurge } from './turn-context-purge';
 import { weeklyReportDispatch, weeklyReportWorkspace } from './weekly-report';
 
 export {
+  managementWorkflowDispatch, managementWorkflowAdvance,
   actionsSweepDispatch,
   actionsSweepWorkspace,
   commitmentsWatchDispatch,
@@ -48,6 +50,7 @@ export {
   weeklyReportWorkspace,
 };
 export const functions = [
+  managementWorkflowDispatch, managementWorkflowAdvance,
   ingestDocument,
   learningPassDispatch,
   learningPassWorkspace,

@@ -138,6 +138,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<OpenersRespons
     db
       .from('browser_flows')
       .select('slug, name')
+      .is('profile_id', null)
       .eq('status', 'ready')
       // Un trámite que radica o envía algo no se propone como primera pregunta
       // de nadie: la pantalla de bienvenida no es el sitio para descubrir que

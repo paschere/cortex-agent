@@ -1,3 +1,4 @@
+import { BrowserWorkspace } from '@/components/browser/BrowserWorkspace';
 import { PageHeader } from '@/components/ui/page-header';
 import { MODULE } from '@/lib/browser-shape';
 import { requireSession } from '@/lib/session';
@@ -40,6 +41,7 @@ export default async function BrowserFlowsPage() {
         subtitle="Vueltas en portales ajenos que Cortex aprendió viéndote hacerlas una vez. Aquí ves cuáles están probadas, cuál dejó de funcionar y cuándo corrió cada una."
         icon={<Globe className="h-5 w-5" />}
       />
+      <BrowserWorkspace />
       <Surface />
     </>
   );

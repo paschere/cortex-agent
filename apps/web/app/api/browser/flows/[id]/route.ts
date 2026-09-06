@@ -1,3 +1,4 @@
+import { getBrowserProfile } from '@cortex/agent-tools/src/browser/profiles';
 import { readDelivery, writeDelivery } from '@/lib/browser-delivery';
 import type { FlowDelivery } from '@/lib/browser-shape';
 import { requireSession } from '@/lib/session';
@@ -98,6 +99,11 @@ export async function GET(
   const { id } = await params;
 
   const flow = await getFlow(db, id);
+  if (
+    flow?.profileId &&
+    !(await getBrowserProfile(db, flow.profileId, session.id).catch(() => null))
+  )
+    return NextResponse.json({ error: 'Ese trámite no existe.' }, { status: 404 });
   if (!flow) return NextResponse.json({ error: 'Ese trámite no existe.' }, { status: 404 });
 
   const runs = await listRuns(db, flow.id, 15);
@@ -224,6 +230,11 @@ export async function PATCH(
   const { id } = await params;
 
   const flow = await getFlow(db, id);
+  if (
+    flow?.profileId &&
+    !(await getBrowserProfile(db, flow.profileId, session.id).catch(() => null))
+  )
+    return NextResponse.json({ error: 'Ese trámite no existe.' }, { status: 404 });
   if (!flow) return NextResponse.json({ error: 'Ese trámite no existe.' }, { status: 404 });
 
   const body = (await req.json().catch(() => ({}))) as {
@@ -354,6 +365,11 @@ export async function DELETE(
   const body = (await req.json().catch(() => ({}))) as { deleteCredential?: boolean };
 
   const flow = await getFlow(db, id);
+  if (
+    flow?.profileId &&
+    !(await getBrowserProfile(db, flow.profileId, session.id).catch(() => null))
+  )
+    return NextResponse.json({ error: 'Ese trámite no existe.' }, { status: 404 });
   if (!flow) return NextResponse.json({ error: 'Ese trámite ya no existe.' }, { status: 404 });
 
   const dependents = await findDependents(db, flow.slug);

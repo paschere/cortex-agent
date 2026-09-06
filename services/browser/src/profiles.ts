@@ -168,6 +168,13 @@ export class ProfileManager {
     context.on('close', () => {
       if (this.open.get(key)?.context === context) this.open.delete(key);
     });
+    // Chromium creates an initial blank page; it must not pin an idle profile.
+    await Promise.all(
+      context
+        .pages()
+        .filter((p) => p.url() === 'about:blank')
+        .map((p) => p.close()),
+    );
     this.open.set(key, { context, lastUsedAt: Date.now() });
     logger.info({ profile: key, open: this.open.size }, 'perfil persistente abierto');
     return context;
@@ -214,6 +221,16 @@ export class ProfileManager {
    * forma irreversible. Separado de cerrar A PROPÓSITO: cerrar es
    * mantenimiento y conserva el disco; esto es una decisión del dueño.
    */
+  async close(owner: string): Promise<void> {
+    const key = profileKey(owner);
+    await this.launching.get(key)?.catch(() => undefined);
+    const entry = this.open.get(key);
+    if (entry) {
+      this.open.delete(key);
+      await entry.context.close().catch(() => undefined);
+    }
+  }
+
   async reset(owner: string): Promise<void> {
     const key = profileKey(owner);
     // Un launch a medio camino no puede quedar escribiendo en un directorio

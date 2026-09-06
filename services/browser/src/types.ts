@@ -21,6 +21,7 @@ export interface Target {
   value: string;
   /** Accessible name. Only meaningful for `role`. */
   name?: string;
+  framePath?: { url: string; name: string }[];
 }
 
 /**
@@ -66,6 +67,8 @@ export type StepAction =
   | 'pause';
 
 export interface Step {
+  /** Human explanation; context, not an executable instruction. */
+  explanation?: string;
   action: StepAction;
   /** What a person would call this step. Shown on screen and in the audit. */
   label: string;
@@ -91,6 +94,8 @@ export interface UploadPayload {
 }
 
 export interface ReplayRequest {
+  owner?: string;
+  profile?: { key: string; revision: number };
   runId: string;
   startUrl: string;
   steps: Step[];

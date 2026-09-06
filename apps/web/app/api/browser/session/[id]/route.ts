@@ -1,3 +1,4 @@
+import { browserActorKey } from '@cortex/agent-tools/src/browser/profiles';
 import { requireSession } from '@/lib/session';
 import { logger } from '@cortex/core';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -75,6 +76,7 @@ function service(): { base: string; token: string } | null {
 
 async function forward(
   path: string,
+  owner: string,
   init: { method: 'GET' | 'POST'; body?: unknown; timeoutMs: number },
 ): Promise<{ ok: true; data: unknown } | { ok: false; status: number; error: string }> {
   const cfg = service();
@@ -87,6 +89,7 @@ async function forward(
       headers: {
         authorization: `Bearer ${cfg.token}`,
         accept: 'application/json',
+        'x-cortex-owner': owner,
         ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
       },
       ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
@@ -115,9 +118,10 @@ async function forward(
 
 /** A picture of the tab as it is right now. */
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  await requireSession();
+  const person = await requireSession();
+  const owner = browserActorKey(person.organization.id, person.id);
   const { id } = await ctx.params;
-  const result = await forward(`/session/${encodeURIComponent(id)}/view`, {
+  const result = await forward(`/session/${encodeURIComponent(id)}/view`, owner, {
     method: 'GET',
     timeoutMs: 20_000,
   });
@@ -127,7 +131,8 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
 /** One gesture, or «ya está, sigue tú». */
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  await requireSession();
+  const person = await requireSession();
+  const owner = browserActorKey(person.organization.id, person.id);
   const { id } = await ctx.params;
 
   const parsed = Input.safeParse(await req.json().catch(() => null));
@@ -138,7 +143,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const session = encodeURIComponent(id);
 
   if (input.kind === 'continue') {
-    const result = await forward(`/session/${session}/continue`, {
+    const result = await forward(`/session/${session}/continue`, owner, {
       method: 'POST',
       body: { fromIndex: input.fromIndex ?? 0 },
       // The whole rest of the errand runs inside this call.
@@ -148,7 +153,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return NextResponse.json(result.data);
   }
 
-  const result = await forward(`/session/${session}/input`, {
+  const result = await forward(`/session/${session}/input`, owner, {
     method: 'POST',
     body: input,
     timeoutMs: 20_000,

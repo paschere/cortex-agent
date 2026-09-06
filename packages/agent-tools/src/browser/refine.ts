@@ -78,7 +78,7 @@ const RANK: Record<TargetKind, number> = {
 const MAX_TARGETS = 8;
 
 function keyOf(target: Target): string {
-  return `${target.kind}|${target.value.trim().toLowerCase()}|${(target.name ?? '').trim().toLowerCase()}`;
+  return `${target.kind}|${target.value.trim().toLowerCase()}|${(target.name ?? '').trim().toLowerCase()}|${JSON.stringify(target.framePath ?? null)}`;
 }
 
 /**

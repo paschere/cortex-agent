@@ -1,3 +1,4 @@
+import { browserActorKey, getBrowserProfile, profileRef } from './profiles';
 import type { Logger } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Actor } from './access';
@@ -331,7 +332,7 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
   // Asked before a browser is even opened, because the answer will not change
   // by trying: a run already known to need a login it does not have would spend
   // twenty seconds arriving at the same question.
-  if (flow.loginRequired && !flow.credentialId) {
+  if (flow.loginRequired && !flow.credentialId && !flow.profileId) {
     const facts = loginFacts(flow);
     return {
       ok: false,
@@ -395,7 +396,12 @@ export async function runFlow(options: RunOptions): Promise<RunOutcome> {
     startedBy: actor.id,
   });
 
+  const browserProfile = flow.profileId
+    ? profileRef(await getBrowserProfile(db, flow.profileId, actor.id))
+    : undefined;
   const replayed = await transport.replay({
+    profile: browserProfile,
+    owner: browserActorKey(flow.organizationId, actor.id),
     runId,
     startUrl: flow.startUrl,
     steps: flow.steps,
@@ -921,6 +927,7 @@ export async function resumeFlow(options: ResumeOptions): Promise<RunOutcome> {
   }
 
   const resumed = await transport.resume({
+    owner: browserActorKey(flow.organizationId, options.actor.id),
     sessionId: checkpoint.sessionId,
     fromIndex: checkpoint.fromIndex,
     inputs: extra,
@@ -1096,7 +1103,12 @@ async function repairFlow(
     startedBy: actor.id,
   });
 
+  const browserProfile = flow.profileId
+    ? profileRef(await getBrowserProfile(db, flow.profileId, actor.id))
+    : undefined;
   const replayed = await transport.replay({
+    profile: browserProfile,
+    owner: browserActorKey(flow.organizationId, actor.id),
     runId: repairRunId,
     startUrl: flow.startUrl,
     steps: patched,

@@ -1,3 +1,4 @@
+import { ClipboardError } from './page-content';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import { spawn } from 'node:child_process';
@@ -202,6 +203,21 @@ async function handle(
     // conserva el disco; esto no. Quién lo pidió y por qué queda en la
     // auditoría de Cortex, que es quien llama: este servicio no tiene base de
     // datos y no recuerda nada.
+    if (req.method === 'POST' && path === '/profile/revoke') {
+      const body = (await readBody(req)) as { key?: string; revision?: number };
+      if (
+        !body.key ||
+        !/^profile-[a-f0-9-]{36}$/.test(body.key) ||
+        !Number.isInteger(body.revision) ||
+        Number(body.revision) < 1
+      ) {
+        json(res, 400, { error: 'Invalid profile' });
+        return;
+      }
+      await worker.revokeProfile(body.key, Number(body.revision));
+      json(res, 200, { ok: true });
+      return;
+    }
     if (req.method === 'DELETE' && path === '/profile') {
       if (!owner) {
         json(res, 400, { error: 'x-cortex-owner is required' });
@@ -245,18 +261,94 @@ async function handle(
     }
 
     if (req.method === 'POST' && path === '/session') {
-      const body = (await readBody(req)) as { startUrl?: string; owner?: string };
+      const body = (await readBody(req)) as {
+        startUrl?: string;
+        owner?: string;
+        profile?: { key: string; revision: number };
+      };
       if (!body?.startUrl) {
         json(res, 400, { error: 'startUrl is required' });
         return;
       }
-      json(res, 200, await worker.openSession(body.startUrl, body.owner ?? owner));
+      json(res, 200, await worker.openSession(body.startUrl, owner ?? body.owner, body.profile));
       return;
     }
 
     // -----------------------------------------------------------------------
     // El volante, los secretos y la pantalla en vivo (browser v2).
     // -----------------------------------------------------------------------
+
+    const clipboardMatch = /^\/session\/([A-Za-z0-9_]+)\/clipboard$/.exec(path);
+    if (clipboardMatch?.[1] && req.method === 'POST') {
+      const body = (await readBody(req)) as { op?: string; text?: string };
+      if (
+        !['copy', 'paste', 'select_all', 'clear'].includes(body.op ?? '') ||
+        (body.text !== undefined && (typeof body.text !== 'string' || body.text.length > 100000))
+      ) {
+        json(res, 400, { error: 'Invalid clipboard action' });
+        return;
+      }
+      try {
+        json(
+          res,
+          200,
+          await worker.clipboardAction(
+            clipboardMatch[1],
+            owner,
+            body.op as 'copy' | 'paste' | 'select_all' | 'clear',
+            body.text,
+          ),
+        );
+      } catch (error) {
+        if (error instanceof ClipboardError) json(res, 422, { error: error.message });
+        else throw error;
+      }
+      return;
+    }
+    const contentMatch = /^\/session\/([A-Za-z0-9_]+)\/content$/.exec(path);
+    if (contentMatch?.[1] && req.method === 'GET') {
+      const query = new URL(req.url ?? '/', 'http://localhost').searchParams;
+      const offset = Number(query.get('offset') ?? 0),
+        limit = Number(query.get('limit') ?? 20000);
+      if (
+        !Number.isSafeInteger(offset) ||
+        offset < 0 ||
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > 20000
+      ) {
+        json(res, 400, { error: 'Invalid content range' });
+        return;
+      }
+      json(res, 200, await worker.content(contentMatch[1], owner, offset, limit));
+      return;
+    }
+
+    const teachingMatch = /^\/session\/([A-Za-z0-9_]+)\/teaching$/.exec(path);
+    if (teachingMatch?.[1] && (req.method === 'GET' || req.method === 'POST')) {
+      const body =
+        req.method === 'POST'
+          ? ((await readBody(req)) as { op?: string; url?: string; index?: number; text?: string })
+          : {};
+      if (
+        req.method === 'POST' &&
+        !['start', 'stop', 'navigate', 'explain'].includes(body.op ?? '')
+      ) {
+        json(res, 400, { error: 'Invalid teaching action' });
+        return;
+      }
+      json(
+        res,
+        200,
+        await worker.teaching(
+          teachingMatch[1],
+          owner,
+          body.op as 'start' | 'stop' | 'navigate' | 'explain' | undefined,
+          body,
+        ),
+      );
+      return;
+    }
 
     const controlMatch = /^\/session\/([A-Za-z0-9_]+)\/control$/.exec(path);
     if (controlMatch?.[1]) {
@@ -321,6 +413,7 @@ async function handle(
         text?: string;
         url?: string;
       };
+      await worker.controlState(actMatch[1], owner);
       json(
         res,
         200,
@@ -392,7 +485,11 @@ async function handle(
       for (const [key, value] of Object.entries(body?.inputs ?? {}).slice(0, 8)) {
         if (typeof value === 'string') inputs[key.slice(0, 40)] = value.slice(0, 300);
       }
-      json(res, 200, await worker.continueSession(continueMatch[1], Math.max(0, from), inputs));
+      json(
+        res,
+        200,
+        await worker.continueSession(continueMatch[1], Math.max(0, from), inputs, owner),
+      );
       return;
     }
 
@@ -403,6 +500,7 @@ async function handle(
         return;
       }
       if (req.method === 'DELETE') {
+        await worker.controlState(sessionMatch[1], owner);
         await worker.closeSession(sessionMatch[1]);
         json(res, 200, { ok: true });
         return;

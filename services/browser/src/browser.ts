@@ -1,3 +1,5 @@
+import { SessionClipboard, readPageContent } from './page-content';
+import { TeachingRecorder } from './teaching';
 import { type Browser, type BrowserContext, type Page, chromium } from 'playwright';
 import type { WebSocket } from 'ws';
 import type { Config } from './config';
@@ -55,6 +57,26 @@ export class BrowserWorker {
   private sweeper: NodeJS.Timeout | null = null;
   /** El computador del tenant (profiles.ts). Null = la feature está apagada. */
   private profiles: ProfileManager | null = null;
+  private readonly profileClaims = new Set<string>();
+  private readonly profileRevisions = new Map<string, number>();
+
+  private claimProfile(profile: { key: string; revision: number }): void {
+    if (!/^profile-[a-f0-9-]{36}$/.test(profile.key) || !Number.isInteger(profile.revision))
+      throw new Error('Invalid profile');
+    if (!this.profiles)
+      throw new Error('Persistent browser profiles require BROWSER_PROFILES_DIR.');
+    if (profile.revision < (this.profileRevisions.get(profile.key) ?? 1))
+      throw new UnknownSession();
+    if (this.profileClaims.has(profile.key)) throw new BusyError();
+    this.profileClaims.add(profile.key);
+  }
+
+  async revokeProfile(key: string, revision: number): Promise<void> {
+    this.profileRevisions.set(key, Math.max(revision, this.profileRevisions.get(key) ?? 1));
+    for (const [id, session] of this.sessions)
+      if (session.profileOwner === key) await this.closeSession(id);
+    await this.profiles?.close(key);
+  }
 
   constructor(private readonly config: Config) {
     // Solo si hay volumen donde guardarlo: sin BROWSER_PROFILES_DIR todo
@@ -209,13 +231,23 @@ export class BrowserWorker {
     if (this.inFlight >= this.config.maxConcurrent) {
       throw new BusyError();
     }
+    if (request.profile) this.claimProfile(request.profile);
     this.inFlight += 1;
     this.runsTotal += 1;
     let context: BrowserContext | null = null;
     let handedOff = false;
+    let runPage: Page | null = null;
     try {
-      context = await this.newContext();
+      context = request.profile
+        ? await this.profiles!.contextFor(request.profile.key)
+        : await this.newContext();
+      if (
+        request.profile &&
+        request.profile.revision < (this.profileRevisions.get(request.profile.key) ?? 1)
+      )
+        throw new UnknownSession();
       const page = await context.newPage();
+      runPage = page;
       await page.goto(request.startUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
       const result = await replay(page, request, this.config);
       // A pause is not a failed run. It is the trámite doing exactly what it
@@ -230,7 +262,14 @@ export class BrowserWorker {
       if (result.pause) {
         if (this.sessions.size < this.config.maxConcurrent) {
           const sessionId = this.newSessionId();
-          this.sessions.set(sessionId, { context, page, touchedAt: Date.now(), request });
+          this.sessions.set(sessionId, {
+            context,
+            page,
+            touchedAt: Date.now(),
+            request,
+            owner: request.owner,
+            ...(request.profile ? { profileOwner: request.profile.key } : {}),
+          });
           handedOff = true;
           logger.info(
             { runId: request.runId, sessionId, stepIndex: result.pause.index },
@@ -263,7 +302,14 @@ export class BrowserWorker {
         // honest, and better than evicting somebody else's half-solved captcha.
         if (this.sessions.size < this.config.maxConcurrent) {
           const sessionId = this.newSessionId();
-          this.sessions.set(sessionId, { context, page, touchedAt: Date.now(), request });
+          this.sessions.set(sessionId, {
+            context,
+            page,
+            touchedAt: Date.now(),
+            request,
+            owner: request.owner,
+            ...(request.profile ? { profileOwner: request.profile.key } : {}),
+          });
           handedOff = true;
           logger.info(
             { runId: request.runId, sessionId, stepIndex: result.failure.index },
@@ -289,7 +335,12 @@ export class BrowserWorker {
       throw err;
     } finally {
       this.inFlight -= 1;
-      if (!handedOff) await context?.close().catch(() => undefined);
+      if (!handedOff) {
+        if (request.profile) {
+          this.profileClaims.delete(request.profile.key);
+          await runPage?.close().catch(() => undefined);
+        } else await context?.close().catch(() => undefined);
+      }
     }
   }
 
@@ -417,10 +468,12 @@ export class BrowserWorker {
     sessionId: string,
     fromIndex: number,
     extraInputs: Record<string, string> = {},
+    owner?: string,
   ): Promise<ReplayResponse> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new UnknownSession();
     session.touchedAt = Date.now();
+    if (session.owner && session.owner !== owner) throw new UnknownSession();
     const original = session.request;
     if (!original) throw new Error('that session was not holding an errand');
 
@@ -451,6 +504,7 @@ export class BrowserWorker {
     }
 
     this.sessions.delete(sessionId);
+    await session.cast?.stop();
     let keptOpen = false;
     try {
       const result = await replay(
@@ -485,6 +539,8 @@ export class BrowserWorker {
           this.sessions.set(nextId, {
             context: session.context,
             page: session.page,
+            owner: session.owner,
+            profileOwner: session.profileOwner,
             touchedAt: Date.now(),
             // The ORIGINAL request with the answer already folded in, so a
             // third pause resumes with both answers rather than re-asking the
@@ -512,7 +568,12 @@ export class BrowserWorker {
 
       return rebased;
     } finally {
-      if (!keptOpen) await session.context.close().catch(() => undefined);
+      if (!keptOpen) {
+        if (session.profileOwner) {
+          await session.page.close().catch(() => undefined);
+          this.profileClaims.delete(session.profileOwner);
+        } else await session.context.close().catch(() => undefined);
+      }
     }
   }
 
@@ -532,6 +593,7 @@ export class BrowserWorker {
   async openSession(
     startUrl: string,
     owner?: string,
+    profile?: { key: string; revision: number },
   ): Promise<{ sessionId: string; snapshot: PageSnapshot }> {
     // Antes de gastar un contexto: a donde no se va, no se va ni un byte.
     assertNavigable(startUrl);
@@ -561,21 +623,37 @@ export class BrowserWorker {
     // computador del tenant: una página nueva en su Chromium persistente, con
     // las cookies del login de la semana pasada ya puestas. Sin cualquiera de
     // las dos cosas, el camino incógnito de siempre.
-    const persistent = this.profiles && owner ? await this.profiles.contextFor(owner) : null;
-    const context = persistent ?? (await this.newContext());
-    const page = await context.newPage();
-    this.foldPopupsInto(page);
-    await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    const sessionId = this.newSessionId();
-    this.sessions.set(sessionId, {
-      context,
-      page,
-      touchedAt: Date.now(),
-      control: createControl(),
-      owner: owner || undefined,
-      ...(persistent && owner ? { profileOwner: owner } : {}),
-    });
-    return { sessionId, snapshot: await snapshotPage(page) };
+    // Personal/shared profile is resolved by the app. Session control remains
+    // scoped to the person who opened it, even for a shared cookie store.
+    if (profile) this.claimProfile(profile);
+    let context: BrowserContext | null = null;
+    let page: Page | null = null;
+    try {
+      context = profile ? await this.profiles!.contextFor(profile.key) : await this.newContext();
+      if (profile && profile.revision < (this.profileRevisions.get(profile.key) ?? 1))
+        throw new UnknownSession();
+      page = await context.newPage();
+      this.foldPopupsInto(page);
+      await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      if (profile && profile.revision < (this.profileRevisions.get(profile.key) ?? 1))
+        throw new UnknownSession();
+      const sessionId = this.newSessionId();
+      this.sessions.set(sessionId, {
+        context,
+        page,
+        touchedAt: Date.now(),
+        control: createControl(),
+        owner,
+        ...(profile ? { profileOwner: profile.key } : {}),
+      });
+      return { sessionId, snapshot: await snapshotPage(page) };
+    } catch (error) {
+      if (profile) {
+        this.profileClaims.delete(profile.key);
+        await page?.close().catch(() => undefined);
+      } else await context?.close().catch(() => undefined);
+      throw error;
+    }
   }
 
   async act(
@@ -606,6 +684,10 @@ export class BrowserWorker {
         // privada» es un resultado con el que decide, no una excepción.
         assertNavigable(url);
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: this.config.stepTimeoutMs });
+      } else if (action === 'scroll') {
+        await page.mouse.wheel(0, Math.max(-3000, Math.min(3000, Number(text) || 800)));
+      } else if (action === 'copy_selection') {
+        await (session.clipboard ??= new SessionClipboard(page)).copy();
       } else if (action === 'wait_for') {
         await page.waitForTimeout(1_000);
       } else {
@@ -626,7 +708,13 @@ export class BrowserWorker {
         else if (action === 'select') await found.locator.selectOption({ label: text });
         else if (action === 'check') await found.locator.check({ timeout: remaining() });
         else if (action === 'press') await found.locator.press(text || 'Enter');
-        else throw new Error(`unknown action ${action}`);
+        else if (action === 'select_text' || action === 'copy') {
+          await found.locator.selectText({ timeout: remaining() });
+          if (action === 'copy') await (session.clipboard ??= new SessionClipboard(page)).copy();
+        } else if (action === 'paste') {
+          await found.locator.focus();
+          await (session.clipboard ??= new SessionClipboard(page)).paste();
+        } else throw new Error(`unknown action ${action}`);
       }
       await page.waitForLoadState('networkidle', { timeout: 3_000 }).catch(() => undefined);
       return { ok: true, matchedTarget, snapshot: await snapshotPage(page) };
@@ -654,12 +742,14 @@ export class BrowserWorker {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     this.sessions.delete(sessionId);
+    session.clipboard?.clear();
     await session.cast?.stop().catch(() => undefined);
     if (session.profileOwner) {
       // La pestaña muere; el contexto NO. Es el computador de toda la
       // organización y otras sesiones pueden estar viviendo en él — quien lo
       // apaga es el cupo LRU, el sweep o el shutdown (profiles.ts).
       await session.page.close().catch(() => undefined);
+      this.profileClaims.delete(session.profileOwner);
       return;
     }
     await session.context.close().catch(() => undefined);
@@ -705,7 +795,7 @@ export class BrowserWorker {
     const session = this.sessions.get(sessionId);
     // Un dueño equivocado recibe el MISMO error que un id inexistente. Decir
     // «existe pero no es tuya» confirma la mitad que no había que confirmar.
-    if (!session || (session.owner && owner && session.owner !== owner)) {
+    if (!session || (session.owner && session.owner !== owner)) {
       throw new UnknownSession();
     }
     return session;
@@ -799,6 +889,7 @@ export class BrowserWorker {
 
   releaseControl(sessionId: string, owner?: string): void {
     const session = this.sessionOf(sessionId, owner);
+    if (session.teacher?.state().active) throw new HumanHasControl();
     session.control = releaseControl(this.controlFor(session));
   }
 
@@ -838,7 +929,9 @@ export class BrowserWorker {
 
   /** Conecta la pantalla en vivo. El espectador anterior queda reemplazado. */
   async attachStream(sessionId: string, socket: WebSocket): Promise<void> {
-    const session = this.peekSession(sessionId);
+    // Called only after server verifies the signed, short-lived stream token.
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new UnknownSession();
     if (!session.cast) {
       session.cast = new Screencast(
         session.page,
@@ -852,6 +945,50 @@ export class BrowserWorker {
       );
     }
     await session.cast.attach(socket);
+  }
+
+  async clipboardAction(
+    sessionId: string,
+    owner: string | undefined,
+    op: 'copy' | 'paste' | 'select_all' | 'clear',
+    text?: string,
+  ) {
+    const session = this.sessionOf(sessionId, owner);
+    if (!humanMayDrive(this.controlFor(session))) throw new HumanHasControl();
+    const clipboard = (session.clipboard ??= new SessionClipboard(session.page));
+    if (op === 'copy') return clipboard.copy();
+    if (op === 'paste') return clipboard.paste(text);
+    if (op === 'select_all') {
+      await clipboard.selectAll();
+      return { ok: true };
+    }
+    clipboard.clear();
+    return { ok: true };
+  }
+  async content(sessionId: string, owner?: string, offset = 0, limit = 20000) {
+    return readPageContent(this.sessionOf(sessionId, owner).page, offset, limit);
+  }
+
+  async teaching(
+    sessionId: string,
+    owner?: string,
+    op?: 'start' | 'stop' | 'navigate' | 'explain',
+    input?: { url?: string; index?: number; text?: string },
+  ) {
+    const session = op ? this.sessionOf(sessionId, owner) : this.peekSession(sessionId, owner);
+    if (!session.teacher) session.teacher = new TeachingRecorder(session.page);
+    if (op === 'start') {
+      this.takeControl(sessionId, owner);
+      return session.teacher.start();
+    }
+    if (op === 'stop') return session.teacher.stop();
+    if (op === 'explain') return session.teacher.explain(input?.index ?? -1, input?.text ?? '');
+    if (op === 'navigate') {
+      if (!humanMayDrive(this.controlFor(session))) throw new HumanHasControl();
+      assertNavigable(input?.url ?? '');
+      return session.teacher.navigate(input!.url!);
+    }
+    return session.teacher.state();
   }
 
   private async sweepSessions(): Promise<void> {
@@ -896,6 +1033,8 @@ interface InteractiveSession {
   owner?: string;
   /** Presente si la pestaña vive en un perfil persistente: cerrarla no debe cerrar el contexto del tenant. */
   profileOwner?: string;
+  teacher?: TeachingRecorder;
+  clipboard?: SessionClipboard;
 }
 
 export class BusyError extends Error {

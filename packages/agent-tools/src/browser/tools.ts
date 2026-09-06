@@ -1,3 +1,4 @@
+import { visibleProfileFlows, getBrowserProfile } from './profiles';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { getCheckpoint, isLive, secondsLeft } from './checkpoint';
@@ -116,7 +117,9 @@ export const browserListFlows = registerTool({
   }),
   rateLimit: { perMinute: 30 },
   handler: async (_input, ctx) => {
-    const ready = (await listFlows(ctx.db)).filter((f) => f.status === 'ready');
+    const ready = (await visibleProfileFlows(ctx.db, ctx.userId, await listFlows(ctx.db))).filter(
+      (f) => f.status === 'ready',
+    );
     // Unattended, the catalogue shows only what may actually be run there.
     // Listing a trámite a leg is not allowed to touch would have the planner
     // build a plan around it and discover the refusal three steps later, having
@@ -205,7 +208,12 @@ export const browserRunFlow = registerTool({
   outputSchema: runOutput,
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
-    const flow = await getFlowBySlug(ctx.db, input.flow);
+    let flow = await getFlowBySlug(ctx.db, input.flow);
+    if (
+      flow?.profileId &&
+      !(await getBrowserProfile(ctx.db, flow.profileId, ctx.userId).catch(() => null))
+    )
+      flow = null;
     if (!flow || flow.status !== 'ready') {
       return {
         ok: false,
@@ -299,7 +307,12 @@ export const browserSubmitFlow = registerTool({
   requiresConfirmation: true,
   rateLimit: { perMinute: 5 },
   handler: async (input, ctx) => {
-    const flow = await getFlowBySlug(ctx.db, input.flow);
+    let flow = await getFlowBySlug(ctx.db, input.flow);
+    if (
+      flow?.profileId &&
+      !(await getBrowserProfile(ctx.db, flow.profileId, ctx.userId).catch(() => null))
+    )
+      flow = null;
     if (!flow || flow.status !== 'ready') {
       return {
         ok: false,

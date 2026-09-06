@@ -70,6 +70,11 @@ const shared = (why: string): SharedTable => ({ kind: 'shared', why });
 
 export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // --- Directory and access -------------------------------------------------
+  management_workflows: tenant(),
+  management_workflow_events: tenant(),
+  management_profiles: tenant(),
+  management_cases: tenant(),
+  management_events: tenant(),
   users: tenant(),
   teams: tenant(),
   team_members: tenant(),
@@ -244,6 +249,7 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // runs across every flow, which naming a flow would make impossible.
   browser_credentials: tenant(),
   browser_flows: tenant(),
+  browser_profiles: tenant(),
   browser_flow_versions: derived('browser_flows', 'flow_id'),
   browser_flow_grants: derived('browser_flows', 'flow_id'),
   browser_flow_runs: tenant(),
@@ -514,6 +520,14 @@ export function tenancyOf(table: string): TableTenancy {
 export type RpcTenancy = 'organization' | 'person' | 'maintenance';
 
 export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
+  management_start_daily: 'organization',
+  management_workflow_checkpoint: 'organization',
+  management_workflow_start: 'organization',
+  management_workflow_claim: 'organization',
+  management_workflow_settle: 'organization',
+  management_workflow_cancel: 'organization',
+  management_save_case: 'organization',
+  management_save_profile: 'organization',
   kb_visible_space_ids: 'person',
   // Migración 0123. Las tres derivan lo que se puede ver del usuario, igual que
   // la búsqueda: `kb_space_access` lleva el usuario dentro justamente para no

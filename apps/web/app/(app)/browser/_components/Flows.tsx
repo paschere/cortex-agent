@@ -176,9 +176,7 @@ function Row({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <span className={chipClass(STATUS_TONE[flow.status])}>{STATUS_LABEL[flow.status]}</span>
-            <span className="min-w-0 truncate text-base font-semibold text-ink">
-              {flow.name}
-            </span>
+            <span className="min-w-0 truncate text-base font-semibold text-ink">{flow.name}</span>
             <span className="ml-auto shrink-0">
               <LastRun flow={flow} />
             </span>
@@ -469,6 +467,11 @@ function Expanded({ flow, onChanged }: { flow: FlowSummary; onChanged: () => voi
                   <span className="text-sm text-ink">
                     <span className="text-ink-muted">{ACTION_LABEL[s.action]}</span> {s.label}
                   </span>
+                  {s.explanation && (
+                    <p className="w-full whitespace-pre-wrap break-words pl-6 text-sm text-ink-muted">
+                      {s.explanation}
+                    </p>
+                  )}
                   {s.value?.kind === 'secret' && (
                     <span className="inline-flex items-center gap-1 text-micro font-medium text-ink">
                       <KeyRound className="h-3 w-3" aria-hidden="true" />

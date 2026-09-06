@@ -68,6 +68,8 @@ export const JOBS: JobSpec[] = [
   { name: 'learning/pass.dispatch', cron: '20 9 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'commitments/watch.dispatch', cron: '0 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'actions/sweep.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
+  { name: 'management/workflow.dispatch', cron: '*/15 * * * *', retryLimit: 1, concurrency: 1 },
+  { name: 'management/workflow.advance', retryLimit: 2, concurrency: 5 },
   { name: 'goals/watch.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'reports/weekly.dispatch', cron: '0 12 * * 1', retryLimit: 1, concurrency: 1 },
 

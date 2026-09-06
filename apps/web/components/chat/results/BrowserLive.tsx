@@ -190,7 +190,12 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void }) {
+function LiveDock({
+  tab,
+  onSay,
+  inline = false,
+  teaching = false,
+}: { tab: TabRef; onSay?: (text: string) => void; inline?: boolean; teaching?: boolean }) {
   const { sessionId } = tab;
   const [hasFrame, setHasFrame] = useState(false);
   const [control, setControl] = useState<ControlView | null>(null);
@@ -203,6 +208,19 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
   const [secretValue, setSecretValue] = useState('');
   const [secretDone, setSecretDone] = useState<string | null>(null);
   const [answer, setAnswer] = useState('');
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [browserNotice, setBrowserNotice] = useState('');
+  const [content, setContent] = useState<{
+    text: string;
+    nextOffset: number | null;
+    totalCharacters: number;
+    limitation: string;
+    sources: { readable: boolean }[];
+    omittedFrames: number;
+  } | null>(null);
+  const [contentBusy, setContentBusy] = useState(false);
+  const preferRemoteClipboard = useRef(false);
+  const clipboardQueue = useRef<Promise<void>>(Promise.resolve());
   const [resumed, setResumed] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const viewportRef = useRef({ width: 1366, height: 900 });
@@ -234,15 +252,20 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
     wsRef.current?.close();
   }, []);
 
+  const paintVersion = useRef(0);
   // Dibuja unos bytes de imagen en el canvas, fuera del ciclo de React.
   const paint = useCallback(async (bytes: Uint8Array, mime: string) => {
+    const version = ++paintVersion.current;
     lastFrameRef.current = { bytes, mime };
     try {
       const bitmap = await createImageBitmap(
         new Blob([bytes.buffer as ArrayBuffer], { type: mime }),
       );
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas || version !== paintVersion.current) {
+        bitmap.close();
+        return;
+      }
       if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
         canvas.width = bitmap.width;
         canvas.height = bitmap.height;
@@ -261,26 +284,41 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
   useEffect(() => {
     let disposed = false;
     let ws: WebSocket | null = null;
-
-    (async () => {
+    let retry: ReturnType<typeof setTimeout>;
+    let attempts = 0;
+    const reconnect = () => {
+      if (!disposed && !goneRef.current) {
+        clearTimeout(retry);
+        retry = setTimeout(connect, Math.min(15000, 1000 * 2 ** attempts++));
+      }
+    };
+    const connect = async () => {
       try {
         const res = await fetch(`/api/browser/live/${encodeURIComponent(sessionId)}/stream`, {
           method: 'POST',
         });
-        if (!res.ok || disposed) return;
+        if (disposed) return;
+        if (!res.ok) {
+          reconnect();
+          return;
+        }
         const { wsUrl } = (await res.json()) as { wsUrl: string };
         ws = new WebSocket(wsUrl);
         wsRef.current = ws;
+        const connection = ws;
         ws.onopen = () => {
           if (!disposed) {
+            attempts = 0;
             liveRef.current = true;
             setLive(true);
           }
         };
         ws.onmessage = (event) => {
+          if (disposed || ws !== connection) return;
           try {
             const msg = JSON.parse(String(event.data)) as {
               type: string;
+              sequence?: number;
               data?: string;
               width?: number;
               height?: number;
@@ -292,7 +330,8 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
               // contrapresión honesta. Frames que lleguen mientras se dibuja
               // esperan en Chromium, que es donde deben esperar.
               void paint(base64ToBytes(msg.data), 'image/jpeg').finally(() => {
-                ws?.send(JSON.stringify({ type: 'ack' }));
+                if (connection.readyState === WebSocket.OPEN)
+                  connection.send(JSON.stringify({ type: 'ack', sequence: msg.sequence }));
               });
             }
           } catch {
@@ -300,18 +339,23 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
           }
         };
         const fallback = () => {
+          if (ws !== connection) return;
+          connection.close();
           liveRef.current = false;
           if (!disposed) setLive(false);
+          reconnect();
         };
         ws.onerror = fallback;
         ws.onclose = fallback;
       } catch {
-        // Sin boleto no hay stream; el poleo de abajo se encarga.
+        reconnect();
       }
-    })();
+    };
+    void connect();
 
     return () => {
       disposed = true;
+      clearTimeout(retry);
       ws?.close();
       wsRef.current = null;
     };
@@ -399,10 +443,70 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
     [sessionId],
   );
 
+  const clipboard = useCallback(
+    (op: 'copy' | 'paste' | 'select_all', text?: string) => {
+      if (!drivingRef.current) return;
+      clipboardQueue.current = clipboardQueue.current.then(async () => {
+        try {
+          const response = await fetch(
+            `/api/browser/live/${encodeURIComponent(sessionId)}/clipboard`,
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ op, ...(text === undefined ? {} : { text }) }),
+            },
+          );
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'No se pudo completar el gesto.');
+          if (op === 'copy') {
+            setCopiedText(data.text);
+            preferRemoteClipboard.current = true;
+            setBrowserNotice(`Copiados ${data.characters} caracteres en esta sesión.`);
+          }
+          if (op === 'paste') setBrowserNotice(`Pegados ${data.characters} caracteres.`);
+          surfaceRef.current?.focus({ preventScroll: true });
+        } catch (e) {
+          if (op === 'copy') {
+            setCopiedText(null);
+            preferRemoteClipboard.current = false;
+          }
+          setBrowserNotice((e as Error).message);
+        }
+      });
+    },
+    [sessionId],
+  );
+  useEffect(() => {
+    const localClipboardMayChange = () => {
+      preferRemoteClipboard.current = false;
+    };
+    window.addEventListener('blur', localClipboardMayChange);
+    return () => window.removeEventListener('blur', localClipboardMayChange);
+  }, []);
+  const readContent = useCallback(
+    async (offset = 0) => {
+      setContentBusy(true);
+      try {
+        const response = await fetch(
+          `/api/browser/live/${encodeURIComponent(sessionId)}/content?offset=${offset}`,
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'No se pudo leer la página.');
+        setContent(data);
+      } catch (e) {
+        setBrowserNotice((e as Error).message);
+      } finally {
+        setContentBusy(false);
+      }
+    },
+    [sessionId],
+  );
+
   const onMouse = useCallback(
     (kind: 'mousePressed' | 'mouseReleased', e: React.MouseEvent) => {
       if (!drivingRef.current) return;
       e.preventDefault();
+      if (kind === 'mousePressed') surfaceRef.current?.focus({ preventScroll: true });
       buttonsRef.current = kind === 'mousePressed' ? 1 : 0;
       const { x, y } = toViewport(e.clientX, e.clientY);
       if (
@@ -414,6 +518,8 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
           button: 'left',
           buttons: buttonsRef.current,
           clickCount: Math.min(e.detail || 1, 3),
+          modifiers:
+            (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0),
         })
       ) {
         // En respaldo, el par pressed/released se colapsa en un click al soltar.
@@ -439,16 +545,48 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
         y,
         button: buttonsRef.current ? 'left' : 'none',
         buttons: buttonsRef.current,
+        modifiers:
+          (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0),
       });
     },
     [toViewport, sendWs],
   );
 
+  useEffect(() => {
+    const releaseOutside = (event: MouseEvent) => {
+      if (!buttonsRef.current) return;
+      buttonsRef.current = 0;
+      const { x, y } = toViewport(event.clientX, event.clientY);
+      sendWs({
+        type: 'mouse',
+        kind: 'mouseReleased',
+        x,
+        y,
+        button: 'left',
+        buttons: 0,
+        clickCount: 1,
+      });
+    };
+    window.addEventListener('mouseup', releaseOutside);
+    return () => window.removeEventListener('mouseup', releaseOutside);
+  }, [sendWs, toViewport]);
+
   const onKey = useCallback(
     (kind: 'keyDown' | 'keyUp', e: React.KeyboardEvent) => {
       if (!drivingRef.current) return;
+      const shortcut = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (shortcut && ['a', 'c', 'v'].includes(key)) {
+        if (key === 'v' && !preferRemoteClipboard.current) return; // native paste supplies local text via onPaste
+        e.preventDefault();
+        if (kind === 'keyDown' && !e.repeat)
+          clipboard(key === 'a' ? 'select_all' : key === 'c' ? 'copy' : 'paste');
+        return;
+      }
       e.preventDefault();
-      const printable = e.key.length === 1;
+      const printable = e.key.length === 1 && !shortcut && !e.altKey;
+      const modifiers =
+        (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
       if (
         !sendWs({
           type: 'key',
@@ -459,15 +597,33 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
           // Deprecado y perfecto para esto: es el código que CDP necesita para
           // que Enter y Backspace existan del otro lado.
           windowsVirtualKeyCode: e.keyCode,
+          modifiers,
         }) &&
         kind === 'keyDown'
       ) {
         if (printable) postInput({ kind: 'type', text: e.key });
-        else if (['Enter', 'Backspace', 'Tab', 'Escape'].includes(e.key))
-          postInput({ kind: 'key', text: e.key });
+        else if (
+          [
+            'Enter',
+            'Backspace',
+            'Delete',
+            'Tab',
+            'Escape',
+            'ArrowLeft',
+            'ArrowRight',
+            'ArrowUp',
+            'ArrowDown',
+            'Home',
+            'End',
+          ].includes(e.key)
+        )
+          postInput({
+            kind: 'key',
+            text: `${e.shiftKey ? 'Shift+' : ''}${e.ctrlKey ? 'Control+' : ''}${e.key}`,
+          });
       }
     },
-    [sendWs, postInput],
+    [sendWs, postInput, clipboard],
   );
 
   const onWheel = useCallback(
@@ -490,10 +646,12 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
       if (!drivingRef.current) return;
       e.preventDefault();
       const text = e.clipboardData.getData('text');
-      if (text && !sendWs({ type: 'text', text }))
-        postInput({ kind: 'type', text: text.slice(0, 200) });
+      if (text) {
+        preferRemoteClipboard.current = false;
+        clipboard('paste', text);
+      }
     },
-    [sendWs, postInput],
+    [clipboard],
   );
 
   // Atrás y recargar: los dos botones de navegador que una persona espera.
@@ -511,6 +669,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
   // -------------------------------------------------------------------------
   const setDriver = useCallback(
     async (op: 'take' | 'release') => {
+      if (teaching && op === 'release') return;
       setBusy(true);
       try {
         const res = await fetch(`/api/browser/live/${encodeURIComponent(sessionId)}`, {
@@ -531,7 +690,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
         setBusy(false);
       }
     },
-    [sessionId, onSay],
+    [sessionId, onSay, teaching],
   );
 
   const submitSecret = useCallback(async () => {
@@ -696,8 +855,10 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
   const header = (
     <div className="flex items-center gap-2 text-xs text-ink-muted">
       <MonitorSmartphone className="h-4 w-4 shrink-0" />
-      <span className="truncate font-medium text-ink">{control?.title || 'Pestaña de Cortex'}</span>
-      {host ? <span className="truncate">· {host}</span> : null}
+      <span className="min-w-0 flex-1 truncate font-medium text-ink">
+        {control?.title || 'Pestaña de Cortex'}
+      </span>
+      {host ? <span className="hidden truncate sm:inline">· {host}</span> : null}
       <span className="ml-auto flex shrink-0 items-center gap-1">
         {gone ? null : live ? (
           <span className="flex items-center gap-1 text-emerald">
@@ -834,19 +995,21 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
 
       {/* El volante. */}
       {!gone ? (
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           {driving ? (
             <>
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || teaching}
                 onClick={() => void setDriver('release')}
                 className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-white disabled:opacity-50"
               >
                 <X className="h-3.5 w-3.5" /> Devolver el control
               </button>
               <span className="text-xs text-amber">
-                Estás conduciendo. Nada de esto le llega a Cortex.
+                {teaching
+                  ? 'Enseñando: Cortex registra los pasos, sin guardar lo que escribes.'
+                  : 'Estás conduciendo. La enseñanza está apagada.'}
               </span>
             </>
           ) : (
@@ -864,13 +1027,106 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
     </>
   );
 
+  const browserTools = (
+    <>
+      <div className="my-2 flex flex-wrap gap-2 text-xs">
+        <button
+          type="button"
+          disabled={!driving || gone}
+          onClick={() => clipboard('select_all')}
+          className="rounded border border-border px-2 py-1 disabled:opacity-40"
+        >
+          Seleccionar todo
+        </button>
+        <button
+          type="button"
+          disabled={!driving || gone}
+          onClick={() => clipboard('copy')}
+          className="rounded border border-border px-2 py-1 disabled:opacity-40"
+        >
+          Copiar selección
+        </button>
+        <button
+          type="button"
+          disabled={!driving || gone || copiedText === null}
+          onClick={() => clipboard('paste')}
+          className="rounded border border-border px-2 py-1 disabled:opacity-40"
+        >
+          Pegar copiado
+        </button>
+        <button
+          type="button"
+          disabled={gone || contentBusy}
+          onClick={() => void readContent()}
+          className="rounded border border-border px-2 py-1 disabled:opacity-40"
+        >
+          {contentBusy ? 'Leyendo…' : 'Leer página'}
+        </button>
+        {copiedText !== null && (
+          <button
+            type="button"
+            className="rounded border border-border px-2 py-1"
+            onClick={() => {
+              void navigator.clipboard
+                .writeText(copiedText)
+                .then(() => setBrowserNotice('Copiado al portapapeles de tu equipo.'))
+                .catch(() =>
+                  setBrowserNotice(
+                    'Tu navegador no permitió copiar al equipo. Puedes seguir pegando dentro de Cortex.',
+                  ),
+                );
+            }}
+          >
+            Copiar a mi equipo
+          </button>
+        )}
+      </div>
+      {browserNotice && (
+        <p role="alert" className="my-2 text-xs text-ink-muted">
+          {browserNotice}
+        </p>
+      )}
+      {content && (
+        <section className="my-2 rounded border border-border p-3">
+          <div className="flex items-center justify-between text-xs">
+            <span>Texto de la página · {content.totalCharacters} caracteres</span>
+            <button type="button" onClick={() => setContent(null)}>
+              Cerrar lectura
+            </button>
+          </div>
+          <textarea
+            readOnly
+            aria-label="Contenido de la página"
+            className="mt-2 h-48 w-full resize-y rounded bg-surface-2 p-2 text-xs"
+            value={content.text}
+          />
+          <p className="mt-1 text-xs text-ink-muted">{content.limitation}</p>
+          {(content.omittedFrames > 0 || content.sources.some((s) => !s.readable)) && (
+            <p className="text-xs text-amber">Hay marcos que no se pudieron leer.</p>
+          )}
+          {content.nextOffset !== null && (
+            <button
+              type="button"
+              disabled={contentBusy}
+              className="mt-2 text-xs text-primary"
+              onClick={() => void readContent(content.nextOffset ?? 0)}
+            >
+              Leer siguiente parte
+            </button>
+          )}
+        </section>
+      )}
+    </>
+  );
+
   const panel = (
     <div
-      className={`pointer-events-auto rounded-xl border bg-surface p-3 shadow-lg ${
+      className={`pointer-events-auto min-w-0 rounded-xl border bg-surface p-3 shadow-lg ${
         needsPerson ? 'border-amber' : 'border-border'
       }`}
     >
       {header}
+      {browserTools}
       {body}
     </div>
   );
@@ -902,7 +1158,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
               driving ? (
                 <button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || teaching}
                   onClick={() => void setDriver('release')}
                   className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-white disabled:opacity-50"
                 >
@@ -929,6 +1185,7 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
             </button>
           </span>
         </div>
+        <div className="max-h-[40vh] shrink-0 overflow-auto px-4">{browserTools}</div>
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3">
           {renderScreen(true)}
         </div>
@@ -941,7 +1198,8 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
             {driving ? (
               <p className="text-xs text-amber">
                 Estás conduciendo: tu mouse (con sus movimientos), tu teclado y tu scroll van a la
-                página. Nada de esto le llega a Cortex.
+                página.{' '}
+                {teaching ? 'Cortex está aprendiendo los pasos.' : 'La enseñanza está apagada.'}
               </p>
             ) : null}
             {control?.help && !driving ? (
@@ -959,6 +1217,8 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
     );
   }
 
+  if (inline) return panel;
+
   // El dock: fijo abajo a la derecha, fuera del río del chat. Dos sesiones se
   // apilan hacia arriba en vez de taparse.
   return createPortal(
@@ -970,4 +1230,11 @@ function LiveDock({ tab, onSay }: { tab: TabRef; onSay?: (text: string) => void 
     </div>,
     document.body,
   );
+}
+
+export function BrowserViewport({
+  sessionId,
+  teaching = false,
+}: { sessionId: string; teaching?: boolean }) {
+  return <LiveDock tab={{ sessionId }} inline teaching={teaching} />;
 }

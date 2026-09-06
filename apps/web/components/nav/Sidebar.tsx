@@ -1,944 +1,267 @@
 'use client';
 
 import { usePanel } from '@/components/panel/PanelHost';
-import {
-  ALL_ICON,
-  ALL_LABEL,
-  COMPANY_ICON,
-  FOOTER,
-  type NavItem,
-  WAITING_ICON,
-  WAITING_LABEL,
-  buildRail,
-  waitingHref,
-} from '@/lib/nav-shape';
+import { type NavItem, buildRail } from '@/lib/nav-shape';
 import type { NavCounts } from '@/lib/nav-signals';
-import { orderByUsage, readUsage, recordVisit } from '@/lib/nav-usage';
-import { type PanelId, panelForHref } from '@/lib/panels/shape';
-import { waitingTotal } from '@/lib/waiting-shape';
+import { recordVisit } from '@/lib/nav-usage';
+import { panelForHref } from '@/lib/panels/shape';
 import type { ActiveOrganization, Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
+import { ArrowUpRight, Layers3, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCommandMenu } from './CommandMenuContext';
 import { useMobileSidebar } from './MobileSidebarContext';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
-// CORTO ARRIBA, COMPLETO DEBAJO.
-//
-// Este archivo DIBUJA el rail; la lista de destinos y el porqué de cada grupo
-// están en `lib/nav-shape.ts`, que es donde se puede probar sin un navegador.
-//
-// La forma es: Chat, Te espera y Brain Knowledge fijos, «Todo» con el resto
-// dentro y «La empresa» aparte y plegada. El chat es el producto; el archivo
-// es la otra superficie de primera. Nada se pierde: lo que no está arriba
-// se alcanza desde «Todo» o desde ⌘K.
-//
-// LO QUE SE MANTIENE INTACTO, porque cada una costó una decisión: el rail se
-// estrecha dentro de `/chat` y se asoma al pasar por encima sin mover la
-// conversación; las filas con panel lo abren al lado en vez de navegar; los
-// contadores; el cajón de móvil, con cada enlace cerrándolo; `adminOnly`; y el
-// foco visible.
-
-const COLLAPSE_KEY = 'sidebar_collapsed';
-
-/**
- * Lo que está desplegado, recordado.
- *
- * Tres claves sueltas y no un objeto, por lo mismo que `sidebar_collapsed` es
- * una cadena: es una preferencia de esta persona en este navegador, no un dato
- * con estructura. Y sobre todo NO van en `nav_usage_v1` — ese objeto lo decae
- * `recordVisit` entero en cada escritura, así que un booleano metido ahí duraría
- * hasta el siguiente clic.
- */
-const OPEN_KEY = {
-  waiting: 'sidebar_waiting_open',
-  all: 'sidebar_all_open',
-  company: 'sidebar_company_open',
-};
-
-const NO_COUNTS: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
-
-/**
- * Un desplegable que se acuerda de cómo lo dejaste.
- *
- * Cerrado en el primer pintado, siempre, y la preferencia llega después de
- * hidratar: `localStorage` no existe en el servidor, así que leerlo durante el
- * render haría que el primer pintado del cliente no coincidiera con el HTML que
- * bajó. Se ve como un rail que da un salto.
- */
-function useRemembered(key: string): [boolean, () => void] {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    setOpen(localStorage.getItem(key) === 'true');
-  }, [key]);
-  const toggle = () =>
-    setOpen((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(key, String(next));
-      } catch {
-        // Modo privado. Se despliega igual; sólo no se recuerda.
-      }
-      return next;
-    });
-  return [open, toggle];
-}
-
-function isActive(pathname: string, href: string): boolean {
-  // Query-bearing entries are deliberately never matched: reading the query
-  // would need useSearchParams, and matching on the path alone would light them
-  // up at the same time as the entry for the bare path.
+const EMPTY: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
+function matches(path: string, href: string) {
   if (href.includes('?')) return false;
-  if (href === '/dashboard') return pathname === '/dashboard';
-  // Integrations owns a child route that has a row of its own (WhatsApp), so
-  // the parent matches exactly instead of by prefix. Prefix matching would light
-  // two rows at once and make "where am I" unanswerable.
-  if (href === '/integrations') return pathname === '/integrations';
-  return pathname === href || pathname.startsWith(`${href}/`);
+  if (href === '/integrations') return path === href;
+  return path === href || path.startsWith(`${href}/`);
 }
-
-/** ¿Está la persona dentro de alguno de estos destinos? */
-function isInside(pathname: string, items: NavItem[]): boolean {
-  return items.some((item) => isActive(pathname, item.href));
-}
-
-/**
- * La forma de una fila, en un solo sitio.
- *
- * La comparten el enlace, la fila de buscar y los desplegables. Tres controles
- * distintos que tienen que verse como la misma columna: en cuanto las clases se
- * copian, una de ellas se queda con el `h-[30px]` viejo y el ritmo se rompe por
- * un píxel que nadie sabe de dónde sale.
- */
-function rowClass(collapsed: boolean, active: boolean): string {
-  return clsx(
-    'group relative flex h-[30px] w-full items-center rounded-sm text-sm transition-colors duration-150',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-    'motion-reduce:transition-none',
-    collapsed ? 'justify-center' : 'gap-2.5 px-2.5',
-    active
-      ? 'bg-primary/25 font-semibold text-white'
-      : 'font-medium text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
-  );
-}
-
-/**
- * One destination, one line.
- *
- * THE ACTIVE ROW IS NOT A BLOCK OF COLOUR. It used to be saturated indigo with a
- * shadow, in a pill, which is the single most recognisable signature of an
- * untouched Tailwind theme — and it shouted, in a rail whose whole job is to
- * recede until asked. It is now the softest tint in the palette with the ink to
- * match, at the small radius the design system uses for everything that is not a
- * button. Unmistakable at a glance, silent otherwise.
- *
- * Rows change colour on hover and never move: a column of capsules flinching
- * under the cursor is noise.
- */
-function NavRow({
-  item,
-  badge,
+function Navigation({
+  role,
+  counts,
   collapsed,
-  pathname,
   onNavigate,
-  /**
-   * El panel que esta fila abre en vez de navegar, si lo hay. Lo decide
-   * `SidebarNav`, que es quien sabe dónde está la persona.
-   */
-  panel: wanted,
-  /**
-   * Se tiñe como activa aunque la ruta no sea la suya. Lo usa «Te espera»: con
-   * las cuatro colas plegadas y la persona dentro de una de ellas, la fila padre
-   * es la única que puede contestar «estás aquí». No toca `aria-current`, que
-   * seguiría siendo mentira — la página no es la que este enlace abre.
-   */
-  groupActive = false,
-  className,
-}: {
-  item: NavItem;
-  badge: number;
-  collapsed: boolean;
-  pathname: string;
-  onNavigate?: () => void;
-  panel?: PanelId | null;
-  groupActive?: boolean;
-  className?: string;
-}) {
-  const Icon = item.icon;
-  const { panelId: openPanel, open, available } = usePanel();
-  // Sin proveedor encima no hay panel que abrir, y entonces la fila navega como
-  // siempre. Comerse el clic con un `open` que no hace nada sería dejarla
-  // muerta, que es peor que no tener panel.
-  const panel = available ? (wanted ?? null) : null;
-  // Un panel abierto también es «estás aquí». Se tiñe igual que una pantalla
-  // activa, pero se anuncia distinto: `aria-current="page"` sería falso — la
-  // página sigue siendo el chat.
-  const showing = panel != null && openPanel === panel;
-  const onPage = isActive(pathname, item.href);
-  const active = onPage || showing || groupActive;
-
-  return (
-    <Link
-      href={item.href}
-      /**
-       * SIGUE SIENDO UN ENLACE, Y ESO NO ES UN DETALLE.
-       *
-       * Un `<button>` habría sido más corto y habría roto la forma en que la
-       * gente abre cosas: ⌘-clic, clic central, «abrir en una pestaña nueva»
-       * del menú contextual. Todo eso necesita un `href` de verdad. Así que la
-       * fila conserva el suyo y lo único que hace este manejador es
-       * interceptar el clic SIMPLE cuando hay panel: cualquier modificador cae
-       * por el `return` y el navegador hace lo de siempre. El clic central ni
-       * siquiera llega aquí — dispara `auxclick`, no `click`.
-       */
-      onClick={(event) => {
-        if (
-          panel &&
-          event.button === 0 &&
-          !event.metaKey &&
-          !event.ctrlKey &&
-          !event.shiftKey &&
-          !event.altKey
-        ) {
-          event.preventDefault();
-          open(panel);
-        }
-        onNavigate?.();
-      }}
-      aria-current={onPage ? 'page' : undefined}
-      aria-expanded={panel ? showing : undefined}
-      title={collapsed ? item.label : undefined}
-      className={clsx(rowClass(collapsed, active), className)}
-    >
-      <span className="relative shrink-0">
-        <Icon
-          strokeWidth={1.75}
-          className={clsx('h-4 w-4', active ? 'text-white' : 'text-rail-ink-faint')}
-        />
-        {collapsed && badge > 0 && (
-          <span
-            aria-hidden="true"
-            className={clsx(
-              'absolute -right-1.5 -top-1.5 min-w-[15px] rounded-full px-1 text-center text-micro font-bold leading-[15px] tabular-nums',
-              active ? 'bg-primary text-white' : 'bg-rail-2 text-rail-ink',
-            )}
-          >
-            {badge > 9 ? '9+' : badge}
-          </span>
+}: { role: Role; counts: NavCounts; collapsed: boolean; onNavigate?: () => void }) {
+  const path = usePathname();
+  const panel = usePanel();
+  const commands = useCommandMenu();
+  const rail = buildRail([], role === 'org_admin');
+  const groups = [
+    { id: 'daily', label: 'Tu espacio de trabajo', items: rail.pinned },
+    { id: 'pending', label: 'Decisiones y seguimiento', items: rail.waiting },
+    ...rail.rest,
+    rail.company,
+  ];
+  function row(item: NavItem) {
+    const active = matches(path, item.href);
+    const Icon = item.icon;
+    const badge = item.signal ? counts[item.signal] : 0;
+    const wanted = path.startsWith('/chat') ? panelForHref(item.href) : null;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        title={collapsed ? item.label : undefined}
+        aria-current={active ? 'page' : undefined}
+        aria-label={collapsed ? `${item.label}${badge ? `, ${badge} pendientes` : ''}` : undefined}
+        onClick={(e) => {
+          recordVisit(item.href);
+          if (
+            wanted &&
+            panel.available &&
+            e.button === 0 &&
+            !e.metaKey &&
+            !e.ctrlKey &&
+            !e.shiftKey &&
+            !e.altKey
+          ) {
+            e.preventDefault();
+            panel.open(wanted);
+          }
+          onNavigate?.();
+        }}
+        className={clsx(
+          'group flex min-h-9 items-center rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+          collapsed ? 'justify-center px-1' : 'gap-2.5 px-2.5',
+          active
+            ? 'bg-primary-soft font-semibold text-primary-ink'
+            : 'font-medium text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
         )}
-      </span>
-      {!collapsed && (
-        <>
-          <span className="min-w-0 flex-1 truncate">{item.label}</span>
-          {badge > 0 && (
-            <>
-              {/* No pill, no colour. A number is already the loudest thing that
-                  can appear on a quiet row; putting an amber capsule around it
-                  was the rail shouting about work it cannot describe. */}
-              <span
-                aria-hidden="true"
-                className={clsx(
-                  'shrink-0 text-micro tabular-nums',
-                  active ? 'text-white/80' : 'text-rail-ink-muted',
-                )}
-              >
+      >
+        <Icon className="h-4 w-4 shrink-0" strokeWidth={1.7} />
+        {!collapsed && (
+          <>
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            {badge > 0 && (
+              <span className="rounded-md bg-surface px-1.5 text-xs tabular-nums text-ink-muted">
                 {badge > 99 ? '99+' : badge}
               </span>
-              <span className="sr-only">, {badge} pendientes</span>
-            </>
-          )}
-        </>
-      )}
-      {collapsed && badge > 0 && <span className="sr-only">{badge} pendientes</span>}
-    </Link>
-  );
-}
-
-/** El triángulo que abre un grupo. Gira; no rebota ni desaparece. */
-function Chevron({
-  open,
-  label,
-  controls,
-  onToggle,
-}: {
-  open: boolean;
-  label: string;
-  controls: string;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      aria-controls={controls}
-      aria-label={label}
-      className="shrink-0 rounded-full p-1 text-rail-ink-faint transition-colors duration-150 hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
-    >
-      <ChevronRight
-        strokeWidth={1.75}
-        className={clsx(
-          'h-3.5 w-3.5 transition-transform duration-150 motion-reduce:transition-none',
-          open && 'rotate-90',
-        )}
-      />
-    </button>
-  );
-}
-
-/**
- * LA FILA QUE SUSTITUYE A CUATRO.
- *
- * `/approvals`, `/commitments`, `/actions` y `/errands` eran cuatro filas
- * haciendo la misma pregunta —«¿qué está parado esperándome?»— en un rail donde
- * la respuesta corta ya existía: la insignia es el TOTAL que
- * `waiting-shape.ts` ya suma para el aviso del chat, y el enlace lleva a la
- * primera cola que tenga algo dentro, en el orden de reloj que ese archivo
- * defiende.
- *
- * SON DOS CONTROLES Y ESO ES A PROPÓSITO. El enlace contesta «llévame a lo que
- * hay»; el triángulo contesta «¿pero qué hay?», y despliega las cuatro con su
- * cuenta cada una. Meter el triángulo dentro del enlace habría sido HTML
- * inválido (un botón dentro de un `<a>`) y, peor, habría hecho que la mitad
- * derecha de la fila hiciera algo distinto de la izquierda sin que se viera.
- *
- * Plegada, se dibuja como activa si estás dentro de cualquiera de las cuatro.
- * Nada se esconde: el rail sigue pudiendo decir dónde estás.
- */
-function WaitingRow({
-  counts,
-  collapsed,
-  pathname,
-  items,
-  open,
-  onToggle,
-  controls,
-  onNavigate,
-  panel,
-}: {
-  counts: NavCounts;
-  collapsed: boolean;
-  pathname: string;
-  items: NavItem[];
-  open: boolean;
-  onToggle: () => void;
-  controls: string;
-  onNavigate?: (href: string) => void;
-  panel: (href: string) => PanelId | null;
-}) {
-  const href = waitingHref(counts);
-  const item = { href, label: WAITING_LABEL, icon: WAITING_ICON };
-  // Plegada y estando dentro de una cola, la fila padre es quien dice «aquí».
-  const inside = !open && isInside(pathname, items);
-
-  return (
-    <div className={clsx('flex items-center', collapsed ? 'justify-center' : 'gap-0.5')}>
-      <NavRow
-        item={item}
-        badge={waitingTotal(counts)}
-        collapsed={collapsed}
-        pathname={pathname}
-        onNavigate={() => onNavigate?.(href)}
-        panel={panel(href)}
-        groupActive={inside}
-        className="min-w-0 flex-1"
-      />
-      {/* Contraído no hay 72px para dos controles, y no hace falta: lo único que
-          hay que ver de reojo ahí es el total. El triángulo vuelve en cuanto el
-          rail se ensancha, que en el chat es al acercar el ratón. */}
-      {!collapsed && (
-        <Chevron
-          open={open}
-          label={open ? 'Ocultar las cuatro colas' : 'Ver las cuatro colas'}
-          controls={controls}
-          onToggle={onToggle}
-        />
-      )}
-    </div>
-  );
-}
-
-/**
- * «Todo» y «La empresa»: una fila que no va a ninguna parte y abre aquí mismo.
- *
- * NO ES UN ENLACE Y NO PUEDE SERLO. Es la diferencia con la fila «Buscar» de
- * arriba, y es la que justifica que existan las dos: la paleta TE SACA de donde
- * estás a una pantalla que nombras escribiendo; esto ABRE DONDE ESTÁS lo que no
- * sabrías nombrar. Recordar contra reconocer. Por eso la paleta se queda con los
- * tres destinos que ni siquiera están en el rail y con los nombres viejos que la
- * gente teclea, y esto se queda con la lista para señalar con el dedo.
- */
-function DisclosureRow({
-  icon: Icon,
-  label,
-  count,
-  collapsed,
-  open,
-  active,
-  onToggle,
-  controls,
-}: {
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  label: string;
-  count?: number;
-  collapsed: boolean;
-  open: boolean;
-  active: boolean;
-  onToggle: () => void;
-  controls: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      aria-controls={controls}
-      title={collapsed ? label : undefined}
-      className={rowClass(collapsed, active)}
-    >
-      <Icon
-        strokeWidth={1.75}
-        className={clsx('h-4 w-4 shrink-0', active ? 'text-white' : 'text-rail-ink-faint')}
-      />
-      {!collapsed && (
-        <>
-          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-          {/*
-            LA CIFRA SE FUE, Y EL CHEVRON BASTA.
-
-            Estuvo aquí un momento, apagada un paso para distinguirla. No es
-            suficiente: en esta columna, en TODO el rail, un número significa
-            «esto te está esperando» — tres aprobaciones, dos vencimientos —, y
-            aquí significaba «pantallas ahí dentro». Dos significados en la
-            misma columna es el lector el que tiene que decidir cuál aplica, y
-            lo va a decidir mal el día que tenga prisa.
-
-            Que los contadores de este producto quieran decir siempre lo mismo
-            vale más que anunciar cuántas cosas hay detrás de un desplegable,
-            que además se ve al abrirlo. El chevron ya dice que hay algo dentro.
-            Y a quien navega escuchando se lo cuenta `aria-expanded`, que es lo
-            que de verdad contesta su pregunta: si está abierto o cerrado.
-          */}
-          <ChevronRight
-            aria-hidden="true"
-            strokeWidth={1.75}
-            className={clsx(
-              'h-3.5 w-3.5 shrink-0 text-rail-ink-faint transition-transform duration-150 motion-reduce:transition-none',
-              open && 'rotate-90',
             )}
-          />
-        </>
-      )}
-    </button>
-  );
-}
-
-/**
- * The door to what the rail does not list.
- *
- * Shaped like every other row rather than like a search field. It was a fake
- * input with a border and its own height, which broke the rhythm of the column
- * to advertise a control that goes nowhere on its own. It keeps the shortcut
- * visible in the slot where the other rows keep their count.
- */
-function SearchRow({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
-  const { setOpen } = useCommandMenu();
-  // On mobile this sits inside the drawer and the palette opens over it. Without
-  // closing the drawer the menu survives the navigation, because the layout does
-  // not remount — the same reason every link here is wired to onNavigate.
-  const open = () => {
-    setOpen(true);
-    onNavigate?.();
-  };
-  // Rendered as ⌘ and corrected after mount rather than guessed on the server:
-  // the platform is not knowable while rendering, and a shortcut hint that names
-  // the wrong key is worse than none. Post-mount, so no hydration mismatch.
-  const [modKey, setModKey] = useState('⌘');
-  useEffect(() => {
-    if (!/Mac|iPhone|iPad|iPod/.test(navigator.userAgent)) setModKey('Ctrl ');
-  }, []);
-
-  return (
-    <button
-      type="button"
-      onClick={open}
-      title={collapsed ? 'Buscar' : undefined}
-      aria-label="Buscar o ir a una pantalla"
-      aria-keyshortcuts="Meta+K Control+K"
-      className={rowClass(collapsed, false)}
-    >
-      <Search strokeWidth={1.75} className="h-4 w-4 shrink-0 text-rail-ink-faint" />
-      {!collapsed && (
-        <>
-          <span className="flex-1 text-left">Buscar</span>
-          {/* No aria-hidden needed: the button carries an explicit aria-label so
-              nothing inside is announced, and aria-keyshortcuts is the honest
-              way to tell a screen reader about ⌘K. */}
-          <span className="shrink-0 font-mono text-micro text-rail-ink-faint">{modKey}K</span>
-        </>
-      )}
-    </button>
-  );
-}
-
-/** The name of a block of destinations. Never a button — the group above folds. */
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="px-2.5 pb-1 pt-3 text-micro font-semibold uppercase tracking-field text-rail-ink-faint">
-      {children}
-    </div>
-  );
-}
-
-function Brand({ collapsed }: { collapsed: boolean }) {
-  return (
-    <div className={clsx('flex items-center gap-2', collapsed && 'justify-center')}>
-      {/* App icon (Next metadata route) — the same mark as the browser tab. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/icon.png" alt="Cortex" className="h-6 w-6 shrink-0" />
-      {/* One line. The maker's line moved to the foot of the rail: it is a
-          signature, and a signature does not belong at the top of a column
-          whose first job is to get somebody to their work. */}
-      {!collapsed && <span className="text-base font-semibold text-rail-ink">Cortex</span>}
-    </div>
-  );
-}
-
-function SidebarNav({
-  role,
-  collapsed,
-  counts,
-  onNavigate,
-}: {
-  role?: Role;
-  collapsed: boolean;
-  counts: NavCounts;
-  onNavigate?: () => void;
-}) {
-  const pathname = usePathname();
-  const admin = role === 'org_admin';
-
-  /**
-   * Read once after mount, never during render.
-   *
-   * `localStorage` does not exist on the server, so reading it while rendering
-   * would either throw or make the first client paint disagree with the HTML
-   * that came down. Both show up as a rail that jumps. The first paint is the
-   * designed order inside «Todo»; the personalised order arrives a tick later.
-   */
-  const [usage, setUsage] = useState<Record<string, number>>({});
-  /**
-   * `pathname` es el DISPARADOR, no un valor que este efecto lea, y por eso la
-   * regla lo ve de más. Sin él, el uso se leería una sola vez al montar y el
-   * orden dentro de «Todo» no se reordenaría nunca dentro de una sesión.
-   */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: es el disparador, no una lectura.
-  useEffect(() => {
-    setUsage(readUsage());
-  }, [pathname]);
-
-  const rail = buildRail([], admin);
-
-  const ids = useId();
-  const [waitingOpen, toggleWaiting] = useRemembered(OPEN_KEY.waiting);
-  const [allOpen, toggleAll] = useRemembered(OPEN_KEY.all);
-  const [companyOpen, toggleCompany] = useRemembered(OPEN_KEY.company);
-
-  const visit = (href: string) => {
-    recordVisit(href);
-    onNavigate?.();
-  };
-
-  /**
-   * LA PIEZA QUE HACE QUE EL RAIL DEJE DE SER UNA SALIDA.
-   *
-   * Estando en el chat, una fila con panel lo abre AL LADO en vez de navegar.
-   * Es la diferencia entre preguntar «¿cuánto nos deben?» y perder la
-   * conversación para verlo, o verlo con la conversación delante.
-   *
-   * Sólo en `/chat`, y esa condición es la mitad del diseño: en cualquier otra
-   * pantalla el panel no tendría nada al lado que proteger, y una fila que a
-   * veces navega y a veces no, sin una razón visible, es una fila en la que no
-   * se puede confiar. Aquí la razón es visible: hay una conversación abierta.
-   *
-   * Fuera de la lista, nada cambia. Ningún destino desaparece: los cinco que
-   * tienen panel siguen teniendo su pantalla completa, con su enlace «Ver todo»
-   * en la cabecera del panel y su ⌘-clic en esta misma fila.
-   */
-  const inChat = pathname.startsWith('/chat');
-  const panel = (href: string) => (inChat ? panelForHref(href) : null);
-
-  const row = (item: NavItem) => (
-    <NavRow
-      key={item.href}
-      item={item}
-      badge={item.signal ? counts[item.signal] : 0}
-      collapsed={collapsed}
-      pathname={pathname}
-      onNavigate={() => visit(item.href)}
-      panel={panel(item.href)}
-    />
-  );
-
-  // Contraído, un rail de 72px no tiene sitio para un encabezado, así que los
-  // grupos se separan con la hairline que habría ido debajo de uno.
-  const nested = collapsed ? '' : 'pl-3';
-
-  return (
-    <nav aria-label="Main" className="scroll-slim h-full overflow-y-auto px-3 pb-3">
-      <SearchRow collapsed={collapsed} onNavigate={onNavigate} />
-
-      <div className="flex flex-col gap-px pt-1">{rail.pinned.map(row)}</div>
-
-      <div className="flex flex-col gap-px pt-3">
-        <WaitingRow
-          counts={counts}
-          collapsed={collapsed}
-          pathname={pathname}
-          items={rail.waiting}
-          open={waitingOpen}
-          onToggle={toggleWaiting}
-          controls={`${ids}-waiting`}
-          onNavigate={visit}
-          panel={panel}
-        />
-        <div id={`${ids}-waiting`} className={clsx('flex flex-col gap-px', nested)}>
-          {waitingOpen && rail.waiting.map(row)}
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-px pt-3">
-        <DisclosureRow
-          icon={ALL_ICON}
-          label={ALL_LABEL}
-          count={rail.restCount}
-          collapsed={collapsed}
-          open={allOpen}
-          active={!allOpen && rail.rest.some((s) => isInside(pathname, s.items))}
-          onToggle={toggleAll}
-          controls={`${ids}-all`}
-        />
-        <div id={`${ids}-all`} className={nested}>
-          {allOpen &&
-            rail.rest.map((section, i) => (
-              <div key={section.id}>
-                {collapsed ? (
-                  i > 0 && <div className="mx-2 my-2 border-t border-rail-border" />
-                ) : (
-                  <SectionLabel>{section.label}</SectionLabel>
-                )}
-                <div className={clsx('flex flex-col', collapsed ? 'gap-0.5' : 'gap-px')}>
-                  {/* Dentro de «Todo» el orden sigue subiendo lo que se usa, que
-                      es lo que este archivo ya hacía antes de que existiera el
-                      bloque de arriba. Aquí no hay nada que aprender con las
-                      manos: es una lista que se abre a propósito. */}
-                  {orderByUsage(section.items, usage).map(row)}
-                </div>
-              </div>
-            ))}
-        </div>
-
-        <DisclosureRow
-          icon={COMPANY_ICON}
-          label={rail.company.label}
-          collapsed={collapsed}
-          open={companyOpen}
-          active={!companyOpen && isInside(pathname, rail.company.items)}
-          onToggle={toggleCompany}
-          controls={`${ids}-company`}
-        />
-        <div id={`${ids}-company`} className={clsx('flex flex-col gap-px', nested)}>
-          {companyOpen && rail.company.items.map(row)}
-        </div>
-      </div>
-    </nav>
-  );
-}
-
-/**
- * The foot of the rail, OUTSIDE the scrolling area.
- *
- * The previous version kept these rows inside the scrolling <nav> with
- * `mt-auto` — fine while the list fitted, and the moment it did not, Ajustes
- * would have slid to the bottom of the scroll and vanished. The rail is short
- * now, but «Todo» desplegado la vuelve a alargar, así que sigue anclado.
- */
-function SidebarFooter({
-  collapsed,
-  organization,
-  onWorkspaceMenu,
-  onNavigate,
-}: {
-  collapsed: boolean;
-  /**
-   * El espacio de trabajo activo, para el selector. Opcional porque llega
-   * desde el layout y no todo el que dibuje un rail tiene por qué tener una
-   * sesión resuelta en la mano; sin él, el pie es el de siempre.
-   */
-  organization?: ActiveOrganization;
-  /** Que el selector tiene el menú abierto. Sólo le importa al rail del chat. */
-  onWorkspaceMenu?: (open: boolean) => void;
-  onNavigate?: () => void;
-}) {
-  const pathname = usePathname();
-  return (
-    <div className="shrink-0 border-t border-rail-border px-3 pb-3 pt-2">
-      {/*
-        EL SELECTOR DE ESPACIO VA AQUÍ, Y SE ELIGIÓ CONTRA DOS ALTERNATIVAS.
-
-        · NO EN `Topbar`, que era el sitio evidente: la barra superior no se
-          monta en `/chat` (ver `AppShell`), y el chat es la pantalla principal
-          del producto. Un selector que no existe en la pantalla donde se pasa
-          el día no es un selector.
-        · NO ARRIBA, junto a la marca: esa cabecera es «Cortex», la identidad
-          del producto, y el nombre del inquilino compitiendo con ella a la
-          misma altura convierte dos cosas distintas en una sola columna de
-          nombres. Además comparte fila con el botón de contraer.
-
-        Aquí, en cambio, está FUERA de la zona que scrollea —igual que Plan y
-        Ajustes, y por la misma razón: «¿en qué empresa estoy?» tiene que poder
-        contestarse sin mover nada— y al lado de las otras dos filas que hablan
-        de este espacio y no del producto. Contraído se queda en la inicial,
-        que es lo mismo que hacen las demás filas con su icono.
-      */}
-      {organization && (
-        <div className="pb-2">
-          <WorkspaceSwitcher
-            active={organization}
-            collapsed={collapsed}
-            onOpenChange={onWorkspaceMenu}
-          />
-        </div>
-      )}
-      <div className="flex flex-col gap-px">
-        {FOOTER.map((item) => (
-          <NavRow
-            key={item.href}
-            item={item}
-            badge={0}
-            collapsed={collapsed}
-            pathname={pathname}
-            onNavigate={onNavigate}
-          />
-        ))}
-      </div>
-      {!collapsed && (
-        <div className="px-2.5 pt-2 text-micro text-rail-ink-faint">
-          Cortex <span className="text-border-strong">·</span> by Vertix
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function Sidebar({
-  role,
-  counts = NO_COUNTS,
-  organization,
-}: {
-  role?: Role;
-  /** What is waiting on this person, counted by the layout that renders us. */
-  counts?: NavCounts;
-  /** El espacio de trabajo activo. Baja hasta el pie, donde está el selector. */
-  organization?: ActiveOrganization;
-}) {
-  const [collapsed, setCollapsed] = useState(false);
-  // The preference arrives after hydration, so the width animation stays off
-  // until then — otherwise a restored collapsed rail slides shut on every load.
-  const [hydrated, setHydrated] = useState(false);
-  const { open, setOpen } = useMobileSidebar();
-  const pathname = usePathname();
-
-  /**
-   * EN EL CHAT EL RAIL SE APARTA, Y SE ASOMA CUANDO LO BUSCAS.
-   *
-   * El chat es la superficie principal de este producto y 260px de menú al
-   * lado de una conversación son 260px que no son la conversación. Así que
-   * dentro de `/chat` el rail se queda en iconos con sus contadores —que es lo
-   * único que hay que poder ver de reojo, «tres cosas te esperan»— y se
-   * despliega al acercar el ratón.
-   *
-   * Y AL DESPLEGARSE FLOTA, NO EMPUJA. Es la diferencia con el rail de
-   * ChatGPT, que al abrirse mueve el hilo entero hacia la derecha: estás
-   * leyendo una respuesta, rozas el borde, y el texto se te va de sitio. Aquí
-   * el ancho reservado no cambia nunca y lo que se expande es una capa por
-   * encima del lienzo. La conversación no se mueve ni un píxel.
-   *
-   * El botón de contraer sigue existiendo fuera del chat, y la preferencia que
-   * guarda se respeta ahí. Dentro del chat no manda: la decisión ya la tomó el
-   * sitio donde estás.
-   *
-   * ===========================================================================
-   * SIEMPRE ESTRECHO AQUÍ, Y LO DECIDIÓ EL DUEÑO
-   * ===========================================================================
-   * Hubo una versión que lo ensanchaba a partir de 1280px, con un argumento que
-   * medía bien y concluía mal: el hilo está topado a 768px, así que ensanchar el
-   * rail no le quita un píxel — sólo lo recentra. Cierto, y da igual.
-   *
-   * Lo que ese razonamiento no pesaba es que el chat es la superficie donde se
-   * está TRABAJANDO, y una columna de nombres al lado compite por la atención
-   * aunque no compita por los píxeles. El dueño lo probó y lo dijo en una línea:
-   * en el chat, cerrado siempre. Es su producto y es la clase de cosa que se
-   * decide mirándola, no midiéndola.
-   *
-   * Así que aquí no hay preferencia que valga ni consulta de medios: iconos con
-   * sus contadores, y los nombres a un roce del ratón.
-   */
-  const inChat = pathname.startsWith('/chat');
-  const [peeking, setPeeking] = useState(false);
-  /**
-   * El menú del espacio de trabajo, abierto.
-   *
-   * Cuenta como «asomado» aunque el ratón ya no esté encima: el desplegable se
-   * dibuja en un portal FUERA del rail, así que ir hacia él dispara el
-   * `onMouseLeave` de la columna y, sin esto, el rail se encogía debajo de su
-   * propio menú —dejando el nombre del inquilino tapado justo mientras alguien
-   * elige a cuál irse—. No toca `peeking`, que sigue siendo sólo lo que dice el
-   * ratón: al cerrarse el menú, la columna se queda abierta si el cursor volvió
-   * a entrar y se cierra si no.
-   */
-  const [workspaceMenu, setWorkspaceMenu] = useState(false);
-  /**
-   * En el chat: ancho si cabe Y SI NO LO CERRASTE. Fuera del chat manda la
-   * preferencia, como siempre.
-   *
-   * El `collapsed` estaba fuera de esta cuenta y el resultado era que dentro de
-   * `/chat` el rail no se podía cerrar: a 1440px salía ancho y el botón no
-   * aparecía siquiera —lo tapaba un `!inChat` más abajo—, así que no había
-   * ningún gesto que lo cerrara. Era el resto de cuando el rail SIEMPRE era
-   * estrecho aquí: entonces no había nada que contraer y esconder el botón era
-   * correcto. En cuanto se volvió ancho, esa guarda pasó a quitar la única
-   * salida.
-   *
-   * El orden importa: la anchura de la pantalla decide el DEFECTO, y una
-   * decisión explícita de la persona gana siempre. Al revés —que el tamaño de
-   * la ventana revoque un clic— es lo que acaba de pasar.
-   */
-  const narrow = inChat || collapsed;
-  const expanded = inChat ? peeking || workspaceMenu : !collapsed;
-
-  useEffect(() => {
-    setCollapsed(localStorage.getItem(COLLAPSE_KEY) === 'true');
-    setHydrated(true);
-  }, []);
-
-  // Salir del chat con el rail asomado lo dejaría abierto sobre otra pantalla.
-  useEffect(() => {
-    if (!inChat) setPeeking(false);
-  }, [inChat]);
-
-  function toggleCollapsed() {
-    setCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem(COLLAPSE_KEY, String(next));
-      return next;
-    });
+            {wanted && <ArrowUpRight className="h-3 w-3 text-rail-ink-faint" />}
+          </>
+        )}
+        {collapsed && badge > 0 && (
+          <span className="ml-0.5 text-micro text-primary">{badge > 9 ? '9+' : badge}</span>
+        )}
+      </Link>
+    );
   }
-
-  const closeDrawer = () => setOpen(false);
-
   return (
     <>
-      {/* Desktop. The rail is the lit plane and the canvas behind the content is
-          the recessed one — the reverse of how this was built, where a rail at
-          `surface-2` sat against a canvas five points away from it and read as a
-          rendering artefact rather than as a different place. */}
+      <nav
+        aria-label="Navegación principal"
+        className="scroll-slim min-h-0 flex-1 overflow-y-auto px-3 pb-4"
+      >
+        <button
+          type="button"
+          onClick={() => {
+            commands.setOpen(true);
+            onNavigate?.();
+          }}
+          aria-label="Buscar en Cortex"
+          className={clsx(
+            'mb-4 flex h-9 w-full items-center rounded-lg border border-rail-border bg-surface text-sm text-rail-ink-muted',
+            collapsed ? 'justify-center' : 'gap-2 px-2.5',
+          )}
+        >
+          <Search className="h-4 w-4" />
+          {!collapsed && (
+            <>
+              <span className="flex-1 text-left">Buscar</span>
+              <kbd className="text-micro">⌘K</kbd>
+            </>
+          )}
+        </button>
+        {groups.map((group) => (
+          <div key={group.id} className="mb-4">
+            {!collapsed ? (
+              <p className="mb-1.5 px-2.5 text-xs font-medium text-rail-ink-faint">{group.label}</p>
+            ) : (
+              <div className="mx-2 mb-2 border-t border-rail-border" />
+            )}
+            <div className="space-y-0.5">{group.items.map(row)}</div>
+          </div>
+        ))}
+      </nav>
+      <div className="shrink-0 space-y-1 border-t border-rail-border px-3 py-3">
+        {rail.footer.map(row)}
+      </div>
+    </>
+  );
+}
+export function Sidebar({
+  role,
+  counts = EMPTY,
+  organization,
+}: { role: Role; counts?: NavCounts; organization?: ActiveOrganization }) {
+  const path = usePathname();
+  const inChat = path.startsWith('/chat');
+  const mobile = useMobileSidebar();
+  const [collapsed, setCollapsed] = useState(false);
+  const [peek, setPeek] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem('sidebar_collapsed') === 'true');
+    } catch {}
+  }, []);
+  const compact = inChat || collapsed;
+  const expanded = !compact || peek || workspaceOpen;
+  function toggle() {
+    setCollapsed((v) => {
+      try {
+        localStorage.setItem('sidebar_collapsed', String(!v));
+      } catch {}
+      return !v;
+    });
+  }
+  function contents(small: boolean, onNavigate?: () => void) {
+    return (
+      <>
+        <div
+          className={clsx(
+            'flex h-16 shrink-0 items-center',
+            small ? 'justify-center' : 'justify-between px-5',
+          )}
+        >
+          <Link
+            href="/management"
+            onClick={onNavigate}
+            aria-label="Cortex, abrir Gerencia"
+            className="flex items-center gap-2.5 text-rail-ink"
+          >
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-white">
+              <Layers3 className="h-4 w-4" />
+            </span>
+            {!small && <span className="text-lg font-bold tracking-tight">cortex</span>}
+          </Link>
+          {!small && !inChat && !onNavigate && (
+            <button
+              type="button"
+              aria-label={collapsed ? 'Fijar el menú expandido' : 'Contraer el menú'}
+              onClick={toggle}
+              className="rounded-lg p-1.5 text-rail-ink-faint hover:bg-rail-2"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {organization && (
+          <div
+            className={clsx(
+              'mb-4 shrink-0',
+              small ? 'px-1' : 'mx-3 rounded-lg border border-rail-border bg-surface p-1',
+            )}
+          >
+            <WorkspaceSwitcher
+              active={organization}
+              collapsed={small}
+              onOpenChange={setWorkspaceOpen}
+            />
+          </div>
+        )}
+        <Navigation role={role} counts={counts} collapsed={small} onNavigate={onNavigate} />
+        {small && !inChat && (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label="Expandir el menú"
+            className="mx-auto mb-3 rounded-lg p-2 text-rail-ink-muted hover:bg-rail-2"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        )}
+      </>
+    );
+  }
+  return (
+    <>
       <aside
-        onMouseEnter={inChat ? () => setPeeking(true) : undefined}
-        onMouseLeave={inChat ? () => setPeeking(false) : undefined}
-        // El ancho RESERVADO. En el chat estrecho no cambia nunca: es lo que
-        // hace que asomarse no mueva la conversación. En el chat ancho el rail
-        // reserva sus 260px y ya no se asoma nada, porque ya está abierto.
         className={clsx(
           'relative hidden h-full shrink-0 print:hidden md:flex',
-          hydrated && !inChat && 'transition-[width] duration-200 motion-reduce:transition-none',
-          inChat ? 'w-[56px]' : collapsed ? 'w-[72px]' : 'w-[260px]',
+          compact ? 'w-[64px]' : 'w-[248px]',
         )}
+        onMouseEnter={() => compact && setPeek(true)}
+        onMouseLeave={() => setPeek(false)}
+        onFocusCapture={() => compact && setPeek(true)}
+        onBlurCapture={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setPeek(false);
+        }}
       >
         <div
           className={clsx(
             'flex h-full flex-col border-r border-rail-border bg-rail',
-            // En el chat estrecho, la capa que se expande va POR ENCIMA del
-            // lienzo. En el chat ancho y fuera del chat, el rail ocupa su hueco
-            // y nada flota — no hay nada que flotar, está abierto.
-            inChat
-              ? clsx(
-                  'absolute inset-y-0 left-0 z-40',
-                  hydrated &&
-                    'transition-[width,box-shadow] duration-200 motion-reduce:transition-none',
-                  expanded ? 'w-[260px] shadow-pop' : 'w-[56px]',
-                )
-              : 'w-full',
+            compact ? 'absolute inset-y-0 left-0 z-40' : 'w-full',
+            compact && (expanded ? 'w-[248px] shadow-pop' : 'w-[64px]'),
           )}
         >
-          <div
-            className={clsx(
-              'flex h-14 shrink-0 items-center justify-between px-3',
-              narrow && !expanded && 'justify-center px-0',
-            )}
-          >
-            <Brand collapsed={narrow && !expanded} />
-            {!narrow && (
-              <button
-                type="button"
-                onClick={toggleCollapsed}
-                aria-label="Contraer el menú"
-                className="rounded-full p-1.5 text-rail-ink-faint transition-colors duration-150 hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
-              >
-                <PanelLeftClose strokeWidth={1.75} className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-          {collapsed && !inChat && (
-            <button
-              type="button"
-              onClick={toggleCollapsed}
-              aria-label="Expandir el menú"
-              className="mx-auto mb-1 rounded-full p-1.5 text-rail-ink-faint transition-colors duration-150 hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
-            >
-              <PanelLeftOpen strokeWidth={1.75} className="h-4 w-4" />
-            </button>
-          )}
-          <div className="min-h-0 flex-1">
-            <SidebarNav role={role} collapsed={!expanded} counts={counts} />
-          </div>
-          <SidebarFooter
-            collapsed={!expanded}
-            organization={organization}
-            onWorkspaceMenu={setWorkspaceMenu}
-          />
+          {contents(!expanded)}
         </div>
       </aside>
-
-      {/* Mobile: Radix Dialog drawer, always in the expanded layout. */}
-      <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Root open={mobile.open} onOpenChange={mobile.setOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm print:hidden md:hidden" />
-          <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-rail-border bg-rail shadow-pop outline-none print:hidden md:hidden">
-            <div className="flex h-14 shrink-0 items-center justify-between px-3">
-              <Dialog.Title asChild>
-                <div>
-                  <Brand collapsed={false} />
-                </div>
-              </Dialog.Title>
-              <Dialog.Close
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm md:hidden" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="fixed inset-y-0 left-0 z-50 flex w-[min(300px,88vw)] flex-col bg-rail shadow-pop md:hidden"
+          >
+            <Dialog.Title className="sr-only">Menú de Cortex</Dialog.Title>
+            <Dialog.Close asChild>
+              <button
+                type="button"
                 aria-label="Cerrar el menú"
-                className="rounded-full p-1.5 text-rail-ink-faint transition-colors duration-150 hover:bg-rail-2 hover:text-rail-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 motion-reduce:transition-none"
+                className="absolute right-3 top-4 z-10 rounded-lg p-2 text-rail-ink-muted"
               >
-                <X strokeWidth={1.75} className="h-4 w-4" />
-              </Dialog.Close>
-            </div>
-            <Dialog.Description className="sr-only">Menú de navegación</Dialog.Description>
-            <div className="min-h-0 flex-1">
-              {/* Closing is wired per link rather than delegated from the <nav>,
-                  which is what the disclosure buttons used to break. */}
-              <SidebarNav role={role} collapsed={false} counts={counts} onNavigate={closeDrawer} />
-            </div>
-            <SidebarFooter collapsed={false} organization={organization} onNavigate={closeDrawer} />
+                <X className="h-4 w-4" />
+              </button>
+            </Dialog.Close>
+            {contents(false, () => mobile.setOpen(false))}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

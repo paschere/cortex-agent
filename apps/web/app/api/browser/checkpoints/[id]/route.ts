@@ -1,3 +1,4 @@
+import { getBrowserProfile } from '@cortex/agent-tools/src/browser/profiles';
 import { deliverFlowResult, readDelivery } from '@/lib/browser-delivery';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -68,6 +69,11 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   }
   const flow = await getFlow(db, checkpoint.flowId);
 
+  if (
+    flow?.profileId &&
+    !(await getBrowserProfile(db, flow.profileId, session.id).catch(() => null))
+  )
+    return NextResponse.json({ error: 'Esa pausa no existe.' }, { status: 404 });
   return NextResponse.json({
     id: checkpoint.id,
     flow: flow ? { id: flow.id, name: flow.name, site: flow.host } : null,

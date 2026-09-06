@@ -6,6 +6,7 @@ import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   ActionIntegrityError,
   type ActionRow,
+  assertCollectionActionCurrent,
   assertExecutable,
   getAction,
   recordExecution,
@@ -140,6 +141,17 @@ export async function runApprovedActionRow(
       return { ok: false, reason: 'integrity', message: err.spanish };
     }
     throw err;
+  }
+
+  try {
+    await assertCollectionActionCurrent(db, action);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'No se pudo verificar la vigencia del cobro.';
+    await recordExecution(db, { id: action.id, status: 'blocked', error: message }).catch(
+      () => undefined,
+    );
+    return { ok: false, reason: 'failed', message };
   }
 
   if (!action.agent_id) {

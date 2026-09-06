@@ -391,19 +391,26 @@ export async function GET(req: NextRequest) {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
-  const { data } = await db
+  const { data, error } = await db
     .from('chat_attachments')
     .select(
-      'id, filename, disposition, created_at, kb_document_id, space_id, kb_documents(status, error_message), kb_collections(name)',
+      'id, filename, disposition, created_at, kb_document_id, space_id, kb_documents:kb_documents!chat_attachments_kb_document_id_fkey(status, error_message), kb_collections:kb_collections!chat_attachments_space_id_fkey(name), extracted_text, feed_truncated',
     )
     .eq('conversation_id', conversationId)
+    .eq('created_by', user.id)
+    .gt('purge_at', new Date().toISOString())
     .order('created_at', { ascending: true })
     .limit(30);
+
+  if (error)
+    return NextResponse.json({ error: 'No se pudieron cargar los adjuntos.' }, { status: 500 });
 
   const attachments = (data ?? []).map((row) => {
     const doc = row.kb_documents as { status?: string; error_message?: string | null } | null;
     const space = row.kb_collections as { name?: string } | null;
     return {
+      truncated:
+        row.feed_truncated === true || ((row.extracted_text as string | null)?.length ?? 0) > 12000,
       id: row.id as string,
       filename: row.filename as string,
       disposition: row.disposition as 'memory' | 'turn',

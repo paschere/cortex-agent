@@ -62,6 +62,7 @@ export const cortexAgent: AgentDefinition = {
     'pipeline.*',
     'meetings.*',
     'cortex.*',
+    'management.*',
     'security.*',
     // Personal inbox digest + Google Chat delivery. `inbox.*` reads only the
     // caller's own mailbox and only for people who opted in from Settings.

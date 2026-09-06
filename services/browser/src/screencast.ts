@@ -47,6 +47,7 @@ import { logger } from './logger';
 
 interface FrameMessage {
   type: 'frame';
+  sequence: number;
   /** JPEG en base64. */
   data: string;
   /** Tamaño del viewport real, para que el cliente mapee sus clicks. */
@@ -55,7 +56,7 @@ interface FrameMessage {
 }
 
 type InboundMessage =
-  | { type: 'ack' }
+  | { type: 'ack'; sequence?: number }
   | {
       type: 'mouse';
       kind: 'mousePressed' | 'mouseReleased' | 'mouseMoved';
@@ -87,6 +88,9 @@ export class Screencast {
   /** El plazo del ack pendiente, para no esperar eternamente a un cliente ido. */
   private ackTimer: NodeJS.Timeout | null = null;
   private pendingCdpAck: number | null = null;
+  private sequence = 0;
+  private queuedInputs = 0;
+  private inputChain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly page: Page,
@@ -110,7 +114,29 @@ export class Screencast {
     this.socket = socket;
 
     socket.on('message', (raw) => {
-      void this.onMessage(raw.toString());
+      if (this.socket !== socket || raw.toString().length > 32_000) return;
+      const text = raw.toString();
+      // ACKs must not wait behind a slow navigation; input order must survive it.
+      let isAck = false;
+      try {
+        isAck = JSON.parse(text)?.type === 'ack';
+      } catch {
+        return;
+      }
+      if (isAck) void this.onMessage(text);
+      else {
+        if (this.queuedInputs >= 128) {
+          socket.close(4008, 'input backlog');
+          return;
+        }
+        this.queuedInputs++;
+        this.inputChain = this.inputChain
+          .then(() => (this.socket === socket ? this.onMessage(text) : undefined))
+          .catch(() => undefined)
+          .finally(() => {
+            this.queuedInputs--;
+          });
+      }
     });
     socket.on('close', () => {
       if (this.socket === socket) void this.stop();
@@ -129,9 +155,16 @@ export class Screencast {
       // ve frames más espaciados, pero la pestaña nunca queda congelada
       // esperándolo.
       if (this.ackTimer) clearTimeout(this.ackTimer);
+      if (this.pendingCdpAck !== null) this.ackChromium();
       this.pendingCdpAck = frame.sessionId;
+      this.sequence += 1;
+      if (!this.socket || this.socket.bufferedAmount > 512_000) {
+        this.ackChromium();
+        return;
+      }
       this.send({
         type: 'frame',
+        sequence: this.sequence,
         data: frame.data,
         width: this.viewport.width,
         height: this.viewport.height,
@@ -207,7 +240,7 @@ export class Screencast {
     }
 
     if (message.type === 'ack') {
-      this.ackChromium();
+      if (message.sequence === this.sequence) this.ackChromium();
       return;
     }
 

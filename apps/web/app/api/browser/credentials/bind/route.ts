@@ -1,3 +1,4 @@
+import { getBrowserProfile } from '@cortex/agent-tools/src/browser/profiles';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { getFlow, listCredentials, writeAuditEvent } from '@cortex/agent-tools';
@@ -69,6 +70,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const db = getOrgScopedClient(session.organization.id);
 
   const flow = await getFlow(db, flowId);
+  if (
+    flow?.profileId &&
+    !(await getBrowserProfile(db, flow.profileId, session.id).catch(() => null))
+  )
+    return NextResponse.json({ error: 'Ese trámite no existe.' }, { status: 404 });
   if (!flow) return NextResponse.json({ error: 'Ese trámite no existe.' }, { status: 404 });
 
   // Nombres, sitios y fechas. Nunca un valor. Ver credentials.ts.

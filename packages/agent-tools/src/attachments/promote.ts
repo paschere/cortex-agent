@@ -116,11 +116,17 @@ interface AttachmentRow {
 const ATTACHMENT_COLUMNS =
   'id, disposition, filename, mime, sha256, extracted_text, file_path, promoted_document_id, promoted_space_id';
 
-async function loadAttachment(db: SupabaseClient, id: string): Promise<AttachmentRow> {
+async function loadAttachment(
+  db: SupabaseClient,
+  id: string,
+  userId: string,
+): Promise<AttachmentRow> {
   const { data } = await db
     .from('chat_attachments')
     .select(ATTACHMENT_COLUMNS)
     .eq('id', id)
+    .eq('created_by', userId)
+    .gt('purge_at', new Date().toISOString())
     .maybeSingle();
   // El handle está acotado al espacio de trabajo, así que «no existe» y «es de
   // otra empresa» llegan aquí como lo mismo, que es como tienen que llegar.
@@ -171,7 +177,7 @@ export const attachmentsPromote = registerTool({
   }),
   rateLimit: { perMinute: 6 },
   handler: async (input, ctx) => {
-    const row = await loadAttachment(ctx.db, input.attachmentId);
+    const row = await loadAttachment(ctx.db, input.attachmentId, ctx.userId);
 
     if (row.disposition !== 'turn') {
       // Ya está en el cerebro desde que se subió. No es un error del que haya

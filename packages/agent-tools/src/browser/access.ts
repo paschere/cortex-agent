@@ -1,3 +1,4 @@
+import { getBrowserProfile } from './profiles';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Flow } from './types';
 
@@ -62,8 +63,15 @@ export function isAdmin(actor: Actor): boolean {
 export async function canRunFlow(
   db: SupabaseClient,
   actor: Actor,
-  flow: Pick<Flow, 'id' | 'name' | 'credentialId'>,
+  flow: Pick<Flow, 'id' | 'name' | 'credentialId' | 'profileId'>,
 ): Promise<AccessVerdict> {
+  if (flow.profileId) {
+    try {
+      await getBrowserProfile(db, flow.profileId, actor.id);
+    } catch {
+      return { allowed: false, reason: 'No tienes acceso al perfil de este trámite.' };
+    }
+  }
   if (!flow.credentialId) return { allowed: true };
   if (isAdmin(actor)) return { allowed: true };
 
