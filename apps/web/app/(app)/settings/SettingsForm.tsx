@@ -587,8 +587,8 @@ export function SettingsForm({
         </div>
 
         <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-          Un hilo te avisa una sola vez, y fuera de esas horas nada suena: el correo se guarda igual
-          y lo ves en el resumen. Las horas son las de tu zona ({prefs.timezone}).
+          Un hilo te avisa una sola vez, y fuera de esas horas nada suena: el correo permanece en tu
+          buzón y puede aparecer en el resumen. Las horas son las de tu zona ({prefs.timezone}).
         </p>
       </Panel>
 

@@ -9,6 +9,17 @@ type Policy = {
   replies: boolean;
   learning: boolean;
 };
+const labelNames: Record<string, string> = {
+  INBOX: 'Recibidos',
+  SENT: 'Enviados',
+  IMPORTANT: 'Importantes',
+  DRAFT: 'Borradores',
+  CATEGORY_FORUMS: 'Foros',
+  CATEGORY_UPDATES: 'Notificaciones',
+  CATEGORY_PERSONAL: 'Principal',
+  STARRED: 'Destacados',
+  UNREAD: 'No leídos',
+};
 export function MailPolicyControls() {
   const [policy, setPolicy] = useState<Policy | null>(null);
   const [labels, setLabels] = useState<{ id: string; name: string }[]>([]);
@@ -100,7 +111,17 @@ export function MailPolicyControls() {
             </p>
             <div className="flex max-h-40 flex-wrap gap-3 overflow-y-auto">
               {labels
-                .filter((l) => !['SPAM', 'TRASH'].includes(l.id))
+                .filter(
+                  (l) =>
+                    ![
+                      'SPAM',
+                      'TRASH',
+                      'CATEGORY_PROMOTIONS',
+                      'CATEGORY_SOCIAL',
+                      'CHAT',
+                      'YELLOW_STAR',
+                    ].includes(l.id),
+                )
                 .map((l) => (
                   <label key={l.id} className="flex items-center gap-2 text-sm">
                     <input
@@ -115,7 +136,7 @@ export function MailPolicyControls() {
                         })
                       }
                     />
-                    {l.name}
+                    {labelNames[l.id] ?? l.name}
                   </label>
                 ))}
             </div>
@@ -145,9 +166,10 @@ export function MailPolicyControls() {
               </label>
             ))}
             <p className="text-xs text-ink-muted">
-              Los avisos respetan también tus horarios y límites del resumen. Las propuestas
-              conservan extractos y quedan pendientes hasta que las revises. Ningún aprendizaje se
-              comparte automáticamente.
+              Para recibir avisos, activa también «Avisarme en el momento» en Resumen diario; allí
+              eliges horarios y límites. Los extractos seleccionados se analizan con el proveedor de
+              IA configurado. Las propuestas conservan extractos y quedan pendientes hasta que las
+              revises. Ningún aprendizaje se comparte automáticamente.
             </p>
             <Button disabled={busy}>
               {busy ? 'Guardando…' : 'Guardar preferencias de correo'}

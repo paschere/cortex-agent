@@ -116,7 +116,7 @@ export function MailboxLearning({
           <div>
             <dt className="text-ink-faint">Histórico</dt>
             <dd className="text-ink">
-              {state.backfillDoneAt ? 'completo' : 'bajando…'} ·{' '}
+              {state.paused ? 'pausado' : state.backfillDoneAt ? 'completo' : 'revisando…'} ·{' '}
               {WINDOW_LABEL[state.backfillWindow]}
             </dd>
           </div>
