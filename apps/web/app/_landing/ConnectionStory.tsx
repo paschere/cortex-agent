@@ -4,6 +4,8 @@ import { CortexSignature } from '@/components/ui/cortex-signature';
 import dynamic from 'next/dynamic';
 import { Component, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
+import { useLandingScroll } from './ScrollExperience';
+
 const ConnectionScene = dynamic(() => import('./ConnectionScene'), { ssr: false });
 
 class SceneBoundary extends Component<
@@ -23,6 +25,7 @@ class SceneBoundary extends Component<
 }
 
 export function ConnectionStory() {
+  const journey = useLandingScroll();
   const root = useRef<HTMLElement>(null);
   const progress = useRef(0);
   const track = useRef<HTMLDivElement>(null);
@@ -75,14 +78,10 @@ export function ConnectionStory() {
   const running = enabled && ready && visible;
   useEffect(() => {
     if (!enabled) return;
-    let frame = 0;
-    const apply = () => {
-      frame = 0;
-      if (!track.current || !stage.current) return;
-      const bounds = track.current.getBoundingClientRect();
-      const inset = Number.parseFloat(getComputedStyle(stage.current).top) || 0;
-      const distance = bounds.height - stage.current.offsetHeight;
-      const p = Math.min(1, Math.max(0, (inset - bounds.top) / Math.max(1, distance)));
+    if (!journey) return;
+    return journey.subscribe(() => {
+      if (!stage.current) return;
+      const p = journey.progress.current.connection;
       progress.current = p;
       stage.current.dataset.progress = p.toFixed(3);
       stage.current.style.setProperty('--story-progress', String(p));
@@ -93,23 +92,8 @@ export function ConnectionStory() {
       }
       const shock = Math.max(0, Math.min(1, (p - 0.3) / 0.13));
       stage.current.style.setProperty('--contact-light', String(Math.sin(shock * Math.PI) * 0.12));
-    };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(apply);
-    };
-    window.addEventListener('scroll', schedule, { passive: true });
-    window.addEventListener('resize', schedule);
-    const resize = new ResizeObserver(schedule);
-    if (track.current) resize.observe(track.current);
-    if (stage.current) resize.observe(stage.current);
-    apply();
-    return () => {
-      window.removeEventListener('scroll', schedule);
-      window.removeEventListener('resize', schedule);
-      resize.disconnect();
-      cancelAnimationFrame(frame);
-    };
-  }, [enabled]);
+    });
+  }, [enabled, journey]);
 
   function restart() {
     track.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });

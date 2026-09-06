@@ -4,9 +4,12 @@ import { CortexSignature } from '@/components/ui/cortex-signature';
 import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState } from 'react';
 
+import { useLandingScroll } from './ScrollExperience';
+
 const SpaceScene = dynamic(() => import('./SpaceScene'), { ssr: false });
 
 export function SpaceHero() {
+  const journey = useLandingScroll();
   const host = useRef<HTMLDivElement>(null);
   const [enabled, setEnabled] = useState(false);
   const [active, setActive] = useState(false);
@@ -45,7 +48,9 @@ export function SpaceHero() {
         <i />
       </div>
       <div className="space-art__canvas" aria-hidden="true">
-        {enabled && <SpaceScene active={active && !paused} compact={compact} />}
+        {enabled && (
+          <SpaceScene active={active && !paused} compact={compact} journey={journey?.progress} />
+        )}
       </div>
       <div className="space-art__core" aria-hidden="true">
         <CortexSignature />

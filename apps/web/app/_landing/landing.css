@@ -164,3 +164,25 @@
   .connection-story[data-scroll=true] .connection-story__track { height: auto; }
   .connection-story[data-scroll=true] .connection-story__stage { position: relative; top: auto; }
 }
+
+/* The galaxy, every chapter and the closing mark share a single page journey. */
+.cosmos { position: relative; isolation: isolate; }
+.journey-space { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.journey-space__orbit { position: absolute; width: 150vw; height: 150vw; left: -25vw; top: calc(50% - 75vw); border: 1px solid #b6b3f310; border-radius: 42%; background: radial-gradient(ellipse at 25% 35%, #8d79dc14, transparent 40%), radial-gradient(ellipse at 75% 70%, #587dcc16, transparent 42%); transform: rotate(var(--journey-orbit, 0deg)); }
+.journey-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 50; background: #aaa6d90c; pointer-events: none; }
+.journey-progress span { display: block; height: 100%; transform: scaleX(var(--journey-progress, 0)); transform-origin: left; background: #c5bdec; }
+.cosmos[data-journey=scroll] .cosmos-hero__copy { transform: translateY(var(--hero-travel, 0px)); }
+.cosmos[data-journey=scroll] .space-art__canvas { scale: var(--hero-scale, 1); }
+.cosmos[data-journey=scroll] main > section:not(.cosmos-hero):not(.connection-story) > * { transform: translateY(var(--chapter-rise, 0px)); opacity: var(--chapter-opacity, 1); }
+.cosmos[data-journey=scroll] .connection-story__heading { transform: translateY(var(--chapter-rise, 0px)); }
+.cosmos[data-journey=scroll] .cosmos-close__mark { rotate: var(--journey-orbit, 0deg); }
+@media (prefers-reduced-motion: reduce) { .journey-space, .journey-progress { display: none; } }
+@media print { .journey-space, .journey-progress { display: none; } }
+@media print { .cosmos[data-journey=scroll] main > section > *, .cosmos[data-journey=scroll] .cosmos-hero__copy, .cosmos[data-journey=scroll] .connection-story__heading, .cosmos[data-journey=scroll] .cosmos-close__mark { transform: none; rotate: none; opacity: 1; } }
+
+.journey-starfield { position: absolute; inset: -180px 0; opacity: .85; }
+.journey-starfield__layer { position: absolute; width: 100%; height: 100%; inset: 0; }
+.journey-starfield__layer--0 { transform: translateY(calc(var(--journey-travel, 0px) * .15)); opacity: .55; }
+.journey-starfield__layer--1 { transform: translateY(calc(var(--journey-travel, 0px) * .4)); opacity: .7; }
+.journey-starfield__layer--2 { transform: translateY(calc(var(--journey-travel, 0px) * .8)); }
+@media (max-width: 700px) { .journey-starfield { opacity: .65; }.journey-starfield__layer--0 { opacity: .35; } }

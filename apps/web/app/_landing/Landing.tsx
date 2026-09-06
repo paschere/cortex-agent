@@ -3,12 +3,13 @@ import { ArrowDown, ArrowUpRight, AudioLines, Globe2, Paperclip, ShieldCheck } f
 import Link from 'next/link';
 import { ConnectionStory } from './ConnectionStory';
 import { MissionPreview } from './MissionPreview';
+import { ScrollExperience } from './ScrollExperience';
 import { SpaceHero } from './SpaceHero';
 
 /** Public content stays server-rendered. Only the spatial canvas and examples hydrate. */
 export function Landing() {
   return (
-    <div className="cosmos">
+    <ScrollExperience>
       <a className="cosmos-skip" href="#contenido">
         Ir al contenido
       </a>
@@ -220,6 +221,6 @@ export function Landing() {
         <p>Contexto para decidir. Capacidad para avanzar.</p>
         <Link href="/login">Iniciar sesión</Link>
       </footer>
-    </div>
+    </ScrollExperience>
   );
 }

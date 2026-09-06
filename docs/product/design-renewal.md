@@ -158,3 +158,20 @@ controles de pausa de la portada y la voz, y queda estático al imprimir.
 Validación local: TypeScript, Biome en los componentes cambiados y Chromium
 con WebGL real para avance y retroceso por scroll, posición sticky, salto,
 reinicio, ausencia de reproducción automática, escritorio y móvil.
+
+`ScrollExperience` coordina el recorrido completo con una sola escucha de scroll:
+la cámara de la galaxia se acerca y gira al salir del hero, el fondo espacial
+acompaña toda la página, las secciones aparecen al entrar en vista y el logo del
+cierre cambia de orientación. La escena humana consume el mismo estado global.
+La línea superior muestra el avance total. Los enlaces de sección conservan sus
+posiciones naturales: el movimiento se aplica al contenido, no a sus anclas.
+El modo de movimiento reducido y la impresión dejan la página estática.
+
+El fondo estelar toma como referencia visual la presentación de GPT-6 Astra
+(https://openai.com/index/gpt-6-astra/). `StarField` distribuye 600 estrellas con
+semilla fija en tres planos de profundidad, con tamaños irregulares, blancos,
+azules y algunos tonos cálidos. Nueve estrellas cercanas tienen un halo suave.
+Los planos usan el progreso global del scroll sin otro bucle de animación.
+La galaxia añade puntos destacados con halo en su shader. El fondo es decorativo,
+no captura interacciones, reduce intensidad en móvil y se oculta con movimiento
+reducido o al imprimir. Se revisó visualmente el hero y el cierre en navegador.
