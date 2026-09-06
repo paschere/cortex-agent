@@ -59,3 +59,29 @@ La prueba visual usa narración y respuesta del modelo simuladas. Se comprobaron
 Por petición del usuario, la firma de Cortex ahora gira, respira y lleva un destello a través de sus trazos. El movimiento se comparte en portada, menú, chat y manuales: órbita de 28 segundos (36 en el menú), respiración de 8 segundos y recorrido luminoso de 6 segundos. Se anima el grupo interior del SVG, conservando la posición y rotación que cada pantalla ya usa.
 
 Es identidad de marca, no una indicación de ejecución. No utiliza temporizadores ni bucles JavaScript. El navegador muestra el símbolo estático con reducción de movimiento y al imprimir. Validado en Chromium comprobando cambios reales de transformación y la desactivación al cambiar las preferencias; se generó un video local de vista previa.
+
+## Landing espacial
+
+La portada pública usa una galaxia procedural de cinco brazos alrededor de la
+firma de Cortex. Paleta aislada en `.cosmos`: azul noche `#070912`, panel
+`#101523`, blanco lunar `#eeeffa`, texto secundario `#a0aac4` y lavanda
+`#b6b3f3`. Manrope mantiene la continuidad con el producto. El contenido se
+presenta en flujo normal, sin una secuencia de scroll fijada: portada, ejemplos
+interactivos de Gerencia/Feed/Trámites, procesos, control, preguntas y acceso.
+Los ejemplos están identificados como ilustrativos; no consultan datos reales.
+Las tarifas siguen sin publicarse y las llamadas a la acción abren registro/login.
+
+`SpaceHero` carga `SpaceScene` por separado después del montaje. Three.js dibuja
+polvo estelar, órbitas y luz mediante geometría procedural y shaders, sin el GLB
+humano anterior. DPR máximo 1.5; 10.000 partículas de galaxia en escritorio,
+4.500 en móvil, más 550 estrellas. Pausa manual, visibilidad de pestaña e
+IntersectionObserver suspenden los cuadros continuos; el modo demand conserva
+la escena al redimensionar. Movimiento reducido evita montar WebGL. Una firma
+SVG y órbitas CSS conservan la composición si WebGL no está disponible.
+
+Validación local: TypeScript y Biome; componentes reales montados en Chromium
+con enlaces de Next adaptados para la previsualización. Se revisaron escritorio,
+320/390/768 px, ejemplos, preguntas desplegables y movimiento reducido, sin
+errores de shaders. Se instrumentaron las llamadas de dibujo para verificar
+pausa y suspensión fuera de vista; se comprobó también la alternativa sin WebGL.
+No incluye una publicación de producción ni pruebas nuevas de autenticación.
