@@ -1,82 +1,257 @@
-import type { ReadinessStep } from '@/lib/management/readiness';
-import { ArrowUpRight, Check, CircleHelp, Mic, ShieldCheck } from 'lucide-react';
+'use client';
+import { ProfileEditor } from '@/app/(app)/management/ProfileEditor';
+import { LAUNCH_GROUPS, type LaunchStep, launchProgress } from '@/lib/management/launch-plan';
+import type { ManagementProfile } from '@/lib/management/shape';
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  CircleHelp,
+  Mic,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, useTransition } from 'react';
+import { CortexSignature } from './cortex-signature';
+type Person = { id: string; name: string | null; email: string };
 export function CompanyLaunch({
   name,
   steps,
   isAdmin,
-}: { name: string; steps: ReadinessStep[]; isAdmin: boolean }) {
-  const ready = steps.filter((s) => s.state === 'ready').length;
+  initialStep,
+  profile,
+  people,
+  readAt,
+}: {
+  name: string;
+  steps: LaunchStep[];
+  isAdmin: boolean;
+  initialStep?: string;
+  profile: ManagementProfile | null;
+  people: Person[];
+  readAt: string;
+}) {
+  const progress = launchProgress(steps);
+  const [selected, setSelected] = useState(
+    steps.some((s) => s.id === initialStep) ? initialStep : progress.next,
+  );
+  const [refreshing, refresh] = useTransition();
+  const router = useRouter();
+  const step = steps.find((s) => s.id === selected) ?? steps[0];
+  if (!step) return null;
+  const select = (id: string) => {
+    setSelected(id);
+    window.history.replaceState(null, '', `/onboarding?step=${encodeURIComponent(id)}`);
+  };
+  const next = steps[steps.indexOf(step) + 1];
+  const status = (item: LaunchStep) =>
+    item.state === 'ready'
+      ? 'Base disponible'
+      : item.state === 'unknown'
+        ? 'Por comprobar'
+        : 'Por preparar';
   return (
-    <section className="company-launch" aria-label="Configurar mi empresa">
-      <div className="company-launch__intro">
+    <div className="launch-center">
+      <header className="launch-center__header">
+        <div className="launch-center__identity">
+          <CortexSignature className="h-10 w-10 text-primary" />
+          <div>
+            <p>{name}</p>
+            <h1>Puesta en marcha</h1>
+          </div>
+        </div>
+        <div className="launch-center__header-actions">
+          <button
+            type="button"
+            disabled={refreshing}
+            onClick={() => refresh(() => router.refresh())}
+          >
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Comprobando…' : 'Comprobar progreso'}
+          </button>
+          <Link href="/management">
+            Ir a mi agenda <ArrowUpRight size={16} />
+          </Link>
+        </div>
+      </header>
+      <div className="launch-center__summary">
         <div>
-          <h2>Tu empresa, bien entendida.</h2>
+          <h2>
+            {progress.complete
+              ? 'Las bases están listas. Sigamos mejorándolas.'
+              : 'De conocer tu empresa a resolver el primer encargo.'}
+          </h2>
           <p>
-            Construyamos el encargo de Cortex para {name}. Cada paso se conecta con el trabajo que
-            ya tienes.
+            Esta configuración siempre estará aquí. Puedes recorrerla a tu ritmo, volver a un paso o
+            continuar con el trabajo diario.
           </p>
         </div>
-        <Link className="company-launch__start" href="/onboarding/entrevista">
-          <Mic size={18} /> Contarle cómo trabajamos <ArrowUpRight size={16} />
-        </Link>
+        <div className="launch-center__meter">
+          <span>
+            <strong>{progress.ready}</strong> / {progress.total} bases
+          </span>
+          <progress
+            max={progress.total}
+            value={progress.ready}
+            aria-label="Bases de configuración disponibles"
+          />
+          <small>
+            {progress.unknown
+              ? `${progress.unknown} etapas requieren comprobar sus datos`
+              : 'El progreso se lee de tus datos, no de los clics'}
+          </small>
+        </div>
       </div>
-      <div className="company-launch__progress">
-        <span>
-          {ready} de {steps.length} bases preparadas
-        </span>
-        <progress aria-label="Bases preparadas" value={ready} max={steps.length} />
-        <span>Se comprueba con tus datos</span>
-      </div>
-      <ol className="company-launch__steps">
-        {steps.map((step, index) => (
-          <li key={step.id} data-state={step.state}>
-            <span className="company-launch__number">
-              {step.state === 'ready' ? (
-                <Check size={18} />
-              ) : step.state === 'unknown' ? (
-                <CircleHelp size={18} />
-              ) : (
-                index + 1
-              )}
-            </span>
-            <div>
-              <h3>{step.title}</h3>
-              <p>{step.detail}</p>
-              <span className="company-launch__status">
-                {step.state === 'ready'
-                  ? 'Preparado'
-                  : step.state === 'unknown'
-                    ? 'No se pudo comprobar'
-                    : 'Por preparar'}
-              </span>
+      <div className="launch-center__workspace">
+        <div className="launch-center__mobile-nav">
+          <label htmlFor="launch-stage">Etapa de configuración</label>
+          <select
+            id="launch-stage"
+            value={step.id}
+            onChange={(event) => select(event.target.value)}
+          >
+            {LAUNCH_GROUPS.map((group) => (
+              <optgroup key={group} label={group}>
+                {steps
+                  .filter((item) => item.group === group)
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {steps.indexOf(item) + 1}. {item.title} — {status(item)}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+        <nav className="launch-center__nav" aria-label="Etapas de puesta en marcha">
+          {LAUNCH_GROUPS.map((group) => (
+            <div key={group}>
+              <h3>{group}</h3>
+              {steps
+                .filter((s) => s.group === group)
+                .map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => select(item.id)}
+                    aria-current={item.id === step.id ? 'step' : undefined}
+                    data-state={item.state}
+                  >
+                    <span className="launch-center__step-icon">
+                      {item.state === 'ready' ? (
+                        <Check size={15} />
+                      ) : item.state === 'unknown' ? (
+                        <CircleHelp size={15} />
+                      ) : (
+                        steps.indexOf(item) + 1
+                      )}
+                    </span>
+                    <span>
+                      {item.title}
+                      {!item.required && <small>Según tu operación</small>}
+                    </span>
+                  </button>
+                ))}
             </div>
-            <Link
-              href={step.href}
-              aria-label={`${step.state === 'ready' ? 'Revisar' : 'Preparar'}: ${step.title}`}
-            >
-              <ArrowUpRight size={20} />
-            </Link>
-          </li>
-        ))}
-      </ol>
-      <div className="company-launch__footer">
-        <ShieldCheck size={20} />
-        <p>
-          <strong>Define cómo puede actuar.</strong> Los permisos se revisan por separado. Preparar
-          el contexto no autoriza envíos ni pagos.
-        </p>
-        <Link href={isAdmin ? '/admin/mandates' : '/approvals'}>
-          {isAdmin ? 'Revisar autonomía' : 'Ver aprobaciones'}
-        </Link>
+          ))}
+        </nav>
+        <div className="launch-center__detail">
+          <div className="launch-center__step-heading">
+            <span>{step.group}</span>
+            <span data-state={step.state}>{status(step)}</span>
+          </div>
+          <h2>{step.title}</h2>
+          <p className="launch-center__description">{step.description}</p>
+          <div className="launch-center__evidence" data-state={step.state}>
+            <CircleHelp size={17} />
+            <p>{step.evidence}</p>
+          </div>
+          {step.adminOnly && !isAdmin && (
+            <p className="launch-center__permission">
+              <ShieldCheck size={17} /> Un administrador prepara esta etapa. Puedes consultar el
+              recorrido y continuar con tus propios datos y procesos.
+            </p>
+          )}
+          <div hidden={step.id !== 'scope'}>
+            {profile ? (
+              <ProfileEditor
+                key={profile.revision}
+                profile={profile}
+                people={people}
+                isAdmin={isAdmin}
+                onSaved={() => router.refresh()}
+                onManageProcesses={() => select('manual')}
+              />
+            ) : (
+              <p className="text-sm text-ink-muted">
+                No se pudo cargar el encargo. Comprueba el progreso para reintentar.
+              </p>
+            )}
+          </div>
+          {step.id !== 'scope' && (
+            <>
+              <h3 className="launch-center__check-title">Qué revisar en esta etapa</h3>
+              <ol className="launch-center__checklist">
+                {step.checklist.map((item, i) => (
+                  <li key={item}>
+                    <span>{i + 1}</span>
+                    {item}
+                  </li>
+                ))}
+              </ol>
+              <div className="launch-center__actions">
+                {(!step.adminOnly || isAdmin) && (
+                  <Link className="launch-center__primary" href={step.action.href}>
+                    {step.action.label}
+                    <ArrowUpRight size={17} />
+                  </Link>
+                )}
+                {step.alternatives
+                  .filter((a) => isAdmin || !a.href.startsWith('/admin'))
+                  .map((a) => (
+                    <Link key={a.href} href={a.href}>
+                      {a.label}
+                      <ArrowUpRight size={15} />
+                    </Link>
+                  ))}
+              </div>
+            </>
+          )}
+          <div className="launch-center__next">
+            <p>
+              {step.required
+                ? 'Esta base forma parte de la puesta en marcha.'
+                : 'Esta etapa depende de tu operación y no bloquea las bases.'}
+              <br />
+              Abrir una pantalla no marca la etapa como terminada.
+            </p>
+            {next && (
+              <button type="button" onClick={() => select(next.id)}>
+                Siguiente etapa
+                <ArrowRight size={16} />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
-      <nav className="company-launch__links" aria-label="Continuar configuración">
-        <Link href="/company">Ficha de empresa</Link>
-        <Link href="/integrations">Conectar herramientas</Link>
-        <Link href="/kb">Conocimiento permanente</Link>
-        <Link href="/schedules">Rutinas activas</Link>
-        <Link href="/management">Abrir agenda de gerencia</Link>
-      </nav>
-    </section>
+      <footer className="launch-center__footer">
+        <Link href="/onboarding/entrevista">
+          <Mic size={17} /> Prefiero contar cómo trabajamos
+        </Link>
+        <span>
+          Comprobado{' '}
+          <time dateTime={readAt}>
+            {new Intl.DateTimeFormat('es-CO', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Bogota',
+            }).format(new Date(readAt))}
+          </time>{' '}
+          · Bogotá
+        </span>
+      </footer>
+    </div>
   );
 }

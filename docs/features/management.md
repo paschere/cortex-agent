@@ -92,3 +92,13 @@ Un administrador puede dictar o escribir el encargo completo y preparar alcance,
 El chat incorpora entradas de entender, decidir y dar seguimiento; cada ejemplo llena el compositor. Las preguntas con opciones permiten respuesta libre multilínea y dictado. Las respuestas conservan sus fuentes, acciones, confirmaciones y orden de herramientas. El prompt compartido pide consultar antes de afirmar, preguntar solo por información que desbloquea el siguiente paso y distinguir evidencia, propuesta y ejecución verificada. Esto orienta el modelo; no constituye una garantía de acierto ni añade capacidades a las herramientas.
 
 Validación: contratos de preparación de empresa, límites/permisos del analizador, regresiones de configuración y preguntas, TypeScript y Chromium de componentes reales con backend/modelo simulados para revisión visual e interacciones. La prueba visual no valida persistencia con una sesión real ni rendimiento de voz/OpenAI. No se aplicaron migraciones ni se activaron rutinas de clientes en esta implementación. Los flujos existentes siguen requiriendo sus migraciones y workers operativos.
+
+## Onboarding permanente y ampliado
+
+`/onboarding` sustituye el checklist anterior por diez etapas agrupadas en empresa, información/equipo, operación y primera misión. Incluye ficha, encargo por dictado integrado, Feed/cerebro/integraciones, responsable, metas, manuales, navegador, mandatos, rutinas y cierre con evidencia. Siete bases participan en el progreso; navegador, autonomía y rutinas se revisan según la operación, sin obligar a conceder permisos para completar la configuración.
+
+El inicio `/` con una sesión válida siempre abre la puesta en marcha. El enlace está fijado en el menú para administradores y miembros, en escritorio y móvil. Las marcas antiguas `dismissed_at` y la finalización del checklist de cinco pasos ya no deciden esta entrada. Ir a la agenda no oculta la configuración. Los enlaces profundos a módulos conservan su destino: no se interceptan con un modal.
+
+Las etapas consultan datos con alcance de empresa; perfiles del navegador y rutinas respetan propiedad personal/compartida. Solo un administrador recibe el conteo de mandatos. Cada lectura fallida se representa como desconocida. El progreso señala bases disponibles, no acredita calidad, sincronización, disponibilidad del portal ni un proceso probado. El resultado final exige un asunto verificado. Se ofrece comprobación explícita y se conserva la etapa seleccionada en la URL.
+
+No se agregaron tablas ni se modificaron permisos o datos de clientes. El encargo se edita con las acciones existentes y su control de revisión. Los formularios de las demás etapas permanecen en su módulo de origen, con enlaces de continuación.

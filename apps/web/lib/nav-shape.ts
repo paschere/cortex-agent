@@ -177,7 +177,8 @@ export const CALLS: NavItem = { href: '/calls', label: 'Llamadas', icon: PhoneCa
 export const BRAIN: NavItem = { href: '/kb', label: 'Brain Knowledge', icon: BookOpen };
 export const FEED: NavItem = { href: '/feed', label: 'Feed', icon: Inbox };
 export const MANAGEMENT: NavItem = { href: '/management', label: 'Gerencia', icon: Briefcase };
-export const PINNED: NavItem[] = [MANAGEMENT, CHAT, FEED, CALLS, BRAIN];
+export const SETUP: NavItem = { href: '/onboarding', label: 'Puesta en marcha', icon: Settings };
+export const PINNED: NavItem[] = [SETUP, MANAGEMENT, CHAT, FEED, CALLS, BRAIN];
 
 const QUEUE_ICON: Record<WaitingQueue, NavIcon> = {
   approvals: Inbox,

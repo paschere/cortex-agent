@@ -4,8 +4,6 @@ import { redirect } from 'next/navigation';
 import { Landing } from './_landing/Landing';
 import './_landing/landing.css';
 import { getOptionalSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
-import { readOnboarding } from '@cortex/agent-tools';
 
 /**
  * `/` is two things depending on who is knocking.
@@ -20,8 +18,8 @@ import { readOnboarding } from '@cortex/agent-tools';
  *
  * That moves the decision here, where it belongs:
  *
- *   signed in  → /management, unless the workspace still has the first-run guide
- *                open (`readOnboarding().show`), in which case /onboarding.
+ *   signed in  → /onboarding, the permanent setup center. Legacy dismissal
+ *                flags and the old five-step completion no longer hide it.
  *                The login screen's `next` parameter defaults to '/', so this
  *                is the hop that lands somebody on the product after signing
  *                in, and it must keep working.
@@ -61,8 +59,7 @@ export default async function RootPage() {
   if (maybeSignedIn) {
     const session = await getOptionalSession();
     if (session) {
-      const onboarding = await readOnboarding(getOrgScopedClient(session.organization.id));
-      redirect(onboarding.show ? '/onboarding' : '/management');
+      redirect('/onboarding');
     }
   }
 
