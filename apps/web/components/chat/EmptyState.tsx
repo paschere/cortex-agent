@@ -1,6 +1,7 @@
 'use client';
 
 import { usePanel } from '@/components/panel/PanelHost';
+import { CortexSignature } from '@/components/ui/cortex-signature';
 import type { FirstStep, OpenersResponse } from '@/lib/chat-openers-shape';
 import { panelForWaiting } from '@/lib/waiting-panel';
 import { type WaitingNoticeData, clipTitle, waitingQuestion } from '@/lib/waiting-shape';
@@ -8,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   AlarmClock,
   BarChart3,
-  Brain,
+  type Brain,
   Building2,
   CalendarClock,
   CalendarDays,
@@ -196,21 +197,9 @@ function FirstStepCard({ step, index }: { step: FirstStep; index: number }) {
   );
 }
 
-/**
- * La marca: un cerebro con luz detrás.
- *
- * Tres capas y cada una hace una cosa. El halo desenfocado es lo único que
- * sigue moviéndose pasada la entrada. El anillo (`kb-flare`) sale una vez al
- * montar y desaparece — su reposo es `opacity-0`, así que ni al terminar ni con
- * `prefers-reduced-motion` queda un aro pegado encima. La baldosa va en blanco
- * y no en índigo suave a propósito: con luz detrás, un relleno teñido apaga el
- * halo en vez de dejarlo pasar.
- */
 function Mark() {
   return (
-    <span className="grid h-12 w-12 place-items-center rounded-xl border border-primary/20 bg-primary-soft text-primary">
-      <Brain className="h-6 w-6" />
-    </span>
+    <CortexSignature className="h-28 w-28 text-primary-ink drop-shadow-[0_0_22px_rgba(105,146,255,0.4)]" />
   );
 }
 

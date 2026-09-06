@@ -56,7 +56,7 @@ export async function AppShell({
     <MobileSidebarProvider>
       <CommandMenuProvider role={user.role}>
         <PanelProvider>
-          <div className="flex h-screen overflow-hidden bg-canvas print:h-auto print:overflow-visible">
+          <div className="cortex-workspace flex h-screen overflow-hidden bg-canvas print:h-auto print:overflow-visible">
             {/* El rail es hijo flex de esta fila. Un wrapper (`print:hidden`)
                 no estira: el nav (`flex-1`) se va a cero y en /chat sólo
                 quedan el workspace y el pie. Esconder al imprimir es cosa

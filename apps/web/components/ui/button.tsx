@@ -21,7 +21,7 @@ export const Button = React.forwardRef<
       'inline-flex items-center justify-center gap-1.5 rounded-pill px-4 py-2 text-sm font-semibold',
       'transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none',
       variant === 'default' &&
-        'bg-primary text-white hover:bg-primary-strong',
+        'cortex-primary-button bg-primary text-white hover:bg-primary-strong',
       variant === 'outline' &&
         'border border-border-strong bg-surface text-ink hover:border-border-strong hover:bg-surface-2',
       variant === 'ghost' && 'text-ink-muted hover:bg-surface-2 hover:text-ink',

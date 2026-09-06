@@ -1,6 +1,7 @@
 'use client';
 
 import { usePanel } from '@/components/panel/PanelHost';
+import { CortexSignature } from '@/components/ui/cortex-signature';
 import { type NavItem, buildRail } from '@/lib/nav-shape';
 import type { NavCounts } from '@/lib/nav-signals';
 import { recordVisit } from '@/lib/nav-usage';
@@ -8,7 +9,7 @@ import { panelForHref } from '@/lib/panels/shape';
 import type { ActiveOrganization, Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { ArrowUpRight, Layers3, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
+import { ArrowUpRight, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -67,7 +68,7 @@ function Navigation({
           onNavigate?.();
         }}
         className={clsx(
-          'group flex min-h-9 items-center rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+          'workspace-nav-link group flex min-h-9 items-center rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           collapsed ? 'justify-center px-1' : 'gap-2.5 px-2.5',
           active
             ? 'bg-primary-soft font-semibold text-primary-ink'
@@ -176,10 +177,10 @@ export function Sidebar({
             aria-label="Cortex, abrir Gerencia"
             className="flex items-center gap-2.5 text-rail-ink"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-white">
-              <Layers3 className="h-4 w-4" />
+            <span className="grid h-8 w-8 place-items-center rounded-lg text-primary-ink">
+              <CortexSignature className="h-10 w-10" />
             </span>
-            {!small && <span className="text-lg font-bold tracking-tight">cortex</span>}
+            {!small && <span className="text-2xl font-medium tracking-[-0.06em]">cortex</span>}
           </Link>
           {!small && !inChat && !onNavigate && (
             <button
@@ -224,7 +225,7 @@ export function Sidebar({
     <>
       <aside
         className={clsx(
-          'relative hidden h-full shrink-0 print:hidden md:flex',
+          'relative hidden h-full shrink-0 p-2 print:hidden md:flex',
           compact ? 'w-[64px]' : 'w-[248px]',
         )}
         onMouseEnter={() => compact && setPeek(true)}
@@ -236,8 +237,8 @@ export function Sidebar({
       >
         <div
           className={clsx(
-            'flex h-full flex-col border-r border-rail-border bg-rail',
-            compact ? 'absolute inset-y-0 left-0 z-40' : 'w-full',
+            'workspace-rail flex h-full flex-col border-r border-rail-border bg-rail',
+            compact ? 'absolute inset-y-2 left-2 z-40' : 'w-full',
             compact && (expanded ? 'w-[248px] shadow-pop' : 'w-[64px]'),
           )}
         >

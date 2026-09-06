@@ -1,5 +1,6 @@
 'use client';
 import { Button } from '@/components/ui/button';
+import { CortexSignature } from '@/components/ui/cortex-signature';
 import { PageHeader } from '@/components/ui/page-header';
 import {
   type ManagementCase,
@@ -87,29 +88,32 @@ export function ManagementBoard(props: Props) {
   }
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Hoy en la empresa"
-        subtitle="Prioridades, responsables y resultados que puedes comprobar."
-        icon={<Briefcase className="h-5 w-5" />}
-        actions={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => startRefresh(() => router.refresh())}
-              disabled={refreshing}
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span className="sr-only sm:not-sr-only">Actualizar</span>
-            </Button>
-            <Button onClick={() => startCase(blankCase(today, profile.data.reviewAfterDays))}>
-              <Plus className="h-4 w-4" />
-              Nuevo asunto
-            </Button>
-          </>
-        }
-      />
+      <div className="management-intro">
+        <CortexSignature className="management-signature" />
+        <PageHeader
+          title="Hoy en la empresa"
+          subtitle="Prioridades, responsables y resultados que puedes comprobar."
+          icon={<Briefcase className="h-5 w-5" />}
+          actions={
+            <>
+              <Button
+                variant="outline"
+                onClick={() => startRefresh(() => router.refresh())}
+                disabled={refreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="sr-only sm:not-sr-only">Actualizar</span>
+              </Button>
+              <Button onClick={() => startCase(blankCase(today, profile.data.reviewAfterDays))}>
+                <Plus className="h-4 w-4" />
+                Nuevo asunto
+              </Button>
+            </>
+          }
+        />
+      </div>
       <div
-        className="flex flex-wrap gap-x-6 gap-y-2 border-b border-border"
+        className="flex gap-6 overflow-x-auto border-b border-border"
         aria-label="Secciones de gerencia"
       >
         {(
@@ -127,7 +131,7 @@ export function ManagementBoard(props: Props) {
               setEditor(null);
             }}
             aria-pressed={tab === value}
-            className={`border-b-2 px-1 pb-3 text-sm font-semibold ${tab === value ? 'border-primary text-primary' : 'border-transparent text-ink-muted'}`}
+            className={`shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-semibold ${tab === value ? 'border-primary text-primary' : 'border-transparent text-ink-muted'}`}
           >
             {label}
           </button>
@@ -160,7 +164,7 @@ export function ManagementBoard(props: Props) {
               visibles pueden estar incompletas.
             </Alert>
           )}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="management-stats grid grid-cols-2 gap-3 lg:grid-cols-4">
             {(
               [
                 ['Por verificar', active.filter((c) => c.data.state === 'review').length, 'review'],
@@ -177,7 +181,8 @@ export function ManagementBoard(props: Props) {
                 type="button"
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`rounded-lg border p-4 text-left ${filter === f ? 'border-primary bg-primary/5' : 'border-border bg-surface'}`}
+                data-kind={f}
+                className={`management-stat rounded-lg border p-4 text-left ${filter === f ? 'border-primary bg-primary/5' : 'border-border bg-surface'}`}
                 aria-pressed={filter === f}
               >
                 <span className="block text-xs font-medium text-ink-muted">{label}</span>
@@ -211,7 +216,7 @@ export function ManagementBoard(props: Props) {
                     Prioridad por vencimiento, impacto declarado, bloqueo y revisión pendiente. No
                     es una predicción.
                   </p>
-                  <div className="divide-y divide-border rounded-lg border border-border bg-surface">
+                  <div className="management-agenda divide-y divide-border rounded-lg border border-border bg-surface">
                     {shown.length === 0 && (
                       <div className="p-8 text-sm text-ink-muted">
                         {active.length === 0 && filter === 'all'
@@ -226,14 +231,17 @@ export function ManagementBoard(props: Props) {
                           type="button"
                           key={c.id}
                           onClick={() => startCase(c.data, c)}
-                          className="group block w-full space-y-2 p-4 text-left hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          data-blocked={c.data.state === 'blocked'}
+                          className="management-case group block w-full space-y-2 p-4 text-left hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <strong className="break-words text-sm">{c.data.title}</strong>
                             <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" />
                           </div>
                           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-muted">
-                            <span>{managementStateLabels[c.data.state]}</span>
+                            <span className="case-state">
+                              {managementStateLabels[c.data.state]}
+                            </span>
                             <span>{name(c.data.ownerId)}</span>
                             <span>Plazo {c.data.dueOn}</span>
                           </div>
@@ -248,7 +256,7 @@ export function ManagementBoard(props: Props) {
                     })}
                   </div>
                 </section>
-                <aside className="min-w-0 space-y-5">
+                <aside className="management-context min-w-0 space-y-5">
                   {sourceConflicts.length > 0 && (
                     <section className="space-y-3 rounded-lg border border-amber/30 p-4">
                       <h2 className="text-sm font-bold">Fuentes pendientes tras un cierre</h2>

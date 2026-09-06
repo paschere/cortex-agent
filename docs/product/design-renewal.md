@@ -35,3 +35,13 @@ El diseño se aplica desde tokens globales, botones, cabeceras, paneles y el mar
 Revisión local en Chromium con componentes reales y respuestas de servidor simuladas: 1440 px y 390 px, navegación, contracción y expansión, cajón móvil, asuntos, historial, revisión, configuración y preparación de cobro. No equivale a una auditoría visual individual de todos los módulos ni a una prueba de integración con servicios reales.
 
 Validación final de esta entrega: typecheck web completo, 99 pruebas Vitest seleccionadas (gestión, cobro, acciones, seguridad, navegación, registros de tablas y jobs), 45 verificaciones PostgreSQL y recorridos visuales locales de Gerencia, Feed, entrada del chat y menú móvil. Las capturas usan datos ficticios; la aceptación de correo y portales externos queda pendiente en un entorno desplegado.
+
+## Revisión visual: centro de mando
+
+La composición anterior fue rechazada por parecer una aplicación administrativa genérica. Esta revisión sustituye las cuatro tarjetas iguales por una banda de indicadores, da prioridad visual al primer asunto y introduce una firma gráfica propia de Cortex.
+
+Paleta del espacio autenticado: vacío `#0A0C13`, grafito `#121621`, tinta clara `#EDF1FF`, periwinkle `#6E7DFF`, señal cian `#74CFEF` y ámbar `#EFBF74`. Manrope se mantiene para lectura y títulos, con títulos de 36–60 px de peso medio y tracking ajustado. Las cifras se integran en la composición y los controles conservan tamaños utilizables.
+
+La revisión del plan evitó limitarse a invertir los colores: menú flotante, banda de indicadores sin cajas, cabecera amplia, firma de líneas plegadas y agenda con profundidad diferenciada. La luz se concentra en la identidad y la selección; no hay movimiento ambiental ni estados de actividad inventados. El tema se aplica al espacio autenticado y sus portales; la impresión y las páginas públicas conservan su paleta legible.
+
+La revisión oscura pasó 20 pruebas de navegación y continuidad de paneles, typecheck web y recorridos Chromium de Gerencia, Feed, chat, menú móvil, portales e impresión. Capturas locales con datos de ejemplo; no desplegada.

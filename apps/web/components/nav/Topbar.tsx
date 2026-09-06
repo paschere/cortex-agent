@@ -22,7 +22,7 @@ export function Topbar({ email }: { email?: string }) {
     .filter((i) => path === i.href || path.startsWith(`${i.href}/`))
     .sort((a, b) => b.href.length - a.href.length)[0];
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 print:hidden md:px-8">
+    <header className="workspace-topbar sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-surface px-4 print:hidden md:px-8">
       <button
         type="button"
         onClick={() => mobile.setOpen(true)}
