@@ -156,7 +156,7 @@ export function ManagementBoard(props: Props) {
             </p>
           </div>
           <div className="manager-agenda__actions">
-            <Link href="/chat?prompt=Revisa%20management.brief%20y%20ay%C3%BAdame%20a%20priorizar%20la%20agenda%20de%20hoy.%20Distingue%20hechos%2C%20datos%20faltantes%20y%20el%20siguiente%20paso.">
+            <Link href="/chat?prompt=Revisa%20la%20agenda%20de%20gerencia%20y%20ay%C3%BAdame%20a%20priorizar%20la%20agenda%20de%20hoy.%20Distingue%20hechos%2C%20datos%20faltantes%20y%20el%20siguiente%20paso.">
               Revisar con Cortex
             </Link>
             <Link href="/onboarding">Configurar empresa</Link>
