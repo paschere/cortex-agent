@@ -115,7 +115,7 @@ registrado tampoco certifica que el proveedor acepte los permisos.
 `/management/mission` reutiliza CaseEditor y el proceso de cartera. Después de
 guardar conserva el asunto creado para continuar al cobro, las aprobaciones y
 la evidencia. `/management/control` explica sus permisos efectivos, muestra los
-mandatos existentes (de empresa, no aislados por proceso), documentos visibles
+mandatos existentes (globales o aislados por rutina), documentos visibles
 con vigencia/reemplazo y las inconsistencias entre asuntos y señales.
 
 El worker deja avisos dentro de Cortex por respuesta, falta de respuesta,
@@ -132,8 +132,28 @@ Los informes semanales guardados incorporan el mismo bloque. Los bloqueos y las
 decisiones en la pantalla son la situación actual y se identifican como tal.
 No se atribuyen ahorros o ingresos sin medición acordada.
 
-Límites todavía vigentes: no hay aislamiento de mandatos por proceso; las metas
-muestran mediciones, no historial de cambios de definición; la revisión de
-calidad no detecta automáticamente todas las contradicciones documentales. La
-validación completa de cobro necesita factura, cuenta de correo y destinatario
-autorizados. Los tests SQL aislados no sustituyen esa prueba autenticada.
+### Mandatos por rutina, comparación de fuentes e historial de metas
+
+La migración 0133 permite limitar un mandato a una rutina existente. Al concederlo,
+la rutina queda en modo de mandatos: la autorización antigua de ejecución sin
+preguntar deja de aplicar, incluso si después se revoca el mandato. Cada llamada
+a una herramienta consulta de nuevo el estado y el propietario de la rutina.
+Pausarla impide la siguiente acción; no revierte una acción ya iniciada. Una
+rutina en este modo no hereda mandatos globales ni de otras rutinas. El chat no
+puede usar permisos exclusivos de una rutina. Los bloqueos no delegables siguen
+vigentes. Este alcance corresponde a rutinas ejecutables, no a todos los manuales.
+
+La migración 0134 guarda revisiones personales de dos documentos visibles. El
+usuario indica la decisión afectada; el modelo compara hasta ocho fragmentos por
+fuente y solo se conservan propuestas con citas literales comprobadas. Se vuelve
+a comprobar el acceso antes de guardar. Cada conclusión humana exige un criterio
+y queda inmutable. No cambia el documento ni declara una fuente como verdad de
+la empresa. La pantalla muestra hasta 50 revisiones recientes. No es un escaneo
+exhaustivo de todas las contradicciones del cerebro.
+
+La revisión semanal y el informe guardado incluyen altas y retiros de metas, con
+objetivo, fecha y responsable. La definición de una meta es inmutable: cambiarla
+requiere retirar la anterior y crear otra. Se declaran fallos y truncamiento.
+
+La validación completa de cobro necesita factura, cuenta de correo y destinatario
+autorizados. Las pruebas de componentes y SQL aisladas no sustituyen ese ensayo.

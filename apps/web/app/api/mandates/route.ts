@@ -32,6 +32,7 @@ const FORBIDDEN = {
 };
 
 const GrantSchema = z.object({
+  routineId: z.string().uuid().nullish(),
   label: z.string().trim().min(3).max(80),
   reason: z.string().trim().max(500).default(''),
   toolPatterns: z.array(z.string().trim().min(1).max(64)).min(1).max(MAX_PATTERNS),
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
   const db = getOrgScopedClient(user.organization.id);
   try {
     const { id, covered } = await grantMandate(db, {
+      routineId: parsed.data.routineId ?? null,
       label: parsed.data.label,
       reason: parsed.data.reason,
       toolPatterns: parsed.data.toolPatterns,

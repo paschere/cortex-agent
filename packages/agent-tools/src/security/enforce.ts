@@ -84,6 +84,8 @@ export interface RiskAuditFields {
 }
 
 export interface EvaluateArgs {
+  routineId?: string;
+  scopedMandatesOnly?: boolean;
   tool: MandateTool;
   input: unknown;
   db: SupabaseClient;
@@ -224,7 +226,12 @@ export async function evaluate(args: EvaluateArgs): Promise<SecurityEvaluation> 
   const gated = doctrine === 'confirm' || args.tool.requiresConfirmation === true;
   const mandates =
     doctrine !== 'block' && gated
-      ? await loadMandates(args.db, { toolId: args.tool.id, now: args.now })
+      ? await loadMandates(args.db, {
+          toolId: args.tool.id,
+          now: args.now,
+          routineId: args.routineId,
+          scopedOnly: args.scopedMandatesOnly,
+        })
       : [];
 
   const outcome = applyMandate({

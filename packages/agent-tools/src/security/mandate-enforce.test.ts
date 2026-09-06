@@ -382,3 +382,41 @@ describe('el ensayo dice lo mismo que la aplicación', () => {
     expect(review.markdown).not.toContain('Delegado');
   });
 });
+
+describe('scoped routine mandates cross the real execution gate', () => {
+  it('a routine-only grant cannot authorize the same tool in chat', async () => {
+    const ctx = makeCtx({
+      mandates: [mandateRow({ routine_id: 'routine-a', applies_unattended: true })],
+    });
+    await expect(
+      runTool(mailTool(), { to: `jefe@${INTERNAL}`, body: 'el acta de ayer' }, ctx),
+    ).rejects.toBeInstanceOf(ConfirmationRequiredError);
+    expect(handler).not.toHaveBeenCalled();
+  });
+  it('a scoped routine cannot borrow another routine or company-wide grant', async () => {
+    const ctx = makeCtx({
+      mandates: [
+        mandateRow({ routine_id: 'routine-b', applies_unattended: true }),
+        mandateRow({ routine_id: null, applies_unattended: true }),
+      ],
+    });
+    ctx.routineId = 'routine-a';
+    ctx.scopedMandatesOnly = true;
+    ctx.surface = 'schedule';
+    await expect(
+      runTool(mailTool(), { to: `jefe@${INTERNAL}`, body: 'el acta de ayer' }, ctx),
+    ).rejects.toBeInstanceOf(ConfirmationRequiredError);
+    expect(handler).not.toHaveBeenCalled();
+  });
+  it('only its own scoped grant can lift the confirmation gate', async () => {
+    const ctx = makeCtx({
+      mandates: [mandateRow({ routine_id: 'routine-a', applies_unattended: true })],
+    });
+    ctx.routineId = 'routine-a';
+    ctx.scopedMandatesOnly = true;
+    ctx.surface = 'schedule';
+    expect(
+      await runTool(mailTool(), { to: `jefe@${INTERNAL}`, body: 'el acta de ayer' }, ctx),
+    ).toMatchObject({ ok: true });
+  });
+});

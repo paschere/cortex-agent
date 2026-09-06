@@ -107,6 +107,8 @@ export async function runTool<I, O>(
     organizationId: ctx.organizationId,
     agentId: ctx.agentId,
     surface: ctx.surface,
+    routineId: ctx.routineId,
+    scopedMandatesOnly: ctx.scopedMandatesOnly,
     confirmed: opts.confirmed,
   });
   const risk = riskAuditFields(evaluation);

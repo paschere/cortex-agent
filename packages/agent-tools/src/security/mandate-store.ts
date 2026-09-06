@@ -47,9 +47,10 @@ export const MANDATES_TABLE = 'mandates';
 export const MANDATE_USES_TABLE = 'mandate_uses';
 
 const MANDATE_COLUMNS =
-  'id, label, tool_patterns, covered_tool_ids, max_risk_level, amount_ceiling, currency, applies_unattended, max_uses_per_day';
+  'id, label, tool_patterns, covered_tool_ids, max_risk_level, amount_ceiling, currency, applies_unattended, max_uses_per_day, routine_id';
 
 interface MandateRow {
+  routine_id?: string | null;
   id: string;
   label: string | null;
   tool_patterns: string[] | null;
@@ -133,26 +134,38 @@ function toGrant(row: MandateRow, usesToday: number): MandateGrant | null {
  */
 export async function loadMandates(
   db: SupabaseClient,
-  opts: { toolId: string; now?: Date },
+  opts: { toolId: string; now?: Date; routineId?: string; scopedOnly?: boolean },
 ): Promise<MandateGrant[]> {
   const now = opts.now ?? new Date();
   const nowIso = now.toISOString();
 
   try {
-    const { data, error } = await db
+    let query = db
       .from(MANDATES_TABLE)
       .select(MANDATE_COLUMNS)
       .is('revoked_at', null)
       .lte('starts_at', nowIso)
       .gt('expires_at', nowIso)
       .contains('covered_tool_ids', [opts.toolId]);
+    // Context is assigned by the scheduler, never from model/tool input.
+    if (opts.scopedOnly) {
+      if (!opts.routineId) return [];
+      query = query.eq('routine_id', opts.routineId);
+    } else if (opts.routineId)
+      query = query.or(`routine_id.is.null,routine_id.eq.${opts.routineId}`);
+    else query = query.is('routine_id', null);
+    const { data, error } = await query;
 
     if (error) {
       logger.warn({ err: error, toolId: opts.toolId }, 'mandates: lectura fallida, sin concesión');
       return [];
     }
 
-    const rows = (data ?? []) as unknown as MandateRow[];
+    const rows = ((data ?? []) as unknown as MandateRow[]).filter((row) =>
+      opts.scopedOnly
+        ? !!opts.routineId && row.routine_id === opts.routineId
+        : !row.routine_id || row.routine_id === opts.routineId,
+    );
     if (rows.length === 0) return [];
 
     // El consumo del día solo se cuenta para las concesiones que tienen

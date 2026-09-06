@@ -1,3 +1,4 @@
+import type { KnowledgeReview } from '@/lib/management/knowledge-review-shape';
 import { listMandates, mandateState } from '@/lib/mandates/store';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -8,7 +9,9 @@ import {
   readManagementSignals,
 } from '@cortex/agent-tools';
 import Link from 'next/link';
+import { SourceReview } from './SourceReview';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 90;
 export default async function ControlPage() {
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
@@ -28,6 +31,17 @@ export default async function ControlPage() {
         )
         .order('created_at', { ascending: false })
         .limit(101)
+    : { data: [], error: null };
+  const visibleIds = (documents.data ?? []).map((d) => d.id);
+  const reviews = visibleIds.length
+    ? await db
+        .from('knowledge_reviews')
+        .select('id,left_document,right_document,finding,resolution,note,created_at,resolved_at')
+        .eq('user_id', user.id)
+        .in('left_document', visibleIds)
+        .in('right_document', visibleIds)
+        .order('created_at', { ascending: false })
+        .limit(50)
     : { data: [], error: null };
   const conflicts = managementSourceConflicts(signals.signals, board.cases);
   return (
@@ -75,8 +89,9 @@ export default async function ControlPage() {
       <section>
         <h2 className="font-semibold">Mandatos de la empresa</h2>
         <p className="mt-2 text-sm text-ink-muted">
-          Los mandatos existentes autorizan herramientas en la empresa; no están limitados a este
-          proceso. La aprobación del cobro de esta misión sigue siendo obligatoria.
+          Puedes limitar un mandato a una rutina concreta. Los mandatos generales siguen aplicando a
+          la empresa; las rutinas con mandatos exclusivos usan solo los de su propio proceso. La
+          aprobación del cobro de esta misión sigue siendo obligatoria.
         </p>
         {user.role !== 'org_admin' ? (
           <p className="mt-3 text-sm">Un administrador puede revisar y modificar los mandatos.</p>
@@ -86,7 +101,7 @@ export default async function ControlPage() {
               {mandates?.map((m) => (
                 <div key={m.id} className="py-3">
                   <h3 className="text-sm font-semibold">
-                    {m.label} ·{' '}
+                    {m.label} · {m.routine_id ? 'Solo una rutina' : 'Toda la empresa'} ·{' '}
                     {
                       {
                         active: 'Activo',
@@ -147,6 +162,11 @@ export default async function ControlPage() {
           semántica de todos los documentos.
         </p>
       </section>
+      <SourceReview
+        documents={(documents.data ?? []).map((d) => ({ id: d.id, title: d.title }))}
+        reviews={(reviews.data ?? []) as KnowledgeReview[]}
+        unavailable={!!reviews.error}
+      />
       <section>
         <h2 className="font-semibold">Vigencia y responsable de las fuentes</h2>
         {documents.error ? (

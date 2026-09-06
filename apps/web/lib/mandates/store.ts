@@ -34,6 +34,7 @@ export const MAX_MANDATE_DAYS = 365;
 export const MAX_PATTERNS = 20;
 
 export interface MandateRow {
+  routine_id?: string | null;
   id: string;
   label: string;
   reason: string;
@@ -53,7 +54,7 @@ export interface MandateRow {
 }
 
 const COLUMNS =
-  'id, label, reason, granted_by, tool_patterns, covered_tool_ids, max_risk_level, amount_ceiling, currency, applies_unattended, max_uses_per_day, starts_at, expires_at, revoked_at, revoked_by, created_at';
+  'id, label, reason, granted_by, tool_patterns, covered_tool_ids, max_risk_level, amount_ceiling, currency, applies_unattended, max_uses_per_day, starts_at, expires_at, revoked_at, revoked_by, created_at, routine_id';
 
 // ---------------------------------------------------------------------------
 // La instantánea
@@ -132,6 +133,7 @@ export function checkGrant(input: {
 // ---------------------------------------------------------------------------
 
 export interface GrantInput {
+  routineId?: string | null;
   label: string;
   reason: string;
   toolPatterns: string[];
@@ -173,6 +175,7 @@ export async function grantMandate(
   const { data, error } = await db
     .from(MANDATES_TABLE)
     .insert({
+      routine_id: input.routineId ?? null,
       label: input.label.trim(),
       reason: input.reason.trim(),
       granted_by: input.grantedBy,

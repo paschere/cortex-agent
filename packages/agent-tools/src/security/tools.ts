@@ -105,7 +105,11 @@ export const securityReviewAction = registerTool({
      * no mandates, and the answer falls back to the doctrine, which is the
      * conservative direction for an explanation as well as for an action.
      */
-    const mandates = await loadMandates(ctx.db, { toolId: input.toolId }).catch(() => []);
+    const mandates = await loadMandates(ctx.db, {
+      toolId: input.toolId,
+      routineId: ctx.routineId,
+      scopedOnly: ctx.scopedMandatesOnly,
+    }).catch(() => []);
     const outcome = applyMandate({
       classification,
       decision: doctrine,
@@ -510,17 +514,15 @@ export const securitySetActionPolicy = registerTool({
       }
     }
 
-    const { error } = await ctx.db
-      .from('security_policies')
-      .upsert(
-        {
-          key: 'action_policy',
-          value: policy,
-          updated_by: ctx.userId,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'organization_id,key' },
-      );
+    const { error } = await ctx.db.from('security_policies').upsert(
+      {
+        key: 'action_policy',
+        value: policy,
+        updated_by: ctx.userId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'organization_id,key' },
+    );
     if (error) {
       return {
         saved: false,

@@ -16,6 +16,9 @@ export interface IntegrationsClient {
 export type ToolSurface = 'web' | 'mcp' | 'schedule';
 
 export interface ToolContext {
+  /** Trusted scheduler context; never accepted as tool arguments. */
+  routineId?: string;
+  scopedMandatesOnly?: boolean;
   /**
    * The workspace this call acts in. Required, and never derived inside a tool:
    * an interactive turn takes it from the session, an unattended one takes it

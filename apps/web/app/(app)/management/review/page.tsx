@@ -1,3 +1,4 @@
+import { describeGoalChange, readGoalChanges } from '@/lib/management/goal-changes';
 import { readWeeklyManagement } from '@/lib/management/weekly-review';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -15,10 +16,11 @@ export default async function ReviewPage() {
   const db = getOrgScopedClient(user.organization.id);
   const end = mondayOf(bogotaToday());
   const start = addDays(end, -7);
-  const [review, board, signals] = await Promise.all([
+  const [review, board, signals, goalChanges] = await Promise.all([
     readWeeklyManagement(db, `${start}T05:00:00Z`, `${end}T05:00:00Z`).catch(() => null),
     readManagement(db),
     readManagementSignals(db, user.id),
+    readGoalChanges(db, `${start}T05:00:00Z`, `${end}T05:00:00Z`).catch(() => null),
   ]);
   const blocked = board.cases.filter((c) => c.data.state === 'blocked');
   const decisions = board.cases.filter(
@@ -94,6 +96,33 @@ export default async function ReviewPage() {
         <Link className="mt-3 inline-block text-sm text-primary" href="/management">
           Resolver en la agenda →
         </Link>
+      </section>
+      <section>
+        <h2 className="font-semibold">Qué metas cambiaron en la semana</h2>
+        {!goalChanges ? (
+          <p className="mt-3 text-sm">No se pudo comprobar el historial de metas.</p>
+        ) : (
+          <>
+            {!goalChanges.changes.length && (
+              <p className="mt-3 text-sm text-ink-muted">
+                No se fijaron ni retiraron metas en este período.
+              </p>
+            )}
+            {goalChanges.changes.map((c) => (
+              <div key={c.key} className="mt-3 border-t border-border pt-3 text-sm">
+                <p>{describeGoalChange(c)}</p>
+                <p className="mt-1 text-xs text-ink-muted">
+                  {new Date(c.at).toLocaleString('es-CO', { timeZone: 'America/Bogota' })} ·{' '}
+                  {board.people.find((p) => p.id === c.actorId)?.name ??
+                    'Persona registrada en el historial'}
+                </p>
+              </div>
+            ))}
+            {goalChanges.partial && (
+              <p className="mt-3 text-sm">Vista parcial: hasta 100 altas y 100 retiros.</p>
+            )}
+          </>
+        )}
       </section>
       <section>
         <h2 className="font-semibold">Metas que requieren atención</h2>

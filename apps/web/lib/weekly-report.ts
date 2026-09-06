@@ -2,6 +2,7 @@ import 'server-only';
 import { buildPeopleLoad } from '@/app/(app)/commitments/_lib/people';
 import { sendEmail } from '@/lib/email';
 import { renderWeeklyReportEmail } from '@/lib/email-templates';
+import { describeGoalChange, readGoalChanges } from '@/lib/management/goal-changes';
 import { readWeeklyManagement } from '@/lib/management/weekly-review';
 import { noteWeeklyReportUndelivered } from '@/lib/notifications/producers';
 import { mustReadList } from '@/lib/supabase/read';
@@ -166,18 +167,24 @@ async function postWeeklyLetter(
   db: SupabaseClient,
   opts: { userId: string; weekStart: string; title: string; content: string },
 ): Promise<void> {
-  const { data: agent } = await db.from('agents').select('id').eq('slug', 'cortex').maybeSingle();
+  const { data: agent, error: agentError } = await db
+    .from('agents')
+    .select('id')
+    .eq('slug', 'cortex')
+    .maybeSingle();
+  if (agentError) return;
   const agentId = (agent as { id?: string } | null)?.id;
   if (!agentId) return;
 
   const key = `weekly:${opts.weekStart}:${opts.userId}`;
-  const { data: existing } = await db
+  const { data: existing, error: existingError } = await db
     .from('conversations')
     .select('id')
     .eq('user_id', opts.userId)
     .eq('external_key', key)
     .maybeSingle();
 
+  if (existingError) return;
   let conversationId = (existing as { id?: string } | null)?.id ?? null;
   if (!conversationId) {
     const { data: created, error } = await db
@@ -283,6 +290,31 @@ export async function runWeeklyReport(input: RunWeeklyReportInput): Promise<RunW
     document.notes.push(
       'No se pudo comprobar el historial de gerencia; los cierres de asuntos no están incluidos.',
     );
+  }
+
+  try {
+    const goals = await readGoalChanges(
+      db,
+      `${weekStart}T05:00:00Z`,
+      `${addDays(weekStart, 7)}T05:00:00Z`,
+    );
+    document.sections.push({
+      type: 'prose',
+      heading: 'Cambios de metas',
+      paragraphs: goals.changes.length
+        ? goals.changes.map(describeGoalChange)
+        : ['No se fijaron ni retiraron metas en este período.'],
+    });
+    document.sources.push({
+      id: 'goal_changes',
+      system: 'Cortex · Metas',
+      detail: `Altas y retiros de metas en la semana ${weekStart}.`,
+      readAt: now.toISOString(),
+      rowCount: goals.changes.length,
+      caveat: goals.partial ? 'Vista parcial: hasta 100 altas y 100 retiros.' : null,
+    });
+  } catch {
+    document.notes.push('No se pudo consultar el historial de cambios de metas.');
   }
 
   // 2. La reclamación. A partir de esta línea la semana es nuestra o no lo es,

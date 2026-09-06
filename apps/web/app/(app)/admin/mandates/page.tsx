@@ -52,6 +52,11 @@ export default async function MandatesPage() {
   const user = await requireSession();
   const sb = getOrgScopedClient(user.organization.id);
 
+  const { data: routines, error: routinesError } = await sb
+    .from('scheduled_jobs')
+    .select('id,name')
+    .order('name')
+    .limit(500);
   const since = new Date(Date.now() - USES_WINDOW_DAYS * 86_400_000).toISOString();
   const [mandates, uses] = await Promise.all([listMandates(sb), listRecentUses(sb, since)]);
 
@@ -93,7 +98,7 @@ export default async function MandatesPage() {
   const now = new Date();
   const view = mandates.map((m: MandateRow) => ({
     id: m.id,
-    label: m.label,
+    label: `${m.label} · ${m.routine_id ? `Solo rutina: ${routines?.find((r) => r.id === m.routine_id)?.name ?? 'rutina no disponible'}` : 'Toda la empresa'}`,
     reason: m.reason,
     state: mandateState(m, now),
     daysLeft: daysLeft(m, now),
@@ -174,7 +179,11 @@ export default async function MandatesPage() {
           </div>
         </Panel>
 
-        <GrantForm catalogue={catalogue} defaultDays={DEFAULT_MANDATE_DAYS} />
+        <GrantForm
+          catalogue={catalogue}
+          routines={routinesError ? [] : (routines ?? [])}
+          defaultDays={DEFAULT_MANDATE_DAYS}
+        />
 
         <MandateList
           mandates={view}

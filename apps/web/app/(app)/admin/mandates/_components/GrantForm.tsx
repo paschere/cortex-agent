@@ -51,15 +51,18 @@ const RISK_COPY: Record<Ceiling, { title: string; blurb: string }> = {
 
 export function GrantForm({
   catalogue,
+  routines = [],
   defaultDays,
 }: {
   catalogue: CatalogueFamily[];
+  routines?: { id: string; name: string }[];
   defaultDays: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const [routineId, setRoutineId] = useState('');
   const [label, setLabel] = useState('');
   const [reason, setReason] = useState('');
   const [patterns, setPatterns] = useState<string[]>([]);
@@ -123,6 +126,7 @@ export function GrantForm({
         body: JSON.stringify({
           label,
           reason,
+          routineId: routineId || null,
           toolPatterns: patterns,
           maxRiskLevel,
           amountCeiling: ceiling,
@@ -261,6 +265,29 @@ export function GrantForm({
           </p>
 
           <div className="grid grid-cols-2 gap-3">
+            <label className="block" htmlFor="mandate-routine">
+              <span className="field-label">Dónde puede usar este permiso</span>
+              <select
+                id="mandate-routine"
+                value={routineId}
+                onChange={(e) => {
+                  setRoutineId(e.target.value);
+                  if (e.target.value) setAppliesUnattended(true);
+                }}
+                className="mt-2 w-full rounded-lg border border-border bg-surface p-2 text-sm"
+              >
+                <option value="">Toda la empresa</option>
+                {routines.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    Solo: {r.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs text-ink-muted">
+                Al elegir una rutina, sus acciones con aprobación dependerán de mandatos exclusivos
+                de esa rutina. Revocarlos no restaura la autorización anterior.
+              </p>
+            </label>
             <label className="block" htmlFor="mandate-days">
               <span className="field-label">Caduca en (días)</span>
               <Input
@@ -405,7 +432,11 @@ export function GrantForm({
                   </strong>
                 </>
               )}
-              , durante <strong className="text-ink">{days || '0'} días</strong>
+              ,{' '}
+              {routineId
+                ? `solo en ${routines.find((r) => r.id === routineId)?.name}, `
+                : 'en toda la empresa, '}
+              durante <strong className="text-ink">{days || '0'} días</strong>
               {appliesUnattended ? ', incluidas las rutinas automáticas' : ''}.
             </>
           ) : (

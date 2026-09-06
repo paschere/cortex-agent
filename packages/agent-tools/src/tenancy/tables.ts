@@ -71,6 +71,7 @@ const shared = (why: string): SharedTable => ({ kind: 'shared', why });
 export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // --- Directory and access -------------------------------------------------
   management_workflows: tenant(),
+  knowledge_reviews: tenant(),
   management_workflow_events: tenant(),
   management_profiles: tenant(),
   management_cases: tenant(),

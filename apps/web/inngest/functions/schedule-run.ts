@@ -4,6 +4,7 @@ import { renderRoutineResultEmail } from '@/lib/email-templates';
 import { sendChatDm, toChatText } from '@/lib/google-chat';
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
+import { readRoutineAuthority } from '@/lib/management/routine-authority';
 import { noteRoutineRun } from '@/lib/notifications/producers';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildCompanyFactsBlock } from '@/lib/system-prompt';
@@ -33,6 +34,7 @@ interface JobRow {
   schedule_kind: 'once' | 'cron';
   status: string;
   allow_unattended_writes: boolean;
+  mandate_only: boolean;
   notify_conversation: boolean;
   notify_email: boolean;
   conversation_id: string | null;
@@ -122,10 +124,16 @@ async function executeToolJob(job: JobRow): Promise<ExecResult> {
     agentId: job.agent_id,
     surface: 'schedule',
   });
+  ctx.routineId = job.id;
+  ctx.scopedMandatesOnly = job.mandate_only === true;
   try {
-    const result = await runTool(toolDef, job.tool_input ?? {}, ctx, {
-      confirmed: job.allow_unattended_writes,
-    });
+    const authority = await readRoutineAuthority(ctx.db, job.id, job.user_id);
+    const result = await runTool(
+      toolDef,
+      job.tool_input ?? {},
+      { ...ctx, scopedMandatesOnly: authority.scopedMandatesOnly },
+      { confirmed: authority.confirmed },
+    );
     const output =
       job.tool_id === 'management.daily_brief' &&
       typeof (result as { report?: unknown })?.report === 'string'
@@ -162,6 +170,8 @@ async function executeAgentJob(job: JobRow): Promise<ExecResult> {
     agentId: job.agent_id,
     surface: 'schedule',
   });
+  ctx.routineId = job.id;
+  ctx.scopedMandatesOnly = job.mandate_only === true;
   const allowed = filterTools(agent.allowed_tool_ids as string[]);
 
   const aiTools: Record<string, CoreTool> = Object.fromEntries(
@@ -171,20 +181,13 @@ async function executeAgentJob(job: JobRow): Promise<ExecResult> {
         description: t.description,
         parameters: t.inputSchema,
         execute: async (args, { abortSignal }) => {
-          if (t.requiresConfirmation && !job.allow_unattended_writes) {
-            return {
-              __skipped: true,
-              tool: t.id,
-              reason:
-                'This tool requires human confirmation and the job does not allow unattended writes. Report this to the user instead.',
-            } as unknown as never;
-          }
           try {
+            const authority = await readRoutineAuthority(ctx.db, job.id, job.user_id);
             return await runTool(
               t,
               args,
-              { ...ctx, signal: abortSignal },
-              { confirmed: job.allow_unattended_writes },
+              { ...ctx, signal: abortSignal, scopedMandatesOnly: authority.scopedMandatesOnly },
+              { confirmed: authority.confirmed },
             );
           } catch (err) {
             logger.error('scheduled tool failed', {
@@ -270,7 +273,7 @@ export const scheduleRunJob: JobHandler = async ({ event, step }) => {
     const { data, error } = await db
       .from('scheduled_jobs')
       .select(
-        'id, organization_id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes, notify_conversation, notify_email, conversation_id, recipients, is_global, timezone, next_run_at',
+        'id, organization_id, user_id, agent_id, name, kind, tool_id, tool_input, instruction, schedule_kind, status, allow_unattended_writes,mandate_only, notify_conversation, notify_email, conversation_id, recipients, is_global, timezone, next_run_at',
       )
       .eq('id', jobId)
       .maybeSingle();
