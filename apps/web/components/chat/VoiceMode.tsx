@@ -5,6 +5,7 @@ import { VOICE_SESSION_MS, readVoiceText } from '@/lib/voice-realtime';
 import * as Dialog from '@radix-ui/react-dialog';
 import { ArrowUpRight, Mic, MicOff, PhoneOff, Square, Volume2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { BrowserVoiceMode } from './BrowserVoiceMode';
 import { LegacyVoiceMode } from './LegacyVoiceMode';
 
 type RealtimeEvent = {
@@ -67,6 +68,7 @@ export function VoiceMode({
   const sequence = useRef(0);
   const speakingEpoch = useRef(0);
   const connectionDeadline = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectDeadline = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deadline = useRef<ReturnType<typeof setTimeout> | null>(null);
   const animation = useRef(0);
   const orb = useRef<HTMLDivElement>(null);
@@ -76,6 +78,8 @@ export function VoiceMode({
     sequence.current++;
     if (deadline.current) clearTimeout(deadline.current);
     if (connectionDeadline.current) clearTimeout(connectionDeadline.current);
+    if (reconnectDeadline.current) clearTimeout(reconnectDeadline.current);
+    reconnectDeadline.current = null;
     cancelAnimationFrame(animation.current);
     for (const controller of aborts.current) controller.abort();
     aborts.current.clear();
@@ -165,8 +169,19 @@ export function VoiceMode({
       };
       pc.onconnectionstatechange = () => {
         if (!alive()) return;
-        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')
+        if (pc.connectionState === 'connected') {
+          if (reconnectDeadline.current) clearTimeout(reconnectDeadline.current);
+          reconnectDeadline.current = null;
+          setNote('');
+        } else if (pc.connectionState === 'failed') {
           fail('Se perdió la conexión. Tu micrófono se ha cerrado; puedes volver a conectar.');
+        } else if (pc.connectionState === 'disconnected' && !reconnectDeadline.current) {
+          setNote('Recuperando la conexión…');
+          reconnectDeadline.current = setTimeout(() => {
+            if (alive() && pc.connectionState !== 'connected')
+              fail('Se perdió la conexión. Tu micrófono se ha cerrado; puedes volver a conectar.');
+          }, 5000);
+        }
       };
       for (const track of mic.getAudioTracks()) pc.addTrack(track, mic);
       const dc = pc.createDataChannel('oai-events');
@@ -354,6 +369,8 @@ export function VoiceMode({
     channel.current.send(JSON.stringify({ type: 'output_audio_buffer.clear' }));
     setPhase('listening');
   };
+  if (legacy && consult)
+    return <BrowserVoiceMode consult={consult} scopeLabel={scopeLabel} onClose={onClose} />;
   if (legacy && allowLegacy) return <LegacyVoiceMode onClose={onClose} />;
   return (
     <Dialog.Root
@@ -464,20 +481,28 @@ export function VoiceMode({
                     onClick={() => void connect()}
                   >
                     <Mic size={19} />
-                    {phase === 'connecting' ? 'Conectando…' : 'Conectar mi voz'}
+                    {phase === 'connecting'
+                      ? 'Conectando…'
+                      : consult
+                        ? 'Voz en tiempo real'
+                        : 'Conectar mi voz'}
                   </button>
                 )}
               </div>
-              {allowLegacy && !connected && phase !== 'connecting' && (
+              {(allowLegacy || consult) && !connected && phase !== 'connecting' && (
                 <button
                   type="button"
-                  className="voice-compatible"
+                  className={
+                    consult
+                      ? 'mt-4 rounded-full border border-white/20 px-5 py-3 text-sm text-violet-100 transition-colors hover:bg-white/5'
+                      : 'voice-compatible'
+                  }
                   onClick={() => {
                     dispose();
                     setLegacy(true);
                   }}
                 >
-                  Usar modo compatible
+                  {consult ? 'Usar voz del navegador' : 'Usar modo compatible'}
                 </button>
               )}
             </div>

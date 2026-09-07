@@ -3,19 +3,24 @@
 import { ChatMarkdown } from '@/components/chat/ChatMarkdown';
 import { VoiceDictation } from '@/components/chat/VoiceDictation';
 import { VoiceMode } from '@/components/chat/VoiceMode';
+import { CortexSignature } from '@/components/ui/cortex-signature';
 import type { Workspace, WorkspaceListPayload } from '@/lib/workspace-switch';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
-  Brain,
   Check,
   CheckCheck,
+  ChevronDown,
   Copy,
   Download,
   FileText,
+  History,
   Loader2,
   Mic,
   Paperclip,
+  Search,
   Send,
   ShieldCheck,
+  Sparkles,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -99,6 +104,10 @@ export function GlobalChat() {
   const [attachments, setAttachments] = useState<GlobalAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [showLatest, setShowLatest] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [scopeDraft, setScopeDraft] = useState<string[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [scopeQuery, setScopeQuery] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -123,6 +132,9 @@ export function GlobalChat() {
   }, [messages, sending, error]);
 
   const interactionLocked = sending || opening || dictating || voiceOpen || uploading;
+  const visibleSpaces = spaces.filter((space) =>
+    space.name.toLocaleLowerCase().includes(scopeQuery.trim().toLocaleLowerCase()),
+  );
 
   useEffect(() => {
     setAttachments([]);
@@ -406,134 +418,52 @@ export function GlobalChat() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#111015] text-zinc-100 md:flex-row">
-      <aside className="w-full min-w-0 max-w-full shrink-0 border-b border-white/10 bg-[#17161c] px-4 py-3 md:w-72 md:border-b-0 md:border-r md:p-5">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-violet-300" />
-          <h2 className="text-sm font-semibold">Alcance de esta conversación</h2>
-        </div>
-        <p className="mt-2 hidden text-xs leading-relaxed text-zinc-500 md:block">
-          Cambiar la selección inicia un chat limpio. Este historial es privado y no se añade a los
-          cerebros.
-        </p>
-        <div className="scroll-slim mt-3 flex w-full min-w-0 gap-2 overflow-x-auto pb-1 md:mt-5 md:grid md:overflow-visible md:pb-0">
-          {loadingSpaces ? (
-            <div className="flex items-center gap-2 py-3 text-xs text-zinc-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Cargando espacios
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#0d0c11] text-zinc-100">
+      <main aria-busy={sending || opening} className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="shrink-0 border-b border-white/[0.07] bg-[#111015]/95 px-4 py-3 backdrop-blur md:px-8">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <CortexSignature className="h-8 w-8 shrink-0 text-violet-200" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-zinc-500">Cortex</p>
+                <h1 className="truncate text-sm font-semibold tracking-tight text-white">
+                  Chat global
+                </h1>
+              </div>
             </div>
-          ) : (
-            spaces.map((workspace) => (
-              <ScopeButton
-                key={workspace.id}
-                workspace={workspace}
-                disabled={interactionLocked}
-                checked={selected.includes(workspace.id)}
-                onChange={() =>
-                  select(
-                    selected.includes(workspace.id)
-                      ? selected.filter((id) => id !== workspace.id)
-                      : [...selected, workspace.id],
-                  )
-                }
-              />
-            ))
-          )}
-        </div>
-        <div className="mt-2 flex gap-2 md:mt-3">
-          <button
-            type="button"
-            disabled={interactionLocked}
-            onClick={() => select(spaces.map((space) => space.id))}
-            className="text-xs font-semibold text-violet-300 hover:text-violet-200"
-          >
-            Seleccionar todos
-          </button>
-          <span className="text-zinc-700">/</span>
-          <button
-            type="button"
-            disabled={interactionLocked}
-            onClick={() => select([])}
-            className="text-xs font-semibold text-zinc-500 hover:text-zinc-300"
-          >
-            Ninguno
-          </button>
-        </div>
-        <div className="mt-6 hidden border-t border-white/10 pt-4 md:block">
-          <div className="mb-3 flex items-center justify-between text-xs text-zinc-500">
-            <span>Conversaciones recientes</span>
-            <button
-              type="button"
-              disabled={interactionLocked}
-              onClick={() => select(selected)}
-              className="text-violet-300 disabled:opacity-40"
-            >
-              Nueva
-            </button>
-          </div>
-          <div className="scroll-slim max-h-[35vh] space-y-1 overflow-y-auto">
-            {history.map((item) => (
+            <div className="flex min-w-0 items-center gap-1.5">
               <button
                 type="button"
-                key={item.id}
                 disabled={interactionLocked}
-                onClick={() => void openConversation(item.id)}
-                className={`block w-full truncate rounded-lg px-2 py-2 text-left text-xs hover:bg-white/5 disabled:opacity-40 ${conversationId === item.id ? 'bg-white/5 text-violet-200' : 'text-zinc-400'}`}
+                onClick={() => {
+                  setScopeDraft(selected);
+                  setScopeQuery('');
+                  setScopeOpen(true);
+                }}
+                className="inline-flex h-9 max-w-[46vw] items-center gap-2 rounded-full border border-violet-300/20 bg-violet-300/[0.08] px-3 text-xs font-medium text-violet-100 disabled:opacity-40 sm:max-w-64"
               >
-                {item.title}
+                <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{selectionLabel}</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-violet-300" />
               </button>
-            ))}
-            {!history.length && (
-              <p className="text-xs text-zinc-600">Tus conversaciones aparecerán aquí.</p>
-            )}
-          </div>
-        </div>
-      </aside>
-      <main aria-busy={sending || opening} className="flex min-w-0 flex-1 flex-col">
-        <header className="border-b border-white/10 px-5 py-4 md:px-8">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-            <div>
-              <h1 className="text-base font-semibold tracking-tight">Consulta global</h1>
-              <p className="mt-1 text-xs text-zinc-500">{selectionLabel}</p>
-            </div>
-            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
-              <select
-                aria-label="Abrir conversación reciente"
+              <button
+                type="button"
                 disabled={interactionLocked}
-                value={conversationId ?? ''}
-                onChange={(event) =>
-                  event.target.value ? void openConversation(event.target.value) : select(selected)
-                }
-                className="max-w-36 rounded-lg border border-white/10 bg-[#17161c] px-2 py-2 text-xs text-zinc-300 md:hidden"
+                onClick={() => setHistoryOpen(true)}
+                aria-label="Abrir historial"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-40"
               >
-                <option value="">Nueva conversación</option>
-                {history.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
+                <History className="h-4 w-4" />
+              </button>
               <button
                 type="button"
                 disabled={!messages.length || interactionLocked}
                 onClick={exportConversation}
                 aria-label="Exportar conversación en Markdown"
-                title="Exportar conversación"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-zinc-400 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-30"
+                className="hidden h-9 w-9 shrink-0 place-items-center rounded-full text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-30 sm:grid"
               >
                 <Download className="h-4 w-4" />
               </button>
-              <button
-                type="button"
-                disabled={sending || opening || dictating || loadingSpaces}
-                onClick={() => setVoiceOpen(true)}
-                aria-label="Abrir conversación por voz"
-                title="Conversar por voz"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-violet-300/20 bg-violet-300/10 text-violet-200 transition-colors hover:bg-violet-300/15 disabled:opacity-30"
-              >
-                <Mic className="h-4 w-4" />
-              </button>
-              <Brain className="h-5 w-5 shrink-0 text-violet-300" />
             </div>
           </div>
         </header>
@@ -544,20 +474,43 @@ export function GlobalChat() {
             nearBottomRef.current = area.scrollHeight - area.scrollTop - area.clientHeight < 96;
             if (nearBottomRef.current) setShowLatest(false);
           }}
-          className="scroll-slim relative flex-1 overflow-y-auto px-4 py-6 md:px-8"
+          className="scroll-slim relative flex-1 overflow-y-auto px-4 py-7 md:px-8 md:py-10"
         >
-          <div className="mx-auto max-w-3xl space-y-5">
+          <div className="mx-auto max-w-3xl space-y-7">
             {messages.length === 0 && (
-              <div className="pt-[12vh]">
-                <p className="max-w-lg text-2xl font-medium tracking-[-0.025em] text-white">
-                  Pregunta con el alcance a la vista.
+              <div className="mx-auto flex max-w-2xl flex-col items-center pt-[5vh] text-center md:pt-[9vh]">
+                <div className="relative mb-5 grid h-20 w-20 place-items-center">
+                  <div className="absolute inset-2 rounded-full bg-violet-300/10 blur-xl" />
+                  <CortexSignature className="relative h-20 w-20 text-violet-200" />
+                </div>
+                <h2 className="max-w-xl text-balance text-3xl font-medium tracking-[-0.04em] text-white md:text-4xl">
+                  ¿Qué quieres resolver hoy?
+                </h2>
+                <p className="mt-4 max-w-lg text-pretty text-sm leading-6 text-zinc-500">
+                  {selected.length
+                    ? 'Revisa prioridades, cruza contexto y prepara el siguiente paso sin mezclar los cerebros de cada empresa.'
+                    : 'Elige los espacios que quieres consultar o empieza una conversación general.'}
                 </p>
-                <p className="mt-3 max-w-md text-sm leading-relaxed text-zinc-500">
-                  Consulta cerebros y trabajo pendiente de empresas autorizadas, o deja la selección
-                  vacía para conversar sin datos ni herramientas. Cortex puede preparar acciones por
-                  empresa. Revisa el destino y los datos de cada propuesta antes de aprobar su
-                  ejecución.
-                </p>
+                <div className="mt-8 grid w-full gap-2 text-left sm:grid-cols-3">
+                  {[
+                    '¿Qué requiere mi atención hoy?',
+                    'Compara los riesgos entre empresas',
+                    'Prepara mi revisión semanal',
+                  ].map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      disabled={interactionLocked}
+                      onClick={() => {
+                        setInput(prompt);
+                        textareaRef.current?.focus();
+                      }}
+                      className="min-h-14 rounded-xl border border-white/[0.08] bg-white/[0.025] px-4 py-3 text-sm leading-5 text-zinc-400 transition-colors hover:border-violet-300/20 hover:bg-violet-300/[0.05] hover:text-zinc-200 disabled:opacity-40"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {messages.map((message) => (
@@ -565,8 +518,8 @@ export function GlobalChat() {
                 <div
                   className={
                     message.role === 'user'
-                      ? 'ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-white px-4 py-3 text-sm text-zinc-900'
-                      : 'max-w-2xl whitespace-pre-wrap text-sm leading-7 text-zinc-200'
+                      ? 'ml-auto max-w-[88%] rounded-2xl rounded-br-md border border-violet-200/10 bg-violet-200/[0.08] px-4 py-3 text-sm leading-6 text-zinc-200'
+                      : 'max-w-[44rem] whitespace-pre-wrap text-[15px] leading-7 text-zinc-100'
                   }
                 >
                   {(message.content ? (
@@ -636,7 +589,7 @@ export function GlobalChat() {
             </button>
           )}
         </div>
-        <div className="border-t border-white/10 bg-[#17161c] px-4 py-4 md:px-8">
+        <div className="shrink-0 bg-gradient-to-t from-[#0d0c11] via-[#0d0c11] to-transparent px-3 pb-3 pt-2 md:px-8 md:pb-6">
           <div className="mx-auto max-w-3xl">
             {attachments.length > 0 && (
               <div className="mb-2 flex min-w-0 flex-wrap gap-2" aria-label="Adjuntos temporales">
@@ -668,7 +621,7 @@ export function GlobalChat() {
                 event.preventDefault();
                 void send();
               }}
-              className="flex items-end gap-2 rounded-2xl border border-white/10 bg-[#201e26] p-2 focus-within:border-violet-400/50"
+              className="overflow-hidden rounded-2xl border border-white/10 bg-[#19181f] shadow-[0_18px_60px_rgba(0,0,0,0.35)] transition-colors focus-within:border-violet-300/30"
             >
               <label className="sr-only" htmlFor="global-message">
                 Mensaje
@@ -691,15 +644,7 @@ export function GlobalChat() {
                     ? 'Consulta los espacios seleccionados…'
                     : 'Conversación general, sin datos de espacios…'
                 }
-                className="max-h-36 min-h-10 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm text-white outline-none placeholder:text-zinc-600"
-              />
-              <VoiceDictation
-                disabled={sending || opening || voiceOpen || uploading || loadingSpaces}
-                hideUnsupported
-                ariaLabel="Dictar mensaje"
-                getBaseText={() => input}
-                onText={setInput}
-                onListeningChange={setDictating}
+                className="max-h-36 min-h-[68px] w-full resize-none overflow-y-auto bg-transparent px-4 pb-2 pt-4 text-[15px] leading-6 text-white outline-none placeholder:text-zinc-600"
               />
               <input
                 ref={fileRef}
@@ -712,50 +657,235 @@ export function GlobalChat() {
                   if (file) void uploadAttachment(file);
                 }}
               />
-              <button
-                type="button"
-                disabled={interactionLocked || attachments.length >= 2}
-                onClick={() => fileRef.current?.click()}
-                aria-label={
-                  attachments.length >= 2
-                    ? 'Máximo de dos adjuntos alcanzado'
-                    : 'Adjuntar archivo temporal'
-                }
-                title="Adjuntar PDF, DOCX, TXT o MD"
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-zinc-400 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-30"
-              >
-                {uploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Paperclip className="h-4 w-4" />
+              <div className="flex min-w-0 items-center justify-between gap-2 px-2 pb-2">
+                <div className="flex min-w-0 items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={sending || opening || dictating || loadingSpaces || uploading}
+                    onClick={() => setVoiceOpen(true)}
+                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-violet-200 px-3.5 text-xs font-semibold text-[#17141f] shadow-[0_8px_24px_rgba(184,166,255,0.16)] disabled:opacity-40"
+                  >
+                    <Mic className="h-4 w-4" />
+                    Modo voz
+                  </button>
+                  <VoiceDictation
+                    disabled={sending || opening || voiceOpen || uploading || loadingSpaces}
+                    hideUnsupported
+                    label="Dictar"
+                    ariaLabel="Dictar mensaje"
+                    getBaseText={() => input}
+                    onText={setInput}
+                    onListeningChange={setDictating}
+                  />
+                  <button
+                    type="button"
+                    disabled={interactionLocked || attachments.length >= 2}
+                    onClick={() => fileRef.current?.click()}
+                    aria-label={
+                      attachments.length >= 2
+                        ? 'Máximo de dos adjuntos alcanzado'
+                        : 'Adjuntar archivo temporal'
+                    }
+                    title="Adjuntar PDF, DOCX, TXT o MD"
+                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl px-2.5 text-xs text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-30"
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Paperclip className="h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">Adjuntar</span>
+                  </button>
+                </div>
+                {sending && (
+                  <button
+                    type="button"
+                    onClick={() => controller.current?.abort()}
+                    className="shrink-0 px-2 py-3 text-xs text-zinc-400"
+                  >
+                    Detener
+                  </button>
                 )}
-              </button>
-              {sending && (
                 <button
-                  type="button"
-                  onClick={() => controller.current?.abort()}
-                  className="px-2 py-3 text-xs text-zinc-400"
+                  type="submit"
+                  disabled={!input.trim() || interactionLocked || loadingSpaces}
+                  aria-label="Enviar"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-[#17151d] disabled:bg-white/10 disabled:text-zinc-600"
                 >
-                  Detener
+                  <Send className="h-4 w-4" />
                 </button>
-              )}
-              <button
-                type="submit"
-                disabled={!input.trim() || interactionLocked || loadingSpaces}
-                aria-label="Enviar"
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-300 text-[#17151d] disabled:opacity-30"
-              >
-                <Send className="h-4 w-4" />
-              </button>
+              </div>
             </form>
-            <p className="mt-2 text-center text-[10px] text-zinc-600">
-              El alcance queda guardado con esta conversación. Este chat no se añade a ningún
-              cerebro. Puedes adjuntar hasta 2 archivos PDF, DOCX, TXT o MD de 4 MB; dejan de estar
-              disponibles a los 7 días.
-            </p>
+            <details className="group mx-auto mt-2 w-fit max-w-full text-center text-[10px] text-zinc-600">
+              <summary className="cursor-pointer list-none px-3 py-1 hover:text-zinc-400">
+                Privacidad y adjuntos
+              </summary>
+              <p className="max-w-xl px-3 pb-1 leading-4">
+                El alcance queda guardado en la conversación y no se añade a los cerebros. Hasta 2
+                archivos PDF, DOCX, TXT o MD de 4 MB; dejan de estar disponibles a los 7 días.
+              </p>
+            </details>
           </div>
         </div>
       </main>
+      <Dialog.Root open={scopeOpen} onOpenChange={setScopeOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+          <Dialog.Content className="fixed inset-x-3 bottom-3 z-50 max-h-[82vh] overflow-hidden rounded-[24px] border border-white/10 bg-[#18171e] shadow-2xl sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-[520px] sm:-translate-x-1/2 sm:-translate-y-1/2">
+            <div className="flex items-start justify-between border-b border-white/[0.07] px-5 py-4">
+              <div>
+                <Dialog.Title className="text-base font-semibold text-white">
+                  Alcance de la conversación
+                </Dialog.Title>
+                <Dialog.Description className="mt-1 text-xs leading-5 text-zinc-500">
+                  Cambiarlo inicia una conversación limpia y mantiene cada cerebro separado.
+                </Dialog.Description>
+              </div>
+              <Dialog.Close className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-zinc-500 hover:bg-white/5 hover:text-white">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Cerrar</span>
+              </Dialog.Close>
+            </div>
+            <div className="p-4 sm:p-5">
+              <label className="flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-black/15 px-3 focus-within:border-violet-300/30">
+                <Search className="h-4 w-4 text-zinc-500" />
+                <span className="sr-only">Buscar espacio</span>
+                <input
+                  value={scopeQuery}
+                  onChange={(event) => setScopeQuery(event.target.value)}
+                  placeholder="Buscar un espacio…"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"
+                />
+              </label>
+              <div className="mt-3 flex items-center gap-3 text-xs">
+                <button
+                  type="button"
+                  disabled={interactionLocked}
+                  onClick={() => setScopeDraft(spaces.map((space) => space.id))}
+                  className="font-semibold text-violet-300 disabled:opacity-40"
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  disabled={interactionLocked}
+                  onClick={() => setScopeDraft([])}
+                  className="font-semibold text-zinc-500 disabled:opacity-40"
+                >
+                  Ninguno
+                </button>
+                <span className="ml-auto text-zinc-600">
+                  {scopeDraft.length === 0
+                    ? 'Sin espacios'
+                    : `${scopeDraft.length} ${scopeDraft.length === 1 ? 'espacio' : 'espacios'}`}
+                </span>
+              </div>
+              <div className="scroll-slim mt-4 grid max-h-[42vh] gap-2 overflow-y-auto sm:grid-cols-2">
+                {loadingSpaces ? (
+                  <p className="flex items-center gap-2 py-4 text-xs text-zinc-500">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Cargando espacios
+                  </p>
+                ) : (
+                  visibleSpaces.map((workspace) => (
+                    <ScopeButton
+                      key={workspace.id}
+                      workspace={workspace}
+                      disabled={interactionLocked}
+                      checked={scopeDraft.includes(workspace.id)}
+                      onChange={() =>
+                        setScopeDraft(
+                          scopeDraft.includes(workspace.id)
+                            ? scopeDraft.filter((id) => id !== workspace.id)
+                            : [...scopeDraft, workspace.id],
+                        )
+                      }
+                    />
+                  ))
+                )}
+              </div>
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/[0.07] pt-4">
+                <p className="text-xs text-zinc-600">
+                  {conversationId
+                    ? 'Aplicar inicia una conversación nueva.'
+                    : 'Elige el contexto para empezar.'}
+                </p>
+                <button
+                  type="button"
+                  disabled={interactionLocked}
+                  onClick={() => {
+                    select(scopeDraft);
+                    setScopeOpen(false);
+                  }}
+                  className="min-h-10 shrink-0 rounded-xl bg-violet-200 px-4 text-xs font-semibold text-[#17141f] disabled:opacity-40"
+                >
+                  {conversationId ? 'Aplicar y empezar' : 'Aplicar'}
+                </button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <Dialog.Root open={historyOpen} onOpenChange={setHistoryOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
+          <Dialog.Content className="fixed bottom-3 right-3 top-3 z-50 flex w-[min(380px,calc(100vw-24px))] flex-col rounded-[24px] border border-white/10 bg-[#18171e] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
+              <Dialog.Title className="text-base font-semibold text-white">
+                Conversaciones
+              </Dialog.Title>
+              <Dialog.Close className="grid h-8 w-8 place-items-center rounded-full text-zinc-500 hover:bg-white/5 hover:text-white">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Cerrar</span>
+              </Dialog.Close>
+            </div>
+            <div className="p-3">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={interactionLocked}
+                  onClick={() => {
+                    select(selected);
+                    setHistoryOpen(false);
+                  }}
+                  className="flex min-h-11 flex-1 items-center gap-2 rounded-xl bg-violet-200 px-4 text-sm font-semibold text-[#17141f] disabled:opacity-40"
+                >
+                  <Sparkles className="h-4 w-4" /> Nueva conversación
+                </button>
+                <button
+                  type="button"
+                  disabled={!messages.length || interactionLocked}
+                  onClick={exportConversation}
+                  aria-label="Exportar conversación en Markdown"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-400 hover:bg-white/5 hover:text-white disabled:opacity-30 sm:hidden"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="scroll-slim flex-1 space-y-1 overflow-y-auto px-3 pb-4">
+              {history.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  disabled={interactionLocked}
+                  onClick={() => {
+                    void openConversation(item.id);
+                    setHistoryOpen(false);
+                  }}
+                  className={`block min-h-11 w-full truncate rounded-xl px-3 text-left text-sm disabled:opacity-40 ${conversationId === item.id ? 'bg-white/[0.07] text-violet-200' : 'text-zinc-400 hover:bg-white/[0.04] hover:text-white'}`}
+                >
+                  {item.title}
+                </button>
+              ))}
+              {!history.length && (
+                <p className="px-3 py-8 text-center text-sm text-zinc-600">
+                  Tus conversaciones aparecerán aquí.
+                </p>
+              )}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       {voiceOpen && (
         <VoiceMode
           onClose={() => setVoiceOpen(false)}
