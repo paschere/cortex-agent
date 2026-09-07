@@ -1,10 +1,10 @@
 import 'server-only';
-import { type Role, type SessionUser, UnauthorizedError } from '@cortex/core';
+import { type SessionUser, UnauthorizedError } from '@cortex/core';
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { auth } from './auth';
 import { resolveActiveOrganization } from './organization';
-import { getSupabaseServiceClient } from './supabase/service';
+import { resolveSessionDirectory } from './session-directory';
 import { canonicalWorkspaceLocation, requestWorkspaceId } from './workspace-context';
 import { WORKSPACE_NAME_COOKIE } from './workspace-cookie';
 
@@ -18,9 +18,9 @@ import { WORKSPACE_NAME_COOKIE } from './workspace-cookie';
  * conversations. Looking the row up by email alone — as this did — would return
  * whichever one Postgres felt like and file the request under the wrong tenant.
  *
- * This function is one of the few places allowed to hold a raw service-role
- * client: it runs before a workspace is known and is what determines it.
- * Everything downstream gets `getOrgScopedClient(user.organization.id)`.
+ * The directory is resolved with one membership-gated SQL upsert. This avoids
+ * a cached missing-row read during concurrent first visits. Downstream queries
+ * use `getOrgScopedClient(user.organization.id)`.
  */
 export async function requireSession(): Promise<SessionUser> {
   const requestHeaders = await headers();
@@ -80,75 +80,14 @@ export async function requireSession(): Promise<SessionUser> {
   const canonical = canonicalWorkspaceLocation(requestHeaders, organization.id);
   if (canonical) redirect(canonical);
 
-  const sb = getSupabaseServiceClient();
-  const findRow = async () =>
-    (
-      await sb
-        .from('users')
-        .select('id,email,name,role')
-        .eq('organization_id', organization.id)
-        .eq('email', session.user.email)
-        .maybeSingle()
-    ).data;
-
-  let row = await findRow();
-
-  if (!row) {
-    // No directory row in this workspace yet. Two ways to get here: an account
-    // that has just been provisioned, and an existing account opening a
-    // workspace it was invited to. Both need a row, and neither is an error.
-    //
-    // The role comes from the workspace membership rather than from "is this
-    // the first user in the table". That old rule made the first person to sign
-    // up an admin of a product that had one company; with open signup it made
-    // them an admin and everybody after them a permanent member, in workspaces
-    // they own.
-    const { data: inserted } = await sb
-      .from('users')
-      .insert({
-        organization_id: organization.id,
-        email: session.user.email,
-        name: session.user.name ?? null,
-        role:
-          organization.role === 'owner' || organization.role === 'admin' ? 'org_admin' : 'member',
-      })
-      .select('id,email,name,role')
-      .single();
-
-    // A fresh account fires several requests at once and every one of them
-    // finds no row; the unique index on (organization_id, lower(email)) lets
-    // exactly one INSERT through and the losers read what the winner wrote,
-    // rather than failing the page with "unauthorized".
-    row = inserted ?? (await findRow());
-    if (!row) throw new UnauthorizedError();
-  }
-
-  // BA membership is the authority on every request. Preserve an explicitly
-  // delegated team_admin role for members, but never retain org_admin after BA
-  // membership is downgraded or revoked.
-  const authoritativeRole: Role =
-    organization.role === 'owner' || organization.role === 'admin'
-      ? 'org_admin'
-      : row.role === 'team_admin'
-        ? 'team_admin'
-        : 'member';
-  if (row.role !== authoritativeRole) {
-    const { data: updated } = await sb
-      .from('users')
-      .update({ role: authoritativeRole })
-      .eq('id', row.id as string)
-      .eq('organization_id', organization.id)
-      .select('id,email,name,role')
-      .single();
-    if (!updated) throw new UnauthorizedError();
-    row = updated;
-  }
+  const row = await resolveSessionDirectory(session.user.id, organization.id);
+  if (!row) throw new UnauthorizedError();
 
   return {
     id: row.id as string,
     email: row.email as string,
     name: row.name as string | null,
-    role: authoritativeRole,
+    role: row.role,
     organization,
   };
 }

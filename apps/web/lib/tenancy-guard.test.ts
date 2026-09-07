@@ -27,10 +27,6 @@ const ALLOWED = new Map<string, string>([
     'Defines both clients. The scoped one is built by wrapping the raw one.',
   ],
   [
-    'lib/session.ts',
-    'Runs before a workspace is known and is what resolves it: it reads the directory row inside the workspace the session names.',
-  ],
-  [
     'lib/oauth.ts',
     'The MCP OAuth handshake. Clients, codes and tokens are keyed by hash and issued before any workspace is in hand; the workspace comes from the user the token resolves to.',
   ],
@@ -82,7 +78,10 @@ const ALLOWED = new Map<string, string>([
     'inngest/functions/commitments-watch.ts',
     'Cron. "Which workspaces have deadlines to watch" spans the install; each event then carries one workspace, and every handle inside the per-workspace function is built from it.',
   ],
-  ['inngest/functions/management-workflow.ts', 'Cron discovers due workflow IDs across companies; each execution uses a handle pinned to the organization on the event.'],
+  [
+    'inngest/functions/management-workflow.ts',
+    'Cron discovers due workflow IDs across companies; each execution uses a handle pinned to the organization on the event.',
+  ],
   [
     'inngest/functions/goals-watch.ts',
     'Cron. "Which workspaces have an active goal" spans the install and there is no session behind a cron; the dispatcher selects organization_id off goals and nothing else. Every id rides on its own event, and the per-workspace function builds every handle from it — so one company\'s readings can only ever be computed from that company\'s rows.',
