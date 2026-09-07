@@ -12,11 +12,17 @@ import { clsx } from 'clsx';
 import {
   ArrowUpRight,
   Bell,
+  BookOpen,
+  ChevronDown,
+  Layers3,
   LayoutDashboard,
+  ListTodo,
   MessagesSquare,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Settings2,
+  Users,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -39,7 +45,16 @@ function Navigation({
   counts,
   collapsed,
   onNavigate,
-}: { role: Role; counts: NavCounts; collapsed: boolean; onNavigate?: () => void }) {
+  organization,
+  onExpand,
+}: {
+  role: Role;
+  counts: NavCounts;
+  collapsed: boolean;
+  onNavigate?: () => void;
+  organization?: ActiveOrganization;
+  onExpand: () => void;
+}) {
   const path = usePathname();
   const panel = usePanel();
   const commands = useCommandMenu();
@@ -49,12 +64,50 @@ function Navigation({
     { href: '/chat/global', label: 'Chat multiempresa', icon: MessagesSquare },
     { href: '/notifications', label: 'Notificaciones', icon: Bell },
   ];
-  const groups = [
-    { id: 'daily', label: 'Tu espacio de trabajo', items: rail.pinned },
-    { id: 'pending', label: 'Decisiones y seguimiento', items: rail.waiting },
-    ...rail.rest,
-    rail.company,
+  const daily = rail.pinned.filter((item) => ['/chat', '/management'].includes(item.href));
+  const groups: { id: string; label: string; icon: NavItem['icon']; items: NavItem[] }[] = [
+    { id: 'pending', label: 'Pendientes', icon: ListTodo, items: rail.waiting },
+    {
+      id: 'knowledge',
+      label: 'Conocimiento',
+      icon: BookOpen,
+      items: [
+        ...rail.pinned.filter((item) => ['/feed', '/kb'].includes(item.href)),
+        ...rail.rest
+          .filter((section) => section.id === 'sources')
+          .flatMap((section) => section.items),
+      ],
+    },
+    {
+      id: 'tools',
+      label: 'Herramientas',
+      icon: Layers3,
+      items: [
+        ...rail.pinned.filter((item) => item.href === '/calls'),
+        ...rail.rest
+          .filter((section) => section.id !== 'sources')
+          .flatMap((section) => section.items),
+      ],
+    },
+    {
+      id: 'company',
+      label: 'Administración',
+      icon: Settings2,
+      items: [
+        ...rail.pinned.filter((item) => item.href === '/onboarding'),
+        ...rail.company.items,
+        ...(organization?.kind === 'company' && organization.role === 'owner'
+          ? [{ href: '/team/activity', label: 'Actividad del equipo', icon: Users }]
+          : []),
+        ...rail.footer.filter((item) => item.href !== '/settings'),
+      ],
+    },
   ];
+  const activeGroup = groups.find((group) =>
+    group.items.some((item) => matches(path, item.href)),
+  )?.id;
+  const [selection, setSelection] = useState<{ path: string; id: string | null } | null>(null);
+  const openGroup = selection?.path === path ? selection.id : activeGroup;
   function row(item: NavItem) {
     const active = matches(path, item.href);
     const Icon = item.icon;
@@ -138,32 +191,92 @@ function Navigation({
             </>
           )}
         </button>
-        <div className="mb-5 rounded-xl border border-primary/15 bg-primary/5 p-1">
-          {!collapsed && (
-            <p className="px-2.5 pb-2 pt-2 text-xs font-semibold text-primary-ink">
-              Tus empresas y espacio personal
-            </p>
-          )}
-          <div className="space-y-0.5">{globalItems.map(row)}</div>
+        <div className="mb-4 space-y-0.5">
+          {globalItems.map(row)}
           <CreateCompanyButton collapsed={collapsed} />
         </div>
-        {groups.map((group) => (
-          <div key={group.id} className="mb-4">
-            {!collapsed ? (
-              <p className="mb-1.5 px-2.5 text-xs font-medium text-rail-ink-faint">{group.label}</p>
-            ) : (
-              <div className="mx-2 mb-2 border-t border-rail-border" />
-            )}
-            <div className="space-y-0.5">
-              {group.items
-                .filter((item) => !globalItems.some((entry) => entry.href === item.href))
-                .map(row)}
-            </div>
-          </div>
-        ))}
+        <div className="mb-3 border-t border-rail-border pt-3">
+          {!collapsed && (
+            <p
+              className="mb-2 truncate px-2.5 text-xs font-medium text-rail-ink-faint"
+              title={organization?.name}
+            >
+              {organization?.kind === 'personal'
+                ? 'Tu espacio personal'
+                : (organization?.name ?? 'Espacio activo')}
+            </p>
+          )}
+          <div className="space-y-0.5">{daily.map(row)}</div>
+        </div>
+        <div className="space-y-1">
+          {groups.map((group) => {
+            const Icon = group.icon;
+            const isOpen = openGroup === group.id && !collapsed;
+            const active = activeGroup === group.id;
+            const count = group.items.reduce(
+              (sum, item) => sum + (item.signal ? counts[item.signal] : 0),
+              0,
+            );
+            return (
+              <div key={group.id}>
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  aria-controls={`sidebar-${onNavigate ? 'mobile' : 'desktop'}-${group.id}`}
+                  aria-label={collapsed ? group.label : undefined}
+                  title={collapsed ? group.label : undefined}
+                  onClick={() => {
+                    if (collapsed) onExpand();
+                    setSelection({ path, id: isOpen ? null : group.id });
+                  }}
+                  className={clsx(
+                    'flex min-h-10 w-full items-center rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                    collapsed ? 'justify-center' : 'gap-2.5 px-2.5',
+                    active
+                      ? 'font-semibold text-primary-ink'
+                      : 'font-medium text-rail-ink-muted hover:bg-rail-2 hover:text-rail-ink',
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" strokeWidth={1.7} />
+                  {!collapsed && (
+                    <>
+                      <span className="flex-1 text-left">{group.label}</span>
+                      {count > 0 && (
+                        <span className="rounded-md bg-primary-soft px-1.5 text-xs tabular-nums text-primary-ink">
+                          {count > 99 ? '99+' : count}
+                        </span>
+                      )}
+                      <ChevronDown
+                        className={clsx(
+                          'h-3.5 w-3.5 text-rail-ink-faint transition-transform motion-reduce:transition-none',
+                          isOpen && 'rotate-180',
+                        )}
+                      />
+                    </>
+                  )}
+                  {collapsed && count > 0 && (
+                    <span className="ml-0.5 text-micro text-primary">
+                      {count > 9 ? '9+' : count}
+                    </span>
+                  )}
+                </button>
+                <div
+                  id={`sidebar-${onNavigate ? 'mobile' : 'desktop'}-${group.id}`}
+                  hidden={!isOpen}
+                  className="mb-2 ml-4 mt-1 space-y-0.5 border-l border-rail-border pl-2"
+                >
+                  {group.items.map(row)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </nav>
       <div className="shrink-0 space-y-1 border-t border-rail-border px-3 py-3">
-        {rail.footer.map(row)}
+        {rail.footer.filter((item) => item.href === '/settings').map(row)}
+        {!collapsed && organization?.kind === 'company' && (
+          <CorporateSupervisionNotice kind={organization.kind} />
+        )}
       </div>
     </>
   );
@@ -239,19 +352,14 @@ export function Sidebar({
             />
           </div>
         )}
-        {!small && organization?.kind === 'company' && (
-          <CorporateSupervisionNotice kind={organization.kind} />
-        )}
-        {!small && organization?.kind === 'company' && organization.role === 'owner' && (
-          <Link
-            href="/team/activity"
-            onClick={onNavigate}
-            className="mx-5 mb-3 text-xs font-semibold text-primary-ink"
-          >
-            Actividad de tu equipo →
-          </Link>
-        )}
-        <Navigation role={role} counts={counts} collapsed={small} onNavigate={onNavigate} />
+        <Navigation
+          role={role}
+          counts={counts}
+          collapsed={small}
+          onNavigate={onNavigate}
+          organization={organization}
+          onExpand={() => setPeek(true)}
+        />
         {small && !inChat && (
           <button
             type="button"
