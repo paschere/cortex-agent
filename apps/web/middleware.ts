@@ -1,5 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { workspaceRequestHeaders } from './lib/workspace-context';
+import {
+  canonicalWorkspaceLocation,
+  requestWorkspaceId,
+  workspaceRequestHeaders,
+} from './lib/workspace-context';
 
 const PUBLIC_PATHS = [
   // The landing page. Safe to list even though every path starts with '/',
@@ -113,6 +117,17 @@ export async function middleware(req: NextRequest) {
     url.pathname = '/login';
     url.searchParams.set('next', `${pathname}${req.nextUrl.search}`);
     return NextResponse.redirect(url);
+  }
+
+  // Resolve a tab's inherited context before rendering a Flight response.
+  // Redirecting from requireSession during a cross-layout client navigation
+  // can leave Next with the previous route's payload and an empty document.
+  // This only pins the URL: requireSession still validates membership.
+  const workspace = requestWorkspaceId(requestHeaders);
+  const canonical =
+    workspace !== null ? canonicalWorkspaceLocation(requestHeaders, workspace) : null;
+  if (req.method === 'GET' && canonical) {
+    return NextResponse.redirect(new URL(canonical, req.url));
   }
 
   // A cookie is present. Validate it, but FAIL OPEN: if the check is slow,

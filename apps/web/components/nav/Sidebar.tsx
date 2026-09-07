@@ -6,6 +6,7 @@ import { type NavItem, buildRail } from '@/lib/nav-shape';
 import type { NavCounts } from '@/lib/nav-signals';
 import { recordVisit } from '@/lib/nav-usage';
 import { panelForHref } from '@/lib/panels/shape';
+import { workspaceHref } from '@/lib/workspace-context';
 import type { ActiveOrganization, Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
@@ -112,14 +113,13 @@ function Navigation({
     const active = matches(path, item.href);
     const Icon = item.icon;
     const badge = item.signal ? counts[item.signal] : 0;
-    const wanted =
-      path.startsWith('/chat') && !globalItems.some((entry) => entry.href === item.href)
-        ? panelForHref(item.href)
-        : null;
+    const global = globalItems.some((entry) => entry.href === item.href);
+    const href = organization && !global ? workspaceHref(organization.id, item.href) : item.href;
+    const wanted = path.startsWith('/chat') && !global ? panelForHref(item.href) : null;
     return (
       <Link
         key={item.href}
-        href={item.href}
+        href={href}
         title={collapsed ? item.label : undefined}
         aria-current={active ? 'page' : undefined}
         aria-label={collapsed ? `${item.label}${badge ? `, ${badge} pendientes` : ''}` : undefined}
