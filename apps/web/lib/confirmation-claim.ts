@@ -8,6 +8,37 @@ export function canonicalInput(value: unknown): string {
       .join(',')}}`;
   return JSON.stringify(value) ?? 'null';
 }
+
+/** Recover legacy intermediate results only from server-persisted parts.
+ * A recorded result always wins, including claimed, failed and completed calls.
+ */
+export function confirmationResults(
+  results: unknown,
+  parts: unknown,
+): Array<Record<string, unknown>> {
+  const saved = Array.isArray(results) ? results.filter((r) => r && typeof r === 'object') : [];
+  const ids = new Set(saved.map((r) => r.toolCallId));
+  const recovered = Array.isArray(parts)
+    ? parts.flatMap((part) => {
+        const invocation = part?.type === 'tool-invocation' ? part.toolInvocation : null;
+        if (
+          invocation?.state !== 'result' ||
+          typeof invocation.toolCallId !== 'string' ||
+          ids.has(invocation.toolCallId)
+        )
+          return [];
+        return [
+          {
+            toolCallId: invocation.toolCallId,
+            toolName: invocation.toolName,
+            args: invocation.args,
+            result: invocation.result,
+          },
+        ];
+      })
+    : [];
+  return [...saved, ...recovered];
+}
 export function pendingConfirmationIndex(
   results: unknown,
   toolId: string,

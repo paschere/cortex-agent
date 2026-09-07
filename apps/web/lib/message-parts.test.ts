@@ -9,6 +9,7 @@ import {
   capServeParts,
   capStoredParts,
   isTruncatedResult,
+  overlayToolResults,
   parseStoredParts,
   toolInvocationsOf,
 } from './message-parts';
@@ -161,6 +162,28 @@ describe('el ida y vuelta por jsonb', () => {
 });
 
 describe('las invocaciones planas que el resto del cliente lee', () => {
+  it('usa el resultado actualizado y no revive una confirmación vieja de parts', () => {
+    const pending = {
+      __requires_confirmation: true,
+      toolId: 'meetings.join',
+      input: { meetingId: 'm1' },
+    };
+    const parts = buildStoredParts([
+      step({ toolResults: [{ toolCallId: 'c1', result: pending }] }),
+    ]);
+    if (!parts) throw new Error('faltaron parts');
+
+    const overlaid = overlayToolResults(parts, [
+      { toolCallId: 'c1', result: { joined: true, meetingId: 'm1' } },
+    ]);
+    const invocation = toolInvocationsOf(overlaid)[0];
+
+    expect(invocation?.state).toBe('result');
+    if (invocation?.state !== 'result') throw new Error('debió traer resultado');
+    expect(invocation.result).toEqual({ joined: true, meetingId: 'm1' });
+    expect(invocation.result).not.toEqual(pending);
+  });
+
   it('salen de las MISMAS parts que se van a pintar, ya recortadas', () => {
     const parts = capServeParts(
       capStoredParts(

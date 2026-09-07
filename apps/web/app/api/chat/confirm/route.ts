@@ -1,5 +1,5 @@
 import { buildToolContext } from '@/lib/agent';
-import { pendingConfirmationIndex } from '@/lib/confirmation-claim';
+import { confirmationResults, pendingConfirmationIndex } from '@/lib/confirmation-claim';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
@@ -43,10 +43,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Esta acción ya no está autorizada.' }, { status: 403 });
   const { data: rows, error: readError } = await db
     .from('messages')
-    .select('id,tool_results')
+    .select('id,tool_results,parts')
     .eq('conversation_id', conversationId)
     .eq('role', 'assistant')
-    .not('tool_results', 'is', null)
     .order('created_at', { ascending: false })
     .limit(20);
   if (readError)
@@ -54,7 +53,12 @@ export async function POST(req: NextRequest) {
   const candidates = (rows ?? [])
     .map((row) => ({
       row,
-      index: pendingConfirmationIndex(row.tool_results, toolId, input, toolCallId),
+      index: pendingConfirmationIndex(
+        confirmationResults(row.tool_results, row.parts),
+        toolId,
+        input,
+        toolCallId,
+      ),
     }))
     .filter(({ index }) => index >= 0);
   const candidate = candidates[0];
@@ -67,7 +71,7 @@ export async function POST(req: NextRequest) {
       { status: 409 },
     );
   const { row, index } = candidate;
-  const original = row.tool_results as Array<Record<string, unknown>>;
+  const original = confirmationResults(row.tool_results, row.parts);
   const claimed = original.map((entry, i) =>
     i === index
       ? {
@@ -81,12 +85,15 @@ export async function POST(req: NextRequest) {
       : entry,
   );
   // Compare-and-swap prevents two tabs, retries or double clicks executing twice.
-  const { data: claim, error: claimError } = await db
+  const claimQuery = db
     .from('messages')
     .update({ tool_results: claimed })
     .eq('id', row.id)
-    .eq('conversation_id', conversationId)
-    .eq('tool_results', JSON.stringify(original))
+    .eq('conversation_id', conversationId);
+  const { data: claim, error: claimError } = await (row.tool_results === null
+    ? claimQuery.is('tool_results', null)
+    : claimQuery.eq('tool_results', JSON.stringify(row.tool_results))
+  )
     .select('id')
     .maybeSingle();
   if (claimError || !claim)

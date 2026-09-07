@@ -1163,13 +1163,11 @@ export async function POST(req: NextRequest) {
    */
   after(async () => {
     try {
-      const [text, steps, toolCalls, toolResults, usage] = await Promise.all([
-        result.text,
-        result.steps,
-        result.toolCalls,
-        result.toolResults,
-        result.usage,
-      ]);
+      const [text, steps, usage] = await Promise.all([result.text, result.steps, result.usage]);
+      // The SDK's top-level toolCalls/toolResults contain only the final step,
+      // commonly a text-only follow-up after a confirmation was proposed.
+      const toolCalls = steps.flatMap((step) => step.toolCalls);
+      const toolResults = steps.flatMap((step) => step.toolResults);
       clock.finished(usage);
 
       const startedErrands = (toolResults ?? []).flatMap((r) => {

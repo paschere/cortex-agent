@@ -273,6 +273,46 @@ export function parseStoredParts(value: unknown): StoredPart[] | undefined {
 }
 
 /**
+ * Apply the current persisted tool results to the chronological snapshot.
+ *
+ * `parts` records what the streamed turn looked like when it finished, while
+ * `/api/chat/confirm` later replaces a confirmation sentinel in
+ * `messages.tool_results` with the claim or executed result. On reload the
+ * latter is authoritative; leaving the old result inside `parts` would render
+ * a second, already-expired confirmation button.
+ */
+export function overlayToolResults(
+  parts: readonly StoredPart[],
+  toolResults: unknown,
+): StoredPart[] {
+  if (!Array.isArray(toolResults)) return [...parts];
+
+  const current = new Map<string, unknown>();
+  for (const row of toolResults) {
+    if (!row || typeof row !== 'object') continue;
+    const result = row as Record<string, unknown>;
+    if (typeof result.toolCallId === 'string' && 'result' in result) {
+      current.set(result.toolCallId, result.result);
+    }
+  }
+  if (current.size === 0) return [...parts];
+
+  return parts.map((part) => {
+    if (part.type !== 'tool-invocation') return part;
+    const invocation = part.toolInvocation;
+    if (!current.has(invocation.toolCallId)) return part;
+    return {
+      ...part,
+      toolInvocation: {
+        ...invocation,
+        state: 'result' as const,
+        result: current.get(invocation.toolCallId),
+      },
+    };
+  });
+}
+
+/**
  * Las invocaciones de unas parts, en la forma plana que el resto del cliente
  * ya lee (`message.toolInvocations`): la detección de confirmaciones y de
  * preguntas con opciones, los avisos de mandatos y el fallback de dibujo pasan

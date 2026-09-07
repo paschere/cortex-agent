@@ -1,6 +1,11 @@
 import { ChatRoot } from '@/components/chat/ChatRoot';
 import { type BrainSource, parseBrainSources } from '@/lib/brain-sources-shape';
-import { capServeParts, parseStoredParts, toolInvocationsOf } from '@/lib/message-parts';
+import {
+  capServeParts,
+  overlayToolResults,
+  parseStoredParts,
+  toolInvocationsOf,
+} from '@/lib/message-parts';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { toToolInvocations } from '@/lib/tool-invocations';
@@ -98,7 +103,10 @@ export default async function ResumeChatPage({
        * antes de la migración, o de usuario) se cae al fallback de siempre.
        */
       const storedParts = m.role === 'assistant' ? parseStoredParts(m.parts) : undefined;
-      const servedParts = storedParts ? capServeParts(storedParts) : undefined;
+      const currentParts = storedParts
+        ? overlayToolResults(storedParts, m.tool_results)
+        : undefined;
+      const servedParts = currentParts ? capServeParts(currentParts) : undefined;
       const partInvocations = servedParts ? toolInvocationsOf(servedParts) : undefined;
       const toolInvocations =
         partInvocations && partInvocations.length > 0
