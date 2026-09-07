@@ -81,7 +81,7 @@ export default function LoginPage() {
 
   return (
     <AuthDocument>
-      <AuthMasthead />
+      <AuthMasthead note="Inteligencia conectada a tu operación." />
 
       <AuthBody>
         <AuthTitle hint="Cortex responde con los sistemas que tu empresa ya usa, y te muestra de dónde salió cada dato.">

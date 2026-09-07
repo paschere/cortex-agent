@@ -17,7 +17,7 @@ import { type InputHTMLAttributes, type ReactNode, useId } from 'react';
 /** The card itself: white, curved, lifted off the canvas. */
 export function AuthDocument({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
+    <div className="auth-document overflow-hidden rounded-card border border-border bg-surface shadow-card">
       {children}
     </div>
   );
@@ -36,7 +36,7 @@ export function AuthMasthead({
   note?: string;
 }) {
   return (
-    <div className="hero-mesh px-6 py-6 text-white sm:px-8">
+    <div className="auth-masthead hero-mesh px-6 py-6 text-white sm:px-8">
       <div className="flex items-center gap-3">
         {/* App icon lives at /icon.png (Next metadata) — same mark as the tab. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -52,7 +52,7 @@ export function AuthMasthead({
 
 /** Everything below the masthead sits in the body of the form. */
 export function AuthBody({ children }: { children: ReactNode }) {
-  return <div className="px-6 py-6 sm:px-8">{children}</div>;
+  return <div className="auth-body px-6 py-6 sm:px-8">{children}</div>;
 }
 
 export function AuthTitle({ children, hint }: { children: ReactNode; hint?: ReactNode }) {

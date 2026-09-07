@@ -139,7 +139,7 @@ export default function SignupPage() {
   if (done) {
     return (
       <AuthDocument>
-        <AuthMasthead />
+        <AuthMasthead note="Inteligencia conectada a tu operación." />
         <AuthBody>
           <AuthTitle
             hint={
@@ -168,7 +168,7 @@ export default function SignupPage() {
 
   return (
     <AuthDocument>
-      <AuthMasthead />
+      <AuthMasthead note="Inteligencia conectada a tu operación." />
 
       <AuthBody>
         <AuthTitle hint="Empieza gratis, sin tarjeta. Creas el espacio de tu empresa e invitas a tu equipo tú mismo.">
