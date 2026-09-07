@@ -1,3 +1,4 @@
+import { CreateCompanyButton } from '@/components/nav/WorkspaceSwitcher';
 import { CompanyGroups } from '@/components/overview/CompanyGroups';
 import { FounderOverview } from '@/components/overview/FounderOverview';
 import { PageHeader } from '@/components/ui/page-header';
@@ -25,9 +26,10 @@ export default async function OverviewPage() {
   return (
     <>
       <PageHeader
-        title="Overview"
+        title="Inicio global"
         subtitle="Decisiones, riesgos y pendientes de todos los espacios a los que tienes acceso."
         icon={<LayoutDashboard className="h-5 w-5" />}
+        actions={<CreateCompanyButton />}
       />
       <FounderOverview data={data} activeId={user.organization.id} />
       <div className="mt-6">

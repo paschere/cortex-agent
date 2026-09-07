@@ -9,18 +9,28 @@ import { panelForHref } from '@/lib/panels/shape';
 import type { ActiveOrganization, Role } from '@cortex/core';
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { ArrowUpRight, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Bell,
+  LayoutDashboard,
+  MessagesSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  X,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useCommandMenu } from './CommandMenuContext';
 import { CorporateSupervisionNotice } from './CorporateSupervisionNotice';
 import { useMobileSidebar } from './MobileSidebarContext';
-import { WorkspaceSwitcher } from './WorkspaceSwitcher';
+import { CreateCompanyButton, WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 const EMPTY: NavCounts = { approvals: 0, commitments: 0, actions: 0, errands: 0 };
 function matches(path: string, href: string) {
   if (href.includes('?')) return false;
+  if (href === '/chat' && path.startsWith('/chat/global')) return false;
   if (href === '/integrations') return path === href;
   return path === href || path.startsWith(`${href}/`);
 }
@@ -34,6 +44,11 @@ function Navigation({
   const panel = usePanel();
   const commands = useCommandMenu();
   const rail = buildRail([], role === 'org_admin');
+  const globalItems: NavItem[] = [
+    { href: '/overview', label: 'Inicio global', icon: LayoutDashboard },
+    { href: '/chat/global', label: 'Chat multiempresa', icon: MessagesSquare },
+    { href: '/notifications', label: 'Notificaciones', icon: Bell },
+  ];
   const groups = [
     { id: 'daily', label: 'Tu espacio de trabajo', items: rail.pinned },
     { id: 'pending', label: 'Decisiones y seguimiento', items: rail.waiting },
@@ -44,7 +59,10 @@ function Navigation({
     const active = matches(path, item.href);
     const Icon = item.icon;
     const badge = item.signal ? counts[item.signal] : 0;
-    const wanted = path.startsWith('/chat') ? panelForHref(item.href) : null;
+    const wanted =
+      path.startsWith('/chat') && !globalItems.some((entry) => entry.href === item.href)
+        ? panelForHref(item.href)
+        : null;
     return (
       <Link
         key={item.href}
@@ -120,6 +138,15 @@ function Navigation({
             </>
           )}
         </button>
+        <div className="mb-5 rounded-xl border border-primary/15 bg-primary/5 p-1">
+          {!collapsed && (
+            <p className="px-2.5 pb-2 pt-2 text-xs font-semibold text-primary-ink">
+              Tus empresas y espacio personal
+            </p>
+          )}
+          <div className="space-y-0.5">{globalItems.map(row)}</div>
+          <CreateCompanyButton collapsed={collapsed} />
+        </div>
         {groups.map((group) => (
           <div key={group.id} className="mb-4">
             {!collapsed ? (
@@ -127,7 +154,11 @@ function Navigation({
             ) : (
               <div className="mx-2 mb-2 border-t border-rail-border" />
             )}
-            <div className="space-y-0.5">{group.items.map(row)}</div>
+            <div className="space-y-0.5">
+              {group.items
+                .filter((item) => !globalItems.some((entry) => entry.href === item.href))
+                .map(row)}
+            </div>
           </div>
         ))}
       </nav>

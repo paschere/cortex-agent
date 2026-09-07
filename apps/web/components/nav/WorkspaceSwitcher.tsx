@@ -126,7 +126,7 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
   // porque un endpoint caído se convertiría en una petición por clic; el
   // reintento es explícito y está en el propio menú.
   useEffect(() => {
-    if (!open || data || loading || loadError) return;
+    if (!open || data || loadError) return;
     setLoading(true);
     let alive = true;
     void fetch('/api/organizations')
@@ -146,7 +146,7 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
     return () => {
       alive = false;
     };
-  }, [open, data, loading, loadError]);
+  }, [open, data, loadError]);
 
   const menu = buildWorkspaceMenu(active, data);
 
@@ -381,6 +381,28 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
   );
 }
 
+export function CreateCompanyButton({ collapsed = false }: { collapsed?: boolean }) {
+  const [creating, setCreating] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Crear empresa"
+        title={collapsed ? 'Crear empresa' : undefined}
+        onClick={() => setCreating(true)}
+        className={clsx(
+          'mt-1 flex min-h-9 items-center rounded-lg border border-primary/20 bg-primary/10 text-sm font-semibold text-primary-ink transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          collapsed ? 'w-full justify-center px-1' : 'gap-2 px-3',
+        )}
+      >
+        <Plus className="h-4 w-4 shrink-0" aria-hidden />
+        {!collapsed && 'Crear empresa'}
+      </button>
+      {creating && <CreateWorkspaceDialog onClose={() => setCreating(false)} />}
+    </>
+  );
+}
+
 /**
  * Pedir el nombre y entrar.
  *
@@ -419,8 +441,8 @@ function CreateWorkspaceDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog.Root open onOpenChange={(open) => !open && !saving && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(440px,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-card border border-border bg-surface shadow-pop outline-none">
+        <Dialog.Overlay className="fixed inset-0 z-[60] bg-ink/40 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[70] w-[min(440px,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-card border border-border bg-surface shadow-pop outline-none">
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div>
               <Dialog.Title className="text-sm font-bold text-ink">Nueva empresa</Dialog.Title>
