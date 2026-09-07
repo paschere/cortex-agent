@@ -9,6 +9,8 @@ const GLOBAL_PATHS = new Set([
   '/api/organizations/active',
   '/api/chat/global',
   '/api/chat/global/actions',
+  '/api/chat/global/realtime',
+  '/api/chat/global/attachments',
   '/api/company-groups',
 ]);
 

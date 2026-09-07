@@ -36,11 +36,21 @@ export function VoiceMode({
   history = [],
   spaceIds = [],
   onCompose,
+  consult,
+  realtimeEndpoint = '/api/voice/realtime',
+  workspaceIds,
+  allowLegacy = true,
+  scopeLabel,
 }: {
   onClose: () => void;
   history?: Turn[];
   spaceIds?: string[];
   onCompose?: (text: string) => void;
+  consult?: (question: string, signal: AbortSignal) => Promise<string>;
+  realtimeEndpoint?: string;
+  workspaceIds?: string[];
+  allowLegacy?: boolean;
+  scopeLabel?: string;
 }) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [muted, setMuted] = useState(false);
@@ -253,21 +263,28 @@ export function VoiceMode({
                 args.question.length > 1000
               )
                 throw new Error('La consulta necesita una pregunta de hasta 1.000 caracteres.');
-              const response = await fetch('/api/voice/turn', {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({
-                  question: args.question,
-                  history: turns.current.map(({ role, text }) => ({
-                    role,
-                    text: text.slice(0, 2000),
-                  })),
-                  textOnly: true,
-                  spaceIds,
-                }),
-                signal: AbortSignal.any([task.signal, AbortSignal.timeout(60_000)]),
-              });
-              result = await readVoiceText(response);
+              if (consult) {
+                result = await consult(
+                  args.question,
+                  AbortSignal.any([task.signal, AbortSignal.timeout(60_000)]),
+                );
+              } else {
+                const response = await fetch('/api/voice/turn', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({
+                    question: args.question,
+                    history: turns.current.map(({ role, text }) => ({
+                      role,
+                      text: text.slice(0, 2000),
+                    })),
+                    textOnly: true,
+                    spaceIds,
+                  }),
+                  signal: AbortSignal.any([task.signal, AbortSignal.timeout(60_000)]),
+                });
+                result = await readVoiceText(response);
+              }
             } catch (error) {
               result = `No se completó la consulta: ${(error as Error).message}. No confirmes ninguna acción.`;
             } finally {
@@ -298,11 +315,12 @@ export function VoiceMode({
       connectionDeadline.current = connectingTimer;
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      const response = await fetch('/api/voice/realtime', {
+      const response = await fetch(realtimeEndpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           sdp: offer.sdp,
+          ...(workspaceIds ? { workspaceIds } : {}),
           history: turns.current.map(({ role, text }) => ({ role, text: text.slice(0, 2000) })),
         }),
         signal: controller.signal,
@@ -336,7 +354,7 @@ export function VoiceMode({
     channel.current.send(JSON.stringify({ type: 'output_audio_buffer.clear' }));
     setPhase('listening');
   };
-  if (legacy) return <LegacyVoiceMode onClose={onClose} />;
+  if (legacy && allowLegacy) return <LegacyVoiceMode onClose={onClose} />;
   return (
     <Dialog.Root
       open
@@ -380,6 +398,7 @@ export function VoiceMode({
                   ? 'Habla con naturalidad. Puedes interrumpir a Cortex cuando lo necesites.'
                   : 'Una conversación con voz de IA. Al conectar, tu audio se transmite a OpenAI para responder en tiempo real.'}
               </Dialog.Description>
+              {scopeLabel && <p className="voice-note">Alcance: {scopeLabel}</p>}
               {note && (
                 <p className="voice-note" role="alert">
                   {note}
@@ -449,7 +468,7 @@ export function VoiceMode({
                   </button>
                 )}
               </div>
-              {!connected && phase !== 'connecting' && (
+              {allowLegacy && !connected && phase !== 'connecting' && (
                 <button
                   type="button"
                   className="voice-compatible"

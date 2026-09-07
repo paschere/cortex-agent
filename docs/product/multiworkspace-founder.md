@@ -38,3 +38,11 @@ El alcance de consulta global inicial incluye cerebros, Gmail, metas y pendiente
 ## Validación
 
 Pruebas unitarias focalizadas de autenticación, propiedad, contexto por pestaña, notificaciones, aprobaciones y seguridad; migraciones y operaciones SQL ejecutadas con PGlite y fixtures aislados. QA visual con componentes reales, datos ficticios y streaming/aprobación simulados en escritorio y móvil de 390 px. Las pruebas de fixtures no equivalen a validación autenticada completa de producción.
+
+## Interacción del chat global
+
+El chat global reutiliza el dictado y la sala de voz del chat empresarial. La sala usa una sesión global y envía las consultas al mismo historial global; no usa el endpoint de consultas de la empresa activa. Durante dictado, llamada o envío, el selector y el historial quedan bloqueados para conservar el alcance. El modo compatible antiguo no se ofrece en global porque no tiene este aislamiento.
+
+La voz conserva los requisitos de configuración y plan: el plan del espacio personal debe admitir voz y el servidor debe tener el proveedor configurado. La validación local con respuestas simuladas no prueba micrófono, latencia ni reproducción de audio reales.
+
+Los adjuntos globales admiten PDF, DOCX, TXT y Markdown: hasta 2 archivos de 4 MB por conversación. Se conserva texto extraído, nunca se añade al cerebro, y cada lectura comprueba la cuenta y las membresías actuales. El contexto del modelo incluye hasta 12.000 caracteres por archivo; la interfaz señala lecturas parciales. Los adjuntos dejan de estar disponibles tras 7 días; la limpieza física de expirados ocurre al insertar otro adjunto. El usuario también puede retirarlos manualmente. El texto que Cortex ya utilizó en una respuesta permanece en el historial de esa conversación.
