@@ -120,10 +120,39 @@ async function syncGoogleIntegration(account: {
 }): Promise<void> {
   if (account.providerId !== 'google' || !account.accessToken) return;
   try {
+    // Account hooks run before the first authenticated page request. Provision
+    // the personal tenant here as well, otherwise a first Google sign-in has no
+    // directory row yet and silently loses this token sync until the next login.
+    // The dynamic import avoids the auth <-> organization module cycle at load
+    // time; the helper itself is deterministic and safe under concurrent hooks.
+    const identity = await pool.query<{ email: string; name: string | null }>(
+      'select email, name from public.ba_user where id = $1',
+      [account.userId],
+    );
+    const baUser = identity.rows[0];
+    if (!baUser) return;
+    const { ensurePersonalWorkspace } = await import('./organization');
+    const personal = await ensurePersonalWorkspace(account.userId, baUser.name, baUser.email);
+
+    // `public.users` is the tenant-local identity used by integrations. It is
+    // deliberately created only in the personal tenant: Google consent at
+    // sign-in must never grant the same tokens to companies the person happens
+    // to belong to.
+    await pool.query(
+      `insert into public.users (organization_id, email, name, role)
+       values ($1, $2, $3, 'org_admin'::public.user_role)
+       on conflict do nothing`,
+      [personal.id, baUser.email, baUser.name],
+    );
+
     const { rows } = await pool.query(
-      `select u.id from public.users u
-       join public.ba_user b on lower(b.email) = lower(u.email)
-       where b.id = $1`,
+      `select u.id
+         from public.ba_user b
+         join public.ba_organization o
+           on o.personal_owner_user_id = b.id and o.kind = 'personal'
+         join public.users u
+           on u.organization_id = o.id and lower(u.email) = lower(b.email)
+        where b.id = $1`,
       [account.userId],
     );
     const userId = rows[0]?.id as string | undefined;
@@ -302,7 +331,18 @@ export const auth = betterAuth({
         member: { modelName: 'ba_member' },
         invitation: { modelName: 'ba_invitation' },
       },
-      organizationLimit: WORKSPACE_LIMIT,
+      // Count only companies this identity owns. Its mandatory personal tenant
+      // and companies where it is an employee must never consume founder slots.
+      organizationLimit: async (user) => {
+        const { rows } = await pool.query<{ count: string }>(
+          `select count(*)::text as count
+             from public.ba_member m
+             join public.ba_organization o on o.id = m."organizationId"
+            where m."userId" = $1 and m.role = 'owner' and o.kind = 'company'`,
+          [user.id],
+        );
+        return Number(rows[0]?.count ?? 0) >= WORKSPACE_LIMIT;
+      },
       membershipLimit: 100,
       invitationExpiresIn: 60 * 60 * 48, // 48 hours
       sendInvitationEmail: async (data) => {

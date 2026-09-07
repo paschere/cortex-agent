@@ -233,6 +233,23 @@ export async function POST(req: NextRequest) {
 
   // Resolve or create conversation
   let conversationId = parsed.data.conversationId;
+  if (conversationId) {
+    // A founder may read corporate transcripts, but never continue somebody
+    // else's chat as if they were its author. The tenant handle is not enough:
+    // ownership is a separate boundary inside the company.
+    const { data: owned, error: ownershipError } = await db
+      .from('conversations')
+      .select('id,agent_id')
+      .eq('id', conversationId)
+      .eq('user_id', user.id)
+      .single();
+    if (ownershipError || !owned || owned.agent_id !== agent.id) {
+      return NextResponse.json(
+        { error: 'Esta conversación no está disponible para continuarla.' },
+        { status: 403 },
+      );
+    }
+  }
   const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
 
   if (!conversationId) {

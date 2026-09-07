@@ -33,6 +33,7 @@ export interface Workspace {
   name: string;
   slug: string | null;
   role: OrgRole;
+  kind?: ActiveOrganization['kind'];
 }
 
 /** La respuesta entera de `GET /api/organizations`. */
@@ -76,7 +77,13 @@ export interface WorkspaceMenu {
  * sesión y el endpoint— y esta función es el único sitio donde se cruzan.
  */
 function fromSession(active: ActiveOrganization): Workspace {
-  return { id: active.id, name: active.name, slug: active.slug, role: active.role };
+  return {
+    id: active.id,
+    name: active.name,
+    slug: active.slug,
+    role: active.role,
+    kind: active.kind,
+  };
 }
 
 /**
@@ -134,6 +141,7 @@ export function buildWorkspaceMenu(
 function sortWorkspaces(list: Workspace[]): Workspace[] {
   return [...list].sort(
     (a, b) =>
+      Number(b.kind === 'personal') - Number(a.kind === 'personal') ||
       a.name.localeCompare(b.name, 'es', { sensitivity: 'base', numeric: true }) ||
       a.id.localeCompare(b.id),
   );
@@ -148,15 +156,15 @@ function sortWorkspaces(list: Workspace[]): Workspace[] {
  * única frase del producto que existe para explicar precisamente esa cifra.
  */
 export function limitReason(limit: number): string {
-  if (limit <= 1) return 'Una cuenta sólo puede tener un espacio de trabajo.';
-  return `Una cuenta puede tener hasta ${limit} espacios de trabajo, y ya están los ${limit}.`;
+  if (limit <= 1) return 'Tu cuenta admite una empresa propia, además del espacio personal.';
+  return `Tu cuenta admite hasta ${limit} empresas propias. El espacio personal y las empresas donde colaboras no ocupan ese cupo.`;
 }
 
 /** Cómo se dice cada rol en la lista. En minúscula: es una nota, no un título. */
 export function roleLabel(role: OrgRole): string {
-  if (role === 'owner') return 'dueño';
-  if (role === 'admin') return 'administrador';
-  return 'miembro';
+  if (role === 'owner') return 'Fundador';
+  if (role === 'admin') return 'Gerente';
+  return 'Colaborador';
 }
 
 /**

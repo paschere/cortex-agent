@@ -24,6 +24,17 @@ export default async function ResumeChatPage({
     greeting: a.greeting,
   }));
 
+  // A workspace member may know a colleague's conversation id through founder
+  // supervision or an audit trail. Resolve ownership before reading a single
+  // message; tenant scope alone still includes every colleague in the company.
+  const { data: conv } = await db
+    .from('conversations')
+    .select('id, title, agents(slug)')
+    .eq('id', conversationId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!conv) return <ChatRoot agents={agents} />;
+
   // Load messages from DB — only user/assistant roles for useChat
   const { data: msgs, error: msgsError } = await db
     .from('messages')
@@ -62,23 +73,8 @@ export default async function ResumeChatPage({
   // instead of quietly implying the messages were never there.
   if (msgsError) {
     throw new Error(
-      `No se pudo leer la conversación ${conversationId}: ${msgsError.message}. ` +
-        'Suele ser una migración sin aplicar en esta base de datos.',
+      `No se pudo leer la conversación ${conversationId}: ${msgsError.message}. Suele ser una migración sin aplicar en esta base de datos.`,
     );
-  }
-
-  // Verify conversation ownership (and recover its agent so a resumed chat
-  // stays on the same agent instead of defaulting to the first in the list).
-  const { data: conv } = await db
-    .from('conversations')
-    .select('id, title, agents(slug)')
-    .eq('id', conversationId)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (!conv) {
-    // conversation not found or not owned — render a fresh chat
-    return <ChatRoot agents={agents} />;
   }
 
   // Map DB rows to AI SDK Message shape; skip 'tool' role (internal)

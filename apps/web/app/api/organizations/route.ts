@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth';
 import {
+  countOwnedCompanies,
   createAdditionalWorkspace,
   listMemberships,
   setActiveOrganization,
@@ -48,6 +49,7 @@ export async function GET() {
   if (!baUserId) return NextResponse.json({ error: 'Sin sesión.' }, { status: 401 });
 
   const workspaces = await listMemberships(baUserId);
+  const ownedCompanies = await countOwnedCompanies(baUserId);
 
   return NextResponse.json({
     workspaces,
@@ -56,7 +58,7 @@ export async function GET() {
     // vengan de la misma fuente evita que el selector marque una fila distinta
     // de aquella en la que la persona está trabajando.
     activeId: user.organization.id,
-    canCreate: workspaces.length < WORKSPACE_LIMIT,
+    canCreate: ownedCompanies < WORKSPACE_LIMIT,
     limit: WORKSPACE_LIMIT,
   });
 }
@@ -84,7 +86,7 @@ export async function POST(req: NextRequest) {
   if (!created.ok) {
     return NextResponse.json(
       {
-        error: `Una cuenta puede tener hasta ${WORKSPACE_LIMIT} espacios de trabajo y ya los tienes todos.`,
+        error: `Tu cuenta admite hasta ${WORKSPACE_LIMIT} empresas propias y ya alcanzaste ese cupo. Tu espacio personal y las empresas donde colaboras no cuentan.`,
       },
       { status: 403 },
     );

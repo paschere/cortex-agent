@@ -74,6 +74,20 @@ describe('el menú del espacio de trabajo', () => {
     expect(menu.others.map((w) => w.id)).not.toContain('org-1');
   });
 
+  it('mantiene el espacio personal antes de las empresas', () => {
+    const menu = buildWorkspaceMenu(
+      ACTIVE,
+      payload({
+        workspaces: [
+          { id: 'org-1', name: 'Vertix', slug: 'vertix', role: 'owner', kind: 'company' },
+          { id: 'org-2', name: 'Ácme', slug: 'acme', role: 'owner', kind: 'company' },
+          { id: 'personal', name: 'Mi espacio', slug: null, role: 'owner', kind: 'personal' },
+        ],
+      }),
+    );
+    expect(menu.others.map((workspace) => workspace.id)).toEqual(['personal', 'org-2']);
+  });
+
   it('el nombre y el rol más nuevos ganan, pero el activo lo decide la sesión', () => {
     // Otra pestaña cambió de espacio: el endpoint dice que el activo es otro.
     // Esta pantalla está pintada entera contra `org-1`, así que sigue diciendo
@@ -124,16 +138,18 @@ describe('el menú del espacio de trabajo', () => {
   });
 
   it('el tope de uno no se cuenta en plural', () => {
-    expect(limitReason(1)).toBe('Una cuenta sólo puede tener un espacio de trabajo.');
-    expect(limitReason(5)).toContain('hasta 5 espacios');
+    expect(limitReason(1)).toBe(
+      'Tu cuenta admite una empresa propia, además del espacio personal.',
+    );
+    expect(limitReason(5)).toContain('hasta 5 empresas propias');
   });
 });
 
 describe('las etiquetas', () => {
   it('cada rol se dice en español', () => {
-    expect(roleLabel('owner')).toBe('dueño');
-    expect(roleLabel('admin')).toBe('administrador');
-    expect(roleLabel('member')).toBe('miembro');
+    expect(roleLabel('owner')).toBe('Fundador');
+    expect(roleLabel('admin')).toBe('Gerente');
+    expect(roleLabel('member')).toBe('Colaborador');
   });
 
   it('la inicial salta lo que no es letra ni cifra', () => {

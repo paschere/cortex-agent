@@ -18,8 +18,8 @@ import { getOptionalSession } from '@/lib/session';
  *
  * That moves the decision here, where it belongs:
  *
- *   signed in  → /onboarding, the permanent setup center. Legacy dismissal
- *                flags and the old five-step completion no longer hide it.
+ *   signed in  → /overview, the global operational home across the account's
+ *                personal and company workspaces.
  *                The login screen's `next` parameter defaults to '/', so this
  *                is the hop that lands somebody on the product after signing
  *                in, and it must keep working.
@@ -59,7 +59,7 @@ export default async function RootPage() {
   if (maybeSignedIn) {
     const session = await getOptionalSession();
     if (session) {
-      redirect('/onboarding');
+      redirect('/overview');
     }
   }
 

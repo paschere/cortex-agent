@@ -154,6 +154,16 @@ export async function saveAnswerAsReportAction(input: {
 
     const db = getOrgScopedClient(user.organization.id);
 
+    if (input.conversationId) {
+      const { data: ownedConversation } = await db
+        .from('conversations')
+        .select('id')
+        .eq('id', input.conversationId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!ownedConversation) return { ok: false, error: 'Esa conversación ya no existe.' };
+    }
+
     // Pulsar dos veces no puede crear dos informes idénticos. Se busca por el
     // id del mensaje y no por el hash del documento: la fecha de guardado entra
     // en el documento, así que dos guardados del mismo texto tienen hashes

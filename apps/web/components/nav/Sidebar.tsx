@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useCommandMenu } from './CommandMenuContext';
+import { CorporateSupervisionNotice } from './CorporateSupervisionNotice';
 import { useMobileSidebar } from './MobileSidebarContext';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
@@ -172,9 +173,9 @@ export function Sidebar({
           )}
         >
           <Link
-            href="/management"
+            href="/overview"
             onClick={onNavigate}
-            aria-label="Cortex, abrir Gerencia"
+            aria-label="Cortex, abrir vista global"
             className="flex items-center gap-2.5 text-rail-ink"
           >
             <span className="grid h-8 w-8 place-items-center rounded-lg text-primary-ink">
@@ -206,6 +207,18 @@ export function Sidebar({
               onOpenChange={setWorkspaceOpen}
             />
           </div>
+        )}
+        {!small && organization?.kind === 'company' && (
+          <CorporateSupervisionNotice kind={organization.kind} />
+        )}
+        {!small && organization?.kind === 'company' && organization.role === 'owner' && (
+          <Link
+            href="/team/activity"
+            onClick={onNavigate}
+            className="mx-5 mb-3 text-xs font-semibold text-primary-ink"
+          >
+            Actividad de tu equipo →
+          </Link>
         )}
         <Navigation role={role} counts={counts} collapsed={small} onNavigate={onNavigate} />
         {small && !inChat && (

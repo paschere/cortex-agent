@@ -1,9 +1,9 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
-import { listNotifications } from '@/lib/notifications/repository';
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
-import { Bell } from 'lucide-react';
+import { pool } from '@/lib/auth';
+import { requireNotificationAccount } from '@/lib/notifications/account';
+import { listGlobalNotifications } from '@/lib/notifications/global-repository';
+import { BellRing } from 'lucide-react';
 import { Inbox } from './_components/Inbox';
 
 export const dynamic = 'force-dynamic';
@@ -23,15 +23,15 @@ export const dynamic = 'force-dynamic';
  * y una bandeja rota se ven idénticas y significan lo contrario.
  */
 export default async function NotificationsPage() {
-  const user = await requireSession();
-  const notifications = await listNotifications(getOrgScopedClient(user.organization.id), user.id);
+  const account = await requireNotificationAccount();
+  const notifications = await listGlobalNotifications(pool, account.id);
 
   return (
     <>
       <PageHeader
-        title="Avisos"
-        subtitle="Lo que pasó mientras no mirabas: un trámite que terminó, una rutina que no pudo correr, un encargo que te preguntó algo, un correo que salió. Lo que sigue esperándote está en sus colas."
-        icon={<Bell className="h-5 w-5" />}
+        title="Centro de avisos"
+        subtitle="Lo urgente de todos tus espacios, con cada empresa claramente identificada."
+        icon={<BellRing className="h-5 w-5" />}
       />
       <Panel className="overflow-hidden">
         <Inbox initial={notifications} />

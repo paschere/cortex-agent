@@ -282,7 +282,7 @@ describe('el mandato atravesando runTool', () => {
     );
   });
 
-  it('un techo monetario sobre una herramienta que declara importe sí muerde', async () => {
+  it('los pagos requieren aprobación humana incluso por debajo del techo del mandato', async () => {
     const payTool: ToolDef<Row, { ok: boolean }> = {
       id: 'payments.approve',
       description: 'approve',
@@ -302,10 +302,11 @@ describe('el mandato atravesando runTool', () => {
     const under = makeCtx({ mandates: [grant] });
     await expect(
       runTool(payTool, { amount: 400_000, currency: 'COP' }, under),
-    ).resolves.toMatchObject({
-      ok: true,
-    });
-    expect(rows(under, 'mandate_uses').at(0)).toMatchObject({ amount: 400_000, currency: 'COP' });
+    ).rejects.toBeInstanceOf(ConfirmationRequiredError);
+    expect(rows(under, 'mandate_uses')).toHaveLength(0);
+    await expect(
+      runTool(payTool, { amount: 400_000, currency: 'COP' }, under, { confirmed: true }),
+    ).resolves.toMatchObject({ ok: true });
 
     const over = makeCtx({ mandates: [grant] });
     await expect(

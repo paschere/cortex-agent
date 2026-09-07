@@ -29,7 +29,11 @@ interface PermissionRow {
  * Distinct tool patterns denied to `userId` by any of their teams.
  * Returns [] when the user has no teams, no restrictions, or on any error.
  */
-export async function deniedToolPatterns(db: SupabaseClient, userId: string): Promise<string[]> {
+export async function deniedToolPatterns(
+  db: SupabaseClient,
+  userId: string,
+  options: { failClosed?: boolean } = {},
+): Promise<string[]> {
   if (!userId) return [];
   try {
     const { data: memberships, error: membersError } = await db
@@ -50,6 +54,8 @@ export async function deniedToolPatterns(db: SupabaseClient, userId: string): Pr
 
     return [...new Set(((rows ?? []) as PermissionRow[]).map((r) => r.tool_pattern))];
   } catch (err) {
+    if (options.failClosed)
+      throw new Error('No se pudieron verificar los permisos de herramientas.');
     // Fail open — never block tools because the permissions lookup broke.
     console.error('[tool-access] could not resolve denied tool patterns, failing open:', err);
     return [];

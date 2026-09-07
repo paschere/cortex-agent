@@ -134,6 +134,14 @@ export async function POST(req: NextRequest) {
   if (!conversationId) {
     return NextResponse.json({ error: 'Falta la conversación.' }, { status: 422 });
   }
+  const { data: ownedConversation } = await db
+    .from('conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!ownedConversation)
+    return NextResponse.json({ error: 'La conversación no existe.' }, { status: 404 });
   if (disposition !== 'memory' && disposition !== 'turn') {
     // There is no default here on purpose — see the header, and the note above
     // the table in migration 0088. A request that does not say is a bug in the
@@ -390,6 +398,14 @@ export async function GET(req: NextRequest) {
 
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
+
+  const { data: ownedConversation } = await db
+    .from('conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!ownedConversation) return NextResponse.json({ attachments: [] });
 
   const { data, error } = await db
     .from('chat_attachments')

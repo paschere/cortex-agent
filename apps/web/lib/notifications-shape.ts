@@ -129,6 +129,13 @@ export interface NotificationView {
   readAt: string | null;
 }
 
+/** Un aviso acompañado del espacio al que pertenece en la bandeja global. */
+export interface GlobalNotificationView extends NotificationView {
+  organizationId: string;
+  organizationName: string;
+  organizationKind: 'personal' | 'company';
+}
+
 /**
  * «pasó 3 veces» — sólo cuando pasó más de una.
  *

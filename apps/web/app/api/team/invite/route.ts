@@ -40,6 +40,12 @@ const Body = z.object({
 
 export async function POST(req: NextRequest) {
   const user = await requireSession();
+  if (user.organization.kind === 'personal') {
+    return NextResponse.json(
+      { error: 'Tu espacio personal es privado. Crea una empresa para invitar a tu equipo.' },
+      { status: 403 },
+    );
+  }
 
   // Only the people who run the workspace add to it. `role` here is the Cortex
   // directory role, which lib/session.ts derives from the better-auth
@@ -66,10 +72,7 @@ export async function POST(req: NextRequest) {
   if (seats.full) {
     return NextResponse.json(
       {
-        error:
-          `Tu plan ${plan.name} llega hasta ${seats.maximum} personas y ya están ocupadas ` +
-          `(${seats.members} adentro${seats.pending > 0 ? ` y ${seats.pending} por aceptar` : ''}). ` +
-          'Amplía el plan en Plan y consumo, o cancela una invitación pendiente.',
+        error: `Tu plan ${plan.name} llega hasta ${seats.maximum} personas y ya están ocupadas (${seats.members} adentro${seats.pending > 0 ? ` y ${seats.pending} por aceptar` : ''}). Amplía el plan en Plan y consumo, o cancela una invitación pendiente.`,
         reason: 'plan_limit',
         meter: 'seats',
       },

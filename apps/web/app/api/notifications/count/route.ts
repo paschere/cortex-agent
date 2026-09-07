@@ -1,6 +1,6 @@
-import { countUnread } from '@/lib/notifications/repository';
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
+import { pool } from '@/lib/auth';
+import { requireNotificationAccount } from '@/lib/notifications/account';
+import { countGlobalUnread } from '@/lib/notifications/global-repository';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * navegación. El CONTENIDO de la bandeja no hace eso y falla a gritos.
  */
 export async function GET(): Promise<NextResponse> {
-  const user = await requireSession();
-  const unread = await countUnread(getOrgScopedClient(user.organization.id), user.id);
+  const account = await requireNotificationAccount();
+  const unread = await countGlobalUnread(pool, account.id).catch(() => 0);
   return NextResponse.json({ unread });
 }

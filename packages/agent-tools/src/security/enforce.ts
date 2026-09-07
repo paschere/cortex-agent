@@ -1,3 +1,4 @@
+import { mandatoryHumanConfirmation } from './mandatory-confirmation.js';
 /**
  * The enforcement glue between `runTool` and the risk model.
  *
@@ -245,8 +246,11 @@ export async function evaluate(args: EvaluateArgs): Promise<SecurityEvaluation> 
 
   return {
     classification,
-    decision: outcome.decision,
-    mandate: outcome.mandate,
+    decision:
+      mandatoryHumanConfirmation(args.tool.id) && outcome.decision !== 'block'
+        ? 'confirm'
+        : outcome.decision,
+    mandate: mandatoryHumanConfirmation(args.tool.id) ? null : outcome.mandate,
     doctrine,
     policy,
     surface,

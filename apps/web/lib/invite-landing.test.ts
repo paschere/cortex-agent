@@ -18,6 +18,17 @@ describe('workspaceLanding', () => {
     });
   });
 
+  it('el espacio personal automático no cuenta como empresa y no esconde la invitación', () => {
+    expect(
+      workspaceLanding({
+        activeMembershipId: null,
+        // organization.ts excluye aquí la membresía personal automática.
+        firstMembershipId: null,
+        pendingInvitationId: 'inv-empresa',
+      }),
+    ).toEqual({ action: 'accept-invitation', invitationId: 'inv-empresa' });
+  });
+
   it('sin membresía y sin invitación, este es su primer espacio', () => {
     expect(workspaceLanding(NADA)).toEqual({ action: 'provision' });
   });

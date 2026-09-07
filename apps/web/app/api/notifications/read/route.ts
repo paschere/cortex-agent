@@ -1,6 +1,6 @@
-import { markAllRead, markRead } from '@/lib/notifications/repository';
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
+import { pool } from '@/lib/auth';
+import { requireNotificationAccount } from '@/lib/notifications/account';
+import { markAllGlobalRead, markGlobalRead } from '@/lib/notifications/global-repository';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -22,12 +22,20 @@ export const dynamic = 'force-dynamic';
  * marca nada: no es que se rechace, es que no encaja con ninguna fila.
  */
 const Body = z.object({
-  ids: z.array(z.string().uuid()).max(200).nullish(),
+  targets: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        organizationId: z.string().min(1).max(200),
+      }),
+    )
+    .max(200)
+    .nullish(),
   all: z.boolean().nullish(),
 });
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const user = await requireSession();
+  const account = await requireNotificationAccount();
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -37,21 +45,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const db = getOrgScopedClient(user.organization.id);
-
   if (parsed.data.all) {
-    const marked = await markAllRead(db, user.id);
+    const marked = await markAllGlobalRead(pool, account.id);
     return NextResponse.json({ marked });
   }
 
-  const ids = parsed.data.ids ?? [];
-  if (ids.length === 0) {
+  const targets = parsed.data.targets ?? [];
+  if (targets.length === 0) {
     return NextResponse.json(
       { error: 'No nombraste ningún aviso. Manda `ids` o `all: true`.' },
       { status: 400 },
     );
   }
 
-  const marked = await markRead(db, user.id, ids);
+  const marked = await markGlobalRead(pool, account.id, targets);
   return NextResponse.json({ marked });
 }

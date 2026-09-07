@@ -56,8 +56,12 @@ export default async function ConversationDetailPage({
   // exception, and only because that role already gates /admin (see
   // app/(app)/admin/layout.tsx) — they can already read this from the audit log.
   const isOwner = !!conv && conv.user_id === user.id;
-  const asAdmin = !!conv && !isOwner && user.role === 'org_admin';
-  if (!conv || (!isOwner && !asAdmin)) notFound();
+  const asFounder =
+    !!conv &&
+    !isOwner &&
+    user.organization.kind === 'company' &&
+    user.organization.role === 'owner';
+  if (!conv || (!isOwner && !asFounder)) notFound();
 
   const { data: msgData } = await sb
     .from('messages')
@@ -101,9 +105,7 @@ export default async function ConversationDetailPage({
   // catalogue: a control offering to mute something that has never come up here
   // is a control nobody can reason about.
   const familiesSeen = [
-    ...new Set(
-      [...turnsByMessage.values()].flatMap((t) => t.tools.families.map((f) => f.family)),
-    ),
+    ...new Set([...turnsByMessage.values()].flatMap((t) => t.tools.families.map((f) => f.family))),
   ].sort();
 
   const agentName = relName(conv.agents) ?? 'Cortex';
@@ -127,17 +129,19 @@ export default async function ConversationDetailPage({
         actions={
           <>
             <SurfaceBadge surface={surface} size="md" />
-            <Link href={`/chat/${conv.id}`}>
-              <Button>Retomar en el chat</Button>
-            </Link>
+            {isOwner && (
+              <Link href={`/chat/${conv.id}`}>
+                <Button>Retomar en el chat</Button>
+              </Link>
+            )}
           </>
         }
       />
 
-      {asAdmin && (
+      {asFounder && (
         <Panel className="mb-4 flex items-center gap-2 border-amber/40 bg-amber-soft px-4 py-2.5 text-xs font-semibold text-amber">
           <ShieldCheck className="h-4 w-4 shrink-0" />
-          Estás viendo la conversación de otra persona como administrador de la organización.
+          Estás viendo la conversación de otra persona como fundador de la organización.
         </Panel>
       )}
 
@@ -146,7 +150,9 @@ export default async function ConversationDetailPage({
           <MessagesSquare className="mx-auto mb-3 h-7 w-7 text-primary" />
           <p className="text-base font-bold text-ink">Aquí no se dijo nada</p>
           <p className="mx-auto mt-1 max-w-sm leading-relaxed">
-            La conversación se creó pero no llegó ningún mensaje. Retómala en el chat para empezarla.
+            {isOwner
+              ? 'La conversación se creó pero no llegó ningún mensaje. Retómala en el chat para empezarla.'
+              : 'La conversación se creó pero no llegó ningún mensaje.'}
           </p>
         </Panel>
       ) : (

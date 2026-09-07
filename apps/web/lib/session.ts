@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from './auth';
 import { resolveActiveOrganization } from './organization';
 import { getSupabaseServiceClient } from './supabase/service';
+import { canonicalWorkspaceLocation, requestWorkspaceId } from './workspace-context';
 import { WORKSPACE_NAME_COOKIE } from './workspace-cookie';
 
 /**
@@ -22,7 +23,8 @@ import { WORKSPACE_NAME_COOKIE } from './workspace-cookie';
  * Everything downstream gets `getOrgScopedClient(user.organization.id)`.
  */
 export async function requireSession(): Promise<SessionUser> {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const requestHeaders = await headers();
+  const session = await auth.api.getSession({ headers: requestHeaders });
   if (!session?.user) throw new UnauthorizedError();
 
   // SaaS default: open signup, so an unset OR empty ALLOWED_EMAIL_DOMAIN must
@@ -54,6 +56,7 @@ export async function requireSession(): Promise<SessionUser> {
     session.user.name ?? null,
     session.user.email,
     preferredName,
+    requestWorkspaceId(requestHeaders),
   );
 
   /**
@@ -72,7 +75,10 @@ export async function requireSession(): Promise<SessionUser> {
   if (resolution.kind === 'pending-invitation') {
     redirect(`/accept-invitation/${resolution.invitationId}`);
   }
+  if (resolution.kind === 'forbidden-workspace') throw new UnauthorizedError();
   const organization = resolution.workspace;
+  const canonical = canonicalWorkspaceLocation(requestHeaders, organization.id);
+  if (canonical) redirect(canonical);
 
   const sb = getSupabaseServiceClient();
   const findRow = async () =>
@@ -117,11 +123,32 @@ export async function requireSession(): Promise<SessionUser> {
     if (!row) throw new UnauthorizedError();
   }
 
+  // BA membership is the authority on every request. Preserve an explicitly
+  // delegated team_admin role for members, but never retain org_admin after BA
+  // membership is downgraded or revoked.
+  const authoritativeRole: Role =
+    organization.role === 'owner' || organization.role === 'admin'
+      ? 'org_admin'
+      : row.role === 'team_admin'
+        ? 'team_admin'
+        : 'member';
+  if (row.role !== authoritativeRole) {
+    const { data: updated } = await sb
+      .from('users')
+      .update({ role: authoritativeRole })
+      .eq('id', row.id as string)
+      .eq('organization_id', organization.id)
+      .select('id,email,name,role')
+      .single();
+    if (!updated) throw new UnauthorizedError();
+    row = updated;
+  }
+
   return {
     id: row.id as string,
     email: row.email as string,
     name: row.name as string | null,
-    role: row.role as Role,
+    role: authoritativeRole,
     organization,
   };
 }

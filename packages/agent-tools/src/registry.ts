@@ -17,6 +17,7 @@ import {
 } from './security/enforce.js';
 import { recordMandateUse } from './security/mandate-store.js';
 import { explainDelegation, typedAmount } from './security/mandate.js';
+import { mandatoryHumanConfirmation } from './security/mandatory-confirmation.js';
 import { toolErrorMessage } from './tool-error.js';
 import type { AnyTool, ToolContext, ToolDef } from './types.js';
 
@@ -157,7 +158,10 @@ export async function runTool<I, O>(
   // A high-risk call is gated even when the tool itself never declared
   // requiresConfirmation — the risk lives in the data and the destination,
   // not in the tool definition.
-  if (evaluation.decision === 'confirm' && !opts.confirmed) {
+  if (
+    (evaluation.decision === 'confirm' || mandatoryHumanConfirmation(tool.id)) &&
+    !opts.confirmed
+  ) {
     await Promise.all([
       writeSecurityEvent({ ...securityEventBase, decision: 'confirm_required' }),
       writeAuditEvent({

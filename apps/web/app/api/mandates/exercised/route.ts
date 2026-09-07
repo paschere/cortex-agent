@@ -69,6 +69,14 @@ export async function GET(req: NextRequest) {
 
   const db = getOrgScopedClient(user.organization.id);
 
+  const { data: ownedConversation } = await db
+    .from('conversations')
+    .select('id')
+    .eq('id', conversationId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!ownedConversation) return NextResponse.json(empty);
+
   // El cliente con ámbito de organización es lo que hace que el id de otra
   // empresa devuelva nada en vez de los permisos de otra empresa.
   const rows = mustReadList<DelegatedRow>(

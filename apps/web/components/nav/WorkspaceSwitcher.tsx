@@ -1,5 +1,6 @@
 'use client';
 
+import { workspaceHref } from '@/lib/workspace-context';
 import {
   type WorkspaceListPayload,
   buildWorkspaceMenu,
@@ -166,7 +167,7 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
     // A propósito no se limpia `switching`: la página se está yendo, y apagar
     // el «Cambiando…» antes de que se vaya sería un parpadeo que dice que ya
     // terminó cuando lo que viene es la carga entera.
-    window.location.assign('/');
+    window.location.assign(workspaceHref(id, '/onboarding'));
   }
 
   return (
@@ -249,7 +250,7 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
                 {menu.active.name}
               </span>
               <span className="shrink-0 text-micro text-ink-faint">
-                {roleLabel(menu.active.role)}
+                {menu.active.kind === 'personal' ? 'Personal' : roleLabel(menu.active.role)}
               </span>
             </div>
 
@@ -315,7 +316,11 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
                     {workspace.name}
                   </span>
                   <span className="shrink-0 text-micro text-ink-faint">
-                    {busy ? 'cambiando…' : roleLabel(workspace.role)}
+                    {busy
+                      ? 'cambiando…'
+                      : workspace.kind === 'personal'
+                        ? 'Personal'
+                        : roleLabel(workspace.role)}
                   </span>
                 </DropdownMenu.Item>
               );
@@ -340,7 +345,7 @@ export function WorkspaceSwitcher({ active, collapsed, onOpenChange }: Workspace
                 className="flex cursor-pointer items-center gap-2 rounded-sm px-2.5 py-2 text-sm outline-none transition-colors duration-150 data-[highlighted]:bg-primary-soft motion-reduce:transition-none"
               >
                 <Plus className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden />
-                <span className="font-medium text-ink">Crear otro espacio</span>
+                <span className="font-medium text-ink">Crear empresa</span>
               </DropdownMenu.Item>
             )}
 
@@ -408,7 +413,7 @@ function CreateWorkspaceDialog({ onClose }: { onClose: () => void }) {
     // El endpoint deja la sesión apuntando al espacio nuevo, así que todo lo
     // que hay detrás de este diálogo ya es de otro inquilino. Misma recarga
     // honesta que al cambiar; el porqué está arriba del archivo.
-    window.location.assign('/');
+    window.location.assign('/overview');
   }
 
   return (
@@ -418,12 +423,10 @@ function CreateWorkspaceDialog({ onClose }: { onClose: () => void }) {
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(440px,calc(100vw-1.5rem))] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-card border border-border bg-surface shadow-pop outline-none">
           <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
             <div>
-              <Dialog.Title className="text-sm font-bold text-ink">
-                Nuevo espacio de trabajo
-              </Dialog.Title>
+              <Dialog.Title className="text-sm font-bold text-ink">Nueva empresa</Dialog.Title>
               <Dialog.Description className="text-micro text-ink-faint">
-                Empieza vacío y separado: sus clientes, su cartera y su memoria no se mezclan con
-                los de aquí.
+                Empieza vacía y separada. Los datos, conexiones y memoria de las empresas donde
+                trabajas no se transfieren sin permiso explícito.
               </Dialog.Description>
             </div>
             <Dialog.Close
@@ -480,7 +483,7 @@ function CreateWorkspaceDialog({ onClose }: { onClose: () => void }) {
               className="inline-flex items-center gap-1.5 rounded-card bg-primary px-4 py-1.5 text-xs font-semibold text-white shadow-pop transition-colors hover:bg-primary-strong disabled:opacity-50"
             >
               {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
-              {saving ? 'Creando y entrando…' : 'Crear y entrar'}
+              {saving ? 'Creando y entrando…' : 'Crear empresa'}
             </button>
           </div>
         </Dialog.Content>

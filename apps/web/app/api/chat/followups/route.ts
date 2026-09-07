@@ -140,9 +140,16 @@ export async function POST(req: NextRequest) {
 
   const db = getOrgScopedClient(user.organization.id);
 
-  // The scoped handle is the whole tenancy story here: another workspace's
-  // conversation id simply returns no rows, so there is nothing to check by
-  // hand and nothing to forget to check.
+  const { data: ownedConversation } = await db
+    .from('conversations')
+    .select('id')
+    .eq('id', parsed.data.conversationId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!ownedConversation) return NextResponse.json({ suggestions: [] }, { status: 404 });
+
+  // Tenant scope and conversation ownership are separate: a colleague's chat
+  // lives in this tenant too, but its content is not this caller's prompt.
   const { data: rows } = await db
     .from('messages')
     .select('id, role, content, followups')

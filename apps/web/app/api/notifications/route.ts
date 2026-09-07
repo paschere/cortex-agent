@@ -1,6 +1,6 @@
-import { listNotifications } from '@/lib/notifications/repository';
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
+import { pool } from '@/lib/auth';
+import { requireNotificationAccount } from '@/lib/notifications/account';
+import { listGlobalNotifications } from '@/lib/notifications/global-repository';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -17,9 +17,8 @@ export const dynamic = 'force-dynamic';
  * contenido, y una bandeja vacía y una bandeja rota se ven idénticas.
  */
 export async function GET(): Promise<NextResponse> {
-  const user = await requireSession();
-  const db = getOrgScopedClient(user.organization.id);
-  const notifications = await listNotifications(db, user.id);
+  const account = await requireNotificationAccount();
+  const notifications = await listGlobalNotifications(pool, account.id);
   return NextResponse.json({
     notifications,
     unread: notifications.filter((n) => n.readAt === null).length,

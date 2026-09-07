@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { workspaceRequestHeaders } from './lib/workspace-context';
 
 const PUBLIC_PATHS = [
   // The landing page. Safe to list even though every path starts with '/',
@@ -99,8 +100,9 @@ function isPublic(pathname: string): boolean {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const requestHeaders = workspaceRequestHeaders(req.nextUrl, req.headers);
   if (isPublic(pathname)) {
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   const cookie = req.headers.get('cookie') ?? '';
@@ -109,7 +111,7 @@ export async function middleware(req: NextRequest) {
   if (!SESSION_COOKIE_RE.test(cookie)) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('next', pathname);
+    url.searchParams.set('next', `${pathname}${req.nextUrl.search}`);
     return NextResponse.redirect(url);
   }
 
@@ -130,7 +132,7 @@ export async function middleware(req: NextRequest) {
       if (!session?.user) {
         const url = req.nextUrl.clone();
         url.pathname = '/login';
-        url.searchParams.set('next', pathname);
+        url.searchParams.set('next', `${pathname}${req.nextUrl.search}`);
         return NextResponse.redirect(url);
       }
     }
@@ -139,7 +141,7 @@ export async function middleware(req: NextRequest) {
     // Timeout / network error → fail open; requireSession() enforces auth.
   }
 
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 /**

@@ -84,6 +84,27 @@ export function NotificationBell({ initialUnread = 0 }: { initialUnread?: number
     return () => window.removeEventListener('focus', onFocus);
   }, [refresh]);
 
+  useEffect(() => {
+    const source = new EventSource('/api/notifications/stream');
+    source.addEventListener('snapshot', (event) => {
+      try {
+        const body = JSON.parse((event as MessageEvent).data) as {
+          unread?: number;
+          notifications?: unknown[];
+        };
+        if (typeof body.unread === 'number' && Number.isFinite(body.unread)) {
+          setUnread(Math.max(0, Math.trunc(body.unread)));
+        }
+        window.dispatchEvent(new CustomEvent('cortex:notifications', { detail: body }));
+      } catch {
+        // A malformed frame must not break navigation; EventSource reconnects.
+      }
+    });
+    return () => {
+      source.close();
+    };
+  }, []);
+
   const label = unread > 0 ? `Avisos, ${unread} sin leer` : 'Avisos';
 
   return (

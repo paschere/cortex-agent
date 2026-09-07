@@ -13,10 +13,10 @@ beforeEach(() => {
     throw new Error('redirected');
   });
 });
-describe('permanent setup entry', () => {
-  it('always opens setup for a signed-in company', async () => {
+describe('signed-in entry', () => {
+  it('opens the global overview for a signed-in account', async () => {
     await expect(RootPage()).rejects.toThrow('redirected');
-    expect(mocks.redirect).toHaveBeenCalledWith('/onboarding');
+    expect(mocks.redirect).toHaveBeenCalledWith('/overview');
   });
   it('keeps the public landing for anonymous visitors without a session lookup', async () => {
     mocks.cookies.mockResolvedValue({ getAll: () => [] });

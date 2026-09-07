@@ -6,6 +6,7 @@ import type { Role, UUID } from './types';
  * single-company role stored on public.users.
  */
 export type OrgRole = 'owner' | 'admin' | 'member';
+export type WorkspaceKind = 'personal' | 'company';
 
 /** The workspace (tenant) a session is currently acting in. */
 export interface ActiveOrganization {
@@ -14,6 +15,8 @@ export interface ActiveOrganization {
   slug: string | null;
   /** The signed-in user's role within this workspace. */
   role: OrgRole;
+  /** Workspace purpose. Optional while older callers and fixtures migrate. */
+  kind?: WorkspaceKind;
 }
 
 export interface SessionUser {

@@ -30,6 +30,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
+  const { data: owned } = await db
+    .from('chat_charts')
+    .select('id')
+    .eq('id', id)
+    .eq('created_by', user.id)
+    .maybeSingle();
+  if (!owned) return NextResponse.json({ error: 'No existe ese gráfico.' }, { status: 404 });
+
   const stored = await getChatChart(db, id).catch(() => null);
   // The scoped handle turns another workspace's id into "no row", so this one
   // branch covers both "does not exist" and "not yours" — and says the same
