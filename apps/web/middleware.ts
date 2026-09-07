@@ -12,6 +12,8 @@ const PUBLIC_PATHS = [
   // `startsWith('//')`, which nothing satisfies. app/page.tsx decides what to
   // render — signed-in visitors are still sent to /chat (or /onboarding) from there.
   '/',
+  // Landing comercial dedicada y sus archivos.
+  '/imagroup',
   '/login',
   // SaaS auth surface: signup, password recovery and the post-password 2FA
   // challenge all run without a full session cookie.

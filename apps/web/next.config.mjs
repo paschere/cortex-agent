@@ -22,7 +22,10 @@ const config = {
   async rewrites() {
     // Canonical MCP connector URL is /mcp (matches the RFC 9728 resource id and
     // the path-based protected-resource metadata). The handler lives at /api/mcp.
-    return [{ source: '/mcp', destination: '/api/mcp' }];
+    return [
+      { source: '/mcp', destination: '/api/mcp' },
+      { source: '/imagroup', destination: '/imagroup/index.html' },
+    ];
   },
   async redirects() {
     return [
@@ -39,6 +42,10 @@ const config = {
   },
   async headers() {
     return [
+      {
+        source: '/imagroup/:path*',
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }],
+      },
       {
         source: '/(.*)',
         headers: [
