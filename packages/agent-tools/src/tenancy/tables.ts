@@ -364,6 +364,7 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   document_extractions: tenant(),
   document_fields: tenant(),
   document_field_corrections: tenant(),
+  source_classification_audit: tenant(),
 
   // --- Pagos (migration 0098) -----------------------------------------------
   // Lo que dice cada fuente sobre un pago, y lo que creemos a partir de todas
@@ -526,6 +527,8 @@ export function tenancyOf(table: string): TableTenancy {
 export type RpcTenancy = 'organization' | 'person' | 'maintenance';
 
 export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
+  finance_classify_source: 'organization',
+  finance_list_sources: 'organization',
   management_start_daily: 'organization',
   management_operate: 'organization',
   mail_review_learning: 'organization',

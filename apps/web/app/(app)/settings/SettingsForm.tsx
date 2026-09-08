@@ -516,7 +516,7 @@ export function SettingsForm({
           maxLength={600}
           rows={3}
           onChange={(e) => set('digestFocus', e.target.value)}
-          placeholder="Primero los clientes, después lo de las vacantes abiertas. Los boletines internos al final."
+          placeholder="Primero los clientes y vencimientos, después las oportunidades comerciales. Los boletines internos al final."
           className={clsx(FIELD, 'mt-2.5 resize-y')}
         />
         <div className="tabular mt-1 text-right text-micro text-ink-faint">

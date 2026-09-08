@@ -3,10 +3,17 @@ import { registerTool } from '../index';
 
 /** Growth pilot: review queue over growth_signals (see 0029_growth_signals.sql). */
 
-const SignalRow = z.object({
+export const SignalRow = z.object({
   id: z.string(),
-  company: z.string(),
-  roleTitle: z.string(),
+  company: z.string().nullable(),
+  candidateName: z.string().nullable(),
+  roleTitle: z.string().nullable(),
+  offer: z.string().nullable(),
+  idealClient: z.string().nullable(),
+  industry: z.string().nullable(),
+  buyingSignal: z.string().nullable(),
+  opportunityNeed: z.string().nullable(),
+  evidenceExcerpt: z.string().nullable(),
   url: z.string(),
   source: z.string(),
   summary: z.string().nullable(),
@@ -20,11 +27,18 @@ const SignalRow = z.object({
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toSignal(r: Record<string, any>): z.infer<typeof SignalRow> {
+export function toSignal(r: Record<string, any>): z.infer<typeof SignalRow> {
   return {
     id: r.id,
-    company: r.company,
-    roleTitle: r.role_title,
+    company: r.company ?? null,
+    candidateName: r.candidate_name ?? null,
+    roleTitle: r.role_title ?? null,
+    offer: r.offer ?? null,
+    idealClient: r.ideal_client ?? null,
+    industry: r.industry ?? null,
+    buyingSignal: r.buying_signal ?? null,
+    opportunityNeed: r.opportunity_need ?? null,
+    evidenceExcerpt: r.evidence_excerpt ?? null,
     url: r.url,
     source: r.source,
     summary: r.summary ?? null,
@@ -41,7 +55,7 @@ function toSignal(r: Record<string, any>): z.infer<typeof SignalRow> {
 export const growthListSignals = registerTool({
   id: 'growth.list_signals',
   description:
-    'List stored growth signals (job-post leads) filtered by status: "new" (awaiting review), "qualified" (Mikey-approved targets), "rejected", or "contacted". Sorted newest first. Use sinceDays to scope to the current pilot week.',
+    'List commercial opportunities from any industry, filtered by review status. Rows keep the configured offer, ideal client, buying signal, opportunity hypothesis and public evidence. Hiring leads remain supported through optional roleTitle.',
   inputSchema: z.object({
     status: z.enum(['new', 'qualified', 'rejected', 'contacted', 'all']).default('new'),
     sinceDays: z.number().int().min(1).max(90).optional(),
@@ -77,9 +91,10 @@ export const growthListSignals = registerTool({
 export const growthUpdateSignal = registerTool({
   id: 'growth.update_signal',
   description:
-    'Update a growth signal after human review: set status (qualified / rejected / contacted) and optionally record the identified contact (name, title, email or contact path, and whether it was found or pattern-inferred).',
+    'Update a commercial opportunity after human review: set status and optionally record a contact or a company name explicitly confirmed by the user. A broad search result title is not a confirmed company. This does not draft or send a message.',
   inputSchema: z.object({
     signalId: z.string().uuid(),
+    company: z.string().trim().min(2).max(200).optional(),
     status: z.enum(['new', 'qualified', 'rejected', 'contacted']).optional(),
     contactName: z.string().optional(),
     contactTitle: z.string().optional(),
@@ -90,6 +105,11 @@ export const growthUpdateSignal = registerTool({
   handler: async (input, ctx) => {
     const now = new Date().toISOString();
     const patch: Record<string, unknown> = { updated_at: now };
+    if (input.company !== undefined) {
+      patch.company = input.company;
+      patch.reviewed_by = ctx.userId;
+      patch.reviewed_at = now;
+    }
     if (input.status) {
       patch.status = input.status;
       // A status change is a judgement, so it is attributed. Filling in only a

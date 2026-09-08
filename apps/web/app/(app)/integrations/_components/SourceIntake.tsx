@@ -73,6 +73,22 @@ export function SourceIntake({ workspaceId }: { workspaceId: string }) {
           </Link>
         ))}
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-border bg-surface-2 px-4 py-4">
+        <div className="max-w-2xl">
+          <h3 className="text-sm font-semibold text-ink">Define cómo se usa la información</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+            Un documento puede servir a varias áreas. Para los documentos ya leídos por Cortex,
+            distingue su uso administrativo, financiero, comercial u operativo y revisa su efecto en
+            las cifras.
+          </p>
+        </div>
+        <Link
+          href={workspaceHref(workspaceId, '/finance#sources')}
+          className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          Clasificar documentos <ArrowRight size={15} />
+        </Link>
+      </div>
     </Panel>
   );
 }

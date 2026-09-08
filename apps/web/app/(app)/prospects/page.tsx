@@ -23,8 +23,15 @@ const MAX_ROWS = 500;
 
 interface SignalRow {
   id: string;
-  company: string;
-  role_title: string;
+  company: string | null;
+  candidate_name: string | null;
+  role_title: string | null;
+  offer: string | null;
+  ideal_client: string | null;
+  industry: string | null;
+  buying_signal: string | null;
+  opportunity_need: string | null;
+  evidence_excerpt: string | null;
   url: string;
   source: string;
   summary: string | null;
@@ -50,7 +57,7 @@ export default async function ProspectsPage() {
     await db
       .from('growth_signals')
       .select(
-        'id, company, role_title, url, source, summary, region, status, contact_name, contact_title, contact_path, contact_confidence, created_at, reviewed_at, reviewed_by',
+        'id, company, candidate_name, role_title, offer, ideal_client, industry, buying_signal, opportunity_need, evidence_excerpt, url, source, summary, region, status, contact_name, contact_title, contact_path, contact_confidence, created_at, reviewed_at, reviewed_by',
       )
       .order('created_at', { ascending: false })
       .limit(MAX_ROWS),
@@ -75,7 +82,14 @@ export default async function ProspectsPage() {
   const prospects: Prospect[] = rows.map((r) => ({
     id: r.id,
     company: r.company,
+    candidateName: r.candidate_name,
     roleTitle: r.role_title,
+    offer: r.offer,
+    idealClient: r.ideal_client,
+    industry: r.industry,
+    buyingSignal: r.buying_signal,
+    opportunityNeed: r.opportunity_need,
+    evidenceExcerpt: r.evidence_excerpt,
     url: r.url,
     source: r.source,
     summary: r.summary,
@@ -97,11 +111,15 @@ export default async function ProspectsPage() {
   return (
     <>
       <PageHeader
-        title="Prospectos"
-        subtitle="Empresas que Cortex encontró contratando los perfiles que tú colocas. Quédate con las que sirven y descarta el resto: aquí nada se borra."
+        title="Outreach"
+        subtitle="Oportunidades comerciales para tu oferta, respaldadas por señales públicas. Califica cada hallazgo antes de preparar un contacto."
         icon={<Radar className="h-5 w-5" />}
       />
-      <ProspectBoard prospects={prospects} truncated={rows.length >= MAX_ROWS} />
+      <ProspectBoard
+        prospects={prospects}
+        truncated={rows.length >= MAX_ROWS}
+        workspaceId={user.organization.id}
+      />
     </>
   );
 }

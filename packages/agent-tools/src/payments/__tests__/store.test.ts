@@ -37,6 +37,7 @@ function invoice(over: Record<string, unknown> = {}) {
     id: 'ext-inv-1',
     organization_id: ORG,
     doc_type: 'invoice',
+    financial_role: 'receivable',
     review_state: 'confirmed',
     doc_number: 'FE-4471',
     client_id: CLIENT.id,

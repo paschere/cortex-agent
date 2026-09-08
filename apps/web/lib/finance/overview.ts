@@ -20,6 +20,7 @@ export interface FinanceReceivables {
   byCurrency: ReceivablesCurrency[];
   confirmedInvoices: number;
   exclusions: {
+    unclassifiedInvoices: number;
     pendingInvoices: number;
     withoutCurrency: number;
     disputedPayments: number;
@@ -84,13 +85,23 @@ async function readReceivables(
     // `receivables` predates section-level read states and deliberately falls
     // back to zero when this count fails. The finance hub cannot turn an
     // unknown exclusion into a reassuring zero, so verify the count here.
-    const pendingRead = await db
-      .from('document_extractions')
-      .select('id', { count: 'exact', head: true })
-      .eq('review_state', 'pending')
-      .eq('doc_type', 'invoice');
-    if (pendingRead.error) throw pendingRead.error;
-    if (pendingRead.count == null) throw new Error('el conteo de facturas pendientes no respondió');
+    const [pendingRead, unclassifiedRead] = await Promise.all([
+      db
+        .from('document_extractions')
+        .select('id', { count: 'exact', head: true })
+        .eq('review_state', 'pending')
+        .eq('doc_type', 'invoice')
+        .eq('financial_role', 'receivable'),
+      db
+        .from('document_extractions')
+        .select('id', { count: 'exact', head: true })
+        .eq('doc_type', 'invoice')
+        .eq('financial_role', 'unclassified'),
+    ]);
+    if (pendingRead.error || unclassifiedRead.error)
+      throw pendingRead.error ?? unclassifiedRead.error;
+    if (pendingRead.count == null || unclassifiedRead.count == null)
+      throw new Error('el conteo de clasificación de facturas no respondió');
 
     return {
       status: 'available',
@@ -98,6 +109,7 @@ async function readReceivables(
         byCurrency: result.byCurrency,
         confirmedInvoices: result.confirmedInvoices,
         exclusions: {
+          unclassifiedInvoices: unclassifiedRead.count,
           pendingInvoices: pendingRead.count,
           withoutCurrency: result.withoutCurrency,
           disputedPayments: result.disputedPayments,
@@ -182,6 +194,7 @@ export async function readFinanceOverview(
         'Cartera no es saldo bancario ni caja disponible.',
         'Los pagos con estado reportado o confirmado sólo reducen cartera cuando están ligados a una factura.',
         'Las facturas registradas alimentan cartera; esta lectura no las presenta como ingresos.',
+        'Una factura sin rol financiero humano confirmado queda excluida de cartera.',
         'No hay datos de presupuesto en esta lectura.',
       ],
     },

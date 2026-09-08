@@ -15,6 +15,7 @@ function invoice(over: Record<string, unknown> = {}) {
     id: 'inv-1',
     organization_id: ACME,
     doc_type: 'invoice',
+    financial_role: 'receivable',
     review_state: 'confirmed',
     doc_number: 'FV-1',
     client_id: 'client-1',
@@ -84,6 +85,7 @@ describe('readFinanceOverview', () => {
     );
     expect(overview.receivables.data.confirmedInvoices).toBe(2);
     expect(overview.receivables.data.exclusions.pendingInvoices).toBe(1);
+    expect(overview.receivables.data.exclusions.unclassifiedInvoices).toBe(0);
     expect(overview.provenance.caveats.join(' ')).toContain('no es saldo bancario');
     expect(overview.upcomingReceivables).toEqual(
       expect.objectContaining({

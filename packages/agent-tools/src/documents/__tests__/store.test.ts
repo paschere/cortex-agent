@@ -106,6 +106,26 @@ async function confirmAll(
 }
 
 describe('an extraction before anybody has looked at it', () => {
+  it('requires a new financial review after re-extraction while preserving business areas', async () => {
+    const w = world();
+    const row = await saveReading(w.db, { documentId: 'doc-1', reading: reading() });
+    await w.db
+      .from('document_extractions')
+      .update({
+        source_domains: ['financial', 'administrative'],
+        financial_role: 'receivable',
+        source_classified_at: '2026-09-07T12:00:00Z',
+        source_classified_by: ANA,
+      })
+      .eq('id', row.id);
+    const reread = await saveReading(w.db, { documentId: 'doc-1', reading: reading() });
+    expect(reread.source_domains).toEqual(['financial', 'administrative']);
+    expect(reread.financial_role).toBe('unclassified');
+    expect(reread.source_classified_at).toBeNull();
+    expect(reread.source_classified_by).toBeNull();
+    expect(reread.total_amount).toBeNull();
+  });
+
   it('is stored pending, with every quote, and contributes nothing to any total', async () => {
     const w = world();
     const row = await saveReading(w.db, { documentId: 'doc-1', reading: reading() });

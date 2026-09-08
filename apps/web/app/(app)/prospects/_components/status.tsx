@@ -1,6 +1,6 @@
+import type { StatusTone } from '@/lib/status-chip';
 import { CircleDot, CircleSlash, Send, ThumbsUp } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { StatusTone } from '@/lib/status-chip';
 import type { SignalStatus } from './types';
 
 /**

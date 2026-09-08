@@ -29,6 +29,7 @@ type Links = {
   integrations: string;
   feed: string;
   review: string;
+  sources: string;
 };
 
 const linkClass =
@@ -170,9 +171,9 @@ export function FinanceHub({ overview, links }: { overview: FinanceOverview; lin
       <div className="flex gap-3 rounded-card border border-amber/20 bg-amber-soft px-4 py-3 text-xs leading-relaxed text-ink-muted">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" aria-hidden />
         <p>
-          <span className="font-semibold text-ink">Límite de clasificación:</span> usa las facturas
-          registradas en Cartera; Cortex todavía no distingue automáticamente compras y ventas.
-          Revisa su clasificación antes de interpretar el total como cuentas por cobrar.
+          <span className="font-semibold text-ink">Regla de inclusión:</span> una etiqueta
+          financiera no cambia los totales. Cartera solo incluye datos de factura confirmados por
+          una persona y clasificados como por cobrar; las cuentas por pagar permanecen separadas.
         </p>
       </div>
 
@@ -291,6 +292,12 @@ export function FinanceHub({ overview, links }: { overview: FinanceOverview; lin
             <PanelHead icon={<Scale className="h-4 w-4" />} title="Requiere revisión" />
             <div className="space-y-3 p-5">
               <QueueRow
+                label="Facturas sin rol financiero"
+                value={exclusions?.unclassifiedInvoices}
+                href={links.sources}
+                alert
+              />
+              <QueueRow
                 label="Facturas sin confirmar"
                 value={exclusions?.pendingInvoices}
                 href={links.review}
@@ -325,6 +332,12 @@ export function FinanceHub({ overview, links }: { overview: FinanceOverview; lin
               title="Completar la foto financiera"
             />
             <div className="space-y-4 p-5 text-sm">
+              <NextStep
+                icon={<Scale />}
+                title="Clasificar fuentes"
+                detail="Define el área, el rol financiero y revisa el impacto antes de guardar."
+                href={links.sources}
+              />
               <NextStep
                 icon={<ReceiptText />}
                 title="Revisar con Cortex"

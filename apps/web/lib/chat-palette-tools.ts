@@ -46,6 +46,20 @@ import { CAPABILITY_GROUPS, familyLabel, familyOf, groupOfFamily } from './tool-
  * cliente, el texto a buscar. Sin espacio, la frase ya es una pregunta entera.
  */
 export const TOOL_PHRASE: Record<string, string> = {
+  'gmail.propose_learning': 'Propón un aprendizaje para revisar de este hilo: ',
+  'security.report_refusal': 'Registra por qué se rechazó esta acción: ',
+  'security.get_action_policy': 'Muéstrame los permisos de acción de esta empresa',
+  'security.set_action_policy': 'Ayúdame a configurar los permisos de acción para ',
+  'management.brief': 'Muéstrame el resumen gerencial de esta empresa',
+  'management.inspect': 'Consulta el asunto y su historial: ',
+  'management.record': 'Registra este asunto para hacerle seguimiento: ',
+  'management.daily_brief': 'Prepara el parte diario de esta empresa',
+  'management.collection_status': 'Muéstrame cómo va el seguimiento de cobro: ',
+  'management.start_collection': 'Prepara el seguimiento de cobro para ',
+  'management.advance_collection': 'Actualiza el seguimiento de cobro de ',
+  'management.operation': 'Muéstrame el ciclo gerencial y sus decisiones',
+  'management.propose_decision': 'Prepara una propuesta de decisión para revisar: ',
+
   'actions.list': 'Muéstrame las acciones que esperan mi aprobación',
   'actions.propose': 'Déjame redactado un mensaje para ',
 
@@ -66,7 +80,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'browser.submit_flow': `Radica el ${MODULE.one} `,
   // La frase empieza por el dato porque así es como llega: la persona escribe
   // el código que le acaba de entrar, no «retoma el trámite».
-  'browser.resume_flow': `El código que me llegó es `,
+  'browser.resume_flow': 'El código que me llegó es ',
   // La navegación libre se pide así; los pasos sueltos (act, read_page,
   // ask_person, request_secret, close_page) los decide el bot dentro de la
   // pestaña y no son una petición — están en la fontanería del test.
@@ -149,6 +163,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'growth.identify_contact': 'Averigua quién decide en ',
   'growth.list_signals': 'Muéstrame las señales de mercado guardadas',
   'growth.update_signal': 'Califica la señal de mercado ',
+  'growth.draft_outreach': 'Prepara un borrador comercial basado en la evidencia para ',
 
   // Metas. La de fijar deja el número por escribir a propósito: el objetivo lo
   // dice la empresa, y una frase que ya lo trajera puesto sería Cortex fijando

@@ -12,6 +12,7 @@ const links = {
   integrations: '/integrations?workspace=org-1',
   feed: '/feed?workspace=org-1',
   review: '/chat?prompt=revisar&workspace=org-1',
+  sources: '/finance?workspace=org-1#sources',
 };
 
 function overview(): FinanceOverview {
@@ -34,6 +35,7 @@ function overview(): FinanceOverview {
         ],
         confirmedInvoices: 2,
         exclusions: {
+          unclassifiedInvoices: 2,
           pendingInvoices: 3,
           withoutCurrency: 1,
           disputedPayments: 1,
@@ -120,7 +122,8 @@ describe('FinanceHub', () => {
     ])
       expect(html).toContain(label);
     for (const href of Object.values(links)) expect(html).toContain(href.replaceAll('&', '&amp;'));
-    expect(html).toContain('todavía no distingue automáticamente compras y ventas');
+    expect(html).toContain('una etiqueta financiera no cambia los totales');
+    expect(html).toContain('Clasificar fuentes');
     expect(html).not.toContain('Pagos confirmados');
   });
 

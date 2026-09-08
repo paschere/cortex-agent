@@ -39,6 +39,13 @@
  * de la interfaz y viven con ella, en `apps/web/lib/tool-labels.ts`.
  */
 export const TOOL_LABEL_TEXT: Record<string, string> = {
+  gmail_propose_learning: 'Proponer un aprendizaje del correo',
+  management_operation: 'Consultar el ciclo gerencial',
+  management_propose_decision: 'Preparar una decisión para revisión',
+  security_report_refusal: 'Registrar una acción rechazada',
+  security_get_action_policy: 'Consultar los permisos de acción',
+  security_set_action_policy: 'Configurar los permisos de acción',
+
   qualify_lead: 'Calificar prospecto',
   hubspot_search_companies: 'Buscar empresas en HubSpot',
   hubspot_get_company: 'Ver detalle de la empresa',
@@ -158,10 +165,11 @@ export const TOOL_LABEL_TEXT: Record<string, string> = {
   chat_send_dm: 'Mandar un privado por Google Chat',
   people_search: 'Buscar el correo de una persona',
   directory_line: 'Ver quién le responde a quién',
-  growth_find_signals: 'Rastrear vacantes que son oportunidad',
+  growth_find_signals: 'Buscar oportunidades comerciales',
   growth_list_signals: 'Ver las oportunidades detectadas',
   growth_update_signal: 'Actualizar la oportunidad',
   growth_identify_contact: 'Averiguar con quién hablar',
+  growth_draft_outreach: 'Preparar un mensaje comercial',
   commitments_due_soon: 'Ver lo que se vence',
   commitments_record: 'Anotar un vencimiento para vigilarlo',
   commitments_mark_met: 'Marcar el compromiso como cumplido',

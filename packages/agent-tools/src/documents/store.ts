@@ -37,7 +37,7 @@ import { type CanonicalValues, EMPTY_CANONICAL, canonicalFrom, nitDigits } from 
 // ---------------------------------------------------------------------------
 
 export const EXTRACTION_COLUMNS =
-  'id, document_id, doc_type, classification_quote, classification_chunk_id, unclassified_reason, client_id, client_nit, client_match_state, review_state, confirmed_at, confirmed_by, rejected_at, rejected_by, doc_number, counterparty_nit, counterparty_name, total_amount, tax_amount, currency, issued_on, due_on, extractor_version, model_id, created_by, error_message, created_at, updated_at';
+  'id, document_id, doc_type, classification_quote, classification_chunk_id, unclassified_reason, source_domains, financial_role, source_classified_at, source_classified_by, client_id, client_nit, client_match_state, review_state, confirmed_at, confirmed_by, rejected_at, rejected_by, doc_number, counterparty_nit, counterparty_name, total_amount, tax_amount, currency, issued_on, due_on, extractor_version, model_id, created_by, error_message, created_at, updated_at';
 
 export const FIELD_COLUMNS =
   'id, extraction_id, field_key, value_text, value_number, value_date, currency, quote, chunk_id, review_state, confirmed_at, confirmed_by, rejected_at, rejected_by, corrected_text, corrected_number, corrected_date, corrected_currency, created_at, updated_at';
@@ -52,6 +52,10 @@ export interface ExtractionRow {
   classification_quote: string | null;
   classification_chunk_id: string | null;
   unclassified_reason: string | null;
+  source_domains: Array<'financial' | 'administrative' | 'commercial' | 'operations'>;
+  financial_role: 'unclassified' | 'receivable' | 'payable' | 'reference';
+  source_classified_at: string | null;
+  source_classified_by: string | null;
   client_id: string | null;
   client_nit: string | null;
   client_match_state: ClientMatchState;
@@ -182,6 +186,12 @@ export async function saveReading(
     classification_quote: reading.classificationQuote,
     classification_chunk_id: reading.classificationChunkId,
     unclassified_reason: reading.unclassifiedReason,
+    // A new reading invalidates the old financial direction. Otherwise changed
+    // fields could inherit an earlier por-cobrar decision and move wrong money.
+    // Migration 0143 audits this system reset through the table trigger.
+    financial_role: 'unclassified',
+    source_classified_at: null,
+    source_classified_by: null,
     client_id: null,
     client_nit: nit,
     client_match_state: match,

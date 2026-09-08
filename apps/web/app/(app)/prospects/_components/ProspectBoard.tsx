@@ -2,6 +2,7 @@
 
 import { Eyebrow, Panel } from '@/components/ui/panel';
 import { CHIP_TONE } from '@/lib/status-chip';
+import { workspaceHref } from '@/lib/workspace-context';
 import { clsx } from 'clsx';
 import { Radar, Search, SearchX } from 'lucide-react';
 import Link from 'next/link';
@@ -19,9 +20,11 @@ const ANY = 'all';
 export function ProspectBoard({
   prospects,
   truncated,
+  workspaceId,
 }: {
   prospects: Prospect[];
   truncated: boolean;
+  workspaceId: string;
 }) {
   // The default view is the work, not the archive.
   const [status, setStatus] = useState<SignalStatus | typeof ANY>('new');
@@ -103,7 +106,8 @@ export function ProspectBoard({
       if (status !== ANY && p.status !== status) return false;
       if (region !== ANY && p.region !== region) return false;
       if (source !== ANY && p.source !== source) return false;
-      if (q && !p.company.toLowerCase().includes(q)) return false;
+      if (q && !`${p.company ?? ''} ${p.candidateName ?? ''}`.toLowerCase().includes(q))
+        return false;
       return true;
     });
   }, [merged, pinned, status, region, source, query]);
@@ -153,7 +157,7 @@ export function ProspectBoard({
     setErrors((e) => ({ ...e, [prospect.id]: result.error }));
   }
 
-  if (prospects.length === 0) return <NothingFoundYet />;
+  if (prospects.length === 0) return <NothingFoundYet workspaceId={workspaceId} />;
 
   const total = merged.length;
 
@@ -212,7 +216,10 @@ export function ProspectBoard({
                 <div className="stat-num mt-1.5 text-xl leading-none text-ink">{count}</div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
                   <div
-                    className={clsx('h-full rounded-full transition-[width] duration-500', meta.bar)}
+                    className={clsx(
+                      'h-full rounded-full transition-[width] duration-500',
+                      meta.bar,
+                    )}
                     style={{ width: `${Math.max(pct, count > 0 ? 5 : 0)}%` }}
                   />
                 </div>
@@ -223,9 +230,9 @@ export function ProspectBoard({
         </div>
 
         <p className="mt-3 text-micro leading-relaxed text-ink-muted">
-          Cortex barre los portales de empleo cada semana y deja lo que encuentra en <b>Nuevos</b>.
-          De ahí solo se mueve: una empresa descartada se queda en Descartados para que nadie vuelva
-          a perder una tarde investigándola.
+          Cortex investiga las empresas, industrias y señales que configures y deja la evidencia en{' '}
+          <b>Nuevos</b>. Nada se contacta desde esta cola: primero una persona califica o descarta
+          cada oportunidad.
         </p>
       </Panel>
 
@@ -237,7 +244,7 @@ export function ProspectBoard({
             value={query}
             onChange={(e) => refilter(() => setQuery(e.target.value))}
             placeholder="Buscar por empresa"
-            aria-label="Buscar prospectos por empresa"
+            aria-label="Buscar oportunidades por empresa"
             className="w-full rounded-card border border-border bg-surface py-1.5 pl-8 pr-3 text-xs text-ink transition-colors placeholder:text-ink-faint focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10"
           />
         </div>
@@ -341,32 +348,35 @@ function FilterSelect({
 }
 
 /** First run: the table is empty and the person needs to know how it fills. */
-function NothingFoundYet() {
+function NothingFoundYet({ workspaceId }: { workspaceId: string }) {
   return (
     <Panel className="p-10 text-center">
       <Radar className="mx-auto mb-3 h-7 w-7 text-primary" />
-      <p className="mb-1 text-base font-bold text-ink">Todavía no hay prospectos</p>
+      <p className="mb-1 text-base font-bold text-ink">Todavía no hay oportunidades</p>
       <p className="mx-auto max-w-lg text-sm leading-relaxed text-ink-muted">
-        Cortex barre los portales de empleo una vez por semana buscando empresas que contraten los
-        perfiles que tu equipo coloca, y todo lo que encuentra aterriza aquí.
+        Dile a Cortex qué ofreces, cuál es tu cliente ideal, qué industrias te interesan y qué
+        señales de compra debe investigar. Cada hallazgo llega con su fuente para revisión.
       </p>
       <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
         <Link
-          href="/chat"
+          href={workspaceHref(
+            workspaceId,
+            '/chat?prompt=Quiero%20configurar%20Outreach.%20Preg%C3%BAntame%20por%20mi%20oferta%2C%20cliente%20ideal%2C%20industrias%2C%20regiones%20y%20se%C3%B1ales%20de%20compra%20antes%20de%20investigar.',
+          )}
           className="rounded-pill bg-primary px-4 py-2 text-xs font-semibold text-white transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
         >
-          Pedirle a Cortex que barra ahora
+          Investigar oportunidades ahora
         </Link>
         <Link
-          href="/schedules"
+          href={workspaceHref(workspaceId, '/schedules')}
           className="rounded-pill border border-border-strong px-4 py-2 text-xs font-semibold text-ink transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 motion-reduce:transform-none motion-reduce:transition-none"
         >
-          Programar el barrido semanal
+          Programar una investigación
         </Link>
       </div>
       <p className="mx-auto mt-3 max-w-lg text-micro text-ink-faint">
-        En el chat, algo así: “Barre los portales buscando vacantes de fullstack senior y QA en
-        empresas de Estados Unidos que contraten remoto.”
+        En el chat, algo así: “Para nuestra oferta de automatización logística, investiga expansión
+        regional y nuevos centros de distribución en estas empresas objetivo.”
       </p>
     </Panel>
   );

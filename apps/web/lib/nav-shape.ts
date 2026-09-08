@@ -273,7 +273,7 @@ export const SECTIONS: NavSection[] = [
       HOME,
       { href: '/goals', label: 'Metas', icon: Target },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
-      { href: '/prospects', label: 'Prospectos', icon: Radar },
+      { href: '/prospects', label: 'Outreach', icon: Radar },
     ],
   },
   {

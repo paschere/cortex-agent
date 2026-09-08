@@ -853,7 +853,8 @@ export async function receivables(
     .from('document_extractions')
     .select(INVOICE_COLUMNS)
     .eq('review_state', 'confirmed')
-    .eq('doc_type', 'invoice');
+    .eq('doc_type', 'invoice')
+    .eq('financial_role', 'receivable');
   if (opts.clientId) invoiceQuery = invoiceQuery.eq('client_id', opts.clientId);
   const invoicesRead = await invoiceQuery.limit(SCAN_LIMIT);
   if (invoicesRead.error) throw invoicesRead.error;
@@ -961,7 +962,8 @@ export async function receivables(
     .from('document_extractions')
     .select('id', { count: 'exact', head: true })
     .eq('review_state', 'pending')
-    .eq('doc_type', 'invoice');
+    .eq('doc_type', 'invoice')
+    .eq('financial_role', 'receivable');
   const pendingExcluded = pendingRead.error ? 0 : (pendingRead.count ?? 0);
 
   const disputedAmount = disputed.reduce((sum, p) => sum + signedAmount(p.kind, amountOf(p)), 0);

@@ -25,7 +25,7 @@ const ParamDef = z.object({
 });
 
 const StepDef = z.object({
-  title: z.string().min(2).max(80).describe('Short imperative label, e.g. "Sweep job boards"'),
+  title: z.string().min(2).max(80).describe('Short imperative label, e.g. "Find buying signals"'),
   detail: z
     .string()
     .min(5)

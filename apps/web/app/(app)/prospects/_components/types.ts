@@ -18,9 +18,16 @@ export type ContactConfidence = 'found' | 'inferred' | 'unknown';
 
 export interface Prospect {
   id: string;
-  company: string;
-  roleTitle: string;
-  /** The job posting itself — the evidence anyone can check for themselves. */
+  company: string | null;
+  candidateName: string | null;
+  roleTitle: string | null;
+  offer: string | null;
+  idealClient: string | null;
+  industry: string | null;
+  buyingSignal: string | null;
+  opportunityNeed: string | null;
+  evidenceExcerpt: string | null;
+  /** Public source a reviewer can check. */
   url: string;
   source: string;
   /** Why it matches what your team sells. */

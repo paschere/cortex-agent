@@ -91,11 +91,29 @@ export function ProspectCard({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-base font-bold text-ink">{prospect.company}</span>
+            <span className="text-base font-bold text-ink">
+              {prospect.company ?? prospect.candidateName ?? 'Empresa por confirmar'}
+            </span>
             <span className={chipClass(meta.tone)}>{meta.label}</span>
           </div>
+          {!prospect.company && prospect.candidateName && (
+            <p className="mt-1 text-micro text-amber">
+              Nombre sugerido por la búsqueda · confirma la empresa antes de contactar
+            </p>
+          )}
           <div className="mt-0.5 text-sm text-ink-muted">
-            busca <span className="font-semibold text-ink">{prospect.roleTitle}</span>
+            {prospect.buyingSignal ? (
+              <>
+                <span className="font-semibold text-ink">{prospect.buyingSignal}</span>
+                {prospect.industry ? ` · ${prospect.industry}` : ''}
+              </>
+            ) : prospect.roleTitle ? (
+              <>
+                Contrata <span className="font-semibold text-ink">{prospect.roleTitle}</span>
+              </>
+            ) : (
+              <span>Señal comercial pendiente de clasificar</span>
+            )}
           </div>
 
           <div className="tabular mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-micro text-ink-faint">
@@ -135,13 +153,38 @@ export function ProspectCard({
       )}
 
       {/* ---------------------------------------------------------- evidence */}
-      {prospect.summary && (
+      {(prospect.evidenceExcerpt || prospect.summary) && (
         <div className="mt-3 rounded-sm border border-border bg-surface-2 px-3 py-2.5">
           <div className="field-label mb-1 flex items-center gap-1.5">
             <Quote className="h-3 w-3" />
-            Por qué parece un buen prospecto
+            Evidencia pública
           </div>
-          <p className="text-xs leading-relaxed text-ink-muted">{prospect.summary}</p>
+          <p className="text-xs leading-relaxed text-ink-muted">
+            {prospect.evidenceExcerpt || prospect.summary}
+          </p>
+        </div>
+      )}
+
+      {(prospect.offer || prospect.opportunityNeed || prospect.idealClient) && (
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+          {prospect.opportunityNeed && (
+            <div>
+              <span className="field-label block">Necesidad posible</span>
+              <span className="text-ink-muted">{prospect.opportunityNeed}</span>
+            </div>
+          )}
+          {prospect.offer && (
+            <div>
+              <span className="field-label block">Oferta que encaja</span>
+              <span className="text-ink-muted">{prospect.offer}</span>
+            </div>
+          )}
+          {prospect.idealClient && (
+            <div className="sm:col-span-2">
+              <span className="field-label block">Cliente ideal configurado</span>
+              <span className="text-ink-muted">{prospect.idealClient}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -198,7 +241,7 @@ function Contact({ prospect }: { prospect: Prospect }) {
     return (
       <p className="mt-3 flex items-center gap-1.5 text-xs text-ink-muted">
         <UserSearch className="h-3.5 w-3.5" />
-        Sin contacto todavía. Pídele a Cortex en el chat que averigüe quién contrata este perfil.
+        Sin contacto todavía. Pídele a Cortex que investigue quién decide sobre esta necesidad.
       </p>
     );
   }
@@ -237,9 +280,7 @@ function Contact({ prospect }: { prospect: Prospect }) {
             {contactPath}
           </a>
         ) : (
-          <div className="mt-1.5 select-all font-mono text-xs text-ink-muted">
-            {contactPath}
-          </div>
+          <div className="mt-1.5 select-all font-mono text-xs text-ink-muted">{contactPath}</div>
         ))}
 
       {guessed && (

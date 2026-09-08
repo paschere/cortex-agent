@@ -13,8 +13,18 @@ import { livingSubtitle } from './_lib/view';
 
 export const dynamic = 'force-dynamic';
 
-export default async function KnowledgeBasePage() {
+export default async function KnowledgeBasePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ document?: string | string[] }>;
+}) {
   const user = await requireSession();
+  const params = await searchParams;
+  const initialDocumentId =
+    typeof params.document === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.document)
+      ? params.document
+      : null;
   const db = getOrgScopedClient(user.organization.id);
 
   // Everything on this page — the map, the figures, the analysis — comes out of
@@ -97,6 +107,8 @@ export default async function KnowledgeBasePage() {
           and this only says which conversations are arriving from there. */}
       <WhatsappInBrain organizationId={user.organization.id} />
       <KnowledgeBase
+        key={`${user.organization.id}:${initialDocumentId ?? 'index'}`}
+        initialDocumentId={initialDocumentId}
         spaces={summaries}
         stats={stats}
         health={health}

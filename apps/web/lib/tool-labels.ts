@@ -1,4 +1,14 @@
 export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
+  gmail_propose_learning: { label: 'Proponer un aprendizaje del correo', icon: 'Mail' },
+  management_operation: { label: 'Consultar el ciclo gerencial', icon: 'Briefcase' },
+  management_propose_decision: {
+    label: 'Preparar una decisión para revisión',
+    icon: 'ClipboardList',
+  },
+  security_report_refusal: { label: 'Registrar una acción rechazada', icon: 'Shield' },
+  security_get_action_policy: { label: 'Consultar los permisos de acción', icon: 'Shield' },
+  security_set_action_policy: { label: 'Configurar los permisos de acción', icon: 'Shield' },
+
   management_daily_brief: { label: 'Preparar el parte diario', icon: 'FileText' },
   management_collection_status: { label: 'Consultar el seguimiento del cobro', icon: 'Wallet' },
   management_start_collection: { label: 'Iniciar seguimiento y preparar un cobro', icon: 'Wallet' },
@@ -193,11 +203,12 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   people_search: { label: 'Buscar el correo de una persona', icon: 'Contact' },
   directory_line: { label: 'Ver quién le responde a quién', icon: 'Network' },
 
-  // Oportunidades: vacantes públicas que delatan que una empresa está creciendo.
-  growth_find_signals: { label: 'Rastrear vacantes que son oportunidad', icon: 'Radar' },
+  // Oportunidades: señales públicas de necesidades comerciales.
+  growth_find_signals: { label: 'Buscar oportunidades comerciales', icon: 'Radar' },
   growth_list_signals: { label: 'Ver las oportunidades detectadas', icon: 'Telescope' },
   growth_update_signal: { label: 'Actualizar la oportunidad', icon: 'PencilLine' },
   growth_identify_contact: { label: 'Averiguar con quién hablar', icon: 'UserSearch' },
+  growth_draft_outreach: { label: 'Preparar un mensaje comercial', icon: 'PencilLine' },
 
   // Vencimientos. «Compromiso» es la palabra del producto, pero lo que la
   // persona espera leer es qué se vence — por eso la primera lo dice así.

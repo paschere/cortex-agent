@@ -2,19 +2,9 @@ import { IntegrationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool, runTool } from '../index';
 import { webSearch } from '../web';
+import { SignalRow, toSignal } from './signals';
 
-/**
- * Growth pilot, test 5 (job-post signal detection): sweep public job boards
- * for open remote roles matching our ICP at US companies, dedupe against
- * the growth_signals table, and persist the new ones for review.
- *
- * A "signal" is a live job post that suggests the company is hiring for a
- * role we can fill (senior fullstack, QA, DevOps, ...). Sweeps are
- * composable: run from chat for a one-off, or from a weekly scheduled agent
- * job for the sustained 15-signals/week pilot target.
- */
-
-const BOARD_SITES = [
+const HIRING_BOARDS = [
   'boards.greenhouse.io',
   'jobs.lever.co',
   'jobs.ashbyhq.com',
@@ -22,134 +12,222 @@ const BOARD_SITES = [
   'jobs.smartrecruiters.com',
 ];
 
-const SignalSchema = z.object({
-  id: z.string(),
-  company: z.string(),
-  roleTitle: z.string(),
-  url: z.string(),
-  source: z.string(),
-  summary: z.string().nullable(),
-  status: z.string(),
-});
+export type SearchPlan = {
+  company: string | null;
+  query: string;
+  buyingSignal: string;
+  roleTitle?: string;
+};
 
-export const growthFindSignals = registerTool({
-  id: 'growth.find_signals',
-  description:
-    'Sweep public job boards (Greenhouse, Lever, Ashby, Workable, SmartRecruiters) for live job posts matching the roles your organization fills (e.g. "senior fullstack engineer", "QA engineer") at companies hiring remote. Deduplicates against previously found signals (by posting URL) and stores the new ones with status "new" for review. Returns the new signals plus counts. Run weekly (via schedule.create) for the growth pilot. ' +
-    'This DISCOVERS companies from a role — you do not name the company. It only sees these five boards, so a company that advertises solely on its own careers page will not show up; web.search is the way to check one named company.',
-  inputSchema: z.object({
+export function buildSearchPlans(input: {
+  mode?: 'commercial' | 'hiring';
+  companies?: string[];
+  offer?: string;
+  idealClient?: string;
+  industries?: string[];
+  buyingSignals?: string[];
+  regions?: string[];
+  sources?: string[];
+  roles?: string[];
+  extraQualifiers?: string;
+}): SearchPlan[] {
+  const mode = input.mode ?? (input.roles?.length ? 'hiring' : 'commercial');
+  if (mode === 'hiring') {
+    const boards = input.sources?.length ? input.sources : HIRING_BOARDS;
+    const scope = ` (${boards.map((source) => `site:${source}`).join(' OR ')})`;
+    return (input.roles ?? []).map((role) => ({
+      company: null,
+      roleTitle: role,
+      buyingSignal: `Contratación: ${role}`,
+      query: `"${role}" ${input.extraQualifiers ?? 'remote'}${scope}`,
+    }));
+  }
+  const scope = input.sources?.length
+    ? ` (${input.sources.map((source) => `site:${source}`).join(' OR ')})`
+    : '';
+  const companies: Array<string | null> = input.companies?.length ? input.companies : [null];
+  return companies.flatMap((company) =>
+    (input.buyingSignals ?? []).map((signal) => ({
+      company,
+      buyingSignal: signal,
+      query: [
+        company ? `"${company}"` : null,
+        `"${signal}"`,
+        input.idealClient,
+        input.industries?.join(' OR '),
+        input.regions?.join(' OR '),
+        input.extraQualifiers,
+        scope,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    })),
+  );
+}
+
+const InputSchema = z
+  .object({
+    mode: z.enum(['commercial', 'hiring']).optional(),
+    companies: z
+      .array(z.string().min(2))
+      .max(20)
+      .optional()
+      .describe('Optional named targets; broad result titles remain unverified candidate names'),
+    offer: z.string().min(2).optional().describe('What this organization sells'),
+    idealClient: z.string().min(2).optional().describe('Configurable ideal-client profile'),
+    industries: z.array(z.string().min(2)).max(8).optional(),
+    buyingSignals: z
+      .array(z.string().min(2))
+      .max(8)
+      .optional()
+      .describe('Events worth investigating, e.g. expansion, regulation, funding, contract expiry'),
+    opportunityNeed: z
+      .string()
+      .min(2)
+      .optional()
+      .describe('Need the offer could address; a hypothesis pending review'),
+    regions: z.array(z.string().min(2)).max(8).optional(),
+    sources: z
+      .array(z.string().min(3))
+      .max(10)
+      .optional()
+      .describe('Optional domains; omit to search the open web'),
     roles: z
       .array(z.string().min(2))
       .min(1)
       .max(5)
-      .describe('Role queries to sweep, e.g. ["senior fullstack engineer", "senior QA engineer"]'),
-    extraQualifiers: z
-      .string()
-      .default('remote')
-      .describe('Extra search qualifiers appended to every query, e.g. "remote US"'),
-    maxPerRole: z.number().int().min(1).max(10).default(8),
-  }),
+      .optional()
+      .describe('Legacy hiring-mode role queries'),
+    extraQualifiers: z.string().optional(),
+    maxPerQuery: z.number().int().min(1).max(10).default(5),
+    maxPerRole: z.number().int().min(1).max(10).optional().describe('Legacy alias for maxPerQuery'),
+  })
+  .superRefine((input, ctx) => {
+    const mode = input.mode ?? (input.roles?.length ? 'hiring' : 'commercial');
+    if (mode === 'commercial') {
+      for (const key of ['offer', 'idealClient', 'buyingSignals'] as const) {
+        if (!input[key] || (Array.isArray(input[key]) && input[key].length === 0))
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [key],
+            message: `Required in commercial mode: ${key}`,
+          });
+      }
+    } else if (!input.roles?.length)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['roles'],
+        message: 'Required in hiring mode',
+      });
+  });
+
+export const growthFindSignals = registerTool({
+  id: 'growth.find_signals',
+  description:
+    'Investigate buying signals in any industry and save public evidence for human review. Commercial mode requires offer, ideal client and buying signals. Company names are optional: broad discovery stores unverified candidate titles separately. Optional source domains narrow the search; otherwise it searches the open web. Split large requests into batches of at most 20 searches. Legacy hiring mode accepts roles. It never contacts anyone or sends a campaign.',
+  inputSchema: InputSchema,
   outputSchema: z.object({
-    newSignals: z.array(SignalSchema),
+    newSignals: z.array(SignalRow),
     newCount: z.number(),
     duplicateCount: z.number(),
     totalStored: z.number(),
   }),
   rateLimit: { perMinute: 4 },
   handler: async (input, ctx) => {
-    if (!process.env.TAVILY_API_KEY) {
+    if (!process.env.TAVILY_API_KEY)
       throw new IntegrationError('TAVILY_API_KEY not configured — web search unavailable', 'web');
-    }
-
-    interface Candidate {
-      company: string;
-      roleTitle: string;
-      url: string;
-      source: string;
-      summary: string;
-    }
-    const candidates = new Map<string, Candidate>();
-
-    // One targeted query per (role x board) keeps results precise; Tavily
-    // handles the ranking. Sequential to respect web.search's rate limit.
-    for (const role of input.roles) {
-      const siteFilter = BOARD_SITES.map((s) => `site:${s}`).join(' OR ');
-      const query = `"${role}" ${input.extraQualifiers ?? 'remote'} (${siteFilter})`;
-      const res = await runTool(
+    const candidates = new Map<string, Record<string, unknown>>();
+    const plans = buildSearchPlans(input);
+    if (plans.length > 20)
+      throw new Error('Divide la investigación en lotes de hasta 20 búsquedas.');
+    for (const plan of plans) {
+      const result = await runTool(
         webSearch,
-        { query, maxResults: input.maxPerRole ?? 8, includeAnswer: false, searchDepth: 'basic' },
+        {
+          query: plan.query,
+          maxResults: input.maxPerRole ?? input.maxPerQuery ?? 5,
+          includeAnswer: false,
+          searchDepth: 'basic',
+        },
         ctx,
       );
-      for (const r of res.results) {
-        let host: string;
+      for (const hit of result.results) {
+        let parsed: URL;
         try {
-          host = new URL(r.url).hostname;
+          parsed = new URL(hit.url);
         } catch {
           continue;
         }
-        const board = BOARD_SITES.find((s) => host === s || host.endsWith(`.${s}`));
-        if (!board) continue;
-        // Company slug is the first path segment on all supported boards.
-        const slug = new URL(r.url).pathname.split('/').filter(Boolean)[0] ?? '';
-        const company = slug
-          .replace(/[-_]/g, ' ')
-          .replace(/\b\w/g, (c) => c.toUpperCase())
-          .trim();
-        if (!company) continue;
-        candidates.set(r.url, {
-          company,
-          roleTitle: role,
-          url: r.url,
-          source: board,
-          summary: (r.content ?? '').slice(0, 400),
+        let company = plan.company;
+        if (!company && plan.roleTitle) {
+          const board = HIRING_BOARDS.find(
+            (host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`),
+          );
+          if (!board) continue;
+          const slug = parsed.pathname.split('/').filter(Boolean)[0] ?? '';
+          company = slug
+            .replace(/[-_]/g, ' ')
+            .replace(/\b\w/g, (c) => c.toUpperCase())
+            .trim();
+        }
+        const candidateName = company ? null : hit.title.slice(0, 200);
+        const evidence = (hit.content ?? '').slice(0, 500);
+        candidates.set(hit.url, {
+          company: company || null,
+          candidate_name: candidateName,
+          role_title: plan.roleTitle ?? null,
+          offer: input.offer ?? null,
+          ideal_client: input.idealClient ?? null,
+          industry: input.industries?.join(', ') ?? null,
+          buying_signal: plan.buyingSignal,
+          opportunity_need: input.opportunityNeed ?? null,
+          evidence_excerpt: evidence,
+          url: hit.url,
+          source: parsed.hostname,
+          summary: evidence,
+          region: input.regions?.join(', ') ?? (plan.roleTitle ? 'US' : null),
+          found_by: ctx.userId,
         });
       }
     }
-
-    // Dedupe against history and insert the new ones.
     const urls = [...candidates.keys()];
-    const { data: existing } = urls.length
+    const { data: existing, error: existingError } = urls.length
       ? await ctx.db.from('growth_signals').select('url').in('url', urls)
-      : { data: [] as Array<{ url: string }> };
-    const known = new Set((existing ?? []).map((e) => e.url as string));
-    const fresh = [...candidates.values()].filter((c) => !known.has(c.url));
-
-    const newSignals: Array<z.infer<typeof SignalSchema>> = [];
-    for (const c of fresh) {
-      const { data: row, error } = await ctx.db
+      : { data: [] as Array<{ url: string }>, error: null };
+    if (existingError)
+      throw new Error('No se pudo comprobar cuáles oportunidades ya estaban guardadas.');
+    const known = new Set((existing ?? []).map((row) => row.url as string));
+    const fresh = [...candidates.entries()].filter(([url]) => !known.has(url));
+    const newSignals: Array<z.infer<typeof SignalRow>> = [];
+    let concurrentDuplicates = 0;
+    for (const [, candidate] of fresh) {
+      const { data, error } = await ctx.db
         .from('growth_signals')
-        .insert({
-          company: c.company,
-          role_title: c.roleTitle,
-          url: c.url,
-          source: c.source,
-          summary: c.summary,
-          region: 'US',
-          found_by: ctx.userId,
-        })
-        .select('id, company, role_title, url, source, summary, status')
+        .insert(candidate)
+        .select('*')
         .single();
-      if (error || !row) continue; // unique-index race: another sweep won — fine
-      newSignals.push({
-        id: row.id as string,
-        company: row.company as string,
-        roleTitle: row.role_title as string,
-        url: row.url as string,
-        source: row.source as string,
-        summary: (row.summary as string | null) ?? null,
-        status: row.status as string,
-      });
+      if (error) {
+        if (error.code === '23505') {
+          concurrentDuplicates += 1;
+          continue;
+        }
+        throw new Error(`growth_signals insert failed: ${error.message}`);
+      }
+      if (!data) throw new Error('growth_signals insert returned no row');
+      newSignals.push(toSignal(data));
     }
-
-    const { count } = await ctx.db
+    const { count, error: countError } = await ctx.db
       .from('growth_signals')
       .select('id', { count: 'exact', head: true });
-
+    if (countError || count == null)
+      throw new Error(
+        'La investigación terminó, pero no se pudo leer el total de oportunidades guardadas.',
+      );
     return {
       newSignals,
       newCount: newSignals.length,
-      duplicateCount: candidates.size - fresh.length,
-      totalStored: count ?? 0,
+      duplicateCount: candidates.size - fresh.length + concurrentDuplicates,
+      totalStored: count,
     };
   },
 });

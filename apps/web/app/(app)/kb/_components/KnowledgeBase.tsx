@@ -61,6 +61,7 @@ export function KnowledgeBase({
   constellation,
   isAdmin,
   viewerName,
+  initialDocumentId = null,
 }: {
   spaces: SpaceSummary[];
   stats: BrainStats;
@@ -72,6 +73,8 @@ export function KnowledgeBase({
   constellation: ConstellationData | null;
   isAdmin: boolean;
   viewerName: string;
+  /** The reader action revalidates visibility before returning any content. */
+  initialDocumentId?: string | null;
 }) {
   const stats = useDigest(serverStats);
 
@@ -79,7 +82,7 @@ export function KnowledgeBase({
   // union, because every transition between them is "set one, clear the other"
   // and a union would need a reducer to say the same thing.
   const [spaceId, setSpaceId] = useState<string | null>(null);
-  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [documentId, setDocumentId] = useState<string | null>(initialDocumentId);
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
 
   const [hovered, setHovered] = useState<string | null>(null);

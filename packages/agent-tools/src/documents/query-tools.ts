@@ -75,7 +75,7 @@ const filterSchema = {
 export const documentsRecords = registerTool({
   id: 'documents.records',
   description:
-    'The confirmed documents themselves, filtered: by type (factura, guía, declaración, certificado, contrato, póliza), by client or NIT, by issue date, by deadline, by amount. Answers "qué facturas le emitimos a este cliente en julio", "qué guías tienen el plazo vencido", "qué declaraciones vencen esta semana". Only documents a person has confirmed appear here — anything Cortex read but nobody checked is in documents.pending_review and is deliberately absent.',
+    'The confirmed documents themselves, filtered by type, client or NIT, issue date, deadline and amount. Generic invoice records may be purchases or sales: this list does not establish financial direction. Use payments.receivables for classified accounts receivable; classification is reviewed in /finance#sources. Unreviewed documents are in documents.pending_review and are deliberately absent here.',
   inputSchema: z.object({
     ...filterSchema,
     limit: z.number().int().min(1).max(200).default(50),
@@ -163,7 +163,7 @@ function describeRecords(records: ExtractionRecord[], overdue: ExtractionRecord[
 export const documentsTotals = registerTool({
   id: 'documents.totals',
   description:
-    'Add up the confirmed documents: totals and counts grouped by client, by document type, by month or by currency, over any filter. Answers "cuánto le facturamos a Coltrans en julio", "cuánto llevamos facturado este año por cliente", "cuánto vale la mercancía declarada este mes". Amounts in different currencies are NEVER added together — each currency is its own group. The answer always says how many matching documents are still waiting for review and therefore are not in the figure.',
+    'Add up confirmed documentary amounts and counts grouped by client, document type, month or currency. These are documentary totals, NOT sales, revenue, accounts receivable, cash or profit: generic invoices can include both purchases and sales. Use payments.receivables for classified accounts receivable. Amounts in different currencies are NEVER added together. Report matching documents still waiting for review and excluded from the figure.',
   inputSchema: z.object({
     ...filterSchema,
     groupBy: z
@@ -216,7 +216,7 @@ export const documentsTotals = registerTool({
       groups,
       pendingExcluded: result.pendingExcluded,
       withoutAmount: result.withoutAmount,
-      guidance: describeTotals(groups, result.pendingExcluded, result.withoutAmount, metric),
+      guidance: `${describeTotals(groups, result.pendingExcluded, result.withoutAmount, metric)} Son totales documentales; no establecen ventas, ingresos, cartera, caja ni utilidad. Las facturas pueden ser de compra o de venta.`,
     };
   },
 });

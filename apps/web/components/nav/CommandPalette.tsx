@@ -197,9 +197,10 @@ const SECTIONS: Section[] = [
       },
       {
         href: '/prospects',
-        label: 'Prospectos',
-        note: 'El tablero completo; los nuevos también salen en Aprobaciones',
-        keywords: 'growth signals prospectos oportunidades contratando vacantes',
+        label: 'Outreach',
+        note: 'Prospección comercial: empresas, señales y oportunidades por revisar',
+        keywords:
+          'outreach growth señales prospectos oportunidades industria comercial ventas clientes',
       },
       {
         href: '/learning',
@@ -328,7 +329,7 @@ export function CommandPalette({ open, onClose, role }: CommandPaletteProps) {
   const go = (href: string) => {
     const workspaceId = new URL(window.location.href).searchParams.get('workspace');
     router.push(
-      workspaceId && ['/finance', '/payments'].includes(href)
+      workspaceId && ['/finance', '/payments', '/prospects'].includes(href)
         ? workspaceHref(workspaceId, href)
         : href,
     );

@@ -11,6 +11,7 @@ describe('source intake navigation', () => {
       '/kb?workspace=company-a',
       '/tools?workspace=company-a#custom-tools',
       '/integrations?workspace=company-a#mcp',
+      '/finance?workspace=company-a#sources',
     ]) {
       expect(html).toContain(`href="${path}"`);
     }
