@@ -3,6 +3,7 @@ import { ProfileEditor } from '@/app/(app)/management/ProfileEditor';
 import type { SetupCheck } from '@/lib/management/diagnostics';
 import { LAUNCH_GROUPS, type LaunchStep, launchProgress } from '@/lib/management/launch-plan';
 import type { ManagementProfile } from '@/lib/management/shape';
+import { workspaceHref } from '@/lib/workspace-context';
 import {
   ArrowRight,
   ArrowUpRight,
@@ -16,9 +17,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { CortexSignature } from './cortex-signature';
+import { SourceDiagnostics } from './source-diagnostics';
 type Person = { id: string; name: string | null; email: string };
 export function CompanyLaunch({
   name,
+  workspaceId,
   diagnostics = [],
   steps,
   isAdmin,
@@ -28,6 +31,7 @@ export function CompanyLaunch({
   readAt,
 }: {
   name: string;
+  workspaceId: string;
   diagnostics?: SetupCheck[];
   steps: LaunchStep[];
   isAdmin: boolean;
@@ -46,7 +50,11 @@ export function CompanyLaunch({
   if (!step) return null;
   const select = (id: string) => {
     setSelected(id);
-    window.history.replaceState(null, '', `/onboarding?step=${encodeURIComponent(id)}`);
+    window.history.replaceState(
+      null,
+      '',
+      workspaceHref(workspaceId, `/onboarding?step=${encodeURIComponent(id)}`),
+    );
   };
   const next = steps[steps.indexOf(step) + 1];
   const status = (item: LaunchStep) =>
@@ -107,35 +115,7 @@ export function CompanyLaunch({
           </small>
         </div>
       </div>
-      <details className="rounded-xl border border-border bg-surface p-5">
-        <summary className="cursor-pointer font-semibold">
-          Diagnóstico · {diagnostics.filter((d) => d.state === 'blocked').length} bloqueos ·{' '}
-          {diagnostics.filter((d) => d.state === 'unknown').length} por comprobar
-        </summary>
-        <div className="mt-4 divide-y divide-border">
-          {diagnostics.map((d) => (
-            <div key={d.id} className="grid gap-2 py-4 sm:grid-cols-[180px_1fr_auto]">
-              <div>
-                <strong className="text-sm">{d.label}</strong>
-                <p className="text-xs text-ink-muted">
-                  {d.state === 'checked'
-                    ? 'Lectura comprobada'
-                    : d.state === 'blocked'
-                      ? 'Necesita atención'
-                      : 'Verificación pendiente'}
-                </p>
-              </div>
-              <div className="text-sm">
-                <p>{d.detail}</p>
-                <p className="mt-1 text-xs text-ink-muted">Afecta: {d.affects}</p>
-              </div>
-              <Link className="text-sm font-semibold text-primary" href={d.href}>
-                Revisar →
-              </Link>
-            </div>
-          ))}
-        </div>
-      </details>
+      <SourceDiagnostics checks={diagnostics} workspaceId={workspaceId} workspaceName={name} />
       <div className="launch-center__workspace">
         <div className="launch-center__mobile-nav">
           <label htmlFor="launch-stage">Etapa de configuración</label>

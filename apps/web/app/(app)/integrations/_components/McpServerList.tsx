@@ -25,6 +25,17 @@ function authBadge(t: McpServer['auth_type']): string {
   return t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer' : 'Sin auth';
 }
 
+function checkedLabel(iso: string | null): string {
+  if (!iso) return 'Aún no comprobado';
+  return `Última comprobación: ${new Date(iso).toLocaleString('es-CO', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'America/Bogota',
+  })}`;
+}
+
 /** A soft pill tag on the row: short label, no shadow of its own. */
 const TAG = 'rounded-pill border px-2.5 py-0.5 text-micro font-semibold';
 
@@ -121,18 +132,24 @@ function McpServerRow({ server }: { server: McpServer }) {
             <span className="text-sm font-bold text-ink">{server.name}</span>
             <span className={clsx(TAG, 'border-border bg-surface text-ink-faint')}>
               {authBadge(server.auth_type)}
-              {server.authConfigured ? ' · stored' : ''}
+              {server.authConfigured ? ' · guardada' : ''}
             </span>
             <span className={clsx(TAG, 'border-primary/30 bg-primary-soft text-primary')}>
               {server.tool_count} {server.tool_count === 1 ? 'herramienta' : 'herramientas'}
             </span>
             {!server.enabled && (
-              <span className={clsx(TAG, 'border-amber/40 bg-amber-soft text-amber')}>En pausa</span>
+              <span className={clsx(TAG, 'border-amber/40 bg-amber-soft text-amber')}>
+                En pausa
+              </span>
             )}
           </div>
-          <p className="tabular mt-1 max-w-md truncate text-micro text-ink-faint" title={server.url}>
+          <p
+            className="tabular mt-1 max-w-md truncate text-micro text-ink-faint"
+            title={server.url}
+          >
             {server.url}
           </p>
+          <p className="mt-1 text-micro text-ink-faint">{checkedLabel(server.last_checked_at)}</p>
         </div>
 
         <div className="flex items-center gap-3 text-xs text-ink-muted">

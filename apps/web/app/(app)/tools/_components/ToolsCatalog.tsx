@@ -22,6 +22,7 @@ import {
   providerLabel,
   qualifiedToolLabel,
 } from '@/lib/tool-taxonomy';
+import { workspaceHref } from '@/lib/workspace-context';
 import { clsx } from 'clsx';
 import {
   AlarmClock,
@@ -139,6 +140,8 @@ export interface CatalogTool {
   serverName: string | null;
   /** Custom tools only: what the last test run said, when it failed. */
   lastError?: string | null;
+  /** Custom tools only: evidence that a live test was run, never inferred from configuration. */
+  lastTestedAt?: string | null;
   /** Custom tools only: whether the definition is switched on. */
   enabled?: boolean;
 }
@@ -262,7 +265,7 @@ const BLOCK_TONE: Record<BlockReason, 'rose' | 'amber'> = {
   credential: 'rose',
 };
 
-type StateFilter = 'all' | 'ready' | 'blocked' | 'approval' | 'unused';
+type StateFilter = 'all' | 'ready' | 'blocked' | 'approval' | 'attention' | 'unused';
 
 // ---------------------------------------------------------------------------
 // Small shared pieces
@@ -400,6 +403,7 @@ function relativeTime(iso: string): string {
 
 export function ToolsControlCentre({
   tools,
+  workspaceId,
   isAdmin,
   teams,
   selectedTeamId,
@@ -409,6 +413,7 @@ export function ToolsControlCentre({
   usageMeta,
 }: {
   tools: CatalogTool[];
+  workspaceId: string;
   isAdmin: boolean;
   teams: CatalogTeam[];
   selectedTeamId: string;
@@ -445,7 +450,14 @@ export function ToolsControlCentre({
   }, []);
 
   const blockedTools = useMemo(() => tools.filter((t) => t.blockedForMe.length > 0), [tools]);
-  const readyCount = tools.length - blockedTools.length;
+  const toolsNeedingReview = tools.filter(
+    (t) => t.kind === 'custom' && (!t.lastTestedAt || Boolean(t.lastError)),
+  );
+  const readyCount = tools.filter(
+    (t) =>
+      t.blockedForMe.length === 0 &&
+      (t.kind !== 'custom' || (Boolean(t.lastTestedAt) && !t.lastError)),
+  ).length;
   const approvalCount = tools.filter((t) => t.needsApproval).length;
   const usedCount = tools.filter((t) => t.usage).length;
 
@@ -469,9 +481,19 @@ export function ToolsControlCentre({
     const q = query.trim().toLowerCase();
     return tools.filter((t) => {
       if (group !== 'all' && t.group !== group) return false;
-      if (state === 'ready' && t.blockedForMe.length > 0) return false;
+      if (
+        state === 'ready' &&
+        (t.blockedForMe.length > 0 ||
+          (t.kind === 'custom' && (!t.lastTestedAt || Boolean(t.lastError))))
+      )
+        return false;
       if (state === 'blocked' && t.blockedForMe.length === 0) return false;
       if (state === 'approval' && !t.needsApproval) return false;
+      if (
+        state === 'attention' &&
+        (t.kind !== 'custom' || (Boolean(t.lastTestedAt) && !t.lastError))
+      )
+        return false;
       if (state === 'unused' && t.usage) return false;
       if (cause && !t.blockedForMe.includes(cause)) return false;
       if (risk !== 'all' && t.riskLevel !== risk) return false;
@@ -559,7 +581,10 @@ export function ToolsControlCentre({
   function selectTeam(id: string) {
     setError(null);
     startTransition(() => {
-      router.replace(id ? `/tools?team=${encodeURIComponent(id)}` : '/tools', { scroll: false });
+      router.replace(
+        workspaceHref(workspaceId, id ? `/tools?team=${encodeURIComponent(id)}` : '/tools'),
+        { scroll: false },
+      );
     });
   }
 
@@ -644,6 +669,68 @@ export function ToolsControlCentre({
 
   return (
     <div className="flex flex-col gap-4">
+      {isAdmin && (
+        <Panel className="overflow-hidden">
+          <div className="border-b border-border px-4 py-3">
+            <p className="field-label text-primary">Puesta a punto de esta empresa</p>
+            <h2 className="mt-1 text-base font-bold text-ink">Prepara a Cortex para trabajar</h2>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              Configura la fuente y el agente. Si tu sistema no aparece, también puedes conectar una
+              operación de su API.
+            </p>
+          </div>
+          <div className="grid gap-px bg-border md:grid-cols-3">
+            <Link
+              href={workspaceHref(workspaceId, '/integrations')}
+              className="group bg-surface p-4 hover:bg-surface-2"
+            >
+              <span className="text-micro font-semibold text-primary">
+                Configuración · Conecta el sistema
+              </span>
+              <span className="mt-1 block text-sm font-semibold text-ink">
+                Correo, CRM o servidor MCP
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-ink-muted">
+                Autoriza la cuenta o registra el servidor que contiene los datos.
+              </span>
+              <span className="mt-2 block text-micro font-semibold text-primary group-hover:underline">
+                Ir a Integraciones →
+              </span>
+            </Link>
+            <Link
+              href={workspaceHref(workspaceId, '/agents')}
+              className="group bg-surface p-4 hover:bg-surface-2"
+            >
+              <span className="text-micro font-semibold text-primary">
+                Configuración · Dásela al agente
+              </span>
+              <span className="mt-1 block text-sm font-semibold text-ink">
+                Elige qué puede hacer
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-ink-muted">
+                Una conexión por sí sola no hace que el modelo vea la herramienta.
+              </span>
+              <span className="mt-2 block text-micro font-semibold text-primary group-hover:underline">
+                Configurar agentes →
+              </span>
+            </Link>
+            <a href="#custom-tools" className="group bg-surface p-4 hover:bg-surface-2">
+              <span className="text-micro font-semibold text-primary">
+                Opcional · Conecta una API propia
+              </span>
+              <span className="mt-1 block text-sm font-semibold text-ink">
+                Conecta una API con su documentación
+              </span>
+              <span className="mt-1 block text-xs leading-relaxed text-ink-muted">
+                Describe una tarea, revisa el borrador y pruébalo antes de considerarlo listo.
+              </span>
+              <span className="mt-2 block text-micro font-semibold text-primary group-hover:underline">
+                Crear herramienta propia →
+              </span>
+            </a>
+          </div>
+        </Panel>
+      )}
       {/* --- 1. The inventory line ------------------------------------------
           Hairlines come from the gap showing the border colour through, so the
           rules stay correct at every breakpoint the grid reflows to. */}
@@ -666,6 +753,11 @@ export function ToolsControlCentre({
           ))}
         </div>
       </Panel>
+      <p className="-mt-2 px-1 text-micro leading-relaxed text-ink-faint">
+        “Lista” significa que la configuración y los permisos actuales permiten ofrecérsela al
+        agente. No confirma que el proveedor externo responda ahora ni que una operación concreta
+        vaya a completarse.
+      </p>
 
       {/* --- 2. What Cortex knows how to do -------------------------------- */}
       <Panel className="p-4">
@@ -942,6 +1034,15 @@ export function ToolsControlCentre({
             <ShieldAlert className="h-3 w-3" />
             Piden confirmación
           </FilterChip>
+          {toolsNeedingReview.length > 0 && (
+            <FilterChip
+              active={state === 'attention'}
+              onClick={() => setState(state === 'attention' ? 'all' : 'attention')}
+            >
+              <FlaskConical className="h-3 w-3" />
+              Por revisar ({toolsNeedingReview.length})
+            </FilterChip>
+          )}
           <FilterChip
             active={state === 'unused'}
             onClick={() => setState(state === 'unused' ? 'all' : 'unused')}
@@ -1129,7 +1230,7 @@ function CauseDetail({
         {tools.map((t) => t.title).join(', ')}{' '}
         {tools.length === 1 ? 'está apagada' : 'están apagadas'}.{' '}
         {isAdmin ? (
-          <a href="#herramientas-propias" className="font-semibold text-primary hover:underline">
+          <a href="#custom-tools" className="font-semibold text-primary hover:underline">
             Enciéndela abajo, en Herramientas propias
           </a>
         ) : (
@@ -1520,6 +1621,24 @@ function ToolRow({
               La última prueba falló
             </Badge>
           )}
+          {t.kind === 'custom' && !t.lastTestedAt && (
+            <Badge
+              className={WARN_CHIP}
+              icon={FlaskConical}
+              title="La configuración existe, pero todavía no hay evidencia de una prueba en vivo."
+            >
+              Configurada · falta probar
+            </Badge>
+          )}
+          {t.kind === 'custom' && t.lastTestedAt && !t.lastError && (
+            <Badge
+              className={OK_CHIP}
+              icon={FlaskConical}
+              title={`Última prueba correcta: ${shortDateTime(t.lastTestedAt)}`}
+            >
+              Prueba correcta
+            </Badge>
+          )}
         </div>
 
         {usageAvailable && <UsageLine usage={t.usage} />}
@@ -1565,7 +1684,7 @@ function RowReason({
       <>
         Está apagada, así que no se le ofrece al modelo.{' '}
         {isAdmin ? (
-          <a href="#herramientas-propias" className="font-semibold underline">
+          <a href="#custom-tools" className="font-semibold underline">
             Encenderla
           </a>
         ) : (

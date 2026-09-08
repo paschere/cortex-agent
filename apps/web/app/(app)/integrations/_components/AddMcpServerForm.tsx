@@ -66,9 +66,15 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
           };
           toolCount = refreshData.toolCount;
           lastError = refreshData.lastError;
+        } else {
+          const refreshData = (await refreshRes.json().catch(() => ({}))) as { error?: unknown };
+          lastError =
+            typeof refreshData.error === 'string'
+              ? refreshData.error
+              : 'no respondió la comprobación de herramientas';
         }
       } catch {
-        // best-effort preview
+        lastError = 'no respondió la comprobación de herramientas';
       }
 
       setResult({ toolCount, lastError });
@@ -130,7 +136,9 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
                 disabled={disabled}
                 className="accent-primary"
               />
-              <span>{t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer token' : 'Ninguna'}</span>
+              <span>
+                {t === 'api_key' ? 'API key' : t === 'bearer' ? 'Bearer token' : 'Ninguna'}
+              </span>
             </label>
           ))}
         </div>
@@ -160,10 +168,18 @@ export function AddMcpServerForm({ disabled = false }: { disabled?: boolean }) {
         </p>
       )}
       {result && (
-        <p className="rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-xs text-emerald">
-          Servidor agregado. Cortex encontró <span className="tabular">{result.toolCount}</span>{' '}
-          {result.toolCount === 1 ? 'herramienta' : 'herramientas'}.
-          {result.lastError ? ` También reportó: ${result.lastError}` : ''}
+        <p
+          className={`rounded-card border px-3 py-2 text-xs ${
+            result.lastError || result.toolCount === 0
+              ? 'border-amber/30 bg-amber-soft text-amber'
+              : 'border-emerald/30 bg-emerald-soft text-emerald'
+          }`}
+        >
+          {result.lastError
+            ? `El servidor quedó guardado, pero Cortex todavía no pudo comprobarlo: ${result.lastError}`
+            : result.toolCount === 0
+              ? 'El servidor quedó guardado y respondió, pero no publicó herramientas.'
+              : `Servidor comprobado. Cortex encontró ${result.toolCount} ${result.toolCount === 1 ? 'herramienta' : 'herramientas'}.`}
         </p>
       )}
 

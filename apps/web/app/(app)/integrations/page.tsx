@@ -1,8 +1,11 @@
 import { DirectionPair } from '@/components/connect/DirectionPair';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel } from '@/components/ui/panel';
+import { SourceDiagnostics } from '@/components/ui/source-diagnostics';
+import { readSetupDiagnostics } from '@/lib/management/diagnostics';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { workspaceHref } from '@/lib/workspace-context';
 import {
   PRICES_CHECKED_ON,
   embeddingConfig,
@@ -34,12 +37,13 @@ import {
 import Link from 'next/link';
 import { AddMcpServerForm } from './_components/AddMcpServerForm';
 import { type McpServer, McpServerList } from './_components/McpServerList';
+import { SourceIntake } from './_components/SourceIntake';
 
 const MAX_MCP_SERVERS = 5;
 const MAX_MCP_TOOLS = 50;
 
 /** Connected for the whole team, connected by this person, or not at all. */
-type ConnState = 'workspace' | 'user' | 'disconnected';
+type ConnState = 'workspace' | 'user' | 'disconnected' | 'unknown';
 
 interface ProviderCard {
   key: string;
@@ -59,6 +63,7 @@ interface ProviderCard {
   ctaLabel?: string;
   /** Replaces the tool count for a system that is a channel, not a toolbox. */
   footNote?: string;
+  scope: 'company' | 'personal';
 }
 
 /**
@@ -66,9 +71,10 @@ interface ProviderCard {
  * grey, for the missing ones: it is something to act on, not a neutral fact.
  */
 const STATE_TAG: Record<ConnState, { label: string; cls: string }> = {
-  workspace: { label: 'Conectada · equipo', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
-  user: { label: 'Conectada · tú', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
+  workspace: { label: 'Configurada', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
+  user: { label: 'Autorizada', cls: 'border-emerald/40 bg-emerald-soft text-emerald' },
   disconnected: { label: 'Sin conectar', cls: 'border-amber/40 bg-amber-soft text-amber' },
+  unknown: { label: 'Sin comprobar', cls: 'border-border bg-surface-2 text-ink-muted' },
 };
 
 function fmtDate(iso: string | null | undefined): string {
@@ -87,10 +93,11 @@ export default async function IntegrationsPage({
   const user = await requireSession();
   const sp = await searchParams;
   const db = getOrgScopedClient(user.organization.id);
+  const diagnosticsPromise = readSetupDiagnostics(db, user.id);
 
   // Every OAuth row, not just this user's: "who connected it" is part of the
   // answer, and a team-sized table makes this a cheap read.
-  const { data: integrationRows } = await db
+  const { data: integrationRows, error: integrationError } = await db
     .from('integrations')
     .select('provider, scopes, updated_at, user_id')
     .limit(1000);
@@ -111,6 +118,7 @@ export default async function IntegrationsPage({
 
   /** Owner line for a per-user OAuth provider. */
   function personalOwner(provider: string): string {
+    if (integrationError) return 'No se pudo comprobar quién autorizó esta integración';
     const own = mine[provider];
     if (own) {
       const when = fmtDate(own.updated_at);
@@ -121,6 +129,11 @@ export default async function IntegrationsPage({
       return `${n} ${n === 1 ? 'compañero la conectó' : 'compañeros la conectaron'}; tu cuenta no`;
     }
     return 'Nadie la ha conectado todavía';
+  }
+
+  function personalState(provider: string): ConnState {
+    if (integrationError) return 'unknown';
+    return mine[provider] ? 'user' : 'disconnected';
   }
 
   /** Owner line for a workspace credential provisioned by ops. */
@@ -201,7 +214,8 @@ export default async function IntegrationsPage({
       name: 'Google Workspace',
       icon: Mail,
       families: ['gmail', 'gcal', 'gsheets', 'gdrive', 'meetings', 'chat'],
-      state: mine.google ? 'user' : 'disconnected',
+      state: personalState('google'),
+      scope: 'personal',
       unlocks:
         'Leer y redactar tu correo, ver y crear eventos del calendario, abrir archivos de Docs, Sheets y Drive, y traer transcripciones de reuniones.',
       offline:
@@ -216,7 +230,8 @@ export default async function IntegrationsPage({
       name: 'Microsoft 365',
       icon: Inbox,
       families: ['outlook', 'mscal'],
-      state: mine.microsoft ? 'user' : 'disconnected',
+      state: personalState('microsoft'),
+      scope: 'personal',
       unlocks:
         'Leer y buscar tu correo de Outlook, leer un hilo completo, dejar borradores y enviarlos, ver y crear eventos del calendario, y guardar en Brain Knowledge la correspondencia con clientes y proveedores.',
       offline:
@@ -240,6 +255,7 @@ export default async function IntegrationsPage({
       icon: MessageCircle,
       families: [],
       state: waOn ? 'workspace' : 'disconnected',
+      scope: 'company',
       unlocks:
         'Escribirle a Cortex por mensaje directo desde tu teléfono, y guardar en Brain Knowledge los grupos que elijas, con quién dijo qué y cuándo.',
       offline:
@@ -262,7 +278,8 @@ export default async function IntegrationsPage({
       name: 'HubSpot',
       icon: Building2,
       families: ['hubspot'],
-      state: hubspotWorkspace ? 'workspace' : mine.hubspot ? 'user' : 'disconnected',
+      state: hubspotWorkspace ? 'workspace' : personalState('hubspot'),
+      scope: hubspotWorkspace ? 'company' : 'personal',
       unlocks:
         'Negocios, empresas, contactos, salud del pipeline y actividad reciente: el sistema de registro comercial.',
       offline:
@@ -278,6 +295,7 @@ export default async function IntegrationsPage({
       icon: Sparkles,
       families: ['presentations'],
       state: matcherOn ? 'workspace' : 'disconnected',
+      scope: 'company',
       unlocks:
         'Ver quién está en una vacante, armar la presentación de un candidato para el cliente y volver a bajar las que ya se hicieron, en PDF con la carta de la empresa.',
       offline: 'No se pueden armar ni consultar presentaciones de candidatos para el cliente.',
@@ -289,6 +307,7 @@ export default async function IntegrationsPage({
       icon: Wallet,
       families: ['payroll'],
       state: payrollOn ? 'workspace' : 'disconnected',
+      scope: 'company',
       unlocks:
         'Quién está asignado a qué cliente, reportes de nómina y gastos, y proyecciones de costo hacia adelante.',
       offline: 'Sin respuestas de costo del equipo, asignaciones ni gastos.',
@@ -300,6 +319,7 @@ export default async function IntegrationsPage({
       icon: Brain,
       families: ['kb', 'pipeline', 'schedule', 'inbox', 'security'],
       state: brainOn ? 'workspace' : 'disconnected',
+      scope: 'company',
       unlocks:
         'Búsqueda y memoria en Brain Knowledge, pipelines, rutinas y el resumen del correo: el razonamiento propio de Cortex.',
       offline: 'Se para el corazón: sin Brain Knowledge, sin pipelines y sin rutinas.',
@@ -314,6 +334,7 @@ export default async function IntegrationsPage({
       icon: Globe,
       families: ['web', 'growth'],
       state: webOn ? 'workspace' : 'disconnected',
+      scope: 'company',
       unlocks:
         'Búsqueda en vivo y lectura de páginas para investigar prospectos y señales de crecimiento.',
       offline: 'Cortex se queda con lo que ya sabe: no puede investigar empresas al día.',
@@ -325,6 +346,7 @@ export default async function IntegrationsPage({
       icon: MessageSquare,
       families: ['slack'],
       state: slackOn ? 'workspace' : 'disconnected',
+      scope: 'company',
       unlocks:
         'Publicar avances, reportes y resultados de rutinas directo en los canales del equipo.',
       offline: 'Los resultados se quedan en la app y en el correo: nada llega a Slack.',
@@ -335,7 +357,8 @@ export default async function IntegrationsPage({
       name: 'GitHub',
       icon: GitBranch,
       families: ['github'],
-      state: mine.github ? 'user' : 'disconnected',
+      state: personalState('github'),
+      scope: 'personal',
       unlocks: 'Repositorios, issues, pull requests y métricas de actividad de ingeniería.',
       offline:
         'Sin visibilidad de repos, issues ni PRs: las preguntas de ingeniería quedan sin respuesta.',
@@ -348,7 +371,8 @@ export default async function IntegrationsPage({
       name: 'Linear',
       icon: ListTodo,
       families: ['linear'],
-      state: mine.linear ? 'user' : 'disconnected',
+      state: personalState('linear'),
+      scope: 'personal',
       unlocks: 'Proyectos, ciclos, issues y carga del equipo para ver el roadmap.',
       offline:
         'Sin respuestas de roadmap ni de carga: Cortex no ve qué está construyendo el equipo.',
@@ -394,16 +418,17 @@ export default async function IntegrationsPage({
   const totalMcpTools = mcpServers.reduce((sum, s) => sum + s.tool_count, 0);
   const atToolCapacity = totalMcpTools >= MAX_MCP_TOOLS;
 
-  const connected = providers.filter((p) => p.state !== 'disconnected');
+  const connected = providers.filter((p) => p.state === 'workspace' || p.state === 'user');
   const missing = providers.filter((p) => p.state === 'disconnected');
   const totalToolCount = Object.values(toolsByFamily).reduce((a, b) => a + b, 0);
+  const diagnostics = await diagnosticsPromise;
 
   /** The register header: what the organisation holds, counted in mono. */
   const stats = [
     {
-      label: 'Sistemas conectados',
+      label: 'Sistemas configurados',
       value: `${connected.length}/${providers.length}`,
-      sub: 'Cortex puede actuar en estos',
+      sub: 'con credencial o sesión registrada',
       icon: CircleCheck,
       tone: 'text-emerald',
     },
@@ -434,11 +459,28 @@ export default async function IntegrationsPage({
     <>
       <PageHeader
         title="Integraciones"
-        subtitle="Los sistemas que esta organización tiene conectados: dónde puede leer y actuar Cortex en tu nombre."
+        subtitle={`Fuentes y herramientas de ${user.organization.name}: qué está configurado, quién puede usarlo y qué falta comprobar.`}
         icon={<Plug className="h-5 w-5" />}
       />
 
       <DirectionPair active="outbound" />
+
+      <SourceIntake workspaceId={user.organization.id} />
+
+      {integrationError && (
+        <div className="mb-5 rounded-card border border-amber/30 bg-amber-soft px-3 py-2 text-xs text-amber">
+          No se pudieron leer las autorizaciones personales. Los estados “Sin comprobar” no
+          significan que esas cuentas estén desconectadas.
+        </div>
+      )}
+
+      <div className="mb-5">
+        <SourceDiagnostics
+          checks={diagnostics}
+          workspaceId={user.organization.id}
+          workspaceName={user.organization.name}
+        />
+      </div>
 
       {sp.connected && (
         <div className="mb-4 rounded-card border border-emerald/30 bg-emerald-soft px-3 py-2 text-xs text-emerald">
@@ -624,7 +666,6 @@ export default async function IntegrationsPage({
         {providers.map((p) => {
           const tag = STATE_TAG[p.state];
           const tools = famCount(p.families);
-          const isOn = p.state !== 'disconnected';
           return (
             <Panel key={p.key} className="flex h-full flex-col gap-3 p-4">
               <div className="flex items-start justify-between gap-2">
@@ -647,16 +688,23 @@ export default async function IntegrationsPage({
               </div>
 
               <div>
-                <div className="text-sm font-bold text-ink">{p.name}</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-sm font-bold text-ink">{p.name}</div>
+                  <span className="rounded-pill border border-border bg-surface-2 px-2 py-0.5 text-micro font-semibold text-ink-muted">
+                    {p.scope === 'company' ? 'Ámbito de empresa' : 'Tu cuenta'}
+                  </span>
+                </div>
                 <p className="mt-0.5 text-xs leading-snug text-ink-muted">{p.unlocks}</p>
               </div>
 
               <p className="flex items-start gap-1.5 text-micro leading-snug text-ink-faint">
                 <Users className="mt-px h-3 w-3 shrink-0" />
-                {p.owner}
+                {p.state === 'unknown'
+                  ? 'No se pudo comprobar quién tiene esta conexión.'
+                  : p.owner}
               </p>
 
-              {!isOn && (
+              {p.state === 'disconnected' && (
                 <p className="flex items-start gap-1.5 rounded-card border border-amber/30 bg-amber-soft px-2.5 py-1.5 text-micro leading-snug text-amber">
                   <TriangleAlert className="mt-px h-3 w-3 shrink-0" />
                   <span>
@@ -689,7 +737,7 @@ export default async function IntegrationsPage({
                 </span>
                 {p.connectHref && (
                   <Link
-                    href={p.connectHref}
+                    href={workspaceHref(user.organization.id, p.connectHref)}
                     className="rounded-pill bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-pop transition-all duration-150 hover:-translate-y-px hover:bg-primary-strong motion-reduce:transform-none motion-reduce:transition-none"
                   >
                     {p.ctaLabel ?? 'Conectar'}
@@ -701,7 +749,7 @@ export default async function IntegrationsPage({
         })}
       </div>
 
-      <section className="rounded-xl border border-primary/25 bg-primary-soft p-5">
+      <section className="mt-5 rounded-xl border border-primary/25 bg-primary-soft p-5">
         <h2 className="text-lg font-semibold">Conecta el sistema de tu empresa</h2>
         <p className="mt-2 max-w-2xl text-sm text-ink-muted">
           ¿Tu ERP, inventario o sistema de pedidos tiene una API? Comparte su documentación y
@@ -709,7 +757,7 @@ export default async function IntegrationsPage({
         </p>
         <a
           className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white"
-          href="/tools#herramientas-propias"
+          href={workspaceHref(user.organization.id, '/tools#custom-tools')}
         >
           Conectar una API propia →
         </a>
@@ -717,13 +765,13 @@ export default async function IntegrationsPage({
 
       {/* Advanced: external MCP servers are just another inbound source of
           tools — same direction as an integration, so they live here. */}
-      <Panel className="mt-5 p-5">
+      <Panel className="mt-5 scroll-mt-5 p-5" id="mcp">
         <div className="flex flex-wrap items-start gap-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-card bg-surface-2 text-ink-muted">
             <Server className="h-4 w-4" />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="field-label">Advanced</div>
+            <div className="field-label">Avanzado · solo tu cuenta</div>
             <h2 className="mt-0.5 text-base font-bold tracking-tight text-ink">
               Herramientas extra que le conectas a Cortex
             </h2>

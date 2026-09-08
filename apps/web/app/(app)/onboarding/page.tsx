@@ -24,6 +24,7 @@ export default async function OnboardingPage({
   ]);
   return (
     <CompanyLaunch
+      workspaceId={user.organization.id}
       diagnostics={diagnostics}
       name={user.organization.name}
       steps={result.steps}

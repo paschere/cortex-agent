@@ -133,7 +133,7 @@ export function CustomTools() {
   }
 
   return (
-    <Panel className="p-4" id="herramientas-propias">
+    <Panel className="scroll-mt-24 p-4" id="custom-tools">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-card bg-primary-soft text-primary">

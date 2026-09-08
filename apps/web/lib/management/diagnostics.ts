@@ -8,11 +8,13 @@ export type SetupCheck = {
   detail: string;
   affects: string;
   href: string;
+  checkedAt: string;
 };
 
 /** Read-only checks; configured credentials are never described as a tested session. */
 export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
   const checks: SetupCheck[] = [];
+  const checkedAt = new Date().toISOString();
   async function check(
     id: string,
     label: string,
@@ -21,10 +23,11 @@ export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
     read: () => Promise<{ state: SetupCheck['state']; detail: string }>,
   ) {
     try {
-      checks.push({ id, label, affects, href, ...(await read()) });
+      checks.push({ id, label, affects, href, checkedAt, ...(await read()) });
     } catch {
       checks.push({
         id,
+        checkedAt,
         label,
         affects,
         href,
@@ -37,7 +40,7 @@ export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
     check(
       'connections',
       'Conexiones y permisos',
-      'Leer fuentes y enviar cobros desde tu cuenta.',
+      'Consultar tus sistemas y preparar acciones con los permisos de tu cuenta.',
       '/integrations',
       async () => {
         const r = await db.from('integrations').select('provider,scopes').eq('user_id', userId);
@@ -46,7 +49,7 @@ export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
           state: r.data?.length ? 'unknown' : 'blocked',
           detail: r.data?.length
             ? `${r.data.length} conexiones registradas. Abre Integraciones para comprobar acceso; los permisos guardados no prueban que el proveedor acepte la sesión.`
-            : 'No hay conexiones personales. Para enviar un cobro debes conectar tu correo.',
+            : 'No hay conexiones personales. Conecta el sistema que necesita tu proceso; también puedes empezar con archivos o texto en Feed.',
         };
       },
     ),
@@ -79,11 +82,14 @@ export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
             detail:
               'No hay documentos visibles en el cerebro. El Feed sigue siendo temporal hasta que decidas guardar algo.',
           };
-        const bad = rows.filter(
+        const examined = rows.slice(0, 500);
+        const bad = examined.filter(
           (d) =>
             d.status !== 'ready' ||
             d.superseded_by ||
-            (d.valid_until && new Date(d.valid_until).getTime() < Date.now()),
+            (d.valid_until &&
+              (!Number.isFinite(Date.parse(d.valid_until)) ||
+                Date.parse(d.valid_until) < Date.now())),
         );
         return {
           state: bad.length || rows.length > 500 ? 'unknown' : 'checked',
@@ -92,9 +98,74 @@ export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
       },
     ),
     check(
+      'feed',
+      'Fuentes temporales',
+      'Consultar archivos, enlaces y texto sin incorporarlos al cerebro.',
+      '/feed',
+      async () => {
+        const r = await db
+          .from('chat_attachments')
+          .select('id', { count: 'exact', head: true })
+          .eq('created_by', userId)
+          .not('feed_kind', 'is', null)
+          .gt('purge_at', checkedAt);
+        if (r.error) throw r.error;
+        return {
+          state: r.count ? 'checked' : 'unknown',
+          detail: r.count
+            ? `${r.count} entradas temporales disponibles para tu cuenta en este espacio. Comprueba su contenido y fecha antes de usarlas como evidencia; no se guardan automáticamente en el cerebro.`
+            : 'Tu Feed está vacío. Puedes añadir un archivo, una URL o texto para la primera consulta. Es opcional si ya tienes otra fuente disponible.',
+        };
+      },
+    ),
+    check(
+      'custom-tools',
+      'API de la empresa',
+      'Consultar o actuar sobre sistemas personalizados.',
+      '/tools#custom-tools',
+      async () => {
+        const r = await db
+          .from('custom_tools')
+          .select('id,enabled,last_tested_at,last_error')
+          .limit(501);
+        if (r.error) throw r.error;
+        const active = (r.data ?? []).filter((row) => row.enabled);
+        const failed = active.filter((row) => row.last_error);
+        const untested = active.filter((row) => !row.last_tested_at);
+        return {
+          state: failed.length ? 'blocked' : 'unknown',
+          detail: active.length
+            ? `${active.length} herramientas habilitadas${r.data?.length === 501 ? ' (vista parcial)' : ''}; ${failed.length} con error registrado y ${untested.length} sin prueba registrada. Revisa el resultado de cada prueba y los permisos antes de ejecutar; una prueba anterior no garantiza acceso actual.`
+            : 'No hay API propias habilitadas. Si tu proceso usa un sistema especial, prepara su conexión desde Herramientas con su documentación. Esta conexión es opcional.',
+        };
+      },
+    ),
+    check(
+      'mcp',
+      'Servidores MCP',
+      'Descubrir herramientas externas disponibles para tu cuenta.',
+      '/integrations#mcp',
+      async () => {
+        const r = await db
+          .from('user_mcp_servers')
+          .select('id,enabled,last_checked_at,last_error,tool_count')
+          .eq('user_id', userId)
+          .limit(101);
+        if (r.error) throw r.error;
+        const active = (r.data ?? []).filter((row) => row.enabled);
+        const failed = active.filter((row) => row.last_error);
+        return {
+          state: failed.length ? 'blocked' : 'unknown',
+          detail: active.length
+            ? `${active.length} servidores habilitados; ${failed.length} con error registrado. Actualiza su catálogo en Integraciones y revisa las herramientas permitidas; descubrirlas no verifica su ejecución.`
+            : 'No tienes servidores MCP habilitados en este espacio. Añade uno si tu sistema ofrece MCP; puedes trabajar con las otras fuentes sin este paso.',
+        };
+      },
+    ),
+    check(
       'workflows',
       'Motor de la primera misión',
-      'Preparar y seguir una factura sin duplicar el cobro.',
+      'Recorrer un proceso desde el dato inicial hasta su cierre con evidencia.',
       '/management/mission',
       async () => {
         const r = await db
@@ -103,9 +174,10 @@ export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
           .eq('user_id', userId);
         if (r.error) throw r.error;
         return {
-          state: 'checked',
-          detail:
-            'La tabla de procesos responde. El guardado, las aprobaciones y el seguimiento deben validarse recorriendo una misión real.',
+          state: r.count ? 'unknown' : 'blocked',
+          detail: r.count
+            ? `${r.count} procesos registrados. Recorre una misión para comprobar las acciones, aprobaciones y evidencia de cierre; la existencia del proceso no prueba su ejecución.`
+            : 'Todavía no hay una misión registrada para tu cuenta. Elige un proceso, sus datos de entrada y la evidencia que demostrará su cierre.',
         };
       },
     ),
@@ -163,6 +235,15 @@ export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
       },
     ),
   ]);
-  const order = ['connections', 'sources', 'workflows', 'routines', 'browser'];
+  const order = [
+    'connections',
+    'feed',
+    'sources',
+    'custom-tools',
+    'mcp',
+    'workflows',
+    'routines',
+    'browser',
+  ];
   return checks.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
 }

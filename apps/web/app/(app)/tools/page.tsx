@@ -445,6 +445,7 @@ export default async function ToolsPage({
       serverId: null,
       serverName: null,
       lastError: row.last_error ?? null,
+      lastTestedAt: row.last_tested_at ?? null,
       enabled: row.enabled,
     } satisfies CatalogTool;
   });
@@ -471,6 +472,7 @@ export default async function ToolsPage({
 
       <ToolsControlCentre
         tools={tools}
+        workspaceId={session.organization.id}
         isAdmin={isAdmin}
         teams={teams}
         selectedTeamId={selectedTeamId}
