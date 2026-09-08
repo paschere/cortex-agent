@@ -338,11 +338,23 @@ function SourceRow({
             className="mt-2 min-h-10 w-full rounded-sm border border-border-strong bg-surface px-3 text-sm text-ink disabled:cursor-not-allowed disabled:bg-surface-2"
           >
             {ROLE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={
+                  source.docType !== 'invoice' &&
+                  (option.value === 'receivable' || option.value === 'payable')
+                }
+              >
                 {option.label}
               </option>
             ))}
           </select>
+          {source.docType !== 'invoice' ? (
+            <span className="text-micro leading-relaxed text-ink-faint">
+              Por cobrar y por pagar requieren un documento identificado como factura.
+            </span>
+          ) : null}
           <span className="mt-1.5 block text-micro leading-relaxed text-ink-faint">
             {ROLE_OPTIONS.find((option) => option.value === effectiveRole)?.help}
           </span>

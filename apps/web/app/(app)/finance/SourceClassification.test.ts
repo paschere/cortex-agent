@@ -65,6 +65,11 @@ describe('SourceClassification', () => {
     expect(html).toContain('Total a pagar: $250.000');
     expect(html).toContain('/kb?document=document-1&amp;workspace=org-1');
     expect(html).toContain('1 pendiente');
+    expect(html).toContain(
+      'Por cobrar y por pagar requieren un documento identificado como factura.',
+    );
+    expect(html).toMatch(/<option value="receivable" disabled="">Por cobrar<\/option>/);
+    expect(html).toMatch(/<option value="payable" disabled="">Por pagar<\/option>/);
   });
 
   it('explains extraction and disables editing for members', () => {
