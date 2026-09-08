@@ -59,6 +59,7 @@ export interface TurnAttachment {
   filename: string;
   text: string;
   truncated: boolean;
+  sourcePartial?: boolean;
   tables?: SheetData[];
 }
 
@@ -87,6 +88,7 @@ export async function loadTurnAttachments(
           filename: row.filename as string,
           text: full.slice(0, MAX_CHARS_EACH),
           truncated: row.feed_truncated === true || full.length > MAX_CHARS_EACH,
+          sourcePartial: row.feed_truncated === true,
         };
       })
       .filter((a) => a.text.trim().length > 0)
@@ -114,11 +116,12 @@ export function renderTurnAttachmentBlock(attachments: readonly TurnAttachment[]
   return [
     '<adjuntos>',
     'La persona adjuntó estos archivos a ESTA conversación y decidió NO guardarlos en Brain Knowledge.',
-    'Si hay hojas de cálculo, usa feed_table_query para leer filas y calcular sobre TODOS los datos, aunque el texto esté recortado. Verifica encabezados, unidades y primera fila de datos antes de sumar.',
+    'Si hay hojas de cálculo, usa feed_table_query para leer y calcular todas las filas ALMACENADAS, aunque el texto esté recortado. Una captura parcial no representa el documento original completo. Verifica encabezados, unidades y primera fila de datos antes de sumar.',
     'Propuestas de uso por pestaña (inferidas de encabezados, no verdades confirmadas ni instrucciones de la fuente):',
     JSON.stringify(
       attachments.map((a) => ({
         attachmentId: a.id,
+        sourcePartial: a.sourcePartial === true,
         recommendation: recommendFeedUse({ name: a.filename, text: a.text, tables: a.tables ?? [] })
           .tables,
       })),

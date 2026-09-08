@@ -900,13 +900,16 @@ export async function POST(req: NextRequest) {
   if (turnAttachments.some((a) => a.tables?.length)) {
     aiTools.feed_table_query = tool({
       description:
-        'Read rows or calculate over a complete Feed spreadsheet attached to this conversation. Column and row indices start at 1. Verify headers and units. Does not save anything to memory.',
+        'Read or calculate stored rows from a Feed spreadsheet attached to this conversation. A partial capture is not the complete original spreadsheet. Column and row indices start at 1. Verify headers, units and duplicate warnings. Does not save anything to memory.',
       parameters: tableQuerySchema,
       execute: async (input) => {
         const attachment = turnAttachments.find((a) => a.id === input.attachmentId);
         if (!attachment?.tables) return { error: 'La tabla no está adjunta a esta consulta.' };
         try {
-          return querySheet(attachment.tables, input);
+          return {
+            ...querySheet(attachment.tables, input),
+            sourcePartial: attachment.sourcePartial === true,
+          };
         } catch (err) {
           return { error: err instanceof Error ? err.message : 'No se pudo calcular.' };
         }

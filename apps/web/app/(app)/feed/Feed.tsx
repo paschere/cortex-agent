@@ -628,9 +628,12 @@ export function Feed({
               )}
               {(detail.feed_truncated || detail.extracted_text.length > 12000) && (
                 <p className="mb-3 rounded-sm bg-amber-soft p-3 text-xs text-ink">
-                  {detail.feed_truncated ? 'La página se capturó parcialmente. ' : ''}El chat recibe
-                  una lectura inicial de hasta 12.000 caracteres. Para hojas de cálculo, Cortex
-                  también puede consultar las filas y calcular sobre la tabla completa.
+                  {detail.feed_truncated
+                    ? 'La fuente se capturó parcialmente; los cálculos no cubren el archivo original completo. '
+                    : ''}
+                  El chat recibe una lectura inicial de hasta 12.000 caracteres. Para hojas de
+                  cálculo, Cortex también puede consultar las filas y calcular sobre toda la captura
+                  almacenada.
                 </p>
               )}
               {table ? (
