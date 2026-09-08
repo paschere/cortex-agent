@@ -69,6 +69,13 @@ describe('el rail', () => {
     expect(rail.rest.map((s) => s.id)).not.toContain('work');
   });
 
+  it('Finanzas reúne el resumen y la cartera sin duplicar destinos', () => {
+    expect(
+      SECTIONS.find((section) => section.id === 'finance')?.items.map((item) => item.href),
+    ).toEqual(['/finance', '/payments']);
+    expect(everyDestination().filter((href) => href === '/finance')).toHaveLength(1);
+  });
+
   it('quien no es admin sólo ve una fila de La empresa, y la ve', () => {
     expect(buildRail([], false).company.items.map((i) => i.href)).toEqual(['/company']);
     expect(buildRail([], true).company.items).toHaveLength(COMPANY.items.length);

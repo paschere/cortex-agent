@@ -880,13 +880,19 @@ export async function receivables(
   // Lo abonado contra cada factura, por factura. Un pago sin factura no se
   // reparte entre las abiertas: adivinar a cuál iba es exactamente el tipo de
   // suposición que este módulo no hace.
+  // Invoice id alone is insufficient: a malformed/imported payment can point
+  // at an invoice while naming another currency. Such a row must stay visible
+  // as unapplied evidence instead of reducing a balance in a different unit.
   const appliedTo = new Map<string, number>();
+  const linkedPayments: Array<{ key: string; amount: number }> = [];
   let unappliedPayments = 0;
   let unappliedAmount = 0;
   for (const p of payments) {
     const signed = signedAmount(p.kind, amountOf(p));
     if (p.extraction_id) {
-      appliedTo.set(p.extraction_id, (appliedTo.get(p.extraction_id) ?? 0) + signed);
+      const key = `${p.extraction_id}\u0000${currencyBucket('pago', p.currency)}`;
+      appliedTo.set(key, (appliedTo.get(key) ?? 0) + signed);
+      linkedPayments.push({ key, amount: signed });
     } else {
       unappliedPayments += 1;
       unappliedAmount += signed;
@@ -897,6 +903,7 @@ export async function receivables(
     ages: Array<{ balance: number; since: string | null }>;
   }
   const buckets = new Map<string, Bucket>();
+  const appliedKeys = new Set<string>();
   let withoutCurrency = 0;
 
   for (const invoice of invoices) {
@@ -918,7 +925,9 @@ export async function receivables(
       overdueInvoices: 0,
       ages: [],
     };
-    const paid = appliedTo.get(invoice.id) ?? 0;
+    const paymentKey = `${invoice.id}\u0000${currencyBucket('pago', invoice.currency)}`;
+    const paid = appliedTo.get(paymentKey) ?? 0;
+    appliedKeys.add(paymentKey);
     const balance = total - paid;
     bucket.invoiced += total;
     bucket.paid += paid;
@@ -933,6 +942,15 @@ export async function receivables(
       }
     }
     buckets.set(key, bucket);
+  }
+
+  // A link to a missing invoice, or to the right invoice in the wrong
+  // currency, is evidence we cannot apply. Keep it in the explicit exclusion
+  // count instead of silently losing it or crossing currencies.
+  for (const linked of linkedPayments) {
+    if (appliedKeys.has(linked.key)) continue;
+    unappliedPayments += 1;
+    unappliedAmount += linked.amount;
   }
 
   const byCurrency: ReceivablesCurrency[] = [...buckets.values()]

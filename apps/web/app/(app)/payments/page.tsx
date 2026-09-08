@@ -4,6 +4,7 @@ import type { PaymentKind, PaymentState } from '@/lib/payments-shape';
 import { PAYMENT_KIND_LABEL } from '@/lib/payments-shape';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { workspaceHref } from '@/lib/workspace-context';
 import {
   bogotaToday,
   hydratePayments,
@@ -16,6 +17,7 @@ import {
   sourceRank,
 } from '@cortex/agent-tools';
 import { AlertTriangle, Banknote, FileWarning, Scale } from 'lucide-react';
+import Link from 'next/link';
 import { PaymentsBoard } from './_components/PaymentsBoard';
 import { money, shortDate } from './_components/format';
 import type {
@@ -152,6 +154,12 @@ export default async function PaymentsPage() {
 
   return (
     <div className="space-y-6">
+      <Link
+        href={workspaceHref(user.organization.id, '/finance')}
+        className="inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+      >
+        ← Resumen de Finanzas
+      </Link>
       <PageHeader
         title="Pagos"
         subtitle="Lo que de verdad entró, y quién lo dice. A mano, desde un comprobante, o desde el sistema contable el día que se conecte."

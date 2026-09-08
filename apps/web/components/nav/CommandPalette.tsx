@@ -1,6 +1,7 @@
 'use client';
 
 import { MODULE } from '@/lib/browser-shape';
+import { workspaceHref } from '@/lib/workspace-context';
 import type { Role } from '@cortex/core';
 import { Command } from 'cmdk';
 import { useRouter } from 'next/navigation';
@@ -55,7 +56,12 @@ const SECTIONS: Section[] = [
   {
     heading: 'Todos los días',
     entries: [
-      { href: '/management', label: 'Gerencia', note: 'Prioridades, responsables y resultados con evidencia', keywords: 'gerente empresa hoy gestion operaciones seguimiento procesos' },
+      {
+        href: '/management',
+        label: 'Gerencia',
+        note: 'Prioridades, responsables y resultados con evidencia',
+        keywords: 'gerente empresa hoy gestion operaciones seguimiento procesos',
+      },
       {
         href: '/dashboard',
         label: 'Inicio',
@@ -97,6 +103,12 @@ const SECTIONS: Section[] = [
         label: 'Clientes',
         note: 'Cada empresa y todo lo que Cortex tiene de ella',
         keywords: 'empresas cuentas clients companias contrapartes',
+      },
+      {
+        href: '/finance',
+        label: 'Finanzas',
+        note: 'Resumen financiero, cartera y calidad de las fuentes',
+        keywords: 'finanzas financiero caja cartera pagos dinero monedas conciliacion',
       },
       {
         href: '/payments',
@@ -314,7 +326,12 @@ export function CommandPalette({ open, onClose, role }: CommandPaletteProps) {
   const sections = SECTIONS.filter((s) => !s.adminOnly || role === 'org_admin');
 
   const go = (href: string) => {
-    router.push(href);
+    const workspaceId = new URL(window.location.href).searchParams.get('workspace');
+    router.push(
+      workspaceId && ['/finance', '/payments'].includes(href)
+        ? workspaceHref(workspaceId, href)
+        : href,
+    );
     onClose();
   };
 

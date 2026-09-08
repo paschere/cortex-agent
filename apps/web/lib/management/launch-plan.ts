@@ -99,6 +99,7 @@ export function buildLaunchPlan(e: LaunchEvidence): LaunchStep[] {
       action: { label: 'Traer datos al Feed', href: '/feed' },
       alternatives: [
         { label: 'Conectar herramientas', href: '/integrations' },
+        { label: 'Preparar las fuentes financieras', href: '/finance' },
         { label: 'Guardar conocimiento permanente', href: '/kb' },
       ],
       checklist: [

@@ -24,6 +24,7 @@ import {
   Search,
   Settings2,
   Users,
+  Wallet,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -69,6 +70,14 @@ function Navigation({
   const groups: { id: string; label: string; icon: NavItem['icon']; items: NavItem[] }[] = [
     { id: 'pending', label: 'Pendientes', icon: ListTodo, items: rail.waiting },
     {
+      id: 'finance',
+      label: 'Finanzas',
+      icon: Wallet,
+      items: rail.rest
+        .filter((section) => section.id === 'finance')
+        .flatMap((section) => section.items),
+    },
+    {
       id: 'knowledge',
       label: 'Conocimiento',
       icon: BookOpen,
@@ -86,7 +95,7 @@ function Navigation({
       items: [
         ...rail.pinned.filter((item) => item.href === '/calls'),
         ...rail.rest
-          .filter((section) => section.id !== 'sources')
+          .filter((section) => section.id !== 'sources' && section.id !== 'finance')
           .flatMap((section) => section.items),
       ],
     },

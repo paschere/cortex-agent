@@ -232,15 +232,20 @@ export const SECTIONS: NavSection[] = [
   {
     // Clientes es el eje del que cuelga el resto del producto (migración 0075):
     // una pregunta sobre un cliente empieza aquí y se sigue hasta el correo, la
-    // reunión o el vencimiento. Cartera va con ella y no en «Cómo vamos» porque
-    // no es un informe de cierre de mes: es la pregunta del martes por la
-    // mañana, «¿quién nos debe y desde cuándo?».
+    // reunión o el vencimiento. La cartera vive en su sección financiera.
     id: 'work',
     label: 'Con quién trabajo',
     items: [
       { href: '/clients', label: 'Clientes', icon: Building2 },
       { href: '/trackers', label: 'Tablas', icon: Table2 },
-      { href: '/payments', label: 'Cartera', icon: Wallet },
+    ],
+  },
+  {
+    id: 'finance',
+    label: 'Finanzas',
+    items: [
+      { href: '/finance', label: 'Resumen financiero', icon: Wallet },
+      { href: '/payments', label: 'Cartera y pagos', icon: Wallet },
     ],
   },
   {
