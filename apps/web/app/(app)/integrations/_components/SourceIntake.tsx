@@ -34,7 +34,7 @@ const paths = [
     description: 'Importa herramientas de un servidor compatible para usarlas desde tu cuenta.',
     scope: 'Solo tú · avanzado',
     action: 'Configurar MCP',
-    href: '#mcp',
+    href: '/integrations#mcp',
     icon: Server,
   },
 ] as const;
