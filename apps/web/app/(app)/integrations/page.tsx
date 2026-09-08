@@ -666,6 +666,7 @@ export default async function IntegrationsPage({
         {providers.map((p) => {
           const tag = STATE_TAG[p.state];
           const tools = famCount(p.families);
+          const isOn = p.state === 'workspace' || p.state === 'user';
           return (
             <Panel key={p.key} className="flex h-full flex-col gap-3 p-4">
               <div className="flex items-start justify-between gap-2">
