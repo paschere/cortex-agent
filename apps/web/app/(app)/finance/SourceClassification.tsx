@@ -334,7 +334,7 @@ function SourceRow({
           <select
             value={effectiveRole}
             onChange={(event) => setRole(event.target.value as FinancialRole)}
-            disabled={!canClassify || pending || !domains.includes('financial')}
+            disabled={!canClassify || pending}
             className="mt-2 min-h-10 w-full rounded-sm border border-border-strong bg-surface px-3 text-sm text-ink disabled:cursor-not-allowed disabled:bg-surface-2"
           >
             {ROLE_OPTIONS.map((option) => (
@@ -342,7 +342,7 @@ function SourceRow({
                 key={option.value}
                 value={option.value}
                 disabled={
-                  source.docType !== 'invoice' &&
+                  (source.docType !== 'invoice' || !domains.includes('financial')) &&
                   (option.value === 'receivable' || option.value === 'payable')
                 }
               >
