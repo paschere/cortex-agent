@@ -42,7 +42,10 @@ describe('recommendFeedUse', () => {
       'commercial',
       'operations',
     ]);
-    expect(result.tables[0]?.missingRequiredFields).toEqual([]);
+    expect(result.tables[0]?.missingRequiredFields).toEqual([
+      'moneda explícita',
+      'confirmar si es compra o venta',
+    ]);
     expect(result).toMatchObject({
       temporary: true,
       promotionPerformed: false,
@@ -69,7 +72,12 @@ describe('recommendFeedUse', () => {
     expect(result.tables[0]).toMatchObject({
       kind: 'payments',
       areas: ['financial', 'administrative'],
-      missingRequiredFields: ['fecha', 'contraparte'],
+      missingRequiredFields: [
+        'moneda explícita',
+        'confirmar si es pago recibido o realizado',
+        'fecha',
+        'contraparte',
+      ],
     });
     expect(JSON.stringify(result)).not.toContain('50000');
   });

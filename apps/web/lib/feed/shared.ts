@@ -1,4 +1,5 @@
 import type { SheetData } from '@cortex/agent-tools/src/kb/spreadsheets';
+import type { FeedUseRecommendation } from './intelligence';
 
 export const FEED_ACCEPT = {
   'application/pdf': ['.pdf'],
@@ -23,6 +24,7 @@ export interface FeedEntry {
   feed_truncated: boolean;
 }
 export interface FeedDetail extends FeedEntry {
+  recommendation?: FeedUseRecommendation;
   extracted_text: string;
   feed_tables: SheetData[] | null;
 }

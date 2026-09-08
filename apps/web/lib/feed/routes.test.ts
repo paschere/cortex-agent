@@ -142,6 +142,34 @@ beforeEach(() => {
 });
 
 describe('Feed lifecycle', () => {
+  it('reuses unchanged content without another file upload or memory write', async () => {
+    const id = await addText();
+    const form = new FormData();
+    form.set('kind', 'text');
+    form.set('text', 'Notas privadas');
+    const response = await POST(
+      new NextRequest('http://localhost/api/feed', { method: 'POST', body: form }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ entry: { id }, deduplicated: true });
+    expect(state.rows).toHaveLength(1);
+    expect(files.putFile).toHaveBeenCalledOnce();
+    expect(promote).not.toHaveBeenCalled();
+  });
+  it('keeps identical sources private to the uploader and company', async () => {
+    const id = await addText();
+    state.userId = 'other';
+    const other = await addText();
+    state.orgId = 'org-b';
+    const elsewhere = await addText();
+    expect(new Set([id, other, elsewhere]).size).toBe(3);
+  });
+  it('does not deduplicate an expired snapshot', async () => {
+    const id = await addText();
+    if (state.rows[0]) state.rows[0].purge_at = '2000-01-01T00:00:00Z';
+    expect(await addText()).not.toBe(id);
+  });
+
   it('accepts consultation data without creating a conversation or memory', async () => {
     await addText();
     expect(state.writes).toEqual(['chat_attachments']);

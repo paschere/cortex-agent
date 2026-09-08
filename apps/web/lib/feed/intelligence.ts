@@ -26,6 +26,8 @@ export interface FeedUseRecommendation {
 }
 
 type Concept =
+  | 'currency'
+  | 'direction'
   | 'amount'
   | 'counterparty'
   | 'date'
@@ -39,6 +41,8 @@ type Concept =
   | 'task';
 
 const CONCEPTS: Record<Concept, RegExp> = {
+  currency: /^(moneda|divisa|currency|codigo moneda)$/,
+  direction: /^(tipo movimiento|tipo operacion|compra venta|sentido|direction)$/,
   amount: /^(monto|valor|importe|total|subtotal|saldo|precio|amount)$/,
   counterparty: /^(cliente|proveedor|tercero|contraparte|empresa|razon social|beneficiario)$/,
   date: /^(fecha|fecha emision|fecha pago|date|payment date)$/,
@@ -68,12 +72,16 @@ const KIND_AREAS: Record<Exclude<FeedTableKind, 'general'>, FeedArea[]> = {
 
 const FINANCIAL_REQUIRED: Partial<Record<FeedTableKind, Array<[Concept, string]>>> = {
   invoice: [
+    ['currency', 'moneda explícita'],
+    ['direction', 'confirmar si es compra o venta'],
     ['invoiceNumber', 'número de factura'],
     ['date', 'fecha'],
     ['amount', 'monto'],
     ['counterparty', 'cliente o proveedor'],
   ],
   payments: [
+    ['currency', 'moneda explícita'],
+    ['direction', 'confirmar si es pago recibido o realizado'],
     ['paymentReference', 'referencia de pago'],
     ['date', 'fecha'],
     ['amount', 'monto'],

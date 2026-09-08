@@ -45,6 +45,7 @@ export function querySheet(sheets: SheetData[], input: z.infer<typeof tableQuery
     matchedRows: rows.length,
     startRow: input.startRow,
     filter: input.filter ?? null,
+    ...repeatedRows(rows),
   };
   if (input.operation === 'rows')
     return {
@@ -84,5 +85,27 @@ export function querySheet(sheets: SheetData[], input: z.infer<typeof tableQuery
     numericCells: numbers.length,
     blankCells: values.length - numbers.length,
     value,
+  };
+}
+
+function repeatedRows(rows: Array<{ row: number; values: SheetValue[] }>) {
+  const seen = new Set<string>();
+  const duplicateRows: number[] = [];
+  for (const row of rows) {
+    if (row.values.every((v) => v === null || v === '')) continue;
+    const key = JSON.stringify(row.values);
+    if (seen.has(key)) duplicateRows.push(row.row);
+    else seen.add(key);
+  }
+  return {
+    duplicateRowCount: duplicateRows.length,
+    duplicateRowExamples: duplicateRows.slice(0, 10),
+    requiresDuplicateReview: duplicateRows.length > 0,
+    ...(duplicateRows.length
+      ? {
+          warning:
+            'Hay filas idénticas. El cálculo incluye todas las filas; confirma si son repeticiones o eventos distintos antes de usarlo como cifra de negocio. No se eliminó ninguna.',
+        }
+      : {}),
   };
 }

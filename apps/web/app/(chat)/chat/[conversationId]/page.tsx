@@ -16,10 +16,13 @@ import type { Message } from 'ai';
 
 export default async function ResumeChatPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ conversationId: string }>;
+  searchParams: Promise<{ prompt?: string }>;
 }) {
   const { conversationId } = await params;
+  const { prompt } = await searchParams;
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
 
@@ -224,6 +227,7 @@ export default async function ResumeChatPage({
 
   return (
     <ChatRoot
+      initialDraft={typeof prompt === 'string' ? prompt.slice(0, 4000) : undefined}
       agents={agents}
       conversationId={conversationId}
       initialMessages={initialMessages}

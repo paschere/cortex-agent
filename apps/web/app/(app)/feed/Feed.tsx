@@ -9,6 +9,7 @@ import {
   type FeedDetail,
   type FeedEntry,
 } from '@/lib/feed/shared';
+import { workspaceHref } from '@/lib/workspace-context';
 import {
   Brain,
   Check,
@@ -34,7 +35,11 @@ const buttonClass =
 const icons = { file: FileText, url: Link2, text: FileText };
 const kinds = { file: 'Archivo', url: 'Enlace', text: 'Texto' };
 
-export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
+export function Feed({
+  initialEntries,
+  workspaceId,
+}: { initialEntries: FeedEntry[]; workspaceId: string }) {
+  const href = (path: string) => workspaceHref(workspaceId, path);
   const router = useRouter();
   const [entries, setEntries] = useState(initialEntries);
   const [selected, setSelected] = useState<string | null>(null);
@@ -52,9 +57,10 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
   const [spaces, setSpaces] = useState<SpaceChoice[]>([]);
   const [space, setSpace] = useState('');
   const [sheet, setSheet] = useState(0);
+  const [showHistory, setShowHistory] = useState(false);
 
   async function refresh() {
-    const res = await fetch('/api/feed');
+    const res = await fetch(href('/api/feed'));
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'No se pudo actualizar Feed.');
     setEntries(data.entries);
@@ -67,7 +73,7 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
     setSheet(0);
     if (!selected) return;
     const controller = new AbortController();
-    void fetch(`/api/feed/${selected}`, { signal: controller.signal })
+    void fetch(workspaceHref(workspaceId, `/api/feed/${selected}`), { signal: controller.signal })
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? 'No se pudo leer la entrada.');
@@ -80,15 +86,19 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
         }
       });
     return () => controller.abort();
-  }, [selected]);
+  }, [selected, workspaceId]);
 
   async function add(form: FormData) {
-    const res = await fetch('/api/feed', { method: 'POST', body: form });
+    const res = await fetch(href('/api/feed'), { method: 'POST', body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'No se pudo añadir la entrada.');
-    setEntries((prev) => [data.entry, ...prev]);
+    setEntries((prev) => [data.entry, ...prev.filter((entry) => entry.id !== data.entry.id)]);
     setSelected(data.entry.id);
-    setNotice('Añadido a Feed. Disponible para consulta durante siete días.');
+    setNotice(
+      data.deduplicated
+        ? 'El contenido ya estaba en tu Feed. Se reutilizó la entrada, sin duplicarla ni ampliar su vencimiento.'
+        : 'Fuente leída. Cortex propone su uso por pestaña; permanece temporal hasta que decidas guardarla.',
+    );
   }
 
   async function upload(files: File[]) {
@@ -146,7 +156,7 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch(`/api/feed/${detail.id}`, {
+      const res = await fetch(href(`/api/feed/${detail.id}`), {
         method: action === 'delete' ? 'DELETE' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         ...(action === 'delete'
@@ -156,7 +166,7 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'No se pudo completar la acción.');
       if (action === 'consult') {
-        router.push(data.href);
+        router.push(href(data.href));
         return;
       }
       if (action === 'delete') {
@@ -187,7 +197,16 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
     }
   }
 
-  const filtered = entries.filter((entry) =>
+  const sourceKeys = new Set<string>();
+  const latest = [...entries]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .filter((entry) => {
+      const key = entry.source_url ?? entry.id;
+      if (!showHistory && sourceKeys.has(key)) return false;
+      sourceKeys.add(key);
+      return true;
+    });
+  const filtered = latest.filter((entry) =>
     `${entry.filename} ${entry.source_url ?? ''}`.toLowerCase().includes(query.toLowerCase()),
   );
   const table = detail?.feed_tables?.[sheet];
@@ -253,7 +272,7 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
             {mode === 'url' ? (
               <>
                 <label htmlFor="feed-url" className="block text-sm font-medium text-ink">
-                  Enlace de una página pública
+                  Google Sheets o página pública
                 </label>
                 <input
                   id="feed-url"
@@ -267,9 +286,15 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
                   disabled={busy}
                 />
                 <p className="text-xs text-ink-muted">
-                  Se captura el contenido de hoy. Las páginas que requieren iniciar sesión pueden no
-                  estar disponibles.
+                  Sheets usa tu conexión de Google de esta empresa. Se toma una captura: puedes
+                  actualizarla aquí. Otras URLs deben ser públicas.
                 </p>
+                <a
+                  href={href('/integrations')}
+                  className="inline-block text-xs font-medium text-primary underline"
+                >
+                  Revisar conexión de Google
+                </a>
               </>
             ) : (
               <>
@@ -353,40 +378,59 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
                 : 'Lo que añadas aparecerá aquí. Puedes consultarlo primero y decidir después si vale la pena conservarlo.'}
             </div>
           ) : (
-            <ul className="divide-y divide-border">
-              {filtered.map((entry) => {
-                const Icon = icons[entry.feed_kind];
-                return (
-                  <li key={entry.id}>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      aria-pressed={selected === entry.id}
-                      onClick={() => setSelected(entry.id)}
-                      className={`flex w-full gap-3 rounded-sm px-3 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${selected === entry.id ? 'bg-primary-soft' : 'hover:bg-surface'}`}
-                    >
-                      <Icon size={18} className="mt-0.5 shrink-0 text-primary" aria-hidden />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-ink">
-                          {entry.filename}
+            <div>
+              <label className="mb-3 flex items-center gap-2 text-xs text-ink-muted">
+                <input
+                  type="checkbox"
+                  checked={showHistory}
+                  onChange={(event) => setShowHistory(event.target.checked)}
+                />
+                Ver también capturas anteriores
+              </label>
+              <ul className="divide-y divide-border">
+                {filtered.map((entry) => {
+                  const Icon = icons[entry.feed_kind];
+                  return (
+                    <li key={entry.id}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-pressed={selected === entry.id}
+                        onClick={() => setSelected(entry.id)}
+                        className={`flex w-full gap-3 rounded-sm px-3 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${selected === entry.id ? 'bg-primary-soft' : 'hover:bg-surface'}`}
+                      >
+                        <Icon size={18} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-ink">
+                            {entry.filename}
+                          </span>
+                          <span className="mt-1 block text-xs text-ink-muted">
+                            {kinds[entry.feed_kind]} ·{' '}
+                            {new Date(entry.created_at).toLocaleDateString('es-CO', {
+                              timeZone: 'America/Bogota',
+                            })}
+                          </span>
+                          {entry.source_url && (
+                            <span className="mt-1 block text-xs text-ink-faint">
+                              {
+                                entries.filter((item) => item.source_url === entry.source_url)
+                                  .length
+                              }{' '}
+                              capturas de esta fuente
+                            </span>
+                          )}
+                          <span className="mt-1 block text-xs text-ink-muted">
+                            {entry.promoted_document_id
+                              ? 'También guardado en el cerebro'
+                              : 'Sólo para consulta'}
+                          </span>
                         </span>
-                        <span className="mt-1 block text-xs text-ink-muted">
-                          {kinds[entry.feed_kind]} ·{' '}
-                          {new Date(entry.created_at).toLocaleDateString('es-CO', {
-                            timeZone: 'America/Bogota',
-                          })}
-                        </span>
-                        <span className="mt-1 block text-xs text-ink-muted">
-                          {entry.promoted_document_id
-                            ? 'También guardado en el cerebro'
-                            : 'Sólo para consulta'}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           )}
         </section>
 
@@ -418,7 +462,67 @@ export function Feed({ initialEntries }: { initialEntries: FeedEntry[] }) {
                   Abrir página original
                 </a>
               )}
+              {detail.recommendation && (
+                <div className="mt-4 space-y-3 rounded-sm border border-primary/20 bg-primary-soft p-4">
+                  <p className="text-sm font-semibold text-ink">Dónde puede aportar esta fuente</p>
+                  <p className="text-xs leading-relaxed text-ink-muted">
+                    {detail.promoted_document_id
+                      ? 'Este archivo ya tiene una copia en el cerebro. Esta propuesta no ha aplicado cambios a cifras.'
+                      : 'Propuesta basada en los encabezados. No se ha copiado al cerebro ni aplicado a cifras.'}
+                  </p>
+                  {detail.recommendation.tables.map((table, index) => (
+                    <div key={`${table.name}:${index}`} className="border-t border-border pt-3">
+                      <p className="text-sm font-medium text-ink">{table.name}</p>
+                      <p className="mt-1 text-xs text-primary">
+                        {table.areas
+                          .map(
+                            (area) =>
+                              ({
+                                financial: 'Finanzas',
+                                administrative: 'Administración',
+                                commercial: 'Comercial',
+                                operations: 'Operaciones',
+                              })[area],
+                          )
+                          .join(' · ') || 'Uso por confirmar'}
+                      </p>
+                      <p className="mt-1 text-xs text-ink-muted">{table.reasons.join(' ')}</p>
+                      {table.missingRequiredFields.length > 0 && (
+                        <p className="mt-2 text-xs text-amber">
+                          Falta revisar: {table.missingRequiredFields.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  {detail.recommendation.tables.length === 0 && (
+                    <p className="text-xs text-ink-muted">
+                      Cortex necesita revisar el contenido contigo para proponer un destino.
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="my-4 flex flex-wrap gap-2">
+                {detail.source_url && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className={`${buttonClass} border border-border text-ink`}
+                    onClick={() => {
+                      const form = new FormData();
+                      form.set('kind', 'url');
+                      form.set('url', detail.source_url ?? '');
+                      setBusy(true);
+                      setError(null);
+                      void add(form)
+                        .catch((err) =>
+                          setError(err instanceof Error ? err.message : 'No se pudo actualizar.'),
+                        )
+                        .finally(() => setBusy(false));
+                    }}
+                  >
+                    Actualizar captura
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={busy}

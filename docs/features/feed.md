@@ -56,3 +56,28 @@ Feed: unchecked reads in live meeting archive/voice-answer, voice turn, and
 weekly report, plus an already-stale baseline for the chat route. The chat
 route's unchecked-read count is one in both HEAD and this change. The attachment
 route baseline was reduced because its GET now handles database errors.
+
+## Routing, identity, and Google Sheets snapshots (0145)
+
+Feed now proposes business areas per worksheet using explainable header matches.
+Ambiguous/unknown tables remain unclassified. Recommendations appear in the preview
+and temporary chat context; they never write CRM records, accounting entries, or KB.
+Financial candidates flag missing currency and direction as well as record fields.
+
+Identical parsed tables/text are reused within one owner and organization. URLs
+retain their origin in the identity; capture timestamps are excluded. A database
+unique index prevents simultaneous duplicate inserts. Expired entries release only
+their identity slot, retaining their old evidence until the normal purge. Existing
+legacy uploads can be reused by exact byte hash. This is exact-content detection,
+not automatic reconciliation of differently formatted invoices from different systems.
+
+Google Sheets URLs use the current workspace/user Google connection. A read captures
+up to 20 tabs, A1:AZ1000 per tab, at most 50,000 populated cells in total. Larger grid
+bounds visibly mark the capture partial. This is manual refresh, not unattended sync.
+Changed contents create a separate snapshot; unchanged contents reuse the existing
+snapshot without extending retention. The list groups URL snapshots by source and
+can show older captures. XLSX/CSV remain supported through file upload.
+
+Table queries report identical rows and their original row numbers. They do not
+silently remove them: repeated transactions may be valid. Computed values explicitly
+include all selected rows and require review when duplicates are present.

@@ -1,4 +1,5 @@
 import { buildToolContext } from '@/lib/agent';
+import { recommendFeedUse } from '@/lib/feed/intelligence';
 import { FEED_COLUMNS, ownedFeed } from '@/lib/feed/store';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
@@ -33,7 +34,16 @@ export async function GET(_req: NextRequest, params: Params) {
   if (!row)
     return NextResponse.json({ error: 'La entrada no existe o ya venció.' }, { status: 404 });
   const { file_path: _, ...entry } = row;
-  return NextResponse.json({ entry });
+  return NextResponse.json({
+    entry: {
+      ...entry,
+      recommendation: recommendFeedUse({
+        name: entry.filename,
+        text: entry.extracted_text,
+        tables: entry.feed_tables ?? [],
+      }),
+    },
+  });
 }
 
 export async function POST(req: NextRequest, params: Params) {
@@ -61,7 +71,11 @@ export async function POST(req: NextRequest, params: Params) {
       );
       return NextResponse.json({ result });
     }
-    if (row.conversation_id) return NextResponse.json({ href: `/chat/${row.conversation_id}` });
+    const prompt = encodeURIComponent(
+      'Analiza esta fuente del Feed. Identifica qué contiene cada pestaña, recomienda en qué áreas puede servir, revisa filas repetidas y datos faltantes. Distingue referencias de datos que podrían afectar Finanzas. Muéstrame la propuesta antes de guardar o aplicar cambios.',
+    );
+    const chatHref = (id: string) => `/chat/${id}?prompt=${prompt}`;
+    if (row.conversation_id) return NextResponse.json({ href: chatHref(row.conversation_id) });
     const agent = await loadAgent(db, listAgents()[0]?.id ?? 'cortex');
     const { data: conversation, error: createError } = await db
       .from('conversations')
@@ -91,9 +105,9 @@ export async function POST(req: NextRequest, params: Params) {
         .maybeSingle();
       if (readError || !existing?.conversation_id)
         throw new Error('La entrada ya no está disponible.');
-      return NextResponse.json({ href: `/chat/${existing.conversation_id}` });
+      return NextResponse.json({ href: chatHref(existing.conversation_id) });
     }
-    return NextResponse.json({ href: `/chat/${conversation.id}` });
+    return NextResponse.json({ href: chatHref(conversation.id) });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'No se pudo completar la acción.' },

@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
+import { feedFingerprint } from '@/lib/feed/fingerprint';
+import { googleSpreadsheetId, readGoogleSheetFeed } from '@/lib/feed/google-sheets';
 import { FEED_MAX_BYTES, FEED_MAX_TEXT, feedMime } from '@/lib/feed/shared';
 import { FEED_COLUMNS, ownedFeed } from '@/lib/feed/store';
 import { requireSession } from '@/lib/session';
@@ -36,11 +38,6 @@ export async function POST(req: NextRequest) {
     .not('feed_kind', 'is', null)
     .gt('purge_at', new Date().toISOString());
   if (countError) return NextResponse.json({ error: 'No se pudo abrir Feed.' }, { status: 500 });
-  if ((count ?? 0) >= 100)
-    return NextResponse.json(
-      { error: 'Tu Feed tiene 100 entradas. Elimina alguna para añadir más.' },
-      { status: 409 },
-    );
 
   let bytes: Buffer;
   let mime: string;
@@ -49,6 +46,7 @@ export async function POST(req: NextRequest) {
   let tables: SheetData[] | undefined;
   let url: string | null = null;
   let truncated = false;
+  let identityText = '';
   try {
     if (kind === 'file') {
       const file = form.get('file');
@@ -76,23 +74,34 @@ export async function POST(req: NextRequest) {
       const parsed = new URL(url);
       if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password)
         throw new Error('Usa un enlace público http o https, sin credenciales.');
-      const result = await webScrape.handler(
-        { url, maxChars: 20000 },
-        buildToolContext({
-          organizationId: user.organization.id,
-          userId: user.id,
-          agentId: user.id,
-          surface: 'web',
-          signal: AbortSignal.timeout(25000),
-        }),
-      );
-      if (!result.content.trim())
-        throw new Error('La página no tiene texto accesible. Puedes pegar su contenido.');
-      text = `Fuente: ${url}\nConsultada: ${new Date().toISOString()}\n\n${result.content}`;
-      truncated = result.truncated;
-      name = parsed.hostname + (parsed.pathname === '/' ? '' : parsed.pathname.slice(0, 100));
-      mime = 'text/markdown';
-      bytes = Buffer.from(text);
+      const spreadsheetId = googleSpreadsheetId(parsed);
+      const context = buildToolContext({
+        organizationId: user.organization.id,
+        userId: user.id,
+        agentId: user.id,
+        surface: 'web',
+        signal: AbortSignal.timeout(25000),
+      });
+      if (spreadsheetId) {
+        const result = await readGoogleSheetFeed(context, spreadsheetId);
+        url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
+        name = result.name.slice(0, 200);
+        text = result.text;
+        tables = result.tables;
+        truncated = result.truncated;
+        mime = 'text/markdown';
+        bytes = Buffer.from(text);
+      } else {
+        const result = await webScrape.handler({ url, maxChars: 20000 }, context);
+        if (!result.content.trim())
+          throw new Error('La página no tiene texto accesible. Puedes pegar su contenido.');
+        text = `Fuente: ${url}\nConsultada: ${new Date().toISOString()}\n\n${result.content}`;
+        identityText = result.content;
+        truncated = result.truncated;
+        name = parsed.hostname + (parsed.pathname === '/' ? '' : parsed.pathname.slice(0, 100));
+        mime = 'text/markdown';
+        bytes = Buffer.from(text);
+      }
     } else {
       throw new Error('Elige archivo, enlace o texto.');
     }
@@ -104,13 +113,48 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message =
       kind === 'url'
-        ? 'No se pudo leer esa página pública. Revisa el enlace o pega su contenido.'
+        ? 'No se pudo leer la fuente. Para Google Sheets, conecta Google en esta empresa y comprueba tu permiso sobre el archivo. Para otras URLs, usa una página pública.'
         : err instanceof Error
           ? err.message
           : 'No se pudo leer el contenido.';
     return NextResponse.json({ error: message }, { status: 422 });
   }
 
+  const fingerprint = feedFingerprint({
+    text: identityText || text,
+    tables,
+    sourceUrl: url,
+    truncated,
+  });
+  const findDuplicate = () =>
+    ownedFeed(db, user.id).eq('feed_content_hash', fingerprint).maybeSingle();
+  const duplicate = await findDuplicate();
+  if (duplicate.error)
+    return NextResponse.json(
+      { error: 'No se pudo comprobar si la fuente ya existe.' },
+      { status: 503 },
+    );
+  if (duplicate.data) return NextResponse.json({ entry: duplicate.data, deduplicated: true });
+  // Older entries have no semantic identity yet; exact original bytes remain a safe match.
+  const rawHash = createHash('sha256').update(bytes).digest('hex');
+  const legacy = await ownedFeed(db, user.id)
+    .eq('sha256', rawHash)
+    .eq('mime', mime)
+    .is('feed_content_hash', null)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (legacy.error)
+    return NextResponse.json(
+      { error: 'No se pudo comprobar el historial de la fuente.' },
+      { status: 503 },
+    );
+  if (legacy.data?.[0] && kind !== 'url')
+    return NextResponse.json({ entry: legacy.data[0], deduplicated: true });
+  if ((count ?? 0) >= 100)
+    return NextResponse.json(
+      { error: 'Tu Feed tiene 100 entradas. Elimina alguna para añadir una fuente nueva.' },
+      { status: 409 },
+    );
   const id = randomUUID();
   const path = `${user.id}/${id}/${name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
   try {
@@ -124,7 +168,8 @@ export async function POST(req: NextRequest) {
         filename: name,
         mime,
         byte_size: bytes.length,
-        sha256: createHash('sha256').update(bytes).digest('hex'),
+        sha256: rawHash,
+        feed_content_hash: fingerprint,
         extracted_text: text,
         file_path: path,
         created_by: user.id,
@@ -135,6 +180,13 @@ export async function POST(req: NextRequest) {
       })
       .select(FEED_COLUMNS)
       .single();
+    if (error?.code === '23505') {
+      await removeFiles(db, 'chat-uploads', [path]);
+      const winner = await findDuplicate();
+      if (winner.error || !winner.data)
+        throw new Error('No se pudo recuperar la entrada existente.');
+      return NextResponse.json({ entry: winner.data, deduplicated: true });
+    }
     if (error || !data) throw new Error('No se pudo guardar la entrada.');
     return NextResponse.json({ entry: data }, { status: 201 });
   } catch {

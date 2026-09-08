@@ -12,5 +12,11 @@ export default async function FeedPage() {
     .order('created_at', { ascending: false })
     .limit(100);
   if (error) throw new Error('No se pudo cargar Feed. Revisa que la migración 0128 esté aplicada.');
-  return <Feed initialEntries={(data ?? []) as FeedEntry[]} />;
+  return (
+    <Feed
+      key={user.organization.id}
+      workspaceId={user.organization.id}
+      initialEntries={(data ?? []) as FeedEntry[]}
+    />
+  );
 }

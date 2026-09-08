@@ -19,6 +19,13 @@ const input = (extra = {}) =>
     ...extra,
   });
 describe('complete Feed tables', () => {
+  it('makes repeated rows explicit without deleting potentially legitimate transactions', () => {
+    expect(querySheet(sheets, input())).toMatchObject({
+      duplicateRowCount: 998,
+      requiresDuplicateReview: true,
+      value: 10000,
+    });
+  });
   it('calculates beyond the preview and prompt limits', () => {
     expect(querySheet(sheets, input())).toMatchObject({ value: 10000, matchedRows: 1000 });
     expect(querySheet(sheets, input({ filter: { column: 1, equals: 'A' } }))).toMatchObject({
