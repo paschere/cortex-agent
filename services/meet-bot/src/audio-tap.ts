@@ -1,32 +1,20 @@
 /**
  * EL TAP: cómo un script DENTRO de la página de Meet saca el audio de la sala.
  *
- * Vexa (gmeet-capture + pcm-capture) dejó de usar ScriptProcessor: el callback
- * corre en el hilo principal y Meet lo mata a mitad de llamada (issue #204:
- * chunks dejan de salir, Whisper se queda en 0). AudioWorklet corre en el hilo
- * de audio. El PCM sale a 16 kHz linear16 para Deepgram.
+ * Camino de Vexa (`gmeet-capture.ts` + `pcm-capture.ts`):
+ *  Meet ya reproduce cada participante en un <audio>/<video> con srcObject.
+ *  Se toma ESE MediaStream con createMediaStreamSource y un AudioWorklet a
+ *  16 kHz. No se crean sinks paralelos ni createMediaElementSource — eso
+ *  le quita el elemento a Meet y las pistas remotas se quedan muted (peak=0).
  *
- * Cómo se engancha cada pista (21-08, 02-09 y 04-09: chunks>0, peak=0):
- *  1. Chrome en Docker no decodifica WebRTC remoto sin un dispositivo de
- *     salida. El entrypoint levanta PulseAudio + null sink; sin eso las
- *     pistas se quedan muted (lM) y MediaElementSource entrega ceros.
- *  2. Preferir createMediaElementSource de los <audio>/<video> que Meet ya
- *     está decodificando (después de desmutearlos). Un sink paralelo sobre
- *     la misma pista muted sigue en silencio.
- *  3. El AudioContext va a 48 kHz nativo; forzar 16 kHz anula el decode de
- *     Meet. El downsample a 16 kHz es solo al emitir PCM a Deepgram.
- *  4. No mezclar senders locales (TTS / fake mic). Al `ended`, se olvida
- *     el id para que Meet pueda reciclar la pista.
+ * El PCM sale linear16 16 kHz a Deepgram. El roster/scene es de Cortex.
  */
 
 export const AUDIO_TAP_SCRIPT = /* js */ `
 (() => {
   if (window.__cortexTap) return;
 
-  // MEET CORTA EL AUDIO A UNA PESTAÑA OCULTA. En headless/Xvfb la página
-  // arranca 'hidden' y Meet deja de suscribir al bot a los streams de audio
-  // remotos (las pistas llegan pero muted=true, sin RTP). Forzamos que la
-  // página SIEMPRE se reporte visible y con foco.
+  // MEET CORTA EL AUDIO A UNA PESTAÑA OCULTA.
   try {
     Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
     Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
@@ -36,48 +24,6 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     document.addEventListener('visibilitychange', (e) => e.stopImmediatePropagation(), true);
     document.dispatchEvent(new Event('visibilitychange'));
   } catch (e) { /* algún getter no configurable */ }
-
-  // Meet deja de suscribir audio de tiles que cree fuera de pantalla.
-  try {
-    const NativeIO = window.IntersectionObserver;
-    if (NativeIO && !NativeIO.__cortexWrapped) {
-      const WrappedIO = function (cb, opts) {
-        return new NativeIO(function (entries, obs) {
-          for (const e of entries) {
-            try {
-              Object.defineProperty(e, 'isIntersecting', { get: () => true, configurable: true });
-              Object.defineProperty(e, 'intersectionRatio', { get: () => 1, configurable: true });
-            } catch (err) { /* */ }
-          }
-          return cb(entries, obs);
-        }, opts);
-      };
-      WrappedIO.prototype = NativeIO.prototype;
-      WrappedIO.__cortexWrapped = true;
-      window.IntersectionObserver = WrappedIO;
-    }
-  } catch (e) { /* */ }
-
-  const pending = [];
-  const seenTrack = new Set();
-  const pcs = [];
-  const OrigPC = window.RTCPeerConnection;
-  if (OrigPC && !OrigPC.__cortexWrapped) {
-    const Wrapped = new Proxy(OrigPC, {
-      construct(Target, args) {
-        const pc = new Target(...args);
-        pcs.push(pc);
-        pc.addEventListener('track', (ev) => {
-          if (ev.track && ev.track.kind === 'audio') {
-            pending.push(ev.streams[0] || new MediaStream([ev.track]));
-          }
-        });
-        return pc;
-      },
-    });
-    Wrapped.__cortexWrapped = true;
-    window.RTCPeerConnection = Wrapped;
-  }
 
   const state = {
     started: false, peak: 0, recentPeak: 0, chunks: 0, speaker: null, roster: [],
@@ -151,11 +97,10 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
 
   let ctx = null;
   const mixerHold = { current: null };
-  const nodes = [];
-  const sinks = [];
-  const meetNodes = [];
-  const sourcedEls = new WeakSet();
-  let sendersThisSweep = new Set();
+  const captureNodes = [];
+  const sourceNodes = [];
+  const connectedStreamIds = new Set();
+  const wiredTracks = [];
   let sweepTimer = null;
   let speakerWatched = false;
 
@@ -191,9 +136,28 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     } catch (e) { /* binding caído un frame */ }
   }
 
+  function isLocalVoice(t) {
+    try {
+      return Boolean(window.__cortexLocalTrackId && t && t.id === window.__cortexLocalTrackId);
+    } catch (e) { return false; }
+  }
+
+  function isLocalStream(stream) {
+    const tracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
+    return tracks.length > 0 && tracks.every(isLocalVoice);
+  }
+
+  // Vexa findMediaElements: solo lo que Meet YA está reproduciendo.
+  function findMediaElements() {
+    return Array.from(document.querySelectorAll('audio, video')).filter((el) =>
+      !el.paused &&
+      el.srcObject instanceof MediaStream &&
+      el.srcObject.getAudioTracks().length > 0
+    );
+  }
+
   async function setupGraph() {
-    // Native rate (48 kHz). Forcing 16 kHz here zeros MediaElementSource of Meet.
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
     if (ctx.state === 'suspended') await ctx.resume();
     state.sampleRate = ctx.sampleRate;
     const mixer = ctx.createGain();
@@ -213,151 +177,48 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
       node.port.onmessage = (e) => emitPcm(e.data, ctx.sampleRate);
       mixer.connect(node);
       node.connect(ctx.destination);
-      nodes.push(node);
+      captureNodes.push(node);
       state.capture = 'worklet';
     } catch (err) {
       const processor = ctx.createScriptProcessor(4096, 1, 1);
       mixer.connect(processor);
       processor.connect(ctx.destination);
       processor.onaudioprocess = onFrame;
-      nodes.push(processor);
+      captureNodes.push(processor);
       state.capture = 'script';
     }
     state.ctxState = ctx.state;
   }
 
-  function dropWire(entry) {
-    try { entry.node && entry.node.disconnect(); } catch (e) { /* ya cortado */ }
-    if (entry.el && entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
-    seenTrack.delete(entry.trackId);
-  }
-
-  function attachSink(track) {
-    const playable = (track.clone && track.clone()) || track;
-    try { playable.enabled = true; } catch (e) { /* */ }
-    const el = document.createElement('audio');
-    el.autoplay = true;
-    el.playsInline = true;
-    // muted=true / volume=0: Chromium deja de decodificar (21-08 y 02-09: peak=0).
-    el.muted = false;
-    el.volume = 1;
-    el.setAttribute('data-cortex-tap', '1');
-    el.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';
-    el.srcObject = new MediaStream([playable]);
-    (document.body || document.documentElement).appendChild(el);
-    const play = () => { const p = el.play(); if (p && p.catch) p.catch(() => {}); };
-    play();
-    track.addEventListener('unmute', play);
-    playable.addEventListener('unmute', play);
-    return el;
-  }
-
-  function senderIds() {
-    const ids = new Set();
+  function connectElement(el) {
+    const stream = el.srcObject;
+    if (!stream || !(stream instanceof MediaStream)) return false;
+    if (stream.getAudioTracks().length === 0) return false;
+    if (connectedStreamIds.has(stream.id)) return false;
+    if (isLocalStream(stream)) return false;
+    if (!mixerHold.current || !ctx) return false;
     try {
-      if (window.__cortexLocalTrackId) ids.add(window.__cortexLocalTrackId);
-    } catch (e) { /* */ }
-    for (const pc of pcs) {
-      try {
-        for (const s of pc.getSenders ? pc.getSenders() : []) {
-          if (s.track && s.track.kind === 'audio') ids.add(s.track.id);
-        }
-      } catch (e) { /* pc cerrada */ }
-    }
-    return ids;
-  }
-
-  function isLocalVoice(t) {
-    if (!t) return false;
-    if (sendersThisSweep.has(t.id)) return true;
-    try {
-      return Boolean(window.__cortexLocalTrackId && t.id === window.__cortexLocalTrackId);
-    } catch (e) { return false; }
-  }
-
-  function wireTrack(t) {
-    if (!t || t.kind !== 'audio' || t.readyState === 'ended') return;
-    if (isLocalVoice(t)) return;
-    if (seenTrack.has(t.id)) return;
-    if (!mixerHold.current || !ctx) return;
-    seenTrack.add(t.id);
-    let el = null;
-    try {
-      el = attachSink(t);
-      let src = null;
-      try {
-        src = ctx.createMediaElementSource(el);
-      } catch (e) {
-        src = ctx.createMediaStreamSource(new MediaStream([t]));
-      }
-      src.connect(mixerHold.current);
-      const entry = { trackId: t.id, track: t, node: src, el };
-      sinks.push(entry);
-      t.addEventListener('ended', () => {
-        const i = sinks.indexOf(entry);
-        if (i >= 0) sinks.splice(i, 1);
-        dropWire(entry);
+      const source = ctx.createMediaStreamSource(stream);
+      source.connect(mixerHold.current);
+      sourceNodes.push(source);
+      connectedStreamIds.add(stream.id);
+      const track = stream.getAudioTracks()[0];
+      wiredTracks.push(track);
+      track.addEventListener('ended', () => {
+        connectedStreamIds.delete(stream.id);
+        const i = wiredTracks.indexOf(track);
+        if (i >= 0) wiredTracks.splice(i, 1);
       });
+      return true;
     } catch (e) {
-      seenTrack.delete(t.id);
-      if (el && el.parentNode) el.parentNode.removeChild(el);
+      return false;
     }
   }
 
-  function wireStream(stream) {
-    if (!stream) return;
-    const tracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
-    for (const t of tracks) wireTrack(t);
-    if (stream.addEventListener && !stream.__cortexWatch) {
-      stream.__cortexWatch = true;
-      stream.addEventListener('addtrack', (ev) => {
-        if (ev.track && ev.track.kind === 'audio') wireTrack(ev.track);
-      });
-    }
-  }
-
-  function forceMeetPlay(el) {
-    try {
-      el.muted = false;
-      el.defaultMuted = false;
-      el.volume = 1;
-      const p = el.play();
-      if (p && p.catch) p.catch(() => {});
-    } catch (e) { /* */ }
-  }
-
-  function markMeetTracks(el) {
-    if (!el.srcObject || !el.srcObject.getAudioTracks) return;
-    for (const t of el.srcObject.getAudioTracks()) seenTrack.add(t.id);
-  }
-
-  function wireMeetElement(el) {
-    if (!el || el.getAttribute('data-cortex-tap') === '1') return;
-    forceMeetPlay(el);
-    if (!mixerHold.current || !ctx) return;
-    if (sourcedEls.has(el) && meetNodes.length) {
-      markMeetTracks(el);
-      return;
-    }
-    if (!sourcedEls.has(el)) {
-      try {
-        const src = ctx.createMediaElementSource(el);
-        src.connect(mixerHold.current);
-        sourcedEls.add(el);
-        meetNodes.push(src);
-        markMeetTracks(el);
-        return;
-      } catch (e) {
-        sourcedEls.add(el);
-      }
-    }
-    if (el.srcObject) wireStream(el.srcObject);
-  }
-
-  function wireMeetElements() {
-    const els = document.querySelectorAll('audio:not([data-cortex-tap]), video');
+  function sweep() {
+    const els = findMediaElements();
     state.elements = els.length;
-    state.meetPlay = [...els].slice(0, 6).map((el) => {
+    state.meetPlay = els.slice(0, 6).map((el) => {
       const tracks = el.srcObject && el.srcObject.getAudioTracks
         ? el.srcObject.getAudioTracks().length
         : 0;
@@ -367,41 +228,16 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
         + (el.volume < 0.1 ? 'v0' : '')
         + tracks;
     }).join(',');
-    for (const el of els) wireMeetElement(el);
-  }
-
-  function sweep() {
-    sendersThisSweep = senderIds();
-    wireMeetElements();
-    while (pending.length) wireStream(pending.pop());
-    for (const pc of pcs) {
-      try {
-        for (const r of pc.getReceivers ? pc.getReceivers() : []) {
-          if (r.track && r.track.kind === 'audio') wireTrack(r.track);
-        }
-      } catch (e) { /* pc cerrada */ }
-    }
-    const byId = new Map();
-    for (const s of sinks) {
-      if (s.track) byId.set(s.track.id, s.track);
-    }
-    for (const el of document.querySelectorAll('audio:not([data-cortex-tap]), video')) {
-      if (!el.srcObject || !el.srcObject.getAudioTracks) continue;
-      for (const t of el.srcObject.getAudioTracks()) {
-        if (!sendersThisSweep.has(t.id)) byId.set(t.id, t);
-      }
-    }
-    const liveTracks = [...byId.values()];
-    state.tracks = liveTracks.length;
-    state.live = liveTracks.filter((t) => t.readyState === 'live').length;
-    state.meetSrc = meetNodes.length;
-    state.pcs = pcs.length;
-    const mine = document.querySelectorAll('audio[data-cortex-tap]');
-    state.mine = mine.length;
-    state.playing = [...mine].filter((e) => !e.paused).length;
-    state.trackInfo = liveTracks
+    for (const el of els) connectElement(el);
+    state.meetSrc = connectedStreamIds.size;
+    state.tracks = connectedStreamIds.size;
+    state.live = wiredTracks.filter((t) => t && t.readyState === 'live').length;
+    state.pcs = 0;
+    state.mine = 0;
+    state.playing = els.filter((e) => !e.paused).length;
+    state.trackInfo = wiredTracks
       .slice(0, 8)
-      .map((t) => (t.readyState[0] || '?') + (t.muted ? 'M' : '') + (t.enabled ? '' : 'D') + (sendersThisSweep.has(t.id) ? 'S' : ''))
+      .map((t) => (t.readyState[0] || '?') + (t.muted ? 'M' : '') + (t.enabled ? '' : 'D'))
       .join(',');
     state.vis = document.visibilityState;
     if (ctx) {
@@ -411,9 +247,12 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     }
   }
 
-  function disconnectWires() {
-    while (sinks.length) dropWire(sinks.pop());
-    seenTrack.clear();
+  function disconnectSources() {
+    for (const n of sourceNodes.splice(0)) {
+      try { n.disconnect(); } catch (e) { /* */ }
+    }
+    connectedStreamIds.clear();
+    wiredTracks.length = 0;
   }
 
   async function start() {
@@ -424,21 +263,18 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     if (!sweepTimer) sweepTimer = setInterval(sweep, 1000);
     refreshRoster();
     watchSpeaker();
-    return { ok: true, sampleRate: ctx && ctx.sampleRate, capture: state.capture };
+    return { ok: true, sampleRate: ctx && ctx.sampleRate, capture: state.capture, streams: connectedStreamIds.size };
   }
 
   function rewire() {
-    disconnectWires();
+    disconnectSources();
     sweep();
-    return { ok: true, tracks: state.tracks, meetSrc: meetNodes.length, capture: state.capture };
+    return { ok: true, tracks: state.tracks, meetSrc: state.meetSrc, capture: state.capture };
   }
 
   async function restart() {
-    disconnectWires();
-    for (const n of meetNodes.splice(0)) {
-      try { n.disconnect(); } catch (e) { /* */ }
-    }
-    for (const n of nodes.splice(0)) {
+    disconnectSources();
+    for (const n of captureNodes.splice(0)) {
       try { n.disconnect(); } catch (e) { /* */ }
     }
     if (ctx) {

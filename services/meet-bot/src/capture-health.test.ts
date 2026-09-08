@@ -73,24 +73,19 @@ check(
   false,
 );
 check(
-  'headless Chromium needs MediaElementSource of an unmuted sink',
-  AUDIO_TAP_SCRIPT.includes('createMediaElementSource') &&
-    AUDIO_TAP_SCRIPT.includes('el.muted = false'),
+  'Vexa taps Meet playing elements via createMediaStreamSource of srcObject',
+  AUDIO_TAP_SCRIPT.includes('createMediaStreamSource') &&
+    AUDIO_TAP_SCRIPT.includes('findMediaElements'),
   true,
 );
 check(
-  'AudioContext stays at native rate so Meet 48 kHz decode is not zeroed',
-  AUDIO_TAP_SCRIPT.includes('AudioContext)({ sampleRate: 16000 })'),
+  'does not steal Meet elements with createMediaElementSource',
+  AUDIO_TAP_SCRIPT.includes('createMediaElementSource'),
   false,
 );
 check(
-  'Meet own media elements are tapped before parallel sinks',
-  AUDIO_TAP_SCRIPT.includes('wireMeetElement'),
-  true,
-);
-check(
-  'local senders are skipped so TTS is not counted as the live track',
-  AUDIO_TAP_SCRIPT.includes('getSenders'),
+  'AudioContext is 16 kHz like Vexa gmeet-capture',
+  AUDIO_TAP_SCRIPT.includes('AudioContext)({ sampleRate: 16000 })'),
   true,
 );
 check(
@@ -100,7 +95,7 @@ check(
 );
 check(
   'ended tracks are forgotten so Meet can recycle them',
-  AUDIO_TAP_SCRIPT.includes('seenTrack.delete') && AUDIO_TAP_SCRIPT.includes("t.addEventListener('ended'"),
+  AUDIO_TAP_SCRIPT.includes('connectedStreamIds.delete') && AUDIO_TAP_SCRIPT.includes("addEventListener('ended'"),
   true,
 );
 check('watchdog can rewire and restart the graph', AUDIO_TAP_SCRIPT.includes('rewire') && AUDIO_TAP_SCRIPT.includes('restart'), true);
