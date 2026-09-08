@@ -171,7 +171,7 @@ export async function readFinanceOverview(
       data: {
         supported: false,
         reason:
-          'La lectura contable actual no expone saldos por factura; Cortex no proyecta vencimientos restando pagos por segunda vez.',
+          'La proyección de cobros aún no está disponible. Requiere saldos conciliados y fechas de vencimiento por factura.',
       },
     },
     provenance: {

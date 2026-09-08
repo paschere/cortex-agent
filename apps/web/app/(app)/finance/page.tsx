@@ -29,7 +29,7 @@ export default async function FinancePage() {
           integrations: href('/integrations'),
           feed: href('/feed'),
           review: href(
-            `/chat?prompt=${encodeURIComponent('Muéstrame las facturas pendientes de confirmar de esta empresa, con sus fuentes, para revisarlas antes de incluirlas en Finanzas.')}`,
+            `/chat?prompt=${encodeURIComponent('Muéstrame las facturas pendientes de confirmar y las que no tienen moneda en esta empresa, con sus fuentes, para revisar su clasificación y sus datos antes de incluirlas en Finanzas.')}`,
           ),
         }}
       />

@@ -154,14 +154,14 @@ export function FinanceHub({ overview, links }: { overview: FinanceOverview; lin
         <Metric
           label="Saldo bancario"
           value="No disponible"
-          note="Conecta una fuente bancaria para consultarlo"
+          note="Los saldos bancarios aún no están integrados en este resumen"
           icon={<Landmark className="h-4 w-4" />}
           tone="neutral"
         />
         <Metric
           label="Costos y resultado"
           value="No disponible"
-          note="Aún no hay una fuente contable suficiente"
+          note="Costos y resultados aún no están integrados en este resumen"
           icon={<ReceiptText className="h-4 w-4" />}
           tone="neutral"
         />
@@ -314,7 +314,7 @@ export function FinanceHub({ overview, links }: { overview: FinanceOverview; lin
               <QueueRow
                 label="Facturas sin moneda"
                 value={exclusions?.withoutCurrency}
-                href={links.feed}
+                href={links.review}
               />
             </div>
           </Panel>
