@@ -391,7 +391,7 @@ export class MeetSession {
     await this.armAudioTap(page);
     this.startRosterWatch(page);
     this.startCaptureWatch(page);
-    this.startVisualWatch(page);
+    if (!this.voiceEnabled) this.startVisualWatch(page);
     if (camera.enabled) await this.armVirtualCamera(page);
     if (this.voiceEnabled && !(await this.ensureVoiceReady())) {
       this.setStatus(
@@ -718,10 +718,37 @@ export class MeetSession {
     }
     await this.deepgram?.stop().catch(() => undefined);
     this.deepgram = null;
+    if (this.visualTimer) clearInterval(this.visualTimer);
+    this.visualTimer = null;
     this.liveVoice = new MeetLiveVoice({
       config: this.config,
       owner: this.owner,
       sessionId: this.id,
+      captureView: async () => {
+        if (this.status !== 'live' || page.isClosed()) return null;
+        const scene = await page
+          .evaluate(() =>
+            (
+              window as unknown as {
+                __cortexTap?: { scene?: () => { presenting?: string | null } };
+              }
+            ).__cortexTap?.scene?.(),
+          )
+          .catch(() => null);
+        if (!scene?.presenting) return null;
+        const jpeg = await page.screenshot({
+          type: 'jpeg',
+          quality: 75,
+          scale: 'css',
+          timeout: 5000,
+        });
+        if (jpeg.length > 1_500_000) return null;
+        return {
+          imageBase64: jpeg.toString('base64'),
+          capturedAt: Date.now(),
+          scope: 'meeting-viewport',
+        };
+      },
       audio: async (pcm) => {
         await page.evaluate((b64) => {
           const voice = (
