@@ -57,7 +57,7 @@ async function main() {
   await Promise.all([voice.wake(), voice.wake()]);
   assert.equal(created, 1);
   assert.match(callbacks?.instructions ?? '', /Empresa A/);
-  assert.equal(callbacks?.voice, 'gleam');
+  assert.equal(callbacks?.voice, 'bossa');
   await callbacks?.onDelegation({
     id: 'd1',
     offsetMs: 0,

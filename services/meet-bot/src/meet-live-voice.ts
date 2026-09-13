@@ -97,7 +97,7 @@ export class MeetLiveVoice {
     );
     const live = createTransport({
       apiKey: key,
-      voice: 'gleam',
+      voice: 'bossa',
       instructions: `${instructions}\nHabla en español de Colombia, tuteando, con frases cortas y entonación conversacional. Evita el tono de locutor, el entusiasmo exagerado y repetir muletillas. Mantén un ritmo fluido con pausas naturales. Cuando te llamen, di «Te escucho» y escucha.`,
       onAudio: (pcm) => {
         if (generation !== this.generation || this.muted) return;

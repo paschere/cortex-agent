@@ -33,6 +33,6 @@ La captura de voz es efímera: no se sube al archivo de la reunión ni se incorp
 
 Antes de abrir cada sesión de voz, el bot solicita al backend un contexto breve autenticado del workspace: identidad Cortex, nombre de la empresa y reglas de delegación. Si no puede cargarlo, no abre una sesión genérica. El prompt completo, el cerebro, los permisos y los procedimientos siguen en el backend que responde con el contexto grupal autorizado.
 
-La voz de Meet usa Gleam con instrucciones de español colombiano y un ritmo conversacional. La naturalidad y el acento requieren una escucha real; cambiar la voz no garantiza un acento regional. Se verificó una sesión sintética de OpenAI con respuesta de identidad Cortex; esto no prueba reproducción dentro de Meet.
+La voz de Meet usa Bossa con instrucciones de español colombiano y un ritmo conversacional. La naturalidad y el acento requieren una escucha real; cambiar la voz no garantiza un acento regional. Se verificó una sesión sintética de OpenAI con respuesta de identidad Cortex; esto no prueba reproducción dentro de Meet.
 
 Los subtítulos activos conservan los fragmentos originales y sus tiempos, separados por rol, en filas estables que se actualizan en vivo y al refrescar. No se marcan como turnos finalizados: GPT-Live no envía ese evento. Una transcripción de salida tampoco prueba que otro participante oyó todo el audio. Las filas activas se conservan en el archivo de la reunión; en reposo no se transcribe la sala.
