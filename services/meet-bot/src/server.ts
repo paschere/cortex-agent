@@ -175,6 +175,13 @@ export function startServer(config: Config): Server {
       const meetUrl = String(body.meetUrl ?? '');
       const botName = String(body.botName ?? 'Cortex');
       const voiceEnabled = body.voiceEnabled === true;
+      if (voiceEnabled && !config.openaiKey) {
+        json(res, 503, {
+          error:
+            'Para voz conversacional configura OPENAI_API_KEY en meet-bot. GPT-Live no está activado.',
+        });
+        return;
+      }
       const userId = typeof body.userId === 'string' && body.userId.length > 8 ? body.userId : null;
       if (!owner || !/^https:\/\/meet\.google\.com\//.test(meetUrl)) {
         json(res, 400, { error: 'owner y un meetUrl de meet.google.com son obligatorios' });

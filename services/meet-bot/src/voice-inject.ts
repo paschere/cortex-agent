@@ -115,6 +115,27 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
 
   let speaking = false;
   let playHead = 0;
+  const activeSources = new Set();
+  let playbackGeneration = 0;
+
+  function stopPlayback() {
+    playbackGeneration += 1;
+    for (const source of activeSources) {
+      try { source.stop(); } catch (_) { /* already ended */ }
+      try { source.disconnect(); } catch (_) { /* already disconnected */ }
+    }
+    activeSources.clear();
+    playHead = ctx.currentTime;
+    speaking = false;
+  }
+
+  function trackSource(source) {
+    activeSources.add(source);
+    source.onended = () => {
+      activeSources.delete(source);
+      if (!activeSources.size) speaking = false;
+    };
+  }
 
   function pcmBuffer(b64, sampleRate) {
     const bin = atob(b64);
@@ -142,6 +163,7 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.connect(gain);
+    trackSource(src);
     const now = ctx.currentTime;
     if (playHead < now + 0.02) playHead = now + 0.02;
     src.start(playHead);
@@ -151,9 +173,10 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
   }
 
   async function endSpeak() {
+    const generation = playbackGeneration;
     const remain = Math.max(0, playHead - ctx.currentTime);
     await new Promise((r) => setTimeout(r, remain * 1000 + 80));
-    speaking = false;
+    if (generation === playbackGeneration && !activeSources.size) speaking = false;
     return { duration: remain };
   }
 
@@ -172,8 +195,9 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
     src.buffer = buf;
     src.connect(gain);
     speaking = true;
+    activeSources.add(src);
     const done = new Promise((resolve) => {
-      src.onended = () => { speaking = false; resolve(); };
+      src.onended = () => { activeSources.delete(src); speaking = activeSources.size > 0; resolve(); };
     });
     src.start();
     const cap = Math.ceil(buf.duration * 1000) + 1500;
@@ -214,10 +238,11 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
   window.__cortexVoice = {
     speak,
     speakPcm,
+    stopPlayback,
     beginSpeak,
     endSpeak,
     arm,
-    mute: () => { gain.gain.value = 0; if (micTrack) micTrack.enabled = false; },
+    mute: () => { stopPlayback(); gain.gain.value = 0; if (micTrack) micTrack.enabled = false; },
     unmute: () => { gain.gain.value = 1; if (micTrack) micTrack.enabled = true; void hijackSenders(); },
     isSpeaking: () => speaking,
     status: () => ({

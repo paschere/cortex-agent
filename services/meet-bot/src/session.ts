@@ -16,25 +16,15 @@ import {
   leaveGoogleMeet,
   resetEscalation,
   setGoogleMeetMicrophone,
-  setGoogleMeetHand,
   setHooks,
   waitForGoogleMeetingAdmission,
 } from './join';
+import { LocalWakeDetector } from './local-wake';
+import { MeetLiveVoice } from './meet-live-voice';
 import { humanPause, launchPersistentBrowser, warmUpProfile } from './stealth';
-import {
-  VoiceBrain,
-  isBotSpeaker,
-  isEchoOfBot,
-  roomHasHumanSpeech,
-  someoneElseSpeakingOnRoster,
-} from './voice-brain';
-import {
-  type CallEvent,
-  rosterDiff,
-  shouldTakeFrame,
-  uploadVisualFrame,
-} from './visual-log';
 import { resolveVirtualCamera } from './virtual-camera';
+import { type CallEvent, rosterDiff, shouldTakeFrame, uploadVisualFrame } from './visual-log';
+import { isBotSpeaker, isEchoOfBot } from './voice-brain';
 import { VOICE_INJECT_SCRIPT } from './voice-inject';
 
 /**
@@ -117,7 +107,8 @@ export class MeetSession {
   private status: MeetStatus = 'joining';
   private finalCount = 0;
   private endedReason: string | null = null;
-  private voice: VoiceBrain | null = null;
+  private liveVoice: MeetLiveVoice | null = null;
+  private localWake: LocalWakeDetector | null = null;
   private voiceEnabled: boolean;
   private recent: Transcript[] = [];
   private heardAt = Date.now();
@@ -151,7 +142,7 @@ export class MeetSession {
   }
 
   setVoiceMuted(muted: boolean): void {
-    this.voice?.setMuted(muted);
+    this.liveVoice?.setMuted(muted);
     if (this.page) void setGoogleMeetMicrophone(this.page, !muted, this.botName, this.display);
   }
 
@@ -195,9 +186,6 @@ export class MeetSession {
       }
       this.recent.push(line);
       if (this.recent.length > 200) this.recent.shift();
-      if (this.voice) void this.voice.onFinalLine(line);
-    } else if (this.voice) {
-      this.voice.onInterim(line);
     }
     this.events.onTranscript(line);
   }
@@ -208,9 +196,11 @@ export class MeetSession {
    */
   async speakText(text: string): Promise<{ ok: boolean; detail?: string }> {
     const ready = await this.ensureVoiceReady();
-    if (!ready || !this.voice) return { ok: false, detail: 'sin-sesion' };
-    const ok = await this.voice.speakText(text);
-    return ok ? { ok: true } : { ok: false, detail: 'no-pude-sintetizar' };
+    if (ready && this.liveVoice) {
+      const ok = await this.liveVoice.say(text);
+      return { ok, ...(ok ? {} : { detail: 'GPT-Live no está listo' }) };
+    }
+    return { ok: false, detail: 'GPT-Live no está listo' };
   }
 
   currentStatus(): { status: MeetStatus; detail: string | null } {
@@ -292,14 +282,21 @@ export class MeetSession {
       '__cortexAudioChunk',
       (_src, payload: { b64: string; rms?: number; speaker: string | null }) => {
         this.deepgram?.setSpeaker(payload.speaker);
-        if (payload.b64) this.deepgram?.push(Buffer.from(payload.b64, 'base64'));
+        if (payload.b64) {
+          const pcm = Buffer.from(payload.b64, 'base64');
+          this.deepgram?.push(pcm);
+          this.localWake?.push(pcm);
+          this.liveVoice?.push(pcm);
+        }
       },
     );
 
-    this.deepgram = new DeepgramStream(this.config.deepgramKey, this.config.sttLanguage, (t) => {
-      this.ingestHeard(t);
-    });
-    this.deepgram.start();
+    if (!this.voiceEnabled) {
+      this.deepgram = new DeepgramStream(this.config.deepgramKey, this.config.sttLanguage, (t) => {
+        this.ingestHeard(t);
+      });
+      this.deepgram.start();
+    }
 
     this.setStatus('joining');
 
@@ -396,7 +393,14 @@ export class MeetSession {
     this.startCaptureWatch(page);
     this.startVisualWatch(page);
     if (camera.enabled) await this.armVirtualCamera(page);
-    if (this.voiceEnabled) await this.ensureVoiceReady();
+    if (this.voiceEnabled && !(await this.ensureVoiceReady())) {
+      this.setStatus(
+        'failed',
+        'No se pudo activar el detector local y GPT-Live. Revisa la configuración de voz.',
+      );
+      await this.leave();
+      return;
+    }
     this.startCallEndWatch(page);
     this.setStatus('live');
   }
@@ -470,7 +474,9 @@ export class MeetSession {
       setTimeout(() => {
         if (page.isClosed()) return;
         void page
-          .evaluate('(window.__cortexTap && (window.__cortexTap.peek || window.__cortexTap.level)()) || {peak:0,chunks:0}')
+          .evaluate(
+            '(window.__cortexTap && (window.__cortexTap.peek || window.__cortexTap.level)()) || {peak:0,chunks:0}',
+          )
           .then((lvl) =>
             console.log(
               `[cortex-meet] ${this.id} audio level @${delay / 1000}s ${JSON.stringify(lvl)}`,
@@ -696,102 +702,82 @@ export class MeetSession {
     await page.evaluate(VOICE_INJECT_SCRIPT).catch(() => undefined);
     await setGoogleMeetMicrophone(page, true, this.botName, this.display);
     const armed = await page
-      .evaluate(() =>
-        (
-          window as unknown as { __cortexVoice?: { arm?: () => Promise<unknown> } }
-        ).__cortexVoice?.arm?.() ?? { error: 'sin __cortexVoice.arm' },
+      .evaluate(
+        () =>
+          (
+            window as unknown as { __cortexVoice?: { arm?: () => Promise<unknown> } }
+          ).__cortexVoice?.arm?.() ?? { error: 'sin __cortexVoice.arm' },
       )
       .catch((err: Error) => ({ error: err.message }));
     console.log(`[cortex-meet] ${this.id} voice arm ${JSON.stringify(armed)}`);
-    if (this.voice) return true;
-    this.voice = new VoiceBrain(this.owner, this.id, {
+    // Voice-enabled meetings use local wake detection; no cloud STT in standby.
+    if (this.liveVoice) return true;
+    if (!this.config.openaiKey) {
+      console.error('[cortex-meet] GPT-Live requires OPENAI_API_KEY');
+      return false;
+    }
+    await this.deepgram?.stop().catch(() => undefined);
+    this.deepgram = null;
+    this.liveVoice = new MeetLiveVoice({
       config: this.config,
-      botName: this.botName,
-      recentTranscript: () => this.recent,
-      onSpoken: (text) => this.recordBotSpeech(text),
-      speak: async (mp3B64) => {
-        const result = await page
-          .evaluate(
-            (b64) =>
-              (
-                window as unknown as { __cortexVoice?: { speak: (b: string) => Promise<unknown> } }
-              ).__cortexVoice?.speak(b64) ?? { error: 'sin __cortexVoice' },
-            mp3B64,
-          )
-          .catch((err: Error) => ({ error: err.message }));
-        // Si esto dice duration>0, gumAudio>0 y track live, el audio SALIÓ por
-        // el micro suplantado; lo que quede es de Meet (micro apagado) o del
-        // anfitrión.
-        console.log(`[cortex-meet] ${this.id} speak ${JSON.stringify(result)}`);
+      owner: this.owner,
+      sessionId: this.id,
+      audio: async (pcm) => {
+        await page.evaluate((b64) => {
+          const voice = (
+            window as unknown as {
+              __cortexVoice?: { speakPcm: (b: string, rate: number) => unknown };
+            }
+          ).__cortexVoice;
+          voice?.speakPcm(b64, 24000);
+        }, pcm.toString('base64'));
       },
-      mute: async () => {
-        await setGoogleMeetMicrophone(page, false, this.botName, this.display);
-        await page
-          .evaluate(() =>
-            (window as unknown as { __cortexVoice?: { mute: () => void } }).__cortexVoice?.mute(),
-          )
-          .catch(() => undefined);
-      },
-      unmute: async () => {
-        await page
-          .evaluate(() =>
-            (
-              window as unknown as { __cortexVoice?: { unmute: () => void } }
-            ).__cortexVoice?.unmute(),
-          )
-          .catch(() => undefined);
-        await setGoogleMeetMicrophone(page, true, this.botName, this.display, {
-          onlyIfNeeded: true,
+      clear: async () => {
+        await page.evaluate(() => {
+          (
+            window as unknown as { __cortexVoice?: { stopPlayback: () => void } }
+          ).__cortexVoice?.stopPlayback();
         });
       },
-      beginSpeak: async () => {
-        await page
-          .evaluate(() =>
-            (
-              window as unknown as { __cortexVoice?: { beginSpeak?: () => Promise<unknown> } }
-            ).__cortexVoice?.beginSpeak?.(),
-          )
-          .catch(() => undefined);
+      transcript: (role, text) => {
+        // These are fragments, not completed or guaranteed audible utterances.
+        this.events.onTranscript({
+          text,
+          isFinal: false,
+          speaker: role === 'assistant' ? this.botName : null,
+          at: (Date.now() - this.heardAt) / 1000,
+        });
       },
-      pushPcm: async (b64, sampleRate) => {
-        await page
-          .evaluate(
-            ({ pcm, rate }) =>
-              (
-                window as unknown as {
-                  __cortexVoice?: { speakPcm?: (b: string, s: number) => unknown };
-                }
-              ).__cortexVoice?.speakPcm?.(pcm, rate),
-            { pcm: b64, rate: sampleRate },
-          )
-          .catch(() => undefined);
-      },
-      endSpeak: async () => {
-        await page
-          .evaluate(() =>
-            (
-              window as unknown as { __cortexVoice?: { endSpeak?: () => Promise<unknown> } }
-            ).__cortexVoice?.endSpeak?.(),
-          )
-          .catch(() => undefined);
-      },
-      raiseHand: async () => {
-        await setGoogleMeetHand(page, true, this.display);
-      },
-      lowerHand: async () => {
-        await setGoogleMeetHand(page, false, this.display);
-      },
-      othersInCall: () => this.roster.filter((p) => !p.self).length,
-      someoneElseSpeaking: (except) =>
-        someoneElseSpeakingOnRoster(this.roster, except, this.botName),
-      roomSpeaking: () => roomHasHumanSpeech(this.roster, this.botName),
+      status: (state) => console.log(`[cortex-meet] ${this.id} GPT-Live: ${state}`),
     });
-    return true;
+    this.localWake = new LocalWakeDetector({
+      onWake: () => {
+        void this.liveVoice?.wake();
+      },
+      onError: () => {
+        console.error('[cortex-meet] local wake unavailable');
+        void this.liveVoice?.sleep('detector no disponible');
+      },
+    });
+    try {
+      await this.localWake.start();
+      return true;
+    } catch {
+      await this.localWake.stop();
+      this.localWake = null;
+      await this.liveVoice.sleep('detector no disponible');
+      this.liveVoice = null;
+      return false;
+    }
   }
 
   async leave(): Promise<void> {
     if (this.status === 'live') this.setStatus('ended', 'Cerrada por Cortex.');
     this.finishing = true;
+    await this.localWake?.stop();
+    this.localWake = null;
+    await this.liveVoice?.sleep('llamada terminada');
+    this.liveVoice = null;
     if (this.rosterTimer) {
       clearInterval(this.rosterTimer);
       this.rosterTimer = null;

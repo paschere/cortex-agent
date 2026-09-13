@@ -24,6 +24,8 @@ function number(name: string, fallback: number): number {
 }
 
 export interface Config {
+  /** GPT-Live only runs during an explicitly activated conversation. */
+  openaiKey?: string;
   /** Secreto compartido con Cortex — la misma forma que el browser service. */
   serviceToken: string;
   /** La API key de Deepgram, para STT en vivo y (después) TTS. */
@@ -95,6 +97,7 @@ export interface Config {
 
 export function loadConfig(): Config {
   return {
+    openaiKey: process.env.OPENAI_API_KEY?.trim() || undefined,
     serviceToken: required(
       'MEET_SERVICE_TOKEN',
       'MEET_SERVICE_TOKEN   el secreto compartido, igual que en Cortex',

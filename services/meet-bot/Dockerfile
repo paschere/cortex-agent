@@ -35,7 +35,7 @@ ENV TZ=America/Bogota
 # PulseAudio: Chrome no decodifica WebRTC remoto sin un dispositivo de salida
 # (si no, pistas muted, peak=0, Deepgram mudo). Null sink, nadie lo oye.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends xvfb fonts-liberation xdotool x11vnc pulseaudio pulseaudio-utils \
+  && apt-get install -y --no-install-recommends xvfb fonts-liberation xdotool x11vnc pulseaudio pulseaudio-utils python3 python3-pip curl unzip \
   && rm -rf /var/lib/apt/lists/* \
   && printf '%s\n' \
     '#!/usr/bin/pulseaudio -nF' \
@@ -47,12 +47,18 @@ RUN apt-get update \
     > /etc/pulse/default.pa \
   && printf '%s\n' 'exit-idle-time = -1' >> /etc/pulse/daemon.conf
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
+RUN python3 -m pip install --no-cache-dir vosk==0.3.45 \
+  && curl -L --fail --silent --show-error https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip -o /tmp/cortex-wake-model.zip \
+  && unzip -q /tmp/cortex-wake-model.zip -d /opt \
+  && mv /opt/vosk-model-small-en-us-0.15 /opt/cortex-wake-model \
+  && rm /tmp/cortex-wake-model.zip
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/meet-bot/package.json services/meet-bot/
 RUN pnpm install --filter @cortex/meet-bot --prod --frozen-lockfile
 RUN pnpm --filter @cortex/meet-bot exec playwright install chrome
 COPY --from=build /repo/services/meet-bot/dist services/meet-bot/dist
+COPY services/meet-bot/src/local-wake.py services/meet-bot/dist/local-wake.py
 
 RUN mkdir -p /app/storage/screenshots /profiles \
   && chown -R pwuser:pwuser /app/storage /profiles

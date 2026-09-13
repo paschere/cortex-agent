@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
-import { takeSpokenClauses, VOICE_LIVE_FACTS, wantsLiveLookup } from '@/lib/voice-spoken';
+import { VOICE_LIVE_FACTS, takeSpokenClauses, wantsLiveLookup } from '@/lib/voice-spoken';
 import { getTool, listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
 import { type CoreTool, streamText, tool } from 'ai';
@@ -40,8 +40,10 @@ export const maxDuration = 60;
  * la sala oye la primera frase sin esperar el resto. `done` cierra el turno.
  *
  * ===========================================================================
- * MODO VOZ = AUTO-AUTORIZA. Y POR QUÉ ESO ES PELIGROSO Y AUN ASÍ CORRECTO.
+ * COMPATIBILIDAD: VOZ LEGACY AUTO-AUTORIZA; GPT-LIVE PIDE CONFIRMACIÓN.
  * ===========================================================================
+ * La ruta conversational=true conserva los controles de confirmación y remite
+ * las acciones pendientes al chat. Lo siguiente describe solo el modo legacy.
  * En una reunión por voz no hay tarjeta que clickear: si una herramienta
  * pidiera confirmación, el turno se quedaría mudo esperando a nadie. Así que
  * en modo voz las confirmaciones se AUTO-AUTORIZAN (`confirmed: true`). Es una
@@ -59,6 +61,7 @@ const Body = z.object({
   transcript: z.string().max(20_000),
   /** Saludo / «¿me oyes?»: sin tools, para no gastar 2–4 s mirando el catálogo. */
   quick: z.boolean().optional(),
+  conversational: z.boolean().optional(),
 });
 
 type UUID = `${string}-${string}-${string}-${string}-${string}`;
@@ -182,7 +185,9 @@ export async function POST(req: NextRequest) {
       `Estás EN una reunión por voz, y alguien te acaba de nombrar. Responde para DECIRSE EN VOZ ALTA: natural, sin listas ni markdown ni emojis. Puedes usar tus herramientas y el cerebro de la empresa. Si actúas (mandar algo, crear algo), dilo en la misma frase. ${VOICE_LIVE_FACTS}`,
       `TRANSCRIPT RECIENTE DE LA REUNIÓN:\n${transcript || '(nada aún)'}`,
       ...(brief
-        ? [`CONSULTA WEB YA HECHA (fuente de las cifras; no uses un número que no esté aquí):\n${brief}`]
+        ? [
+            `CONSULTA WEB YA HECHA (fuente de las cifras; no uses un número que no esté aquí):\n${brief}`,
+          ]
         : []),
     ],
   }).catch(() => ({
@@ -199,16 +204,20 @@ export async function POST(req: NextRequest) {
         parameters: def.inputSchema,
         execute: async (args, { abortSignal }) => {
           try {
-            // MODO VOZ: auto-autoriza. Ver la cabecera para lo que abre.
+            // GPT-Live conserves confirmation gates; legacy callers retain their policy.
             return await runTool(
               def,
               args,
               { ...scopedCtx, signal: abortSignal },
-              { confirmed: true },
+              { confirmed: parsed.data.conversational !== true },
             );
           } catch (err) {
             if (err instanceof ConfirmationRequiredError) {
-              return { __error: true, message: 'necesitaba confirmación' };
+              return {
+                __error: true,
+                message:
+                  'Esta acción necesita confirmación. Pide al usuario revisarla y ejecutarla desde el chat de Cortex; no está ejecutada ni hay una tarjeta creada por esta llamada.',
+              };
             }
             return { __error: true, message: (err as Error).message };
           }
