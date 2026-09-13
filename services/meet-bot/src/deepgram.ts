@@ -11,6 +11,12 @@ import WebSocket from 'ws';
  */
 
 export interface Transcript {
+  id?: string;
+  role?: 'user' | 'assistant';
+  source?: 'gpt-live';
+  startMs?: number;
+  endMs?: number;
+  fragments?: Array<{ text: string; startMs?: number; endMs?: number }>;
   text: string;
   isFinal: boolean;
   speaker: string | null;

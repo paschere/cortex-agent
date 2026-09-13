@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import type { LiveTranscriptFragment } from './live-captions';
 
 const LIVE_URL = 'wss://api.openai.com/v1/live/sessions';
 
@@ -18,7 +19,7 @@ export interface OpenAILiveOptions {
   closeTimeoutMs?: number;
   onAudio: (pcm24k: Buffer) => void;
   onClearPlayback: () => void;
-  onTranscript?: (fragment: { role: 'user' | 'assistant'; text: string }) => void;
+  onTranscript?: (fragment: LiveTranscriptFragment) => void;
   onOutputActivity?: () => void;
   onUsage?: (seconds: number, final: boolean) => void;
   onDelegation: (delegation: LiveDelegation) => Promise<string>;
@@ -216,7 +217,16 @@ export class OpenAILiveTransport {
 
     if (event.type === 'session.input_transcript.delta' && typeof event.delta === 'string') {
       this.inputTranscript = (this.inputTranscript + event.delta).slice(-20_000);
-      this.options.onTranscript?.({ role: 'user', text: event.delta });
+      this.options.onTranscript?.({
+        role: 'user',
+        text: event.delta,
+        ...(typeof event.start_ms === 'number' && Number.isFinite(event.start_ms)
+          ? { startMs: event.start_ms }
+          : {}),
+        ...(typeof event.end_ms === 'number' && Number.isFinite(event.end_ms)
+          ? { endMs: event.end_ms }
+          : {}),
+      });
       // Live has no output-audio-done marker. New caller speech after output audio
       // is the reliable local barge-in boundary for discarding queued playback.
       this.clearPlaybackIfNeeded();
@@ -224,7 +234,16 @@ export class OpenAILiveTransport {
     }
     if (event.type === 'session.output_transcript.delta' && typeof event.delta === 'string') {
       this.outputTranscript = (this.outputTranscript + event.delta).slice(-20_000);
-      this.options.onTranscript?.({ role: 'assistant', text: event.delta });
+      this.options.onTranscript?.({
+        role: 'assistant',
+        text: event.delta,
+        ...(typeof event.start_ms === 'number' && Number.isFinite(event.start_ms)
+          ? { startMs: event.start_ms }
+          : {}),
+        ...(typeof event.end_ms === 'number' && Number.isFinite(event.end_ms)
+          ? { endMs: event.end_ms }
+          : {}),
+      });
       return;
     }
     if (

@@ -11,7 +11,10 @@ async function main() {
   const requests: Array<Record<string, unknown>> = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_url, init) => {
-    requests.push(JSON.parse(String(init?.body)));
+    const body = JSON.parse(String(init?.body));
+    if (body.bootstrap)
+      return Response.json({ instructions: 'Eres Cortex, gerente virtual de Empresa A.' });
+    requests.push(body);
     return Response.json({ answer: 'Resultado verificado' });
   };
   let callbacks: OpenAILiveOptions | undefined;
@@ -53,6 +56,8 @@ async function main() {
   assert.equal(sent, 0);
   await Promise.all([voice.wake(), voice.wake()]);
   assert.equal(created, 1);
+  assert.match(callbacks?.instructions ?? '', /Empresa A/);
+  assert.equal(callbacks?.voice, 'gleam');
   await callbacks?.onDelegation({
     id: 'd1',
     offsetMs: 0,
@@ -81,6 +86,56 @@ async function main() {
   assert.equal(sent, 1);
   assert.equal(created, 1);
   await voice.sleep();
+  let releaseBootstrap: ((response: Response) => void) | undefined;
+  let cancelledCreated = 0;
+  globalThis.fetch = async () =>
+    new Promise<Response>((resolve) => {
+      releaseBootstrap = resolve;
+    });
+  const cancelled = new MeetLiveVoice({
+    config: {
+      openaiKey: 'synthetic',
+      cortexBaseUrl: 'https://cortex.invalid',
+      serviceToken: 'test',
+    } as Config,
+    owner: 'org-b',
+    sessionId: 'call-b',
+    audio: async () => {},
+    clear: async () => {},
+    transcript: () => {},
+    status: () => {},
+    createTransport: () => {
+      cancelledCreated++;
+      throw new Error('must not connect after mute');
+    },
+  });
+  const pending = cancelled.wake();
+  cancelled.setMuted(true);
+  releaseBootstrap?.(Response.json({ instructions: 'Cortex empresa B' }));
+  await pending;
+  assert.equal(cancelledCreated, 0, 'mute during context loading cannot open a billable session');
+  globalThis.fetch = async () => new Response('', { status: 503 });
+  cancelled.setMuted(false);
+  const unavailable = new MeetLiveVoice({
+    config: {
+      openaiKey: 'synthetic',
+      cortexBaseUrl: 'https://cortex.invalid',
+      serviceToken: 'test',
+    } as Config,
+    owner: 'org-c',
+    sessionId: 'call-c',
+    audio: async () => {},
+    clear: async () => {},
+    transcript: () => {},
+    status: () => {},
+    createTransport: () => {
+      cancelledCreated++;
+      throw new Error('must not connect without identity');
+    },
+  });
+  await unavailable.wake();
+  assert.equal(cancelledCreated, 0, 'missing company context fails closed');
+  globalThis.fetch = originalFetch;
   console.log(
     'Meet Live: zero standby cloud audio, one session per wake, mute closes billing and stale playback',
   );

@@ -23,9 +23,25 @@ export const maxDuration = 120;
  */
 
 const Line = z.object({
+  id: z.string().max(160).optional(),
   text: z.string(),
+  isFinal: z.boolean().optional(),
   speaker: z.string().nullable(),
   at: z.number(),
+  role: z.enum(['user', 'assistant']).optional(),
+  source: z.literal('gpt-live').optional(),
+  startMs: z.number().optional(),
+  endMs: z.number().optional(),
+  fragments: z
+    .array(
+      z.object({
+        text: z.string(),
+        startMs: z.number().optional(),
+        endMs: z.number().optional(),
+      }),
+    )
+    .max(2_000)
+    .optional(),
 });
 
 const Person = z.object({

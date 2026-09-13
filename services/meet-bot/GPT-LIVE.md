@@ -28,3 +28,11 @@ Fuentes: https://developers.openai.com/api/docs/guides/live ; https://developers
 Comparte la pantalla en Meet, di «Cortex», espera «Te escucho» y pide «mira lo que estoy mostrando y compáralo con el cerebro». Cada petición visual explícita toma una captura nueva del viewport visible del bot y la envía directamente al cerebro de esa empresa. No ve ventanas privadas, filas ocultas ni el documento completo. Si no detecta una presentación compartida o falla la captura, pide compartir pantalla.
 
 La captura de voz es efímera: no se sube al archivo de la reunión ni se incorpora automáticamente al cerebro. El modo conversacional no toma capturas periódicas; las reuniones de notas sin voz conservan su registro visual existente. Las acciones propuestas mantienen sus confirmaciones. Antes de darlo por validado, probar una presentación real, una pregunta sobre ella y una pregunta sin pantalla compartida.
+
+## Identidad, voz y subtítulos
+
+Antes de abrir cada sesión de voz, el bot solicita al backend un contexto breve autenticado del workspace: identidad Cortex, nombre de la empresa y reglas de delegación. Si no puede cargarlo, no abre una sesión genérica. El prompt completo, el cerebro, los permisos y los procedimientos siguen en el backend que responde con el contexto grupal autorizado.
+
+La voz de Meet usa Gleam con instrucciones de español colombiano y un ritmo conversacional. La naturalidad y el acento requieren una escucha real; cambiar la voz no garantiza un acento regional. Se verificó una sesión sintética de OpenAI con respuesta de identidad Cortex; esto no prueba reproducción dentro de Meet.
+
+Los subtítulos activos conservan los fragmentos originales y sus tiempos, separados por rol, en filas estables que se actualizan en vivo y al refrescar. No se marcan como turnos finalizados: GPT-Live no envía ese evento. Una transcripción de salida tampoco prueba que otro participante oyó todo el audio. Las filas activas se conservan en el archivo de la reunión; en reposo no se transcribe la sala.

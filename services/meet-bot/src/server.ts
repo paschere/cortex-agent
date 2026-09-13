@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http';
 import type { Config } from './config';
 import type { Transcript } from './deepgram';
+import { retainTranscript } from './live-captions';
 import { MeetSession, type MeetStatus } from './session';
 
 /**
@@ -99,7 +100,7 @@ export function startServer(config: Config): Server {
           status: m.status === 'failed' ? 'failed' : 'ended',
           detail: m.detail,
           participants: m.participants.map((p) => ({ id: p.id, name: p.name, self: p.self })),
-          transcript: m.transcript.map((t) => ({ text: t.text, speaker: t.speaker, at: t.at })),
+          transcript: m.transcript,
           timeline: m.session.snapshotTimeline(),
         }),
         signal: AbortSignal.timeout(90_000),
@@ -237,10 +238,8 @@ export function startServer(config: Config): Server {
         config,
         {
           onTranscript: (t) => {
-            // Solo los finales se guardan; los parciales viajan al vivo y se
-            // reemplazan. Así el transcript acumulado (el que se importa) no
-            // repite media frase tres veces.
-            if (t.isFinal) m.transcript.push(t);
+            // Live captions update a stable row; Deepgram keeps its final-only contract.
+            retainTranscript(m.transcript, t);
             push(m, 'transcript', t);
           },
           onStatus: (status, detail) => {

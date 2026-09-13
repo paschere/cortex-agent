@@ -3,6 +3,12 @@
 import { CallTimeline, type VisibleEvent } from '@/components/meetings/CallTimeline';
 import { ParticipantStrip } from '@/components/meetings/ParticipantStrip';
 import { type MeetingParticipant, speakerTone } from '@/components/meetings/speakers';
+import {
+  type LiveTranscriptLine,
+  isGptLiveLine,
+  mergeTranscriptSnapshot,
+  upsertDisplayLine,
+} from '@/lib/live-transcript';
 import { Loader2, Mic, MicOff, Radio, Send, Sparkles, Users, Volume2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -36,12 +42,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * bufferiza y llega tarde.
  */
 
-export interface Line {
-  text: string;
-  isFinal: boolean;
-  speaker: string | null;
-  at: number;
-}
+export type Line = LiveTranscriptLine;
 interface ChatMsg {
   role: 'you' | 'cortex';
   text: string;
@@ -123,6 +124,8 @@ export function LiveRoom({
   const [muted, setMuted] = useState(false);
   const [people, setPeople] = useState<MeetingParticipant[]>(snapshot?.people ?? []);
   const transcriptEnd = useRef<HTMLDivElement | null>(null);
+  const followTranscript = useRef(true);
+  const [showLatest, setShowLatest] = useState(false);
   const chatEnd = useRef<HTMLDivElement | null>(null);
   const lineRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
   const [timeline, setTimeline] = useState<VisibleEvent[]>(snapshot?.timeline ?? []);
@@ -161,7 +164,7 @@ export function LiveRoom({
               timeline?: VisibleEvent[];
             };
             setStatus('ended');
-            setLines((data.transcript ?? []).filter((t) => t.isFinal !== false));
+            setLines((prev) => mergeTranscriptSnapshot(prev, data.transcript ?? []));
             if (Array.isArray(data.participants)) setPeople(data.participants);
             if (Array.isArray(data.timeline)) setTimeline(data.timeline);
             setPartial(null);
@@ -183,7 +186,7 @@ export function LiveRoom({
         };
         if (data.status) setStatus(data.status);
         if (data.detail !== undefined) setDetail(data.detail ?? null);
-        setLines((data.transcript ?? []).filter((t) => t.isFinal !== false));
+        setLines((prev) => mergeTranscriptSnapshot(prev, data.transcript ?? []));
         if (Array.isArray(data.participants)) setPeople(data.participants);
         if (Array.isArray(data.timeline)) setTimeline(data.timeline);
       } catch {
@@ -222,10 +225,10 @@ export function LiveRoom({
     });
     es.addEventListener('transcript', (e) => {
       const t = JSON.parse((e as MessageEvent).data) as Line;
-      if (t.isFinal) {
-        setLines((prev) =>
-          prev.some((p) => p.at === t.at && p.text === t.text) ? prev : [...prev, t],
-        );
+      if (isGptLiveLine(t)) {
+        setLines((prev) => upsertDisplayLine(prev, t));
+      } else if (t.isFinal) {
+        setLines((prev) => upsertDisplayLine(prev, t));
         setPartial(null);
       } else {
         setPartial(t);
@@ -239,7 +242,11 @@ export function LiveRoom({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: lines/partial son el disparador del autoscroll.
   useEffect(() => {
-    transcriptEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (followTranscript.current) {
+      transcriptEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } else {
+      setShowLatest(true);
+    }
   }, [lines, partial]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: chat/asking son el disparador del autoscroll.
   useEffect(() => {
@@ -366,7 +373,15 @@ export function LiveRoom({
 
       <div className="grid min-h-0 flex-1 md:grid-cols-[1.3fr_1fr]">
         {/* Transcript en vivo */}
-        <div className="flex min-h-[40vh] min-w-0 flex-col overflow-y-auto border-b border-border p-4 md:min-h-0 md:border-b-0 md:border-r">
+        <div
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 72;
+            followTranscript.current = nearBottom;
+            if (nearBottom) setShowLatest(false);
+          }}
+          className="relative flex min-h-[40vh] min-w-0 flex-col overflow-y-auto border-b border-border p-4 md:min-h-0 md:border-b-0 md:border-r"
+        >
           <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
             <Mic className="h-3.5 w-3.5" /> {dead ? 'Lo que se dijo' : 'Lo que se dice'}
             {lines.length > 0 ? (
@@ -389,7 +404,7 @@ export function LiveRoom({
               const tone = l.speaker ? speakerTone(l.speaker) : null;
               return (
                 <p
-                  key={`${l.at}-${i}`}
+                  key={l.id ?? `${l.at}-${i}`}
                   ref={(el) => {
                     if (el) lineRefs.current.set(l.at, el);
                     else lineRefs.current.delete(l.at);
@@ -403,8 +418,12 @@ export function LiveRoom({
                   >
                     {clock(l.at)}
                   </button>
-                  <span className={`font-semibold ${tone?.text ?? 'text-ink-faint'}`}>
-                    {l.speaker ?? 'Alguien'}:{' '}
+                  <span
+                    className={`font-semibold ${
+                      l.role === 'assistant' ? 'text-primary' : (tone?.text ?? 'text-ink-faint')
+                    }`}
+                  >
+                    {l.speaker ?? (l.role === 'assistant' ? 'Cortex' : 'Alguien')}:{' '}
                   </span>
                   {l.text}
                 </p>
@@ -423,6 +442,19 @@ export function LiveRoom({
             ) : null}
           </div>
           <div ref={transcriptEnd} />
+          {showLatest ? (
+            <button
+              type="button"
+              onClick={() => {
+                followTranscript.current = true;
+                setShowLatest(false);
+                transcriptEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+              }}
+              className="sticky bottom-0 mt-3 self-center rounded-pill border border-border bg-surface px-3 py-1.5 text-xs font-medium text-ink shadow-card hover:bg-surface-2"
+            >
+              Volver a lo último
+            </button>
+          ) : null}
         </div>
 
         {/* Chat de la reunión */}

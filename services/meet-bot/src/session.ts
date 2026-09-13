@@ -19,6 +19,7 @@ import {
   setHooks,
   waitForGoogleMeetingAdmission,
 } from './join';
+import { retainTranscript } from './live-captions';
 import { LocalWakeDetector } from './local-wake';
 import { MeetLiveVoice } from './meet-live-voice';
 import { humanPause, launchPersistentBrowser, warmUpProfile } from './stealth';
@@ -766,14 +767,12 @@ export class MeetSession {
           ).__cortexVoice?.stopPlayback();
         });
       },
-      transcript: (role, text) => {
-        // These are fragments, not completed or guaranteed audible utterances.
-        this.events.onTranscript({
-          text,
-          isFinal: false,
-          speaker: role === 'assistant' ? this.botName : null,
-          at: (Date.now() - this.heardAt) / 1000,
-        });
+      meetingStartedAt: this.heardAt,
+      transcript: (row) => {
+        const line = { ...row, speaker: row.role === 'assistant' ? this.botName : null };
+        retainTranscript(this.recent, line);
+        if (this.recent.length > 200) this.recent.shift();
+        this.events.onTranscript(line);
       },
       status: (state) => console.log(`[cortex-meet] ${this.id} GPT-Live: ${state}`),
     });
