@@ -160,6 +160,11 @@ check(
   true,
 );
 check(
+  'fake camera is a y4m, not /dev/null',
+  getJoinBrowserArgs().some((a) => a.startsWith('--use-file-for-fake-video-capture=') && !a.endsWith('/dev/null')),
+  true,
+);
+check(
   'streams PCM into the mic instead of waiting for a full WAV',
   VOICE_INJECT_SCRIPT.includes('speakPcm') && VOICE_INJECT_SCRIPT.includes('beginSpeak'),
   true,

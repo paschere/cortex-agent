@@ -32,6 +32,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { virtualCamY4mPath } from "../virtual-camera";
 
 /** The pinned browser UI locale (#856). Deployment knob; default en-US. */
 export function resolveBotUiLocale(): string {
@@ -71,7 +72,6 @@ export const JOIN_BROWSER_ARGS: readonly string[] = [
   // Start AudioContexts in 'running', not 'suspended' — Vexa taps remote
   // participant audio via createMediaStreamSource of Meet's playing elements.
   "--autoplay-policy=no-user-gesture-required",
-  "--use-file-for-fake-video-capture=/dev/null",
   "--disable-blink-features=AutomationControlled",
   "--disable-features=VizDisplayCompositor",
   "--disable-site-isolation-trials",
@@ -123,5 +123,6 @@ export function getJoinBrowserArgs(): string[] {
     ...JOIN_BROWSER_ARGS,
     ...getLocaleBrowserArgs(),
     `--use-file-for-fake-audio-capture=${silentMicWavPath()}`,
+    `--use-file-for-fake-video-capture=${virtualCamY4mPath()}`,
   ];
 }

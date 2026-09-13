@@ -553,6 +553,35 @@ export async function joinGoogleMeeting(
     await handle.click();
   };
 
+  const setLobbyCamera = async (wantOn: boolean): Promise<void> => {
+    const selectors = wantOn
+      ? [
+          'button[aria-label*="Turn on camera" i]',
+          'button[aria-label*="Activar cámara" i]',
+          'button[aria-label*="Encender cámara" i]',
+          googleCameraButtonSelectors[2],
+        ]
+      : [
+          googleCameraButtonSelectors[0],
+          googleCameraButtonSelectors[1],
+          'button[aria-label*="Turn off camera" i]',
+          'button[aria-label*="Desactivar cámara" i]',
+        ];
+    for (const sel of selectors) {
+      if (!sel) continue;
+      try {
+        const handle = await page.waitForSelector(sel, { timeout: 1500 });
+        if (!handle) continue;
+        await clickHandle(handle, wantOn ? "camera_on" : "camera_off");
+        log(wantOn ? "Camera turned on (virtual)." : "Camera turned off.");
+        return;
+      } catch {
+        /* next selector */
+      }
+    }
+    log(wantOn ? "Camera on-button not found (may already be on)." : "Camera already off or not found.");
+  };
+
   // Fill a text field via humanized click+paste, falling back to page.fill.
   const fillField = async (
     handle: ElementHandle<Element>,
@@ -612,13 +641,7 @@ export async function joinGoogleMeeting(
 
     // Mic: Meet suele nacer muteado. Con voz hay que ENCENDERLO; sin voz, apagarlo.
     await setGoogleMeetMicrophone(page, Boolean(botConfig.voiceEnabled), botConfig.botName, botConfig.display);
-
-    try {
-      const cameraHandle = await page.waitForSelector(googleCameraButtonSelectors[0], { timeout: 3000 });
-      if (cameraHandle) { await clickHandle(cameraHandle, "camera"); log("Camera turned off."); }
-    } catch (e) {
-      log("Camera already off or not found.");
-    }
+    await setLobbyCamera(Boolean(botConfig.cameraEnabled));
 
     // Authenticated lobby: one primary CTA — "Join now" (standard join),
     // "Switch here" (same account already in the call) or "Ask to join"
@@ -669,13 +692,7 @@ export async function joinGoogleMeeting(
     await fillField(nameHandle!, nameFieldSelector, botName, "name");
 
     await setGoogleMeetMicrophone(page, Boolean(botConfig.voiceEnabled), botConfig.botName, botConfig.display);
-
-    try {
-      const cameraHandle = await page.waitForSelector(googleCameraButtonSelectors[0], { timeout: 1000 });
-      if (cameraHandle) await clickHandle(cameraHandle, "camera");
-    } catch (e) {
-      log("Camera already off or not found.");
-    }
+    await setLobbyCamera(Boolean(botConfig.cameraEnabled));
 
     const { handle: joinHandle } = await waitForLobbyCta(
       page,

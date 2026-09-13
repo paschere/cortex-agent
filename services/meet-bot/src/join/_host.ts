@@ -22,6 +22,8 @@ export interface BotConfig {
   display?: string;
   /** When true, leave the Meet mic on so Cortex can speak. */
   voiceEnabled?: boolean;
+  /** When true, turn the camera on so the virtual canvas is what the room sees. */
+  cameraEnabled?: boolean;
   automaticLeave?: {
     waitingRoomTimeout: number;
     noOneJoinedTimeout?: number;

@@ -34,6 +34,7 @@ import {
   shouldTakeFrame,
   uploadVisualFrame,
 } from './visual-log';
+import { resolveVirtualCamera } from './virtual-camera';
 import { VOICE_INJECT_SCRIPT } from './voice-inject';
 
 /**
@@ -255,6 +256,16 @@ export class MeetSession {
 
     this.display = await this.ensureDisplay();
 
+    const camera = await resolveVirtualCamera({
+      spec: this.config.camera,
+      name: this.botName,
+      subtitle: this.config.cameraSubtitle,
+      accent: this.config.cameraColor,
+    });
+    console.log(
+      `[cortex-meet] ${this.id} cámara virtual mode=${camera.mode} enabled=${camera.enabled}`,
+    );
+
     const { context, page } = await launchPersistentBrowser(profileDir, {
       proxyServer: this.config.proxyServer,
       proxyUsername: this.config.proxyUsername,
@@ -268,6 +279,10 @@ export class MeetSession {
 
     await this.context.addInitScript(AUDIO_TAP_SCRIPT);
     await page.evaluate(AUDIO_TAP_SCRIPT).catch(() => undefined);
+    if (camera.script) {
+      await this.context.addInitScript(camera.script);
+      await page.evaluate(camera.script).catch(() => undefined);
+    }
     if (this.voiceEnabled) {
       await this.context.addInitScript(VOICE_INJECT_SCRIPT);
       await page.evaluate(VOICE_INJECT_SCRIPT).catch(() => undefined);
@@ -311,6 +326,7 @@ export class MeetSession {
       uiInteractionMode: this.config.uiInteractionMode,
       display: this.display,
       voiceEnabled: this.voiceEnabled,
+      cameraEnabled: camera.enabled,
       automaticLeave: { waitingRoomTimeout: this.config.admissionTimeoutMs },
     };
     this.botConfig = botConfig;
@@ -379,6 +395,7 @@ export class MeetSession {
     this.startRosterWatch(page);
     this.startCaptureWatch(page);
     this.startVisualWatch(page);
+    if (camera.enabled) await this.armVirtualCamera(page);
     if (this.voiceEnabled) await this.ensureVoiceReady();
     this.startCallEndWatch(page);
     this.setStatus('live');
@@ -430,6 +447,15 @@ export class MeetSession {
         `[cortex-meet] ${this.id} pulse ausente: ${err instanceof Error ? err.message : err}`,
       );
     }
+  }
+
+  private async armVirtualCamera(page: Page): Promise<void> {
+    const result = await page
+      .evaluate(
+        '(window.__cortexCamera && window.__cortexCamera.arm()) || {ok:false,reason:"sin cámara"}',
+      )
+      .catch((err: Error) => ({ ok: false, reason: err.message }));
+    console.log(`[cortex-meet] ${this.id} camera arm ${JSON.stringify(result)}`);
   }
 
   private async armAudioTap(page: Page): Promise<void> {

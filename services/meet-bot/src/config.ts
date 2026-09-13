@@ -84,6 +84,13 @@ export interface Config {
    * que Google bloquea. Formato: https://browser-production-xxx.up.railway.app
    */
   browserServiceUrl: string | null;
+  /**
+   * Cámara virtual que ve la sala. `card` (default) pinta el nombre;
+   * `off` la deja apagada; una URL o ruta usa esa imagen/video.
+   */
+  camera: string;
+  cameraSubtitle: string;
+  cameraColor: string | null;
 }
 
 export function loadConfig(): Config {
@@ -117,5 +124,8 @@ export function loadConfig(): Config {
     everyoneLeftTimeoutMs: number('MEET_EVERYONE_LEFT_MS', 45_000),
     warmup: process.env.MEET_WARMUP?.trim() !== 'false',
     browserServiceUrl: process.env.MEET_BROWSER_SERVICE_URL?.trim() || null,
+    camera: process.env.MEET_CAMERA?.trim() || 'card',
+    cameraSubtitle: process.env.MEET_CAMERA_SUBTITLE?.trim() || 'tomando notas',
+    cameraColor: process.env.MEET_CAMERA_COLOR?.trim() || null,
   };
 }
