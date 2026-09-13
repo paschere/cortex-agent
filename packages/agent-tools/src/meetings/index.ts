@@ -42,6 +42,12 @@ export {
 export type { CallEvent, CallEventKind, RosterPerson } from './timeline';
 export { applyCaptions, captionCallFrames } from './caption-frames';
 export type { CaptionableFrame } from './caption-frames';
+export {
+  isMeetingUrl,
+  meetingPlatformLabel,
+  parseMeetingUrl,
+} from './meeting-url';
+export type { MeetingPlatform, ParsedMeetingUrl } from './meeting-url';
 
 // The importer's engine, for the callers that are not a model turn: the Inngest
 // sweep and the Brain Knowledge page's manual import button.

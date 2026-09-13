@@ -20,6 +20,8 @@ export interface StealthLaunchInput {
   locale?: string;
   timezone?: string;
   display?: string;
+  /** Playwright writes the sitting here as webm (720p). */
+  videoDir?: string;
 }
 
 export function chromeLaunchOptions(
@@ -56,6 +58,9 @@ export function chromeLaunchOptions(
     ignoreDefaultArgs: ['--enable-automation'],
     args,
     viewport: null,
+    ...(input.videoDir
+      ? { recordVideo: { dir: input.videoDir, size: { width: 1280, height: 720 } } }
+      : {}),
     locale,
     timezoneId,
     colorScheme: 'light',

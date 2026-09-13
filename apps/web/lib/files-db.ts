@@ -117,6 +117,20 @@ export async function getFileDirect(
   return { content: row.content, contentType: row.content_type };
 }
 
+/** Concatena un trozo al bytea ya guardado. El bot manda el webm en partes
+ *  porque Vercel no traga un POST de 80 MB. */
+export async function appendFileDirect(input: DirectPutInput): Promise<boolean> {
+  const result = await pool.query(
+    `update public.app_files
+        set content = content || $3::bytea,
+            content_type = $4,
+            size_bytes = size_bytes + $5
+      where bucket = $1 and path = $2`,
+    [input.bucket, input.path, input.content, input.contentType, input.content.byteLength],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function fileExistsDirect(bucket: string, path: string): Promise<boolean> {
   const result = await pool.query(
     'select 1 from public.app_files where bucket = $1 and path = $2',
