@@ -245,6 +245,7 @@ export const VOICE_INJECT_SCRIPT = /* js */ `
     mute: () => { stopPlayback(); gain.gain.value = 0; if (micTrack) micTrack.enabled = false; },
     unmute: () => { gain.gain.value = 1; if (micTrack) micTrack.enabled = true; void hijackSenders(); },
     isSpeaking: () => speaking,
+    playbackRemainingMs: () => Math.max(0, playHead - ctx.currentTime) * 1000,
     status: () => ({
       ctx: ctx.state,
       gumAudio,

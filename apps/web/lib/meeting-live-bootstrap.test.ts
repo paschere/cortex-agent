@@ -10,6 +10,8 @@ describe('meeting GPT-Live bootstrap', () => {
     expect(prompt).toContain('no te presentes como un producto o asistente de OpenAI');
     expect(prompt).toContain('Soy Cortex, el gerente virtual de Acme Colombia');
     expect(prompt).toContain('no repitas la presentación');
+    expect(prompt).toContain('una sola respuesta completa');
+    expect(prompt).toContain('guarda silencio hasta que vuelvan a nombrar explícitamente a Cortex');
   });
 
   it('keeps company facts and private context in the delegated backend', () => {

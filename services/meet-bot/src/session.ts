@@ -767,6 +767,18 @@ export class MeetSession {
           ).__cortexVoice?.stopPlayback();
         });
       },
+      playbackRemainingMs: async () =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as { __cortexVoice?: { playbackRemainingMs: () => number } }
+            ).__cortexVoice?.playbackRemainingMs() ?? 0,
+        ),
+      recentContext: () =>
+        this.recent
+          .slice(-40)
+          .map((line) => `${Math.round(line.at)}s ${line.speaker ?? 'Participante'}: ${line.text}`)
+          .join('\n'),
       meetingStartedAt: this.heardAt,
       transcript: (row) => {
         const line = { ...row, speaker: row.role === 'assistant' ? this.botName : null };
@@ -774,7 +786,26 @@ export class MeetSession {
         if (this.recent.length > 200) this.recent.shift();
         this.events.onTranscript(line);
       },
-      status: (state) => console.log(`[cortex-meet] ${this.id} GPT-Live: ${state}`),
+      status: (state) => {
+        console.log(`[cortex-meet] ${this.id} GPT-Live: ${state}`);
+        const cameraState =
+          state === 'respondiendo'
+            ? 'speaking'
+            : state === 'conversando'
+              ? 'listening'
+              : ['preparando Cortex', 'conectando', 'consultando cerebro'].includes(state)
+                ? 'processing'
+                : 'idle';
+        void page
+          .evaluate(
+            (value) =>
+              (
+                window as unknown as { __cortexCamera?: { setState: (state: string) => void } }
+              ).__cortexCamera?.setState(value),
+            cameraState,
+          )
+          .catch(() => undefined);
+      },
     });
     this.localWake = new LocalWakeDetector({
       onWake: () => {

@@ -5,6 +5,7 @@ import type { OpenAILiveOptions } from './openai-live';
 async function main() {
   let created = 0;
   let sent = 0;
+  let lastSent = Buffer.alloc(0);
   let closed = 0;
   let played = 0;
   let captures = 0;
@@ -24,6 +25,7 @@ async function main() {
       cortexBaseUrl: 'https://cortex.invalid',
       serviceToken: 'test',
     } as Config,
+    recentContext: () => '12s Participante: Revisemos la cartera anterior.',
     captureView: async () => {
       captures++;
       return { imageBase64: 'synthetic', capturedAt: Date.now(), scope: 'meeting-viewport' };
@@ -41,7 +43,8 @@ async function main() {
       callbacks = opts;
       return {
         start: async () => {},
-        sendAudio: () => {
+        sendAudio: (pcm) => {
+          lastSent = pcm;
           sent++;
         },
         appendCommentary: () => true,
@@ -65,6 +68,13 @@ async function main() {
   });
   assert.equal(captures, 1);
   assert.equal(requests[0].visualRequested, true);
+  assert.match(String(requests[0].transcript), /cartera anterior/);
+  voice.push(Buffer.alloc(320, 1));
+  assert.ok(
+    lastSent.some((byte) => byte !== 0),
+    'room audio stays live during reasoning for corrections',
+  );
+  sent = 0;
   await callbacks?.onDelegation({
     id: 'd2',
     offsetMs: 1,
@@ -135,6 +145,54 @@ async function main() {
   });
   await unavailable.wake();
   assert.equal(cancelledCreated, 0, 'missing company context fails closed');
+  globalThis.fetch = originalFetch;
+  let drainCallbacks: OpenAILiveOptions | undefined;
+  let drainClosed = 0;
+  let remaining = 400;
+  globalThis.fetch = async () => Response.json({ instructions: 'Cortex de la empresa de prueba' });
+  const drain = new MeetLiveVoice({
+    config: {
+      openaiKey: 'synthetic',
+      cortexBaseUrl: 'https://cortex.invalid',
+      serviceToken: 'test',
+    } as Config,
+    owner: 'org-d',
+    sessionId: 'call-d',
+    audio: async () => {},
+    clear: async () => {},
+    transcript: () => {},
+    status: () => {},
+    playbackRemainingMs: async () => remaining,
+    createTransport: (opts) => {
+      drainCallbacks = opts;
+      return {
+        start: async () => {},
+        sendAudio: () => {},
+        appendCommentary: () => true,
+        close: async () => {
+          drainClosed++;
+        },
+      };
+    },
+  });
+  await drain.wake();
+  drainCallbacks?.onAudio(Buffer.alloc(480));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  remaining = 0;
+  await drain.finishResponseIfDrained(Date.now() + 3000);
+  assert.equal(drainClosed, 0, 'greeting must leave time for the question');
+  drainCallbacks?.onTranscript?.({ role: 'user', text: 'Consulta la cartera' });
+  drainCallbacks?.onAudio(Buffer.alloc(480));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  remaining = 400;
+  await drain.finishResponseIfDrained(Date.now() + 3000);
+  assert.equal(drainClosed, 0, 'browser playback must drain before sleep');
+  remaining = 0;
+  await drain.finishResponseIfDrained(Date.now() + 500);
+  assert.equal(drainClosed, 0, 'short output pause is not the end');
+  drainCallbacks?.onTranscript?.({ role: 'user', text: 'La charla de otros continúa' });
+  await drain.finishResponseIfDrained(Date.now() + 3000);
+  assert.equal(drainClosed, 1, 'ambient transcript cannot keep engagement alive');
   globalThis.fetch = originalFetch;
   console.log(
     'Meet Live: zero standby cloud audio, one session per wake, mute closes billing and stale playback',

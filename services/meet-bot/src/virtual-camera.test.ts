@@ -31,6 +31,12 @@ assert.ok(script.includes('getUserMedia'));
 assert.ok(script.includes('replaceTrack'));
 assert.ok(script.includes('Nora'));
 assert.ok(script.includes('__cortexLocalVideoTrackId'));
+assert.ok(script.includes('setState: (next)'));
+assert.ok(script.includes("listening: { label: 'Escuchando'"));
+assert.ok(script.includes("processing: { label: 'Pensando'"));
+assert.ok(script.includes("speaking: { label: 'Respondiendo'"));
+assert.ok(script.includes('ctx.lineTo(x, y)'));
+assert.ok(script.includes('state: cameraState'));
 
 async function main(): Promise<void> {
   const off = await resolveVirtualCamera({ spec: 'off', name: 'Cortex' });

@@ -36,3 +36,9 @@ Antes de abrir cada sesión de voz, el bot solicita al backend un contexto breve
 La voz de Meet usa Bossa con instrucciones de español colombiano y un ritmo conversacional. La naturalidad y el acento requieren una escucha real; cambiar la voz no garantiza un acento regional. Se verificó una sesión sintética de OpenAI con respuesta de identidad Cortex; esto no prueba reproducción dentro de Meet.
 
 Los subtítulos activos conservan los fragmentos originales y sus tiempos, separados por rol, en filas estables que se actualizan en vivo y al refrescar. No se marcan como turnos finalizados: GPT-Live no envía ese evento. Una transcripción de salida tampoco prueba que otro participante oyó todo el audio. Las filas activas se conservan en el archivo de la reunión; en reposo no se transcribe la sala.
+
+## Volver al reposo y retomar contexto
+
+Mientras está resolviendo una petición o hablando, la entrada de audio permanece abierta para aclaraciones e interrupciones. Después de una respuesta se cierra la sesión cuando no hay consultas pendientes, la cola del navegador terminó y pasaron 2.5 segundos sin nuevos fragmentos de audio. Ese margen es una heurística local: GPT-Live no publica un evento definitivo de fin de respuesta. Un saludo inicial no cierra la escucha antes de la pregunta. Los fragmentos de charla ambiente no renuevan el temporizador de actividad.
+
+Al despertar, el bot toma hasta 40 filas recientes de la transcripción de esta llamada y las incluye como contexto previo en las consultas al cerebro. Se señalan los intervalos sin transcripción; no se reconstruye lo ocurrido en reposo. La cámara virtual refleja reposo, escucha, consulta y respuesta mediante su canvas animado.

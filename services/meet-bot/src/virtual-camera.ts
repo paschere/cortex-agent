@@ -20,6 +20,7 @@ import { extname, join } from 'node:path';
  */
 
 export type CameraMode = 'off' | 'card' | 'image' | 'video';
+export type CameraState = 'idle' | 'listening' | 'processing' | 'speaking';
 
 export interface CameraPageConfig {
   mode: Exclude<CameraMode, 'off'>;
@@ -96,10 +97,7 @@ function guessMime(ref: string, fallback: string): string {
   return fallback;
 }
 
-async function loadMediaDataUrl(
-  ref: string,
-  kind: 'image' | 'video',
-): Promise<string | null> {
+async function loadMediaDataUrl(ref: string, kind: 'image' | 'video'): Promise<string | null> {
   const cap = kind === 'video' ? MAX_VIDEO : MAX_IMAGE;
   const fallback = kind === 'video' ? 'video/mp4' : 'image/png';
   try {
@@ -114,7 +112,8 @@ async function loadMediaDataUrl(
         console.log(`[cortex-meet] cámara: ${ref} pesa ${bytes.length} bytes, uso la tarjeta`);
         return null;
       }
-      const mime = (res.headers.get('content-type') ?? '').split(';')[0].trim() || guessMime(ref, fallback);
+      const mime =
+        (res.headers.get('content-type') ?? '').split(';')[0].trim() || guessMime(ref, fallback);
       return `data:${mime};base64,${bytes.toString('base64')}`;
     }
     const bytes = readFileSync(ref);
@@ -157,6 +156,21 @@ export function virtualCameraScript(cfg: CameraPageConfig): string {
     media.play().catch(function () {});
   }
 
+  const CAMERA_STATES = {
+    idle: { label: 'En la llamada', color: CFG.accent },
+    listening: { label: 'Escuchando', color: '#59D9C2' },
+    processing: { label: 'Pensando', color: '#A990FF' },
+    speaking: { label: 'Respondiendo', color: '#F3B562' },
+  };
+  const STATE_ALIASES = {
+    rest: 'idle', resting: 'idle', reposo: 'idle', ready: 'idle',
+    listen: 'listening', escucha: 'listening', hearing: 'listening',
+    process: 'processing', thinking: 'processing', procesando: 'processing',
+    response: 'speaking', responding: 'speaking', respuesta: 'speaking', speak: 'speaking',
+  };
+  let cameraState = 'idle';
+  let stateChangedAt = performance.now();
+
   function cover(srcW, srcH) {
     const scale = Math.max(W / srcW, H / srcH);
     const dw = srcW * scale;
@@ -165,37 +179,79 @@ export function virtualCameraScript(cfg: CameraPageConfig): string {
   }
 
   function paintCard(t) {
-    const g = ctx.createLinearGradient(0, 0, W, H);
-    g.addColorStop(0, '#0B1020');
-    g.addColorStop(1, '#161328');
+    const state = CAMERA_STATES[cameraState];
+    const seconds = t / 1000;
+    const transition = Math.min(1, (performance.now() - stateChangedAt) / 420);
+    const g = ctx.createRadialGradient(W * 0.5, H * 0.45, 40, W * 0.5, H * 0.45, 720);
+    g.addColorStop(0, '#15162A');
+    g.addColorStop(0.58, '#090B16');
+    g.addColorStop(1, '#05060C');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
-    const pulse = 0.55 + 0.45 * Math.sin(t / 700);
+
+    // A single continuous orbital spiral is the Cortex signature. Its motion
+    // changes with the live state while the composition remains calm in Meet.
+    const cx = W / 2;
+    const cy = H * 0.39;
+    const turns = cameraState === 'processing' ? 3.25 : 2.75;
+    const speed = cameraState === 'processing' ? 1.35 : cameraState === 'speaking' ? 0.9 : 0.42;
+    const breath = cameraState === 'listening' ? 1 + Math.sin(seconds * 3.1) * 0.055 : 1;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(seconds * speed);
+    ctx.scale(breath, breath);
+    ctx.lineCap = 'round';
+    ctx.shadowColor = state.color;
+    ctx.shadowBlur = cameraState === 'idle' ? 18 : 30;
+    const spiral = ctx.createLinearGradient(-150, -120, 150, 120);
+    spiral.addColorStop(0, 'rgba(255,255,255,0.06)');
+    spiral.addColorStop(0.46, state.color);
+    spiral.addColorStop(1, '#F4F0FF');
+    ctx.strokeStyle = spiral;
+    ctx.lineWidth = 7;
+    ctx.globalAlpha = 0.72 + transition * 0.28;
     ctx.beginPath();
-    ctx.arc(W / 2, H * 0.38, 118 + pulse * 10, 0, Math.PI * 2);
-    ctx.fillStyle = CFG.accent;
-    ctx.globalAlpha = 0.18 + pulse * 0.12;
-    ctx.fill();
+    for (let i = 0; i <= 260; i += 1) {
+      const p = i / 260;
+      const angle = p * Math.PI * 2 * turns;
+      const radius = 8 + p * 137;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius * 0.82;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
     ctx.globalAlpha = 1;
-    ctx.beginPath();
-    ctx.arc(W / 2, H * 0.38, 78, 0, Math.PI * 2);
-    ctx.fillStyle = CFG.accent;
-    ctx.fill();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '700 34px ui-sans-serif, system-ui, sans-serif';
+    ctx.shadowBlur = 0;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('C', W / 2, H * 0.38 + 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '600 22px ui-sans-serif, system-ui, sans-serif';
-    ctx.fillText('CORTEX', W / 2, H * 0.58);
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = '700 56px ui-sans-serif, system-ui, sans-serif';
-    ctx.fillText((CFG.name || 'Cortex').slice(0, 28), W / 2, H * 0.70);
-    if (CFG.subtitle) {
-      ctx.fillStyle = 'rgba(255,255,255,0.62)';
-      ctx.font = '500 26px ui-sans-serif, system-ui, sans-serif';
-      ctx.fillText(String(CFG.subtitle).slice(0, 48), W / 2, H * 0.80);
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    ctx.font = '600 18px ui-sans-serif, -apple-system, system-ui, sans-serif';
+    ctx.fillText('CORTEX', cx, H * 0.67);
+    ctx.fillStyle = '#F7F5FF';
+    ctx.font = '650 42px ui-sans-serif, -apple-system, system-ui, sans-serif';
+    ctx.fillText((CFG.name || 'Cortex').slice(0, 28), cx, H * 0.735);
+
+    const statusY = H * 0.825;
+    const dotPulse = cameraState === 'idle' ? 0.85 : 0.78 + Math.sin(seconds * 4.2) * 0.22;
+    ctx.beginPath();
+    ctx.arc(cx - 70, statusY, 6 + dotPulse * 2, 0, Math.PI * 2);
+    ctx.fillStyle = state.color;
+    ctx.shadowColor = state.color;
+    ctx.shadowBlur = 15;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(247,245,255,0.72)';
+    ctx.font = '500 24px ui-sans-serif, -apple-system, system-ui, sans-serif';
+    ctx.fillText(state.label, cx - 51, statusY + 1);
+
+    if (CFG.subtitle && cameraState === 'idle') {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(247,245,255,0.38)';
+      ctx.font = '450 18px ui-sans-serif, -apple-system, system-ui, sans-serif';
+      ctx.fillText(String(CFG.subtitle).slice(0, 48), cx, H * 0.89);
     }
   }
 
@@ -293,6 +349,17 @@ export function virtualCameraScript(cfg: CameraPageConfig): string {
   }
 
   window.__cortexCamera = {
+    setState: (next) => {
+      const raw = String(next || '').trim().toLowerCase();
+      const normalized = CAMERA_STATES[raw] ? raw : STATE_ALIASES[raw];
+      if (!normalized) return false;
+      if (normalized !== cameraState) {
+        cameraState = normalized;
+        stateChangedAt = performance.now();
+        paint();
+      }
+      return true;
+    },
     arm: async () => {
       paint();
       if (media && 'play' in media) media.play().catch(function () {});
@@ -305,6 +372,7 @@ export function virtualCameraScript(cfg: CameraPageConfig): string {
     },
     status: () => ({
       mode: CFG.mode,
+      state: cameraState,
       track: camTrack && camTrack.readyState,
       pcs: videoPcs.length,
     }),
