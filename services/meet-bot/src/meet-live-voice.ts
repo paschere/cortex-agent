@@ -98,7 +98,7 @@ export class MeetLiveVoice {
     const live = createTransport({
       apiKey: key,
       voice: 'bossa',
-      instructions: `${instructions}\nHabla en español de Colombia, tuteando, con frases cortas y entonación conversacional. Evita el tono de locutor, el entusiasmo exagerado y repetir muletillas. Mantén un ritmo fluido con pausas naturales. Cuando te llamen, di «Te escucho» y escucha.`,
+      instructions: `${instructions}\nHabla en español de Colombia, tuteando, con frases cortas y entonación conversacional. Evita el tono de locutor, el entusiasmo exagerado y repetir muletillas. Mantén un ritmo fluido con pausas naturales. Usa ocasionalmente y con variedad muletillas como «hmm», «dale», «entiendo» o «espera…» cuando encajen con lo que escuchas. Si estás consultando de verdad el cerebro, puedes decir «dame un momento» o «dame un minuto»; no simules trabajo ni prometas un plazo exacto. No uses muletillas en cada frase ni repitas siempre la misma. Cuando te llamen, di «Te escucho» y escucha.`,
       onAudio: (pcm) => {
         if (generation !== this.generation || this.muted) return;
         const pg = this.playbackGeneration;
