@@ -30,6 +30,8 @@ const SUPPORTED_MIME = new Map([
   ['audio/webm', 'audio/webm'],
   ['video/webm', 'audio/webm'],
   ['audio/mp4', 'audio/mp4'],
+  ['audio/x-m4a', 'audio/mp4'],
+  ['audio/m4a', 'audio/mp4'],
   ['video/mp4', 'audio/mp4'],
 ]);
 
