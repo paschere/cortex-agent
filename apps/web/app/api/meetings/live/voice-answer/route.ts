@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
+import { loadMeetingBrain } from '@/lib/meeting-brain';
 import { buildMeetingLiveBootstrap } from '@/lib/meeting-live-bootstrap';
 import { validateMeetingVoiceVisual } from '@/lib/meeting-voice-visual';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
@@ -220,6 +221,7 @@ export async function POST(req: NextRequest) {
     .eq('id', actor.agentId)
     .maybeSingle();
 
+  const brainEvidence = await loadMeetingBrain(question, scopedCtx);
   const live = !quick && wantsLiveLookup(question);
   const brief = live ? await liveWebBrief(question, scopedCtx) : null;
   if (live) logger.info({ owner, sessionId: body.sessionId }, 'voice-answer live lookup');
@@ -240,6 +242,7 @@ export async function POST(req: NextRequest) {
     audience: 'group',
     sections: [
       `Estás EN una reunión por voz, y alguien te acaba de nombrar. Responde para DECIRSE EN VOZ ALTA: natural, sin listas ni markdown ni emojis. Puedes usar tus herramientas y el cerebro de la empresa. Si actúas (mandar algo, crear algo), dilo en la misma frase. ${VOICE_LIVE_FACTS}`,
+      brainEvidence,
       `TRANSCRIPT RECIENTE DE LA REUNIÓN:\n${transcript || '(nada aún)'}`,
       ...(visualPromptSection ? [visualPromptSection] : []),
       ...(brief
@@ -249,7 +252,7 @@ export async function POST(req: NextRequest) {
         : []),
     ],
   }).catch(() => ({
-    system: `Eres Cortex, en una reunión por voz. Responde corto, para decirse en voz alta.${visualPromptSection ? ` ${visualPromptSection}` : ''}`,
+    system: `Eres Cortex, en una reunión por voz. Responde corto, para decirse en voz alta. ${brainEvidence}${visualPromptSection ? ` ${visualPromptSection}` : ''}`,
   }));
 
   const aiTools: Record<string, CoreTool> = {};
