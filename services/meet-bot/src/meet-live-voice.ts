@@ -48,6 +48,7 @@ export class MeetLiveVoice {
   private requestHeard = false;
   private responseAudioAt = 0;
   private lastAudioAt = 0;
+  private silentOutputMs = 0;
   private pendingDelegations = 0;
   private checkingDrain = false;
   private visibleStatus = '';
@@ -84,6 +85,7 @@ export class MeetLiveVoice {
     this.requestHeard = false;
     this.responseAudioAt = 0;
     this.lastAudioAt = 0;
+    this.silentOutputMs = 0;
     this.pendingDelegations = 0;
     this.resampler = new LiveAudioResampler();
     let instructions: string;
@@ -144,9 +146,21 @@ export class MeetLiveVoice {
       instructions: `${instructions}\nHabla en español de Colombia, tuteando, con frases cortas y entonación conversacional. Evita el tono de locutor, el entusiasmo exagerado y repetir muletillas. Mantén un ritmo fluido con pausas naturales. Al comenzar tu propia respuesta puedes usar ocasionalmente «hmm», «dale», «entiendo» o «espera…». No hagas esos sonidos mientras habla otra persona y no los fuerces. Si estás consultando de verdad el cerebro, puedes decir «dame un momento» o «dame un minuto»; no simules trabajo ni prometas un plazo exacto. No uses muletillas en cada frase ni repitas siempre la misma. Al activarte, escucha sin saludo automático. Espera a que terminen una pregunta dirigida a Cortex; una mención dentro de una conversación entre personas no te da el turno. Si falta un dato imprescindible, pregunta solo eso. No cierres con «¿algo más?» ni ofrezcas continuar.`,
       onAudio: (pcm) => {
         if (generation !== this.generation || this.muted) return;
-        this.lastAudioAt = Date.now();
-        if (this.requestHeard) this.responseAudioAt = this.lastAudioAt;
-        this.emitStatus('respondiendo');
+        // Live may stream silence between turns. Transport traffic is not speech.
+        let energy = 0;
+        const samples = Math.floor(pcm.length / 2);
+        for (let i = 0; i < samples; i++) energy += pcm.readInt16LE(i * 2) ** 2;
+        const audible = samples > 0 && Math.sqrt(energy / samples) > 16;
+        if (audible) {
+          this.silentOutputMs = 0;
+          this.lastAudioAt = Date.now();
+          if (this.requestHeard) this.responseAudioAt = this.lastAudioAt;
+          this.emitStatus('respondiendo');
+        } else {
+          this.silentOutputMs += samples / 24;
+          // Preserve natural pauses, but do not queue endless silent playback.
+          if (!this.lastAudioAt || this.silentOutputMs > 2000) return;
+        }
         const pg = this.playbackGeneration;
         // Bounded producer queue: never accumulate seconds of stale speech in Node.
         if (this.pendingAudioBytes + pcm.length > 240_000) {
@@ -167,8 +181,15 @@ export class MeetLiveVoice {
           });
       },
       onClearPlayback: () => {
+        if (generation !== this.generation) return;
         this.playbackGeneration++;
-        void this.options.clear();
+        this.lastAudioAt = 0;
+        this.responseAudioAt = 0;
+        this.silentOutputMs = 0;
+        this.emitStatus(this.pendingDelegations ? 'consultando cerebro' : 'conversando');
+        void this.options.clear().catch(() => {
+          if (generation === this.generation) void this.sleep('falló reproducción');
+        });
       },
       onUsage: (seconds, final) => {
         console.log(
@@ -347,8 +368,8 @@ export class MeetLiveVoice {
     this.wakeAudioBytes = 0;
     this.heard = '';
     this.cooldownUntil = Date.now() + 2500;
-    await this.options.clear().catch(() => undefined);
     this.emitStatus(reason);
+    await this.options.clear().catch(() => undefined);
     await live?.close();
   }
 }

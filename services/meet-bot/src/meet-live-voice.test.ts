@@ -86,7 +86,7 @@ async function main() {
   globalThis.fetch = originalFetch;
   voice.push(Buffer.alloc(320));
   assert.equal(sent, 1);
-  callbacks?.onAudio(Buffer.alloc(480));
+  callbacks?.onAudio(Buffer.alloc(480, 8));
   voice.setMuted(true);
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(played, 0, 'queued audio discarded immediately on mute');
@@ -148,6 +148,7 @@ async function main() {
   globalThis.fetch = originalFetch;
   let drainCallbacks: OpenAILiveOptions | undefined;
   let drainClosed = 0;
+  const states: string[] = [];
   let autoGreetings = 0;
   const drainedInput: Buffer[] = [];
   let remaining = 400;
@@ -167,7 +168,7 @@ async function main() {
     audio: async () => {},
     clear: async () => {},
     transcript: () => {},
-    status: () => {},
+    status: (state) => states.push(state),
     playbackRemainingMs: async () => remaining,
     createTransport: (opts) => {
       drainCallbacks = opts;
@@ -194,12 +195,16 @@ async function main() {
   assert.equal(autoGreetings, 0, 'activation must not interrupt with an automatic greeting');
   assert.deepEqual(drainCallbacks?.voice, { id: 'voice_workspace' });
   drainCallbacks?.onAudio(Buffer.alloc(480));
+  assert.equal(states.at(-1), 'conversando', 'silence cannot set responding');
+  drainCallbacks?.onAudio(Buffer.alloc(480, 8));
   await new Promise<void>((resolve) => setImmediate(resolve));
   remaining = 0;
   await drain.finishResponseIfDrained(Date.now() + 3000);
   assert.equal(drainClosed, 0, 'greeting must leave time for the question');
+  drainCallbacks?.onClearPlayback?.();
+  assert.equal(states.at(-1), 'conversando', 'interruption restores listening');
   drainCallbacks?.onTranscript?.({ role: 'user', text: 'Consulta la cartera' });
-  drainCallbacks?.onAudio(Buffer.alloc(480));
+  drainCallbacks?.onAudio(Buffer.alloc(480, 8));
   await new Promise<void>((resolve) => setImmediate(resolve));
   remaining = 400;
   await drain.finishResponseIfDrained(Date.now() + 3000);
@@ -208,7 +213,10 @@ async function main() {
   await drain.finishResponseIfDrained(Date.now() + 500);
   assert.equal(drainClosed, 0, 'short output pause is not the end');
   drainCallbacks?.onTranscript?.({ role: 'user', text: 'La charla de otros continúa' });
+  for (let i = 0; i < 400; i++) drainCallbacks?.onAudio(Buffer.alloc(480));
+  await new Promise<void>((resolve) => setImmediate(resolve));
   await drain.finishResponseIfDrained(Date.now() + 3000);
+  assert.equal(states.at(-1), 'reposo', 'continuous silent output must release responding');
   assert.equal(drainClosed, 1, 'ambient transcript cannot keep engagement alive');
   globalThis.fetch = originalFetch;
   console.log(
