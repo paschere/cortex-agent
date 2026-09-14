@@ -14,7 +14,11 @@ export const realtimeTool = {
     additionalProperties: false,
   },
 };
-export function realtimeSession(model: string, history: { role: string; text: string }[]) {
+export function realtimeSession(
+  model: string,
+  history: { role: string; text: string }[],
+  voice: string | { id: string } = 'marin',
+) {
   return {
     type: 'realtime',
     model,
@@ -32,7 +36,7 @@ export function realtimeSession(model: string, history: { role: string; text: st
           create_response: true,
         },
       },
-      output: { voice: 'marin' },
+      output: { voice },
     },
     tools: [realtimeTool],
     tool_choice: 'auto',

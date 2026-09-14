@@ -4,6 +4,7 @@ import { Panel } from '@/components/ui/panel';
 import { isChatOutboundConfigured } from '@/lib/google-chat';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { workspaceHref } from '@/lib/workspace-context';
 import {
   PREFERENCE_COLUMNS,
   getSyncState,
@@ -16,6 +17,7 @@ import {
   ChevronRight,
   Mail,
   MessagesSquare,
+  Mic2,
   Settings as SettingsIcon,
   ShieldCheck,
 } from 'lucide-react';
@@ -240,7 +242,7 @@ export default async function SettingsPage() {
                   que se rellena, y tiene que encontrarse desde el único sitio
                   donde la gente busca «qué guarda este producto sobre mí». */}
               <RowLink
-                href="/settings/memory"
+                href={workspaceHref(user.organization.id, '/settings/memory')}
                 icon={<Brain className="h-4 w-4" />}
                 title="Lo que Cortex recuerda de ti"
               >
@@ -263,6 +265,15 @@ export default async function SettingsPage() {
                 )}
               </RowLink>
 
+              <RowLink
+                href={workspaceHref(user.organization.id, '/settings/voice')}
+                icon={<Mic2 className="h-4 w-4" />}
+                title="La voz de Cortex"
+              >
+                Elige cómo suena Cortex en las llamadas de esta empresa y, si administras el
+                espacio, crea una voz propia con consentimiento verificable.
+              </RowLink>
+
               {/* La entrevista vive aquí, al lado de la lista de memorias, por
                   la razón que dice esa fila: éste es el sitio donde se busca
                   «qué guarda y qué hace este producto en mi nombre».
@@ -273,7 +284,7 @@ export default async function SettingsPage() {
                   semana: es algo que alguien recuerda un martes de marzo, y
                   entonces va a buscarlo a Configuración. */}
               <RowLink
-                href="/onboarding/entrevista"
+                href={workspaceHref(user.organization.id, '/onboarding/entrevista')}
                 icon={<MessagesSquare className="h-4 w-4" />}
                 title="Cuéntale cómo trabaja tu empresa"
               >
@@ -289,7 +300,7 @@ export default async function SettingsPage() {
               </RowLink>
 
               <RowLink
-                href="/integrations"
+                href={workspaceHref(user.organization.id, '/integrations')}
                 icon={<Building2 className="h-4 w-4" />}
                 title="Lo que Cortex tiene conectado"
               >

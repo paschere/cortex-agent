@@ -43,7 +43,7 @@ async function main(): Promise<void> {
   const live = new OpenAILiveTransport({
     apiKey: 'secret',
     instructions: 'Habla en español.',
-    voice: 'marin',
+    voice: { id: 'voice_custom' },
     onAudio: (chunk) => audio.push(chunk),
     onClearPlayback: () => {
       clears += 1;
@@ -73,7 +73,7 @@ async function main(): Promise<void> {
   assert.equal(start.type, 'session.start');
   assert.deepEqual(start.session.audio, {
     format: { type: 'audio/pcm', rate: 24_000 },
-    output: { voice: 'marin' },
+    output: { voice: { id: 'voice_custom' } },
   });
   assert.deepEqual(start.session.delegation, { type: 'client' });
   socket.message({ type: 'session.started', session: { id: 'live_1' } });

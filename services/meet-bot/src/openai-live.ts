@@ -14,7 +14,7 @@ export interface LiveDelegation {
 export interface OpenAILiveOptions {
   apiKey: string;
   instructions: string;
-  voice?: string;
+  voice?: string | { id: string };
   startTimeoutMs?: number;
   closeTimeoutMs?: number;
   onAudio: (pcm24k: Buffer) => void;

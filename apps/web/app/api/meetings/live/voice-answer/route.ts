@@ -5,6 +5,7 @@ import { validateMeetingVoiceVisual } from '@/lib/meeting-voice-visual';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { VOICE_LIVE_FACTS, takeSpokenClauses, wantsLiveLookup } from '@/lib/voice-spoken';
+import { readWorkspaceVoice } from '@/lib/workspace-voice';
 import { getTool, listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
 import { ConfirmationRequiredError, logger } from '@cortex/core';
 import { type CoreTool, streamText, tool } from 'ai';
@@ -174,7 +175,13 @@ export async function POST(req: NextRequest) {
       .select('name')
       .eq('id', owner)
       .maybeSingle();
-    return NextResponse.json({ instructions: buildMeetingLiveBootstrap(organization?.name) });
+    return NextResponse.json(
+      {
+        instructions: buildMeetingLiveBootstrap(organization?.name),
+        voice: await readWorkspaceVoice(owner),
+      },
+      { headers: { 'cache-control': 'no-store' } },
+    );
   }
 
   if (!parsed.success) return NextResponse.json({ error: 'bad request' }, { status: 400 });

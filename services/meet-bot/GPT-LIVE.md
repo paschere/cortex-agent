@@ -2,7 +2,7 @@
 
 Las llamadas con voz usan un detector local del nombre Cortex. Mientras está en reposo, el audio de la sala solo pasa por ese detector en el servidor del bot: no se envía a OpenAI ni Deepgram. El detector emite una señal de activación; no guarda ni publica una transcripción de la sala.
 
-Tras la activación se crea una sesión GPT-Live 1 (`store: false`). Cortex dice «Te escucho»; espera esa señal antes de formular la pregunta. No se conserva un búfer de audio previo al despertar. El audio activo se transmite por WebSocket y se reproduce en el micrófono virtual de Meet. El cerebro de la empresa se consulta por la ruta existente con contexto de la conversación activa y confirmación obligatoria para las acciones que la requieren. Una interrupción de voz detiene audio pendiente; no se presenta como cancelación de una operación empresarial.
+Tras la activación se crea una sesión GPT-Live 1 (`store: false`). La activación es silenciosa: Cortex espera una pregunta dirigida a él y la cámara indica escucha. Mientras se conecta, se conserva solo el audio posterior a la señal local, en un búfer acotado de hasta 10 segundos que se descarta si falla la conexión. No se conserva un búfer de audio previo al despertar. El audio activo se transmite por WebSocket y se reproduce en el micrófono virtual de Meet. El cerebro de la empresa se consulta por la ruta existente con contexto de la conversación activa y confirmación obligatoria para las acciones que la requieren. Una interrupción de voz detiene audio pendiente; no se presenta como cancelación de una operación empresarial.
 
 Cierre: «Gracias Cortex», «Cortex, eso es todo», silencio/interacción ausente durante 30 segundos, límite de 3 minutos por activación, silenciar o salir de la llamada. El límite no garantiza duración de factura exacta: la finalización del proveedor tarda y puede fallar. Se registra `usage.seconds` del proveedor y si es final. Se puede llamar a Cortex de nuevo después del cierre. Los saludos/fragmentos transcritos no prueban que alguien oyó la respuesta.
 
@@ -25,7 +25,7 @@ Fuentes: https://developers.openai.com/api/docs/guides/live ; https://developers
 
 ## Consultar lo que se está mostrando
 
-Comparte la pantalla en Meet, di «Cortex», espera «Te escucho» y pide «mira lo que estoy mostrando y compáralo con el cerebro». Cada petición visual explícita toma una captura nueva del viewport visible del bot y la envía directamente al cerebro de esa empresa. No ve ventanas privadas, filas ocultas ni el documento completo. Si no detecta una presentación compartida o falla la captura, pide compartir pantalla.
+Comparte la pantalla en Meet, di «Cortex» y pide «mira lo que estoy mostrando y compáralo con el cerebro». Cada petición visual explícita toma una captura nueva del viewport visible del bot y la envía directamente al cerebro de esa empresa. No ve ventanas privadas, filas ocultas ni el documento completo. Si no detecta una presentación compartida o falla la captura, pide compartir pantalla.
 
 La captura de voz es efímera: no se sube al archivo de la reunión ni se incorpora automáticamente al cerebro. El modo conversacional no toma capturas periódicas; las reuniones de notas sin voz conservan su registro visual existente. Las acciones propuestas mantienen sus confirmaciones. Antes de darlo por validado, probar una presentación real, una pregunta sobre ella y una pregunta sin pantalla compartida.
 
@@ -39,6 +39,14 @@ Los subtítulos activos conservan los fragmentos originales y sus tiempos, separ
 
 ## Volver al reposo y retomar contexto
 
-Mientras está resolviendo una petición o hablando, la entrada de audio permanece abierta para aclaraciones e interrupciones. Después de una respuesta se cierra la sesión cuando no hay consultas pendientes, la cola del navegador terminó y pasaron 2.5 segundos sin nuevos fragmentos de audio. Ese margen es una heurística local: GPT-Live no publica un evento definitivo de fin de respuesta. Un saludo inicial no cierra la escucha antes de la pregunta. Los fragmentos de charla ambiente no renuevan el temporizador de actividad.
+Mientras está resolviendo una petición o hablando, la entrada de audio permanece abierta para aclaraciones e interrupciones. Después de una respuesta se cierra la sesión cuando no hay consultas pendientes, la cola del navegador terminó y pasaron 2.5 segundos sin nuevos fragmentos de audio. Ese margen es una heurística local: GPT-Live no publica un evento definitivo de fin de respuesta. No hay un saludo automático que interrumpa la reunión. Los fragmentos de charla ambiente no renuevan el temporizador de actividad.
 
 Al despertar, el bot toma hasta 40 filas recientes de la transcripción de esta llamada y las incluye como contexto previo en las consultas al cerebro. Se señalan los intervalos sin transcripción; no se reconstruye lo ocurrido en reposo. La cámara virtual refleja reposo, escucha, consulta y respuesta mediante su canvas animado.
+
+## Voz propia por workspace
+
+En Configuración → Voz de Cortex (`/settings/voice`), propietarios y administradores pueden comprobar acceso, subir o grabar consentimiento y muestra por separado, crear una voz, escuchar una prueba y activarla para el workspace. Se conserva Bossa como voz estándar de Meet; el modo Realtime web conserva su voz estándar si no hay voz propia. La selección se lee al iniciar cada sesión y se envía a OpenAI como `{ id: voiceId }`. Las sesiones en curso no cambian de voz.
+
+La API de creación requiere elegibilidad, permisos de voces y la misma clave de proyecto que usa el servicio Meet. El chequeo real inicial de `audio/consent_phrases` respondió 404; no se creó una voz de prueba ni se fabricó consentimiento. El producto bloquea creación si no puede confirmar la frase de consentimiento actual. Cada archivo tiene un límite de 2 MiB para respetar el cuerpo máximo de Vercel; la muestra debe tener 5–30 segundos. OpenAI valida el contenido y que la voz coincida. Los audios no se incorporan al cerebro ni se guardan en el archivo de Cortex; el proveedor los recibe para crear la voz. Solo se persisten IDs del proveedor en servidor y metadatos de auditoría por workspace.
+
+La prueba usa Text-to-Speech; su resultado no garantiza idéntica entonación en GPT-Live. La guía de voces personalizadas documenta acentos ingleses para GPT-Live; evaluar español antes de sustituir la voz aprobada. OpenAI limita el número de voces por su organización, no por cada workspace de Cortex.

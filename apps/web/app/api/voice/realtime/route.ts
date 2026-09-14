@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { realtimeSession } from '@/lib/voice-realtime';
+import { readWorkspaceVoice } from '@/lib/workspace-voice';
 import { consumeToken, readWorkspacePlan } from '@cortex/agent-tools';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -54,7 +55,11 @@ export async function POST(req: Request) {
   form.set(
     'session',
     JSON.stringify(
-      realtimeSession(process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2.1', body.data.history),
+      realtimeSession(
+        process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime-2.1',
+        body.data.history,
+        (await readWorkspaceVoice(user.organization.id)) ?? 'marin',
+      ),
     ),
   );
   try {

@@ -148,8 +148,14 @@ async function main() {
   globalThis.fetch = originalFetch;
   let drainCallbacks: OpenAILiveOptions | undefined;
   let drainClosed = 0;
+  let autoGreetings = 0;
+  const drainedInput: Buffer[] = [];
   let remaining = 400;
-  globalThis.fetch = async () => Response.json({ instructions: 'Cortex de la empresa de prueba' });
+  globalThis.fetch = async () =>
+    Response.json({
+      instructions: 'Cortex de la empresa de prueba',
+      voice: { id: 'voice_workspace' },
+    });
   const drain = new MeetLiveVoice({
     config: {
       openaiKey: 'synthetic',
@@ -167,15 +173,26 @@ async function main() {
       drainCallbacks = opts;
       return {
         start: async () => {},
-        sendAudio: () => {},
-        appendCommentary: () => true,
+        sendAudio: (pcm) => {
+          drainedInput.push(pcm);
+        },
+        appendCommentary: () => {
+          autoGreetings++;
+          return true;
+        },
         close: async () => {
           drainClosed++;
         },
       };
     },
   });
-  await drain.wake();
+  drain.push(Buffer.alloc(320, 5));
+  const drainWake = drain.wake();
+  drain.push(Buffer.alloc(320, 2));
+  await drainWake;
+  assert.equal(drainedInput.length, 1, 'only post-wake audio survives connection startup');
+  assert.equal(autoGreetings, 0, 'activation must not interrupt with an automatic greeting');
+  assert.deepEqual(drainCallbacks?.voice, { id: 'voice_workspace' });
   drainCallbacks?.onAudio(Buffer.alloc(480));
   await new Promise<void>((resolve) => setImmediate(resolve));
   remaining = 0;

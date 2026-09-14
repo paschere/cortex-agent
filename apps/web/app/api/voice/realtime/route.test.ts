@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
+  voice: vi.fn(),
   plan: vi.fn(),
   rate: vi.fn(),
   fetch: vi.fn(),
 }));
+vi.mock('@/lib/workspace-voice', () => ({ readWorkspaceVoice: mocks.voice }));
 vi.mock('@/lib/session', () => ({ requireSession: mocks.session }));
 vi.mock('@/lib/supabase/service', () => ({ getOrgScopedClient: () => ({ scoped: true }) }));
 vi.mock('@cortex/agent-tools', () => ({ readWorkspacePlan: mocks.plan, consumeToken: mocks.rate }));
@@ -21,6 +23,7 @@ beforeEach(() => {
   mocks.session.mockResolvedValue({ id: 'person', organization: { id: 'company' } });
   mocks.plan.mockResolvedValue({ plan: { code: 'business' } });
   mocks.rate.mockResolvedValue(undefined);
+  mocks.voice.mockResolvedValue(null);
   mocks.fetch.mockResolvedValue(new Response('v=0\no=answer'));
 });
 describe('realtime session boundary', () => {
@@ -49,6 +52,15 @@ describe('realtime session boundary', () => {
     expect(options.headers['OpenAI-Safety-Identifier']).not.toContain('person');
     expect(JSON.parse(options.body.get('session')).tools[0].name).toBe('consult_cortex');
     expect(mocks.rate).toHaveBeenCalledWith(expect.anything(), 'person', 'voice.realtime', 3);
+  });
+  it('selects the custom voice only from the authenticated workspace', async () => {
+    mocks.voice.mockResolvedValue({ id: 'voice_owned' });
+    await POST(request({ sdp: 'v=0\no=browser-offer', voice: { id: 'voice_foreign' } }));
+    expect(mocks.voice).toHaveBeenCalledWith('company');
+    const options = mocks.fetch.mock.calls[0]?.[1];
+    expect(JSON.parse(options.body.get('session')).audio.output.voice).toEqual({
+      id: 'voice_owned',
+    });
   });
   it('rate limits session creation and does not leak provider errors', async () => {
     mocks.rate.mockRejectedValueOnce(new Error('limit'));

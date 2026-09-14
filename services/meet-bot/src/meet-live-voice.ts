@@ -30,6 +30,8 @@ export interface MeetLiveVoiceOptions {
 export class MeetLiveVoice {
   private live: LiveConnection | null = null;
   private connecting = false;
+  private wakeAudio: Buffer[] = [];
+  private wakeAudioBytes = 0;
   private generation = 0;
   private muted = false;
   private startedAt = 0;
@@ -72,6 +74,8 @@ export class MeetLiveVoice {
       return;
     }
     this.connecting = true;
+    this.wakeAudio = [];
+    this.wakeAudioBytes = 0;
     const generation = ++this.generation;
     const abort = new AbortController();
     this.abort = abort;
@@ -83,6 +87,7 @@ export class MeetLiveVoice {
     this.pendingDelegations = 0;
     this.resampler = new LiveAudioResampler();
     let instructions: string;
+    let selectedVoice: string | { id: string } = 'bossa';
     this.emitStatus('preparando Cortex');
     try {
       const response = await fetch(
@@ -102,10 +107,21 @@ export class MeetLiveVoice {
         },
       );
       if (!response.ok) throw new Error('Context unavailable');
-      const context = (await response.json()) as { instructions?: unknown };
+      const context = (await response.json()) as { instructions?: unknown; voice?: unknown };
       if (typeof context.instructions !== 'string' || !context.instructions.trim())
         throw new Error('Empty context');
       instructions = context.instructions;
+      if (context.voice != null) {
+        if (
+          typeof context.voice !== 'object' ||
+          !('id' in context.voice) ||
+          typeof context.voice.id !== 'string' ||
+          !/^voice_[A-Za-z0-9_-]{1,200}$/.test(context.voice.id)
+        ) {
+          throw new Error('Invalid workspace voice');
+        }
+        selectedVoice = { id: context.voice.id };
+      }
     } catch {
       if (generation === this.generation)
         await this.sleep('no se pudo cargar el contexto de Cortex');
@@ -124,8 +140,8 @@ export class MeetLiveVoice {
     );
     const live = createTransport({
       apiKey: key,
-      voice: 'bossa',
-      instructions: `${instructions}\nHabla en español de Colombia, tuteando, con frases cortas y entonación conversacional. Evita el tono de locutor, el entusiasmo exagerado y repetir muletillas. Mantén un ritmo fluido con pausas naturales. Usa ocasionalmente y con variedad muletillas como «hmm», «dale», «entiendo» o «espera…» cuando encajen con lo que escuchas. Si estás consultando de verdad el cerebro, puedes decir «dame un momento» o «dame un minuto»; no simules trabajo ni prometas un plazo exacto. No uses muletillas en cada frase ni repitas siempre la misma. Cuando te llamen, di «Te escucho» y escucha.`,
+      voice: selectedVoice,
+      instructions: `${instructions}\nHabla en español de Colombia, tuteando, con frases cortas y entonación conversacional. Evita el tono de locutor, el entusiasmo exagerado y repetir muletillas. Mantén un ritmo fluido con pausas naturales. Al comenzar tu propia respuesta puedes usar ocasionalmente «hmm», «dale», «entiendo» o «espera…». No hagas esos sonidos mientras habla otra persona y no los fuerces. Si estás consultando de verdad el cerebro, puedes decir «dame un momento» o «dame un minuto»; no simules trabajo ni prometas un plazo exacto. No uses muletillas en cada frase ni repitas siempre la misma. Al activarte, escucha sin saludo automático. Espera a que terminen una pregunta dirigida a Cortex; una mención dentro de una conversación entre personas no te da el turno. Si falta un dato imprescindible, pregunta solo eso. No cierres con «¿algo más?» ni ofrezcas continuar.`,
       onAudio: (pcm) => {
         if (generation !== this.generation || this.muted) return;
         this.lastAudioAt = Date.now();
@@ -231,7 +247,6 @@ export class MeetLiveVoice {
       },
     });
     this.live = live;
-    this.connecting = false;
     this.startedAt = this.activityAt = Date.now();
     this.emitStatus('conectando');
     try {
@@ -240,8 +255,11 @@ export class MeetLiveVoice {
         await live.close();
         return;
       }
+      this.connecting = false;
+      for (const chunk of this.wakeAudio) live.sendAudio(this.resampler.push(chunk));
+      this.wakeAudio = [];
+      this.wakeAudioBytes = 0;
       this.emitStatus('conversando');
-      live.appendCommentary('Te acaban de llamar. Di brevemente: «Te escucho».');
       this.timer = setInterval(() => {
         void this.finishResponseIfDrained();
         if (liveEngagementExpired(Date.now(), this.startedAt, this.activityAt))
@@ -253,7 +271,18 @@ export class MeetLiveVoice {
   }
 
   push(pcm16k: Buffer): void {
-    if (!this.live || this.muted) return;
+    if (this.muted) return;
+    // Only audio received AFTER the local wake signal is buffered, in memory.
+    if (this.connecting) {
+      if (this.wakeAudioBytes + pcm16k.length > 320_000) {
+        void this.sleep('conexión demasiado lenta');
+        return;
+      }
+      this.wakeAudio.push(Buffer.from(pcm16k));
+      this.wakeAudioBytes += pcm16k.length;
+      return;
+    }
+    if (!this.live) return;
     this.live.sendAudio(
       this.resampler.push(this.inputClosed ? Buffer.alloc(pcm16k.length) : pcm16k),
     );
@@ -314,6 +343,8 @@ export class MeetLiveVoice {
     const live = this.live;
     this.live = null;
     this.connecting = false;
+    this.wakeAudio = [];
+    this.wakeAudioBytes = 0;
     this.heard = '';
     this.cooldownUntil = Date.now() + 2500;
     await this.options.clear().catch(() => undefined);
