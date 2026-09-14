@@ -82,6 +82,16 @@ async function main() {
   });
   assert.equal(captures, 1, 'earlier visual request cannot cause another capture');
   assert.equal(requests[1].visualRequested, false);
+  assert.equal(
+    requests[1].question,
+    '. Ahora busca mi factura.',
+    'new request excludes previously delegated question',
+  );
+  assert.match(
+    String(requests[1].transcript),
+    /Mira lo que estoy mostrando/,
+    'previous request remains reference context',
+  );
   assert.equal(requests[1].visual, undefined);
   globalThis.fetch = originalFetch;
   voice.push(Buffer.alloc(320));

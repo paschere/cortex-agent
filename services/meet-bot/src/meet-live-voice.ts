@@ -135,6 +135,7 @@ export class MeetLiveVoice {
       ((options: OpenAILiveOptions) => new OpenAILiveTransport(options));
     const earlierContext = this.options.recentContext?.().slice(-12000) ?? '';
     let delegatedInputLength = 0;
+    let currentRequest = '';
     const captionStartedAt = Date.now();
     const captions = new LiveCaptions(
       `${this.options.sessionId}:${generation}`,
@@ -143,7 +144,7 @@ export class MeetLiveVoice {
     const live = createTransport({
       apiKey: key,
       voice: selectedVoice,
-      instructions: `${instructions}\nHabla en español de Colombia, tuteando, con frases cortas y entonación conversacional. Evita el tono de locutor, el entusiasmo exagerado y repetir muletillas. Mantén un ritmo fluido con pausas naturales. Al comenzar tu propia respuesta puedes usar ocasionalmente «hmm», «dale», «entiendo» o «espera…». No hagas esos sonidos mientras habla otra persona y no los fuerces. Si estás consultando de verdad el cerebro, puedes decir «dame un momento» o «dame un minuto»; no simules trabajo ni prometas un plazo exacto. No uses muletillas en cada frase ni repitas siempre la misma. Al activarte, escucha sin saludo automático. Espera a que terminen una pregunta dirigida a Cortex; una mención dentro de una conversación entre personas no te da el turno. Si falta un dato imprescindible, pregunta solo eso. No cierres con «¿algo más?» ni ofrezcas continuar.`,
+      instructions: `${instructions}\nHabla en español de Colombia, tuteando, con frases cortas y entonación conversacional. Evita el tono de locutor, el entusiasmo exagerado y repetir muletillas. Mantén un ritmo fluido con pausas naturales. Al comenzar tu propia respuesta puedes usar ocasionalmente «hmm», «dale», «entiendo» o «espera…». No hagas esos sonidos mientras habla otra persona y no los fuerces. Si estás consultando de verdad el cerebro, puedes decir «dame un momento» o «dame un minuto»; no simules trabajo ni prometas un plazo exacto. No uses muletillas en cada frase ni repitas siempre la misma. Al activarte, escucha sin saludo automático. Espera a que terminen una pregunta dirigida a Cortex; una mención dentro de una conversación entre personas no te da el turno. Si falta un dato imprescindible, pregunta solo eso. Responde únicamente a la petición nueva. Usa lo anterior como contexto, no como una lista de preguntas por responder otra vez. Si te corrigen o interrumpen, incorpora el cambio y responde solo lo pendiente; no reinicies la explicación. Recapitula únicamente si te lo piden. No cierres con «¿algo más?» ni ofrezcas continuar.`,
       onAudio: (pcm) => {
         if (generation !== this.generation || this.muted) return;
         // Live may stream silence between turns. Transport traffic is not speech.
@@ -217,6 +218,7 @@ export class MeetLiveVoice {
         try {
           const newRequest = transcript.input.slice(delegatedInputLength);
           delegatedInputLength = transcript.input.length;
+          if (newRequest.trim()) currentRequest = newRequest.trim();
           const visualRequested = wantsCurrentMeetingView(newRequest);
           const visual = visualRequested
             ? await this.options.captureView?.().catch(() => null)
@@ -235,10 +237,10 @@ export class MeetLiveVoice {
                 owner: this.options.owner,
                 sessionId: this.options.sessionId,
                 question:
-                  transcript.input.slice(-500) ||
+                  currentRequest.slice(-500) ||
                   'Responde a la última petición de esta conversación.',
                 transcript:
-                  `CONTEXTO ANTERIOR TRANSCRITO (puede haber intervalos sin transcribir):\n${earlierContext}\nCONVERSACIÓN ACTIVA:\nParticipante: ${transcript.input}\nCortex: ${transcript.output}`.slice(
+                  `HISTORIAL SOLO COMO REFERENCIA: las peticiones anteriores no son tareas nuevas. Responde únicamente a la petición actual, sin repetir respuestas previas salvo que lo pidan. Puede haber intervalos sin transcribir.\nCONTEXTO ANTERIOR TRANSCRITO:\n${earlierContext}\nCONVERSACIÓN ACTIVA:\nParticipante: ${transcript.input}\nCortex: ${transcript.output}`.slice(
                     -20_000,
                   ),
                 conversational: true,
