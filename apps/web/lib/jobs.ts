@@ -22,8 +22,8 @@
  * que un commit posterior retira.
  */
 
-import { logger } from '@cortex/core';
 import { inngest } from '@/lib/inngest';
+import { logger } from '@cortex/core';
 
 export interface JobEvent {
   name: string;
@@ -44,6 +44,12 @@ export interface JobStep {
    */
   run<T>(name: string, fn: () => Promise<T>): Promise<T>;
   sendEvent(id: string, events: JobEvent | JobEvent[]): Promise<void>;
+  /**
+   * Variante pg-boss para repartidores que no pueden declarar éxito si una
+   * sola rama no entró a la cola. Es opcional porque el step real de Inngest
+   * ya persiste y reintenta sendEvent, pero no conoce esta extensión local.
+   */
+  sendEventStrict?(id: string, events: JobEvent | JobEvent[]): Promise<void>;
   /** Duración tipo Inngest: '30s', '2m', o milisegundos. Duerme de verdad. */
   sleep(id: string, duration: string | number): Promise<void>;
 }
@@ -62,7 +68,13 @@ export function parseDuration(duration: string | number): number {
   if (!m) return 0;
   const value = Number(m[1]);
   const unit = m[2];
-  return unit === 'ms' ? value : unit === 's' ? value * 1000 : unit === 'm' ? value * 60_000 : value * 3_600_000;
+  return unit === 'ms'
+    ? value
+    : unit === 's'
+      ? value * 1000
+      : unit === 'm'
+        ? value * 60_000
+        : value * 3_600_000;
 }
 
 /**
@@ -116,6 +128,13 @@ export async function enqueueJobs(events: JobEvent[]): Promise<void> {
   for (const e of events) await enqueueJob(e.name, e.data);
 }
 
+export async function enqueueJobsStrict(events: JobEvent[]): Promise<void> {
+  for (const e of events) {
+    const accepted = await enqueueJob(e.name, e.data);
+    if (!accepted) throw new Error(`No se pudo encolar el trabajo ${e.name}`);
+  }
+}
+
 /** El shim que hace que un handler escrito para Inngest corra aquí sin más. */
 export function makeStep(): JobStep {
   return {
@@ -123,6 +142,10 @@ export function makeStep(): JobStep {
     sendEvent: async (_id, events) => {
       await enqueueJobs(Array.isArray(events) ? events : [events]);
     },
-    sleep: (_id, duration) => new Promise((resolve) => setTimeout(resolve, parseDuration(duration))),
+    sendEventStrict: async (_id, events) => {
+      await enqueueJobsStrict(Array.isArray(events) ? events : [events]);
+    },
+    sleep: (_id, duration) =>
+      new Promise((resolve) => setTimeout(resolve, parseDuration(duration))),
   };
 }

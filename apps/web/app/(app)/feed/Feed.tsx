@@ -24,6 +24,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
@@ -217,6 +218,14 @@ export function Feed({
         title="Feed"
         icon={<Inbox className="h-5 w-5" />}
         subtitle="Trae archivos, enlaces o texto para trabajar con Cortex. Solo tú puedes verlos; duran siete días y tú decides qué guardar en el cerebro."
+        actions={
+          <Link
+            href={href('/activations')}
+            className={`${buttonClass} border border-border bg-surface text-ink`}
+          >
+            Activaciones
+          </Link>
+        }
       />
 
       <section
@@ -532,6 +541,14 @@ export function Feed({
                   <MessageSquare size={16} />
                   {detail.conversation_id ? 'Continuar consulta' : 'Consultar con Cortex'}
                 </button>
+                {!!detail.feed_tables?.length && (
+                  <Link
+                    href={href(`/activations?source=${encodeURIComponent(detail.id)}`)}
+                    className={`${buttonClass} border border-border text-ink`}
+                  >
+                    Crear activación con esta fuente
+                  </Link>
+                )}
                 {detail.promoted_document_id ? (
                   <span className="inline-flex items-center gap-1 px-2 text-xs text-emerald">
                     <Check size={14} />

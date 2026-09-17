@@ -5,6 +5,7 @@ import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { workspaceHref } from '@/lib/workspace-context';
 import { Landmark } from 'lucide-react';
+import Link from 'next/link';
 import { FinanceHub } from './FinanceHub';
 import { SourceClassification } from './SourceClassification';
 
@@ -47,6 +48,14 @@ export default async function FinancePage() {
         title="Finanzas"
         subtitle="Cartera estimada sobre facturas confirmadas, registros de pago y pendientes que explican cada cifra."
         icon={<Landmark className="h-5 w-5" aria-hidden />}
+        actions={
+          <Link
+            href={href('/activations')}
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            Crear activación financiera
+          </Link>
+        }
       />
       <FinanceHub
         overview={overview}

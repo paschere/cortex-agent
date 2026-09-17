@@ -1,5 +1,6 @@
 import { buildToolContext } from '@/lib/agent';
-import { type JobHandler, enqueueJob } from '@/lib/jobs';
+import { inngest } from '@/lib/inngest';
+import { type JobContext, type JobHandler, enqueueJob } from '@/lib/jobs';
 import { noteMailWorthSeeing, noteMailboxLearningStopped } from '@/lib/notifications/producers';
 import { mustRead, mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
@@ -22,6 +23,11 @@ import {
   withinQuietHours,
 } from '@cortex/agent-tools';
 import { logger } from '@cortex/core';
+import {
+  type GmailSweepMailbox,
+  buildGmailSweepPage,
+  dispatchGmailSweepPage,
+} from './gmail-sweep-dispatcher';
 
 /**
  * APRENDER DE UN BUZÓN DE GMAIL: la carga histórica y el barrido de cada
@@ -84,16 +90,10 @@ import { logger } from '@cortex/core';
 export const GMAIL_SWEEP_CRON = '*/10 * * * *';
 
 /**
- * Cuántas personas barre una ejecución del reparto. Un techo por si un día hay
- * mil buzones conectados: el resto entra mañana, y el registro lo dice en vez
- * de dejar la impresión de que se cubrieron todos.
+ * Cuántas personas barre una ejecución del reparto. Si hay más, la última fila
+ * se vuelve el cursor de otro trabajo durable; el cron ya no abandona la cola.
  */
 const MAX_MAILBOXES_PER_RUN = 200;
-
-interface Mailbox {
-  userId: string;
-  organizationId: string;
-}
 
 function learnContext(organizationId: string, userId: string): LearnContext {
   const db = getOrgScopedClient(organizationId);
@@ -156,42 +156,45 @@ export const gmailBackfillUserJob: JobHandler = async ({ event, step }) => {
 // El reparto
 // ---------------------------------------------------------------------------
 
-export const gmailSweepDispatchJob: JobHandler = async ({ step }) => {
-  const mailboxes = await step.run('find-mailboxes', async (): Promise<Mailbox[]> => {
+export const gmailSweepDispatchJob: JobHandler = async ({ event, step }) => {
+  const afterUserId =
+    typeof event.data.afterUserId === 'string' && event.data.afterUserId.length > 0
+      ? event.data.afterUserId
+      : undefined;
+  const page = await step.run('find-mailboxes', async () => {
     // Sin espacio de trabajo, y sólo aquí: «qué buzones hay conectados» abarca
     // todos los espacios y no hay sesión detrás de un cron. Cada fila nombra el
     // suyo, y el trabajo por persona de abajo construye su handle a partir de
     // ese nombre — así que lo que se lea o escriba después vive dentro de un
     // solo espacio.
     const db = getSupabaseServiceClient();
-    const { data, error } = await db
+    let query = db
       .from('gmail_sync_state')
       .select('user_id, organization_id')
       .eq('paused', false)
-      .limit(MAX_MAILBOXES_PER_RUN + 1);
-    if (error) throw new Error(`No se pudieron listar los buzones: ${error.message}`);
-    const rows = (data ?? []) as Array<{ user_id: string; organization_id: string }>;
-    if (rows.length > MAX_MAILBOXES_PER_RUN) {
-      logger.warn('gmail-sweep: hay más buzones que el techo de una ejecución', {
-        found: rows.length,
-        cap: MAX_MAILBOXES_PER_RUN,
-      });
-    }
-    return rows
-      .slice(0, MAX_MAILBOXES_PER_RUN)
-      .map((r) => ({ userId: r.user_id, organizationId: r.organization_id }));
+      .order('user_id', { ascending: true })
+      .limit(MAX_MAILBOXES_PER_RUN);
+    if (afterUserId) query = query.gt('user_id', afterUserId);
+
+    return buildGmailSweepPage({
+      afterUserId,
+      pageSize: MAX_MAILBOXES_PER_RUN,
+      load: async (): Promise<GmailSweepMailbox[]> => {
+        const { data, error } = await query;
+        if (error) throw new Error(`No se pudieron listar los buzones: ${error.message}`);
+        return ((data ?? []) as Array<{ user_id: string; organization_id: string }>).map((r) => ({
+          userId: r.user_id,
+          organizationId: r.organization_id,
+        }));
+      },
+    });
   });
 
-  if (mailboxes.length > 0) {
-    await step.sendEvent(
-      'sweep-per-mailbox',
-      mailboxes.map((m) => ({
-        name: 'gmail/sweep.user' as const,
-        data: { userId: m.userId, organizationId: m.organizationId },
-      })),
-    );
-  }
-  return { dispatched: mailboxes.length };
+  // Usuarios y continuación comparten el mismo paso. Inngest lo persiste; el
+  // shim de pg-boss usa su variante estricta para que cualquier enqueue
+  // rechazado lance y el trabajo padre sea reintentado.
+  await dispatchGmailSweepPage(step, page);
+  return { dispatched: page.mailboxes.length, continued: Boolean(page.nextAfterUserId) };
 };
 
 // ---------------------------------------------------------------------------
@@ -342,6 +345,29 @@ async function proposeForMailbox(
   }
   return count;
 }
+
+// ---------------------------------------------------------------------------
+// Compatibilidad durante la transición: si no hay worker, enqueueJob cae a
+// Inngest. Por eso el cron Y la autocontinuación deben estar registrados aquí.
+// ---------------------------------------------------------------------------
+
+export const gmailSweepDispatch = inngest.createFunction(
+  { id: 'gmail-sweep-dispatch', concurrency: { limit: 1 }, retries: 1 },
+  [{ cron: GMAIL_SWEEP_CRON }, { event: 'gmail/sweep' }],
+  (ctx) => gmailSweepDispatchJob(ctx as unknown as JobContext),
+);
+
+export const gmailSweepUser = inngest.createFunction(
+  { id: 'gmail-sweep-user', concurrency: { limit: 5 }, retries: 2 },
+  { event: 'gmail/sweep.user' },
+  (ctx) => gmailSweepUserJob(ctx as unknown as JobContext),
+);
+
+export const gmailBackfillUser = inngest.createFunction(
+  { id: 'gmail-backfill-user', concurrency: { limit: 3 }, retries: 2 },
+  { event: 'gmail/backfill.user' },
+  (ctx) => gmailBackfillUserJob(ctx as unknown as JobContext),
+);
 
 async function defaultAgentId(organizationId: string): Promise<string | null> {
   const db = getOrgScopedClient(organizationId);

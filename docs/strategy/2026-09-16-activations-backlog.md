@@ -1,7 +1,7 @@
 # Cortex Activaciones: auditoría, backlog y criterios de lanzamiento
 
 Fecha: 16-09-2026. Acompaña la [estrategia](2026-09-16-cortex-company-scale.md).
-Estado: propuesta lista para convertir en tickets; no migraciones ni features implementadas en este cambio.
+Estado del documento original: propuesta. La primera implementación posterior incorpora un constructor genérico desde prompt, simulación y asuntos con evidencia; facturas queda como plantilla opcional. El alcance entregado y sus límites están en [Activaciones desde un prompt](../features/activations.md). Los demás criterios de lanzamiento de este backlog siguen pendientes.
 
 ## Evidencia del estado actual
 

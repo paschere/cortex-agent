@@ -240,17 +240,22 @@ export function ManagementBoard(props: Props) {
             ))}
           </div>
           {editor ? (
-            <CaseEditor
-              key={editor.item?.id ?? 'new'}
-              {...editor}
-              people={people}
-              cases={cases}
-              userId={userId}
-              isAdmin={isAdmin}
-              today={today}
-              onClose={() => setEditor(null)}
-              onSaved={saved}
-            />
+            <div className="space-y-4">
+              {editor.item?.data.activationEvidence && (
+                <ActivationEvidence evidence={editor.item.data.activationEvidence} />
+              )}
+              <CaseEditor
+                key={editor.item?.id ?? 'new'}
+                {...editor}
+                people={people}
+                cases={cases}
+                userId={userId}
+                isAdmin={isAdmin}
+                today={today}
+                onClose={() => setEditor(null)}
+                onSaved={saved}
+              />
+            </div>
           ) : (
             <>
               <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -437,6 +442,135 @@ export function ManagementBoard(props: Props) {
         />
       )}
     </div>
+  );
+}
+
+function ActivationEvidence({
+  evidence,
+}: {
+  evidence: NonNullable<ManagementCaseData['activationEvidence']>;
+}) {
+  const genericRows = evidence.rows.filter(
+    (row): row is Extract<(typeof evidence.rows)[number], { values: unknown }> => 'values' in row,
+  );
+  const columns = Array.from(
+    new Map(
+      genericRows.flatMap((row) =>
+        row.values.map((value) => [value.column, value.header] as const),
+      ),
+    ).entries(),
+  ).sort(([a], [b]) => a - b);
+  return (
+    <section className="overflow-hidden rounded-lg border border-border bg-surface">
+      <div className="space-y-1 border-b border-border p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          Evidencia de origen · solo lectura
+        </p>
+        <h2 className="break-words text-sm font-bold">{evidence.sourceName}</h2>
+        {evidence.definition?.name && (
+          <p className="text-xs font-medium">Activación: {evidence.definition.name}</p>
+        )}
+        <p className="text-xs text-ink-muted">
+          Hoja {evidence.sheetIndex + 1}: {evidence.sheetName} · {evidence.rows.length}{' '}
+          {evidence.rows.length === 1 ? 'fila importada' : 'filas importadas'}
+        </p>
+        <p className="text-xs text-ink-muted">
+          Este snapshot explica el origen del asunto. No demuestra su resolución ni reemplaza la
+          evidencia de cierre.
+        </p>
+      </div>
+      <div className="max-h-[28rem] overflow-auto">
+        {genericRows.length > 0 ? (
+          <table className="w-full min-w-[640px] text-left text-xs">
+            <thead className="sticky top-0 bg-surface-2 text-ink-muted">
+              <tr>
+                <th className="px-3 py-2 font-semibold">Fila</th>
+                {columns.map(([column, header]) => (
+                  <th key={column} className="px-3 py-2 font-semibold">
+                    {header || `Columna ${column + 1}`}
+                  </th>
+                ))}
+                <th className="px-3 py-2 font-semibold">Resultado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {genericRows.map((row) => {
+                const values = new Map(row.values.map((value) => [value.column, value.value]));
+                return (
+                  <tr key={`${row.rowIndex}:${row.sourceKey}`} className="align-top">
+                    <td className="px-3 py-2 tabular-nums">{row.rowIndex + 1}</td>
+                    {columns.map(([column]) => (
+                      <td key={column} className="max-w-64 break-words px-3 py-2">
+                        {values.get(column) || '—'}
+                      </td>
+                    ))}
+                    <td className="max-w-72 px-3 py-2">
+                      <span className="font-medium">
+                        {row.status === 'matched'
+                          ? 'Coincidencia'
+                          : row.status === 'invalid'
+                            ? 'Inválida'
+                            : 'Sin coincidencia'}
+                      </span>
+                      {row.reasons.length > 0 && (
+                        <span className="mt-1 block break-words text-ink-muted">
+                          {row.reasons.join(' · ')}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full min-w-[760px] text-left text-xs">
+            <thead className="sticky top-0 bg-surface-2 text-ink-muted">
+              <tr>
+                <th className="px-3 py-2 font-semibold">Fila</th>
+                <th className="px-3 py-2 font-semibold">Factura</th>
+                <th className="px-3 py-2 font-semibold">Emisor</th>
+                <th className="px-3 py-2 font-semibold">Valor</th>
+                <th className="px-3 py-2 font-semibold">Fecha</th>
+                <th className="px-3 py-2 font-semibold">Resultado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {evidence.rows.map((row) => {
+                if ('values' in row) return null;
+                return (
+                  <tr key={`${row.rowIndex}:${row.sourceKey}`} className="align-top">
+                    <td className="px-3 py-2 tabular-nums">{row.rowIndex + 1}</td>
+                    <td className="max-w-48 break-words px-3 py-2 font-medium">
+                      {row.invoiceNumber || '—'}
+                    </td>
+                    <td className="max-w-56 break-words px-3 py-2">{row.issuer || '—'}</td>
+                    <td className="whitespace-nowrap px-3 py-2 tabular-nums">
+                      {row.amount || '—'} {row.currency}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2">{row.issuedOn || '—'}</td>
+                    <td className="max-w-64 px-3 py-2">
+                      <span className="font-medium">
+                        {row.status === 'possible_duplicate'
+                          ? 'Posible duplicado'
+                          : row.status === 'invalid'
+                            ? 'Inválida'
+                            : 'Lista'}
+                      </span>
+                      {row.conflicts.length > 0 && (
+                        <span className="mt-1 block break-words text-ink-muted">
+                          {row.conflicts.join(' · ')}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </section>
   );
 }
 

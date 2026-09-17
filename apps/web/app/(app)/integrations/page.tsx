@@ -461,6 +461,14 @@ export default async function IntegrationsPage({
         title="Integraciones"
         subtitle={`Fuentes y herramientas de ${user.organization.name}: qué está configurado, quién puede usarlo y qué falta comprobar.`}
         icon={<Plug className="h-5 w-5" />}
+        actions={
+          <Link
+            href={workspaceHref(user.organization.id, '/activations')}
+            className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            Ver activaciones
+          </Link>
+        }
       />
 
       <DirectionPair active="outbound" />

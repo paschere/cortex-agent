@@ -49,6 +49,98 @@ export const managementEvidenceSchema = z.object({
   observation: text(2000),
   observedOn: managementDate,
 });
+const activationDefinitionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    version: z.literal(1),
+    name: z.string().max(180),
+    kind: z.literal('invoice_duplicates'),
+    mapping: z.object({
+      invoiceNumber: z.number().int().nonnegative(),
+      issuer: z.number().int().nonnegative(),
+      amount: z.number().int().nonnegative(),
+      currency: z.number().int().nonnegative(),
+      issuedOn: z.number().int().nonnegative(),
+    }),
+    caseTitle: z.string().max(180).optional(),
+    caseObjective: z.string().max(2000).optional(),
+    caseNextAction: z.string().max(1000).optional(),
+  }),
+  z.object({
+    version: z.literal(1),
+    name: z.string().max(180),
+    kind: z.literal('table_rule'),
+    rule: z.enum(['duplicates', 'conditions']),
+    conditions: z
+      .array(
+        z.object({
+          column: z.number().int().nonnegative(),
+          operator: z.enum([
+            'equals',
+            'not_equals',
+            'contains',
+            'is_empty',
+            'gt',
+            'gte',
+            'lt',
+            'lte',
+            'before_today',
+            'after_today',
+          ]),
+          value: z.string().max(10_000).optional(),
+        }),
+      )
+      .max(100),
+    match: z.enum(['all', 'any']),
+    groupBy: z.array(z.number().int().nonnegative()).max(100),
+    caseTitle: z.string().max(180),
+    caseObjective: z.string().max(2000),
+    caseNextAction: z.string().max(1000),
+  }),
+]);
+export const managementActivationInvoiceSchema = z.object({
+  rowIndex: z.number().int().nonnegative(),
+  invoiceNumber: z.string().max(500),
+  issuer: z.string().max(1000),
+  amount: z.string().max(200),
+  currency: z.string().max(100),
+  issuedOn: z.string().max(200),
+  sourceKey: z.string().max(1000),
+  status: z.enum(['ready', 'possible_duplicate', 'invalid']),
+  conflicts: z.array(z.string().max(1000)).max(100),
+});
+export const managementActivationRowSchema = z.object({
+  rowIndex: z.number().int().nonnegative(),
+  sourceKey: z.string().max(1000),
+  status: z.enum(['matched', 'unmatched', 'invalid']),
+  values: z
+    .array(
+      z.object({
+        column: z.number().int().nonnegative(),
+        header: z.string().max(1000),
+        value: z.string().max(10_000),
+      }),
+    )
+    .max(500),
+  reasons: z.array(z.string().max(1000)).max(100),
+  groupKey: z.string().max(2000).nullable(),
+  invoiceNumber: z.string().max(500).optional(),
+  issuer: z.string().max(1000).optional(),
+  amount: z.string().max(200).optional(),
+  currency: z.string().max(100).optional(),
+  issuedOn: z.string().max(200).optional(),
+});
+export const managementActivationEvidenceSchema = z.object({
+  runId: z.string().uuid(),
+  sourceId: z.string().uuid(),
+  sourceName: z.string().max(1000),
+  sheetIndex: z.number().int().nonnegative(),
+  sheetName: z.string().max(1000),
+  definition: activationDefinitionSchema.optional(),
+  rows: z
+    .array(z.union([managementActivationRowSchema, managementActivationInvoiceSchema]))
+    .max(10_000),
+});
+export type ManagementActivationEvidence = z.infer<typeof managementActivationEvidenceSchema>;
 export const managementCaseSchema = z.object({
   title: text(180),
   objective: text(2000),
@@ -66,7 +158,13 @@ export const managementCaseSchema = z.object({
   evidence: managementEvidenceSchema.nullable().default(null),
   reviewNote: z.string().trim().max(2000).default(''),
 });
-export type ManagementCaseData = z.infer<typeof managementCaseSchema>;
+/**
+ * activationEvidence is server-owned provenance attached by Activations. It is
+ * deliberately absent from managementCaseSchema, the editable input schema.
+ */
+export type ManagementCaseData = z.infer<typeof managementCaseSchema> & {
+  activationEvidence?: ManagementActivationEvidence;
+};
 export interface ManagementCase {
   id: string;
   data: ManagementCaseData;

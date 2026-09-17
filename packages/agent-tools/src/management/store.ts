@@ -189,8 +189,14 @@ export async function saveManagementCase(
     throw new ManagementError(
       parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
     );
-  const data = parsed.data;
+  const data: ManagementCase['data'] = parsed.data;
   const previous = options.id ? await getManagementCase(db, options.id) : null;
+  // Activation provenance is written by the server that creates the case. It
+  // is never accepted from this editable payload, and an ordinary case update
+  // must not erase it when the RPC replaces the JSON document.
+  if (previous?.data.activationEvidence) {
+    data.activationEvidence = previous.data.activationEvidence;
+  }
   const actor = await db.from('users').select('role').eq('id', actorId).maybeSingle();
   if (actor.error || !actor.data) throw new ManagementError('No se pudo comprobar tu acceso.');
   validateManagementTransition(

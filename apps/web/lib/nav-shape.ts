@@ -260,6 +260,7 @@ export const SECTIONS: NavSection[] = [
       // asienta.
       { href: '/browser', label: MODULE.label, icon: Globe },
       { href: '/schedules', label: 'Rutinas', icon: AlarmClock },
+      { href: '/activations', label: 'Activaciones', icon: BadgeCheck },
       { href: '/pipelines', label: 'Flujos', icon: Workflow },
     ],
   },

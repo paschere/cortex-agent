@@ -4,6 +4,7 @@ import { createOrgScopedClient } from '../tenancy/scoped-client';
 import {
   type ManagementCase,
   defaultManagementProfile,
+  managementActivationEvidenceSchema,
   managementCaseSchema,
   managementDailyReport,
   managementDate,
@@ -36,6 +37,47 @@ const row = (data = {}) =>
     updated_at: '2026-09-05T12:00:00Z',
   }) satisfies ManagementCase;
 describe('gerencia: criterios, evidencia y fechas', () => {
+  it('acepta evidencia genérica y conserva sólo los valores elegidos', () => {
+    const evidence = managementActivationEvidenceSchema.parse({
+      runId: '33333333-3333-4333-a333-333333333333',
+      sourceId: '44444444-4444-4444-a444-444444444444',
+      sourceName: 'clientes.xlsx',
+      sheetIndex: 1,
+      sheetName: 'Renovaciones',
+      definition: {
+        version: 1,
+        name: 'Renovaciones vencidas',
+        kind: 'table_rule',
+        rule: 'conditions',
+        conditions: [{ column: 2, operator: 'before_today' }],
+        match: 'all',
+        groupBy: [],
+        caseTitle: 'Revisar renovación',
+        caseObjective: 'Confirmar la fecha',
+        caseNextAction: 'Contactar al responsable',
+      },
+      rows: [
+        {
+          rowIndex: 4,
+          sourceKey: 'renewal:4',
+          status: 'matched',
+          values: [{ column: 2, header: 'Vencimiento', value: '2026-09-01' }],
+          reasons: ['La fecha ya venció'],
+          groupKey: null,
+          unsharedCustomerNotes: 'no debe viajar a Gerencia',
+        },
+      ],
+    });
+    expect(evidence.rows[0]).toEqual({
+      rowIndex: 4,
+      sourceKey: 'renewal:4',
+      status: 'matched',
+      values: [{ column: 2, header: 'Vencimiento', value: '2026-09-01' }],
+      reasons: ['La fecha ya venció'],
+      groupKey: null,
+    });
+  });
+
   it('no acepta fechas inexistentes ni referencias ejecutables', () => {
     expect(managementDate.safeParse('2026-02-30').success).toBe(false);
     for (const url of [
@@ -232,6 +274,61 @@ describe('gerencia: separación de datos', () => {
       ),
     ).rejects.toThrow(/administrador/);
     expect(rpcCalls).toHaveLength(0);
+  });
+
+  it('preserva evidencia de activación del servidor y descarta intentos del cliente', async () => {
+    const activationEvidence = {
+      runId: '33333333-3333-4333-a333-333333333333',
+      sourceId: '44444444-4444-4444-a444-444444444444',
+      sourceName: 'facturas.xlsx',
+      sheetIndex: 0,
+      sheetName: 'Septiembre',
+      rows: [
+        {
+          rowIndex: 7,
+          invoiceNumber: 'FV-7',
+          issuer: 'Proveedor',
+          amount: '125000',
+          currency: 'COP',
+          issuedOn: '2026-09-01',
+          sourceKey: 'invoice:FV-7',
+          status: 'possible_duplicate' as const,
+          conflicts: ['Coincide con FV-7'],
+        },
+      ],
+    };
+    const existing = row({ activationEvidence });
+    expect(
+      managementCaseSchema.parse({
+        ...datum(),
+        activationEvidence: { ...activationEvidence, sourceName: 'archivo-falso.xlsx', rows: [] },
+      }),
+    ).not.toHaveProperty('activationEvidence');
+    const { client, rpcCalls } = createFakeSupabase(
+      {
+        management_cases: [{ ...existing, organization_id: 'acme' }],
+        users: [{ id: owner, organization_id: 'acme', role: 'org_admin' }],
+      },
+      {
+        management_save_case: (args) => ({ ...existing, data: args.p_data }),
+      },
+    );
+
+    await saveManagementCase(
+      createOrgScopedClient(client, 'acme'),
+      owner,
+      {
+        ...existing.data,
+        title: 'Cobro actualizado',
+        activationEvidence: { ...activationEvidence, sourceName: 'archivo-falso.xlsx', rows: [] },
+      },
+      { id: existing.id, revision: existing.revision, humanReview: true },
+    );
+
+    expect(rpcCalls[0]?.args.p_data).toMatchObject({
+      title: 'Cobro actualizado',
+      activationEvidence,
+    });
   });
 });
 

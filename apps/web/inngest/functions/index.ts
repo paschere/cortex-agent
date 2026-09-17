@@ -6,6 +6,7 @@ import { devTaskStatus } from './dev-task-status';
 import { driveSync } from './drive-sync';
 import { errandRun } from './errand-run';
 import { errandSweep } from './errand-sweep';
+import { gmailBackfillUser, gmailSweepDispatch, gmailSweepUser } from './gmail-learn';
 import { goalsWatchDispatch, goalsWatchWorkspace } from './goals-watch';
 import { ingestDocument } from './ingest-document';
 import { learningPassDispatch, learningPassWorkspace } from './learning-pass';
@@ -34,6 +35,9 @@ export {
   commitmentsWatchWorkspace,
   goalsWatchDispatch,
   goalsWatchWorkspace,
+  gmailBackfillUser,
+  gmailSweepDispatch,
+  gmailSweepUser,
   ingestDocument,
   learningPassDispatch,
   learningPassWorkspace,
@@ -68,6 +72,9 @@ export const functions = [
   commitmentsWatchWorkspace,
   goalsWatchDispatch,
   goalsWatchWorkspace,
+  gmailBackfillUser,
+  gmailSweepDispatch,
+  gmailSweepUser,
   reindexEmbeddings,
   driveSync,
   meetingImportSweep,

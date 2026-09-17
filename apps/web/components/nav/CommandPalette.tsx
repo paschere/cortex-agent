@@ -167,6 +167,13 @@ const SECTIONS: Section[] = [
         keywords: 'programadas tareas cron routines scheduled jobs horario',
       },
       {
+        href: '/activations',
+        label: 'Activaciones',
+        note: 'Describe un proceso y diseña reglas con evidencia y confirmación',
+        keywords:
+          'fuentes feed reglas prompt inventario cartera duplicados simulacion activaciones',
+      },
+      {
         href: '/browser',
         label: MODULE.label,
         note: 'Vueltas en portales ajenos que aprendió viéndote hacerlas',
