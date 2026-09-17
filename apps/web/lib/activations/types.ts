@@ -41,6 +41,7 @@ export type ActivationDefinition =
       match: 'all' | 'any';
       groupBy: number[];
       evidenceColumns?: number[];
+      identityColumns?: number[];
       caseTitle: string;
       caseObjective: string;
       caseNextAction: string;
@@ -51,7 +52,37 @@ export type ActivationSource = {
   filename: string;
   createdAt: string;
   expiresAt: string;
+  kind: 'table' | 'document' | 'url' | 'text';
+  canPrepare: boolean;
   sheets: Array<{ index: number; name: string; rowCount: number; headers: string[] }>;
+  preparedViews: PreparedSourceView[];
+};
+
+export type PreparedRowEvidence = {
+  rowIndex: number;
+  quote: string;
+  sourceStart: number | null;
+};
+
+export type PreparedSourceView = {
+  id: string;
+  name: string;
+  headers: string[];
+  rowCount: number;
+  createdAt: string;
+  derived: true;
+  private: true;
+};
+
+export type PrepareSourceRequest = { sourceId: string; prompt: string };
+export type PrepareSourceResponse = {
+  sourceId: string;
+  viewId?: string;
+  table?: { name: string; rows: Array<Array<string | number | boolean | null>> };
+  evidence: PreparedRowEvidence[];
+  sourceSnapshot: string;
+  status: 'ready' | 'needs_input';
+  questions: string[];
 };
 
 export type ActivationCandidate = {
@@ -61,6 +92,7 @@ export type ActivationCandidate = {
   values: Array<{ column: number; header: string; value: string }>;
   reasons: string[];
   groupKey: string | null;
+  citation?: PreparedRowEvidence;
   // Present for the invoice preset so current consumers can show its richer evidence.
   invoiceNumber?: string;
   issuer?: string;
@@ -73,6 +105,7 @@ export type ActivationRun = {
   id: string;
   sourceId: string;
   sourceName: string;
+  viewId: string | null;
   sheetIndex: number;
   sheetName: string;
   definition: ActivationDefinition;
@@ -94,6 +127,7 @@ export type SimulateActivationRequest = {
   action: 'simulate';
   sourceId: string;
   sheetIndex: number;
+  viewId?: string;
   definition: ActivationDefinition;
 };
 

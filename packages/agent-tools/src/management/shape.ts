@@ -92,6 +92,7 @@ const activationDefinitionSchema = z.discriminatedUnion('kind', [
       .max(100),
     match: z.enum(['all', 'any']),
     groupBy: z.array(z.number().int().nonnegative()).max(100),
+    identityColumns: z.array(z.number().int().nonnegative()).max(100).optional(),
     caseTitle: z.string().max(180),
     caseObjective: z.string().max(2000),
     caseNextAction: z.string().max(1000),

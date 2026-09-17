@@ -49,6 +49,8 @@ export interface JobSpec {
 export const JOB_EXPIRE_SECONDS = 840;
 
 export const JOBS: JobSpec[] = [
+  { name: 'activations/dispatch', cron: '*/5 * * * *', retryLimit: 1, concurrency: 1 },
+  { name: 'activations/run', retryLimit: 1, concurrency: 3, singletonKeyFrom: 'automationId' },
   // --- Los que corren solos (cron) y reparten trabajo por workspace ---------
   { name: 'errand/sweep', cron: '*/5 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'schedule/dispatch', cron: '*/5 * * * *', retryLimit: 1, concurrency: 1 },

@@ -23,8 +23,7 @@ export default async function ActivationsPage({
       feedFileHref={workspaceHref(workspaceId, '/feed?mode=file')}
       feedUrlHref={workspaceHref(workspaceId, '/feed?mode=url')}
       feedTextHref={workspaceHref(workspaceId, '/feed?mode=text')}
-      integrationsHref={workspaceHref(workspaceId, '/integrations')}
-      toolsHref={workspaceHref(workspaceId, '/tools#custom-tools')}
+      feedApiHref={workspaceHref(workspaceId, '/feed?mode=api')}
       managementHref={workspaceHref(workspaceId, '/management')}
       initialSourceId={source ?? null}
     />

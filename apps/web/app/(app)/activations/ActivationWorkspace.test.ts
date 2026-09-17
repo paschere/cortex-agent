@@ -54,7 +54,16 @@ describe('Activations column mapping', () => {
 
   it('accepts a linked source only when it belongs to the loaded workspace response', () => {
     const sources = [
-      { id: 'owned', filename: 'facturas.xlsx', createdAt: '', expiresAt: '', sheets: [] },
+      {
+        id: 'owned',
+        filename: 'facturas.xlsx',
+        createdAt: '',
+        expiresAt: '',
+        kind: 'table' as const,
+        canPrepare: false,
+        sheets: [],
+        preparedViews: [],
+      },
     ];
     expect(resolveInitialSource(sources, 'owned')).toBe('owned');
     expect(resolveInitialSource(sources, 'another-workspace')).toBe('');

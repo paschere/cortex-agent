@@ -18,6 +18,7 @@ import {
   Link2,
   Loader2,
   MessageSquare,
+  Plug,
   Plus,
   Search,
   Trash2,
@@ -26,8 +27,9 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { CustomTools } from '../tools/_components/CustomTools';
 
 const inputClass =
   'w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
@@ -40,13 +42,17 @@ export function Feed({
   initialEntries,
   workspaceId,
   initialMode = 'file',
-}: { initialEntries: FeedEntry[]; workspaceId: string; initialMode?: 'file' | 'url' | 'text' }) {
+}: {
+  initialEntries: FeedEntry[];
+  workspaceId: string;
+  initialMode?: 'file' | 'url' | 'text' | 'api';
+}) {
   const href = (path: string) => workspaceHref(workspaceId, path);
   const router = useRouter();
   const [entries, setEntries] = useState(initialEntries);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<FeedDetail | null>(null);
-  const [mode, setMode] = useState<'file' | 'url' | 'text'>(initialMode);
+  const [mode, setMode] = useState<'file' | 'url' | 'text' | 'api'>(initialMode);
   const [query, setQuery] = useState('');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -234,8 +240,9 @@ export function Feed({
         className="mb-7 rounded-card border border-border bg-surface p-4 sm:p-5"
       >
         <div className="mb-4 flex flex-wrap gap-1" aria-label="Tipo de entrada">
-          {(['file', 'url', 'text'] as const).map((kind) => {
-            const Icon = kind === 'file' ? Upload : kind === 'url' ? Link2 : FileText;
+          {(['file', 'url', 'text', 'api'] as const).map((kind) => {
+            const Icon =
+              kind === 'file' ? Upload : kind === 'url' ? Link2 : kind === 'api' ? Plug : FileText;
             return (
               <button
                 key={kind}
@@ -250,12 +257,22 @@ export function Feed({
                   ? 'Subir archivos'
                   : kind === 'url'
                     ? 'Pegar enlace'
-                    : 'Escribir texto'}
+                    : kind === 'text'
+                      ? 'Escribir texto'
+                      : 'Conectar API'}
               </button>
             );
           })}
         </div>
-        {mode === 'file' ? (
+        {mode === 'api' ? (
+          <ApiSourcePanel
+            apiHref={href('/api/feed/api-sources')}
+            onAdded={(entry) => {
+              setEntries((prev) => [entry, ...prev.filter((item) => item.id !== entry.id)]);
+              setSelected(entry.id);
+            }}
+          />
+        ) : mode === 'file' ? (
           <div
             {...getRootProps()}
             className={`flex cursor-pointer flex-col items-center rounded-sm border border-dashed px-4 py-8 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${isDragActive ? 'border-primary bg-primary-soft' : 'border-border-strong bg-surface-2'}`}
@@ -347,6 +364,7 @@ export function Feed({
           </form>
         )}
       </section>
+      <FeedSourceRegistry apiHref={href('/api/feed/sources')} entries={entries} onCaptured={(entry) => { if (entry) setEntries((prev) => [entry, ...prev.filter((item) => item.id !== entry.id)]); }} />
 
       {error && (
         <div
@@ -542,14 +560,12 @@ export function Feed({
                   <MessageSquare size={16} />
                   {detail.conversation_id ? 'Continuar consulta' : 'Consultar con Cortex'}
                 </button>
-                {!!detail.feed_tables?.length && (
-                  <Link
-                    href={href(`/activations?source=${encodeURIComponent(detail.id)}`)}
-                    className={`${buttonClass} border border-border text-ink`}
-                  >
-                    Crear activación con esta fuente
-                  </Link>
-                )}
+                <Link
+                  href={href(`/activations?source=${encodeURIComponent(detail.id)}`)}
+                  className={`${buttonClass} border border-border text-ink`}
+                >
+                  Crear activación con esta fuente
+                </Link>
                 {detail.promoted_document_id ? (
                   <span className="inline-flex items-center gap-1 px-2 text-xs text-emerald">
                     <Check size={14} />
@@ -717,6 +733,177 @@ export function Feed({
           )}
         </section>
       </div>
+    </div>
+  );
+}
+
+type FeedSourceView={id:string;kind:string;name:string;latestAttachmentId:string|null;status:string;lastCheckedAt:string|null;error:string|null;enabled:boolean};
+function FeedSourceRegistry({apiHref,entries,onCaptured}:{apiHref:string;entries:FeedEntry[];onCaptured:(entry?:FeedEntry)=>void}){
+  const [sources,setSources]=useState<FeedSourceView[]>([]);const [open,setOpen]=useState(false);const [working,setWorking]=useState<string|null>(null);const [registryError,setRegistryError]=useState<string|null>(null);
+  const load=useCallback(async()=>{const response=await fetch(apiHref,{cache:'no-store'});const body=await response.json();if(!response.ok)throw new Error(body.error);setSources(body.sources??[]);},[apiHref]);
+  useEffect(()=>{void load().catch(error=>setRegistryError(error.message));},[load]);
+  async function act(body:unknown,id:string){setWorking(id);setRegistryError(null);try{const response=await fetch(apiHref,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error);if(data.capture?.entry)onCaptured(data.capture.entry);await load();}catch(error){setRegistryError(error instanceof Error?error.message:'No se pudo actualizar la fuente.');}finally{setWorking(null);}}
+  if(!sources.length&&!registryError)return null;
+  return <details open={open} onToggle={event=>setOpen(event.currentTarget.open)} className="rounded-card border border-border bg-surface"><summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink">Fuentes conectadas · {sources.length}</summary><div className="border-t border-border px-4">{registryError?<p className="py-3 text-xs text-rose">{registryError}</p>:null}<ul className="divide-y divide-border">{sources.map(source=><li key={source.id} className="flex flex-wrap items-center gap-3 py-3 text-xs"><span className="min-w-0 flex-1"><span className="block font-semibold text-ink">{source.name}</span><span className="text-ink-muted">{source.kind} · {source.status}{source.lastCheckedAt?` · revisada ${new Date(source.lastCheckedAt).toLocaleString('es-CO')}`:''}</span>{source.error?<span className="block text-rose">{source.error}</span>:null}</span>{['url','google_sheet','api'].includes(source.kind)&&source.enabled?<button type="button" disabled={working===source.id} onClick={()=>void act({action:'refresh',id:source.id},source.id)} className="font-semibold text-primary">Actualizar captura</button>:null}{['file','text'].includes(source.kind)?<select aria-label={`Añadir versión de ${source.name}`} defaultValue="" onChange={event=>{if(event.target.value)void act({action:'version',id:source.id,attachmentId:event.target.value},source.id);}} className="rounded-sm border border-border bg-surface px-2 py-1"><option value="">Añadir versión…</option>{entries.filter(entry=>entry.id!==source.latestAttachmentId).map(entry=><option key={entry.id} value={entry.id}>{entry.filename}</option>)}</select>:null}{source.enabled?<button type="button" disabled={working===source.id} onClick={()=>void act({action:'disable',id:source.id},source.id)} className="font-semibold text-rose">Desconectar</button>:<span className="text-ink-faint">Desconectada</span>}</li>)}</ul></div></details>;
+}
+
+type ApiTool = {
+  id: string;
+  name: string;
+  description: string;
+  fields: Array<{ name: string; required: boolean; description: string; enum?: string[] }>;
+};
+function ApiSourcePanel({
+  apiHref,
+  onAdded,
+}: { apiHref: string; onAdded: (entry: FeedEntry) => void }) {
+  const [tools, setTools] = useState<ApiTool[] | null>(null);
+  const [canConfigure, setCanConfigure] = useState(false);
+  const [toolId, setToolId] = useState('');
+  const [input, setInput] = useState<Record<string, string>>({});
+  const [name, setName] = useState('');
+  const [working, setWorking] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(apiHref, { signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error);
+        setTools(body.tools);
+        setCanConfigure(body.canConfigure);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted)
+          setApiError(error.message ?? 'No se pudieron cargar las APIs.');
+      });
+    return () => controller.abort();
+  }, [apiHref]);
+  const tool = tools?.find((item) => item.id === toolId);
+  async function capture(event: React.FormEvent) {
+    event.preventDefault();
+    if (!tool) return;
+    setWorking(true);
+    setApiError(null);
+    try {
+      const response = await fetch(apiHref, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ toolId, input, ...(name.trim() ? { name: name.trim() } : {}) }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? 'No se pudo consultar la API.');
+      onAdded(body.entry);
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'No se pudo consultar la API.');
+    } finally {
+      setWorking(false);
+    }
+  }
+  if (tools === null) return <p className="text-sm text-ink-muted">Cargando APIs disponibles…</p>;
+  if (!tools.length)
+    return (
+      <div>
+        <p className="mb-4 text-sm text-ink-muted">
+          No hay una API de consulta configurada. Añádela aquí una sola vez; no volveremos a pedir
+          credenciales al capturar datos.
+        </p>
+        {canConfigure ? (
+          <CustomTools />
+        ) : (
+          <p className="text-sm text-amber">Un administrador debe configurar la primera API.</p>
+        )}
+      </div>
+    );
+  return (
+    <div className="space-y-5">
+      <form onSubmit={capture} className="space-y-4">
+        <label className="block text-sm font-medium text-ink">
+          API de consulta
+          <select
+            required
+            value={toolId}
+            onChange={(event) => {
+              setToolId(event.target.value);
+              setInput({});
+            }}
+            className={`${inputClass} mt-1`}
+          >
+            <option value="">Selecciona una API</option>
+            {tools.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {tool ? <p className="text-xs text-ink-muted">{tool.description}</p> : null}
+        {tool?.fields.map((field) => (
+          <label
+            key={field.name}
+            htmlFor={`api-field-${field.name}`}
+            className="block text-sm font-medium text-ink"
+          >
+            {field.name}
+            {field.enum?.length ? (
+              <select
+                id={`api-field-${field.name}`}
+                required={field.required}
+                value={input[field.name] ?? ''}
+                onChange={(event) => setInput({ ...input, [field.name]: event.target.value })}
+                className={`${inputClass} mt-1`}
+              >
+                <option value="">Seleccionar</option>
+                {field.enum.map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id={`api-field-${field.name}`}
+                required={field.required}
+                value={input[field.name] ?? ''}
+                onChange={(event) => setInput({ ...input, [field.name]: event.target.value })}
+                className={`${inputClass} mt-1`}
+              />
+            )}
+            <span className="mt-1 block text-xs font-normal text-ink-muted">
+              {field.description}
+            </span>
+          </label>
+        ))}
+        <label className="block text-sm font-medium text-ink">
+          Nombre de la captura (opcional)
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className={`${inputClass} mt-1`}
+          />
+        </label>
+        {apiError ? (
+          <p role="alert" className="text-sm text-rose">
+            {apiError}
+          </p>
+        ) : null}
+        <button
+          type="submit"
+          disabled={working || !tool}
+          className={`${buttonClass} bg-primary text-white`}
+        >
+          {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}{' '}
+          Consultar y añadir al Feed
+        </button>
+      </form>
+      {canConfigure ? (
+        <details className="rounded-sm border border-border bg-surface-2">
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink">
+            Administrar conexiones API
+          </summary>
+          <div className="border-t border-border p-3">
+            <CustomTools />
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }

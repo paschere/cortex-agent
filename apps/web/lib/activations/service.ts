@@ -8,6 +8,7 @@ import type {
   ActivationRun,
   ActivationSource,
   InvoiceColumnMapping,
+  PreparedSourceView,
 } from './types';
 
 export const ACTIVATION_LIMITS = { maxSheets: 20, maxRows: 1000, maxTextLength: 240 } as const;
@@ -19,12 +20,26 @@ type FeedRow = {
   purge_at: string;
   feed_content_hash: string | null;
   feed_tables: SheetData[] | null;
+  extracted_text: string | null;
+  feed_kind: 'file' | 'url' | 'text' | 'api';
+};
+
+type PreparedViewRow = {
+  id: string;
+  source_id: string;
+  name: string;
+  table_data: SheetData;
+  evidence: Array<{ rowIndex: number; quote: string; sourceStart: number | null }>;
+  source_snapshot: string;
+  created_at: string;
 };
 
 type StoredRun = {
   id: string;
   source_id: string;
   source_name: string;
+  prepared_view_id: string | null;
+  identity_namespace: string | null;
   sheet_index: number;
   sheet_name: string;
   definition: ActivationDefinition;
@@ -61,6 +76,7 @@ export function mapRun(row: StoredRun): ActivationRun {
     id: row.id,
     sourceId: row.source_id,
     sourceName: row.source_name,
+    viewId: row.prepared_view_id ?? null,
     sheetIndex: row.sheet_index,
     sheetName: row.sheet_name,
     definition: row.definition,
@@ -73,19 +89,52 @@ export function mapRun(row: StoredRun): ActivationRun {
   };
 }
 
-export function activationSource(row: FeedRow): ActivationSource {
+export function preparedViewSummary(row: PreparedViewRow): PreparedSourceView {
+  return {
+    id: row.id,
+    name: row.name,
+    headers: (row.table_data.rows[0] ?? []).map(clean),
+    rowCount: Math.max(0, row.table_data.rows.length - 1),
+    createdAt: row.created_at,
+    derived: true,
+    private: true,
+  };
+}
+
+export function activationSource(
+  row: FeedRow,
+  viewsOrIndex: PreparedViewRow[] | number = [],
+): ActivationSource {
+  const views = Array.isArray(viewsOrIndex) ? viewsOrIndex : [];
   return {
     id: row.id,
     filename: row.filename,
     createdAt: row.created_at,
     expiresAt: row.purge_at,
+    kind: row.feed_tables?.length
+      ? 'table'
+      : row.feed_kind === 'url'
+        ? 'url'
+        : row.feed_kind === 'text'
+          ? 'text'
+          : 'document',
+    canPrepare: Boolean(row.extracted_text?.trim()),
     sheets: (row.feed_tables ?? []).slice(0, ACTIVATION_LIMITS.maxSheets).map((sheet, index) => ({
       index,
       name: sheet.name,
       rowCount: Math.max(0, sheet.rows.length - 1),
       headers: (sheet.rows[0] ?? []).map(clean),
     })),
+    preparedViews: views
+      .filter(
+        (view) => view.source_id === row.id && view.source_snapshot === textSourceSnapshot(row),
+      )
+      .map(preparedViewSummary),
   };
+}
+
+export function textSourceSnapshot(row: FeedRow): string {
+  return digest({ content: row.feed_content_hash, extractedText: row.extracted_text });
 }
 
 export function simulateInvoices(
@@ -230,6 +279,7 @@ export function simulateDefinition(
       ...definition.conditions.map((c) => c.column),
       ...definition.groupBy,
       ...(definition.evidenceColumns ?? []),
+      ...(definition.identityColumns ?? []),
     ]),
   ];
   const base = sheet.rows
@@ -256,32 +306,57 @@ export function simulateDefinition(
       const groupParts = definition.groupBy.map((column) => identityPart(rawText(row[column])));
       const emptyGroup = definition.rule === 'duplicates' && groupParts.some((value) => !value);
       const groupIdentity = digest(groupParts);
-      const rowIdentity = digest({ row: offset + 1, values });
+      const identityParts = (definition.identityColumns ?? []).map((column) =>
+        identityPart(rawText(row[column])),
+      );
+      const emptyIdentity =
+        definition.rule === 'conditions' && identityParts.some((value) => !value);
+      const rowIdentity = definition.identityColumns?.length
+        ? digest(identityParts)
+        : digest({ row: offset + 1, values });
       const identity = definition.rule === 'duplicates' ? groupIdentity : rowIdentity;
       return {
         rowIndex: offset + 1,
         sourceKey: `activation:table:${digest(sourceIdentity).slice(0, 24)}:${digest({ definition, identity }).slice(0, 32)}`,
-        status: invalid || emptyGroup ? 'invalid' : 'unmatched',
+        status: invalid || emptyGroup || emptyIdentity ? 'invalid' : 'unmatched',
         values,
         reasons: invalid
           ? ['Una columna usada no tiene un valor válido para la regla.']
           : emptyGroup
             ? ['Falta un valor requerido para agrupar duplicados.']
-            : conditionMatched
-              ? []
-              : ['La fila no cumple las condiciones.'],
+            : emptyIdentity
+              ? ['Falta un valor requerido para identificar la fila.']
+              : conditionMatched
+                ? []
+                : ['La fila no cumple las condiciones.'],
         groupKey:
           definition.rule === 'duplicates' && !invalid && !emptyGroup && conditionMatched
             ? groupIdentity.slice(0, 32)
             : null,
       };
     });
-  if (definition.rule === 'conditions')
-    return base.map((candidate) =>
+  if (definition.rule === 'conditions') {
+    const matched = base.map((candidate) =>
       candidate.status === 'unmatched' && candidate.reasons.length === 0
-        ? { ...candidate, status: 'matched', reasons: ['La fila cumple la regla.'] }
+        ? { ...candidate, status: 'matched' as const, reasons: ['La fila cumple la regla.'] }
         : candidate,
     );
+    const identities = new Map<string, number>();
+    for (const candidate of matched)
+      if (candidate.status === 'matched')
+        identities.set(candidate.sourceKey, (identities.get(candidate.sourceKey) ?? 0) + 1);
+    return matched.map((candidate) =>
+      candidate.status === 'matched' && (identities.get(candidate.sourceKey) ?? 0) > 1
+        ? {
+            ...candidate,
+            reasons: [
+              ...candidate.reasons,
+              'Varias filas comparten la identidad aprobada; se revisarán en un solo asunto.',
+            ],
+          }
+        : candidate,
+    );
+  }
   const counts = new Map<string, number>();
   for (const candidate of base)
     if (candidate.status !== 'invalid' && candidate.groupKey)
@@ -299,6 +374,23 @@ export function simulateDefinition(
   );
 }
 
+export function attachPreparedEvidence(
+  candidates: ActivationCandidate[],
+  view: PreparedViewRow,
+): ActivationCandidate[] {
+  const evidence = new Map(view.evidence.map((item) => [item.rowIndex, item]));
+  return candidates.map((candidate) => {
+    const citation = evidence.get(candidate.rowIndex);
+    if (!citation)
+      return {
+        ...candidate,
+        status: 'invalid',
+        reasons: [...candidate.reasons, 'Falta la cita verificable de la fila preparada.'],
+      };
+    return { ...candidate, citation };
+  });
+}
+
 export function validateMappingForSheet(sheet: SheetData, mapping: InvoiceColumnMapping) {
   const width = Math.max(0, ...sheet.rows.map((row) => row.length));
   if (Object.values(mapping).some((index) => index >= width))
@@ -308,15 +400,27 @@ export function validateMappingForSheet(sheet: SheetData, mapping: InvoiceColumn
 export async function readOwnedTableSources(db: SupabaseClient, actorId: string) {
   const { data, error } = await db
     .from('chat_attachments')
-    .select('id,filename,created_at,purge_at,feed_content_hash,feed_tables')
+    .select(
+      'id,filename,created_at,purge_at,feed_content_hash,feed_tables,extracted_text,feed_kind',
+    )
     .eq('created_by', actorId)
     .not('feed_kind', 'is', null)
-    .not('feed_tables', 'is', null)
     .gt('purge_at', new Date().toISOString())
     .order('created_at', { ascending: false })
     .limit(100);
   if (error) throw new ActivationError('No se pudieron cargar las fuentes de Feed.', 503);
   return (data ?? []) as FeedRow[];
+}
+
+export async function readOwnedPreparedViews(db: SupabaseClient, actorId: string) {
+  const { data, error } = await db
+    .from('feed_prepared_views')
+    .select('id,source_id,name,table_data,evidence,source_snapshot,created_at')
+    .eq('actor_id', actorId)
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) throw new ActivationError('No se pudieron cargar las vistas preparadas.', 503);
+  return (data ?? []) as PreparedViewRow[];
 }
 
 export async function createSimulation(
@@ -325,8 +429,12 @@ export async function createSimulation(
   source: FeedRow,
   sheetIndex: number,
   definition: ActivationDefinition,
+  options: { preparedView?: PreparedViewRow | null; sourceIdentityOverride?: string } = {},
 ) {
-  const tables = source.feed_tables ?? [];
+  const preparedView = options.preparedView;
+  if (preparedView && preparedView.source_id !== source.id)
+    throw new ActivationError('La vista preparada no pertenece a esta fuente.', 404);
+  const tables = preparedView ? [preparedView.table_data] : (source.feed_tables ?? []);
   if (tables.length > ACTIVATION_LIMITS.maxSheets)
     throw new ActivationError(`La fuente supera ${ACTIVATION_LIMITS.maxSheets} hojas.`, 422);
   const sheet = tables[sheetIndex];
@@ -343,6 +451,7 @@ export async function createSimulation(
           ...definition.conditions.map((condition) => condition.column),
           ...definition.groupBy,
           ...(definition.evidenceColumns ?? []),
+          ...(definition.identityColumns ?? []),
         ];
   const width = Math.max(0, ...sheet.rows.map((row) => row.length));
   if (columns.some((column) => column >= width))
@@ -358,11 +467,13 @@ export async function createSimulation(
         throw new ActivationError(`La plantilla usa una columna inexistente: ${match[1]}.`, 422);
     }
   }
-  const candidates = simulateDefinition(
-    source.feed_content_hash ?? sourceSnapshot(source),
-    sheet,
-    definition,
-  );
+  const sourceIdentity =
+    options.sourceIdentityOverride ??
+    preparedView?.source_snapshot ??
+    source.feed_content_hash ??
+    sourceSnapshot(source);
+  const simulated = simulateDefinition(sourceIdentity, sheet, definition);
+  const candidates = preparedView ? attachPreparedEvidence(simulated, preparedView) : simulated;
   const id = randomUUID();
   const { data, error } = await db
     .from('activation_runs')
@@ -370,9 +481,17 @@ export async function createSimulation(
       id,
       actor_id: actorId,
       source_id: source.id,
+      prepared_view_id: preparedView?.id ?? null,
+      identity_namespace: options.sourceIdentityOverride ?? null,
       source_name: source.filename,
-      source_snapshot: sourceSnapshot(source),
-      source_snapshot_data: { contentHash: source.feed_content_hash, tables: source.feed_tables },
+      source_snapshot: preparedView?.source_snapshot ?? sourceSnapshot(source),
+      source_snapshot_data: {
+        contentHash: source.feed_content_hash,
+        tables: source.feed_tables,
+        ...(preparedView
+          ? { extractedText: source.extracted_text, preparedTable: preparedView.table_data }
+          : {}),
+      },
       sheet_index: sheetIndex,
       sheet_name: sheet.name.slice(0, 240),
       definition,
@@ -381,11 +500,11 @@ export async function createSimulation(
       candidates,
     })
     .select(
-      'id,source_id,source_name,sheet_index,sheet_name,definition,mapping,candidates,status,created_at,committed_at,case_ids',
+      'id,source_id,source_name,prepared_view_id,sheet_index,sheet_name,definition,mapping,candidates,status,created_at,committed_at,case_ids',
     )
     .single();
   if (error || !data) throw new ActivationError('No se pudo guardar la simulación.', 503);
   return mapRun(data as StoredRun);
 }
 
-export type { FeedRow, StoredRun };
+export type { FeedRow, PreparedViewRow, StoredRun };

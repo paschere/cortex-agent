@@ -1,3 +1,4 @@
+import { activationDispatchJob, activationRunJob } from '@/inngest/functions/activation-followup';
 import {
   managementOperationReviewJob,
   managementWorkflowAdvanceJob,
@@ -65,6 +66,8 @@ import {
 import type { JobHandler } from '@/lib/jobs';
 
 export const JOB_HANDLERS: Record<string, JobHandler> = {
+  'activations/dispatch': activationDispatchJob,
+  'activations/run': activationRunJob,
   // --- Cron puros: nombre nuevo del manifiesto → función que era sólo cron --
   'errand/sweep': errandSweepJob,
   'schedule/dispatch': scheduleDispatchJob,

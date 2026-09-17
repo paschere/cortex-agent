@@ -60,6 +60,7 @@ export const activationDefinitionSchema = z
       match: z.enum(['all', 'any']),
       groupBy: z.array(z.number().int().min(0).max(499)).max(10),
       evidenceColumns: z.array(z.number().int().min(0).max(499)).max(20).optional(),
+      identityColumns: z.array(z.number().int().min(0).max(499)).max(10).optional(),
       ...CaseFields,
     }),
   ])
@@ -76,6 +77,12 @@ export const activationDefinitionSchema = z
         code: 'custom',
         message: 'Añade al menos una condición.',
         path: ['conditions'],
+      });
+    if (value.rule === 'duplicates' && value.identityColumns?.length)
+      context.addIssue({
+        code: 'custom',
+        message: 'identityColumns solo aplica a condiciones.',
+        path: ['identityColumns'],
       });
     for (const [index, condition] of value.conditions.entries()) {
       if (
@@ -102,6 +109,7 @@ export function validateDefinitionColumns(
           ...definition.conditions.map((condition) => condition.column),
           ...definition.groupBy,
           ...(definition.evidenceColumns ?? []),
+          ...(definition.identityColumns ?? []),
         ];
   return columns.every((column) => column < columnCount);
 }
@@ -110,6 +118,7 @@ export const activationRequestSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('simulate'),
     sourceId: z.string().uuid(),
+    viewId: z.string().uuid().optional(),
     sheetIndex: z
       .number()
       .int()

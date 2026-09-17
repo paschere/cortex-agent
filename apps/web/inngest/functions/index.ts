@@ -1,4 +1,5 @@
 import { actionsSweepDispatch, actionsSweepWorkspace } from './actions-sweep';
+import { activationDispatch, activationRun } from './activation-followup';
 import { commitmentsWatchDispatch, commitmentsWatchWorkspace } from './commitments-watch';
 import { devTaskIntake } from './dev-task-intake';
 import { devTaskRun } from './dev-task-run';
@@ -60,6 +61,8 @@ export {
   weeklyReportWorkspace,
 };
 export const functions = [
+  activationDispatch,
+  activationRun,
   managementWorkflowDispatch,
   managementWorkflowAdvance,
   managementOperationReview,

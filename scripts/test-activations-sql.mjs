@@ -14,7 +14,7 @@ create table ba_organization(id text primary key);
 create table ba_user(id text primary key,email text);
 create table ba_member(id text primary key,"userId" text,"organizationId" text,role text);
 create table users(id uuid primary key,organization_id text,email text,role text);
-create table chat_attachments(id uuid primary key,organization_id text,created_by uuid,feed_kind text,feed_tables jsonb,feed_content_hash text,purge_at timestamptz);
+create table chat_attachments(id uuid primary key,organization_id text,conversation_id uuid,disposition text default 'turn',filename text default 'fixture',mime text default 'text/plain',byte_size bigint default 0,sha256 text default '',created_by uuid,feed_kind text,source_url text,feed_tables jsonb,feed_truncated boolean default false,feed_content_hash text,purge_at timestamptz,extracted_text text,created_at timestamptz default now());
 insert into ba_organization values('a'),('b');
 insert into ba_user values('auth-a','a@test.invalid'),('auth-b','b@test.invalid');
 insert into ba_member values('member-a','auth-a','a','owner'),('member-b','auth-b','b','owner');`);
@@ -27,6 +27,13 @@ await db.query(
 const management = await readFile(`${root}/infra/supabase/migrations/0130_management.sql`, 'utf8');
 await db.exec(management.split('create function public.management_save_profile')[0]);
 await db.exec(await readFile(`${root}/infra/supabase/migrations/0148_activation_runs.sql`, 'utf8'));
+await db.exec(
+  await readFile(`${root}/infra/supabase/migrations/0149_feed_prepared_views.sql`, 'utf8'),
+);
+await db.exec(await readFile(`${root}/infra/supabase/migrations/0150_feed_sources.sql`, 'utf8'));
+await db.exec(
+  await readFile(`${root}/infra/supabase/migrations/0151_activation_automations.sql`, 'utf8'),
+);
 const snapshot = 'a'.repeat(64);
 const source = randomUUID();
 const tables = [
@@ -40,7 +47,7 @@ const tables = [
   },
 ];
 await db.query(
-  `insert into chat_attachments values($1,'a',$2,'file',$3,'content',now()+interval '1 day')`,
+  `insert into chat_attachments(id,organization_id,created_by,feed_kind,feed_tables,feed_content_hash,purge_at,extracted_text) values($1,'a',$2,'file',$3,'content',now()+interval '1 day','facturas')`,
   [source, actor, JSON.stringify(tables)],
 );
 const mapping = { invoiceNumber: 0, issuer: 1, amount: 2, currency: 3, issuedOn: 4 };
@@ -135,7 +142,7 @@ const reupload = await run();
 const repeat = await commit(reupload);
 ok(repeat.created === 0 && repeat.reused === 1, 'same identity reused between runs');
 await rejects(() => commit(first, 'b', other), /no existe/);
-await rejects(() => commit(first, 'a', other), /perteneces/);
+await rejects(() => commit(first, 'a', other), /no existe/);
 const empty = await run(candidates.filter((r) => r.status !== 'matched'));
 await rejects(() => commit(empty), /No hay/);
 const pending = await run();
@@ -194,7 +201,7 @@ const genericTables = [
   },
 ];
 await db.query(
-  `insert into chat_attachments values($1,'a',$2,'file',$3,'generic-content',now()+interval '1 day')`,
+  `insert into chat_attachments(id,organization_id,created_by,feed_kind,feed_tables,feed_content_hash,purge_at,extracted_text) values($1,'a',$2,'file',$3,'generic-content',now()+interval '1 day','renovaciones originales')`,
   [genericSource, actor, JSON.stringify(genericTables)],
 );
 const genericDefinition = {
@@ -327,6 +334,199 @@ const duplicateCase = (
 ok(
   duplicateCase.activationEvidence.rows.length === 2,
   'generic duplicate keeps the complete group',
+);
+
+const preparedTable = { name: 'Renovaciones filtradas', rows: genericTables[0].rows };
+const preparedSnapshot = 'c'.repeat(64);
+const preparedView = randomUUID();
+await db.query(
+  `insert into feed_prepared_views(id,organization_id,actor_id,source_id,name,prompt,table_data,evidence,source_snapshot,source_snapshot_data)
+   values($1,'a',$2,$3,'Renovaciones filtradas','Filtra renovaciones',$4,'[]',$5,$6)`,
+  [
+    preparedView,
+    actor,
+    genericSource,
+    JSON.stringify(preparedTable),
+    preparedSnapshot,
+    JSON.stringify({ extractedText: 'renovaciones originales' }),
+  ],
+);
+const preparedRun = await run(
+  genericRows,
+  genericSource,
+  genericDefinition,
+  'clientes.csv',
+  'Renovaciones filtradas',
+);
+await db.query(
+  'update activation_runs set prepared_view_id=$2,source_snapshot=$3,source_snapshot_data=$4 where id=$1',
+  [
+    preparedRun,
+    preparedView,
+    preparedSnapshot,
+    JSON.stringify({
+      contentHash: 'generic-content',
+      tables: genericTables,
+      extractedText: 'renovaciones originales',
+      preparedTable,
+    }),
+  ],
+);
+await db.query(`update chat_attachments set extracted_text='contenido manipulado' where id=$1`, [
+  genericSource,
+]);
+await rejects(() => commit(preparedRun, 'a', actor, preparedSnapshot), /vista preparada/);
+await db.query(`update chat_attachments set extracted_text='renovaciones originales' where id=$1`, [
+  genericSource,
+]);
+const foreignView = randomUUID();
+await db.query(
+  `insert into feed_prepared_views(id,organization_id,actor_id,source_id,name,prompt,table_data,evidence,source_snapshot,source_snapshot_data)
+   values($1,'a',$2,$3,'Vista ajena','Filtra',$4,'[]',$5,$6)`,
+  [
+    foreignView,
+    other,
+    genericSource,
+    JSON.stringify(preparedTable),
+    preparedSnapshot,
+    JSON.stringify({ extractedText: 'renovaciones originales' }),
+  ],
+);
+await db.query('update activation_runs set prepared_view_id=$2 where id=$1', [
+  preparedRun,
+  foreignView,
+]);
+await rejects(() => commit(preparedRun, 'a', actor, preparedSnapshot), /vista preparada/);
+
+const feedSource = randomUUID();
+await db.query(
+  `insert into feed_sources(id,organization_id,actor_id,kind,name,config,config_hash,latest_attachment_id)
+   values($1,'a',$2,'file','Clientes','{}',$3,$4)`,
+  [feedSource, actor, 'd'.repeat(64), genericSource],
+);
+async function automation(definition = genericDefinition, sourceId = feedSource) {
+  const id = randomUUID();
+  await db.query(
+    `insert into activation_automations(id,organization_id,actor_id,source_connection_id,approval_run_id,name,definition,approved_schema,trigger,interval_minutes,status,next_run_at)
+     values($1,'a',$2,$3,$4,'Renovaciones',$5,'{}','scheduled',60,'active',now()-interval '1 minute')`,
+    [id, actor, sourceId, randomUUID(), JSON.stringify(definition)],
+  );
+  return id;
+}
+const claim = async (id, org = 'a') =>
+  (await db.query('select activation_automation_claim($1,$2) result', [org, id])).rows[0].result;
+const recurring = await automation();
+const firstClaim = await claim(recurring);
+ok(Boolean(firstClaim?.lease_token), 'due authorized automation receives a lease');
+ok((await claim(recurring)) === null, 'active lease prevents a duplicate claim');
+ok((await claim(recurring, 'b')) === null, 'automation claim is tenant scoped');
+await db.query(`update activation_automations set status='paused' where id=$1`, [recurring]);
+await rejects(
+  () =>
+    db.query(`select activation_automation_finish('a',$1,$2,'fingerprint','{}',false,null)`, [
+      recurring,
+      firstClaim.lease_token,
+    ]),
+  /pausada|perdió/,
+);
+
+const disabledAutomation = await automation();
+await db.query('update feed_sources set enabled=false where id=$1', [feedSource]);
+ok((await claim(disabledAutomation)) === null, 'disabled source cannot be claimed');
+ok(
+  (await db.query('select status from activation_automations where id=$1', [disabledAutomation]))
+    .rows[0].status === 'needs_review',
+  'disabled source moves automation to needs review',
+);
+await db.query('update feed_sources set enabled=true where id=$1', [feedSource]);
+const missingMemberAutomation = await automation();
+await db.exec(`delete from ba_member where "organizationId"='a'`);
+ok((await claim(missingMemberAutomation)) === null, 'removed member cannot claim automation');
+ok(
+  (
+    await db.query('select status from activation_automations where id=$1', [
+      missingMemberAutomation,
+    ])
+  ).rows[0].status === 'needs_review',
+  'removed member moves automation to needs review',
+);
+await db.exec(`insert into ba_member values('member-a-final','auth-a','a','owner')`);
+
+async function automationRun(automationId, definition = genericDefinition) {
+  const id = await run(
+    genericRows.map((row) => ({ ...row, sourceKey: `${row.sourceKey}:${automationId}` })),
+    genericSource,
+    definition,
+    'clientes.csv',
+    'Renovaciones',
+  );
+  await db.query(
+    'update activation_runs set identity_namespace=$2,source_snapshot_data=$3 where id=$1',
+    [
+      id,
+      `automation:${automationId}`,
+      JSON.stringify({ contentHash: 'generic-content', tables: genericTables }),
+    ],
+  );
+  return id;
+}
+const authorizedAutomation = await automation();
+const authorizedClaim = await claim(authorizedAutomation);
+const authorizedRun = await automationRun(authorizedAutomation);
+const finished = (
+  await db.query(
+    `select activation_automation_finish('a',$1,$2,'stable','{"checked":true}',false,$3) result`,
+    [authorizedAutomation, authorizedClaim.lease_token, authorizedRun],
+  )
+).rows[0].result;
+ok(finished.created === 1, 'authorized recurring run publishes its matched case');
+ok(
+  (
+    await db.query('select lease_token from activation_automations where id=$1', [
+      authorizedAutomation,
+    ])
+  ).rows[0].lease_token === null,
+  'successful finish releases the lease',
+);
+
+const changedAutomation = await automation();
+const changedClaim = await claim(changedAutomation);
+const changedRun = await automationRun(changedAutomation);
+const newerAttachment = randomUUID();
+await db.query(
+  `insert into chat_attachments(id,organization_id,created_by,feed_kind,feed_tables,feed_content_hash,purge_at,extracted_text)
+   values($1,'a',$2,'file',$3,'new-content',now()+interval '1 day','nueva versión')`,
+  [newerAttachment, actor, JSON.stringify(genericTables)],
+);
+await db.query('update feed_sources set latest_attachment_id=$2 where id=$1', [
+  feedSource,
+  newerAttachment,
+]);
+await rejects(
+  () =>
+    db.query(`select activation_automation_finish('a',$1,$2,'changed','{}',false,$3)`, [
+      changedAutomation,
+      changedClaim.lease_token,
+      changedRun,
+    ]),
+  /fuente cambió/,
+);
+await db.query('update feed_sources set latest_attachment_id=$2 where id=$1', [
+  feedSource,
+  genericSource,
+]);
+const definitionAutomation = await automation();
+const definitionClaim = await claim(definitionAutomation);
+const differentDefinition = { ...genericDefinition, name: 'Otra regla' };
+const unauthorizedRun = await automationRun(definitionAutomation, differentDefinition);
+await rejects(
+  () =>
+    db.query(`select activation_automation_finish('a',$1,$2,'definition','{}',false,$3)`, [
+      definitionAutomation,
+      definitionClaim.lease_token,
+      unauthorizedRun,
+    ]),
+  /regla no coincide/,
 );
 console.log(`${checks} real SQL assertions passed (PGlite, synthetic schema dependencies).`);
 await db.close();

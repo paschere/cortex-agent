@@ -11,7 +11,7 @@ export default async function FeedPage({
 }: { searchParams: Promise<{ mode?: string }> }) {
   const user = await requireSession();
   const { mode } = await searchParams;
-  const initialMode = mode === 'url' || mode === 'text' ? mode : 'file';
+  const initialMode = mode === 'url' || mode === 'text' || mode === 'api' ? mode : 'file';
   const { data, error } = await ownedFeed(getOrgScopedClient(user.organization.id), user.id)
     .order('created_at', { ascending: false })
     .limit(100);

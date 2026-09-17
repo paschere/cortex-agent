@@ -9,6 +9,7 @@ import type {
   ActivationsGetResponse,
   CommitActivationResponse,
   InvoiceColumnMapping,
+  PrepareSourceResponse,
   SimulateActivationResponse,
 } from '@/lib/activations/types';
 import { workspaceHref } from '@/lib/workspace-context';
@@ -40,8 +41,7 @@ type Props = {
   feedFileHref: string;
   feedUrlHref: string;
   feedTextHref: string;
-  integrationsHref: string;
-  toolsHref: string;
+  feedApiHref: string;
   managementHref: string;
   initialSourceId?: string | null;
 };
@@ -142,8 +142,7 @@ export function ActivationWorkspace({
   feedFileHref,
   feedUrlHref,
   feedTextHref,
-  integrationsHref,
-  toolsHref,
+  feedApiHref,
   managementHref,
   initialSourceId = null,
 }: Props) {
@@ -152,12 +151,16 @@ export function ActivationWorkspace({
   const [data, setData] = useState<ActivationsGetResponse | null>(null);
   const [sourceId, setSourceId] = useState('');
   const [sheetIndex, setSheetIndex] = useState<number | null>(null);
+  const [viewId, setViewId] = useState<string | null>(null);
+  const [preparePrompt, setPreparePrompt] = useState('');
+  const [preparingSource, setPreparingSource] = useState(false);
   const [mapping, setMapping] = useState<InvoiceColumnMapping | null>(null);
   const [kind, setKind] = useState<'invoice_duplicates' | 'table_rule'>('table_rule');
   const [rule, setRule] = useState<'duplicates' | 'conditions'>('duplicates');
   const [activationName, setActivationName] = useState('Mi activación');
   const [groupBy, setGroupBy] = useState<number[]>([]);
   const [evidenceColumns, setEvidenceColumns] = useState<number[]>([]);
+  const [identityColumns, setIdentityColumns] = useState<number[]>([]);
   const [conditions, setConditions] = useState<Condition[]>([
     { column: -1, operator: 'equals', value: '', uiId: 'condition-1' },
   ]);
@@ -230,7 +233,15 @@ export function ActivationWorkspace({
   }, [load]);
 
   const source = data?.sources.find((item) => item.id === sourceId) ?? null;
-  const sheet = source?.sheets.find((item) => item.index === sheetIndex) ?? null;
+  const preparedView = source?.preparedViews.find((item) => item.id === viewId);
+  const sheet = preparedView
+    ? {
+        index: 0,
+        name: preparedView.name,
+        rowCount: preparedView.rowCount,
+        headers: preparedView.headers,
+      }
+    : (source?.sheets.find((item) => item.index === sheetIndex) ?? null);
   const mappingComplete =
     mapping !== null &&
     fields.every(({ key }) => mapping[key] >= 0) &&
@@ -269,6 +280,7 @@ export function ActivationWorkspace({
     cancelAction();
     setSourceId(id);
     setSheetIndex(null);
+    setViewId(null);
     setMapping(null);
     setRun(null);
     setResult(null);
@@ -281,11 +293,38 @@ export function ActivationWorkspace({
     cancelAction();
     const next = source?.sheets.find((item) => item.index === index);
     setSheetIndex(index);
+    setViewId(null);
     setMapping(next ? suggestMapping(next.headers) : null);
     setRun(null);
     setResult(null);
     setShareConfirmed(false);
     setError(null);
+  }
+
+  async function prepareSelectedSource() {
+    if (!source || !preparePrompt.trim()) return;
+    setPreparingSource(true);
+    setError(null);
+    try {
+      const response = await fetch(workspaceHref(workspaceId, '/api/activations/prepare-source'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sourceId: source.id, prompt: preparePrompt.trim() }),
+      });
+      const body = (await response.json().catch(() => null)) as PrepareSourceResponse | null;
+      if (!response.ok || !body) throw new Error(message(body, 'No pudimos preparar esta fuente.'));
+      if (body.status === 'needs_input') throw new Error(body.questions.join(' '));
+      await load();
+      if (body.viewId && body.table) {
+        setViewId(body.viewId);
+        setSheetIndex(0);
+        setMapping(suggestMapping(body.table.rows[0]?.map((value) => String(value ?? '')) ?? []));
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No pudimos preparar esta fuente.');
+    } finally {
+      setPreparingSource(false);
+    }
   }
 
   function currentDefinition(): ActivationDefinition | null {
@@ -314,6 +353,7 @@ export function ActivationWorkspace({
       match,
       groupBy: rule === 'duplicates' ? groupBy : [],
       evidenceColumns,
+      identityColumns: rule === 'conditions' ? identityColumns : undefined,
       caseTitle: caseTitle.trim(),
       caseObjective: caseObjective.trim(),
       caseNextAction: caseNextAction.trim(),
@@ -346,6 +386,7 @@ export function ActivationWorkspace({
       setMatch(definition.match);
       setGroupBy(definition.groupBy);
       setEvidenceColumns(definition.evidenceColumns ?? []);
+      setIdentityColumns(definition.identityColumns ?? []);
       setCaseTitle(definition.caseTitle);
       setCaseObjective(definition.caseObjective);
       setCaseNextAction(definition.caseNextAction);
@@ -423,6 +464,7 @@ export function ActivationWorkspace({
           action: 'simulate',
           sourceId: source.id,
           sheetIndex: sheet.index,
+          ...(viewId ? { viewId } : {}),
           definition,
         }),
       });
@@ -502,8 +544,7 @@ export function ActivationWorkspace({
           fileHref={feedFileHref}
           urlHref={feedUrlHref}
           textHref={feedTextHref}
-          integrationsHref={integrationsHref}
-          toolsHref={toolsHref}
+          apiHref={feedApiHref}
         />
       </header>
 
@@ -756,6 +797,37 @@ export function ActivationWorkspace({
                     aria-hidden
                   />
                 </div>
+                {source?.canPrepare ? (
+                  <div className="mt-4 rounded-sm border border-border bg-surface p-3">
+                    <label className="block text-xs font-semibold text-ink">
+                      Preparar lectura con Cortex
+                      <textarea
+                        value={preparePrompt}
+                        onChange={(event) => setPreparePrompt(event.target.value)}
+                        rows={3}
+                        placeholder="Describe qué filas y campos necesitas extraer…"
+                        className={`${select} mt-2 py-2`}
+                      />
+                    </label>
+                    <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+                      Cortex creará una vista tabular privada y derivada. La fuente original queda
+                      intacta.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={!preparePrompt.trim() || preparingSource}
+                      onClick={() => void prepareSelectedSource()}
+                      className={`${button} mt-3 w-full border border-border-strong bg-surface-2 text-ink`}
+                    >
+                      {preparingSource ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Table2 className="h-4 w-4" />
+                      )}{' '}
+                      Preparar lectura
+                    </button>
+                  </div>
+                ) : null}
                 {source ? (
                   <>
                     <label
@@ -768,13 +840,28 @@ export function ActivationWorkspace({
                       <select
                         id="activation-sheet"
                         className={`${select} appearance-none pr-9`}
-                        value={sheetIndex ?? ''}
-                        onChange={(event) => chooseSheet(Number(event.target.value))}
+                        value={viewId ? `view:${viewId}` : (sheetIndex ?? '')}
+                        onChange={(event) => {
+                          if (event.target.value.startsWith('view:')) {
+                            const id = event.target.value.slice(5);
+                            const next = source?.preparedViews.find((item) => item.id === id);
+                            setViewId(id);
+                            setSheetIndex(0);
+                            setMapping(next ? suggestMapping(next.headers) : null);
+                            setRun(null);
+                            setResult(null);
+                          } else chooseSheet(Number(event.target.value));
+                        }}
                       >
                         <option value="">Elige una pestaña</option>
                         {source.sheets.map((item) => (
                           <option key={item.index} value={item.index}>
                             {item.name} · {item.rowCount.toLocaleString('es-CO')} filas
+                          </option>
+                        ))}
+                        {source.preparedViews.map((item) => (
+                          <option key={item.id} value={`view:${item.id}`}>
+                            Derivada · {item.name} · {item.rowCount.toLocaleString('es-CO')} filas
                           </option>
                         ))}
                       </select>
@@ -845,6 +932,8 @@ export function ActivationWorkspace({
                     setGroupBy={setGroupBy}
                     evidenceColumns={evidenceColumns}
                     setEvidenceColumns={setEvidenceColumns}
+                    identityColumns={identityColumns}
+                    setIdentityColumns={setIdentityColumns}
                     conditions={conditions}
                     setConditions={setConditions}
                     match={match}
@@ -892,6 +981,17 @@ export function ActivationWorkspace({
                     commit={commit}
                   />
                 )}
+                {run && matchedGroups > 0 ? (
+                  <AutomationPanel
+                    apiHref={workspaceHref(workspaceId, '/api/activations/automations')}
+                    runId={run.id}
+                    canAutomate={
+                      run.definition.kind !== 'table_rule' ||
+                      run.definition.rule !== 'conditions' ||
+                      Boolean(run.definition.identityColumns?.length)
+                    }
+                  />
+                ) : null}
               </main>
             </div>
             <HistoryList
@@ -915,14 +1015,12 @@ function SourcePicker({
   fileHref,
   urlHref,
   textHref,
-  integrationsHref,
-  toolsHref,
+  apiHref,
 }: {
   fileHref: string;
   urlHref: string;
   textHref: string;
-  integrationsHref: string;
-  toolsHref: string;
+  apiHref: string;
 }) {
   const options = [
     {
@@ -935,7 +1033,8 @@ function SourcePicker({
       href: urlHref,
       icon: Link2,
       title: 'Enlace o Google Sheets',
-      detail: 'Páginas públicas; Sheets requiere acceso mediante el enlace.',
+      detail:
+        'Páginas públicas; Sheets requiere la conexión de Google de esta empresa y permiso sobre la hoja.',
     },
     {
       href: textHref,
@@ -952,7 +1051,7 @@ function SourcePicker({
         <FileSpreadsheet className="h-4 w-4" aria-hidden /> Agregar fuente{' '}
         <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
       </summary>
-      <div className="absolute right-0 top-full mt-2 w-[min(23rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-border bg-surface shadow-card">
+      <div className="absolute left-0 top-full mt-2 w-[min(23rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-border bg-surface shadow-card sm:left-auto sm:right-0">
         <div className="p-2">
           {options.map(({ href, icon: Icon, title, detail }) => (
             <Link
@@ -981,20 +1080,12 @@ function SourcePicker({
                 Conecta un servicio o prepara una herramienta con su documentación. Conectarlo no
                 ejecuta activaciones automáticamente.
               </p>
-              <div className="mt-2 flex flex-wrap gap-3">
-                <Link
-                  href={integrationsHref}
-                  className="text-xs font-semibold text-primary hover:underline"
-                >
-                  Ver integraciones
-                </Link>
-                <Link
-                  href={toolsHref}
-                  className="text-xs font-semibold text-primary hover:underline"
-                >
-                  Configurar API
-                </Link>
-              </div>
+              <Link
+                href={apiHref}
+                className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
+              >
+                Configurar en Feed
+              </Link>
             </div>
           </div>
         </div>
@@ -1017,6 +1108,8 @@ function CustomBuilder({
   setGroupBy,
   evidenceColumns,
   setEvidenceColumns,
+  identityColumns,
+  setIdentityColumns,
   conditions,
   setConditions,
   match,
@@ -1041,6 +1134,8 @@ function CustomBuilder({
   setGroupBy: (value: number[]) => void;
   evidenceColumns: number[];
   setEvidenceColumns: (value: number[]) => void;
+  identityColumns: number[];
+  setIdentityColumns: (value: number[]) => void;
   conditions: Condition[];
   setConditions: (value: Condition[]) => void;
   match: 'all' | 'any';
@@ -1270,6 +1365,41 @@ function CustomBuilder({
           ))}
         </div>
       </fieldset>
+      {rule === 'conditions' ? (
+        <fieldset className="mt-4">
+          <legend className="text-xs font-semibold text-ink-muted">
+            Clave estable para seguimiento
+          </legend>
+          <p className="mt-1 text-xs leading-relaxed text-ink-faint">
+            Elige columnas que identifican el mismo registro entre versiones. Solo se exige si luego
+            activas seguimiento y evita asuntos repetidos.
+          </p>
+          <div className="mt-2 max-h-32 space-y-2 overflow-y-auto rounded-sm border border-border bg-surface p-3">
+            {headers.map((header, index) => (
+              <label
+                key={`identity:${index}:${header}`}
+                className="flex items-center gap-2 text-sm text-ink"
+              >
+                <input
+                  type="checkbox"
+                  checked={identityColumns.includes(index)}
+                  onChange={(event) =>
+                    change(() =>
+                      setIdentityColumns(
+                        event.target.checked
+                          ? [...identityColumns, index]
+                          : identityColumns.filter((item) => item !== index),
+                      ),
+                    )
+                  }
+                  className="h-4 w-4 accent-primary"
+                />
+                {header || `Columna ${index + 1}`}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      ) : null}
       <div className="mt-5 space-y-3 border-t border-border pt-4">
         <p className="text-xs font-semibold text-ink-muted">Asunto que se creará</p>
         <label className="block text-xs text-ink-muted">
@@ -1562,6 +1692,158 @@ function CandidateRow({ item, decision }: { item: ActivationCandidate; decision:
         ) : null}
       </td>
     </tr>
+  );
+}
+
+type AutomationView = {
+  id: string;
+  name: string;
+  status: 'active' | 'paused' | 'needs_review';
+  trigger: 'on_change' | 'scheduled';
+  intervalMinutes: number;
+  lastCheckedAt: string | null;
+  lastResult: string | null;
+  nextRunAt: string | null;
+  sourceConnectionId: string | null;
+};
+function AutomationPanel({
+  apiHref,
+  runId,
+  canAutomate,
+}: { apiHref: string; runId: string; canAutomate: boolean }) {
+  const [items, setItems] = useState<AutomationView[]>([]);
+  const [trigger, setTrigger] = useState<'on_change' | 'scheduled'>('on_change');
+  const [intervalMinutes, setInterval] = useState(360);
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [panelError, setPanelError] = useState<string | null>(null);
+  const refresh = useCallback(async () => {
+    const response = await fetch(apiHref, { cache: 'no-store' });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error);
+    setItems(body.automations ?? []);
+  }, [apiHref]);
+  useEffect(() => {
+    void refresh().catch((error) => setPanelError(error.message));
+  }, [refresh]);
+  async function act(body: unknown) {
+    setBusy(true);
+    setPanelError(null);
+    try {
+      const response = await fetch(apiHref, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      await refresh();
+      setConfirmed(false);
+    } catch (error) {
+      setPanelError(
+        error instanceof Error ? error.message : 'No se pudo actualizar el seguimiento.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="mt-6 rounded-sm border border-border bg-surface-2 p-4">
+      <h3 className="text-sm font-bold text-ink">Seguimiento automático</h3>
+      <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+        Repite esta revisión sobre nuevas versiones de la fuente. Si una fuente preparada cambia y
+        requiere interpretación, se pausará para revisión.
+      </p>
+      {!canAutomate ? (
+        <p className="mt-2 text-xs font-semibold text-amber">
+          Vuelve a configurar y simular esta regla con una clave estable para activar seguimiento.
+        </p>
+      ) : null}
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-semibold text-ink-muted">
+          Cuándo
+          <select
+            value={trigger}
+            onChange={(event) => setTrigger(event.target.value as typeof trigger)}
+            className={`${select} mt-1`}
+          >
+            <option value="on_change">Cuando cambie la fuente</option>
+            <option value="scheduled">En un horario</option>
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-ink-muted">
+          Frecuencia
+          <select
+            value={intervalMinutes}
+            onChange={(event) => setInterval(Number(event.target.value))}
+            className={`${select} mt-1`}
+          >
+            <option value={60}>Cada hora</option>
+            <option value={360}>Cada 6 horas</option>
+            <option value={1440}>Cada día</option>
+            <option value={10080}>Cada semana</option>
+          </select>
+        </label>
+      </div>
+      <label className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-ink">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          onChange={(event) => setConfirmed(event.target.checked)}
+          className="mt-0.5 accent-primary"
+        />
+        Autorizo compartir en el futuro únicamente la evidencia coincidente para crear asuntos, con
+        esta regla y frecuencia.
+      </label>
+      <button
+        type="button"
+        disabled={!canAutomate || !confirmed || busy}
+        onClick={() =>
+          void act({ action: 'create', runId, trigger, intervalMinutes, shareConfirmed: true })
+        }
+        className={`${button} mt-3 bg-primary text-white`}
+      >
+        Activar seguimiento
+      </button>
+      {panelError ? (
+        <p role="alert" className="mt-2 text-xs text-rose">
+          {panelError}
+        </p>
+      ) : null}
+      {items.length ? (
+        <ul className="mt-4 divide-y divide-border border-t border-border">
+          {items.map((item) => (
+            <li key={item.id} className="flex flex-wrap items-center gap-3 py-3 text-xs">
+              <span className="font-semibold text-ink">{item.name}</span>
+              <span className="text-ink-muted">
+                {item.status === 'active'
+                  ? 'Activo'
+                  : item.status === 'paused'
+                    ? 'Pausado'
+                    : 'Requiere revisión'}
+              </span>
+              <span className="min-w-0 flex-1 text-ink-faint">
+                {item.lastResult ?? 'Sin ejecuciones todavía'}
+              </span>
+              {item.status === 'needs_review' ? (
+                <span className="font-semibold text-amber">Vuelve a simular y autorizar</span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void act({ action: item.status === 'paused' ? 'resume' : 'pause', id: item.id })
+                  }
+                  className="font-semibold text-primary"
+                >
+                  {item.status === 'paused' ? 'Reanudar' : 'Pausar'}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 

@@ -23,6 +23,10 @@ import { describe, expect, it } from 'vitest';
  */
 const ALLOWED = new Map<string, string>([
   [
+    'inngest/functions/activation-followup.ts',
+    'Cron scans only due automation IDs and organization IDs; each execution then uses a tenant-scoped client and an actor-authorized database claim.',
+  ],
+  [
     'lib/supabase/service.ts',
     'Defines both clients. The scoped one is built by wrapping the raw one.',
   ],

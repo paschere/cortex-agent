@@ -7,6 +7,9 @@ const source: ActivationSource = {
   filename: 'inventario.csv',
   createdAt: '',
   expiresAt: '',
+  kind: 'table',
+  canPrepare: true,
+  preparedViews: [],
   sheets: [
     {
       index: 0,
@@ -33,6 +36,9 @@ const definition = {
 const proposed = {
   sourceId: source.id,
   sheetIndex: 0,
+  viewId: null,
+  preparationPrompt: null,
+  trigger: { kind: 'manual', intervalMinutes: null },
   definitionJson: JSON.stringify(definition),
   explanation: 'Preparar un asunto para los productos con stock menor de 10.',
   questions: [],
@@ -44,7 +50,7 @@ describe('activation prompt planning boundary', () => {
     const plan = validateActivationPlan(proposed, sources);
     expect(plan.status).toBe('ready');
     expect(plan.draft?.definition).toEqual(definition);
-    expect(plan.limitations.join(' ')).toContain('manual');
+    expect(plan.limitations.join(' ')).toContain('Gerencia');
   });
   it('rejects an invented or inaccessible source', () => {
     expect(
@@ -94,5 +100,56 @@ describe('activation prompt planning boundary', () => {
     expect(catalog).toHaveLength(20);
     expect(catalog[0]?.sheets[0]).not.toHaveProperty('rows');
     expect(planningCatalog(sources, 'another-company')).toEqual([]);
+  });
+  it('keeps textual sources in the bounded catalog before preparation', () => {
+    const textSource: ActivationSource = {
+      ...source,
+      id: '22222222-2222-4222-8222-222222222222',
+      filename: 'contratos.pdf',
+      kind: 'document',
+      sheets: [],
+      preparedViews: [],
+    };
+    expect(planningCatalog([textSource])).toEqual([textSource]);
+  });
+  it('validates a rule against a prepared private view', () => {
+    const withView: ActivationSource = {
+      ...source,
+      sheets: [],
+      kind: 'document',
+      preparedViews: [
+        {
+          id: '33333333-3333-4333-8333-333333333333',
+          name: 'Obligaciones',
+          headers: ['Responsable', 'Fecha'],
+          rowCount: 2,
+          createdAt: '',
+          derived: true,
+          private: true,
+        },
+      ],
+    };
+    const plan = validateActivationPlan(
+      {
+        ...proposed,
+        sheetIndex: null,
+        viewId: withView.preparedViews[0]?.id ?? null,
+        definitionJson: JSON.stringify({
+          ...definition,
+          conditions: [{ column: 1, operator: 'before_today' }],
+          evidenceColumns: [0],
+        }),
+      },
+      [withView],
+    );
+    expect(plan.draft?.viewId).toBe(withView.preparedViews[0]?.id);
+  });
+  it('requires stable identity columns for recurring condition rules', () => {
+    const plan = validateActivationPlan(
+      { ...proposed, trigger: { kind: 'on_source_change', intervalMinutes: null } },
+      sources,
+    );
+    expect(plan.status).toBe('needs_input');
+    expect(plan.questions.join(' ')).toContain('identificar');
   });
 });

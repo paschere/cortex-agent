@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
+import { registerFeedSourceCapture } from '@/lib/feed/api-source';
 import { feedFingerprint } from '@/lib/feed/fingerprint';
 import { googleSpreadsheetId, readGoogleSheetFeed } from '@/lib/feed/google-sheets';
 import { FEED_MAX_BYTES, FEED_MAX_TEXT, feedMime } from '@/lib/feed/shared';
@@ -47,6 +48,8 @@ export async function POST(req: NextRequest) {
   let url: string | null = null;
   let truncated = false;
   let identityText = '';
+  let sourceKind: 'file' | 'text' | 'url' | 'google_sheet' = kind as 'file' | 'text' | 'url';
+  let sourceConfig: Record<string, unknown> = {};
   try {
     if (kind === 'file') {
       const file = form.get('file');
@@ -74,6 +77,14 @@ export async function POST(req: NextRequest) {
       const parsed = new URL(url);
       if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password)
         throw new Error('Usa un enlace público http o https, sin credenciales.');
+      if (
+        [...parsed.searchParams.keys()].some((key) =>
+          /token|secret|password|passwd|api_?key|authorization|signature|credential/i.test(key),
+        )
+      )
+        throw new Error(
+          'El enlace parece incluir una credencial. Conecta la API como herramienta y guarda el secreto allí.',
+        );
       const spreadsheetId = googleSpreadsheetId(parsed);
       const context = buildToolContext({
         organizationId: user.organization.id,
@@ -83,6 +94,8 @@ export async function POST(req: NextRequest) {
         signal: AbortSignal.timeout(25000),
       });
       if (spreadsheetId) {
+        sourceKind = 'google_sheet';
+        sourceConfig = { spreadsheetId };
         const result = await readGoogleSheetFeed(context, spreadsheetId);
         url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}`;
         name = result.name.slice(0, 200);
@@ -92,6 +105,7 @@ export async function POST(req: NextRequest) {
         mime = 'text/markdown';
         bytes = Buffer.from(text);
       } else {
+        sourceConfig = { url };
         const result = await webScrape.handler({ url, maxChars: 20000 }, context);
         if (!result.content.trim())
           throw new Error('La página no tiene texto accesible. Puedes pegar su contenido.');
@@ -134,7 +148,17 @@ export async function POST(req: NextRequest) {
       { error: 'No se pudo comprobar si la fuente ya existe.' },
       { status: 503 },
     );
-  if (duplicate.data) return NextResponse.json({ entry: duplicate.data, deduplicated: true });
+  if (duplicate.data) {
+    await registerFeedSourceCapture({
+      db,
+      actorId: user.id,
+      kind: sourceKind,
+      name,
+      config: Object.keys(sourceConfig).length ? sourceConfig : { contentHash: fingerprint },
+      attachmentId: duplicate.data.id,
+    });
+    return NextResponse.json({ entry: duplicate.data, deduplicated: true });
+  }
   // Older entries have no semantic identity yet; exact original bytes remain a safe match.
   const rawHash = createHash('sha256').update(bytes).digest('hex');
   const legacy = await ownedFeed(db, user.id)
@@ -188,8 +212,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ entry: winner.data, deduplicated: true });
     }
     if (error || !data) throw new Error('No se pudo guardar la entrada.');
+    await registerFeedSourceCapture({
+      db,
+      actorId: user.id,
+      kind: sourceKind,
+      name,
+      config: Object.keys(sourceConfig).length ? sourceConfig : { contentHash: fingerprint },
+      attachmentId: data.id,
+    });
     return NextResponse.json({ entry: data }, { status: 201 });
   } catch {
+    try {
+      await db.from('chat_attachments').delete().eq('id', id).eq('created_by', user.id);
+    } catch {
+      // Best effort rollback; the seven-day purge remains the final safety net.
+    }
     await removeFiles(db, 'chat-uploads', [path]).catch(() => {});
     return NextResponse.json(
       { error: 'No se pudo añadir a Feed. Inténtalo otra vez.' },

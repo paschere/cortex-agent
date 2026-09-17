@@ -152,7 +152,8 @@ describe('Feed lifecycle', () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ entry: { id }, deduplicated: true });
-    expect(state.rows).toHaveLength(1);
+    expect(state.rows.filter((row) => row.table === 'chat_attachments')).toHaveLength(1);
+    expect(state.rows.filter((row) => row.table === 'feed_sources')).toHaveLength(1);
     expect(files.putFile).toHaveBeenCalledOnce();
     expect(promote).not.toHaveBeenCalled();
   });
@@ -172,7 +173,7 @@ describe('Feed lifecycle', () => {
 
   it('accepts consultation data without creating a conversation or memory', async () => {
     await addText();
-    expect(state.writes).toEqual(['chat_attachments']);
+    expect(state.writes).toEqual(['chat_attachments', 'feed_sources']);
     expect(state.rows[0]).toMatchObject({
       disposition: 'turn',
       conversation_id: null,
@@ -187,7 +188,7 @@ describe('Feed lifecycle', () => {
     const second = await (await action(request({ action: 'consult' }), params(id))).json();
     expect(first.href).toMatch(/^\/chat\//);
     expect(second.href).toBe(first.href);
-    expect(state.writes).toEqual(['chat_attachments', 'conversations']);
+    expect(state.writes).toEqual(['chat_attachments', 'feed_sources', 'conversations']);
     expect(promote).not.toHaveBeenCalled();
   });
   it('only promotes when explicitly requested', async () => {
@@ -216,7 +217,7 @@ describe('Feed lifecycle', () => {
     state.rows.push({ table: 'kb_documents', id: 'doc', organization_id: state.orgId });
     expect((await DELETE(request({}), params(id))).status).toBe(200);
     expect(files.removeFiles).toHaveBeenCalledOnce();
-    expect(state.rows).toHaveLength(1);
-    expect(state.rows[0]?.table).toBe('kb_documents');
+    expect(state.rows.filter((row) => row.table === 'kb_documents')).toHaveLength(1);
+    expect(state.rows.filter((row) => row.table === 'chat_attachments')).toHaveLength(0);
   });
 });
