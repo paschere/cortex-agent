@@ -72,10 +72,15 @@ export interface Config {
   /** Cuánto esperar en la sala de espera antes de rendirse. */
   admissionTimeoutMs: number;
   /**
-   * Si Cortex se queda solo en la llamada (los demás colgaron), cuánto esperar
-   * antes de salir. 0 = no salir por quedarse solo.
+   * Si Cortex se queda solo (roster vacío DESPUÉS de haber visto a alguien, y
+   * la sala muda). Un refresh de Meet no cuenta: hace falta silencio. 0 = off.
    */
   everyoneLeftTimeoutMs: number;
+  /**
+   * Silencio remoto continuo para irse, como Vexa `left_alone` (10 min).
+   * Cubre notetakers mudos que el roster sigue contando. 0 = off.
+   */
+  aloneSilenceMs: number;
   /** Visitar Google antes de Meet para que el perfil parezca "vivido". */
   warmup: boolean;
   /**
@@ -125,6 +130,7 @@ export function loadConfig(): Config {
     uiInteractionMode: process.env.MEET_UI_MODE?.trim() === 'synthetic' ? 'synthetic' : 'humanized',
     admissionTimeoutMs: number('MEET_ADMISSION_TIMEOUT_MS', 180_000),
     everyoneLeftTimeoutMs: number('MEET_EVERYONE_LEFT_MS', 45_000),
+    aloneSilenceMs: number('MEET_ALONE_SILENCE_MS', 600_000),
     warmup: process.env.MEET_WARMUP?.trim() !== 'false',
     browserServiceUrl: process.env.MEET_BROWSER_SERVICE_URL?.trim() || null,
     camera: process.env.MEET_CAMERA?.trim() || 'card',

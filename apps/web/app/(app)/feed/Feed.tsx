@@ -39,13 +39,14 @@ const kinds = { file: 'Archivo', url: 'Enlace', text: 'Texto' };
 export function Feed({
   initialEntries,
   workspaceId,
-}: { initialEntries: FeedEntry[]; workspaceId: string }) {
+  initialMode = 'file',
+}: { initialEntries: FeedEntry[]; workspaceId: string; initialMode?: 'file' | 'url' | 'text' }) {
   const href = (path: string) => workspaceHref(workspaceId, path);
   const router = useRouter();
   const [entries, setEntries] = useState(initialEntries);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<FeedDetail | null>(null);
-  const [mode, setMode] = useState<'file' | 'url' | 'text'>('file');
+  const [mode, setMode] = useState<'file' | 'url' | 'text'>(initialMode);
   const [query, setQuery] = useState('');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');

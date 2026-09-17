@@ -20,11 +20,15 @@ import {
   Clock3,
   FileSpreadsheet,
   History,
+  Link2,
   Loader2,
+  Plug,
   RefreshCw,
   SearchCheck,
   ShieldCheck,
   Table2,
+  Type,
+  Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -33,6 +37,11 @@ type Props = {
   workspaceId: string;
   organizationName: string;
   feedHref: string;
+  feedFileHref: string;
+  feedUrlHref: string;
+  feedTextHref: string;
+  integrationsHref: string;
+  toolsHref: string;
   managementHref: string;
   initialSourceId?: string | null;
 };
@@ -130,6 +139,11 @@ export function ActivationWorkspace({
   workspaceId,
   organizationName,
   feedHref,
+  feedFileHref,
+  feedUrlHref,
+  feedTextHref,
+  integrationsHref,
+  toolsHref,
   managementHref,
   initialSourceId = null,
 }: Props) {
@@ -484,12 +498,13 @@ export function ActivationWorkspace({
             </p>
           </div>
         </div>
-        <Link
-          href={feedHref}
-          className={`${button} border border-border-strong bg-surface text-ink hover:bg-surface-2`}
-        >
-          <FileSpreadsheet className="h-4 w-4" aria-hidden /> Añadir archivo en Feed
-        </Link>
+        <SourcePicker
+          fileHref={feedFileHref}
+          urlHref={feedUrlHref}
+          textHref={feedTextHref}
+          integrationsHref={integrationsHref}
+          toolsHref={toolsHref}
+        />
       </header>
 
       <section className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
@@ -893,6 +908,102 @@ export function ActivationWorkspace({
         </details>
       ) : null}
     </div>
+  );
+}
+
+function SourcePicker({
+  fileHref,
+  urlHref,
+  textHref,
+  integrationsHref,
+  toolsHref,
+}: {
+  fileHref: string;
+  urlHref: string;
+  textHref: string;
+  integrationsHref: string;
+  toolsHref: string;
+}) {
+  const options = [
+    {
+      href: fileHref,
+      icon: Upload,
+      title: 'Archivo',
+      detail: 'PDF, Word, Excel, CSV o texto, hasta 10 MB.',
+    },
+    {
+      href: urlHref,
+      icon: Link2,
+      title: 'Enlace o Google Sheets',
+      detail: 'Páginas públicas; Sheets requiere acceso mediante el enlace.',
+    },
+    {
+      href: textHref,
+      icon: Type,
+      title: 'Texto',
+      detail: 'Pega notas o datos directamente en Feed.',
+    },
+  ];
+  return (
+    <details className="group relative z-20">
+      <summary
+        className={`${button} cursor-pointer list-none border border-border-strong bg-surface text-ink hover:bg-surface-2`}
+      >
+        <FileSpreadsheet className="h-4 w-4" aria-hidden /> Agregar fuente{' '}
+        <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="absolute right-0 top-full mt-2 w-[min(23rem,calc(100vw-2rem))] overflow-hidden rounded-card border border-border bg-surface shadow-card">
+        <div className="p-2">
+          {options.map(({ href, icon: Icon, title, detail }) => (
+            <Link
+              key={title}
+              href={href}
+              className="flex items-start gap-3 rounded-sm px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:bg-surface-2"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-primary-soft text-primary">
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ink">{title}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">
+                  {detail}
+                </span>
+              </span>
+            </Link>
+          ))}
+        </div>
+        <div className="border-t border-border bg-surface-2 p-3">
+          <div className="flex items-start gap-3">
+            <Plug className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div>
+              <p className="text-sm font-semibold text-ink">API o integración</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+                Conecta un servicio o prepara una herramienta con su documentación. Conectarlo no
+                ejecuta activaciones automáticamente.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-3">
+                <Link
+                  href={integrationsHref}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  Ver integraciones
+                </Link>
+                <Link
+                  href={toolsHref}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  Configurar API
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p className="border-t border-border px-4 py-3 text-xs leading-relaxed text-ink-faint">
+          Las fuentes de Feed son privadas, duran 7 días y no se guardan automáticamente en Brain.
+          Las activaciones actuales necesitan una tabla para simular.
+        </p>
+      </div>
+    </details>
   );
 }
 

@@ -6,6 +6,7 @@ import { type MeetingParticipant, speakerTone } from '@/components/meetings/spea
 import {
   type LiveTranscriptLine,
   isGptLiveLine,
+  labelLiveSpeaker,
   mergeTranscriptSnapshot,
   upsertDisplayLine,
 } from '@/lib/live-transcript';
@@ -93,6 +94,18 @@ function clock(at: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+function PartialCaption({ at, who, text }: { at: number; who: string; text: string }) {
+  return (
+    <p className="text-sm leading-snug text-ink-faint">
+      <span className="mr-2 font-mono text-[11px]">{clock(at)}</span>
+      <span className={`font-semibold ${who !== 'Alguien' ? speakerTone(who).text : ''}`}>
+        {who}:{' '}
+      </span>
+      {text}
+    </p>
+  );
+}
+
 export function LiveRoom({
   sessionId,
   meetUrl,
@@ -128,8 +141,18 @@ export function LiveRoom({
   const [showLatest, setShowLatest] = useState(false);
   const chatEnd = useRef<HTMLDivElement | null>(null);
   const lineRefs = useRef<Map<number, HTMLParagraphElement>>(new Map());
+  const lastHumanSpeaker = useRef<string | null>(null);
   const [timeline, setTimeline] = useState<VisibleEvent[]>(snapshot?.timeline ?? []);
   const frozen = Boolean(snapshot);
+
+  const speakerLabel = useCallback(
+    (line: Line) => {
+      const name = labelLiveSpeaker(line, people, lastHumanSpeaker.current);
+      if (line.role !== 'assistant' && name !== 'Alguien') lastHumanSpeaker.current = name;
+      return name;
+    },
+    [people],
+  );
 
   const seek = useCallback((at: number) => {
     const keys = [...lineRefs.current.keys()].sort((a, b) => a - b);
@@ -401,7 +424,8 @@ export function LiveRoom({
           ) : null}
           <div className="flex flex-col gap-2">
             {lines.map((l, i) => {
-              const tone = l.speaker ? speakerTone(l.speaker) : null;
+              const who = speakerLabel(l);
+              const tone = who !== 'Alguien' && who !== 'Cortex' ? speakerTone(who) : null;
               return (
                 <p
                   key={l.id ?? `${l.at}-${i}`}
@@ -423,22 +447,14 @@ export function LiveRoom({
                       l.role === 'assistant' ? 'text-primary' : (tone?.text ?? 'text-ink-faint')
                     }`}
                   >
-                    {l.speaker ?? (l.role === 'assistant' ? 'Cortex' : 'Alguien')}:{' '}
+                    {who}:{' '}
                   </span>
                   {l.text}
                 </p>
               );
             })}
             {partial ? (
-              <p className="text-sm leading-snug text-ink-faint">
-                <span className="mr-2 font-mono text-[11px]">{clock(partial.at)}</span>
-                <span
-                  className={`font-semibold ${partial.speaker ? speakerTone(partial.speaker).text : ''}`}
-                >
-                  {partial.speaker ?? 'Alguien'}:{' '}
-                </span>
-                {partial.text}
-              </p>
+              <PartialCaption at={partial.at} who={speakerLabel(partial)} text={partial.text} />
             ) : null}
           </div>
           <div ref={transcriptEnd} />

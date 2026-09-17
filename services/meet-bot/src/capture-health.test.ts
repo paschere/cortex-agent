@@ -61,6 +61,16 @@ check(
   shouldRewireTracks({ silentRounds: 9, speaker: 'Ana', live: 2, recentPeak: 0.04 }),
   false,
 );
+check(
+  'no wired tracks rewires after 1 silent round',
+  shouldRewireTracks({ silentRounds: 1, speaker: 'Mateo Angel', live: 0, recentPeak: 0 }),
+  true,
+);
+check(
+  'no wired tracks wait one round',
+  shouldRewireTracks({ silentRounds: 0, speaker: 'Mateo Angel', live: 0, recentPeak: 0 }),
+  false,
+);
 
 check(
   'AudioWorklet is the capture processor',
@@ -73,9 +83,15 @@ check(
   false,
 );
 check(
-  'Vexa taps Meet playing elements via createMediaStreamSource of srcObject',
-  AUDIO_TAP_SCRIPT.includes('createMediaStreamSource') &&
-    AUDIO_TAP_SCRIPT.includes('findMediaElements'),
+  'taps paused Meet elements that still have a live audio stream',
+  AUDIO_TAP_SCRIPT.includes("el.paused) el.play()") &&
+    AUDIO_TAP_SCRIPT.includes('createMediaStreamSource') &&
+    !AUDIO_TAP_SCRIPT.includes('!el.paused &&'),
+  true,
+);
+check(
+  'wraps RTCPeerConnection so remote tracks are queued before the mixer exists',
+  AUDIO_TAP_SCRIPT.includes('__cortexTapWrapped') && AUDIO_TAP_SCRIPT.includes('pendingStreams'),
   true,
 );
 check(
@@ -102,6 +118,11 @@ check('watchdog can rewire and restart the graph', AUDIO_TAP_SCRIPT.includes('re
 check(
   'scene() reports who is presenting so the visual log can fire',
   AUDIO_TAP_SCRIPT.includes('scene:') && AUDIO_TAP_SCRIPT.includes('presenting'),
+  true,
+);
+check(
+  'roster names a lone remote even without a speaking class',
+  AUDIO_TAP_SCRIPT.includes('function pickSpeaker') && AUDIO_TAP_SCRIPT.includes('unique.length === 1'),
   true,
 );
 

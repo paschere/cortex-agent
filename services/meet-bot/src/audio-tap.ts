@@ -33,25 +33,45 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
   };
 
   const EFFECTS = /visual_effects|backgrounds and effects|fondos y efectos/i;
-  const SPEAKING_SEL = '.Oaajhc, .HX2H7, .wEsLMd, .OgVli, [data-audio-level]:not([data-audio-level="0"])';
+  const SPEAKING_SEL = '.Oaajhc, .HX2H7, .wEsLMd, .OgVli, [data-audio-level]:not([data-audio-level="0"]), [data-is-speaking="true"]';
+  const NAME_SEL = 'span.notranslate, .zWGUib, .cS7aqe, .XWGOtd';
+  // Keep name cleaning in sync with meet-speaker.ts (Node side).
+  const PLACEHOLDER = /^(you|t[uú]|participant|participante|guest|invitado|unknown|desconocido|user|usuario)(\\s+\\d+)?$/i;
+  const CHROME_CHUNK = /^(microphone|micr[oó]fono|camera|c[aá]mara|muted|muteado|speaker|altavoz|sharing|compartiendo)\\b/i;
 
   function cleanName(raw) {
     if (!raw) return null;
     let s = String(raw).replace(/\\s+/g, ' ').trim();
     if (!s || EFFECTS.test(s)) return null;
-    s = s.replace(/\\s*\\((presenting|presentando)\\)\\s*$/i, '');
-    s = s.replace(/,?\\s*(muted|muteado|micr[oó]fono (off|apagado)|c[aá]mara apagada|speaking|hablando).*$/i, '');
-    s = s.replace(/^(you|t[uú])$/i, '');
-    return s.trim() || null;
+    s = s.replace(/\\s*\\((presenting|presentando|you|t[uú]|yourself)\\)\\s*$/i, '');
+    s = s.replace(/'s screen$/i, '');
+    s = s.replace(/\\s+est[aá] (hablando|presentando)$/i, '');
+    s = s.replace(/\\s+is (speaking|presenting)$/i, '');
+    s = s.replace(/\\s+(speaking|hablando|presenting|presentando)$/i, '');
+    const parts = s.split(',').map((p) => p.trim()).filter(Boolean);
+    const nameParts = [];
+    for (const part of parts) {
+      if (CHROME_CHUNK.test(part)) break;
+      nameParts.push(part);
+    }
+    s = (nameParts.join(', ') || parts[0] || s).trim();
+    if (PLACEHOLDER.test(s)) return null;
+    return s || null;
   }
 
   function tileSpeaking(el) {
-    if (el.getAttribute('data-is-speaking') === 'true') return true;
+    if (el.getAttribute('data-is-speaking') === 'true' || el.getAttribute('data-speaking') === 'true') return true;
     const level = el.getAttribute('data-audio-level');
     if (level && level !== '0') return true;
     const aria = el.getAttribute('aria-label') || '';
-    if (/speaking|hablando/i.test(aria)) return true;
+    if (/(is )?speaking|est[aá] hablando|hablando/i.test(aria)) return true;
     return Boolean(el.querySelector(SPEAKING_SEL));
+  }
+
+  function tileName(el, selfName, aria) {
+    if (selfName) return selfName;
+    const labeled = el.querySelector(NAME_SEL);
+    return cleanName(labeled && labeled.textContent) || cleanName(aria) || aria || '';
   }
 
   function collectRoster() {
@@ -78,8 +98,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
         ? el
         : el.querySelector('[data-self-name]');
       const selfName = selfNode ? selfNode.getAttribute('data-self-name') : null;
-      const labeled = el.querySelector('span.notranslate, .zWGUib, .cS7aqe');
-      add(id, selfName || labeled?.textContent || aria, tileSpeaking(el), Boolean(selfName));
+      add(id, tileName(el, selfName, aria), tileSpeaking(el), Boolean(selfName));
     }
     for (const el of document.querySelectorAll('[data-self-name]')) {
       const n = el.getAttribute('data-self-name');
@@ -88,11 +107,32 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     return [...byKey.values()];
   }
 
+  function usableName(name) {
+    const n = cleanName(name);
+    if (!n || /^participante$/i.test(n)) return null;
+    return n;
+  }
+
+  function pickSpeaker(roster) {
+    const others = roster.filter((p) => !p.self);
+    const talking = others.find((p) => p.speaking);
+    const talkingName = talking ? usableName(talking.name) : null;
+    if (talkingName) return talkingName;
+    const unique = [];
+    for (const p of others) {
+      const n = usableName(p.name);
+      if (n && !unique.includes(n)) unique.push(n);
+    }
+    if (unique.length === 1) return unique[0];
+    if (state.speaker && others.some((p) => usableName(p.name) === state.speaker)) return state.speaker;
+    return state.speaker;
+  }
+
   function refreshRoster() {
     const next = collectRoster();
     state.roster = next;
-    const talking = next.find((p) => p.speaking && !p.self) || next.find((p) => p.speaking);
-    if (talking?.name) state.speaker = talking.name;
+    const name = pickSpeaker(next);
+    if (name) state.speaker = name;
   }
 
   let ctx = null;
@@ -100,9 +140,13 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
   const captureNodes = [];
   const sourceNodes = [];
   const connectedStreamIds = new Set();
+  const connectedTrackIds = new Set();
   const wiredTracks = [];
+  const pendingStreams = [];
+  const tapPcs = [];
   let sweepTimer = null;
   let speakerWatched = false;
+  let rosterSoon = null;
 
   const WORKLET_SRC = [
     'class CortexPcmCapture extends AudioWorkletProcessor {',
@@ -147,13 +191,12 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     return tracks.length > 0 && tracks.every(isLocalVoice);
   }
 
-  // Vexa findMediaElements: solo lo que Meet YA está reproduciendo.
+  // Meet a veces deja el <audio> en pausa y igual tiene el MediaStream vivo.
   function findMediaElements() {
-    return Array.from(document.querySelectorAll('audio, video')).filter((el) =>
-      !el.paused &&
-      el.srcObject instanceof MediaStream &&
-      el.srcObject.getAudioTracks().length > 0
-    );
+    return Array.from(document.querySelectorAll('audio, video')).filter((el) => {
+      const stream = el.srcObject;
+      return stream instanceof MediaStream && stream.getAudioTracks().some((t) => t.readyState === 'live');
+    });
   }
 
   async function setupGraph() {
@@ -190,32 +233,60 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     state.ctxState = ctx.state;
   }
 
-  function connectElement(el) {
-    const stream = el.srcObject;
+  function connectStream(stream) {
     if (!stream || !(stream instanceof MediaStream)) return false;
-    if (stream.getAudioTracks().length === 0) return false;
-    if (connectedStreamIds.has(stream.id)) return false;
+    const tracks = stream.getAudioTracks().filter((t) => t.readyState === 'live' && !isLocalVoice(t));
+    if (!tracks.length) return false;
+    const fresh = tracks.filter((t) => !connectedTrackIds.has(t.id));
+    if (!fresh.length) return false;
     if (isLocalStream(stream)) return false;
-    if (!mixerHold.current || !ctx) return false;
+    if (!mixerHold.current || !ctx) {
+      if (!pendingStreams.some((s) => s.id === stream.id)) pendingStreams.push(stream);
+      return false;
+    }
     try {
-      const source = ctx.createMediaStreamSource(stream);
+      const source = ctx.createMediaStreamSource(fresh.length === tracks.length ? stream : new MediaStream(fresh));
       source.connect(mixerHold.current);
       sourceNodes.push(source);
       connectedStreamIds.add(stream.id);
-      const track = stream.getAudioTracks()[0];
-      wiredTracks.push(track);
-      track.addEventListener('ended', () => {
-        connectedStreamIds.delete(stream.id);
-        const i = wiredTracks.indexOf(track);
-        if (i >= 0) wiredTracks.splice(i, 1);
-      });
+      for (const track of fresh) {
+        connectedTrackIds.add(track.id);
+        wiredTracks.push(track);
+        track.addEventListener('ended', () => {
+          connectedTrackIds.delete(track.id);
+          connectedStreamIds.delete(stream.id);
+          const i = wiredTracks.indexOf(track);
+          if (i >= 0) wiredTracks.splice(i, 1);
+        });
+      }
       return true;
     } catch (e) {
       return false;
     }
   }
 
+  function connectElement(el) {
+    if (el.paused) el.play().catch(() => {});
+    return connectStream(el.srcObject);
+  }
+
+  function flushPending() {
+    const queued = pendingStreams.splice(0);
+    for (const stream of queued) connectStream(stream);
+  }
+
   function sweep() {
+    flushPending();
+    for (const pc of tapPcs) {
+      try {
+        for (const receiver of pc.getReceivers()) {
+          const track = receiver.track;
+          if (!track || track.kind !== 'audio' || track.readyState !== 'live') continue;
+          if (isLocalVoice(track)) continue;
+          connectStream(new MediaStream([track]));
+        }
+      } catch (e) { /* pc cerrada */ }
+    }
     const els = findMediaElements();
     state.elements = els.length;
     state.meetPlay = els.slice(0, 6).map((el) => {
@@ -232,7 +303,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     state.meetSrc = connectedStreamIds.size;
     state.tracks = connectedStreamIds.size;
     state.live = wiredTracks.filter((t) => t && t.readyState === 'live').length;
-    state.pcs = 0;
+    state.pcs = tapPcs.length;
     state.mine = 0;
     state.playing = els.filter((e) => !e.paused).length;
     state.trackInfo = wiredTracks
@@ -252,6 +323,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
       try { n.disconnect(); } catch (e) { /* */ }
     }
     connectedStreamIds.clear();
+    connectedTrackIds.clear();
     wiredTracks.length = 0;
   }
 
@@ -259,6 +331,7 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     if (state.started) return { ok: false, reason: 'already-started' };
     state.started = true;
     await setupGraph();
+    flushPending();
     sweep();
     if (!sweepTimer) sweepTimer = setInterval(sweep, 1000);
     refreshRoster();
@@ -268,8 +341,9 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
 
   function rewire() {
     disconnectSources();
+    flushPending();
     sweep();
-    return { ok: true, tracks: state.tracks, meetSrc: state.meetSrc, capture: state.capture };
+    return { ok: true, tracks: state.tracks, meetSrc: state.meetSrc, capture: state.capture, pcs: tapPcs.length };
   }
 
   async function restart() {
@@ -312,15 +386,41 @@ export const AUDIO_TAP_SCRIPT = /* js */ `
     return btoa(bin);
   }
 
+  function refreshRosterSoon() {
+    if (rosterSoon) return;
+    rosterSoon = setTimeout(() => {
+      rosterSoon = null;
+      refreshRoster();
+    }, 250);
+  }
+
   function watchSpeaker() {
     if (speakerWatched) return;
     speakerWatched = true;
-    const pick = () => refreshRoster();
-    new MutationObserver(pick).observe(document.body, {
+    new MutationObserver(refreshRosterSoon).observe(document.body, {
       subtree: true, attributes: true, childList: true,
       attributeFilter: ['data-is-speaking', 'data-audio-level', 'aria-label', 'class'],
     });
-    setInterval(pick, 400);
+    setInterval(refreshRoster, 800);
+  }
+
+  const PrevPC = window.RTCPeerConnection;
+  if (PrevPC && !PrevPC.__cortexTapWrapped) {
+    const Wrapped = new Proxy(PrevPC, {
+      construct(Target, args) {
+        const pc = new Target(...args);
+        tapPcs.push(pc);
+        pc.addEventListener('track', (ev) => {
+          if (!ev.track || ev.track.kind !== 'audio') return;
+          if (isLocalVoice(ev.track)) return;
+          const stream = (ev.streams && ev.streams[0]) || new MediaStream([ev.track]);
+          connectStream(stream);
+        });
+        return pc;
+      },
+    });
+    Wrapped.__cortexTapWrapped = true;
+    window.RTCPeerConnection = Wrapped;
   }
 
   function snapshotLevel(consumeRecent) {

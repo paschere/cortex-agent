@@ -15,6 +15,33 @@ export function isGptLiveLine(line: LiveTranscriptLine): boolean {
   return line.source === 'gpt-live' && typeof line.id === 'string' && line.id.length > 0;
 }
 
+function isRealName(name: string | null | undefined): name is string {
+  const n = name?.trim() ?? '';
+  return n.length > 0 && !/^participante$/i.test(n);
+}
+
+/**
+ * GPT-Live often arrives without a speaker. In a 1:1 (tú + Cortex) the roster
+ * already has the human; keep that name instead of painting «Alguien».
+ */
+export function labelLiveSpeaker(
+  line: Pick<LiveTranscriptLine, 'speaker' | 'role'>,
+  people: Array<{ name: string; speaking?: boolean; self?: boolean }>,
+  lastSpeaker?: string | null,
+): string {
+  if (isRealName(line.speaker)) return line.speaker.trim();
+  if (line.role === 'assistant') return 'Cortex';
+  const others = people.filter((person) => !person.self);
+  const talking = others.find((person) => person.speaking)?.name;
+  if (isRealName(talking)) return talking.trim();
+  const unique = [
+    ...new Set(others.map((person) => person.name.trim()).filter((name) => isRealName(name))),
+  ];
+  if (unique.length === 1 && unique[0]) return unique[0];
+  if (isRealName(lastSpeaker)) return lastSpeaker.trim();
+  return 'Alguien';
+}
+
 function sameLegacyLine(a: LiveTranscriptLine, b: LiveTranscriptLine): boolean {
   return a.at === b.at && a.text === b.text && a.speaker === b.speaker;
 }

@@ -23,9 +23,14 @@ export type CallEndSnapshot = {
 export type CallEndVerdict = { ended: boolean; reason: string | null };
 
 const ENDED_COPY =
-  /this meeting has ended|the meeting has ended|the host ended the meeting|you left the meeting|call ended|thanks for joining|meeting ended|el organizador (finaliz[oó]|termin[oó])|la reuni[oó]n (ha )?(finalizado|terminado)|esta reuni[oó]n ha (terminado|finalizado)|saliste de la reuni[oó]n|la llamada (ha )?(finalizado|terminado)|gracias por (unirte|participar)/i;
+  /this meeting has ended|the meeting has ended|the meeting has been ended|the host ended the meeting|you left the meeting|you.?ve left the meeting|call ended|the call has ended|thanks for joining|meeting ended|el organizador (finaliz[oó]|termin[oó])|la reuni[oó]n (ha )?(finalizado|terminado)|esta reuni[oó]n ha (terminado|finalizado)|saliste de la reuni[oó]n|la llamada (ha )?(finalizado|terminado)|gracias por (unirte|participar)/i;
+
+const REMOVED_COPY =
+  /you (were|have been) removed|you.?ve been removed|removed from (the )?(meeting|call)|you.?re no longer in (the )?(meeting|call)|te (expulsaron|eliminaron|sacaron)|te han (expulsado|eliminado|sacado)/i;
 
 const REJOIN = /^(rejoin|volver a unirse|unirse de nuevo)$/i;
+
+const RETURN_HOME = /return to home screen|volver a la (pantalla de )?inicio|back to home/i;
 
 function hasCode(url: string): boolean {
   return /meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}/i.test(url);
@@ -41,8 +46,14 @@ export function callEndedFromSnapshot(snap: CallEndSnapshot): CallEndVerdict {
     return { ended: true, reason: 'Meet mostró «Volver a unirse»: la llamada ya no está.' };
   }
   const copy = blob([...snap.headings, ...snap.dialogs, ...buttons]);
+  if (REMOVED_COPY.test(copy)) {
+    return { ended: true, reason: 'Te sacaron de la reunión.' };
+  }
   if (ENDED_COPY.test(copy)) {
     return { ended: true, reason: 'Meet avisó que la reunión terminó.' };
+  }
+  if (!snap.hasParticipantTile && buttons.some((b) => RETURN_HOME.test(b))) {
+    return { ended: true, reason: 'Meet mostró la pantalla de despedida.' };
   }
   if (snap.url.includes('meet.google.com') && !hasCode(snap.url) && !snap.hasParticipantTile) {
     return { ended: true, reason: 'Meet salió de la sala (ya no hay código en la URL).' };

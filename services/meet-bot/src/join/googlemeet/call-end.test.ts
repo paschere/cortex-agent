@@ -90,6 +90,36 @@ const lostChrome: CallEndSnapshot = {
 check('lost in-call chrome is detectable', callLostInCallChrome(lostChrome), true);
 check('lost chrome alone is not instant end (roster/url decide)', callEndedFromSnapshot(lostChrome).ended, false);
 
+const kicked: CallEndSnapshot = {
+  url: 'https://meet.google.com/abc-defg-hij',
+  headings: ["You've been removed from the meeting"],
+  buttons: ['Return to home screen'],
+  dialogs: [],
+  hasParticipantTile: false,
+  hasLeaveButton: false,
+};
+check('host removal ends it', callEndedFromSnapshot(kicked).ended, true);
+
+const homeOnly: CallEndSnapshot = {
+  url: 'https://meet.google.com/abc-defg-hij',
+  headings: [],
+  buttons: ['Return to home screen'],
+  dialogs: [],
+  hasParticipantTile: false,
+  hasLeaveButton: false,
+};
+check('return-home without tiles is the goodbye page', callEndedFromSnapshot(homeOnly).ended, true);
+
+const reconnecting: CallEndSnapshot = {
+  url: 'https://meet.google.com/abc-defg-hij',
+  headings: ['Reconnecting'],
+  buttons: ['Leave call'],
+  dialogs: [],
+  hasParticipantTile: true,
+  hasLeaveButton: true,
+};
+check('reconnecting is not ended', callEndedFromSnapshot(reconnecting).ended, false);
+
 if (failed) {
   console.error(`\n${failed} failed, ${passed} passed`);
   process.exit(1);

@@ -42,7 +42,9 @@ export function shouldRewireTracks(input: {
   live: number;
   recentPeak: number;
 }): boolean {
-  if (!silentWhileLive(input)) return false;
+  if (input.recentPeak >= 0.0005) return false;
+  // El tap nunca enganchó pistas de Meet: reenganchar pronto.
+  if (input.live <= 0) return input.silentRounds >= 1;
   if (input.speaker) return input.silentRounds >= 1;
   return input.silentRounds >= 3;
 }

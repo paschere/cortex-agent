@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type LiveTranscriptLine,
+  labelLiveSpeaker,
   mergeTranscriptSnapshot,
   upsertDisplayLine,
 } from './live-transcript';
@@ -61,5 +62,45 @@ describe('live transcript display rows', () => {
     const final = line({ isFinal: true, speaker: 'Ana' });
 
     expect(mergeTranscriptSnapshot([final], [final])).toEqual([final]);
+  });
+});
+
+describe('labelLiveSpeaker', () => {
+  it('names the only other person when GPT-Live omitted the speaker', () => {
+    expect(
+      labelLiveSpeaker(
+        { speaker: null, role: 'user' },
+        [
+          { name: 'Cortex', self: true },
+          { name: 'Ana García', speaking: false, self: false },
+        ],
+      ),
+    ).toBe('Ana García');
+  });
+
+  it('keeps Cortex on assistant lines', () => {
+    expect(labelLiveSpeaker({ speaker: null, role: 'assistant' }, [])).toBe('Cortex');
+  });
+
+  it('falls back to Alguien when several people could have spoken', () => {
+    expect(
+      labelLiveSpeaker({ speaker: null, role: 'user' }, [
+        { name: 'Ana', speaking: false, self: false },
+        { name: 'Juan', speaking: false, self: false },
+      ]),
+    ).toBe('Alguien');
+  });
+
+  it('reuses the last human speaker across a silent gap', () => {
+    expect(
+      labelLiveSpeaker(
+        { speaker: null, role: 'user' },
+        [
+          { name: 'Ana', speaking: false, self: false },
+          { name: 'Juan', speaking: false, self: false },
+        ],
+        'Ana',
+      ),
+    ).toBe('Ana');
   });
 });

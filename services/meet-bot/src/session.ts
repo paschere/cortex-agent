@@ -3,6 +3,11 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { Readable } from 'node:stream';
 import type { BrowserContext, Page } from 'playwright';
 import { AUDIO_TAP_SCRIPT } from './audio-tap';
+import {
+  heardRemoteAudio,
+  shouldLeaveBySilence,
+  shouldLeaveEmptyAndSilent,
+} from './call-aloneness';
 import { chunksStalled, shouldRestartCapture, shouldRewireTracks } from './capture-health';
 import type { Config } from './config';
 import { DeepgramStream, type Transcript } from './deepgram';
@@ -22,6 +27,7 @@ import {
 import { retainTranscript } from './live-captions';
 import { LocalWakeDetector } from './local-wake';
 import { MeetLiveVoice } from './meet-live-voice';
+import { resolveHeardSpeaker } from './meet-speaker';
 import { humanPause, launchPersistentBrowser, warmUpProfile } from './stealth';
 import { resolveVirtualCamera } from './virtual-camera';
 import { type CallEvent, rosterDiff, shouldTakeFrame, uploadVisualFrame } from './visual-log';
@@ -122,6 +128,7 @@ export class MeetSession {
   private captureTimer: ReturnType<typeof setInterval> | null = null;
   private visualTimer: ReturnType<typeof setInterval> | null = null;
   private roster: MeetingParticipant[] = [];
+  private lastHeardSpeaker: string | null = null;
   private timeline: CallEvent[] = [];
   private lastPresenting: string | null = null;
   private lastFrameAt = -100;
@@ -129,6 +136,8 @@ export class MeetSession {
   private finishing = false;
   private sawOthers = false;
   private aloneSince: number | null = null;
+  private liveSince: number | null = null;
+  private lastRemoteAudioAt = Date.now();
 
   constructor(
     readonly id: string,
@@ -169,17 +178,25 @@ export class MeetSession {
     console.log(`[cortex-meet] ${this.id} said ${this.botName}: ${line.slice(0, 80)}`);
   }
 
+  private labelHeardSpeaker(hinted: string | null | undefined): string | null {
+    const speaker = resolveHeardSpeaker({
+      hinted: hinted ?? null,
+      roster: this.roster,
+      lastSpeaker: this.lastHeardSpeaker,
+      botName: this.botName,
+    });
+    if (speaker) this.lastHeardSpeaker = speaker;
+    return speaker;
+  }
+
   private ingestHeard(t: Transcript): void {
-    const speaker =
-      t.speaker ||
-      this.roster.find((p) => p.speaking && !p.self)?.name ||
-      this.roster.find((p) => p.speaking)?.name ||
-      null;
+    const speaker = this.labelHeardSpeaker(t.speaker);
     const line = { ...t, speaker };
     if (isBotSpeaker(line.speaker, this.botName)) return;
     const cutoff = Date.now() - 20_000;
     if (this.botSaid.some((s) => s.at >= cutoff && isEchoOfBot(line.text, s.text))) return;
     if (line.isFinal) {
+      this.finalCount += 1;
       if (this.finalCount === 1 || this.finalCount % 25 === 0) {
         console.log(
           `[cortex-meet] ${this.id} transcript #${this.finalCount} ${speaker ?? '?'}: ${line.text.slice(0, 80)}`,
@@ -214,8 +231,50 @@ export class MeetSession {
 
   private setStatus(status: MeetStatus, detail?: string): void {
     this.status = status;
+    if (status === 'live') {
+      this.liveSince = Date.now();
+      this.lastRemoteAudioAt = Date.now();
+    }
     if (detail) this.endedReason = detail;
     this.events.onStatus(status, detail);
+  }
+
+  private noteRemoteAudio(recentPeak: number): void {
+    if (heardRemoteAudio(recentPeak)) this.lastRemoteAudioAt = Date.now();
+  }
+
+  private checkAlone(): void {
+    if (this.status !== 'live' || this.finishing) return;
+    const now = Date.now();
+    const others = this.roster.filter((p) => !p.self).length;
+    if (others > 0) {
+      this.sawOthers = true;
+      this.aloneSince = null;
+    } else if (this.sawOthers) {
+      this.aloneSince ??= now;
+    }
+    const silentMs = now - this.lastRemoteAudioAt;
+    if (
+      shouldLeaveEmptyAndSilent({
+        sawOthers: this.sawOthers,
+        othersCount: others,
+        emptyMs: this.aloneSince ? now - this.aloneSince : 0,
+        silentMs,
+        everyoneLeftTimeoutMs: this.config.everyoneLeftTimeoutMs,
+      })
+    ) {
+      this.finish('Ya no quedó nadie en la llamada.');
+      return;
+    }
+    if (
+      shouldLeaveBySilence({
+        liveMs: this.liveSince ? now - this.liveSince : 0,
+        silentMs,
+        aloneSilenceMs: this.config.aloneSilenceMs,
+      })
+    ) {
+      this.finish('Nadie habló en un rato: la sala quedó sola o en silencio.');
+    }
   }
 
   async join(): Promise<void> {
@@ -282,7 +341,7 @@ export class MeetSession {
     await this.context.exposeBinding(
       '__cortexAudioChunk',
       (_src, payload: { b64: string; rms?: number; speaker: string | null }) => {
-        this.deepgram?.setSpeaker(payload.speaker);
+        this.deepgram?.setSpeaker(this.labelHeardSpeaker(payload.speaker));
         if (payload.b64) {
           const pcm = Buffer.from(payload.b64, 'base64');
           this.deepgram?.push(pcm);
@@ -292,12 +351,13 @@ export class MeetSession {
       },
     );
 
-    if (!this.voiceEnabled) {
-      this.deepgram = new DeepgramStream(this.config.deepgramKey, this.config.sttLanguage, (t) => {
-        this.ingestHeard(t);
-      });
-      this.deepgram.start();
-    }
+    // Siempre: GPT-Live solo transcribe el turno en que alguien nombra a
+    // Cortex. Sin Deepgram la sala queda muda en Llamadas.
+    this.deepgram = new DeepgramStream(this.config.deepgramKey, this.config.sttLanguage, (t) => {
+      this.ingestHeard(t);
+    });
+    this.deepgram.start();
+    console.log(`[cortex-meet] ${this.id} deepgram on (transcripción de la sala)`);
 
     this.setStatus('joining');
 
@@ -527,9 +587,11 @@ export class MeetSession {
         live: lvl.live ?? 0,
         recentPeak: lvl.recentPeak ?? 0,
       };
-      if (snapshot.live > 0 && snapshot.recentPeak < 0.0005) silentRounds += 1;
+      if (snapshot.recentPeak < 0.0005) silentRounds += 1;
       else silentRounds = 0;
       snapshot.silentRounds = silentRounds;
+      this.noteRemoteAudio(snapshot.recentPeak);
+      this.checkAlone();
       console.log(
         `[cortex-meet] ${this.id} audio watch chunks=${chunks} live=${snapshot.live} recentPeak=${snapshot.recentPeak.toFixed(4)} stall=${stallRounds} silent=${silentRounds} capture=${lvl.capture ?? '?'} tracks=${lvl.trackInfo ?? ''} meet=${lvl.meetPlay ?? ''} src=${lvl.meetSrc ?? 0} sr=${lvl.sampleRate ?? 0}`,
       );
@@ -639,19 +701,14 @@ export class MeetSession {
         this.roster = people;
         this.events.onRoster(people);
       }
-      if (this.status !== 'live') return;
-      const others = people.filter((p) => !p.self);
-      if (others.length > 0) {
-        this.sawOthers = true;
-        this.aloneSince = null;
-        return;
-      }
-      if (!this.sawOthers) return;
-      const wait = this.config.everyoneLeftTimeoutMs;
-      this.aloneSince ??= Date.now();
-      if (Date.now() - this.aloneSince >= wait) {
-        this.finish('Ya no quedó nadie en la llamada.');
-      }
+      const talking = resolveHeardSpeaker({
+        hinted: null,
+        roster: people,
+        lastSpeaker: this.lastHeardSpeaker,
+        botName: this.botName,
+      });
+      if (talking) this.lastHeardSpeaker = talking;
+      this.checkAlone();
     };
     void tick();
     this.rosterTimer = setInterval(() => void tick(), 1000);
@@ -711,14 +768,11 @@ export class MeetSession {
       )
       .catch((err: Error) => ({ error: err.message }));
     console.log(`[cortex-meet] ${this.id} voice arm ${JSON.stringify(armed)}`);
-    // Voice-enabled meetings use local wake detection; no cloud STT in standby.
     if (this.liveVoice) return true;
     if (!this.config.openaiKey) {
       console.error('[cortex-meet] GPT-Live requires OPENAI_API_KEY');
       return false;
     }
-    await this.deepgram?.stop().catch(() => undefined);
-    this.deepgram = null;
     if (this.visualTimer) clearInterval(this.visualTimer);
     this.visualTimer = null;
     this.liveVoice = new MeetLiveVoice({
@@ -781,7 +835,9 @@ export class MeetSession {
           .join('\n'),
       meetingStartedAt: this.heardAt,
       transcript: (row) => {
-        const line = { ...row, speaker: row.role === 'assistant' ? this.botName : null };
+        const speaker =
+          row.role === 'assistant' ? this.botName : this.labelHeardSpeaker(row.speaker);
+        const line = { ...row, speaker };
         retainTranscript(this.recent, line);
         if (this.recent.length > 200) this.recent.shift();
         this.events.onTranscript(line);
