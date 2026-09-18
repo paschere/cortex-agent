@@ -1,8 +1,9 @@
-import { browserActorKey, defaultBrowserProfile, getBrowserProfile, profileRef } from './profiles';
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { createHttpTransport } from './client';
+import { choosePageControl } from './jev-repair';
 import { forbiddenTargetReason } from './live-target';
+import { browserActorKey, defaultBrowserProfile, getBrowserProfile, profileRef } from './profiles';
 import type { PageSnapshot, SnapshotEntry, Target } from './types';
 
 /**
@@ -323,9 +324,21 @@ export const browserAct = registerTool({
 export const browserReadPage = registerTool({
   id: 'browser.read_page',
   description:
-    'Lee el contenido cargado de la página y sus iframes en content.text; continúa con content.nextOffset hasta que sea null. Las limitaciones y marcos inaccesibles se indican explícitamente. También vuelve a mirar la pestaña viva sin tocar nada: la URL donde quedó, el texto visible y los elementos con los que se puede actuar. Úsala después de que una persona condujo («ya terminé, sigue»), cuando un paso falló y necesitas orientarte, o para leer el resultado de una consulta antes de contárselo a la persona — la respuesta sale de lo que leíste aquí, no de mandar a nadie a mirar la página.',
+    'Lee el contenido cargado de la página y sus iframes en content.text; continúa con content.nextOffset hasta que sea null. Las limitaciones y marcos inaccesibles se indican explícitamente. También vuelve a mirar la pestaña viva sin tocar nada: la URL donde quedó, el texto visible y los elementos con los que se puede actuar. Úsala después de que una persona condujo, cuando un paso falló o para leer el resultado de una consulta. Para localizar un control puedes pasar findControl con un objetivo concreto y la acción prevista: si Jev está habilitado devuelve una sugerencia basada en los elementos visibles. No ejecuta nada; usa browser.act con ref y name después de comprobarla. Una sugerencia no autoriza acciones externas.',
   inputSchema: z.object({
     sessionId: sessionField,
+    findControl: z
+      .object({
+        goal: z
+          .string()
+          .min(3)
+          .max(400)
+          .describe(
+            'El control que necesitas, por ejemplo abrir la sección de certificados. No incluyas contraseñas ni valores a escribir.',
+          ),
+        action: z.enum(['click', 'fill', 'select', 'check']),
+      })
+      .optional(),
     elementOffset: z
       .number()
       .int()
@@ -343,6 +356,14 @@ export const browserReadPage = registerTool({
   }),
   outputSchema: z.object({
     page: viewSchema,
+    controlSuggestion: z
+      .object({
+        status: z.enum(['matched', 'uncertain', 'unavailable']),
+        ref: z.string().optional(),
+        name: z.string().optional(),
+        confidence: z.number().optional(),
+      })
+      .optional(),
     content: z
       .object({
         text: z.string(),
@@ -376,8 +397,43 @@ export const browserReadPage = registerTool({
       input.offset ?? 0,
     );
     if (content && !content.ok) throw new Error(content.reason);
+    const suggestion = input.findControl
+      ? await choosePageControl(
+          {
+            step: {
+              action: input.findControl.action,
+              label: input.findControl.goal,
+              targets: [],
+              landmarks: [],
+            },
+            stepIndex: 0,
+            context: { before: [], after: [] },
+            snapshot: {
+              ...fresh.data,
+              elements: fresh.data.elements.slice(
+                input.elementOffset ?? 0,
+                (input.elementOffset ?? 0) + 50,
+              ),
+            },
+          },
+          'locate',
+          ctx.signal,
+        )
+      : undefined;
     return {
       page: viewOf(fresh.data, 'full', input.elementOffset ?? 0),
+      ...(input.findControl
+        ? {
+            controlSuggestion: suggestion
+              ? {
+                  status: 'matched' as const,
+                  ref: suggestion.ref,
+                  name: suggestion.name,
+                  confidence: suggestion.confidence,
+                }
+              : { status: suggestion === null ? ('uncertain' as const) : ('unavailable' as const) },
+          }
+        : {}),
       ...(content?.ok ? { content: content.data } : {}),
     };
   },

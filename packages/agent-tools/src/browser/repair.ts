@@ -1,6 +1,7 @@
 import { generateText } from 'ai';
 import { utilityModel } from '../model';
 import { addSpend, spendOf } from './cost';
+import { repairWithJev } from './jev-repair';
 import type { ModelSpend, PageSnapshot, Step, Target } from './types';
 import { EMPTY_SPEND } from './types';
 
@@ -97,6 +98,9 @@ function parseJson(raw: string): Record<string, unknown> | null {
 export const modelRepairer: Repairer = async (request) => {
   let spend = EMPTY_SPEND;
   if (request.snapshot.elements.length === 0) return null;
+
+  const jev = await repairWithJev(request);
+  if (jev !== undefined) return jev;
 
   const result = await generateText({
     model: utilityModel(),

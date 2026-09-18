@@ -1,6 +1,7 @@
 import { IntegrationError } from '@cortex/core';
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { rerankWebWithJev } from './jev-rerank';
 
 export const webSearch = registerTool({
   id: 'web.search',
@@ -46,14 +47,15 @@ export const webSearch = registerTool({
     if (!r.ok) throw new IntegrationError(`Tavily ${r.status}: ${await r.text()}`, 'web');
 
     const data = (await r.json()) as TavilyResponse;
+    const results = (data.results ?? []).map((res) => ({
+      title: res.title ?? '',
+      url: res.url ?? '',
+      content: res.content ?? '',
+      score: res.score ?? null,
+    }));
     return {
       answer: data.answer ?? null,
-      results: (data.results ?? []).map((res) => ({
-        title: res.title ?? '',
-        url: res.url ?? '',
-        content: res.content ?? '',
-        score: res.score ?? null,
-      })),
+      results: await rerankWebWithJev(input.query, results, ctx.signal),
     };
   },
 });
