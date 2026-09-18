@@ -72,7 +72,8 @@ export async function POST(req: NextRequest) {
           updated_at: now,
         })
         .eq('source_connection_id', parsed.data.id)
-        .eq('actor_id', user.id);
+        .eq('actor_id', user.id)
+        .in('status', ['active', 'paused']);
       if (paused.error)
         return NextResponse.json(
           { error: 'La fuente quedó desactivada, pero no se pudo actualizar su seguimiento.' },
