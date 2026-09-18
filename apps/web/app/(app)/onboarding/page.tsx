@@ -1,6 +1,7 @@
 import { CompanyLaunch } from '@/components/ui/company-launch';
 import { readSetupDiagnostics } from '@/lib/management/diagnostics';
 import { readLaunchPlan } from '@/lib/management/launch-store';
+import { readMissionProgress } from '@/lib/management/mission-progress-store';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,7 @@ export default async function OnboardingPage({
   const user = await requireSession();
   const { step } = await searchParams;
   const db = getOrgScopedClient(user.organization.id);
-  const [result, diagnostics] = await Promise.all([
+  const [result, diagnostics, mission] = await Promise.all([
     readLaunchPlan(
       db,
       user.id,
@@ -21,6 +22,7 @@ export default async function OnboardingPage({
       user.role === 'org_admin',
     ),
     readSetupDiagnostics(db, user.id),
+    readMissionProgress(db, user.id),
   ]);
   return (
     <CompanyLaunch
@@ -33,6 +35,7 @@ export default async function OnboardingPage({
       profile={result.board?.profile ?? null}
       people={result.board?.people ?? []}
       readAt={result.readAt}
+      mission={mission}
     />
   );
 }

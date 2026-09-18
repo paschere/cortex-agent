@@ -2,6 +2,7 @@
 import { ProfileEditor } from '@/app/(app)/management/ProfileEditor';
 import type { SetupCheck } from '@/lib/management/diagnostics';
 import { LAUNCH_GROUPS, type LaunchStep, launchProgress } from '@/lib/management/launch-plan';
+import type { MissionProgress } from '@/lib/management/mission-progress';
 import type { ManagementProfile } from '@/lib/management/shape';
 import { workspaceHref } from '@/lib/workspace-context';
 import {
@@ -17,6 +18,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { CortexSignature } from './cortex-signature';
+import { MissionLaunch } from './mission-launch';
 import { SourceDiagnostics } from './source-diagnostics';
 type Person = { id: string; name: string | null; email: string };
 export function CompanyLaunch({
@@ -29,6 +31,7 @@ export function CompanyLaunch({
   profile,
   people,
   readAt,
+  mission,
 }: {
   name: string;
   workspaceId: string;
@@ -39,6 +42,7 @@ export function CompanyLaunch({
   profile: ManagementProfile | null;
   people: Person[];
   readAt: string;
+  mission: MissionProgress;
 }) {
   const progress = launchProgress(steps);
   const [selected, setSelected] = useState(
@@ -56,6 +60,8 @@ export function CompanyLaunch({
       workspaceHref(workspaceId, `/onboarding?step=${encodeURIComponent(id)}`),
     );
   };
+  const internalHref = (href: string) =>
+    href.startsWith('/') ? workspaceHref(workspaceId, href) : href;
   const next = steps[steps.indexOf(step) + 1];
   const status = (item: LaunchStep) =>
     item.state === 'ready'
@@ -82,7 +88,7 @@ export function CompanyLaunch({
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
             {refreshing ? 'Comprobando…' : 'Comprobar progreso'}
           </button>
-          <Link href="/management">
+          <Link href={internalHref('/management')}>
             Ir a mi agenda <ArrowUpRight size={16} />
           </Link>
         </div>
@@ -202,7 +208,9 @@ export function CompanyLaunch({
               </p>
             )}
           </div>
-          {step.id !== 'scope' && (
+          {step.id === 'mission' ? (
+            <MissionLaunch mission={mission} workspaceId={workspaceId} />
+          ) : step.id !== 'scope' ? (
             <>
               <h3 className="launch-center__check-title">Qué revisar en esta etapa</h3>
               <ol className="launch-center__checklist">
@@ -215,7 +223,7 @@ export function CompanyLaunch({
               </ol>
               <div className="launch-center__actions">
                 {(!step.adminOnly || isAdmin) && (
-                  <Link className="launch-center__primary" href={step.action.href}>
+                  <Link className="launch-center__primary" href={internalHref(step.action.href)}>
                     {step.action.label}
                     <ArrowUpRight size={17} />
                   </Link>
@@ -223,14 +231,14 @@ export function CompanyLaunch({
                 {step.alternatives
                   .filter((a) => isAdmin || !a.href.startsWith('/admin'))
                   .map((a) => (
-                    <Link key={a.href} href={a.href}>
+                    <Link key={a.href} href={internalHref(a.href)}>
                       {a.label}
                       <ArrowUpRight size={15} />
                     </Link>
                   ))}
               </div>
             </>
-          )}
+          ) : null}
           <div className="launch-center__next">
             <p>
               {step.required
@@ -249,12 +257,12 @@ export function CompanyLaunch({
         </div>
       </div>
       <div className="flex flex-wrap gap-5 text-sm font-semibold text-primary">
-        <Link href="/management/mission">Primera misión →</Link>
-        <Link href="/management/control">Autonomía y calidad →</Link>
-        <Link href="/management/review">Revisión semanal →</Link>
+        <Link href={internalHref('/management/mission')}>Primera misión →</Link>
+        <Link href={internalHref('/management/control')}>Autonomía y calidad →</Link>
+        <Link href={internalHref('/management/review')}>Revisión semanal →</Link>
       </div>
       <footer className="launch-center__footer">
-        <Link href="/onboarding/entrevista">
+        <Link href={internalHref('/onboarding/entrevista')}>
           <Mic size={17} /> Prefiero contar cómo trabajamos
         </Link>
         <span>

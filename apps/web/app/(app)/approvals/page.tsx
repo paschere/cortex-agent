@@ -1,15 +1,15 @@
-import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
-import Link from 'next/link';
-import { Inbox, ShieldAlert, Radar, AlarmClockOff, ArrowRight } from 'lucide-react';
-import { PageHeader } from '@/components/ui/page-header';
-import { Panel } from '@/components/ui/panel';
-import { relativeTime } from '@/lib/relative-time';
-import { type StatusTone, chipClass } from '@/lib/status-chip';
 // La tarjeta se fue a `components/approvals/` cuando el chat empezó a montarla
 // también: es la misma decisión en dos sitios y no puede haber dos copias de
 // ella. Ver la cabecera del componente.
 import { PendingActionCard } from '@/components/approvals/PendingActionCard';
+import { PageHeader } from '@/components/ui/page-header';
+import { Panel } from '@/components/ui/panel';
+import { relativeTime } from '@/lib/relative-time';
+import { requireSession } from '@/lib/session';
+import { type StatusTone, chipClass } from '@/lib/status-chip';
+import { getOrgScopedClient } from '@/lib/supabase/service';
+import { AlarmClockOff, ArrowRight, Inbox, Radar, ShieldAlert } from 'lucide-react';
+import Link from 'next/link';
 import { SignalCard } from './_components/SignalCard';
 
 interface PendingActionRow {
@@ -93,7 +93,12 @@ export default async function ApprovalsPage() {
       .from('mcp_pending_actions')
       .select('id, tool_id, input, created_at, expires_at, decision, decided_at, decided_via')
       .eq('user_id', user.id)
-      .or(`and(decision.is.null,expires_at.gt.${nowIso}),decided_at.gt.${decidedSince}`)
+      // Activation approvals are rendered in ActivationExecution, whose
+      // button claims the same queue row and then performs the required GET
+      // verification. Keep them out of this generic executor card.
+      .or(
+        `and(decision.is.null,expires_at.gt.${nowIso},staged_via.is.null),and(decision.is.null,expires_at.gt.${nowIso},staged_via.neq.activation),and(decided_at.gt.${decidedSince},staged_via.is.null),and(decided_at.gt.${decidedSince},staged_via.neq.activation)`,
+      )
       .order('created_at', { ascending: false }),
     db
       .from('growth_signals')
@@ -115,7 +120,9 @@ export default async function ApprovalsPage() {
   const signals = (signalsRes.data ?? []) as unknown as SignalRow[];
   const failing = ((jobsRes.data ?? []) as unknown as JobRow[])
     .map((j) => ({ id: j.id, name: j.name, lastRun: j.scheduled_job_runs?.[0] }))
-    .filter((j): j is { id: string; name: string; lastRun: JobRunRow } => j.lastRun?.status === 'error');
+    .filter(
+      (j): j is { id: string; name: string; lastRun: JobRunRow } => j.lastRun?.status === 'error',
+    );
 
   const nothingPending = approvalRows.length === 0 && signals.length === 0 && failing.length === 0;
 

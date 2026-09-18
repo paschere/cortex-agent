@@ -8,11 +8,11 @@ export const dynamic = 'force-dynamic';
 export default async function ActivationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ source?: string }>;
+  searchParams: Promise<{ source?: string; prompt?: string; run?: string }>;
 }) {
   const user = await requireSession();
   const workspaceId = user.organization.id;
-  const { source } = await searchParams;
+  const { source, prompt, run } = await searchParams;
 
   return (
     <ActivationWorkspace
@@ -26,6 +26,8 @@ export default async function ActivationsPage({
       feedApiHref={workspaceHref(workspaceId, '/feed?mode=api')}
       managementHref={workspaceHref(workspaceId, '/management')}
       initialSourceId={source ?? null}
+      initialRunId={run ?? null}
+      initialPrompt={prompt?.slice(0, 4000) ?? ''}
     />
   );
 }

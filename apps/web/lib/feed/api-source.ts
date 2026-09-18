@@ -13,8 +13,9 @@ import {
 import type { SheetData, SheetValue } from '@cortex/agent-tools/src/kb/spreadsheets';
 import { webScrape } from '@cortex/agent-tools/src/web/scrape';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { type FeedPagination, collectFeedPages, feedPaginationSchema } from './pagination';
 
-const MAX_ROWS = 500;
+const MAX_ROWS = 1000;
 const MAX_COLUMNS = 50;
 const MAX_CELL_CHARS = 4000;
 const MAX_TEXT = 200_000;
@@ -199,6 +200,7 @@ export async function captureApiFeed(options: {
   actorId: string;
   toolId: string;
   input: Record<string, unknown>;
+  pagination?: FeedPagination;
   name?: string;
 }) {
   const { db, organizationId, actorId } = options;
@@ -214,15 +216,34 @@ export async function captureApiFeed(options: {
     surface: 'web',
     signal: AbortSignal.timeout(60_000),
   });
-  const result = (await runTool(customToolDef(tool), options.input, context, {
-    confirmed: false,
-  })) as CustomToolResult;
-  if (!result.ok) throw new Error(result.message || 'La API no devolvió una respuesta utilizable.');
+  const read = async (input: Record<string, unknown>) => {
+    const result = (await runTool(customToolDef(tool), input, context, {
+      confirmed: false,
+    })) as CustomToolResult;
+    if (!result.ok)
+      throw new Error(result.message || 'La API no devolvió una respuesta utilizable.');
+    return { data: result.data, truncated: result.truncated };
+  };
+  const pagination = options.pagination
+    ? feedPaginationSchema.parse(options.pagination)
+    : undefined;
+  if (
+    pagination &&
+    !tool.input_schema?.fields?.some((field) => field.name === pagination.cursorInput)
+  )
+    throw new Error('El parámetro de cursor debe existir en la herramienta API.');
+  const result = pagination
+    ? await collectFeedPages(pagination, options.input, read)
+    : await read(options.input);
   const normalized = normalizeApiFeed(result.data);
   if (!normalized.text.trim() && !normalized.tables?.length)
     throw new Error('La API devolvió una respuesta vacía.');
 
-  const safeConfig = { toolId: tool.id, input: options.input };
+  const safeConfig = {
+    toolId: tool.id,
+    input: options.input,
+    ...(pagination ? { pagination } : {}),
+  };
   const configHash = hashConfig(safeConfig);
   const sourceName = (options.name?.trim() || tool.name).slice(0, 240);
   const now = new Date().toISOString();
@@ -338,7 +359,7 @@ export async function refreshFeedSource(
   actorId: string,
   sourceId: string,
   organizationId: string,
-) {
+): Promise<{ sourceId: string; entry: unknown; deduplicated: boolean }> {
   const { data, error } = await db
     .from('feed_sources')
     .select('id,kind,name,config,enabled')
@@ -353,7 +374,31 @@ export async function refreshFeedSource(
       input?: Record<string, unknown>;
       url?: string;
       spreadsheetId?: string;
+      pagination?: FeedPagination;
     };
+    if (data.kind === 'combined') {
+      const { refreshCombinedSource } = await import('./combined-source');
+      return await refreshCombinedSource(
+        db,
+        actorId,
+        sourceId,
+        organizationId,
+        async (dependencyId) => {
+          const dependency = await db
+            .from('feed_sources')
+            .select('kind,enabled')
+            .eq('id', dependencyId)
+            .eq('actor_id', actorId)
+            .maybeSingle();
+          if (dependency.error || !dependency.data?.enabled)
+            throw new Error('Una fuente del cruce está desconectada o no está disponible.');
+          if (['api', 'url', 'google_sheet'].includes(dependency.data.kind))
+            await refreshFeedSource(db, actorId, dependencyId, organizationId);
+          else if (!['file', 'text'].includes(dependency.data.kind))
+            throw new Error('Los cruces no pueden depender de otros cruces.');
+        },
+      );
+    }
     if (data.kind === 'api') {
       if (!config.toolId) throw new Error('La fuente API no tiene una herramienta configurada.');
       return await captureApiFeed({
@@ -362,6 +407,7 @@ export async function refreshFeedSource(
         actorId,
         toolId: config.toolId,
         input: config.input ?? {},
+        pagination: config.pagination,
         name: data.name,
       });
     }

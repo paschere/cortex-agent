@@ -27,6 +27,7 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { DayJournal } from './_components/DayJournal';
 import { Insights } from './_components/Insights';
+import { ManagementOverview } from './_components/ManagementOverview';
 import { WaitingIndex } from './_components/WaitingIndex';
 
 /**
@@ -182,7 +183,11 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
           <PulseCell label="Herramientas hoy" value={toolCallsToday} />
           <PulseCell label="Prospectos nuevos" value={newSignals} attention={newSignals > 0} />
-          <PulseCell label="Por aprobar" value={pendingApprovals} attention={pendingApprovals > 0} />
+          <PulseCell
+            label="Por aprobar"
+            value={pendingApprovals}
+            attention={pendingApprovals > 0}
+          />
           <PulseCell label="Rutinas activas" value={activeRoutines} />
         </div>
       </Panel>
@@ -203,6 +208,8 @@ export default async function DashboardPage() {
         <WaitingIndex index={waiting} />
         <DayJournal journal={journal} />
       </div>
+
+      <ManagementOverview />
 
       {/*
         LA TERCERA MITAD: LO QUE NOTÉ.

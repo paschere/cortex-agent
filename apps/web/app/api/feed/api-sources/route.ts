@@ -1,5 +1,6 @@
 import { isSameOrigin } from '@/lib/activations/request';
 import { captureApiFeed } from '@/lib/feed/api-source';
+import { feedPaginationSchema } from '@/lib/feed/pagination';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { type CustomToolRow, SAFE_COLUMNS } from '@cortex/agent-tools';
@@ -11,6 +12,7 @@ export const maxDuration = 90;
 
 const Body = z.object({
   toolId: z.string().uuid(),
+  pagination: feedPaginationSchema.optional(),
   input: z.record(z.unknown()).default({}),
   name: z.string().trim().min(1).max(240).optional(),
 });

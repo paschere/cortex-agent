@@ -76,6 +76,11 @@ export const approvalsList = registerTool({
       .eq('user_id', ctx.userId)
       .is('decision', null)
       .gt('expires_at', nowIso)
+      // Activation approvals are claimed by the activation bridge, which
+      // performs its mandatory verifier read. Keeping them out of this
+      // generic catalog prevents a card whose button can never complete the
+      // operation from being offered here.
+      .or('staged_via.is.null,staged_via.neq.activation')
       // Lo más viejo primero: el TTL es constante, así que es también lo que
       // está a punto de vencerse, que es lo urgente.
       .order('created_at', { ascending: true })

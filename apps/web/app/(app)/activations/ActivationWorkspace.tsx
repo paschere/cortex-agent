@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivationExecution } from './ActivationExecution';
 
 type Props = {
   workspaceId: string;
@@ -44,9 +45,11 @@ type Props = {
   feedApiHref: string;
   managementHref: string;
   initialSourceId?: string | null;
+  initialPrompt?: string;
+  initialRunId?: string | null;
 };
 type MappingKey = keyof InvoiceColumnMapping;
-type Result = { run: ActivationRun; created: number; reused: number };
+type Result = { run: ActivationRun; created: number; reused: number; restored?: boolean };
 type Condition = {
   column: number;
   operator: ActivationConditionOperator;
@@ -154,6 +157,8 @@ export function ActivationWorkspace({
   feedApiHref,
   managementHref,
   initialSourceId = null,
+  initialPrompt = '',
+  initialRunId = null,
 }: Props) {
   const apiHref = workspaceHref(workspaceId, '/api/activations');
   const plannerHref = workspaceHref(workspaceId, '/api/activations/plan');
@@ -187,7 +192,7 @@ export function ActivationWorkspace({
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<'simulate' | 'commit' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState(initialPrompt);
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planning, setPlanning] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -195,6 +200,7 @@ export function ActivationWorkspace({
     trigger: 'on_change' | 'scheduled';
     intervalMinutes: number;
   }>({ trigger: 'on_change', intervalMinutes: 360 });
+  const restoredRunId = useRef<string | null>(null);
   const requestId = useRef(0);
   const actionId = useRef(0);
   const actionController = useRef<AbortController | null>(null);
@@ -549,6 +555,28 @@ export function ActivationWorkspace({
 
   const step = result ? 4 : run ? 3 : sheet ? 2 : 1;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Restore a saved run once, without overwriting subsequent edits.
+  useEffect(() => {
+    if (!initialRunId || !data || restoredRunId.current === initialRunId) return;
+    restoredRunId.current = initialRunId;
+    const saved = data.runs.find((item) => item.id === initialRunId);
+    if (!saved) {
+      setError(
+        'La simulación guardada ya no está disponible. Revisa la fuente antes de simular otra vez.',
+      );
+      return;
+    }
+    applyDefinition(saved.definition);
+    setSourceId(saved.sourceId);
+    setSheetIndex(saved.sheetIndex);
+    setViewId(saved.viewId);
+    setRun(saved);
+    setResult(
+      saved.status === 'committed' ? { run: saved, created: 0, reused: 0, restored: true } : null,
+    );
+    setAdvancedOpen(true);
+  }, [data, initialRunId]);
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -559,8 +587,8 @@ export function ActivationWorkspace({
           <div>
             <h1 className="page-heading text-xl font-bold tracking-tight text-ink">Activaciones</h1>
             <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-muted">
-              Describe qué revisar en una tabla de tu Feed y convierte las coincidencias en asuntos
-              para {organizationName}. Cada ejecución se revisa y confirma manualmente.
+              Describe qué revisar en tus fuentes de Feed y convierte las coincidencias en asuntos
+              para {organizationName}. Simula primero y autoriza qué compartir o seguir revisando.
             </p>
           </div>
         </div>
@@ -767,7 +795,7 @@ export function ActivationWorkspace({
               <aside className="min-w-0 border-b border-border bg-surface-2/50 p-5 xl:border-b-0 xl:border-r">
                 <h2 className="text-sm font-bold text-ink">Preparar lectura</h2>
                 <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                  Solo aparecen archivos tabulares de tu Feed personal.
+                  Usa tablas o prepara una lectura de tus documentos, enlaces y textos de Feed.
                 </p>
                 <label
                   htmlFor="activation-kind"
@@ -809,7 +837,7 @@ export function ActivationWorkspace({
                     value={sourceId}
                     onChange={(event) => chooseSource(event.target.value)}
                   >
-                    <option value="">Elige una hoja de cálculo</option>
+                    <option value="">Elige una fuente</option>
                     {data.sources.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.filename}
@@ -1005,6 +1033,9 @@ export function ActivationWorkspace({
                     commit={commit}
                   />
                 )}
+                {run?.status === 'committed' && run.caseIds.length ? (
+                  <RunExecution key={run.id} run={run} workspaceId={workspaceId} />
+                ) : null}
                 {run && matchedGroups > 0 ? (
                   <AutomationPanel
                     apiHref={workspaceHref(workspaceId, '/api/activations/automations')}
@@ -1035,6 +1066,72 @@ export function ActivationWorkspace({
         </details>
       ) : null}
     </div>
+  );
+}
+
+function RunExecution({ run, workspaceId }: { run: ActivationRun; workspaceId: string }) {
+  const [caseId, setCaseId] = useState(run.caseIds[0] ?? '');
+  const [caseNames, setCaseNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const controller = new AbortController();
+    const url = workspaceHref(
+      workspaceId,
+      `/api/activations/operations?runId=${encodeURIComponent(run.id)}`,
+    );
+    void fetch(url, { signal: controller.signal, cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const body = await response.json();
+        if (!controller.signal.aborted)
+          setCaseNames(
+            Object.fromEntries(
+              (body.cases ?? []).map((item: { id: string; title: string }) => [
+                item.id,
+                item.title,
+              ]),
+            ),
+          );
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [run.id, workspaceId]);
+
+  return (
+    <section className="mt-6 border-t border-border pt-5">
+      <label htmlFor="operation-case" className="text-sm font-semibold text-ink">
+        Continuar con una acción
+      </label>
+      <p className="mb-3 mt-1 text-xs text-ink-muted">
+        Elige un asunto. Revisa la acción y cómo se comprobará antes de aprobarla.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <select
+          id="operation-case"
+          className={`${select} flex-1`}
+          value={caseId}
+          onChange={(event) => setCaseId(event.target.value)}
+        >
+          {run.caseIds.map((id, index) => (
+            <option value={id} key={id}>
+              {caseNames[id] ?? `Asunto ${index + 1} · ${id.slice(0, 8)}`}
+            </option>
+          ))}
+        </select>
+        <Link
+          className="text-xs font-semibold text-primary"
+          href={workspaceHref(workspaceId, `/management?case=${encodeURIComponent(caseId)}`)}
+        >
+          Ver asunto y evidencia
+        </Link>
+      </div>
+      <ActivationExecution
+        key={caseId}
+        workspaceId={workspaceId}
+        caseId={caseId}
+        runId={run.id}
+        className="mt-4"
+      />
+    </section>
   );
 }
 
@@ -1899,9 +1996,15 @@ function ResultView({
         </span>
         <h2 className="mt-4 text-xl font-bold text-ink">Revisión aplicada en {organizationName}</h2>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-          Se crearon {result.created} {result.created === 1 ? 'asunto nuevo' : 'asuntos nuevos'} y
-          se reutilizaron {result.reused} ya existentes. El resultado evita duplicar asuntos al
-          reintentar.
+          {result.restored ? (
+            'Resultado guardado. Puedes consultar sus asuntos y continuar el seguimiento.'
+          ) : (
+            <>
+              Se crearon {result.created} {result.created === 1 ? 'asunto nuevo' : 'asuntos nuevos'}{' '}
+              y se reutilizaron {result.reused} ya existentes. El resultado evita duplicar asuntos
+              al reintentar.
+            </>
+          )}
         </p>
         <p className="mt-4 text-xs text-ink-faint">
           {result.run.caseIds.length} asuntos vinculados ·{' '}

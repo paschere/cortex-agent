@@ -59,6 +59,10 @@ export async function decideApproval(input: DecideInput): Promise<ClaimOutcome> 
     decision: input.decision,
     via: input.via,
     now,
+    // Activation operations have a second, provider-verification phase. A
+    // generic approval button must never consume their claim and then route it
+    // through the ordinary registry executor.
+    blockedStagedVia: 'activation',
   });
 
   if (outcome.status === 'claimed') {

@@ -9,6 +9,7 @@ import {
   type FeedDetail,
   type FeedEntry,
 } from '@/lib/feed/shared';
+import type { FeedSourceSummary } from '@/lib/feed/source-management';
 import { workspaceHref } from '@/lib/workspace-context';
 import {
   Brain,
@@ -30,13 +31,21 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { CustomTools } from '../tools/_components/CustomTools';
+import { SourceIntelligence } from './SourceIntelligence';
+import { SourceReliability } from './SourceReliability';
 
 const inputClass =
   'w-full rounded-sm border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary/40';
 const buttonClass =
   'inline-flex items-center justify-center gap-2 rounded-sm px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed';
-const icons = { file: FileText, url: Link2, text: FileText };
-const kinds = { file: 'Archivo', url: 'Enlace', text: 'Texto' };
+const icons = { file: FileText, url: Link2, text: FileText, api: Plug, combined: Link2 };
+const kinds = {
+  file: 'Archivo',
+  url: 'Enlace',
+  text: 'Texto',
+  api: 'API',
+  combined: 'Fuentes combinadas',
+};
 
 export function Feed({
   initialEntries,
@@ -390,7 +399,26 @@ export function Feed({
           </form>
         )}
       </section>
+      <details className="rounded-card border border-border bg-surface">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-ink">
+          Cruzar fuentes y explorar activaciones{' '}
+          <span className="ml-2 text-xs font-normal text-ink-muted">
+            Combina datos para encontrar qué requiere atención
+          </span>
+        </summary>
+        <div className="border-t border-border p-3 sm:p-4">
+          <SourceIntelligence
+            workspaceId={workspaceId}
+            refreshKey={entries.map((entry) => entry.id).join(',')}
+            onCaptured={() => {
+              void refresh();
+            }}
+          />
+        </div>
+      </details>
       <FeedSourceRegistry
+        refreshKey={entries.map((entry) => entry.id).join(',')}
+        workspaceId={workspaceId}
         apiHref={href('/api/feed/sources')}
         onCaptured={(entry) => {
           if (entry) setEntries((prev) => [entry, ...prev.filter((item) => item.id !== entry.id)]);
@@ -453,7 +481,7 @@ export function Feed({
               </label>
               <ul className="divide-y divide-border">
                 {filtered.map((entry) => {
-                  const Icon = icons[entry.feed_kind];
+                  const Icon = icons[entry.feed_kind] ?? FileText;
                   return (
                     <li key={entry.id}>
                       <button
@@ -773,26 +801,22 @@ export function Feed({
   );
 }
 
-type FeedSourceView = {
-  id: string;
-  kind: string;
-  name: string;
-  latestAttachmentId: string | null;
-  status: string;
-  lastCheckedAt: string | null;
-  error: string | null;
-  enabled: boolean;
-};
+type FeedSourceView = FeedSourceSummary;
 function FeedSourceRegistry({
+  refreshKey,
+  workspaceId,
   apiHref,
   onCaptured,
   onAddVersion,
 }: {
+  workspaceId: string;
   apiHref: string;
+  refreshKey: string;
   onCaptured: (entry?: FeedEntry) => void;
   onAddVersion: (source: { id: string; kind: 'file' | 'text'; name: string }) => void;
 }) {
   const [sources, setSources] = useState<FeedSourceView[]>([]);
+  const [impactTruncated, setImpactTruncated] = useState(false);
   const [open, setOpen] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [registryError, setRegistryError] = useState<string | null>(null);
@@ -801,10 +825,12 @@ function FeedSourceRegistry({
     const body = await response.json();
     if (!response.ok) throw new Error(body.error);
     setSources(body.sources ?? []);
+    setImpactTruncated(body.impactTruncated === true);
   }, [apiHref]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: New captures invalidate registry health and source pointers.
   useEffect(() => {
     void load().catch((error) => setRegistryError(error.message));
-  }, [load]);
+  }, [load, refreshKey]);
   async function act(body: unknown, id: string) {
     setWorking(id);
     setRegistryError(null);
@@ -835,6 +861,11 @@ function FeedSourceRegistry({
         Fuentes conectadas · {sources.length}
       </summary>
       <div className="border-t border-border px-4">
+        {impactTruncated ? (
+          <p className="py-2 text-xs text-ink-muted">
+            Los conteos de activaciones muestran una vista parcial.
+          </p>
+        ) : null}
         {registryError ? <p className="py-3 text-xs text-rose">{registryError}</p> : null}
         <ul className="divide-y divide-border">
           {sources.map((source) => (
@@ -842,14 +873,32 @@ function FeedSourceRegistry({
               <span className="min-w-0 flex-1">
                 <span className="block font-semibold text-ink">{source.name}</span>
                 <span className="text-ink-muted">
-                  {source.kind} · {source.status}
+                  {source.kind === 'google_sheet'
+                    ? 'Google Sheets'
+                    : source.kind === 'combined'
+                      ? 'Combinada'
+                      : source.kind === 'api'
+                        ? 'API'
+                        : source.kind === 'file'
+                          ? 'Archivo'
+                          : source.kind === 'text'
+                            ? 'Texto'
+                            : 'URL'}{' '}
+                  · {source.health?.label ?? source.status}
                   {source.lastCheckedAt
                     ? ` · revisada ${new Date(source.lastCheckedAt).toLocaleString('es-CO')}`
                     : ''}
                 </span>
+                {source.health && (
+                  <span className="mt-1 block text-ink-muted">
+                    {source.health.detail} · {source.health.affectedActivations} activaciones
+                    vinculadas
+                  </span>
+                )}
                 {source.error ? <span className="block text-rose">{source.error}</span> : null}
               </span>
-              {['url', 'google_sheet', 'api'].includes(source.kind) && source.enabled ? (
+              {['url', 'google_sheet', 'api', 'combined'].includes(source.kind) &&
+              source.enabled ? (
                 <button
                   type="button"
                   disabled={working === source.id}
@@ -885,8 +934,16 @@ function FeedSourceRegistry({
                   Desconectar
                 </button>
               ) : (
-                <span className="text-ink-faint">Desconectada</span>
+                <button
+                  type="button"
+                  disabled={working === source.id}
+                  onClick={() => void act({ action: 'reconnect', id: source.id }, source.id)}
+                  className="font-semibold text-primary"
+                >
+                  Reconectar
+                </button>
               )}
+              <SourceReliability source={source} workspaceId={workspaceId} onChanged={load} />
             </li>
           ))}
         </ul>
@@ -910,6 +967,10 @@ function ApiSourcePanel({
   const [toolId, setToolId] = useState('');
   const [input, setInput] = useState<Record<string, string>>({});
   const [name, setName] = useState('');
+  const [paginated, setPaginated] = useState(false);
+  const [recordsPath, setRecordsPath] = useState('data');
+  const [nextCursorPath, setNextCursorPath] = useState('next_cursor');
+  const [cursorInput, setCursorInput] = useState('');
   const [working, setWorking] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   useEffect(() => {
@@ -937,7 +998,14 @@ function ApiSourcePanel({
       const response = await fetch(apiHref, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ toolId, input, ...(name.trim() ? { name: name.trim() } : {}) }),
+        body: JSON.stringify({
+          toolId,
+          input,
+          ...(name.trim() ? { name: name.trim() } : {}),
+          ...(paginated
+            ? { pagination: { recordsPath, nextCursorPath, cursorInput, maxPages: 5 } }
+            : {}),
+        }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? 'No se pudo consultar la API.');
@@ -974,6 +1042,8 @@ function ApiSourcePanel({
             onChange={(event) => {
               setToolId(event.target.value);
               setInput({});
+              setPaginated(false);
+              setCursorInput('');
             }}
             className={`${inputClass} mt-1`}
           >
@@ -1028,6 +1098,63 @@ function ApiSourcePanel({
             className={`${inputClass} mt-1`}
           />
         </label>
+        <details className="rounded-sm border border-border p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-ink-muted">
+            Lectura por páginas (opcional)
+          </summary>
+          <label className="mt-3 flex items-center gap-2 text-xs text-ink">
+            <input
+              type="checkbox"
+              checked={paginated}
+              onChange={(e) => setPaginated(e.target.checked)}
+            />
+            La API devuelve un cursor para obtener la siguiente página
+          </label>
+          {paginated && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-ink-muted">
+                Ruta de la lista en la respuesta
+                <input
+                  className={`${inputClass} mt-1`}
+                  value={recordsPath}
+                  onChange={(e) => setRecordsPath(e.target.value)}
+                  placeholder="data.items"
+                />
+              </label>
+              <label className="text-xs text-ink-muted">
+                Ruta del siguiente cursor
+                <input
+                  required
+                  className={`${inputClass} mt-1`}
+                  value={nextCursorPath}
+                  onChange={(e) => setNextCursorPath(e.target.value)}
+                  placeholder="pagination.next_cursor"
+                />
+              </label>
+              <label className="text-xs text-ink-muted">
+                Parámetro que recibe el cursor
+                <select
+                  required
+                  className={`${inputClass} mt-1`}
+                  value={cursorInput}
+                  onChange={(e) => setCursorInput(e.target.value)}
+                >
+                  <option value="">Seleccionar parámetro</option>
+                  {tool?.fields.map((f) => (
+                    <option key={f.name} value={f.name}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="text-xs leading-relaxed text-ink-muted">
+                Usa los nombres que aparecen en la documentación de tu API. Cortex consulta hasta 5
+                páginas y 1.000 filas; si queda contenido pendiente, lo marca incompleto y bloquea
+                su uso automático.
+              </p>
+            </div>
+          )}
+        </details>
         {apiError ? (
           <p role="alert" className="text-sm text-rose">
             {apiError}

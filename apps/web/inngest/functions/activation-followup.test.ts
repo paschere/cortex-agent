@@ -39,6 +39,7 @@ vi.mock('@cortex/agent-tools', () => ({
   isRefused: vi.fn(() => false),
 }));
 
+import { CombinedSourceError } from '@/lib/feed/combined-source';
 import { activationDispatchJob, activationRunJob } from './activation-followup';
 
 const automation = {
@@ -116,7 +117,11 @@ function arrange(options?: {
 }
 
 describe('activation follow-up worker', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // A refresh failure leaves the second queued database read unused.
+    mocks.from.mockReset();
+  });
 
   it('skips evaluation for an unchanged on-change source', async () => {
     const { finishes } = arrange();
@@ -169,6 +174,20 @@ describe('activation follow-up worker', () => {
       p_run_id: null,
       p_needs_review: true,
       p_result: { outcome: 'error' },
+    });
+  });
+
+  it('pauses a combined source when its dependencies require review', async () => {
+    const { finishes } = arrange({
+      kind: 'combined',
+      refreshError: new CombinedSourceError('Las columnas cambiaron.', 409),
+    });
+    await activationRunJob(event);
+    expect(mocks.createSimulation).not.toHaveBeenCalled();
+    expect(finishes[0]).toMatchObject({
+      p_run_id: null,
+      p_needs_review: true,
+      p_result: { outcome: 'error', message: 'Las columnas cambiaron.' },
     });
   });
 

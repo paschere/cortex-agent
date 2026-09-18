@@ -14,7 +14,7 @@ export const FEED_MAX_TEXT = 200_000;
 export interface FeedEntry {
   id: string;
   filename: string;
-  feed_kind: 'file' | 'url' | 'text';
+  feed_kind: 'file' | 'url' | 'text' | 'api' | 'combined';
   source_url: string | null;
   created_at: string;
   purge_at: string;

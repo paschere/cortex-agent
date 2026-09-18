@@ -10,6 +10,7 @@ import {
   sourceSnapshot,
 } from '@/lib/activations/service';
 import { refreshFeedSource } from '@/lib/feed/api-source';
+import { CombinedSourceError } from '@/lib/feed/combined-source';
 import { inngest } from '@/lib/inngest';
 import type { JobContext, JobHandler } from '@/lib/jobs';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
@@ -49,6 +50,7 @@ export const activationRunJob: JobHandler = async ({ event }) => {
   if (claim.error) throw new Error('No se pudo reservar la ejecución.');
   const automation = claim.data;
   if (!automation) return { skipped: true };
+  let sourceRevision: number | null = null;
   const finish = async (
     result: Record<string, unknown>,
     fingerprint: string | null,
@@ -62,6 +64,7 @@ export const activationRunJob: JobHandler = async ({ event }) => {
       p_result: result,
       p_needs_review: needsReview,
       p_run_id: runId,
+      p_source_revision: sourceRevision,
     });
     if (completed.error)
       throw new Error('La ejecución perdió su autorización o no pudo guardarse.');
@@ -70,14 +73,15 @@ export const activationRunJob: JobHandler = async ({ event }) => {
   try {
     const connection = await db
       .from('feed_sources')
-      .select('id,kind,latest_attachment_id')
+      .select('id,kind,latest_attachment_id,signal_revision')
       .eq('id', automation.source_connection_id)
       .eq('actor_id', automation.actor_id)
       .eq('enabled', true)
       .single();
     if (connection.error || !connection.data)
       throw new ActivationError('Revisa la conexión de la fuente.', 409);
-    if (['api', 'url', 'google_sheet'].includes(connection.data.kind))
+    sourceRevision = connection.data.signal_revision ?? 0;
+    if (['api', 'url', 'google_sheet', 'combined'].includes(connection.data.kind))
       await refreshFeedSource(db, automation.actor_id, connection.data.id, input.organizationId);
     const current = await db
       .from('feed_sources')
@@ -195,16 +199,19 @@ export const activationRunJob: JobHandler = async ({ event }) => {
   } catch (error) {
     // A revoked lease cannot publish or finish. A transient failure remains due
     // next interval; a changed schema requires an explicit fresh authorization.
+    const needsReview =
+      error instanceof ActivationError ||
+      (error instanceof CombinedSourceError && error.status < 500);
     return finish(
       {
         message:
-          error instanceof ActivationError
+          needsReview && error instanceof Error
             ? error.message
             : 'No se pudo revisar la fuente. Se intentará de nuevo en la próxima revisión.',
         outcome: 'error',
       },
       null,
-      error instanceof ActivationError,
+      needsReview,
     );
   }
 };

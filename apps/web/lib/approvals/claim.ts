@@ -40,6 +40,8 @@ export interface ClaimedApproval {
   agentId: string;
   toolId: string;
   input: unknown;
+  /** Origin metadata used to route activation approvals through their bridge. */
+  stagedVia?: string | null;
 }
 
 /** What a diagnostic read can see. Ownership is NOT filtered here on purpose. */
@@ -51,6 +53,7 @@ export interface ApprovalSnapshot {
   decision: ApprovalDecision | null;
   decidedAt: string | null;
   decidedVia: string | null;
+  stagedVia?: string | null;
 }
 
 export interface ApprovalClaim {
@@ -60,6 +63,10 @@ export interface ApprovalClaim {
   via: ApprovalChannel;
   /** Both the expiry cutoff and the recorded decision time. */
   now: Date;
+  /** Require an approval staged by one owning flow. */
+  requiredStagedVia?: string;
+  /** Keep a specialized approval out of generic executors. */
+  blockedStagedVia?: string;
 }
 
 export interface ApprovalStore {
@@ -107,10 +114,22 @@ export async function claimApproval(
   if (!isApprovalId(input.id) || !isApprovalId(input.userId)) return { status: 'unknown' };
 
   const action = await store.claim(input);
-  if (action) return { status: 'claimed', action };
+  if (action) {
+    if (input.requiredStagedVia && action.stagedVia !== input.requiredStagedVia)
+      return { status: 'unknown' };
+    if (input.blockedStagedVia && action.stagedVia === input.blockedStagedVia)
+      return { status: 'unknown' };
+    return { status: 'claimed', action };
+  }
 
   const row = await store.peek(input.id);
   if (!row) return { status: 'unknown' };
+
+  if (
+    (input.requiredStagedVia && row.stagedVia !== input.requiredStagedVia) ||
+    (input.blockedStagedVia && row.stagedVia === input.blockedStagedVia)
+  )
+    return { status: 'unknown' };
 
   // Ownership is checked BEFORE the decision is revealed: someone who does not
   // own the approval learns nothing about it, not even that it was approved.
@@ -141,7 +160,7 @@ export function supabaseApprovalStore(db: SupabaseClient): ApprovalStore {
   return {
     async claim(input) {
       const nowIso = input.now.toISOString();
-      const { data, error } = await db
+      let query = db
         .from('mcp_pending_actions')
         .update({
           decision: input.decision,
@@ -152,8 +171,12 @@ export function supabaseApprovalStore(db: SupabaseClient): ApprovalStore {
         .eq('id', input.id)
         .eq('user_id', input.userId)
         .is('decision', null)
-        .gt('expires_at', nowIso)
-        .select('id, organization_id, user_id, agent_id, tool_id, input')
+        .gt('expires_at', nowIso);
+      if (input.requiredStagedVia) query = query.eq('staged_via', input.requiredStagedVia);
+      if (input.blockedStagedVia)
+        query = query.or(`staged_via.is.null,staged_via.neq.${input.blockedStagedVia}`);
+      const { data, error } = await query
+        .select('id, organization_id, user_id, agent_id, tool_id, input, staged_via')
         .maybeSingle();
       if (error || !data) return null;
       return {
@@ -163,12 +186,13 @@ export function supabaseApprovalStore(db: SupabaseClient): ApprovalStore {
         agentId: data.agent_id as string,
         toolId: data.tool_id as string,
         input: data.input,
+        stagedVia: (data.staged_via as string | null) ?? null,
       };
     },
     async peek(id) {
       const { data } = await db
         .from('mcp_pending_actions')
-        .select('id, user_id, tool_id, expires_at, decision, decided_at, decided_via')
+        .select('id, user_id, tool_id, expires_at, decision, decided_at, decided_via, staged_via')
         .eq('id', id)
         .maybeSingle();
       if (!data) return null;
@@ -180,6 +204,7 @@ export function supabaseApprovalStore(db: SupabaseClient): ApprovalStore {
         decision: (data.decision as ApprovalDecision | null) ?? null,
         decidedAt: (data.decided_at as string | null) ?? null,
         decidedVia: (data.decided_via as string | null) ?? null,
+        stagedVia: (data.staged_via as string | null) ?? null,
       };
     },
   };

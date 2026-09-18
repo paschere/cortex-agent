@@ -77,6 +77,7 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   management_cases: tenant(),
   activation_runs: tenant(),
   activation_automations: tenant(),
+  activation_operations: tenant(),
   feed_prepared_views: tenant(),
   management_operations: tenant(),
   management_operation_events: tenant(),
@@ -305,6 +306,8 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // to it, and it should carry the workspace itself.
   chat_attachments: tenant(),
   feed_sources: tenant(),
+  feed_source_signals: tenant(),
+  feed_combined_dependencies: tenant(),
 
   // --- Proposed actions (migration 0077) ------------------------------------
   // Drafted emails waiting on a human, and the record of every human edit to
@@ -533,6 +536,7 @@ export type RpcTenancy = 'organization' | 'person' | 'maintenance';
 export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   activation_commit_run: 'organization',
   activation_automation_claim: 'organization',
+  feed_source_signal: 'organization',
   activation_automation_finish: 'organization',
   finance_classify_source: 'organization',
   finance_list_sources: 'organization',

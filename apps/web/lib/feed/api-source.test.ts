@@ -38,8 +38,8 @@ describe('API sources for Feed', () => {
   });
 
   it('caps rows and reports truncation', () => {
-    const result = normalizeApiFeed(Array.from({ length: 501 }, (_, id) => ({ id })));
-    expect(result.tables?.[0]?.rows).toHaveLength(501); // header + 500 records
+    const result = normalizeApiFeed(Array.from({ length: 1001 }, (_, id) => ({ id })));
+    expect(result.tables?.[0]?.rows).toHaveLength(1001); // header + 1000 records
     expect(result.truncated).toBe(true);
   });
 });

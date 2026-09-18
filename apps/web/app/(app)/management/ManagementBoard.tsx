@@ -11,10 +11,12 @@ import {
   managementSourceConflicts,
   managementStateLabels,
 } from '@/lib/management/shape';
+import { workspaceHref } from '@/lib/workspace-context';
 import { ArrowRight, Briefcase, CheckCircle2, Plus, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { ActivationExecution } from '../activations/ActivationExecution';
 import { CaseEditor } from './CaseEditor';
 import { ExecutiveFocus } from './ExecutiveFocus';
 import { ManualStudio } from './ManualStudio';
@@ -34,11 +36,23 @@ type Props = {
   readAt: string;
   today: string;
   userId: string;
+  workspaceId: string;
   isAdmin: boolean;
 };
 export function ManagementBoard(props: Props) {
-  const { cases, profile, people, signals, warnings, truncated, readAt, today, userId, isAdmin } =
-    props;
+  const {
+    cases,
+    profile,
+    people,
+    signals,
+    warnings,
+    truncated,
+    readAt,
+    today,
+    userId,
+    workspaceId,
+    isAdmin,
+  } = props;
   const router = useRouter();
   const [tab, setTab] = useState<'today' | 'processes' | 'settings'>(props.initialTab ?? 'today');
   const [filter, setFilter] = useState<'all' | 'risk' | 'review' | 'working' | 'verified'>('all');
@@ -48,6 +62,7 @@ export function ManagementBoard(props: Props) {
   );
   const [notice, setNotice] = useState('');
   const [refreshing, startRefresh] = useTransition();
+  const href = (path: string) => workspaceHref(workspaceId, path);
   const name = (id: string | null) =>
     people.find((p) => p.id === id)?.name ||
     people.find((p) => p.id === id)?.email ||
@@ -159,29 +174,35 @@ export function ManagementBoard(props: Props) {
             </p>
           </div>
           <div className="manager-agenda__actions">
-            <Link href="/chat?prompt=Revisa%20la%20agenda%20de%20gerencia%20y%20ay%C3%BAdame%20a%20priorizar%20la%20agenda%20de%20hoy.%20Distingue%20hechos%2C%20datos%20faltantes%20y%20el%20siguiente%20paso.">
+            <Link
+              href={href(
+                '/chat?prompt=Revisa%20la%20agenda%20de%20gerencia%20y%20ay%C3%BAdame%20a%20priorizar%20la%20agenda%20de%20hoy.%20Distingue%20hechos%2C%20datos%20faltantes%20y%20el%20siguiente%20paso.',
+              )}
+            >
               Revisar con Cortex
             </Link>
-            <Link href="/onboarding">Configurar empresa</Link>
+            <Link href={href('/onboarding')}>Configurar empresa</Link>
           </div>
           <nav aria-label="Fuentes de la agenda">
-            <Link href="/goals">Metas</Link>
-            <Link href="/commitments">Compromisos</Link>
-            <Link href="/approvals">Aprobaciones</Link>
-            <Link href="/schedules">Rutinas</Link>
-            <Link href="/feed">Consultar datos</Link>
-            <Link href="/management/operation">Operación de 30 días</Link>
-            <Link href="/management/mission">Primera misión</Link>
-            <Link href="/management/control">Autonomía y calidad</Link>
-            <Link href="/management/review">Revisión semanal</Link>
+            <Link href={href('/goals')}>Metas</Link>
+            <Link href={href('/commitments')}>Compromisos</Link>
+            <Link href={href('/approvals')}>Aprobaciones</Link>
+            <Link href={href('/schedules')}>Rutinas</Link>
+            <Link href={href('/feed')}>Consultar datos</Link>
+            <Link href={href('/management/operation')}>Operación de 30 días</Link>
+            <Link href={href('/management/mission')}>Primera misión</Link>
+            <Link href={href('/management/control')}>Autonomía y calidad</Link>
+            <Link href={href('/management/review')}>Revisión semanal</Link>
           </nav>
         </section>
       )}
       {tab === 'today' && !editor && (
         <ExecutiveFocus
           cases={cases}
+          people={people}
           userId={userId}
           today={today}
+          workspaceId={workspaceId}
           isAdmin={isAdmin}
           onOpen={(c) => startCase(c.data, c)}
         />
@@ -242,7 +263,15 @@ export function ManagementBoard(props: Props) {
           {editor ? (
             <div className="space-y-4">
               {editor.item?.data.activationEvidence && (
-                <ActivationEvidence evidence={editor.item.data.activationEvidence} />
+                <>
+                  <ActivationEvidence evidence={editor.item.data.activationEvidence} />
+                  <ActivationExecution
+                    key={editor.item.id}
+                    workspaceId={workspaceId}
+                    caseId={editor.item.id}
+                    runId={editor.item.data.activationEvidence.runId}
+                  />
+                </>
               )}
               <CaseEditor
                 key={editor.item?.id ?? 'new'}
@@ -321,7 +350,10 @@ export function ManagementBoard(props: Props) {
                         <div key={caseId} className="space-y-2">
                           <p className="text-sm font-semibold">{signal.title}</p>
                           <div className="flex flex-wrap gap-3">
-                            <Link href={signal.href} className="text-xs font-semibold text-primary">
+                            <Link
+                              href={href(signal.href)}
+                              className="text-xs font-semibold text-primary"
+                            >
                               Abrir fuente
                             </Link>
                             <button
@@ -360,7 +392,7 @@ export function ManagementBoard(props: Props) {
                           <div className="flex flex-wrap items-center gap-3">
                             <Link
                               className="text-xs font-semibold text-primary hover:underline"
-                              href={s.href}
+                              href={href(s.href)}
                             >
                               Abrir fuente
                             </Link>
@@ -397,7 +429,7 @@ export function ManagementBoard(props: Props) {
                       Las señales se actualizan al abrir o actualizar esta vista. Puedes recibir un
                       parte de los asuntos compartidos en una conversación.
                     </p>
-                    <DailyBriefControl />
+                    <DailyBriefControl workspaceId={workspaceId} />
                   </section>
                 </aside>
               </div>
@@ -475,7 +507,7 @@ function ActivationEvidence({
           {evidence.rows.length === 1 ? 'fila importada' : 'filas importadas'}
         </p>
         <p className="text-xs text-ink-muted">
-          Este snapshot explica el origen del asunto. No demuestra su resolución ni reemplaza la
+          Esta evidencia explica el origen del asunto. No demuestra su resolución ni reemplaza la
           evidencia de cierre.
         </p>
       </div>
@@ -498,7 +530,25 @@ function ActivationEvidence({
                 const values = new Map(row.values.map((value) => [value.column, value.value]));
                 return (
                   <tr key={`${row.rowIndex}:${row.sourceKey}`} className="align-top">
-                    <td className="px-3 py-2 tabular-nums">{row.rowIndex + 1}</td>
+                    <td className="max-w-56 px-3 py-2 tabular-nums">
+                      {row.rowIndex + 1}
+                      {row.provenance?.length ? (
+                        <details className="mt-1 text-ink-muted">
+                          <summary className="cursor-pointer">Ver orígenes</summary>
+                          <ul className="mt-2 space-y-1">
+                            {row.provenance.map((origin) => (
+                              <li
+                                key={`${origin.sourceId}:${origin.sheetIndex}:${origin.rowIndex}`}
+                                className="break-words"
+                              >
+                                {origin.sourceName} · {origin.sheetName} · fila{' '}
+                                {origin.rowIndex + 1}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : null}
+                    </td>
                     {columns.map(([column]) => (
                       <td key={column} className="max-w-64 break-words px-3 py-2">
                         {values.get(column) || '—'}
@@ -540,7 +590,7 @@ function ActivationEvidence({
                 if ('values' in row) return null;
                 return (
                   <tr key={`${row.rowIndex}:${row.sourceKey}`} className="align-top">
-                    <td className="px-3 py-2 tabular-nums">{row.rowIndex + 1}</td>
+                    <td className="max-w-56 px-3 py-2 tabular-nums">{row.rowIndex + 1}</td>
                     <td className="max-w-48 break-words px-3 py-2 font-medium">
                       {row.invoiceNumber || '—'}
                     </td>
@@ -574,7 +624,7 @@ function ActivationEvidence({
   );
 }
 
-function DailyBriefControl() {
+function DailyBriefControl({ workspaceId }: { workspaceId: string }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState('');
   const [job, setJob] = useState<{ id: string; status: string } | null>(null);
@@ -588,7 +638,10 @@ function DailyBriefControl() {
       {job ? (
         <output className="block text-xs">
           {job.status === 'paused' ? 'Tu parte está pausado.' : 'Parte diario activo.'}{' '}
-          <Link className="font-semibold text-primary" href={`/schedules/${job.id}`}>
+          <Link
+            className="font-semibold text-primary"
+            href={workspaceHref(workspaceId, `/schedules/${job.id}`)}
+          >
             Ver rutina →
           </Link>
         </output>

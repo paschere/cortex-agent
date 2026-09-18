@@ -22,6 +22,7 @@ export default async function ManagementPage({
       {...sources}
       today={bogotaToday()}
       userId={user.id}
+      workspaceId={user.organization.id}
       isAdmin={user.role === 'org_admin'}
     />
   );

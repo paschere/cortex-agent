@@ -43,10 +43,20 @@ const ROW = {
  */
 function fakeDb(rows: unknown[] = [ROW]) {
   const chain: Record<string, unknown> = {};
+  let hideActivation = false;
   for (const method of ['select', 'eq', 'is', 'gt', 'order']) {
     chain[method] = () => chain;
   }
-  chain.limit = async () => ({ data: rows, error: null });
+  chain.or = () => {
+    hideActivation = true;
+    return chain;
+  };
+  chain.limit = async () => ({
+    data: hideActivation
+      ? rows.filter((row) => (row as { staged_via?: unknown }).staged_via !== 'activation')
+      : rows,
+    error: null,
+  });
   return { from: () => chain } as unknown as ToolContext['db'];
 }
 
@@ -143,6 +153,14 @@ describe('approvals.list no puede devolver el payload', () => {
     const out = await approvalsList.handler({ limit: 10 }, ctx(fakeDb([])));
     expect(out.pending).toEqual([]);
     expect(out.summary).toContain('No hay nada');
+  });
+
+  it('deja las aprobaciones de activación al puente que las verifica', async () => {
+    const out = await approvalsList.handler(
+      { limit: 10 },
+      ctx(fakeDb([ROW, { ...ROW, id: 'activation', staged_via: 'activation' }])),
+    );
+    expect(out.pending.map((item) => item.id)).toEqual([ROW.id]);
   });
 
   it('un origen que no reconocemos se lee como «no consta», nunca como «web»', () => {

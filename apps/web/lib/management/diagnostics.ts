@@ -1,3 +1,4 @@
+import { sourceHealth } from '@/lib/feed/health';
 import { listVisibleSpaces } from '@cortex/agent-tools';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -115,6 +116,60 @@ export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
           detail: r.count
             ? `${r.count} entradas temporales disponibles para tu cuenta en este espacio. Comprueba su contenido y fecha antes de usarlas como evidencia; no se guardan automáticamente en el cerebro.`
             : 'Tu Feed está vacío. Puedes añadir un archivo, una URL o texto para la primera consulta. Es opcional si ya tienes otra fuente disponible.',
+        };
+      },
+    ),
+    check(
+      'feed-health',
+      'Vigencia de fuentes conectadas',
+      'Detectar lecturas incompletas, fuentes vencidas y reglas detenidas.',
+      '/feed',
+      async () => {
+        const sources = await db
+          .from('feed_sources')
+          .select('id,enabled,status,last_checked_at,freshness_minutes,latest_attachment_id')
+          .eq('actor_id', userId)
+          .limit(101);
+        if (sources.error) throw sources.error;
+        const rows = sources.data ?? [];
+        if (!rows.length)
+          return {
+            state: 'unknown',
+            detail:
+              'Todavía no hay fuentes conectadas para esta persona. Añade una en Feed para comprobar su vigencia.',
+          };
+        const ids = rows.flatMap((s) => (s.latest_attachment_id ? [s.latest_attachment_id] : []));
+        const [captures, automations] = await Promise.all([
+          ids.length
+            ? db
+                .from('chat_attachments')
+                .select('id,purge_at,feed_truncated')
+                .eq('created_by', userId)
+                .in('id', ids)
+            : Promise.resolve({ data: [], error: null }),
+          db
+            .from('activation_automations')
+            .select('source_connection_id,status')
+            .eq('actor_id', userId)
+            .in(
+              'source_connection_id',
+              rows.map((s) => s.id),
+            )
+            .limit(1000),
+        ]);
+        if (captures.error || automations.error) throw new Error('source health');
+        const states = rows.map((row) =>
+          sourceHealth(
+            row,
+            captures.data?.find((c) => c.id === row.latest_attachment_id) ?? null,
+            (automations.data ?? []).filter((a) => a.source_connection_id === row.id),
+          ),
+        );
+        const unhealthy = states.filter((s) => s.state !== 'healthy');
+        const incomplete = rows.length > 100 || (automations.data?.length ?? 0) >= 1000;
+        return {
+          state: unhealthy.length ? 'blocked' : incomplete ? 'unknown' : 'checked',
+          detail: `${states.length} fuentes examinadas; ${unhealthy.length} necesitan atención.${incomplete ? ' Vista parcial.' : ''} Abre Feed para ver qué reparar. La vigencia de una lectura no prueba la veracidad del origen.`,
         };
       },
     ),
@@ -238,6 +293,7 @@ export async function readSetupDiagnostics(db: SupabaseClient, userId: string) {
   const order = [
     'connections',
     'feed',
+    'feed-health',
     'sources',
     'custom-tools',
     'mcp',

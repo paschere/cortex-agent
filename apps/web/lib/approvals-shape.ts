@@ -13,7 +13,14 @@
  */
 
 /** Dónde se paró la llamada a pedir permiso (migración 0102). */
-export const STAGED_VIA = ['mcp', 'google_chat', 'whatsapp', 'web', 'schedule'] as const;
+export const STAGED_VIA = [
+  'mcp',
+  'google_chat',
+  'whatsapp',
+  'web',
+  'schedule',
+  'activation',
+] as const;
 export type StagedVia = (typeof STAGED_VIA)[number];
 
 /**
@@ -28,4 +35,5 @@ export const STAGED_VIA_LABEL: Record<StagedVia, string> = {
   whatsapp: 'WhatsApp',
   web: 'este chat',
   schedule: 'una rutina programada',
+  activation: 'una activación',
 };

@@ -110,6 +110,19 @@ export const managementActivationInvoiceSchema = z.object({
   conflicts: z.array(z.string().max(1000)).max(100),
 });
 export const managementActivationRowSchema = z.object({
+  provenance: z
+    .array(
+      z.object({
+        sourceId: z.string().uuid(),
+        sourceName: z.string().max(1000),
+        attachmentId: z.string().uuid(),
+        sheetIndex: z.number().int().nonnegative(),
+        sheetName: z.string().max(1000),
+        rowIndex: z.number().int().nonnegative(),
+      }),
+    )
+    .max(60)
+    .optional(),
   rowIndex: z.number().int().nonnegative(),
   sourceKey: z.string().max(1000),
   status: z.enum(['matched', 'unmatched', 'invalid']),

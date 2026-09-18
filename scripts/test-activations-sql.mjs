@@ -528,5 +528,133 @@ await rejects(
     ]),
   /regla no coincide/,
 );
+// Source webhook delivery is authenticated, deduplicated and survives a review
+// finishing after the notification. These are real SQL transitions, no providers.
+await db.exec(
+  await readFile(`${root}/infra/supabase/migrations/0152_combined_feed_sources.sql`, 'utf8'),
+);
+await db.exec(`create table agents(id uuid primary key);
+create table mcp_pending_actions(id uuid primary key,staged_via text constraint mcp_pending_actions_staged_via_check check(staged_via in ('web','mcp','google_chat','whatsapp','schedule')));`);
+await db.exec(
+  await readFile(`${root}/infra/supabase/migrations/0153_activation_operations.sql`, 'utf8'),
+);
+const operationId = randomUUID();
+const operationAgent = randomUUID();
+await db.query('insert into agents values($1)', [operationAgent]);
+await db.query(
+  `insert into activation_operations(id,organization_id,actor_id,agent_id,case_id,activation_run_id,action_tool_id,action_input,action_tool_snapshot,verifier_tool_id,verifier_input,verifier_expected,verifier_tool_snapshot,source_evidence,intent_hash,idempotency_key)
+ values($1,'a',$2,$3,$4,$5,'custom.update','{}',$6,'custom.read','{}','"done"',$6,'{}',$6,'test-activation-operation')`,
+  [operationId, actor, operationAgent, genericResult.caseIds[0], genericRun, snapshot],
+);
+await db.query('delete from activation_runs where id=$1', [genericRun]);
+ok(
+  (await db.query('select count(*)::int n from activation_operations where id=$1', [operationId]))
+    .rows[0].n === 1,
+  'operation audit survives temporary activation run deletion',
+);
+await db.query(`insert into mcp_pending_actions values($1,'activation')`, [randomUUID()]);
+ok(
+  (await db.query("select has_table_privilege('anon','activation_operations','INSERT') allowed"))
+    .rows[0].allowed === false,
+  'anonymous clients cannot prepare an operation',
+);
+await db.exec(
+  await readFile(`${root}/infra/supabase/migrations/0155_feed_source_reliability.sql`, 'utf8'),
+);
+const hookHash = 'e'.repeat(64);
+await db.query('update feed_sources set webhook_enabled=true,webhook_token_hash=$2 where id=$1', [
+  feedSource,
+  hookHash,
+]);
+const signal = async (event, hash = hookHash, org = 'a') =>
+  (await db.query('select feed_source_signal($1,$2,$3,$4) result', [org, feedSource, hash, event]))
+    .rows[0].result;
+ok((await signal('wrong-secret', 'f'.repeat(64))) === null, 'webhook rejects wrong credential');
+ok(
+  (await signal('wrong-tenant', hookHash, 'b')) === null,
+  'webhook cannot address a foreign tenant',
+);
+ok(
+  (await db.query('select count(*)::int n from feed_source_signals')).rows[0].n === 0,
+  'unauthorized signals leave no event',
+);
+const signaled = await signal('change-1');
+ok(signaled.duplicate === false && signaled.coalesced === false, 'first change accepted');
+ok((await signal('change-1')).duplicate === true, 'same event id is idempotent');
+ok((await signal('change-2')).coalesced === true, 'bursty events coalesce dispatch');
+ok(
+  (await db.query('select signal_revision from feed_sources where id=$1', [feedSource])).rows[0]
+    .signal_revision === 2,
+  'duplicates do not advance source revision',
+);
+const racingAutomation = await automation();
+const racingClaim = await claim(racingAutomation);
+await signal('during-review');
+await db.query(`select activation_automation_finish('a',$1,$2,'stable','{}',false,null,2)`, [
+  racingAutomation,
+  racingClaim.lease_token,
+]);
+ok(
+  (
+    await db.query('select next_run_at<=now() due from activation_automations where id=$1', [
+      racingAutomation,
+    ])
+  ).rows[0].due,
+  'change received during review remains due',
+);
+const stableClaim = await claim(racingAutomation);
+await db.query(`select activation_automation_finish('a',$1,$2,'stable','{}',false,null,3)`, [
+  racingAutomation,
+  stableClaim.lease_token,
+]);
+ok(
+  (
+    await db.query('select next_run_at>now() scheduled from activation_automations where id=$1', [
+      racingAutomation,
+    ])
+  ).rows[0].scheduled,
+  'reviewed revision returns to cadence',
+);
+const combinedConnection = randomUUID();
+const combinedCapture = randomUUID();
+await db.query(
+  `insert into chat_attachments(id,organization_id,created_by,feed_kind,feed_tables,feed_content_hash,purge_at) values($1,'a',$2,'combined',$3,'combined',now()+interval '1 day')`,
+  [combinedCapture, actor, JSON.stringify(genericTables)],
+);
+await db.query(
+  `insert into feed_sources(id,organization_id,actor_id,kind,name,config,config_hash,latest_attachment_id) values($1,'a',$2,'combined','Cruce','{}',$3,$4)`,
+  [combinedConnection, actor, 'c'.repeat(64), combinedCapture],
+);
+await db.query(
+  `insert into feed_combined_dependencies(organization_id,combined_source_id,combined_attachment_id,dependency_source_id,dependency_attachment_id) values('a',$1,$2,$3,$4)`,
+  [combinedConnection, combinedCapture, feedSource, genericSource],
+);
+const combinedAutomation = await automation(genericDefinition, combinedConnection);
+await db.query(`update activation_automations set next_run_at=now()+interval '1 day' where id=$1`, [
+  combinedAutomation,
+]);
+await signal('wake-combined');
+ok(
+  (await db.query('select signal_revision from feed_sources where id=$1', [combinedConnection]))
+    .rows[0].signal_revision === 1,
+  'dependency signal advances combined source revision',
+);
+ok(
+  (
+    await db.query('select next_run_at<=now() due from activation_automations where id=$1', [
+      combinedAutomation,
+    ])
+  ).rows[0].due,
+  'dependency notification wakes combined activation',
+);
+await db.query('update feed_sources set enabled=false where id=$1', [feedSource]);
+ok((await signal('disabled')) === null, 'disconnected sources reject webhook events');
+await db.query('update feed_sources set enabled=true,webhook_enabled=false where id=$1', [
+  feedSource,
+]);
+ok((await signal('revoked')) === null, 'revoked webhook rejects previous secret');
+await db.query('update feed_sources set webhook_enabled=true where id=$1', [feedSource]);
+await db.exec(`delete from ba_member where "organizationId"='a'`);
+ok((await signal('removed-member')) === null, 'membership removal invalidates source webhook');
 console.log(`${checks} real SQL assertions passed (PGlite, synthetic schema dependencies).`);
 await db.close();

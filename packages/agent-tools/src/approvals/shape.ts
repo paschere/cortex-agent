@@ -38,7 +38,14 @@ import { z } from 'zod';
  */
 
 /** Dónde se paró la llamada a pedir permiso. Nulo = no consta (migración 0102). */
-export const STAGED_VIA = ['mcp', 'google_chat', 'whatsapp', 'web', 'schedule'] as const;
+export const STAGED_VIA = [
+  'mcp',
+  'google_chat',
+  'whatsapp',
+  'web',
+  'schedule',
+  'activation',
+] as const;
 export type StagedVia = (typeof STAGED_VIA)[number];
 
 /** Cómo se nombra cada origen delante de una persona. */
@@ -48,6 +55,7 @@ export const STAGED_VIA_LABEL: Record<StagedVia, string> = {
   whatsapp: 'WhatsApp',
   web: 'este chat',
   schedule: 'una rutina programada',
+  activation: 'una activación',
 };
 
 export const pendingApprovalSchema = z

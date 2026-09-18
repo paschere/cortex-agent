@@ -39,6 +39,14 @@
  * de la interfaz y viven con ella, en `apps/web/lib/tool-labels.ts`.
  */
 export const TOOL_LABEL_TEXT: Record<string, string> = {
+  feed_table_query: 'Consultar la hoja de cálculo de Feed',
+  management_advance_collection: 'Actualizar o detener el seguimiento',
+  management_brief: 'Revisar la gerencia de la empresa',
+  management_collection_status: 'Consultar el seguimiento del cobro',
+  management_daily_brief: 'Preparar el parte diario',
+  management_inspect: 'Consultar un asunto y su historial',
+  management_record: 'Organizar y seguir un asunto',
+  management_start_collection: 'Iniciar seguimiento y preparar un cobro',
   gmail_propose_learning: 'Proponer un aprendizaje del correo',
   management_operation: 'Consultar el ciclo gerencial',
   management_propose_decision: 'Preparar una decisión para revisión',

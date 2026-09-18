@@ -130,3 +130,46 @@ describe('source readiness evidence', () => {
     expect(JSON.stringify(checks)).not.toMatch(/secret|private|other-company/);
   });
 });
+
+describe('connected source health diagnostics', () => {
+  it('identifies incomplete own captures while excluding other people and workspaces', async () => {
+    const { client } = createFakeSupabase({
+      feed_sources: [
+        {
+          id: 'mine',
+          organization_id: 'a',
+          actor_id: 'me',
+          enabled: true,
+          status: 'ok',
+          last_checked_at: new Date().toISOString(),
+          freshness_minutes: 1440,
+          latest_attachment_id: 'capture',
+        },
+        {
+          id: 'other',
+          organization_id: 'a',
+          actor_id: 'other',
+          enabled: false,
+          status: 'disabled',
+        },
+        { id: 'foreign', organization_id: 'b', actor_id: 'me', enabled: false, status: 'disabled' },
+      ],
+      chat_attachments: [
+        {
+          id: 'capture',
+          organization_id: 'a',
+          created_by: 'me',
+          feed_kind: 'api',
+          purge_at: '2099-01-01',
+          feed_truncated: true,
+        },
+      ],
+      activation_automations: [],
+    });
+    const checks = await readSetupDiagnostics(createOrgScopedClient(client, 'a'), 'me');
+    expect(checks.find((c) => c.id === 'feed-health')).toMatchObject({
+      state: 'blocked',
+      detail: expect.stringContaining('1 fuentes examinadas; 1 necesitan atención'),
+    });
+  });
+});
