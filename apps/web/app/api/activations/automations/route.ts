@@ -1,6 +1,7 @@
 import {
   automationInput,
   automationSummary,
+  automationTransitionSourceStatuses,
   recurringDefinitionError,
 } from '@/lib/activations/automations';
 import { activationDefinitionSchema, isSameOrigin } from '@/lib/activations/request';
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
         })
         .eq('id', body.id)
         .eq('actor_id', user.id)
-        .in('status', body.action === 'resume' ? ['paused'] : ['active', 'needs_review'])
+        .in('status', automationTransitionSourceStatuses(body.action))
         .select('*')
         .maybeSingle();
       if (error || !data)
@@ -70,6 +71,11 @@ export async function POST(req: NextRequest) {
     const source = (await readOwnedTableSources(db, user.id)).find((s) => s.id === run.source_id);
     if (!source)
       throw new ActivationError('La fuente venció. Añade una versión y vuelve a simular.', 409);
+    if (source.feed_truncated)
+      throw new ActivationError(
+        'La captura está incompleta. Reduce el origen o sus filas antes de activar el seguimiento.',
+        409,
+      );
     const { data: connection, error: connectionError } = await db
       .from('feed_sources')
       .select('id,kind')

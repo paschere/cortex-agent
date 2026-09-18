@@ -39,12 +39,24 @@ export function normalizeApiFeed(data: unknown): {
     const records = data as Record<string, unknown>[];
     const headers: string[] = [];
     const seen = new Set<string>();
+    let truncated = records.length > MAX_ROWS;
     for (const row of records.slice(0, MAX_ROWS)) {
       for (const key of Object.keys(row)) {
         if (!seen.has(key) && headers.length < MAX_COLUMNS) {
           seen.add(key);
           headers.push(key);
+        } else if (!seen.has(key)) {
+          truncated = true;
         }
+        const value = row[key];
+        if (
+          typeof value === 'string'
+            ? value.length > MAX_CELL_CHARS
+            : value != null &&
+              typeof value === 'object' &&
+              JSON.stringify(value).length > MAX_CELL_CHARS
+        )
+          truncated = true;
       }
     }
     const rows: SheetValue[][] = [
@@ -55,7 +67,7 @@ export function normalizeApiFeed(data: unknown): {
     return {
       text: `Respuesta API tabular: ${records.length} filas, ${headers.length} columnas.`,
       tables: [table],
-      truncated: records.length > MAX_ROWS || Object.keys(records[0] ?? {}).length > MAX_COLUMNS,
+      truncated,
     };
   }
   const serialized = typeof data === 'string' ? data : (JSON.stringify(data, null, 2) ?? '');
@@ -73,9 +85,55 @@ export async function registerFeedSourceCapture(options: {
   name: string;
   config: Record<string, unknown>;
   attachmentId: string;
+  targetSourceId?: string;
 }) {
   const now = new Date().toISOString();
   const configHash = hashConfig(options.config);
+  if (options.targetSourceId) {
+    if (!['file', 'text'].includes(options.kind))
+      throw new Error('Sólo archivos y textos aceptan versiones manuales.');
+    const target = await options.db
+      .from('feed_sources')
+      .select('id,kind')
+      .eq('id', options.targetSourceId)
+      .eq('actor_id', options.actorId)
+      .maybeSingle();
+    if (target.error || !target.data) throw new Error('La fuente de destino no existe.');
+    if (target.data.kind !== options.kind)
+      throw new Error('La nueva versión debe ser del mismo tipo que la fuente.');
+    const updated = await options.db
+      .from('feed_sources')
+      .update({
+        latest_attachment_id: options.attachmentId,
+        enabled: true,
+        last_checked_at: now,
+        last_changed_at: now,
+        status: 'ok',
+        error: null,
+        updated_at: now,
+      })
+      .eq('id', options.targetSourceId)
+      .eq('actor_id', options.actorId);
+    if (updated.error) throw new Error('No se pudo guardar la nueva versión.');
+    const attachment = await options.db
+      .from('chat_attachments')
+      .select('feed_source_id')
+      .eq('id', options.attachmentId)
+      .eq('created_by', options.actorId)
+      .maybeSingle();
+    if (attachment.error || !attachment.data)
+      throw new Error('No se pudo comprobar la captura de la nueva versión.');
+    if (!attachment.data.feed_source_id) {
+      const linked = await options.db
+        .from('chat_attachments')
+        .update({ feed_source_id: options.targetSourceId })
+        .eq('id', options.attachmentId)
+        .eq('created_by', options.actorId)
+        .is('feed_source_id', null);
+      if (linked.error) throw new Error('No se pudo enlazar la nueva versión.');
+    }
+    return options.targetSourceId;
+  }
   const existing = await options.db
     .from('feed_sources')
     .select('id')
@@ -104,7 +162,7 @@ export async function registerFeedSourceCapture(options: {
     if (inserted.error || !inserted.data) throw new Error('No se pudo registrar la fuente.');
     id = inserted.data.id as string;
   } else {
-    await options.db
+    const updated = await options.db
       .from('feed_sources')
       .update({
         latest_attachment_id: options.attachmentId,
@@ -114,11 +172,14 @@ export async function registerFeedSourceCapture(options: {
         updated_at: now,
       })
       .eq('id', id);
+    if (updated.error) throw new Error('No se pudo actualizar la conexión de Feed.');
   }
-  await options.db
+  const linked = await options.db
     .from('chat_attachments')
     .update({ feed_source_id: id })
-    .eq('id', options.attachmentId);
+    .eq('id', options.attachmentId)
+    .eq('created_by', options.actorId);
+  if (linked.error) throw new Error('No se pudo enlazar la captura de Feed.');
   return id;
 }
 
@@ -200,7 +261,7 @@ export async function captureApiFeed(options: {
   const duplicate = await ownedFeed(db, actorId).eq('feed_content_hash', fingerprint).maybeSingle();
   if (duplicate.error) throw new Error('No se pudo comprobar el historial de Feed.');
   if (duplicate.data) {
-    await db
+    const updated = await db
       .from('feed_sources')
       .update({
         latest_attachment_id: duplicate.data.id,
@@ -209,7 +270,12 @@ export async function captureApiFeed(options: {
         error: null,
         updated_at: now,
       })
-      .eq('id', sourceId);
+      .eq('id', sourceId)
+      .eq('enabled', true)
+      .select('id')
+      .maybeSingle();
+    if (updated.error || !updated.data)
+      throw new Error('No se pudo actualizar la conexión o fue desactivada.');
     return { sourceId, entry: duplicate.data, deduplicated: true };
   }
   const { count, error: countError } = await db
@@ -248,7 +314,7 @@ export async function captureApiFeed(options: {
     .select(FEED_COLUMNS)
     .single();
   if (inserted.error || !inserted.data) throw new Error('No se pudo guardar la captura API.');
-  await db
+  const updated = await db
     .from('feed_sources')
     .update({
       latest_attachment_id: id,
@@ -258,7 +324,12 @@ export async function captureApiFeed(options: {
       error: null,
       updated_at: now,
     })
-    .eq('id', sourceId);
+    .eq('id', sourceId)
+    .eq('enabled', true)
+    .select('id')
+    .maybeSingle();
+  if (updated.error || !updated.data)
+    throw new Error('No se pudo actualizar la conexión o fue desactivada.');
   return { sourceId, entry: inserted.data, deduplicated: false };
 }
 
@@ -342,7 +413,8 @@ export async function refreshFeedSource(
         error: (error instanceof Error ? error.message : 'No se pudo actualizar.').slice(0, 2000),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', sourceId);
+      .eq('id', sourceId)
+      .eq('enabled', true);
     throw error;
   }
 }
@@ -371,7 +443,7 @@ async function saveRefreshedCapture(options: {
   const now = new Date().toISOString();
   if (duplicate.error) throw new Error('No se pudo comprobar el historial de Feed.');
   if (duplicate.data) {
-    await options.db
+    const updated = await options.db
       .from('feed_sources')
       .update({
         latest_attachment_id: duplicate.data.id,
@@ -380,7 +452,12 @@ async function saveRefreshedCapture(options: {
         error: null,
         updated_at: now,
       })
-      .eq('id', options.sourceId);
+      .eq('id', options.sourceId)
+      .eq('enabled', true)
+      .select('id')
+      .maybeSingle();
+    if (updated.error || !updated.data)
+      throw new Error('No se pudo actualizar la conexión o fue desactivada.');
     return { sourceId: options.sourceId, entry: duplicate.data, deduplicated: true };
   }
   const { count, error: countError } = await options.db
@@ -417,7 +494,7 @@ async function saveRefreshedCapture(options: {
     .select(FEED_COLUMNS)
     .single();
   if (inserted.error || !inserted.data) throw new Error('No se pudo guardar la nueva captura.');
-  await options.db
+  const updated = await options.db
     .from('feed_sources')
     .update({
       latest_attachment_id: id,
@@ -427,6 +504,11 @@ async function saveRefreshedCapture(options: {
       error: null,
       updated_at: now,
     })
-    .eq('id', options.sourceId);
+    .eq('id', options.sourceId)
+    .eq('enabled', true)
+    .select('id')
+    .maybeSingle();
+  if (updated.error || !updated.data)
+    throw new Error('No se pudo actualizar la conexión o fue desactivada.');
   return { sourceId: options.sourceId, entry: inserted.data, deduplicated: false };
 }

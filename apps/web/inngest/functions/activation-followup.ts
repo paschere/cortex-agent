@@ -94,6 +94,11 @@ export const activationRunJob: JobHandler = async ({ event }) => {
         'La captura venció o fue eliminada. Añade una versión desde Feed y revisa la activación.',
         409,
       );
+    if (source.feed_truncated)
+      throw new ActivationError(
+        'La fuente está incompleta. Acota la consulta antes de activar el seguimiento.',
+        409,
+      );
     // Fingerprints are content based, never capture timestamps or attachment IDs.
     const fingerprint = source.feed_content_hash ?? sourceSnapshot(source);
     const schema = automation.approved_schema as {

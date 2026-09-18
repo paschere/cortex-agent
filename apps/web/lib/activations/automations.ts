@@ -12,6 +12,9 @@ export const automationInput = z.discriminatedUnion('action', [
   z.object({ action: z.literal('pause'), id: z.string().uuid() }),
   z.object({ action: z.literal('resume'), id: z.string().uuid() }),
 ]);
+export function automationTransitionSourceStatuses(action: 'pause' | 'resume') {
+  return action === 'resume' ? ['paused'] : ['active'];
+}
 export function recurringDefinitionError(definition: ActivationDefinition): string | null {
   if (
     definition.kind === 'table_rule' &&

@@ -54,6 +54,7 @@ const automation = {
 const source = {
   id: '55555555-5555-4555-8555-555555555555',
   feed_content_hash: 'fingerprint',
+  feed_truncated: false,
   feed_tables: [
     {
       name: 'Datos',
@@ -81,6 +82,7 @@ function arrange(options?: {
   headers?: string[];
   kind?: string;
   refreshError?: Error;
+  truncated?: boolean;
 }) {
   const currentAutomation = {
     ...automation,
@@ -105,7 +107,7 @@ function arrange(options?: {
       }),
     )
     .mockReturnValueOnce(query({ latest_attachment_id: source.id }));
-  mocks.readSources.mockResolvedValue([source]);
+  mocks.readSources.mockResolvedValue([{ ...source, feed_truncated: options?.truncated ?? false }]);
   mocks.readViews.mockResolvedValue([]);
   mocks.createSimulation.mockResolvedValue({ id: 'run-1', candidates: [] });
   if (options?.refreshError) mocks.refresh.mockRejectedValue(options.refreshError);
@@ -145,7 +147,7 @@ describe('activation follow-up worker', () => {
     expect(mocks.createSimulation).toHaveBeenCalledWith(
       expect.anything(),
       automation.actor_id,
-      source,
+      expect.objectContaining(source),
       0,
       expect.anything(),
       { preparedView: undefined, sourceIdentityOverride: `automation:${automation.id}` },
@@ -157,6 +159,17 @@ describe('activation follow-up worker', () => {
     await activationRunJob(event);
     expect(mocks.createSimulation).not.toHaveBeenCalled();
     expect(finishes[0]).toMatchObject({ p_run_id: null, p_result: { outcome: 'error' } });
+  });
+
+  it('moves a partial refreshed capture to needs review without publication', async () => {
+    const { finishes } = arrange({ kind: 'api', truncated: true });
+    await activationRunJob(event);
+    expect(mocks.createSimulation).not.toHaveBeenCalled();
+    expect(finishes[0]).toMatchObject({
+      p_run_id: null,
+      p_needs_review: true,
+      p_result: { outcome: 'error' },
+    });
   });
 
   it('surfaces dispatcher enqueue failures', async () => {

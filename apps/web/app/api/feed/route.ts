@@ -32,6 +32,39 @@ export async function POST(req: NextRequest) {
   if (!form)
     return NextResponse.json({ error: 'Añade un archivo, un enlace o texto.' }, { status: 400 });
   const kind = String(form.get('kind') ?? '');
+  const targetSourceId = String(form.get('targetSourceId') ?? '').trim() || undefined;
+  if (
+    targetSourceId &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      targetSourceId,
+    )
+  )
+    return NextResponse.json({ error: 'La fuente de destino no es válida.' }, { status: 400 });
+  if (targetSourceId && !['file', 'text'].includes(kind))
+    return NextResponse.json(
+      { error: 'Sólo archivos y textos aceptan versiones manuales.' },
+      { status: 409 },
+    );
+  if (targetSourceId) {
+    const target = await db
+      .from('feed_sources')
+      .select('id,kind')
+      .eq('id', targetSourceId)
+      .eq('actor_id', user.id)
+      .maybeSingle();
+    if (target.error)
+      return NextResponse.json(
+        { error: 'No se pudo revisar la fuente de destino.' },
+        { status: 503 },
+      );
+    if (!target.data)
+      return NextResponse.json({ error: 'La fuente de destino no existe.' }, { status: 404 });
+    if (target.data.kind !== kind)
+      return NextResponse.json(
+        { error: 'La nueva versión debe ser del mismo tipo que la fuente.' },
+        { status: 409 },
+      );
+  }
   const { count, error: countError } = await db
     .from('chat_attachments')
     .select('id', { count: 'exact', head: true })
@@ -156,6 +189,7 @@ export async function POST(req: NextRequest) {
       name,
       config: Object.keys(sourceConfig).length ? sourceConfig : { contentHash: fingerprint },
       attachmentId: duplicate.data.id,
+      targetSourceId,
     });
     return NextResponse.json({ entry: duplicate.data, deduplicated: true });
   }
@@ -172,8 +206,19 @@ export async function POST(req: NextRequest) {
       { error: 'No se pudo comprobar el historial de la fuente.' },
       { status: 503 },
     );
-  if (legacy.data?.[0] && kind !== 'url')
+  if (legacy.data?.[0] && kind !== 'url') {
+    if (targetSourceId)
+      await registerFeedSourceCapture({
+        db,
+        actorId: user.id,
+        kind: sourceKind,
+        name,
+        config: { contentHash: fingerprint },
+        attachmentId: legacy.data[0].id,
+        targetSourceId,
+      });
     return NextResponse.json({ entry: legacy.data[0], deduplicated: true });
+  }
   if ((count ?? 0) >= 100)
     return NextResponse.json(
       { error: 'Tu Feed tiene 100 entradas. Elimina alguna para añadir una fuente nueva.' },
@@ -209,6 +254,15 @@ export async function POST(req: NextRequest) {
       const winner = await findDuplicate();
       if (winner.error || !winner.data)
         throw new Error('No se pudo recuperar la entrada existente.');
+      await registerFeedSourceCapture({
+        db,
+        actorId: user.id,
+        kind: sourceKind,
+        name,
+        config: Object.keys(sourceConfig).length ? sourceConfig : { contentHash: fingerprint },
+        attachmentId: winner.data.id,
+        targetSourceId,
+      });
       return NextResponse.json({ entry: winner.data, deduplicated: true });
     }
     if (error || !data) throw new Error('No se pudo guardar la entrada.');
@@ -219,6 +273,7 @@ export async function POST(req: NextRequest) {
       name,
       config: Object.keys(sourceConfig).length ? sourceConfig : { contentHash: fingerprint },
       attachmentId: data.id,
+      targetSourceId,
     });
     return NextResponse.json({ entry: data }, { status: 201 });
   } catch {

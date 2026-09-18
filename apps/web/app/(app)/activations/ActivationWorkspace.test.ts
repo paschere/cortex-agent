@@ -60,6 +60,7 @@ describe('Activations column mapping', () => {
         createdAt: '',
         expiresAt: '',
         kind: 'table' as const,
+        truncated: false,
         canPrepare: false,
         sheets: [],
         preparedViews: [],

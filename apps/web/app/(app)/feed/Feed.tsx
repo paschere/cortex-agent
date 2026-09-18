@@ -66,6 +66,11 @@ export function Feed({
   const [space, setSpace] = useState('');
   const [sheet, setSheet] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
+  const [versionTarget, setVersionTarget] = useState<{
+    id: string;
+    kind: 'file' | 'text';
+    name: string;
+  } | null>(null);
 
   async function refresh() {
     const res = await fetch(href('/api/feed'));
@@ -97,16 +102,20 @@ export function Feed({
   }, [selected, workspaceId]);
 
   async function add(form: FormData) {
+    if (versionTarget) form.set('targetSourceId', versionTarget.id);
     const res = await fetch(href('/api/feed'), { method: 'POST', body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'No se pudo añadir la entrada.');
     setEntries((prev) => [data.entry, ...prev.filter((entry) => entry.id !== data.entry.id)]);
     setSelected(data.entry.id);
     setNotice(
-      data.deduplicated
-        ? 'El contenido ya estaba en tu Feed. Se reutilizó la entrada, sin duplicarla ni ampliar su vencimiento.'
-        : 'Fuente leída. Cortex propone su uso por pestaña; permanece temporal hasta que decidas guardarla.',
+      versionTarget
+        ? `Nueva versión guardada en ${versionTarget.name}.`
+        : data.deduplicated
+          ? 'El contenido ya estaba en tu Feed. Se reutilizó la entrada, sin duplicarla ni ampliar su vencimiento.'
+          : 'Fuente leída. Cortex propone su uso por pestaña; permanece temporal hasta que decidas guardarla.',
     );
+    setVersionTarget(null);
   }
 
   async function upload(files: File[]) {
@@ -249,7 +258,10 @@ export function Feed({
                 type="button"
                 disabled={busy}
                 aria-pressed={mode === kind}
-                onClick={() => setMode(kind)}
+                onClick={() => {
+                  setMode(kind);
+                  if (kind !== versionTarget?.kind) setVersionTarget(null);
+                }}
                 className={`${buttonClass} ${mode === kind ? 'bg-primary-soft text-primary' : 'text-ink-muted hover:bg-surface-2'}`}
               >
                 <Icon size={16} aria-hidden />
@@ -264,6 +276,20 @@ export function Feed({
             );
           })}
         </div>
+        {versionTarget ? (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-sm bg-primary-soft px-3 py-2 text-sm text-ink">
+            <span>
+              Nueva versión de <strong>{versionTarget.name}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => setVersionTarget(null)}
+              className="font-semibold text-primary"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : null}
         {mode === 'api' ? (
           <ApiSourcePanel
             apiHref={href('/api/feed/api-sources')}
@@ -364,7 +390,17 @@ export function Feed({
           </form>
         )}
       </section>
-      <FeedSourceRegistry apiHref={href('/api/feed/sources')} entries={entries} onCaptured={(entry) => { if (entry) setEntries((prev) => [entry, ...prev.filter((item) => item.id !== entry.id)]); }} />
+      <FeedSourceRegistry
+        apiHref={href('/api/feed/sources')}
+        onCaptured={(entry) => {
+          if (entry) setEntries((prev) => [entry, ...prev.filter((item) => item.id !== entry.id)]);
+        }}
+        onAddVersion={(source) => {
+          setVersionTarget(source);
+          setMode(source.kind);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
 
       {error && (
         <div
@@ -737,14 +773,126 @@ export function Feed({
   );
 }
 
-type FeedSourceView={id:string;kind:string;name:string;latestAttachmentId:string|null;status:string;lastCheckedAt:string|null;error:string|null;enabled:boolean};
-function FeedSourceRegistry({apiHref,entries,onCaptured}:{apiHref:string;entries:FeedEntry[];onCaptured:(entry?:FeedEntry)=>void}){
-  const [sources,setSources]=useState<FeedSourceView[]>([]);const [open,setOpen]=useState(false);const [working,setWorking]=useState<string|null>(null);const [registryError,setRegistryError]=useState<string|null>(null);
-  const load=useCallback(async()=>{const response=await fetch(apiHref,{cache:'no-store'});const body=await response.json();if(!response.ok)throw new Error(body.error);setSources(body.sources??[]);},[apiHref]);
-  useEffect(()=>{void load().catch(error=>setRegistryError(error.message));},[load]);
-  async function act(body:unknown,id:string){setWorking(id);setRegistryError(null);try{const response=await fetch(apiHref,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error);if(data.capture?.entry)onCaptured(data.capture.entry);await load();}catch(error){setRegistryError(error instanceof Error?error.message:'No se pudo actualizar la fuente.');}finally{setWorking(null);}}
-  if(!sources.length&&!registryError)return null;
-  return <details open={open} onToggle={event=>setOpen(event.currentTarget.open)} className="rounded-card border border-border bg-surface"><summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink">Fuentes conectadas · {sources.length}</summary><div className="border-t border-border px-4">{registryError?<p className="py-3 text-xs text-rose">{registryError}</p>:null}<ul className="divide-y divide-border">{sources.map(source=><li key={source.id} className="flex flex-wrap items-center gap-3 py-3 text-xs"><span className="min-w-0 flex-1"><span className="block font-semibold text-ink">{source.name}</span><span className="text-ink-muted">{source.kind} · {source.status}{source.lastCheckedAt?` · revisada ${new Date(source.lastCheckedAt).toLocaleString('es-CO')}`:''}</span>{source.error?<span className="block text-rose">{source.error}</span>:null}</span>{['url','google_sheet','api'].includes(source.kind)&&source.enabled?<button type="button" disabled={working===source.id} onClick={()=>void act({action:'refresh',id:source.id},source.id)} className="font-semibold text-primary">Actualizar captura</button>:null}{['file','text'].includes(source.kind)?<select aria-label={`Añadir versión de ${source.name}`} defaultValue="" onChange={event=>{if(event.target.value)void act({action:'version',id:source.id,attachmentId:event.target.value},source.id);}} className="rounded-sm border border-border bg-surface px-2 py-1"><option value="">Añadir versión…</option>{entries.filter(entry=>entry.id!==source.latestAttachmentId).map(entry=><option key={entry.id} value={entry.id}>{entry.filename}</option>)}</select>:null}{source.enabled?<button type="button" disabled={working===source.id} onClick={()=>void act({action:'disable',id:source.id},source.id)} className="font-semibold text-rose">Desconectar</button>:<span className="text-ink-faint">Desconectada</span>}</li>)}</ul></div></details>;
+type FeedSourceView = {
+  id: string;
+  kind: string;
+  name: string;
+  latestAttachmentId: string | null;
+  status: string;
+  lastCheckedAt: string | null;
+  error: string | null;
+  enabled: boolean;
+};
+function FeedSourceRegistry({
+  apiHref,
+  onCaptured,
+  onAddVersion,
+}: {
+  apiHref: string;
+  onCaptured: (entry?: FeedEntry) => void;
+  onAddVersion: (source: { id: string; kind: 'file' | 'text'; name: string }) => void;
+}) {
+  const [sources, setSources] = useState<FeedSourceView[]>([]);
+  const [open, setOpen] = useState(false);
+  const [working, setWorking] = useState<string | null>(null);
+  const [registryError, setRegistryError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    const response = await fetch(apiHref, { cache: 'no-store' });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error);
+    setSources(body.sources ?? []);
+  }, [apiHref]);
+  useEffect(() => {
+    void load().catch((error) => setRegistryError(error.message));
+  }, [load]);
+  async function act(body: unknown, id: string) {
+    setWorking(id);
+    setRegistryError(null);
+    try {
+      const response = await fetch(apiHref, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      if (data.capture?.entry) onCaptured(data.capture.entry);
+      await load();
+    } catch (error) {
+      setRegistryError(error instanceof Error ? error.message : 'No se pudo actualizar la fuente.');
+    } finally {
+      setWorking(null);
+    }
+  }
+  if (!sources.length && !registryError) return null;
+  return (
+    <details
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      className="rounded-card border border-border bg-surface"
+    >
+      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-ink">
+        Fuentes conectadas · {sources.length}
+      </summary>
+      <div className="border-t border-border px-4">
+        {registryError ? <p className="py-3 text-xs text-rose">{registryError}</p> : null}
+        <ul className="divide-y divide-border">
+          {sources.map((source) => (
+            <li key={source.id} className="flex flex-wrap items-center gap-3 py-3 text-xs">
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-ink">{source.name}</span>
+                <span className="text-ink-muted">
+                  {source.kind} · {source.status}
+                  {source.lastCheckedAt
+                    ? ` · revisada ${new Date(source.lastCheckedAt).toLocaleString('es-CO')}`
+                    : ''}
+                </span>
+                {source.error ? <span className="block text-rose">{source.error}</span> : null}
+              </span>
+              {['url', 'google_sheet', 'api'].includes(source.kind) && source.enabled ? (
+                <button
+                  type="button"
+                  disabled={working === source.id}
+                  onClick={() => void act({ action: 'refresh', id: source.id }, source.id)}
+                  className="font-semibold text-primary"
+                >
+                  Actualizar captura
+                </button>
+              ) : null}
+              {source.enabled && (source.kind === 'file' || source.kind === 'text') ? (
+                <button
+                  type="button"
+                  disabled={working === source.id}
+                  onClick={() =>
+                    onAddVersion({
+                      id: source.id,
+                      kind: source.kind as 'file' | 'text',
+                      name: source.name,
+                    })
+                  }
+                  className="font-semibold text-primary"
+                >
+                  Añadir versión
+                </button>
+              ) : null}
+              {source.enabled ? (
+                <button
+                  type="button"
+                  disabled={working === source.id}
+                  onClick={() => void act({ action: 'disable', id: source.id }, source.id)}
+                  className="font-semibold text-rose"
+                >
+                  Desconectar
+                </button>
+              ) : (
+                <span className="text-ink-faint">Desconectada</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </details>
+  );
 }
 
 type ApiTool = {

@@ -1,6 +1,5 @@
 import {
   ACTIVATION_PLANNER_SYSTEM,
-  ActivationError,
   PLAN_LIMITATIONS,
   activationPlanInput,
   modelPlanSchema,
@@ -10,6 +9,7 @@ import {
 import { prepareSourceView } from '@/lib/activations/prepare';
 import { isSameOrigin } from '@/lib/activations/request';
 import {
+  ActivationError,
   activationSource,
   readOwnedPreparedViews,
   readOwnedTableSources,

@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       );
     const attachment = await db
       .from('chat_attachments')
-      .select('id,feed_kind,purge_at')
+      .select('id,feed_kind,purge_at,feed_source_id')
       .eq('id', parsed.data.attachmentId)
       .eq('created_by', user.id)
       .not('feed_kind', 'is', null)
@@ -114,6 +114,11 @@ export async function POST(req: NextRequest) {
     if (attachment.data.feed_kind !== source.data.kind)
       return NextResponse.json(
         { error: 'La nueva versión debe ser del mismo tipo.' },
+        { status: 409 },
+      );
+    if (attachment.data.feed_source_id && attachment.data.feed_source_id !== parsed.data.id)
+      return NextResponse.json(
+        { error: 'Esta captura ya pertenece a otra fuente conectada.' },
         { status: 409 },
       );
     const now = new Date().toISOString();

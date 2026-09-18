@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { automationInput, recurringDefinitionError, sameHeaders } from './automations';
+import {
+  automationInput,
+  automationTransitionSourceStatuses,
+  recurringDefinitionError,
+  sameHeaders,
+} from './automations';
 import type { ActivationDefinition } from './types';
 const rule: ActivationDefinition = {
   version: 1,
@@ -14,6 +19,11 @@ const rule: ActivationDefinition = {
   caseNextAction: 'Reponer',
 };
 describe('recurring activation authorization', () => {
+  it('does not let pause and resume bypass a mandatory review', () => {
+    expect(automationTransitionSourceStatuses('pause')).toEqual(['active']);
+    expect(automationTransitionSourceStatuses('resume')).toEqual(['paused']);
+    expect(automationTransitionSourceStatuses('pause')).not.toContain('needs_review');
+  });
   it('requires explicit future sharing and supported frequency', () => {
     const input = {
       action: 'create',

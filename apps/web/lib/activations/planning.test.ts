@@ -7,6 +7,7 @@ const source: ActivationSource = {
   filename: 'inventario.csv',
   createdAt: '',
   expiresAt: '',
+  truncated: false,
   kind: 'table',
   canPrepare: true,
   preparedViews: [],
@@ -38,7 +39,7 @@ const proposed = {
   sheetIndex: 0,
   viewId: null,
   preparationPrompt: null,
-  trigger: { kind: 'manual', intervalMinutes: null },
+  trigger: { kind: 'manual' as const, intervalMinutes: null },
   definitionJson: JSON.stringify(definition),
   explanation: 'Preparar un asunto para los productos con stock menor de 10.',
   questions: [],
@@ -151,5 +152,17 @@ describe('activation prompt planning boundary', () => {
     );
     expect(plan.status).toBe('needs_input');
     expect(plan.questions.join(' ')).toContain('identificar');
+  });
+  it('does not authorize recurring logic over a truncated capture', () => {
+    const plan = validateActivationPlan(
+      {
+        ...proposed,
+        trigger: { kind: 'on_source_change', intervalMinutes: null },
+        definitionJson: JSON.stringify({ ...definition, identityColumns: [0] }),
+      },
+      [{ ...source, truncated: true }],
+    );
+    expect(plan.status).toBe('needs_input');
+    expect(plan.questions.join(' ')).toContain('incompleta');
   });
 });

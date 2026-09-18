@@ -122,11 +122,12 @@ import { GET, POST } from '@/app/api/feed/route';
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const request = (body: object) =>
   new NextRequest('http://localhost/api/feed/id', { method: 'POST', body: JSON.stringify(body) });
-async function addText() {
+async function addText(targetSourceId?: string, text = 'Notas privadas') {
   const form = new FormData();
   form.set('kind', 'text');
-  form.set('text', 'Notas privadas');
+  form.set('text', text);
   form.set('title', 'Mi nota');
+  if (targetSourceId) form.set('targetSourceId', targetSourceId);
   const res = await POST(
     new NextRequest('http://localhost/api/feed', { method: 'POST', body: form }),
   );
@@ -169,6 +170,18 @@ describe('Feed lifecycle', () => {
     const id = await addText();
     if (state.rows[0]) state.rows[0].purge_at = '2000-01-01T00:00:00Z';
     expect(await addText()).not.toBe(id);
+  });
+  it('uploads a manual version directly into its existing source', async () => {
+    await addText();
+    const source = state.rows.find((row) => row.table === 'feed_sources');
+    const second = await addText(source?.id as string, 'Notas privadas, versión dos');
+    const sources = state.rows.filter((row) => row.table === 'feed_sources');
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.latest_attachment_id).toBe(second);
+    expect(
+      state.rows.find((row) => row.table === 'chat_attachments' && row.id === second)
+        ?.feed_source_id,
+    ).toBe(source?.id);
   });
 
   it('accepts consultation data without creating a conversation or memory', async () => {

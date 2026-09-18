@@ -52,6 +52,7 @@ export type ActivationSource = {
   filename: string;
   createdAt: string;
   expiresAt: string;
+  truncated: boolean;
   kind: 'table' | 'document' | 'url' | 'text';
   canPrepare: boolean;
   sheets: Array<{ index: number; name: string; rowCount: number; headers: string[] }>;

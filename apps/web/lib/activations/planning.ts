@@ -56,6 +56,7 @@ export function planningCatalog(sources: ActivationSource[], sourceId?: string) 
       filename: source.filename.slice(0, 240),
       createdAt: source.createdAt,
       expiresAt: source.expiresAt,
+      truncated: source.truncated,
       kind: source.kind,
       canPrepare: source.canPrepare,
       sheets: [],
@@ -123,6 +124,10 @@ export function validateActivationPlan(
   const trigger = value.trigger ?? { kind: 'manual' as const, intervalMinutes: null };
   if (trigger.kind === 'scheduled' && trigger.intervalMinutes === null)
     return blocked('Elige cada cuánto debe revisarse la fuente.');
+  if (trigger.kind !== 'manual' && source.truncated)
+    return blocked(
+      'La captura está incompleta. Divide o ajusta la fuente antes de autorizar seguimiento automático.',
+    );
   if (
     trigger.kind !== 'manual' &&
     definition.kind === 'table_rule' &&

@@ -57,7 +57,16 @@ type PlanResponse = {
   status: 'ready' | 'needs_input';
   explanation: string;
   questions: string[];
-  draft?: { sourceId: string; sheetIndex: number; definition: ActivationDefinition };
+  draft?: {
+    sourceId: string;
+    sheetIndex: number;
+    viewId?: string;
+    definition: ActivationDefinition;
+    trigger?: {
+      kind: 'manual' | 'on_source_change' | 'scheduled';
+      intervalMinutes?: 60 | 360 | 1440 | 10080;
+    };
+  };
   limitations: string[];
 };
 
@@ -182,6 +191,10 @@ export function ActivationWorkspace({
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [planning, setPlanning] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [automationDefaults, setAutomationDefaults] = useState<{
+    trigger: 'on_change' | 'scheduled';
+    intervalMinutes: number;
+  }>({ trigger: 'on_change', intervalMinutes: 360 });
   const requestId = useRef(0);
   const actionId = useRef(0);
   const actionController = useRef<AbortController | null>(null);
@@ -398,7 +411,11 @@ export function ActivationWorkspace({
 
   function applyDraft(draft: NonNullable<PlanResponse['draft']>) {
     const nextSource = data?.sources.find((item) => item.id === draft.sourceId);
-    const nextSheet = nextSource?.sheets.find((item) => item.index === draft.sheetIndex);
+    const nextView = draft.viewId
+      ? nextSource?.preparedViews.find((item) => item.id === draft.viewId)
+      : null;
+    const nextSheet =
+      nextView ?? nextSource?.sheets.find((item) => item.index === draft.sheetIndex);
     if (!nextSource || !nextSheet) {
       setError(
         'La propuesta usa una fuente o pestaña que ya no está disponible en este workspace.',
@@ -406,8 +423,15 @@ export function ActivationWorkspace({
       return;
     }
     setSourceId(nextSource.id);
-    setSheetIndex(nextSheet.index);
+    setSheetIndex(nextView ? 0 : draft.sheetIndex);
+    setViewId(nextView?.id ?? null);
     applyDefinition(draft.definition);
+    if (draft.trigger && draft.trigger.kind !== 'manual') {
+      setAutomationDefaults({
+        trigger: draft.trigger.kind === 'on_source_change' ? 'on_change' : 'scheduled',
+        intervalMinutes: draft.trigger.intervalMinutes ?? 360,
+      });
+    }
     setAdvancedOpen(true);
   }
 
@@ -990,6 +1014,8 @@ export function ActivationWorkspace({
                       run.definition.rule !== 'conditions' ||
                       Boolean(run.definition.identityColumns?.length)
                     }
+                    initialTrigger={automationDefaults.trigger}
+                    initialInterval={automationDefaults.intervalMinutes}
                   />
                 ) : null}
               </main>
@@ -1001,6 +1027,7 @@ export function ActivationWorkspace({
                   sourceId: historyRun.sourceId,
                   sheetIndex: historyRun.sheetIndex,
                   definition: historyRun.definition,
+                  trigger: { kind: 'manual' },
                 })
               }
             />
@@ -1710,10 +1737,18 @@ function AutomationPanel({
   apiHref,
   runId,
   canAutomate,
-}: { apiHref: string; runId: string; canAutomate: boolean }) {
+  initialTrigger,
+  initialInterval,
+}: {
+  apiHref: string;
+  runId: string;
+  canAutomate: boolean;
+  initialTrigger: 'on_change' | 'scheduled';
+  initialInterval: number;
+}) {
   const [items, setItems] = useState<AutomationView[]>([]);
-  const [trigger, setTrigger] = useState<'on_change' | 'scheduled'>('on_change');
-  const [intervalMinutes, setInterval] = useState(360);
+  const [trigger, setTrigger] = useState<'on_change' | 'scheduled'>(initialTrigger);
+  const [intervalMinutes, setInterval] = useState(initialInterval);
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);

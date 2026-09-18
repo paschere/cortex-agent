@@ -27,6 +27,10 @@ const ALLOWED = new Map<string, string>([
     'Cron scans only due automation IDs and organization IDs; each execution then uses a tenant-scoped client and an actor-authorized database claim.',
   ],
   [
+    'inngest/functions/activation-followup.test.ts',
+    'Test-only mock of the raw cron dispatcher client; production execution remains covered by the adjacent allowlisted worker and tenant-scoped claim.',
+  ],
+  [
     'lib/supabase/service.ts',
     'Defines both clients. The scoped one is built by wrapping the raw one.',
   ],

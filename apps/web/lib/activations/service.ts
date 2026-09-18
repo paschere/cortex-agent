@@ -22,6 +22,7 @@ type FeedRow = {
   feed_tables: SheetData[] | null;
   extracted_text: string | null;
   feed_kind: 'file' | 'url' | 'text' | 'api';
+  feed_truncated: boolean;
 };
 
 type PreparedViewRow = {
@@ -111,6 +112,7 @@ export function activationSource(
     filename: row.filename,
     createdAt: row.created_at,
     expiresAt: row.purge_at,
+    truncated: row.feed_truncated,
     kind: row.feed_tables?.length
       ? 'table'
       : row.feed_kind === 'url'
@@ -401,7 +403,7 @@ export async function readOwnedTableSources(db: SupabaseClient, actorId: string)
   const { data, error } = await db
     .from('chat_attachments')
     .select(
-      'id,filename,created_at,purge_at,feed_content_hash,feed_tables,extracted_text,feed_kind',
+      'id,filename,created_at,purge_at,feed_content_hash,feed_tables,extracted_text,feed_kind,feed_truncated',
     )
     .eq('created_by', actorId)
     .not('feed_kind', 'is', null)
