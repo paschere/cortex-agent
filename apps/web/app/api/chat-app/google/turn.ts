@@ -5,6 +5,7 @@ import { toChatText } from '@/lib/google-chat';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
+import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { chatModel } from '@cortex/agent-tools';
 import {
   type RiskLevel,
@@ -566,6 +567,7 @@ export async function runChatTurn(req: ChatTurnRequest): Promise<ChatTurnDeliver
       // none (a WhatsApp group at `plain` scope) must still get an answer.
       ...(allowed.length > 0 ? { tools: aiTools, toolChoice: 'auto' as const } : {}),
       maxSteps: 12,
+      experimental_repairToolCall: createToolCallRepair({ surface: 'google_chat' }),
     });
     answer = result.text.trim();
 

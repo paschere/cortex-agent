@@ -1,3 +1,4 @@
+import { createToolCallRepair } from '@/lib/tool-call-repair';
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { buildToolContext } from '@/lib/agent';
@@ -653,6 +654,7 @@ How you work:
       tools: aiTools,
       toolChoice: 'auto',
       maxSteps: TASK_MAX_STEPS,
+      experimental_repairToolCall: createToolCallRepair({ surface: 'orchestrator' }),
     });
 
     const text = result.text.trim();

@@ -2,6 +2,7 @@ import { buildToolContext } from '@/lib/agent';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
+import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { figuresForTts } from '@/lib/voice-figures';
 import { VOICE_LIVE_FACTS, takeSpokenClauses } from '@/lib/voice-spoken';
 import { listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
@@ -158,6 +159,7 @@ export async function POST(req: NextRequest) {
     prompt: `TE DIJO LA PERSONA: ${question}`,
     tools: aiTools,
     maxSteps: 6,
+    experimental_repairToolCall: createToolCallRepair({ signal: req.signal, surface: 'voice' }),
     abortSignal: AbortSignal.any([req.signal, streamAbort.signal]),
   });
 

@@ -8,6 +8,7 @@ import { readRoutineAuthority } from '@/lib/management/routine-authority';
 import { noteRoutineRun } from '@/lib/notifications/producers';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { buildCompanyFactsBlock } from '@/lib/system-prompt';
+import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { chatModel } from '@cortex/agent-tools';
 import {
   filterTools,
@@ -244,6 +245,7 @@ UNATTENDED SCHEDULED RUN. You are executing the scheduled job "${job.name}" with
       tools: aiTools,
       toolChoice: 'auto',
       maxSteps: 12,
+      experimental_repairToolCall: createToolCallRepair({ surface: 'routine' }),
     });
     const text = result.text.trim();
     if (!text) return { ok: false, output: '', error: 'Agent produced no final text' };

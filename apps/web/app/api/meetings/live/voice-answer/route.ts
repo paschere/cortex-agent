@@ -5,6 +5,7 @@ import { buildMeetingLiveBootstrap } from '@/lib/meeting-live-bootstrap';
 import { validateMeetingVoiceVisual } from '@/lib/meeting-voice-visual';
 import { getOrgScopedClient, getSupabaseServiceClient } from '@/lib/supabase/service';
 import { buildSystemPrompt } from '@/lib/system-prompt';
+import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { VOICE_LIVE_FACTS, takeSpokenClauses, wantsLiveLookup } from '@/lib/voice-spoken';
 import { readWorkspaceVoice } from '@/lib/workspace-voice';
 import { getTool, listTools, readWorkspacePlan, runTool, voiceModel } from '@cortex/agent-tools';
@@ -306,6 +307,7 @@ export async function POST(req: NextRequest) {
         }
       : { prompt: `TE DIJERON EN LA REUNIÓN: ${question}` }),
     ...(quick ? { maxSteps: 1 as const } : { tools: aiTools, maxSteps: 6 as const }),
+    experimental_repairToolCall: createToolCallRepair({ surface: 'meeting_voice' }),
   });
 
   const encoder = new TextEncoder();

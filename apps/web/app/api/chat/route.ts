@@ -36,6 +36,7 @@ import {
   buildSystemPrompt,
 } from '@/lib/system-prompt';
 import { deniedToolPatterns, isToolDenied } from '@/lib/tool-access';
+import { createToolCallRepair } from '@/lib/tool-call-repair';
 import { buildTurnMessages } from '@/lib/turn-messages';
 import { NO_THINKING, chatModel, utilityModel } from '@cortex/agent-tools';
 import {
@@ -1132,6 +1133,8 @@ export async function POST(req: NextRequest) {
     toolChoice: 'auto',
     maxSteps: 12,
     abortSignal: req.signal,
+    // Argumentos rotos de una herramienta no tumban el turno: ver lib/tool-call-repair.ts.
+    experimental_repairToolCall: createToolCallRepair({ signal: req.signal, surface: 'chat' }),
     // The one measurement that has to happen mid-stream, because it is the only
     // moment that matters and it is over before `onFinish` runs. The callback is
     // a comparison and an assignment — the SDK pauses the stream until it
