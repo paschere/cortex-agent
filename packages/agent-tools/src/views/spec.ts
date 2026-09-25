@@ -5,7 +5,9 @@ import { TRACKER_SLUG_RE, type TrackerField } from '../trackers/schema';
  * EL CONTRATO DE UNA VISTA (migración 0156).
  *
  * Una vista es una lista de bloques declarativos sobre las tablas inventadas
- * del espacio. El modelo escribe este JSON y la persona lo edita hablando;
+ * del espacio y, en sólo lectura, sobre las tablas propias de la plataforma
+ * (ventas, pagos, clientes…; ver sources.ts). El modelo escribe este JSON y la
+ * persona lo edita hablando;
  * nadie escribe HTML ni JavaScript. Es lo que permite abrirla desde afuera sin
  * miedo: un spec no puede ejecutar nada, sólo pedir datos que el servidor
  * calcula con el mismo handle de espacio que usa todo lo demás.
@@ -18,6 +20,31 @@ import { TRACKER_SLUG_RE, type TrackerField } from '../trackers/schema';
  */
 
 export const VIEW_SLUG_RE = /^[a-z][a-z0-9_]{1,47}$/;
+
+/**
+ * LAS FUENTES DE LA PLATAFORMA SE NOMBRAN DISTINTO, A PROPÓSITO.
+ *
+ * Un bloque lee de una tabla inventada («remates») o de una tabla propia de
+ * Cortex («cortex.ventas», ver sources.ts). El punto no cabe en un slug de
+ * tabla (TRACKER_SLUG_RE no lo admite), así que las dos familias no pueden
+ * chocar nunca: nadie puede crear una tabla que se llame como una fuente de la
+ * plataforma y cambiarle a una vista guardada de dónde saca sus números.
+ *
+ * El campo del bloque sigue llamándose `tracker` para que los specs que ya
+ * están guardados sigan pasando el contrato sin migrar nada.
+ */
+export const PLATFORM_SOURCE_RE = /^cortex\.[a-z][a-z0-9_]{1,40}$/;
+
+export function isPlatformSourceId(ref: string): boolean {
+  return PLATFORM_SOURCE_RE.test(ref);
+}
+
+const sourceRef = z
+  .string()
+  .refine(
+    (v) => TRACKER_SLUG_RE.test(v) || PLATFORM_SOURCE_RE.test(v),
+    'Usa el slug de una tabla del espacio o el id de una fuente de la plataforma (cortex.…).',
+  );
 export const BLOCK_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 export const MAX_VIEW_BLOCKS = 24;
 
@@ -89,7 +116,7 @@ const base = {
   width: z.enum(WIDTHS).default('full'),
 };
 const source = {
-  tracker: z.string().regex(TRACKER_SLUG_RE),
+  tracker: sourceRef,
   filters: z.array(filterSchema).max(8).default([]),
 };
 
@@ -154,7 +181,10 @@ export const boardBlockSchema = z.object({
 export const formBlockSchema = z.object({
   ...base,
   type: z.literal('form'),
-  tracker: z.string().regex(TRACKER_SLUG_RE),
+  // La forma admite las dos familias para que el rechazo de un formulario
+  // sobre una fuente de la plataforma llegue con su explicación desde
+  // `checkSpecAgainst`, y no como un «no cumple el patrón» que nadie entiende.
+  tracker: sourceRef,
   title,
   intro: z.string().trim().max(400).optional(),
   /** Campos que el formulario pide; vacío = todos los de la tabla. */
@@ -246,7 +276,11 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
     const where = `Bloque «${block.id}»`;
     const tracker = bySlug.get(block.tracker);
     if (!tracker) {
-      problems.push(`${where}: la tabla «${block.tracker}» no existe.`);
+      problems.push(
+        isPlatformSourceId(block.tracker)
+          ? `${where}: «${block.tracker}» no es una fuente de la plataforma.`
+          : `${where}: la tabla «${block.tracker}» no existe.`,
+      );
       continue;
     }
     const need = (key: string, what: string) => {
@@ -294,6 +328,12 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         break;
       }
       case 'form':
+        if (isPlatformSourceId(block.tracker)) {
+          problems.push(
+            `${where}: un formulario sólo agrega filas a una tabla propia del espacio; «${tracker.name}» es una fuente de la plataforma y es de sólo lectura. Crea una tabla para lo que el formulario recibe.`,
+          );
+          break;
+        }
         for (const c of block.fields) {
           if (c === 'label' || c === 'created_at' || c === 'updated_at')
             problems.push(`${where}: el formulario sólo pide campos de la tabla, no «${c}».`);
@@ -305,7 +345,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
   return problems;
 }
 
-/** Las tablas que una vista lee, sin repetir. */
+/** Las tablas y fuentes que una vista lee, sin repetir. */
 export function trackersOf(spec: ViewSpec): string[] {
   return [...new Set(spec.blocks.flatMap((b) => (b.type === 'text' ? [] : [b.tracker])))];
 }

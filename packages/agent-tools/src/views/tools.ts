@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
+import { PLATFORM_SOURCES, platformSourcesGrammar } from './sources';
 import { BLOCK_LABEL, viewSpecSchema } from './spec';
 import {
   archiveView,
@@ -17,7 +18,9 @@ import {
  * Vistas: pantallas que la empresa se arma hablando (migración 0156).
  *
  * El agente escribe el spec —bloques declarativos sobre las tablas
- * inventadas— y la persona lo ve en /views/<slug>, en Inicio si la fija, o
+ * inventadas y, en sólo lectura, sobre las fuentes de la plataforma
+ * (`cortex.ventas`, `cortex.pagos`…, ver sources.ts)— y la persona lo ve en
+ * /views/<slug>, en Inicio si la fija, o
  * afuera por enlace. Crear y editar no piden confirmación porque cada guardado
  * es una versión y se deshace desde la pantalla. ABRIR LA PUERTA SÍ la pide,
  * siempre, sin mandato ni gracia que valga (mandatory-confirmation.ts): un
@@ -29,15 +32,22 @@ import {
  */
 
 const SPEC_GRAMMAR = `Spec: {version:1, subtitle?, accent?: primary|emerald|amber|sky|rose, blocks:[...]} with 1-24 blocks. Every block has id (short, unique, a-z0-9_-) and width: full|half|third (three thirds or two halves share a row).
-Block types (tracker = a table slug from trackers.list; field = a field key of that table, or label/created_at/updated_at):
+Block types (tracker = a table slug from trackers.list OR a built-in platform source id below; field = a field key of that table/source, or label/created_at/updated_at):
 - text {markdown}
 - metric {title, tracker, aggregate: count|sum|avg|min|max, field? (numeric, required unless count), filters?, format?: number|money|percent, goal?, tone?, caption?}
 - table {title, tracker, columns?: [field], filters?, sort?: {field, dir: asc|desc}, limit? (≤200), searchable?}
 - chart {title, tracker, chart: bar|line|donut, groupBy: field (dates group by bucket: day|week|month), aggregate, field?, filters?, limit?, tone?}
 - board {title, tracker, groupBy: a select field, cardFields?: [field], filters?}
-- form {title, tracker, intro?, fields?: [field keys to ask], submitLabel?, successMessage?} — adds a row to the table.
+- form {title, tracker, intro?, fields?: [field keys to ask], submitLabel?, successMessage?} — adds a row to the table. Only on trackers: platform sources are read-only.
 filters: [{field, op, value?}] with op eq|neq|contains|gt|gte|lt|lte|empty|not_empty|before_today|after_today|next_days|last_days (next/last_days take a number of days).
-Put the headline metrics first as thirds, then charts as halves, then the full-width table.`;
+Put the headline metrics first as thirds, then charts as halves, then the full-width table.
+Built-in platform sources (read-only, live company data; money fields are COP only, other currencies go to the *_otra_moneda number field). "Ventas" means cortex.ventas (confirmed sales invoices; cartera = its saldo/estado):
+${platformSourcesGrammar()}`;
+
+const INTERNAL_SOURCE_IDS = [...PLATFORM_SOURCES.values()]
+  .filter((s) => s.sensitivity === 'internal')
+  .map((s) => s.id)
+  .join(', ');
 
 const summarySchema = z.object({
   id: z.string(),
@@ -109,7 +119,7 @@ export const viewsGet = registerTool({
 
 export const viewsCreate = registerTool({
   id: 'views.create',
-  description: `Create a custom view: a screen, dashboard, client portal or intake form built from this workspace's tables (trackers). Use it when someone asks for a dashboard, panel, tablero, portal, interface or form over data they keep in a table. Call trackers.list first to know the table slugs and field keys; if the data has no table yet, create it with trackers.define first. The view opens at /views/<slug>. It stays internal to the team until someone shares it (views.share).
+  description: `Create a custom view: a screen, dashboard, client portal or intake form built from this workspace's tables (trackers) and/or the platform's own data (sales invoices, payments, clients, deadlines, goals… listed below as cortex.* sources). Use it when someone asks for a dashboard, panel, tablero, portal, interface or form over data they keep in a table or that Cortex already holds. Call trackers.list first to know the table slugs and field keys; prefer a cortex.* source over copying platform data into a table; if the data exists nowhere yet, create a table with trackers.define first. The view opens at /views/<slug>. It stays internal to the team until someone shares it (views.share).
 ${SPEC_GRAMMAR}`,
   inputSchema: z.object({
     name: z.string().trim().min(1).max(80).describe('What people call the view.'),
@@ -187,8 +197,7 @@ ${SPEC_GRAMMAR}`,
 
 export const viewsShare = registerTool({
   id: 'views.share',
-  description:
-    'Open or close the outside door of a custom view. visibility "link" gives a public URL anyone with it can open without an account (optionally expiring after N days); "workspace" closes it again and kills the old link. Password protection cannot be set from chat: tell the person to set it from the view screen (Compartir). Always requires the person\'s explicit approval, because a link exposes the table rows the view shows.',
+  description: `Open or close the outside door of a custom view. visibility "link" gives a public URL anyone with it can open without an account (optionally expiring after N days); "workspace" closes it again and kills the old link. Password protection cannot be set from chat: tell the person to set it from the view screen (Compartir). A view that uses an INTERNAL platform source (${INTERNAL_SOURCE_IDS}) can never be shared by link or password; say so instead of trying. Always requires the person's explicit approval, because a link exposes the table rows the view shows.`,
   inputSchema: z.object({
     view: z.string().trim().min(1).max(80).describe('Slug or id of the view.'),
     visibility: z.enum(['workspace', 'link']),

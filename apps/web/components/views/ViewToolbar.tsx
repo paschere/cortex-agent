@@ -49,6 +49,11 @@ export interface ToolbarView {
   expiresAt: string | null;
   opens: number;
   canManage: boolean;
+  /**
+   * Por qué esta vista no puede salir de Cortex (usa una fuente interna de la
+   * plataforma), o null. El servidor lo rechaza igual; esto lo dice antes.
+   */
+  shareBlocked: string | null;
 }
 
 export interface ToolbarVersion {
@@ -202,37 +207,47 @@ function ShareDialog({ view }: { view: ToolbarView }) {
                 Sólo quien creó la vista o un administrador puede cambiar cómo se comparte.
               </p>
             )}
+            {view.shareBlocked && (
+              <p className="rounded-sm border border-amber/25 bg-amber-soft px-3 py-2 text-xs leading-relaxed text-amber">
+                {view.shareBlocked}
+              </p>
+            )}
             <fieldset className="space-y-2" disabled={!view.canManage || pending}>
-              {DOORS.map((d) => (
-                <label
-                  key={d.id}
-                  className={clsx(
-                    'flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2.5 transition-colors',
-                    door === d.id
-                      ? 'border-primary bg-primary-soft/40'
-                      : 'border-border hover:bg-surface-2',
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="door"
-                    className="sr-only"
-                    checked={door === d.id}
-                    onChange={() => setDoor(d.id)}
-                  />
-                  <d.icon
+              {DOORS.map((d) => {
+                const locked = Boolean(view.shareBlocked) && d.id !== 'workspace';
+                return (
+                  <label
+                    key={d.id}
                     className={clsx(
-                      'mt-0.5 h-4 w-4 shrink-0',
-                      door === d.id ? 'text-primary' : 'text-ink-faint',
+                      'flex items-start gap-3 rounded-sm border px-3 py-2.5 transition-colors',
+                      locked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                      door === d.id
+                        ? 'border-primary bg-primary-soft/40'
+                        : 'border-border hover:bg-surface-2',
                     )}
-                  />
-                  <span>
-                    <span className="block text-sm font-semibold text-ink">{d.title}</span>
-                    <span className="block text-xs text-ink-muted">{d.body}</span>
-                  </span>
-                  {door === d.id && <Check className="ml-auto mt-0.5 h-4 w-4 text-primary" />}
-                </label>
-              ))}
+                  >
+                    <input
+                      type="radio"
+                      name="door"
+                      className="sr-only"
+                      checked={door === d.id}
+                      disabled={locked}
+                      onChange={() => setDoor(d.id)}
+                    />
+                    <d.icon
+                      className={clsx(
+                        'mt-0.5 h-4 w-4 shrink-0',
+                        door === d.id ? 'text-primary' : 'text-ink-faint',
+                      )}
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-ink">{d.title}</span>
+                      <span className="block text-xs text-ink-muted">{d.body}</span>
+                    </span>
+                    {door === d.id && <Check className="ml-auto mt-0.5 h-4 w-4 text-primary" />}
+                  </label>
+                );
+              })}
             </fieldset>
 
             {door !== 'workspace' && view.canManage && (

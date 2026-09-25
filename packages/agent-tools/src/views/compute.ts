@@ -7,6 +7,7 @@ import {
   type ViewFilter,
   type ViewSpec,
   fieldType,
+  isPlatformSourceId,
 } from './spec';
 
 /**
@@ -42,6 +43,13 @@ export interface ViewSource {
   rows: ViewRow[];
   /** True cuando la lectura se cortó en el tope y hay más filas. */
   truncated: boolean;
+  /**
+   * Por qué esta fuente NO se leyó, cuando no se leyó a propósito: una fuente
+   * interna pedida desde el enlace público, o una fuente de la plataforma que
+   * no contestó. Cada bloque que la usa se pinta como aviso con esta frase, y
+   * `rows` llega vacío — no filtrado, vacío: lo que no se leyó no puede viajar.
+   */
+  blocked?: string;
 }
 
 export type ValueFormat = 'number' | 'money' | 'percent';
@@ -325,6 +333,15 @@ function computeBlock(
   }
   const src = sources.get(block.tracker);
   if (!src) return problem(block, `La tabla «${block.tracker}» ya no existe en este espacio.`);
+  if (src.blocked) return problem(block, src.blocked);
+  // Un formulario escribe filas; una fuente de la plataforma no las recibe. El
+  // guardado ya lo rechaza (`checkSpecAgainst`), esto cubre un spec que llegue
+  // por otro camino: se pinta el aviso, nunca un formulario que no puede enviar.
+  if (block.type === 'form' && isPlatformSourceId(block.tracker))
+    return problem(
+      block,
+      `${src.tracker.name} es de sólo lectura: un formulario no puede escribir ahí.`,
+    );
   const { tracker } = src;
   const missing = [
     ...('filters' in block ? block.filters.map((f) => f.field) : []),

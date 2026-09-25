@@ -5,6 +5,8 @@ import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
   computeView,
   getView,
+  internalShareRefusal,
+  internalSourcesOf,
   listViewVersions,
   loadViewSources,
   publicViewUrl,
@@ -41,6 +43,7 @@ export default async function ViewPage({ params }: { params: Promise<{ slug: str
   ]);
   const computed = computeView(view.spec, sources);
   const open = view.share_token && shareIsOpen(view) ? publicViewUrl(view.share_token) : null;
+  const internal = internalSourcesOf(view.spec);
 
   return (
     <>
@@ -70,6 +73,7 @@ export default async function ViewPage({ params }: { params: Promise<{ slug: str
             expiresAt: view.share_expires_at,
             opens: view.share_views,
             canManage: user.role === 'org_admin' || view.created_by === user.id,
+            shareBlocked: internal.length ? internalShareRefusal(internal) : null,
           }}
           versions={versions.map((v) => ({
             version: v.version,

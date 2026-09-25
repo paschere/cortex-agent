@@ -2,14 +2,22 @@ import { randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { NotFoundError, ValidationError } from '@cortex/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { bogotaToday } from '../commitments/shape';
 import { appBaseUrl } from '../reports/store';
 import { rowLabel } from '../trackers/schema';
 import { TRACKER_COLUMNS, type TrackerRow, listTrackers, shapeValues } from '../trackers/store';
 import type { ViewRow, ViewSource } from './compute';
 import {
+  PLATFORM_SOURCES,
+  type SourceSensitivity,
+  internalShareRefusal,
+  internalSourcesOf,
+} from './sources';
+import {
   type CatalogTracker,
   type ViewSpec,
   checkSpecAgainst,
+  isPlatformSourceId,
   slugify,
   trackersOf,
   viewSpecSchema,
@@ -23,6 +31,13 @@ import {
  * el cliente de servicio SIN alcance porque el enlace público no trae sesión
  * — el token es la credencial y la fila encontrada trae su propio espacio.
  * Todo lo que se lee después de esa fila se lee con un handle de ESE espacio.
+ *
+ * FUENTES DE LA PLATAFORMA. Además de las tablas inventadas, un bloque puede
+ * leer una fuente `cortex.*` (sources.ts). Entran por el mismo catálogo y la
+ * misma carga, con el mismo tope de filas, y con una regla más: una vista que
+ * usa una fuente `internal` no abre su puerta de afuera (`setViewAccess`,
+ * `updateView`), y la página pública no la lee aunque la tenga
+ * (`loadViewSources` con `audience: 'public'`).
  */
 
 // El hash de la contraseña NO está en esta lista: ninguna lectura normal lo
@@ -142,18 +157,45 @@ export function shareIsOpen(row: Pick<CustomViewRow, 'share_token' | 'share_expi
 // Catálogo y datos
 // ---------------------------------------------------------------------------
 
-export async function viewCatalog(
-  db: SupabaseClient,
-): Promise<Array<CatalogTracker & { id: string; description: string; rowCount: number }>> {
+export interface ViewCatalogEntry extends CatalogTracker {
+  /** El id de la tabla; en una fuente de la plataforma, su mismo `cortex.*`. */
+  id: string;
+  description: string;
+  /** Nulo en las fuentes de la plataforma: contarlas cuesta una lectura por fuente. */
+  rowCount: number | null;
+  kind: 'tracker' | 'platform';
+  sensitivity: SourceSensitivity;
+}
+
+/** Las tablas del espacio y, después, las fuentes de la plataforma (sin contar filas). */
+export async function viewCatalog(db: SupabaseClient): Promise<ViewCatalogEntry[]> {
   const rows = await listTrackers(db, 40);
-  return rows.map((t) => ({
-    id: t.id,
-    slug: t.slug,
-    name: t.name,
-    description: t.description,
-    fields: t.fields,
-    rowCount: t.rowCount,
-  }));
+  return [
+    ...rows.map(
+      (t): ViewCatalogEntry => ({
+        id: t.id,
+        slug: t.slug,
+        name: t.name,
+        description: t.description,
+        fields: t.fields,
+        rowCount: t.rowCount,
+        kind: 'tracker',
+        sensitivity: 'shareable',
+      }),
+    ),
+    ...[...PLATFORM_SOURCES.values()].map(
+      (s): ViewCatalogEntry => ({
+        id: s.id,
+        slug: s.id,
+        name: s.name,
+        description: s.description,
+        fields: s.fields,
+        rowCount: null,
+        kind: 'platform',
+        sensitivity: s.sensitivity,
+      }),
+    ),
+  ];
 }
 
 function adaptEntry(row: Record<string, unknown>): ViewRow {
@@ -170,13 +212,65 @@ function adaptEntry(row: Record<string, unknown>): ViewRow {
   };
 }
 
-/** Lee las tablas que el spec nombra y sus filas, hasta el tope. */
+export const INTERNAL_SOURCE_BLOCKED =
+  'Esta información es interna del equipo y no se muestra fuera de Cortex.';
+
+export interface LoadViewSourcesOptions {
+  /**
+   * `public` para la página de afuera (/v/<token>): las fuentes `internal` NO
+   * SE LEEN y sus bloques se pintan como aviso. Es la segunda llave: la
+   * primera es que `setViewAccess` no deja compartir una vista así; ésta
+   * cubre la vista que quedó compartida por otro camino (una versión vieja,
+   * una fuente que cambió de sensibilidad en un despliegue).
+   */
+  audience?: 'team' | 'public';
+}
+
+/** Lee las tablas y fuentes que el spec nombra y sus filas, hasta el tope. */
 export async function loadViewSources(
   db: SupabaseClient,
   spec: ViewSpec,
+  options: LoadViewSourcesOptions = {},
 ): Promise<Map<string, ViewSource>> {
-  const slugs = trackersOf(spec);
+  const refs = trackersOf(spec);
   const sources = new Map<string, ViewSource>();
+  if (!refs.length) return sources;
+  const slugs = refs.filter((r) => !isPlatformSourceId(r));
+  const platform = refs.filter(isPlatformSourceId);
+
+  await Promise.all(
+    platform.map(async (id) => {
+      const def = PLATFORM_SOURCES.get(id);
+      // Una fuente que ya no existe se queda fuera del mapa: `computeView` la
+      // pinta como «ya no existe», igual que una tabla borrada.
+      if (!def) return;
+      const tracker = { slug: def.id, name: def.name, fields: def.fields };
+      if (options.audience === 'public' && def.sensitivity === 'internal') {
+        sources.set(id, { tracker, rows: [], truncated: false, blocked: INTERNAL_SOURCE_BLOCKED });
+        return;
+      }
+      try {
+        const read = await def.read(db, VIEW_ROW_CAP, bogotaToday());
+        sources.set(id, {
+          tracker,
+          rows: read.rows.slice(0, VIEW_ROW_CAP),
+          truncated: read.truncated,
+        });
+      } catch {
+        // Una fuente de la plataforma que no contesta (una migración que falta
+        // en este despliegue, un módulo apagado) no tumba la vista entera: sus
+        // bloques dicen que no se pudo leer y los demás siguen. El detalle del
+        // error es de los registros, no de una pantalla que puede ser pública.
+        sources.set(id, {
+          tracker,
+          rows: [],
+          truncated: false,
+          blocked: `No se pudo leer ${def.name} en este momento. Vuelve a intentarlo en un rato.`,
+        });
+      }
+    }),
+  );
+
   if (!slugs.length) return sources;
   const { data, error } = await db.from('trackers').select(TRACKER_COLUMNS).in('slug', slugs);
   if (error) throw error;
@@ -354,6 +448,15 @@ export async function updateView(
   const current = await mustGetView(db, id);
   if (input.expectedVersion !== undefined && input.expectedVersion !== current.version)
     throw new ViewConflictError();
+  // Una vista que ya está afuera no puede empezar a mostrar algo interno: el
+  // enlace lo vería al siguiente clic. Primero se cierra la puerta.
+  if (input.spec && current.visibility !== 'workspace') {
+    const internal = internalSourcesOf(input.spec);
+    if (internal.length)
+      throw new ValidationError(
+        `Esta vista está compartida afuera y no puede usar información interna del equipo (${internal.map((s) => `«${s.name}»`).join(', ')}). Deja de compartirla primero, o usa otra fuente.`,
+      );
+  }
   const next = current.version + 1;
   const { data, error } = await db
     .from('custom_views')
@@ -464,6 +567,15 @@ export async function setViewAccess(
   const visibility = input.visibility ?? current.visibility;
   const patch: Record<string, unknown> = { updated_by: input.userId };
 
+  // Abrir la puerta de una vista con fuentes internas es la única decisión de
+  // compartir que ni un administrador puede tomar: esas fuentes nombran a gente
+  // del equipo y su trabajo. Sólo se mira cuando se PIDE abrir (fijarla en
+  // Inicio no toca la puerta y no debe fallar por esto).
+  if (input.visibility && input.visibility !== 'workspace') {
+    const internal = internalSourcesOf(current.spec);
+    if (internal.length) throw new ValidationError(internalShareRefusal(internal));
+  }
+
   if (input.pinned !== undefined) patch.pinned = input.pinned;
 
   if (visibility === 'workspace') {
@@ -524,6 +636,10 @@ export interface PublicViewRow extends CustomViewRow {
  * sólo si la puerta está abierta de verdad: no archivada, no interna, no
  * vencida. Cualquier otro caso es null, sin distinguir, porque la ruta pública
  * contesta lo mismo en todos.
+ *
+ * Encontrar la fila no es poder pintarlo todo: quien la pinte lee sus fuentes
+ * con `loadViewSources(..., { audience: 'public' })`, que deja sin leer las
+ * fuentes internas de la plataforma aunque el spec las nombre.
  */
 export async function findViewByToken(
   serviceDb: SupabaseClient,
@@ -596,6 +712,10 @@ export async function submitViewForm(
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || block.type !== 'form')
     throw new NotFoundError('Ese formulario no está en esta vista.');
+  if (isPlatformSourceId(block.tracker))
+    throw new ValidationError(
+      'Este formulario apunta a una fuente de sólo lectura; no recibe filas.',
+    );
 
   if (!input.submittedBy) {
     const since = new Date(Date.now() - 3_600_000).toISOString();

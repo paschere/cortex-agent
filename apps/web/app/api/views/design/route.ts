@@ -20,6 +20,7 @@ import {
   isRefused,
   loadViewSources,
   queryRows,
+  readPlatformSource,
   viewCatalog,
 } from '@cortex/agent-tools';
 import { generateObject } from 'ai';
@@ -60,14 +61,28 @@ export async function POST(req: NextRequest) {
     if (parsed.data.viewId && !current)
       return NextResponse.json({ error: 'Esa vista ya no existe.' }, { status: 404 });
 
-    const trackers = (await viewCatalog(db)).slice(0, 20);
+    const full = await viewCatalog(db);
+    // Hasta 20 tablas del espacio y todas las fuentes de la plataforma. Las
+    // muestras de una fuente de la plataforma son tres filas leídas por su
+    // propio lector; si una no contesta, va sin muestra y el diseño sigue.
+    const entries = [
+      ...full.filter((t) => t.kind === 'tracker').slice(0, 20),
+      ...full.filter((t) => t.kind === 'platform'),
+    ];
     const catalog: DesignCatalogEntry[] = await Promise.all(
-      trackers.map(async (t) => {
-        const rows = t.rowCount ? await queryRows(db, { trackerId: t.id, limit: 3 }) : [];
+      entries.map(async (t) => {
+        const rows =
+          t.kind === 'platform'
+            ? ((await readPlatformSource(db, t.slug, 3).catch(() => null))?.rows ?? [])
+            : t.rowCount
+              ? await queryRows(db, { trackerId: t.id, limit: 3 })
+              : [];
         return {
           slug: t.slug,
           name: t.name,
           description: t.description,
+          kind: t.kind,
+          sensitivity: t.sensitivity,
           rowCount: t.rowCount,
           fields: t.fields,
           sample: sampleOf(rows.map((r) => ({ label: r.label, ...r.values }))),

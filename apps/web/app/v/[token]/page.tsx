@@ -43,7 +43,12 @@ export default async function PublicViewPage({ params }: { params: Promise<{ tok
     }
   }
 
-  const computed = computeView(view.spec, await loadViewSources(db, view.spec));
+  // `audience: 'public'`: una fuente interna del equipo no se lee aquí aunque
+  // la vista la tenga; su bloque sale como aviso (ver loadViewSources).
+  const computed = computeView(
+    view.spec,
+    await loadViewSources(db, view.spec, { audience: 'public' }),
+  );
   void countPublicOpen(db, view).catch(() => undefined);
 
   return (
