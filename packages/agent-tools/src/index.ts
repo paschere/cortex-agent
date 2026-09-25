@@ -134,6 +134,7 @@ export * from './reports';
 // filas, no un informe — y antes de encargos, que ejecutan, no almacenan.
 export * from './trackers';
 export * from './views';
+export * from './table-sync';
 // Encargos (migration 0089): a job handed over and worked unattended for
 // minutes or hours. The EXECUTION engine lives in apps/web/lib/errands, which
 // needs Inngest and the orchestrator; what is here is the vocabulary every

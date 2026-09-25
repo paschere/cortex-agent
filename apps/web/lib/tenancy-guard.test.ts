@@ -95,6 +95,10 @@ const ALLOWED = new Map<string, string>([
     'Cron. "Which workspaces have open management cases" spans the install; each event then carries one workspace and every read and notice in the per-workspace job uses a handle pinned to it.',
   ],
   [
+    'inngest/functions/table-sync.ts',
+    'Cron. "Which table syncs are due" spans the install; each sync then runs on its own event with a handle pinned to its workspace, under the identity of the source owner who created it.',
+  ],
+  [
     'inngest/functions/receivables-watch.ts',
     'Cron. "Which workspaces have receivable invoices" spans the install; each event then carries one workspace and every handle in the per-workspace job is built from it. The only other unscoped read is that workspace\'s own name for the email header.',
   ],

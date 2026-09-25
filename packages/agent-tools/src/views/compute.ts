@@ -655,7 +655,10 @@ export function computeView(
     if (!src) continue;
     const rows = src.rows
       .filter((r) => alert.filters.every((f) => matches(src.tracker, r, f, today)))
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      // Por última actualización y no por creación: una fila que CAMBIÓ y
+      // ahora cumple el filtro («pasó a Aterrizó») también es noticia, y tiene
+      // que caber entre las recientes para que el navegador la vea.
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
       .slice(0, ALERT_FEED_ROWS)
       .map((r) => ({ id: r.id, label: r.label, createdAt: r.created_at }));
     alerts.push({

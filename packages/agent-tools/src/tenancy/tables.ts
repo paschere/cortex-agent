@@ -434,6 +434,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // Cortex para otra, que los citaría como si fueran suyos.
   trackers: tenant(),
   tracker_rows: tenant(),
+  // 0161: una fuente conectada que llena una tabla sola. Tenant: corre con la
+  // identidad de quien la creó y escribe sólo en la tabla de su espacio.
+  tracker_syncs: tenant(),
 
   // --- Vistas (migración 0156) ------------------------------------------------
   // Pantallas armadas sobre las tablas de arriba. Tenant las tres. La vista es

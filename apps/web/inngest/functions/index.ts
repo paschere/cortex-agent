@@ -25,6 +25,7 @@ import { receivablesWatchDispatch, receivablesWatchWorkspace } from './receivabl
 import { reindexEmbeddings } from './reindex-embeddings';
 import { scheduleDispatch } from './schedule-dispatch';
 import { scheduleRun } from './schedule-run';
+import { tableSyncDispatch, tableSyncRun, tableSyncSetup } from './table-sync';
 import { turnContextPurge, turnLatencyPurge } from './turn-context-purge';
 import { weeklyReportDispatch, weeklyReportWorkspace } from './weekly-report';
 
@@ -40,6 +41,9 @@ export {
   commitmentsWatchWorkspace,
   receivablesWatchDispatch,
   receivablesWatchWorkspace,
+  tableSyncDispatch,
+  tableSyncRun,
+  tableSyncSetup,
   goalsWatchDispatch,
   goalsWatchWorkspace,
   gmailBackfillUser,
@@ -83,6 +87,9 @@ export const functions = [
   commitmentsWatchWorkspace,
   receivablesWatchDispatch,
   receivablesWatchWorkspace,
+  tableSyncDispatch,
+  tableSyncRun,
+  tableSyncSetup,
   goalsWatchDispatch,
   goalsWatchWorkspace,
   gmailBackfillUser,

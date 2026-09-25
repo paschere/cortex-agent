@@ -13,7 +13,13 @@ import {
 import type { SheetData, SheetValue } from '@cortex/agent-tools/src/kb/spreadsheets';
 import { webScrape } from '@cortex/agent-tools/src/web/scrape';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { type FeedPagination, collectFeedPages, feedPaginationSchema } from './pagination';
+import { z } from 'zod';
+import {
+  type FeedPagination,
+  collectFeedPages,
+  feedPaginationSchema,
+  valueAtPath,
+} from './pagination';
 
 const MAX_ROWS = 1000;
 const MAX_COLUMNS = 50;
@@ -27,17 +33,101 @@ function cell(value: unknown): SheetValue {
   return JSON.stringify(value).slice(0, MAX_CELL_CHARS);
 }
 
-/** Only arrays of records become tables; every other response stays text. */
-export function normalizeApiFeed(data: unknown): {
+/**
+ * CÓMO SE LEE UNA RESPUESTA DE API COMO TABLA.
+ *
+ * Antes sólo una lista de registros en la raíz (`[{…},{…}]`) se volvía tabla, y
+ * casi ninguna API real responde así: AviationStack y Flightradar24 meten la
+ * lista en `data`, FlightAware en `arrivals`, OpenSky manda `states` como
+ * listas SIN nombres de campo. Todas esas quedaban como texto y ninguna vista
+ * podía mostrarlas.
+ *
+ * Ahora, en este orden:
+ *   1. `shape.recordsPath` si la fuente lo dice («data», «response.flights»).
+ *   2. La lista en la raíz.
+ *   3. Si la raíz es un objeto, la propiedad que es una lista de registros (o
+ *      de filas) más larga — sin adivinar entre dos del mismo tamaño.
+ * Una lista de listas usa `shape.columns` como encabezados, o c1, c2… En las
+ * listas que vienen dentro de un objeto, un objeto anidado se aplana UN nivel
+ * con punto («origin.code»): lo bastante para aeropuertos, horas y estados.
+ * Una lista en la raíz no se aplana, para no mover columnas de las que ya
+ * dependen activaciones guardadas.
+ */
+export const apiShapeSchema = z.object({
+  recordsPath: z
+    .string()
+    .trim()
+    .max(160)
+    .regex(/^[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/)
+    .refine((v) => !v.split('.').some((k) => ['__proto__', 'constructor', 'prototype'].includes(k)))
+    .optional(),
+  columns: z.array(z.string().trim().min(1).max(80)).max(MAX_COLUMNS).optional(),
+});
+export type ApiShape = z.infer<typeof apiShapeSchema>;
+
+type Records = Array<Record<string, unknown>> | unknown[][];
+
+function isRecordList(v: unknown): v is Array<Record<string, unknown>> {
+  return (
+    Array.isArray(v) &&
+    v.length > 0 &&
+    v.every((row) => row && typeof row === 'object' && !Array.isArray(row))
+  );
+}
+
+function isRowList(v: unknown): v is unknown[][] {
+  return Array.isArray(v) && v.length > 0 && v.every((row) => Array.isArray(row));
+}
+
+function findRecords(data: unknown, shape?: ApiShape): Records | null {
+  if (shape?.recordsPath) {
+    const at = valueAtPath(data, shape.recordsPath);
+    return isRecordList(at) || isRowList(at) ? at : null;
+  }
+  if (isRecordList(data) || isRowList(data)) return data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const candidates = Object.values(data as Record<string, unknown>).filter(
+    (v): v is Records => isRecordList(v) || isRowList(v),
+  );
+  if (!candidates.length) return null;
+  const sorted = [...candidates].sort((a, b) => b.length - a.length);
+  // Dos listas igual de largas: no hay cómo saber cuál es la buena.
+  if (sorted.length > 1 && sorted[0]?.length === sorted[1]?.length) return null;
+  return sorted[0] ?? null;
+}
+
+/** Un nivel de aplanado: { origin: { code } } → { "origin.code" }. */
+function flatten(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      for (const [inner, v] of Object.entries(value as Record<string, unknown>))
+        out[`${key}.${inner}`] = v;
+    } else out[key] = value;
+  }
+  return out;
+}
+
+export function normalizeApiFeed(
+  data: unknown,
+  shape?: ApiShape,
+): {
   text: string;
   tables?: SheetData[];
   truncated: boolean;
 } {
-  if (
-    Array.isArray(data) &&
-    data.every((row) => row && typeof row === 'object' && !Array.isArray(row))
-  ) {
-    const records = data as Record<string, unknown>[];
+  const found = findRecords(data, shape);
+  if (found) {
+    const records: Array<Record<string, unknown>> = isRowList(found)
+      ? found.map((row) =>
+          Object.fromEntries(row.map((v, i) => [shape?.columns?.[i] ?? `c${i + 1}`, v])),
+        )
+      : // Una lista en la raíz conserva su forma de siempre (anidados como
+        // JSON): las activaciones ya guardadas dependen del orden de esas
+        // columnas. Sólo se aplanan las respuestas que antes no daban tabla.
+        found === data
+        ? (found as Array<Record<string, unknown>>)
+        : (found as Array<Record<string, unknown>>).map(flatten);
     const headers: string[] = [];
     const seen = new Set<string>();
     let truncated = records.length > MAX_ROWS;
@@ -201,6 +291,7 @@ export async function captureApiFeed(options: {
   toolId: string;
   input: Record<string, unknown>;
   pagination?: FeedPagination;
+  shape?: ApiShape;
   name?: string;
 }) {
   const { db, organizationId, actorId } = options;
@@ -235,7 +326,8 @@ export async function captureApiFeed(options: {
   const result = pagination
     ? await collectFeedPages(pagination, options.input, read)
     : await read(options.input);
-  const normalized = normalizeApiFeed(result.data);
+  const shape = options.shape ? apiShapeSchema.parse(options.shape) : undefined;
+  const normalized = normalizeApiFeed(result.data, shape);
   if (!normalized.text.trim() && !normalized.tables?.length)
     throw new Error('La API devolvió una respuesta vacía.');
 
@@ -243,6 +335,7 @@ export async function captureApiFeed(options: {
     toolId: tool.id,
     input: options.input,
     ...(pagination ? { pagination } : {}),
+    ...(shape && (shape.recordsPath || shape.columns?.length) ? { shape } : {}),
   };
   const configHash = hashConfig(safeConfig);
   const sourceName = (options.name?.trim() || tool.name).slice(0, 240);
@@ -375,6 +468,7 @@ export async function refreshFeedSource(
       url?: string;
       spreadsheetId?: string;
       pagination?: FeedPagination;
+      shape?: ApiShape;
     };
     if (data.kind === 'combined') {
       const { refreshCombinedSource } = await import('./combined-source');
@@ -408,6 +502,7 @@ export async function refreshFeedSource(
         toolId: config.toolId,
         input: config.input ?? {},
         pagination: config.pagination,
+        shape: config.shape,
         name: data.name,
       });
     }

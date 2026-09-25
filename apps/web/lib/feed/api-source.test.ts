@@ -65,3 +65,46 @@ describe('Feed source persistence failures', () => {
     ).rejects.toThrow('actualizar la conexión');
   });
 });
+
+describe('respuestas de API de vuelos como tabla', () => {
+  it('encuentra la lista dentro de data (AviationStack, Flightradar24)', () => {
+    const out = normalizeApiFeed({
+      pagination: { total: 2 },
+      data: [
+        {
+          flight: { iata: 'AV9' },
+          arrival: { iata: 'BOG', actual: null },
+          flight_status: 'active',
+        },
+        {
+          flight: { iata: 'LA40' },
+          arrival: { iata: 'BOG', actual: '2026-09-25T10:00' },
+          flight_status: 'landed',
+        },
+      ],
+    });
+    expect(out.tables?.[0]?.rows[0]).toEqual([
+      'flight.iata',
+      'arrival.iata',
+      'arrival.actual',
+      'flight_status',
+    ]);
+    expect(out.tables?.[0]?.rows[2]).toEqual(['LA40', 'BOG', '2026-09-25T10:00', 'landed']);
+  });
+
+  it('usa nombres de columna para listas sin nombres (OpenSky)', () => {
+    const out = normalizeApiFeed(
+      { time: 1, states: [['abc123', 'AVA9   ', 'Colombia']] },
+      { recordsPath: 'states', columns: ['icao24', 'callsign', 'pais'] },
+    );
+    expect(out.tables?.[0]?.rows).toEqual([
+      ['icao24', 'callsign', 'pais'],
+      ['abc123', 'AVA9   ', 'Colombia'],
+    ]);
+  });
+
+  it('no adivina entre dos listas del mismo tamaño', () => {
+    const out = normalizeApiFeed({ a: [{ x: 1 }], b: [{ y: 2 }] });
+    expect(out.tables).toBeUndefined();
+  });
+});

@@ -66,6 +66,11 @@ import {
 import { reindexEmbeddingsJob } from '@/inngest/functions/reindex-embeddings';
 import { scheduleDispatchJob } from '@/inngest/functions/schedule-dispatch';
 import { scheduleRunJob } from '@/inngest/functions/schedule-run';
+import {
+  tableSyncDispatchJob,
+  tableSyncRunJob,
+  tableSyncSetupJob,
+} from '@/inngest/functions/table-sync';
 import { turnContextPurgeJob, turnLatencyPurgeJob } from '@/inngest/functions/turn-context-purge';
 import {
   weeklyReportDispatchJob,
@@ -86,6 +91,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'memory/derive.dispatch': memoryDeriveDispatchJob,
   'commitments/watch.dispatch': commitmentsWatchDispatchJob,
   'receivables/watch.dispatch': receivablesWatchDispatchJob,
+  'table-sync/dispatch': tableSyncDispatchJob,
   'actions/sweep.dispatch': actionsSweepDispatchJob,
   'management/workflow.dispatch': managementWorkflowDispatchJob,
   'management/workflow.advance': managementWorkflowAdvanceJob,
@@ -109,6 +115,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'actions/sweep.workspace': actionsSweepWorkspaceJob,
   'commitments/watch.workspace': commitmentsWatchWorkspaceJob,
   'receivables/watch.workspace': receivablesWatchWorkspaceJob,
+  'table-sync/run': tableSyncRunJob,
+  'table-sync/setup': tableSyncSetupJob,
   'goals/watch.workspace': goalsWatchWorkspaceJob,
   'memory/derive.user': memoryDeriveUserJob,
   'gmail/backfill.user': gmailBackfillUserJob,

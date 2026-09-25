@@ -66,6 +66,8 @@ export const NOTIFICATION_KINDS = [
    * por un formulario con alerta de campana. Ver la 0160.
    */
   'view_activity',
+  /** Una tabla que se llena sola recibió filas nuevas o cambios. Ver la 0161. */
+  'table_sync',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -109,6 +111,7 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   management_attention: 'warning',
   receivables_overdue: 'warning',
   view_activity: 'info',
+  table_sync: 'info',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -127,6 +130,7 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   management_attention: 'Gerencia',
   receivables_overdue: 'Cartera',
   view_activity: 'Vistas',
+  table_sync: 'Tablas',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */

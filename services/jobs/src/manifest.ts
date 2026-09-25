@@ -72,6 +72,9 @@ export const JOBS: JobSpec[] = [
   // La cartera que avisa sola (0159): 07:00 en Bogotá, una hora después de los
   // vencimientos. Ver apps/web/inngest/functions/receivables-watch.ts.
   { name: 'receivables/watch.dispatch', cron: '0 12 * * *', retryLimit: 1, concurrency: 1 },
+  // Tablas que se llenan solas desde una fuente conectada (0161). Cada 5
+  // minutos decide qué sincronizaciones tocan; cada una corre en su evento.
+  { name: 'table-sync/dispatch', cron: '*/5 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'actions/sweep.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'management/workflow.dispatch', cron: '*/15 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'management/workflow.advance', retryLimit: 2, concurrency: 5 },
@@ -104,6 +107,8 @@ export const JOBS: JobSpec[] = [
   { name: 'actions/sweep.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'commitments/watch.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'receivables/watch.workspace', retryLimit: 1, concurrency: 5 },
+  { name: 'table-sync/run', retryLimit: 1, concurrency: 5 },
+  { name: 'table-sync/setup', retryLimit: 0, concurrency: 2 },
   { name: 'goals/watch.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'learning/pass.workspace', retryLimit: 1, concurrency: 1 },
   { name: 'memory/derive.user', retryLimit: 1, concurrency: 5 },

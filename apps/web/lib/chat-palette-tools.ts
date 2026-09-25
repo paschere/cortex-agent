@@ -288,6 +288,8 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.query': 'Muéstrame la tabla de ',
   'trackers.remove': 'Borra de la tabla ',
   'trackers.upsert': 'Anota en la tabla ',
+  'trackers.sync_from_source': 'Haz que la tabla se llene sola desde la fuente ',
+  'trackers.syncs': 'Muéstrame las tablas que se llenan solas',
   'views.archive': 'Archiva la vista ',
   'views.create': 'Hazme una vista con ',
   'views.get': 'Muéstrame la vista ',
