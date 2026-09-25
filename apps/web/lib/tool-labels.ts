@@ -266,6 +266,7 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   company_facts: { label: 'Leer la ficha de la empresa', icon: 'Landmark' },
 
   // Tablas que esta empresa se inventa.
+  kb_propose_memory: { label: 'Proponer un recuerdo para la empresa', icon: 'BookmarkPlus' },
   trackers_define: { label: 'Crear o cambiar una tabla', icon: 'Table2' },
   trackers_list: { label: 'Ver las tablas inventadas', icon: 'Table2' },
   trackers_query: { label: 'Consultar la tabla', icon: 'Table2' },

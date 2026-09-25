@@ -96,6 +96,10 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // sin un espacio en la mano.
   kb_space_grants: tenant(),
   kb_documents: tenant(),
+  // Migración 0157: lo que se dijo en el chat, propuesto para la memoria de la
+  // empresa hasta que alguien con permiso lo acepte. Tenant: una propuesta de
+  // otra empresa aceptada aquí sería un «acuerdo» ajeno en la boca de Cortex.
+  memory_proposals: tenant(),
   kb_chunks: derived('kb_documents', 'document_id'),
   // Tenant rather than derived even though most rows name a document: the whole
   // point of the table is "what did THIS workspace spend", which has to be

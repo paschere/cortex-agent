@@ -221,6 +221,9 @@ export const RICH: Record<string, ResultView> = {
   reports_open: dynamic(() =>
     import('./ReportCard').then((m) => m.ReportCard as unknown as ResultView),
   ),
+  kb_propose_memory: dynamic(() =>
+    import('./MemoryProposalCard').then((m) => m.MemoryProposalCard as unknown as ResultView),
+  ),
   trackers_list: dynamic(() =>
     import('./TrackersDirectory').then((m) => m.TrackersDirectory as unknown as ResultView),
   ),
@@ -254,6 +257,7 @@ const RICH_NEEDS: Record<string, (result: unknown) => boolean> = {
     field(r, 'found') === true && typeof field(field(r, 'report'), 'id') === 'string',
   trackers_query: (r) => typeof field(field(r, 'tracker'), 'slug') === 'string',
   trackers_list: (r) => Array.isArray(field(r, 'trackers')),
+  kb_propose_memory: (r) => typeof field(r, 'statement') === 'string',
   actions_propose: (r) => {
     const action = field(r, 'action');
     return (

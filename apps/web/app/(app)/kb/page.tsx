@@ -2,8 +2,10 @@ import { PageHeader } from '@/components/ui/page-header';
 import { WhatsappInBrain } from '@/components/whatsapp/WhatsappInBrain';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { COMPANY_MEMORY_KIND_LABEL, listMemoryProposals } from '@cortex/agent-tools';
 import { BookOpen } from 'lucide-react';
 import { KnowledgeBase } from './_components/KnowledgeBase';
+import { PendingMemories, type PendingMemory } from './_components/PendingMemories';
 import { ago } from './_components/format';
 import type { SpaceSummary } from './_components/types';
 import { readBrain } from './_lib/brain';
@@ -60,6 +62,38 @@ export default async function KnowledgeBasePage({
 
   const isAdmin = user.role === 'org_admin';
 
+  // Lo que Cortex propuso guardar desde el chat (0157). Sólo se muestran los
+  // que esta persona podría decidir: los de espacios donde aporta, o todos si
+  // administra la empresa. Si la tabla aún no existe, la página sigue igual.
+  const writable = new Set(
+    spaces.filter((s) => s.level === 'contribute' || s.level === 'admin').map((s) => s.id),
+  );
+  const proposals = await listMemoryProposals(db, { status: 'pending', limit: 30 }).catch(() => []);
+  const decidable = proposals.filter((p) =>
+    p.target_space_id ? writable.has(p.target_space_id) : isAdmin,
+  );
+  const proposerIds = [...new Set(decidable.map((p) => p.proposed_by))];
+  const proposers = new Map<string, string>();
+  if (proposerIds.length) {
+    const { data: rows, error: proposerError } = await db
+      .from('users')
+      .select('id, name, email')
+      .in('id', proposerIds);
+    if (!proposerError)
+      for (const r of (rows ?? []) as Array<{ id: string; name: string | null; email: string }>)
+        proposers.set(r.id, r.name?.trim() || r.email);
+  }
+  const pendingMemories: PendingMemory[] = decidable.map((p) => ({
+    id: p.id,
+    kindLabel: COMPANY_MEMORY_KIND_LABEL[p.kind] ?? 'Dato',
+    subject: p.subject,
+    statement: p.statement,
+    quote: p.quote,
+    proposer: proposers.get(p.proposed_by) ?? 'alguien del equipo',
+    when: ago(p.created_at),
+    space: spaces.find((s) => s.id === p.target_space_id)?.name ?? null,
+  }));
+
   const summaries: SpaceSummary[] = spaces.map((s) => {
     const f = facts.get(s.id);
     const isMine = s.kind === 'personal' && s.ownerId === user.id;
@@ -106,6 +140,7 @@ export default async function KnowledgeBasePage({
       {/* A view, not a control panel: WhatsApp is configured in Integrations,
           and this only says which conversations are arriving from there. */}
       <WhatsappInBrain organizationId={user.organization.id} />
+      <PendingMemories items={pendingMemories} />
       <KnowledgeBase
         key={`${user.organization.id}:${initialDocumentId ?? 'index'}`}
         initialDocumentId={initialDocumentId}

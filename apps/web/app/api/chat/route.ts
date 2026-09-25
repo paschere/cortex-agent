@@ -9,7 +9,6 @@ import {
 import { type BrainSource, collectBrainSources } from '@/lib/brain-sources-shape';
 import { loadTurnAttachments, renderTurnAttachmentBlock } from '@/lib/chat-attachments';
 import { CITATION_RULE } from '@/lib/citations';
-import { isControlHandoffMessage } from '@/lib/confirmation-notes';
 import { EVENT_ERRAND_ADVANCE } from '@/lib/errands/contract';
 import { querySheet, tableQuerySchema } from '@/lib/feed/table-query';
 import { enqueueJobs } from '@/lib/jobs';
@@ -27,6 +26,7 @@ import {
   pointAtResult,
   screenBlock,
 } from '@/lib/screen-glance';
+import { ragQueryFor } from '@/lib/rag-query';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
@@ -86,19 +86,7 @@ export const maxDuration = 300;
  */
 const DEFAULT_FRAGMENTS = 3;
 
-const ACKNOWLEDGMENT_RE =
-  /^(ok|yes|no|sure|thanks|got it|sounds good|proceed|continue|sí|claro|dale|perfecto|de acuerdo)[.!?]?$/i;
-
-function shouldRunRag(message: string): boolean {
-  const wordCount = message.trim().split(/\s+/).length;
-  if (wordCount < 8) return false;
-  if (ACKNOWLEDGMENT_RE.test(message.trim())) return false;
-  // Los avisos que nuestras propias tarjetas escriben por la persona
-  // («aprobé», «ya terminé en la página») son control, no preguntas — largos
-  // solo porque cargan un id de pestaña. Ver isControlHandoffMessage.
-  if (isControlHandoffMessage(message)) return false;
-  return true;
-}
+// La regla de cuándo buscar y con qué texto vive en lib/rag-query.ts.
 
 /**
  * A tool the model may be offered this turn, in the one shape
@@ -353,10 +341,12 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // RAG prepend: kb.search top 3 on the last user message (conditional).
-  // Skipped entirely while the KB has no indexed chunks — saves an embedding
-  // round-trip per message on fresh workspaces.
-  const ragQuery = lastUserMessage?.content ?? '';
+  // RAG prepend: kb.search top 3 (conditional). Qué se busca y cuándo lo
+  // decide `ragQueryFor`: preguntas cortas incluidas, completadas con lo que la
+  // persona dijo justo antes. Skipped entirely while the KB has no indexed
+  // chunks — saves an embedding round-trip per message on fresh workspaces.
+  const ragDecision = ragQueryFor(messages);
+  const ragQuery = ragDecision.run ? ragDecision.query : '';
   let ragBlock = '';
   /**
    * Los documentos que se pegaron encima de esta pregunta, para escribirlos con
@@ -463,9 +453,11 @@ export async function POST(req: NextRequest) {
       'Alguien puso en cero los fragmentos para esta conversación.',
       fragmentLimit,
     );
-  } else if (!shouldRunRag(ragQuery)) {
+  } else if (!ragDecision.run) {
     recorder.retrievalSkipped(
-      'El mensaje es muy corto o es un acuse de recibo, así que no valía la pena buscar.',
+      ragDecision.reason === 'control'
+        ? 'El mensaje era un aviso de una tarjeta, no una pregunta.'
+        : 'El mensaje era un saludo o un acuse de recibo, así que no valía la pena buscar.',
       fragmentLimit,
     );
   }
@@ -491,7 +483,7 @@ export async function POST(req: NextRequest) {
   // ---------------------------------------------------------------------------
   const closeRetrieval = clock.open('retrieval');
   const retrieving = (async (): Promise<string> => {
-    if ((chunkCount ?? 0) > 0 && fragmentLimit > 0 && shouldRunRag(ragQuery)) {
+    if ((chunkCount ?? 0) > 0 && fragmentLimit > 0 && ragDecision.run) {
       // The relevance cut used to live here, as `score >= 0.65` on the blended
       // rank — a number that could not be interpreted and that, measured against
       // a real corpus, never got there at all: semantic matching alone tops out

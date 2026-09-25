@@ -71,6 +71,18 @@ export { ingestMarkdown, OVER_DOCUMENT_LIMIT_MESSAGE } from './ingest';
 export { kbListSpaces } from './list-spaces';
 export { kbShareSpace } from './share-space';
 export { kbCreateDocument } from './create-document';
+export {
+  COMPANY_MEMORY_KINDS,
+  COMPANY_MEMORY_KIND_LABEL,
+  acceptMemoryProposal,
+  kbProposeMemory,
+  listMemoryProposals,
+  normalizeForQuote,
+  proposalMarkdown,
+  quoteAppearsIn,
+  rejectMemoryProposal,
+} from './proposals';
+export type { CompanyMemoryKind, MemoryProposalRow } from './proposals';
 export { kbContext } from './context';
 export {
   assertCanAdminSpace,

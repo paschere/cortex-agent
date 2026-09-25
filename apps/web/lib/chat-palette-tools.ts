@@ -282,6 +282,7 @@ export const TOOL_PHRASE: Record<string, string> = {
   'reports.run': 'Vuelve a correr el informe a la medida ',
   'reports.share': 'Comparte por enlace el informe de ',
 
+  'kb.propose_memory': 'Recuerda para la empresa que ',
   'trackers.define': 'Crea una tabla para vigilar ',
   'trackers.list': 'Muéstrame las tablas que hemos inventado',
   'trackers.query': 'Muéstrame la tabla de ',
