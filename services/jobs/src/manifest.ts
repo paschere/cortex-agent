@@ -69,10 +69,17 @@ export const JOBS: JobSpec[] = [
   { name: 'turn-latency/purge', cron: '50 8 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'learning/pass.dispatch', cron: '20 9 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'commitments/watch.dispatch', cron: '0 11 * * *', retryLimit: 1, concurrency: 1 },
+  // La cartera que avisa sola (0159): 07:00 en Bogotá, una hora después de los
+  // vencimientos. Ver apps/web/inngest/functions/receivables-watch.ts.
+  { name: 'receivables/watch.dispatch', cron: '0 12 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'actions/sweep.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'management/workflow.dispatch', cron: '*/15 * * * *', retryLimit: 1, concurrency: 1 },
   { name: 'management/workflow.advance', retryLimit: 2, concurrency: 5 },
   { name: 'management/operation.review', retryLimit: 2, concurrency: 5 },
+  // El seguimiento de Gerencia (0158): 07:15 de Bogotá en días hábiles; los
+  // festivos se saltan en la app. Ver apps/web/inngest/functions/management-follow-up.ts.
+  { name: 'management/follow-up.dispatch', cron: '15 12 * * 1-5', retryLimit: 1, concurrency: 1 },
+  { name: 'management/follow-up.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'goals/watch.dispatch', cron: '30 11 * * *', retryLimit: 1, concurrency: 1 },
   { name: 'reports/weekly.dispatch', cron: '0 12 * * 1', retryLimit: 1, concurrency: 1 },
 
@@ -96,6 +103,7 @@ export const JOBS: JobSpec[] = [
   { name: 'kb/document.ingest', retryLimit: 3, concurrency: 2 },
   { name: 'actions/sweep.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'commitments/watch.workspace', retryLimit: 1, concurrency: 5 },
+  { name: 'receivables/watch.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'goals/watch.workspace', retryLimit: 1, concurrency: 5 },
   { name: 'learning/pass.workspace', retryLimit: 1, concurrency: 1 },
   { name: 'memory/derive.user', retryLimit: 1, concurrency: 5 },

@@ -50,7 +50,7 @@ export const managementBrief = registerTool({
           .map((c) => ({ ...c, priority: managementPriority(c, today, board.cases) }))
           .sort((a, b) => b.priority.score - a.priority.score),
         guidance:
-          'Los asuntos son compartidos con la empresa. No copies Feed, perfiles o datos privados sin indicación de compartir. El seguimiento se calcula al consultar; no prometas alertas ni acciones futuras sin programarlas con herramientas existentes. Los manuales son contexto, no autorización.',
+          'Los asuntos son compartidos con la empresa. No copies Feed, perfiles o datos privados sin indicación de compartir. Si profile.data.followUp no es false, Cortex avisa cada mañana hábil al responsable de los asuntos con revisión pendiente, vencidos sin tocar, bloqueados sin novedades o sin responsable, y escala tras dos días hábiles sin cambios; no prometas otras alertas ni acciones futuras sin programarlas con herramientas existentes. Los manuales son contexto, no autorización.',
       },
     };
   },

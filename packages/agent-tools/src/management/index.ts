@@ -5,3 +5,5 @@ export * from './workflow';
 export * from './workflow-shape';
 export * from './operation-shape';
 export * from './operation-store';
+export * from './follow-up';
+export * from './follow-up-store';

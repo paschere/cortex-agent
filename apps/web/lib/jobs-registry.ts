@@ -51,10 +51,18 @@ import {
   learningPassDispatchJob,
   learningPassWorkspaceJob,
 } from '@/inngest/functions/learning-pass';
+import {
+  managementFollowUpDispatchJob,
+  managementFollowUpWorkspaceJob,
+} from '@/inngest/functions/management-follow-up';
 import { meetingImportSweepJob } from '@/inngest/functions/meeting-import';
 import { memoryDeriveDispatchJob, memoryDeriveUserJob } from '@/inngest/functions/memory-derive';
 import { orchestratorRunJob } from '@/inngest/functions/orchestrator-run';
 import { orchestratorSweepJob } from '@/inngest/functions/orchestrator-sweep';
+import {
+  receivablesWatchDispatchJob,
+  receivablesWatchWorkspaceJob,
+} from '@/inngest/functions/receivables-watch';
 import { reindexEmbeddingsJob } from '@/inngest/functions/reindex-embeddings';
 import { scheduleDispatchJob } from '@/inngest/functions/schedule-dispatch';
 import { scheduleRunJob } from '@/inngest/functions/schedule-run';
@@ -77,10 +85,13 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'gmail/sweep': gmailSweepDispatchJob,
   'memory/derive.dispatch': memoryDeriveDispatchJob,
   'commitments/watch.dispatch': commitmentsWatchDispatchJob,
+  'receivables/watch.dispatch': receivablesWatchDispatchJob,
   'actions/sweep.dispatch': actionsSweepDispatchJob,
   'management/workflow.dispatch': managementWorkflowDispatchJob,
   'management/workflow.advance': managementWorkflowAdvanceJob,
   'management/operation.review': managementOperationReviewJob,
+  'management/follow-up.dispatch': managementFollowUpDispatchJob,
+  'management/follow-up.workspace': managementFollowUpWorkspaceJob,
   'goals/watch.dispatch': goalsWatchDispatchJob,
   'reports/weekly.dispatch': weeklyReportDispatchJob,
 
@@ -97,6 +108,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   'learning/pass.workspace': learningPassWorkspaceJob,
   'actions/sweep.workspace': actionsSweepWorkspaceJob,
   'commitments/watch.workspace': commitmentsWatchWorkspaceJob,
+  'receivables/watch.workspace': receivablesWatchWorkspaceJob,
   'goals/watch.workspace': goalsWatchWorkspaceJob,
   'memory/derive.user': memoryDeriveUserJob,
   'gmail/backfill.user': gmailBackfillUserJob,

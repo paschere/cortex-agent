@@ -28,6 +28,7 @@ import { Suspense } from 'react';
 import { DayJournal } from './_components/DayJournal';
 import { Insights } from './_components/Insights';
 import { ManagementOverview } from './_components/ManagementOverview';
+import { MoneyAtRiskPanel } from './_components/MoneyAtRiskPanel';
 import { PinnedViews } from './_components/PinnedViews';
 import { WaitingIndex } from './_components/WaitingIndex';
 
@@ -209,6 +210,11 @@ export default async function DashboardPage() {
         <WaitingIndex index={waiting} />
         <DayJournal journal={journal} />
       </div>
+
+      {/* Cartera vencida, pagos de la semana y multas: sólo si hay algo. */}
+      <Suspense fallback={null}>
+        <MoneyAtRiskPanel organizationId={user.organization.id} />
+      </Suspense>
 
       {/* Lo que el equipo fijó a propósito desde /views. Sin fijadas, nada. */}
       <Suspense fallback={null}>

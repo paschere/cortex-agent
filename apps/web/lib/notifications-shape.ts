@@ -56,6 +56,11 @@ export const NOTIFICATION_KINDS = [
    */
   'mail_worth_seeing',
   'management_attention',
+  /**
+   * Una o varias facturas por cobrar cruzaron un escalón de mora (vencida, 30,
+   * 60, 90 días). Una vez por escalón y factura; ver la 0159.
+   */
+  'receivables_overdue',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -97,6 +102,7 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   // «ya está resuelto» y esto es exactamente lo contrario.
   mail_worth_seeing: 'warning',
   management_attention: 'warning',
+  receivables_overdue: 'warning',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -113,6 +119,7 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   report_ready: 'Informe',
   mail_worth_seeing: 'Correo',
   management_attention: 'Gerencia',
+  receivables_overdue: 'Cartera',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */

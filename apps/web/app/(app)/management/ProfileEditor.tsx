@@ -174,6 +174,24 @@ export function ProfileEditor({
             required
           />
         </div>
+        <label className="flex items-start gap-3 rounded-lg border border-border p-4 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={data.followUp !== false}
+            onChange={(e) => field('followUp', e.target.checked)}
+          />
+          <span>
+            <span className="font-semibold">Seguimiento automático de asuntos</span>
+            <span className="mt-1 block text-ink-muted">
+              Cada mañana hábil Cortex le escribe al responsable, en la app y por correo, cuando un
+              asunto tiene la revisión pendiente, venció sin avances o lleva días bloqueado. Si en
+              dos días hábiles nadie lo actualiza, avisa a la persona de escalamiento o, si no hay,
+              al jefe del responsable. Los asuntos sin responsable llegan una vez a los
+              administradores. Solo escribe a miembros de la empresa.
+            </span>
+          </span>
+        </label>
         <div className="space-y-2 rounded-lg border border-border p-4 text-sm">
           <h3 className="font-semibold">Autoridad para actuar</h3>
           <p className="text-ink-muted">

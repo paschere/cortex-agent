@@ -826,6 +826,102 @@ export interface ReceivablesResult {
 const SCAN_LIMIT = 1000;
 
 /**
+ * Lo abonado contra cada factura, por factura y moneda. Compartido por la
+ * cartera y por el vigilante de facturas vencidas, para que «cuánto se debe de
+ * esta factura» tenga UNA respuesta.
+ *
+ * Un pago sin factura no se reparte entre las abiertas: adivinar a cuál iba es
+ * exactamente el tipo de suposición que este módulo no hace. Y el id de la
+ * factura solo no basta: un pago importado puede apuntar a una factura en otra
+ * moneda, y esa fila tiene que seguir visible como no aplicada en vez de restar
+ * en otra unidad.
+ */
+function applyPayments(payments: PaymentRow[]) {
+  const appliedTo = new Map<string, number>();
+  const linkedPayments: Array<{ key: string; amount: number }> = [];
+  let unappliedPayments = 0;
+  let unappliedAmount = 0;
+  for (const p of payments) {
+    const signed = signedAmount(p.kind, amountOf(p));
+    if (p.extraction_id) {
+      const key = `${p.extraction_id}\u0000${currencyBucket('pago', p.currency)}`;
+      appliedTo.set(key, (appliedTo.get(key) ?? 0) + signed);
+      linkedPayments.push({ key, amount: signed });
+    } else {
+      unappliedPayments += 1;
+      unappliedAmount += signed;
+    }
+  }
+  return { appliedTo, linkedPayments, unappliedPayments, unappliedAmount };
+}
+
+export interface OverdueInvoice {
+  id: string;
+  docNumber: string | null;
+  clientId: string | null;
+  counterparty: string | null;
+  currency: string;
+  balance: number;
+  dueOn: string;
+  daysOverdue: number;
+}
+
+/**
+ * Cada factura confirmada por cobrar que ya venció y todavía tiene saldo, con
+ * sus días de mora contados en Bogotá. Mismas reglas que `receivables`: sólo
+ * confirmadas, nunca se mezclan monedas, y un pago sólo resta de la factura a
+ * la que está atado.
+ */
+export async function overdueReceivableInvoices(
+  db: SupabaseClient,
+  opts: { today?: string } = {},
+): Promise<OverdueInvoice[]> {
+  const today = opts.today ?? bogotaToday();
+  const read = await db
+    .from('document_extractions')
+    .select(INVOICE_COLUMNS)
+    .eq('review_state', 'confirmed')
+    .eq('doc_type', 'invoice')
+    .eq('financial_role', 'receivable')
+    .lt('due_on', today)
+    .limit(SCAN_LIMIT);
+  if (read.error) throw read.error;
+  const invoices = (read.data ?? []) as Array<{
+    id: string;
+    doc_number: string | null;
+    client_id: string | null;
+    counterparty_name: string | null;
+    total_amount: number | string | null;
+    currency: string | null;
+    due_on: string | null;
+  }>;
+  if (!invoices.length) return [];
+  const payments = await listPayments(db, { state: [...COUNTED_STATES], limit: SCAN_LIMIT });
+  const { appliedTo } = applyPayments(payments);
+  const out: OverdueInvoice[] = [];
+  for (const invoice of invoices) {
+    const total = num(invoice.total_amount);
+    if (total == null || !invoice.currency || !invoice.due_on) continue;
+    const paid =
+      appliedTo.get(`${invoice.id}\u0000${currencyBucket('pago', invoice.currency)}`) ?? 0;
+    const balance = total - paid;
+    const days = daysBetween(invoice.due_on, today);
+    if (balance <= 0.005 || days == null || days <= 0) continue;
+    out.push({
+      id: invoice.id,
+      docNumber: invoice.doc_number,
+      clientId: invoice.client_id,
+      counterparty: invoice.counterparty_name,
+      currency: invoice.currency,
+      balance,
+      dueOn: invoice.due_on,
+      daysOverdue: days,
+    });
+  }
+  return out.sort((a, b) => b.balance - a.balance);
+}
+
+/**
  * Cuánto se debe, sobre qué base, y qué se quedó fuera.
  *
  * SE CALCULA SOBRE FACTURAS CONFIRMADAS Y LO DICE EN LA CARA. Es la misma
@@ -878,27 +974,14 @@ export async function receivables(
     limit: SCAN_LIMIT,
   });
 
-  // Lo abonado contra cada factura, por factura. Un pago sin factura no se
-  // reparte entre las abiertas: adivinar a cuál iba es exactamente el tipo de
-  // suposición que este módulo no hace.
-  // Invoice id alone is insufficient: a malformed/imported payment can point
-  // at an invoice while naming another currency. Such a row must stay visible
-  // as unapplied evidence instead of reducing a balance in a different unit.
-  const appliedTo = new Map<string, number>();
-  const linkedPayments: Array<{ key: string; amount: number }> = [];
-  let unappliedPayments = 0;
-  let unappliedAmount = 0;
-  for (const p of payments) {
-    const signed = signedAmount(p.kind, amountOf(p));
-    if (p.extraction_id) {
-      const key = `${p.extraction_id}\u0000${currencyBucket('pago', p.currency)}`;
-      appliedTo.set(key, (appliedTo.get(key) ?? 0) + signed);
-      linkedPayments.push({ key, amount: signed });
-    } else {
-      unappliedPayments += 1;
-      unappliedAmount += signed;
-    }
-  }
+  const {
+    appliedTo,
+    linkedPayments,
+    unappliedPayments: unlinkedCount,
+    unappliedAmount: unlinkedAmount,
+  } = applyPayments(payments);
+  let unappliedPayments = unlinkedCount;
+  let unappliedAmount = unlinkedAmount;
 
   interface Bucket extends ReceivablesCurrency {
     ages: Array<{ balance: number; since: string | null }>;

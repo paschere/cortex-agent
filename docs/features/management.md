@@ -25,7 +25,7 @@ Las lecturas tienen límites explícitos: 500 asuntos recientes, 1.000 personas,
 
 ## Alcance de la automatización
 
-Las señales se consultan al abrir/actualizar la mesa o usar `management.brief`. El parte diario consulta los asuntos compartidos ya organizados; no crea casos ni incorpora aprobaciones/encargos privados. La fecha de revisión identifica trabajo pendiente, no ejecuta una tarea programada. El responsable de escalamiento queda identificado; este módulo no le envía mensajes automáticamente.
+Las señales se consultan al abrir/actualizar la mesa o usar `management.brief`. El parte diario consulta los asuntos compartidos ya organizados; no crea casos ni incorpora aprobaciones/encargos privados. La fecha de revisión identifica trabajo pendiente, no ejecuta una tarea programada. El responsable de escalamiento recibe los escalados del seguimiento automático (ver «Seguimiento automático de asuntos (0158)»); el parte diario por sí mismo no envía mensajes.
 
 La ejecución de correos, cobros o trámites continúa en Acciones, Navegador, Flujos y sus herramientas, bajo los mandatos/aprobaciones existentes. Cerrar un asunto no marca como pagada una factura, cumplido un compromiso ni aprobado un trámite en la fuente original. Esas fuentes deben verificarse y actualizarse mediante su propio mecanismo.
 
@@ -190,3 +190,30 @@ Validación: pruebas SQL aisladas en `operation.sql-test.mjs`, pruebas de límit
 de avisos en `operation-attention.test.ts`, regresiones de gerencia y registro de
 jobs, compilación del worker y typecheck web. La prueba de un ciclo empresarial
 real de 30 días sigue siendo una validación operativa distinta.
+
+## Seguimiento automático de asuntos (0158)
+
+Gerencia ya no solo muestra: persigue. Cada día hábil a las 07:15 de Bogotá (cron `15 12 * * 1-5`, trabajos `management/follow-up.dispatch` y `management/follow-up.workspace` en el worker de pg-boss y en Inngest; los festivos de Colombia se saltan en el código) Cortex revisa, por empresa, los asuntos **por organizar, en gestión o bloqueados**. «Por verificar» queda fuera: el responsable ya entregó y falta la revisión de un administrador.
+
+Un asunto entra en la lista si:
+
+- su **próxima revisión** es hoy o ya pasó;
+- está **vencido y nadie lo tocó** desde el plazo (si el responsable lo actualizó después y puso una revisión futura, se le vuelve a preguntar en esa fecha, no cada mañana);
+- está **bloqueado sin ninguna revisión en 3 días hábiles**;
+- **no tiene responsable**, o el responsable ya no está en el directorio de la empresa.
+
+Quién recibe qué:
+
+1. **Responsable** — aviso en la app (`management_attention`) y correo con el asunto, por qué aparece, el próximo paso y el enlace `/management?case=…`.
+2. **Escalado** — si pasan **2 días hábiles** desde el aviso 1 y el asunto sigue en la misma revisión (nadie guardó nada), va a la persona de escalamiento del perfil; si no hay (o es el propio responsable, o no es miembro), al jefe del responsable según la línea de mando (0106); si no, al primer administrador. El responsable recibe en la app que se escaló. Si nadie está por encima del responsable, no se escala.
+3. **Sin responsable** — a los administradores, una sola vez en la vida del asunto.
+
+Cualquier cambio guardado sube la revisión: eso detiene el escalado y, si el asunto sigue en la lista, reinicia en el paso 1 al día hábil siguiente. Solo avisa; no cambia, reasigna ni ejecuta nada. Todos los destinatarios salen del directorio de la empresa leído con su handle; nunca personas externas.
+
+**Libro de avisos:** `management_case_notices` con índice único `(case_id, case_revision, step)` y otro parcial que limita `unowned` a uno por asunto. Reclamar → enviar → cerrar, como `commitment_notices`; un aviso que no llegó por ningún canal se suelta y se reintenta al día siguiente. El aviso en la app usa además `dedupe_key`. RLS deny-all + `service_role`, registrado como `tenant()`.
+
+**Interruptor:** `management_profiles.data.followUp`, encendido por defecto (un perfil sin el campo cuenta como encendido). Un administrador lo apaga en Gerencia → Configuración → «Seguimiento automático de asuntos». No hay preferencias de avisos por persona en el producto, así que no se consultan.
+
+Código: reglas puras en `packages/agent-tools/src/management/follow-up.ts` (con `follow-up.test.ts`: selección, pasos, escalado, días hábiles y claves), acceso a datos en `follow-up-store.ts`, orquestación en `apps/web/inngest/functions/management-follow-up.ts`, correo en `apps/web/lib/email-templates/management-follow-up.ts`. Prueba SQL: `PGLITE_MODULE=… node packages/agent-tools/src/management/follow-up.sql-test.mjs`.
+
+Pendiente de despliegue: aplicar **0158 después de 0130**, desplegar web y worker. La entrega real de correo (Resend) y el ciclo completo contra una base real no se probaron en esta sesión. Un miembro dado de baja conserva su fila en `users` (0138), así que todavía podría recibir avisos si sigue como responsable; lo mismo ocurre hoy en compromisos.

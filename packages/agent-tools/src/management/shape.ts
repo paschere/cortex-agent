@@ -207,6 +207,12 @@ export const managementProfileSchema = z.object({
   escalationOwnerId: z.string().uuid().nullable(),
   reviewAfterDays: z.number().int().min(1).max(30),
   playbooks: z.array(managementPlaybookSchema).max(20),
+  /**
+   * El seguimiento automático (0158): cada mañana hábil avisa al responsable y
+   * escala lo que sigue sin avance. Encendido por defecto; un perfil guardado
+   * antes de que existiera el campo se lee como encendido (`!== false`).
+   */
+  followUp: z.boolean().default(true),
 });
 export type ManagementProfileData = z.infer<typeof managementProfileSchema>;
 export interface ManagementProfile {
@@ -222,6 +228,7 @@ export const defaultManagementProfile: ManagementProfileData = {
   escalationOwnerId: null,
   reviewAfterDays: 2,
   playbooks: [],
+  followUp: true,
 };
 export interface ManagementSignal {
   key: string;
@@ -374,7 +381,9 @@ export function managementDailyReport(
           .join('\n')
       : 'Sin asuntos que requieran atención según los registros consultados.',
     attention.length > 20 ? `Hay ${attention.length - 20} asuntos adicionales en Gerencia.` : '',
-    `Escalamiento acordado: ${clean(name(profile.escalationOwnerId))}. Este parte identifica al responsable; no envía mensajes a esa persona.`,
+    profile.followUp === false
+      ? `Escalamiento acordado: ${clean(name(profile.escalationOwnerId))}. Este parte identifica al responsable; no envía mensajes a esa persona.`
+      : `Escalamiento acordado: ${clean(name(profile.escalationOwnerId))}. Este parte no envía mensajes; el seguimiento de Gerencia avisa cada mañana hábil a los responsables y escala lo que siga sin avance después de dos días hábiles.`,
     'Consulta Gerencia para revisar evidencia, reasignar o registrar avances. Este parte consulta asuntos compartidos; no ejecuta trámites ni verifica resultados automáticamente.',
   ]
     .filter(Boolean)

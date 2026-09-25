@@ -11,6 +11,7 @@ import { gmailBackfillUser, gmailSweepDispatch, gmailSweepUser } from './gmail-l
 import { goalsWatchDispatch, goalsWatchWorkspace } from './goals-watch';
 import { ingestDocument } from './ingest-document';
 import { learningPassDispatch, learningPassWorkspace } from './learning-pass';
+import { managementFollowUpDispatch, managementFollowUpWorkspace } from './management-follow-up';
 import {
   managementOperationReview,
   managementWorkflowAdvance,
@@ -20,6 +21,7 @@ import { meetingImportSweep } from './meeting-import';
 import { memoryDeriveDispatch, memoryDeriveUser } from './memory-derive';
 import { orchestratorRun } from './orchestrator-run';
 import { orchestratorSweep } from './orchestrator-sweep';
+import { receivablesWatchDispatch, receivablesWatchWorkspace } from './receivables-watch';
 import { reindexEmbeddings } from './reindex-embeddings';
 import { scheduleDispatch } from './schedule-dispatch';
 import { scheduleRun } from './schedule-run';
@@ -27,6 +29,8 @@ import { turnContextPurge, turnLatencyPurge } from './turn-context-purge';
 import { weeklyReportDispatch, weeklyReportWorkspace } from './weekly-report';
 
 export {
+  managementFollowUpDispatch,
+  managementFollowUpWorkspace,
   managementWorkflowDispatch,
   managementWorkflowAdvance,
   managementOperationReview,
@@ -34,6 +38,8 @@ export {
   actionsSweepWorkspace,
   commitmentsWatchDispatch,
   commitmentsWatchWorkspace,
+  receivablesWatchDispatch,
+  receivablesWatchWorkspace,
   goalsWatchDispatch,
   goalsWatchWorkspace,
   gmailBackfillUser,
@@ -61,6 +67,8 @@ export {
   weeklyReportWorkspace,
 };
 export const functions = [
+  managementFollowUpDispatch,
+  managementFollowUpWorkspace,
   activationDispatch,
   activationRun,
   managementWorkflowDispatch,
@@ -73,6 +81,8 @@ export const functions = [
   actionsSweepWorkspace,
   commitmentsWatchDispatch,
   commitmentsWatchWorkspace,
+  receivablesWatchDispatch,
+  receivablesWatchWorkspace,
   goalsWatchDispatch,
   goalsWatchWorkspace,
   gmailBackfillUser,

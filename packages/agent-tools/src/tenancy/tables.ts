@@ -82,6 +82,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   management_operations: tenant(),
   management_operation_events: tenant(),
   management_events: tenant(),
+  // El libro del seguimiento de Gerencia (0158): lleva su propio
+  // organization_id porque el vigilante lo lee por empresa, no por asunto.
+  management_case_notices: tenant(),
   users: tenant(),
   teams: tenant(),
   team_members: tenant(),
@@ -100,6 +103,9 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   // empresa hasta que alguien con permiso lo acepte. Tenant: una propuesta de
   // otra empresa aceptada aquí sería un «acuerdo» ajeno en la boca de Cortex.
   memory_proposals: tenant(),
+  // Migración 0159: qué escalón de mora de qué factura ya se avisó. Tenant: el
+  // vigilante de cartera corre por espacio y sólo reclama avisos del suyo.
+  receivable_notices: tenant(),
   kb_chunks: derived('kb_documents', 'document_id'),
   // Tenant rather than derived even though most rows name a document: the whole
   // point of the table is "what did THIS workspace spend", which has to be
