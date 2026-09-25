@@ -287,6 +287,12 @@ export const TOOL_PHRASE: Record<string, string> = {
   'trackers.query': 'Muéstrame la tabla de ',
   'trackers.remove': 'Borra de la tabla ',
   'trackers.upsert': 'Anota en la tabla ',
+  'views.archive': 'Archiva la vista ',
+  'views.create': 'Hazme una vista con ',
+  'views.get': 'Muéstrame la vista ',
+  'views.list': 'Muéstrame las vistas que tenemos',
+  'views.share': 'Comparte por enlace la vista ',
+  'views.update': 'Cambia la vista ',
 
   'sales.draft_proposal': 'Redáctame una propuesta para ',
 

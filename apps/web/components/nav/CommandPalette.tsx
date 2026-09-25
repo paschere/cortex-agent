@@ -197,6 +197,13 @@ const SECTIONS: Section[] = [
         keywords: 'metas goals objetivos kpi umbral cartera dso cumplimiento indicadores',
       },
       {
+        href: '/views',
+        label: 'Vistas',
+        note: 'Tableros, portales y formularios que se piden escribiendo',
+        keywords:
+          'vistas interfaces tableros dashboard portal formulario pantalla compartir enlace contraseña',
+      },
+      {
         href: '/reports',
         label: 'Informes',
         note: 'Guardados por mes, congelados tal como se calcularon',

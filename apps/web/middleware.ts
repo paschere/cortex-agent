@@ -83,6 +83,17 @@ const PUBLIC_PATHS = [
   // (the link is opened from Claude/email where no cookie exists — see the
   // route's header comment for the trade-off).
   '/api/files/presentation',
+  // El enlace de un informe compartido, con la misma postura que el de la
+  // presentación: se abre desde WhatsApp u Outlook, sin cookie, y el token es
+  // la credencial. Faltaba en esta lista desde la 0079 — el enlace rebotaba a
+  // /login para cualquiera que no fuera del equipo, que era todo su público.
+  '/api/files/report',
+  // Vistas compartidas (migración 0156): la página por token y sus dos
+  // endpoints — desbloquear con contraseña y enviar un formulario. Cada uno
+  // valida el token (y la cookie de desbloqueo cuando la vista la pide); ver
+  // lib/views/public.ts. El resto de /api/views sigue detrás de la sesión.
+  '/v',
+  '/api/views/public',
 ];
 
 interface SessionPayload {

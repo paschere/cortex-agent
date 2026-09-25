@@ -13,6 +13,7 @@ import {
   Inbox,
   Landmark,
   LayoutDashboard,
+  LayoutPanelTop,
   MessageCircle,
   MessageSquare,
   MoreHorizontal,
@@ -274,6 +275,8 @@ export const SECTIONS: NavSection[] = [
       HOME,
       { href: '/goals', label: 'Metas', icon: Target },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
+      // Tableros, portales y formularios armados hablando (migración 0156).
+      { href: '/views', label: 'Vistas', icon: LayoutPanelTop },
       { href: '/prospects', label: 'Outreach', icon: Radar },
     ],
   },

@@ -138,6 +138,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
     tone: 'sky',
     icon: 'Inbox',
   },
+  management: {
+    name: 'Gerencia',
+    blurb:
+      'Los asuntos que Cortex lleva como gerente: el resumen del día, el detalle de cada asunto y el registro de lo que se decidió o se hizo, con su evidencia.',
+    tone: 'primary',
+    icon: 'Target',
+  },
   goals: {
     name: 'Metas',
     blurb:
@@ -256,6 +263,13 @@ export const FAMILY_META: Record<string, FamilyMeta> = {
       'Tableros que esta empresa se inventa: el agente define los campos, llena las filas y las consulta. No sustituye clientes, vencimientos ni cartera.',
     tone: 'emerald',
     icon: 'Table2',
+  },
+  views: {
+    name: 'Vistas',
+    blurb:
+      'Pantallas a la medida sobre las tablas de la empresa: tableros, portales y formularios. Se piden y se cambian escribiendo, y se comparten por enlace o con contraseña.',
+    tone: 'primary',
+    icon: 'SquareKanban',
   },
   vehicles: {
     name: 'Vehículos',
@@ -523,10 +537,12 @@ const FAMILY_GROUP: Record<string, string> = {
   // is asking for a document, whatever the numbers inside it are about.
   reports: 'docs',
   trackers: 'docs',
+  views: 'docs',
   github: 'eng',
   linear: 'eng',
   payroll: 'money',
   goals: 'goals',
+  management: 'goals',
   vehicles: 'vehicles',
   // Sits with the fleet rather than with automation: a SOAT that lapses is a
   // truck off the road, and the person who cares about one cares about the

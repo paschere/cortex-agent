@@ -271,6 +271,12 @@ export const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   trackers_query: { label: 'Consultar la tabla', icon: 'Table2' },
   trackers_upsert: { label: 'Anotar en la tabla', icon: 'Table2' },
   trackers_remove: { label: 'Borrar de la tabla', icon: 'Table2' },
+  views_list: { label: 'Ver las vistas', icon: 'LayoutPanelTop' },
+  views_get: { label: 'Abrir una vista', icon: 'LayoutPanelTop' },
+  views_create: { label: 'Crear una vista', icon: 'LayoutPanelTop' },
+  views_update: { label: 'Cambiar una vista', icon: 'LayoutPanelTop' },
+  views_share: { label: 'Compartir una vista', icon: 'Link2' },
+  views_archive: { label: 'Archivar una vista', icon: 'Archive' },
 
   // Informes.
   reports_generate: { label: 'Armar el informe', icon: 'FileBarChart' },

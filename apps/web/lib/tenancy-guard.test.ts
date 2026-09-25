@@ -63,6 +63,10 @@ const ALLOWED = new Map<string, string>([
     'The same posture as the presentation link, on purpose: a shared report is opened from WhatsApp or Outlook where no Cortex cookie exists, so the token is the credential. The row it finds carries its own workspace; nothing widens from there.',
   ],
   [
+    'lib/views/public.ts',
+    'A shared view (/v/<token>) is opened by people with no Cortex account, so the token is the credential — the same posture as the report link. It is used for exactly two reads: the view row by token and its workspace name. Every row the view then shows is read through getOrgScopedClient(view.organization_id).',
+  ],
+  [
     'inngest/functions/turn-context-purge.ts',
     'Retention sweep over captured turn contexts. It redacts and deletes by date across every workspace, which is the point — a per-tenant sweep would need a tenant to run it, and the rows nobody is looking at are exactly the ones that must still expire.',
   ],

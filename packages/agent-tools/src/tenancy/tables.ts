@@ -425,6 +425,15 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   trackers: tenant(),
   tracker_rows: tenant(),
 
+  // --- Vistas (migración 0156) ------------------------------------------------
+  // Pantallas armadas sobre las tablas de arriba. Tenant las tres. La vista es
+  // la que más se asoma afuera: su token abre filas de la empresa a quien lo
+  // tenga, así que la ÚNICA lectura sin alcance es la búsqueda por token (ver
+  // `findViewByToken`), y todo lo que sigue se lee con el espacio de esa fila.
+  custom_views: tenant(),
+  custom_view_versions: tenant(),
+  custom_view_submissions: tenant(),
+
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first
   // ten minutes. `usage_events` and `usage_counters` are tenant in the strongest
@@ -535,6 +544,9 @@ export type RpcTenancy = 'organization' | 'person' | 'maintenance';
 
 export const RPC_TENANCY: Readonly<Record<string, RpcTenancy>> = {
   activation_commit_run: 'organization',
+  // Migración 0156: gastar el intento de contraseña bajo candado, y limpiarlo.
+  custom_view_reserve_unlock: 'organization',
+  custom_view_clear_unlocks: 'organization',
   activation_automation_claim: 'organization',
   feed_source_signal: 'organization',
   activation_automation_finish: 'organization',
