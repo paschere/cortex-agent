@@ -1,13 +1,21 @@
 import { InviteTeam } from '@/components/team/InviteTeam';
 import { PendingInvitations } from '@/components/team/PendingInvitations';
+import { RemoveMemberDialog } from '@/components/team/RemoveMemberDialog';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Panel, PanelHead } from '@/components/ui/panel';
+import { auth } from '@/lib/auth';
+import { normalizeMembershipRole } from '@/lib/founder-rules';
 import { relativeTime } from '@/lib/relative-time';
 import { requireSession } from '@/lib/session';
 import { mustReadList } from '@/lib/supabase/read';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { listPendingInvitations } from '@/lib/team/invitations';
+import {
+  changeMemberRole,
+  listCompanyMembers,
+  memberIdForDirectoryUser,
+} from '@/lib/team/membership-admin';
 import {
   managerMapOf,
   readSeats,
@@ -18,11 +26,12 @@ import {
 import { clsx } from 'clsx';
 import { ChevronRight, Flag, UserPlus, Users } from 'lucide-react';
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import Link from 'next/link';
 import { absoluteTime } from '../audit/_components/format';
 import { countdown } from './_lib/countdown';
 import { AUDIT_ROW_CAP, WINDOW_DAYS, fetchRosterActivity, rosterFor } from './_lib/user-activity';
-import { cancelInvitationAction } from './actions';
+import { cancelInvitationAction, removeMemberAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,10 +66,29 @@ const ROLE_LABEL: Record<Role, string> = {
 const SELECT_CLASS =
   'rounded-sm border border-border bg-surface px-2 py-1 text-xs text-ink transition-colors focus:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/10';
 
-const ROLE_TAG: Record<Role, string> = {
+const ROLES: readonly Role[] = ['member', 'team_admin', 'org_admin'];
+
+/**
+ * Lo que dice la etiqueta de la fila. Además de los tres roles del directorio,
+ * dos estados que salen de `ba_member`: el fundador (que el directorio llama
+ * `org_admin` igual que a un admin) y quien ya no tiene acceso — su fila del
+ * directorio se conserva a propósito (0138) para que el historial siga
+ * diciendo quién hizo qué.
+ */
+type Standing = Role | 'owner' | 'removed';
+
+const STANDING_LABEL: Record<Standing, string> = {
+  ...ROLE_LABEL,
+  owner: 'Fundador',
+  removed: 'Sin acceso',
+};
+
+const ROLE_TAG: Record<Standing, string> = {
+  owner: 'border-primary/40 bg-primary-soft text-primary-ink',
   org_admin: 'border-primary/30 bg-primary-soft text-primary-ink',
   team_admin: 'border-sky/40 bg-sky-soft text-sky',
   member: 'border-border bg-surface-2 text-ink-muted',
+  removed: 'border-rose/30 bg-rose-soft text-rose',
 };
 
 /**
@@ -71,23 +99,59 @@ const ROLE_TAG: Record<Role, string> = {
  * que uno de los dos se pulse por error y el otro se olvide. Una fila, una
  * decisión, un guardado.
  *
- * Los dos cambios pasan por su propia puerta: el rol por este `update` y el jefe
- * por `setManager`, que es el ÚNICO sitio del producto que escribe
- * `users.manager_id` y el que comprueba que las dos personas son de este espacio
- * y que la línea no se muerde la cola.
+ * EL ROL ANTES NO DURABA. Esto escribía sólo `public.users.role`, y
+ * `resolveSessionDirectory` lo recalcula desde `ba_member.role` en CADA
+ * petición: ascender a alguien a admin de la organización se deshacía en su
+ * siguiente clic, y quitárselo también. Ahora el rol pasa por
+ * `changeMemberRole` (lib/team/membership-admin.ts), que cambia primero la
+ * membresía con better-auth y después el directorio, con las reglas de
+ * lib/founder-rules.ts: un admin no toca a un fundador, nadie deja a la
+ * empresa sin fundador y nadie se cambia el rol a sí mismo desde aquí. Es la
+ * misma función que usa la consola del fundador.
+ *
+ * El jefe sigue por `setManager`, que es el ÚNICO sitio del producto que
+ * escribe `users.manager_id` y el que comprueba que las dos personas son de
+ * este espacio y que la línea no se muerde la cola.
  */
 async function setUserPosition(formData: FormData) {
   'use server';
   const user = await requireSession();
   if (user.role !== 'org_admin') throw new Error('forbidden');
   const userId = formData.get('userId') as string;
-  const role = formData.get('role') as Role;
+  const submitted = formData.get('role');
   const chosen = formData.get('managerId') as string;
   const managerId = !chosen || chosen === NO_MANAGER ? null : chosen;
 
   const sb = getOrgScopedClient(user.organization.id);
-  const { error } = await sb.from('users').update({ role }).eq('id', userId);
-  if (error) throw new Error(`No se pudo cambiar el rol: ${error.message}`);
+  // El desplegable de rol va deshabilitado en las filas de fundadores, en la
+  // propia y en las de quien ya no tiene acceso, y un control deshabilitado no
+  // viaja en el formulario: sin `role`, sólo se guarda el jefe.
+  const role = ROLES.find((candidate) => candidate === submitted) ?? null;
+  if (role) {
+    const { data: current, error } = await sb
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) throw new Error(`No se pudo leer a esa persona: ${error.message}`);
+    if (!current) throw new Error('Esa persona no es de este espacio.');
+    if ((current as { role: Role }).role !== role) {
+      const requestHeaders = await headers();
+      const accountId = (await auth.api.getSession({ headers: requestHeaders }))?.user?.id;
+      const memberId = await memberIdForDirectoryUser(user.organization.id, userId);
+      if (!accountId || !memberId) throw new Error('Esa persona ya no está en la empresa.');
+      const result = await changeMemberRole({
+        organizationId: user.organization.id,
+        workspaceKind: user.organization.kind ?? 'company',
+        actorAccountId: accountId,
+        actorRole: user.organization.role,
+        memberId,
+        next: role,
+        requestHeaders,
+      });
+      if (!result.ok && result.reason !== 'unchanged') throw new Error(result.message);
+    }
+  }
   await setManager(sb, { userId, managerId });
   revalidatePath('/admin/users');
   revalidatePath('/company');
@@ -113,12 +177,25 @@ export default async function UsersPage() {
   const { plan, contractedSeats } = await readWorkspacePlan(sb);
 
   // Cuatro lecturas para toda la pantalla, nunca una por persona. Ver _lib/user-activity.
-  const [roster, activity, seats, invitations] = await Promise.all([
+  const [roster, activity, seats, invitations, memberships] = await Promise.all([
     sb.from('users').select('id, email, name, role, manager_id, created_at').order('created_at'),
     fetchRosterActivity(sb),
     readSeats(sb, user.organization.id, plan, contractedSeats),
     listPendingInvitations(sb, user.organization.id),
+    // La membresía de better-auth de cada fila: dice quién es fundador y quién
+    // ya salió, que el directorio solo no sabe decir.
+    listCompanyMembers([user.organization.id]),
   ]);
+  const membershipOf = new Map(
+    memberships.map((row) => [row.email.toLowerCase(), normalizeMembershipRole(row.role)]),
+  );
+  const standingOf = (u: User): Standing => {
+    const membership = membershipOf.get(u.email.toLowerCase());
+    if (!membership) return 'removed';
+    return membership === 'owner' ? 'owner' : u.role;
+  };
+  const actorIsOwner = user.organization.role === 'owner';
+  const companyName = user.organization.name;
 
   // `mustReadList` y no `?? []`: con el estado vacío reescrito abajo, una base
   // caída diría «todavía no hay nadie registrado» en un espacio lleno de gente.
@@ -235,6 +312,13 @@ export default async function UsersPage() {
               <tbody>
                 {users.map((u) => {
                   const a = rosterFor(activity, u.id);
+                  const standing = standingOf(u);
+                  const self = u.id === user.id;
+                  // Fundadores, uno mismo y quien ya salió no cambian de rol
+                  // aquí; ver la cabecera de `setUserPosition`.
+                  const roleLocked = self || standing === 'owner' || standing === 'removed';
+                  const mayRemove =
+                    !self && standing !== 'removed' && (standing !== 'owner' || actorIsOwner);
                   return (
                     <tr key={u.id} className="border-t border-border hover:bg-surface-2/40">
                       <td className="px-4 py-3">
@@ -259,10 +343,10 @@ export default async function UsersPage() {
                         <span
                           className={clsx(
                             'rounded-pill border px-2 py-0.5 text-micro font-semibold',
-                            ROLE_TAG[u.role],
+                            ROLE_TAG[standingOf(u)],
                           )}
                         >
-                          {ROLE_LABEL[u.role]}
+                          {STANDING_LABEL[standingOf(u)]}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
@@ -302,35 +386,54 @@ export default async function UsersPage() {
                         {new Date(u.created_at).toLocaleDateString('es-CO')}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <form action={setUserPosition} className="flex items-center gap-2">
-                          <input type="hidden" name="userId" value={u.id} />
-                          <select
-                            name="role"
-                            defaultValue={u.role}
-                            aria-label={`Rol de ${label(u)}`}
-                            className={SELECT_CLASS}
-                          >
-                            <option value="member">{ROLE_LABEL.member}</option>
-                            <option value="team_admin">{ROLE_LABEL.team_admin}</option>
-                            <option value="org_admin">{ROLE_LABEL.org_admin}</option>
-                          </select>
-                          <select
-                            name="managerId"
-                            defaultValue={u.manager_id ?? NO_MANAGER}
-                            aria-label={`A quién le responde ${label(u)}`}
-                            className={SELECT_CLASS}
-                          >
-                            <option value={NO_MANAGER}>A nadie</option>
-                            {options(u).map((other) => (
-                              <option key={other.id} value={other.id}>
-                                {label(other)}
-                              </option>
-                            ))}
-                          </select>
-                          <Button type="submit" variant="outline">
-                            Guardar
-                          </Button>
-                        </form>
+                        <div className="flex items-center gap-2">
+                          <form action={setUserPosition} className="flex items-center gap-2">
+                            <input type="hidden" name="userId" value={u.id} />
+                            <select
+                              name="role"
+                              defaultValue={standing === 'owner' ? 'owner' : u.role}
+                              disabled={roleLocked}
+                              aria-label={`Rol de ${label(u)}`}
+                              title={
+                                self
+                                  ? 'Tu propio rol lo cambia otro administrador'
+                                  : standing === 'owner'
+                                    ? 'La propiedad de la empresa no se cambia desde aquí'
+                                    : undefined
+                              }
+                              className={clsx(SELECT_CLASS, 'disabled:opacity-60')}
+                            >
+                              {standing === 'owner' && <option value="owner">Fundador</option>}
+                              <option value="member">{ROLE_LABEL.member}</option>
+                              <option value="team_admin">{ROLE_LABEL.team_admin}</option>
+                              <option value="org_admin">{ROLE_LABEL.org_admin}</option>
+                            </select>
+                            <select
+                              name="managerId"
+                              defaultValue={u.manager_id ?? NO_MANAGER}
+                              aria-label={`A quién le responde ${label(u)}`}
+                              className={SELECT_CLASS}
+                            >
+                              <option value={NO_MANAGER}>A nadie</option>
+                              {options(u).map((other) => (
+                                <option key={other.id} value={other.id}>
+                                  {label(other)}
+                                </option>
+                              ))}
+                            </select>
+                            <Button type="submit" variant="outline">
+                              Guardar
+                            </Button>
+                          </form>
+                          {mayRemove && (
+                            <RemoveMemberDialog
+                              compact
+                              personLabel={label(u)}
+                              companyName={companyName}
+                              onConfirm={removeMemberAction.bind(null, u.id)}
+                            />
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

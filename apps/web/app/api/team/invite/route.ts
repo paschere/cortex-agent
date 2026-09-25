@@ -1,7 +1,5 @@
-import { auth } from '@/lib/auth';
 import { requireSession } from '@/lib/session';
-import { getOrgScopedClient } from '@/lib/supabase/service';
-import { readSeats, readWorkspacePlan } from '@cortex/agent-tools';
+import { inviteToCompany } from '@/lib/team/membership-admin';
 import { headers } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -65,51 +63,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const db = getOrgScopedClient(user.organization.id);
-  const { plan, contractedSeats } = await readWorkspacePlan(db);
-  const seats = await readSeats(db, user.organization.id, plan, contractedSeats);
-
-  if (seats.full) {
-    return NextResponse.json(
-      {
-        error: `Tu plan ${plan.name} llega hasta ${seats.maximum} personas y ya están ocupadas (${seats.members} adentro${seats.pending > 0 ? ` y ${seats.pending} por aceptar` : ''}). Amplía el plan en Plan y consumo, o cancela una invitación pendiente.`,
-        reason: 'plan_limit',
-        meter: 'seats',
-      },
-      { status: 402 },
-    );
-  }
-
-  try {
-    const invitation = await auth.api.createInvitation({
-      body: {
-        email: parsed.data.email,
-        role: parsed.data.role,
-        // Stated rather than left to the session's active workspace. The two are
-        // the same value here — `requireSession` resolved it — but naming it
-        // means a stale `activeOrganizationId` cannot send an invitation into a
-        // workspace this request was not acting in.
-        organizationId: user.organization.id,
-        // Re-inviting somebody whose first email got lost should send another
-        // one, not fail with "ya está invitado". The seat check above already
-        // counted that pending invitation, so this cannot buy a second seat.
-        resend: true,
-      },
-      headers: await headers(),
-    });
-    return NextResponse.json({ ok: true, id: (invitation as { id?: string })?.id ?? null });
-  } catch (err) {
-    // better-auth's own refusals (already a member, already invited) carry a
-    // usable sentence; anything else gets a generic one rather than a stack.
-    const message = err instanceof Error ? err.message : '';
-    return NextResponse.json(
-      {
-        error:
-          message && message.length < 200
-            ? message
-            : 'No se pudo enviar la invitación. Inténtalo de nuevo.',
-      },
-      { status: 400 },
-    );
-  }
+  // El tope de asientos y la llamada a better-auth viven en
+  // lib/team/membership-admin.ts, compartidos con la consola del fundador, que
+  // invita a varias empresas a la vez. Este comentario de cabecera sigue
+  // siendo el porqué; aquella función es el cómo.
+  const result = await inviteToCompany({
+    organizationId: user.organization.id,
+    email: parsed.data.email,
+    role: parsed.data.role,
+    requestHeaders: await headers(),
+  });
+  if (result.ok) return NextResponse.json({ ok: true, id: result.id ?? null });
+  return NextResponse.json(
+    result.reason === 'plan_limit'
+      ? { error: result.message, reason: 'plan_limit', meter: 'seats' }
+      : { error: result.message },
+    { status: result.status },
+  );
 }

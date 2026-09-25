@@ -15,6 +15,17 @@ describe('workspace request context', () => {
       expect(canonicalWorkspaceLocation(headers, 'personal')).toBeNull();
     }
   });
+  it('treats the founder console and its APIs as global, without inheriting a tab company', () => {
+    const input = new Headers({ referer: 'https://app.test/chat?workspace=acme' });
+    for (const path of ['/overview/people', '/overview/companies/acme', '/api/founder/x']) {
+      const headers = workspaceRequestHeaders(new URL(path, 'https://app.test'), input);
+      expect(requestWorkspaceId(headers)).toBeNull();
+      expect(canonicalWorkspaceLocation(headers, 'acme')).toBeNull();
+    }
+    // A lookalike prefix is not global.
+    const lookalike = workspaceRequestHeaders(new URL('https://app.test/overviewx'), input);
+    expect(requestWorkspaceId(lookalike)).toBe('acme');
+  });
   it('keeps two tabs pinned despite a different account default', () => {
     for (const id of ['company-a', 'company-b']) {
       const headers = workspaceRequestHeaders(

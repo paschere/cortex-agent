@@ -14,6 +14,20 @@ const GLOBAL_PATHS = new Set([
   '/api/company-groups',
 ]);
 
+/**
+ * Prefijos globales: la consola del fundador (/overview/people,
+ * /overview/companies/[id]) actúa sobre varias empresas a la vez y revalida la
+ * propiedad de CADA una en el servidor, así que no hereda —ni debe heredar— la
+ * empresa de la pestaña. `/api/founder/` queda reservado para sus APIs.
+ */
+const GLOBAL_PREFIXES = ['/overview/', '/api/founder/'];
+
+export function isGlobalPath(pathname: string): boolean {
+  return (
+    GLOBAL_PATHS.has(pathname) || GLOBAL_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  );
+}
+
 export function workspaceHref(workspaceId: string, href: string): string {
   if (!href.startsWith('/') || href.startsWith('//')) throw new Error('Expected an internal path');
   const url = new URL(href, 'https://cortex.invalid');
@@ -37,7 +51,7 @@ export function canonicalWorkspaceLocation(
   const path = headers.get('x-cortex-request-path');
   if (!path || !path.startsWith('/') || path.startsWith('//')) return null;
   const url = new URL(path, 'https://cortex.invalid');
-  if (GLOBAL_PATHS.has(url.pathname)) return null;
+  if (isGlobalPath(url.pathname)) return null;
   if (url.searchParams.has(WORKSPACE_QUERY)) return null;
   return workspaceHref(workspaceId, path);
 }
@@ -45,7 +59,7 @@ export function canonicalWorkspaceLocation(
 /** Explicit URL wins; a same-origin referrer retains context for Next/API requests. */
 export function workspaceRequestHeaders(url: URL, input: Headers): Headers {
   const result = new Headers(input);
-  const global = GLOBAL_PATHS.has(url.pathname);
+  const global = isGlobalPath(url.pathname);
   let workspace: string | null = url.searchParams.get(WORKSPACE_QUERY);
   if (workspace === null) workspace = input.get(WORKSPACE_HEADER);
   if (workspace === null) {

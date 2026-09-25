@@ -97,3 +97,36 @@ export async function removeCompanyFromGroup(
   );
   return result.rowCount === 1;
 }
+
+/**
+ * Renombrar un grupo. Sólo quien lo administra (`company_group_admins`), en la
+ * misma sentencia: un id de grupo ajeno no coincide con ninguna fila y la
+ * respuesta es `false`, igual que si no existiera.
+ */
+export async function renameCompanyGroup(accountId: string, groupId: string, name: string) {
+  const result = await pool.query(
+    `update public.company_groups g set name = $3, updated_at = now()
+      where g.id = $1
+        and exists (select 1 from public.company_group_admins a
+                     where a.group_id = g.id and a.account_id = $2)`,
+    [groupId, accountId, name.trim()],
+  );
+  return result.rowCount === 1;
+}
+
+/**
+ * Borrar un grupo. Las empresas NO se tocan: un grupo es navegación, nunca un
+ * límite de permisos (ver 0140), así que borrarlo sólo las devuelve a «sin
+ * grupo». Las filas de administradores y de empresas caen por `on delete
+ * cascade`.
+ */
+export async function deleteCompanyGroup(accountId: string, groupId: string) {
+  const result = await pool.query(
+    `delete from public.company_groups g
+      where g.id = $1
+        and exists (select 1 from public.company_group_admins a
+                     where a.group_id = g.id and a.account_id = $2)`,
+    [groupId, accountId],
+  );
+  return result.rowCount === 1;
+}

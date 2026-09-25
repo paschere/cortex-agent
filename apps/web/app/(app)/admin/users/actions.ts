@@ -16,10 +16,13 @@
  * `cancelInvitation` no la encuentra porque el espacio va en el WHERE.
  */
 
+import { auth } from '@/lib/auth';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { cancelInvitation } from '@/lib/team/invitations';
+import { memberIdForDirectoryUser, removeCompanyMember } from '@/lib/team/membership-admin';
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 
 export interface CancelResult {
   ok: boolean;
@@ -45,6 +48,44 @@ export async function cancelInvitationAction(invitationId: string): Promise<Canc
 
   // El asiento vuelve a estar libre, y la cifra de asientos sale en las dos
   // pantallas: la de personas y la del plan.
+  revalidatePath('/admin/users');
+  revalidatePath('/plan');
+  return { ok: true };
+}
+
+/**
+ * Retirar a alguien de ESTE espacio.
+ *
+ * Lo único que llega de afuera es el id de su fila en el directorio. El puente a
+ * `ba_member` se hace dentro de la empresa de la sesión
+ * (`memberIdForDirectoryUser`), así que un id de otra empresa no encuentra a
+ * nadie. Las reglas —último fundador, un admin no retira a un fundador,
+ * espacio personal— son las de lib/founder-rules.ts, las mismas que usa la
+ * consola del fundador.
+ */
+export async function removeMemberAction(directoryUserId: string): Promise<CancelResult> {
+  const user = await requireSession();
+  if (user.role !== 'org_admin') {
+    return { ok: false, error: 'Solo quien administra el espacio puede retirar a alguien.' };
+  }
+  if (!directoryUserId) return { ok: false, error: 'Falta la persona.' };
+  const requestHeaders = await headers();
+  const accountId = (await auth.api.getSession({ headers: requestHeaders }))?.user?.id;
+  if (!accountId) return { ok: false, error: 'Tu sesión venció. Vuelve a entrar.' };
+
+  const memberId = await memberIdForDirectoryUser(user.organization.id, directoryUserId);
+  if (!memberId) {
+    return { ok: false, error: 'Esa persona ya no está en la empresa. Recarga la pantalla.' };
+  }
+  const result = await removeCompanyMember({
+    organizationId: user.organization.id,
+    workspaceKind: user.organization.kind ?? 'company',
+    actorAccountId: accountId,
+    actorRole: user.organization.role,
+    memberId,
+    requestHeaders,
+  });
+  if (!result.ok) return { ok: false, error: result.message };
   revalidatePath('/admin/users');
   revalidatePath('/plan');
   return { ok: true };
