@@ -179,7 +179,10 @@ export const BRAIN: NavItem = { href: '/kb', label: 'Brain Knowledge', icon: Boo
 export const FEED: NavItem = { href: '/feed', label: 'Feed', icon: Inbox };
 export const MANAGEMENT: NavItem = { href: '/management', label: 'Gerencia', icon: Briefcase };
 export const SETUP: NavItem = { href: '/onboarding', label: 'Puesta en marcha', icon: Settings };
-export const PINNED: NavItem[] = [SETUP, MANAGEMENT, CHAT, FEED, CALLS, BRAIN];
+/** Tableros, portales y formularios armados hablando (migración 0156). Fija
+ * junto a Chat y Gerencia: enterrada en «Herramientas» nadie la encontraba. */
+export const VIEWS: NavItem = { href: '/views', label: 'Vistas', icon: LayoutPanelTop };
+export const PINNED: NavItem[] = [SETUP, MANAGEMENT, CHAT, VIEWS, FEED, CALLS, BRAIN];
 
 const QUEUE_ICON: Record<WaitingQueue, NavIcon> = {
   approvals: Inbox,
@@ -275,8 +278,6 @@ export const SECTIONS: NavSection[] = [
       HOME,
       { href: '/goals', label: 'Metas', icon: Target },
       { href: '/reports', label: 'Informes', icon: FileBarChart },
-      // Tableros, portales y formularios armados hablando (migración 0156).
-      { href: '/views', label: 'Vistas', icon: LayoutPanelTop },
       { href: '/prospects', label: 'Outreach', icon: Radar },
     ],
   },

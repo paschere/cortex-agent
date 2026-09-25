@@ -88,6 +88,7 @@ describe('el rail', () => {
       '/onboarding',
       '/management',
       '/chat',
+      '/views',
       '/feed',
       '/calls',
       '/kb',

@@ -66,7 +66,7 @@ function Navigation({
     { href: '/chat/global', label: 'Chat multiempresa', icon: MessagesSquare },
     { href: '/notifications', label: 'Notificaciones', icon: Bell },
   ];
-  const daily = rail.pinned.filter((item) => ['/chat', '/management'].includes(item.href));
+  const daily = rail.pinned.filter((item) => ['/chat', '/management', '/views'].includes(item.href));
   const groups: { id: string; label: string; icon: NavItem['icon']; items: NavItem[] }[] = [
     { id: 'pending', label: 'Pendientes', icon: ListTodo, items: rail.waiting },
     {
