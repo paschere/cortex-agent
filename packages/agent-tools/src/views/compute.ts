@@ -8,7 +8,7 @@ import {
   type ViewFilter,
   type ViewSpec,
   fieldType,
-  isPlatformSourceId,
+  isReadOnlySource,
 } from './spec';
 
 /**
@@ -382,10 +382,10 @@ function computeBlock(
   const src = sources.get(block.tracker);
   if (!src) return problem(block, `La tabla «${block.tracker}» ya no existe en este espacio.`);
   if (src.blocked) return problem(block, src.blocked);
-  // Un formulario escribe filas; una fuente de la plataforma no las recibe. El
+  // Un formulario escribe filas; una fuente de la plataforma o del Feed no las recibe. El
   // guardado ya lo rechaza (`checkSpecAgainst`), esto cubre un spec que llegue
   // por otro camino: se pinta el aviso, nunca un formulario que no puede enviar.
-  if (block.type === 'form' && isPlatformSourceId(block.tracker))
+  if (block.type === 'form' && isReadOnlySource(block.tracker))
     return problem(
       block,
       `${src.tracker.name} es de sólo lectura: un formulario no puede escribir ahí.`,

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { registerTool } from '../index';
 import { PLATFORM_SOURCES, platformSourcesGrammar } from './sources';
-import { BLOCK_LABEL, viewSpecSchema } from './spec';
+import { BLOCK_LABEL, trackersOf, viewSpecSchema } from './spec';
 import {
   archiveView,
   createView,
@@ -43,11 +43,12 @@ filters: [{field, op, value?}] with op eq|neq|contains|gt|gte|lt|lte|empty|not_e
 Interactive (custom tables only, never platform sources): table {editable?: [field keys editable in place], actions?: [row buttons]}; board {draggable?: true (drag cards between columns to change the select field), actions?}. Row button: {id, label (≤32), kind: "set_field" (with field + value, e.g. estado=Pagada; select values must be options) | "notify" (pings the view owner and admins with the row name), confirm?: bool, tone?}. Any editable/draggable/button needs spec.editing: "team" (only the workspace, inside the app) or "public" (also whoever has the link); default "off".
 Live: spec.refreshSeconds 0|10|30|60 (default 30). Alerts: spec.alerts: [{id, source: table slug or platform source id, filters?, message?, sound?: bool (default true), desktop?: bool, bell?: bool (bell notification to the view owner when a row arrives through this view's form)}] — fires when a new row matching the filters appears while the view is open.
 Put the headline metrics first as thirds, then charts as halves, then the full-width table.
-Built-in platform sources (read-only, live company data; money fields are COP only, other currencies go to the *_otra_moneda number field). "Ventas" means cortex.ventas (confirmed sales invoices; cartera = its saldo/estado):
-${platformSourcesGrammar()}`;
+Built-in platform sources (read-only, live company data; money fields are COP only, other currencies go to the *_otra_moneda number field). "Ventas" means cortex.ventas (confirmed sales invoices; cartera = its saldo/estado). PERSONAL sources read only the rows of whoever opens the view (their own activations, operations, routines):
+${platformSourcesGrammar()}
+Feed tables (read-only, PRIVATE to the person who added them): feed.<attachment uuid>.<sheet index from 0> (a fixed Feed capture), feedsrc.<connected source uuid>.<sheet index> (always the latest sync of a connected Feed source; the open view refreshes by itself when the source syncs), feedview.<prepared view uuid>. Fields are the sheet headers without accents in lower_snake_case. Only the owner sees the rows; teammates see a notice on those blocks, and a view using them can never be shared by link. Prefer designing Feed views from /views, which lists the person's Feed tables with their fields.`;
 
 const INTERNAL_SOURCE_IDS = [...PLATFORM_SOURCES.values()]
-  .filter((s) => s.sensitivity === 'internal')
+  .filter((s) => s.sensitivity !== 'shareable')
   .map((s) => s.id)
   .join(', ');
 
@@ -137,7 +138,7 @@ ${SPEC_GRAMMAR}`,
   outputSchema: z.object({ view: summarySchema, markdown: z.string() }),
   rateLimit: { perMinute: 10 },
   handler: async (input, ctx) => {
-    const spec = await validateSpec(ctx.db, input.spec);
+    const spec = await validateSpec(ctx.db, input.spec, { viewerId: ctx.userId });
     let view = await createView(ctx.db, {
       name: input.name,
       description: input.description,
@@ -178,7 +179,12 @@ ${SPEC_GRAMMAR}`,
     const current = await mustGetView(ctx.db, input.view);
     let view = current;
     if (input.spec || input.name || input.description !== undefined) {
-      const spec = input.spec ? await validateSpec(ctx.db, input.spec) : undefined;
+      const spec = input.spec
+        ? await validateSpec(ctx.db, input.spec, {
+            viewerId: ctx.userId,
+            keep: trackersOf(current.spec),
+          })
+        : undefined;
       view = await updateView(ctx.db, current.id, {
         name: input.name,
         description: input.description,
@@ -199,7 +205,7 @@ ${SPEC_GRAMMAR}`,
 
 export const viewsShare = registerTool({
   id: 'views.share',
-  description: `Open or close the outside door of a custom view. visibility "link" gives a public URL anyone with it can open without an account (optionally expiring after N days); "workspace" closes it again and kills the old link. Password protection cannot be set from chat: tell the person to set it from the view screen (Compartir). A view that uses an INTERNAL platform source (${INTERNAL_SOURCE_IDS}) can never be shared by link or password; say so instead of trying. Always requires the person's explicit approval, because a link exposes the table rows the view shows.`,
+  description: `Open or close the outside door of a custom view. visibility "link" gives a public URL anyone with it can open without an account (optionally expiring after N days); "workspace" closes it again and kills the old link. Password protection cannot be set from chat: tell the person to set it from the view screen (Compartir). A view that uses an INTERNAL or PERSONAL platform source (${INTERNAL_SOURCE_IDS}) or any Feed table (feed.*, feedsrc.*, feedview.*) can never be shared by link or password; say so instead of trying. Always requires the person's explicit approval, because a link exposes the table rows the view shows.`,
   inputSchema: z.object({
     view: z.string().trim().min(1).max(80).describe('Slug or id of the view.'),
     visibility: z.enum(['workspace', 'link']),

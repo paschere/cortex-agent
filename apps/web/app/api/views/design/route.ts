@@ -21,7 +21,9 @@ import {
   loadViewSources,
   queryRows,
   readPlatformSource,
+  trackersOf,
   viewCatalog,
+  viewSpecSchema,
 } from '@cortex/agent-tools';
 import { generateObject } from 'ai';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -61,22 +63,40 @@ export async function POST(req: NextRequest) {
     if (parsed.data.viewId && !current)
       return NextResponse.json({ error: 'Esa vista ya no existe.' }, { status: 404 });
 
-    const full = await viewCatalog(db);
-    // Hasta 20 tablas del espacio y todas las fuentes de la plataforma. Las
-    // muestras de una fuente de la plataforma son tres filas leídas por su
-    // propio lector; si una no contesta, va sin muestra y el diseño sigue.
+    // Lo que la vista ya usa: el borrador que se está afinando o la versión
+    // guardada. Una tabla del Feed de esa lista que esta persona no puede leer
+    // entra como `unavailable` (se conserva sin abrirla).
+    const draftSpec = viewSpecSchema.safeParse(parsed.data.draft?.spec);
+    const keep = draftSpec.success
+      ? trackersOf(draftSpec.data)
+      : current
+        ? trackersOf(current.spec)
+        : [];
+    const full = await viewCatalog(db, { viewerId: user.id, keep });
+    // Hasta 20 tablas del espacio, todas las fuentes de la plataforma y las
+    // tablas del Feed de ESTA persona. Las muestras de una fuente de la
+    // plataforma son tres filas leídas por su propio lector (las personales,
+    // con las filas de quien diseña); si una no contesta, va sin muestra y el
+    // diseño sigue. Las del Feed ya traen su muestra del listado.
     const entries = [
       ...full.filter((t) => t.kind === 'tracker').slice(0, 20),
       ...full.filter((t) => t.kind === 'platform'),
+      ...full.filter((t) => t.kind === 'feed'),
     ];
     const catalog: DesignCatalogEntry[] = await Promise.all(
       entries.map(async (t) => {
         const rows =
-          t.kind === 'platform'
-            ? ((await readPlatformSource(db, t.slug, 3).catch(() => null))?.rows ?? [])
-            : t.rowCount
-              ? await queryRows(db, { trackerId: t.id, limit: 3 })
-              : [];
+          t.kind === 'feed'
+            ? (t.sample ?? [])
+            : t.kind === 'platform'
+              ? ((
+                  await readPlatformSource(db, t.slug, 3, undefined, { viewerId: user.id }).catch(
+                    () => null,
+                  )
+                )?.rows ?? [])
+              : t.rowCount
+                ? await queryRows(db, { trackerId: t.id, limit: 3 })
+                : [];
         return {
           slug: t.slug,
           name: t.name,
@@ -86,6 +106,7 @@ export async function POST(req: NextRequest) {
           rowCount: t.rowCount,
           fields: t.fields,
           sample: sampleOf(rows.map((r) => ({ label: r.label, ...r.values }))),
+          ...(t.opaque ? { unavailable: true } : {}),
         };
       }),
     );
@@ -143,7 +164,7 @@ export async function POST(req: NextRequest) {
       });
 
     const draft = checked.result;
-    const sources = await loadViewSources(db, draft.spec);
+    const sources = await loadViewSources(db, draft.spec, { viewerId: user.id });
     for (const t of draft.newTrackers)
       if (!sources.has(t.slug))
         sources.set(t.slug, { tracker: t, rows: [], truncated: false } satisfies ViewSource);

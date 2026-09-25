@@ -8,6 +8,12 @@ import { rowLabel } from '../trackers/schema';
 import { TRACKER_COLUMNS, type TrackerRow, listTrackers, shapeValues } from '../trackers/store';
 import type { ViewRow, ViewSource } from './compute';
 import {
+  FEED_NO_VIEWER_MESSAGE,
+  FEED_PUBLIC_MESSAGE,
+  listFeedSources,
+  readFeedSource,
+} from './feed-sources';
+import {
   PLATFORM_SOURCES,
   type SourceSensitivity,
   internalShareRefusal,
@@ -17,7 +23,9 @@ import {
   type CatalogTracker,
   type ViewSpec,
   checkSpecAgainst,
+  isFeedSourceId,
   isPlatformSourceId,
+  isReadOnlySource,
   slugify,
   trackersOf,
   viewSpecSchema,
@@ -38,6 +46,13 @@ import {
  * usa una fuente `internal` no abre su puerta de afuera (`setViewAccess`,
  * `updateView`), y la página pública no la lee aunque la tenga
  * (`loadViewSources` con `audience: 'public'`).
+ *
+ * FUENTES DE CADA PERSONA. Las `personal` de la plataforma (activaciones,
+ * seguimientos, operaciones, rutinas) y las tablas del Feed (feed-sources.ts)
+ * dependen de QUIÉN MIRA: se leen con `viewerId` y cada quien ve lo suyo (en
+ * el Feed, sólo el dueño ve la tabla). Sin `viewerId` —el enlace público,
+ * cualquier llamador que no lo pase— no se leen: salen como aviso. Tampoco
+ * abren la puerta de afuera, igual que las internas.
  */
 
 // El hash de la contraseña NO está en esta lista: ninguna lectura normal lo
@@ -161,18 +176,65 @@ export function shareIsOpen(row: Pick<CustomViewRow, 'share_token' | 'share_expi
 // ---------------------------------------------------------------------------
 
 export interface ViewCatalogEntry extends CatalogTracker {
-  /** El id de la tabla; en una fuente de la plataforma, su mismo `cortex.*`. */
+  /** El id de la tabla; en una fuente de la plataforma o del Feed, su mismo id. */
   id: string;
   description: string;
   /** Nulo en las fuentes de la plataforma: contarlas cuesta una lectura por fuente. */
   rowCount: number | null;
-  kind: 'tracker' | 'platform';
+  kind: 'tracker' | 'platform' | 'feed';
   sensitivity: SourceSensitivity;
+  /** Sólo en las del Feed: hasta tres filas ya leídas (el diseñador no las relee). */
+  sample?: ViewRow[];
 }
 
-/** Las tablas del espacio y, después, las fuentes de la plataforma (sin contar filas). */
-export async function viewCatalog(db: SupabaseClient): Promise<ViewCatalogEntry[]> {
+export interface ViewCatalogOptions {
+  /** Quién pregunta. Sin él, el catálogo no trae tablas del Feed. */
+  viewerId?: string | null;
+  /**
+   * Las fuentes que la vista YA usa (el spec guardado o el borrador). Una
+   * tabla del Feed de esa lista que quien pregunta no puede leer entra como
+   * `opaque`: se conserva sin comprobar campos (ver spec.ts, CatalogTracker).
+   */
+  keep?: string[];
+  /**
+   * Resolver sólo estas tablas del Feed en vez de listar el Feed entero. Es lo
+   * que usa `validateSpec`: para comprobar un spec basta leer lo que nombra.
+   */
+  feedRefs?: string[];
+}
+
+/**
+ * Las tablas del espacio, las fuentes de la plataforma (sin contar filas) y
+ * las tablas del Feed de quien pregunta (sólo las suyas).
+ */
+export async function viewCatalog(
+  db: SupabaseClient,
+  options: ViewCatalogOptions = {},
+): Promise<ViewCatalogEntry[]> {
   const rows = await listTrackers(db, 40);
+  const feed = options.viewerId
+    ? await feedCatalog(db, options.viewerId, options.feedRefs).catch(
+        // Un Feed que no contesta no impide diseñar sobre lo demás.
+        () => [] as ViewCatalogEntry[],
+      )
+    : [];
+  const seen = new Set(feed.map((f) => f.slug));
+  const opaque = (options.keep ?? [])
+    .filter((ref) => isFeedSourceId(ref) && !seen.has(ref))
+    .map(
+      (ref): ViewCatalogEntry => ({
+        id: ref,
+        slug: ref,
+        name: 'Tabla del Feed no disponible para ti',
+        description:
+          'Tabla del Feed privado de otra persona, o ya vencida. Se conserva tal cual; no la cambies.',
+        fields: [],
+        rowCount: null,
+        kind: 'feed',
+        sensitivity: 'personal',
+        opaque: true,
+      }),
+    );
   return [
     ...rows.map(
       (t): ViewCatalogEntry => ({
@@ -198,7 +260,46 @@ export async function viewCatalog(db: SupabaseClient): Promise<ViewCatalogEntry[
         sensitivity: s.sensitivity,
       }),
     ),
+    ...feed,
+    ...opaque,
   ];
+}
+
+async function feedCatalog(
+  db: SupabaseClient,
+  viewerId: string,
+  only?: string[],
+): Promise<ViewCatalogEntry[]> {
+  const entry = (
+    id: string,
+    name: string,
+    description: string,
+    fields: CatalogTracker['fields'],
+    rowCount: number | null,
+    sample: ViewRow[],
+  ): ViewCatalogEntry => ({
+    id,
+    slug: id,
+    name,
+    description,
+    fields,
+    rowCount,
+    kind: 'feed',
+    sensitivity: 'personal',
+    sample,
+  });
+  if (only) {
+    const refs = [...new Set(only.filter(isFeedSourceId))];
+    const read = await Promise.all(
+      refs.map(async (ref) => ({ ref, r: await readFeedSource(db, ref, viewerId, 3) })),
+    );
+    return read.flatMap(({ ref, r }) =>
+      r.ok ? [entry(ref, r.name, r.description, r.fields, null, r.rows.slice(0, 3))] : [],
+    );
+  }
+  return (await listFeedSources(db, viewerId)).map((f) =>
+    entry(f.id, f.name, f.description, f.fields, f.rowCount, f.sample),
+  );
 }
 
 function adaptEntry(row: Record<string, unknown>): ViewRow {
@@ -217,16 +318,26 @@ function adaptEntry(row: Record<string, unknown>): ViewRow {
 
 export const INTERNAL_SOURCE_BLOCKED =
   'Esta información es interna del equipo y no se muestra fuera de Cortex.';
+export const PERSONAL_SOURCE_BLOCKED =
+  'Esta información es de cada persona y no se muestra fuera de Cortex.';
+export const PERSONAL_SOURCE_NO_VIEWER =
+  'Esta información es de cada persona: abre la vista dentro de Cortex para ver la tuya.';
 
 export interface LoadViewSourcesOptions {
   /**
-   * `public` para la página de afuera (/v/<token>): las fuentes `internal` NO
-   * SE LEEN y sus bloques se pintan como aviso. Es la segunda llave: la
-   * primera es que `setViewAccess` no deja compartir una vista así; ésta
-   * cubre la vista que quedó compartida por otro camino (una versión vieja,
-   * una fuente que cambió de sensibilidad en un despliegue).
+   * `public` para la página de afuera (/v/<token>): las fuentes `internal`,
+   * las `personal` y las del Feed NO SE LEEN y sus bloques se pintan como
+   * aviso. Es la segunda llave: la primera es que `setViewAccess` no deja
+   * compartir una vista así; ésta cubre la vista que quedó compartida por
+   * otro camino (una versión vieja, una fuente que cambió de sensibilidad en
+   * un despliegue).
    */
   audience?: 'team' | 'public';
+  /**
+   * Quién mira (dentro de la app). Las fuentes `personal` leen SUS filas; las
+   * del Feed sólo se leen si es su dueño. Sin él, ninguna de las dos se lee.
+   */
+  viewerId?: string | null;
 }
 
 /** Lee las tablas y fuentes que el spec nombra y sus filas, hasta el tope. */
@@ -238,8 +349,34 @@ export async function loadViewSources(
   const refs = trackersOf(spec);
   const sources = new Map<string, ViewSource>();
   if (!refs.length) return sources;
-  const slugs = refs.filter((r) => !isPlatformSourceId(r));
+  const slugs = refs.filter((r) => !isReadOnlySource(r));
   const platform = refs.filter(isPlatformSourceId);
+  const feed = refs.filter(isFeedSourceId);
+  const viewerId = options.audience === 'public' ? null : (options.viewerId ?? null);
+
+  await Promise.all(
+    feed.map(async (id) => {
+      // Sin nombre ni campos: lo que no se leyó no puede describirse.
+      const tracker = { slug: id, name: 'Tabla del Feed', fields: [] };
+      const blocked = (message: string) =>
+        sources.set(id, { tracker, rows: [], truncated: false, blocked: message });
+      if (options.audience === 'public') return blocked(FEED_PUBLIC_MESSAGE);
+      if (!viewerId) return blocked(FEED_NO_VIEWER_MESSAGE);
+      try {
+        const read = await readFeedSource(db, id, viewerId, VIEW_ROW_CAP);
+        if (!read.ok) return blocked(read.message);
+        sources.set(id, {
+          tracker: { slug: id, name: read.name, fields: read.fields },
+          rows: read.rows.slice(0, VIEW_ROW_CAP),
+          truncated: read.truncated,
+        });
+      } catch {
+        blocked(
+          'No se pudo leer esta tabla del Feed en este momento. Vuelve a intentarlo en un rato.',
+        );
+      }
+    }),
+  );
 
   await Promise.all(
     platform.map(async (id) => {
@@ -248,12 +385,27 @@ export async function loadViewSources(
       // pinta como «ya no existe», igual que una tabla borrada.
       if (!def) return;
       const tracker = { slug: def.id, name: def.name, fields: def.fields };
-      if (options.audience === 'public' && def.sensitivity === 'internal') {
-        sources.set(id, { tracker, rows: [], truncated: false, blocked: INTERNAL_SOURCE_BLOCKED });
+      if (options.audience === 'public' && def.sensitivity !== 'shareable') {
+        sources.set(id, {
+          tracker,
+          rows: [],
+          truncated: false,
+          blocked:
+            def.sensitivity === 'internal' ? INTERNAL_SOURCE_BLOCKED : PERSONAL_SOURCE_BLOCKED,
+        });
+        return;
+      }
+      if (def.sensitivity === 'personal' && !viewerId) {
+        sources.set(id, {
+          tracker,
+          rows: [],
+          truncated: false,
+          blocked: PERSONAL_SOURCE_NO_VIEWER,
+        });
         return;
       }
       try {
-        const read = await def.read(db, VIEW_ROW_CAP, bogotaToday());
+        const read = await def.read(db, VIEW_ROW_CAP, bogotaToday(), { viewerId });
         sources.set(id, {
           tracker,
           rows: read.rows.slice(0, VIEW_ROW_CAP),
@@ -361,8 +513,16 @@ async function freeSlug(db: SupabaseClient, wanted: string): Promise<string> {
   return `${wanted.slice(0, 36)}_${randomBytes(4).toString('hex')}`;
 }
 
-/** Valida forma y catálogo. Lanza ValidationError con TODOS los problemas. */
-export async function validateSpec(db: SupabaseClient, raw: unknown): Promise<ViewSpec> {
+/**
+ * Valida forma y catálogo. Lanza ValidationError con TODOS los problemas.
+ * `viewerId` deja comprobar las tablas del Feed de quien guarda; `keep` son
+ * las fuentes de la versión guardada (ver `ViewCatalogOptions.keep`).
+ */
+export async function validateSpec(
+  db: SupabaseClient,
+  raw: unknown,
+  options: { viewerId?: string | null; keep?: string[] } = {},
+): Promise<ViewSpec> {
   const parsed = viewSpecSchema.safeParse(raw);
   if (!parsed.success) {
     throw new ValidationError(
@@ -372,7 +532,12 @@ export async function validateSpec(db: SupabaseClient, raw: unknown): Promise<Vi
         .join('; ')}.`,
     );
   }
-  const problems = checkSpecAgainst(parsed.data, await viewCatalog(db));
+  const catalog = await viewCatalog(db, {
+    viewerId: options.viewerId,
+    keep: options.keep,
+    feedRefs: trackersOf(parsed.data),
+  });
+  const problems = checkSpecAgainst(parsed.data, catalog);
   if (problems.length) throw new ValidationError(problems.slice(0, 8).join(' '));
   return parsed.data;
 }
@@ -457,7 +622,7 @@ export async function updateView(
     const internal = internalSourcesOf(input.spec);
     if (internal.length)
       throw new ValidationError(
-        `Esta vista está compartida afuera y no puede usar información interna del equipo (${internal.map((s) => `«${s.name}»`).join(', ')}). Deja de compartirla primero, o usa otra fuente.`,
+        `Esta vista está compartida afuera y no puede usar información interna del equipo ni de cada persona (${internal.map((s) => `«${s.name}»`).join(', ')}). Deja de compartirla primero, o usa otra fuente.`,
       );
   }
   const next = current.version + 1;
@@ -715,7 +880,7 @@ export async function submitViewForm(
   const block = view.spec.blocks.find((b) => b.id === input.blockId);
   if (!block || block.type !== 'form')
     throw new NotFoundError('Ese formulario no está en esta vista.');
-  if (isPlatformSourceId(block.tracker))
+  if (isReadOnlySource(block.tracker))
     throw new ValidationError(
       'Este formulario apunta a una fuente de sólo lectura; no recibe filas.',
     );
@@ -811,8 +976,8 @@ async function assertPublicBudget(db: SupabaseClient, viewId: string) {
 }
 
 async function trackerForBlock(db: SupabaseClient, slug: string): Promise<TrackerRow> {
-  if (isPlatformSourceId(slug))
-    throw new ValidationError('Esa fuente es de la plataforma y es de sólo lectura.');
+  if (isReadOnlySource(slug))
+    throw new ValidationError('Esa fuente es de la plataforma o del Feed y es de sólo lectura.');
   const { data, error } = await db
     .from('trackers')
     .select(TRACKER_COLUMNS)

@@ -39,7 +39,7 @@ export default async function ViewPage({ params }: { params: Promise<{ slug: str
   if (!view) notFound();
 
   const [sources, versions] = await Promise.all([
-    loadViewSources(db, view.spec),
+    loadViewSources(db, view.spec, { viewerId: user.id }),
     listViewVersions(db, view.id, 20),
   ]);
   const computed = computeView(view.spec, sources, new Date(), {

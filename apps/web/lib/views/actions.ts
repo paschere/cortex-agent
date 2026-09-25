@@ -18,6 +18,7 @@ import {
   submitViewForm,
   trackerFieldsSchema,
   trackerSlugSchema,
+  trackersOf,
   updateView,
   validateSpec,
 } from '@cortex/agent-tools';
@@ -85,7 +86,14 @@ export async function saveViewAction(
       if (await getTrackerBySlug(db, t.slug)) continue;
       await defineTracker(db, { ...t, userId: user.id });
     }
-    const spec = await validateSpec(db, input.spec);
+    // Las tablas del Feed se comprueban con las de quien guarda; las que la
+    // versión guardada ya usaba y esta persona no puede leer (el Feed privado
+    // de otro, una captura vencida) se conservan sin abrirlas.
+    const saved = input.viewId ? await mustGetView(db, input.viewId) : null;
+    const spec = await validateSpec(db, input.spec, {
+      viewerId: user.id,
+      keep: saved ? trackersOf(saved.spec) : [],
+    });
     const view = input.viewId
       ? await updateView(db, input.viewId, {
           name: input.name,

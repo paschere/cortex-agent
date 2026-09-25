@@ -31,7 +31,7 @@ import {
 import { listPayments, num } from '../payments/store';
 import type { TrackerField } from '../trackers/schema';
 import { type ViewRow, todayIn } from './compute';
-import { type ViewSpec, trackersOf } from './spec';
+import { type ViewSpec, isFeedSourceId, trackersOf } from './spec';
 
 /**
  * LAS TABLAS DE LA PLATAFORMA COMO FUENTES DE UNA VISTA.
@@ -71,13 +71,24 @@ import { type ViewSpec, trackersOf } from './spec';
  *      Las `shareable` muestran datos de la empresa con clientes y terceros,
  *      que es exactamente lo que alguien decide mostrar al abrir un enlace.
  *
+ *      Las `personal` (activaciones, seguimientos, operaciones, rutinas) son
+ *      de CADA persona, como en sus pantallas: se leen con el id de quien mira
+ *      (`SourceReadContext.viewerId`) y cada quien ve lo suyo. Sin alguien que
+ *      mire —el enlace público, Inicio sin sesión— no se leen, y una vista que
+ *      las usa tampoco se comparte por enlace.
+ *
  * Lo que un campo NO expone también es decisión: el responsable de un cliente,
  * los teléfonos, las notas y el detalle de un vencimiento se quedan fuera de
  * las fuentes compartibles; los correos de contacto de un prospecto no salen
  * por ninguna.
  */
 
-export type SourceSensitivity = 'shareable' | 'internal';
+export type SourceSensitivity = 'shareable' | 'internal' | 'personal';
+
+/** Quién está mirando. Sólo las fuentes `personal` y las del Feed lo usan. */
+export interface SourceReadContext {
+  viewerId: string | null;
+}
 
 export interface PlatformSourceRead {
   rows: ViewRow[];
@@ -93,7 +104,12 @@ export interface PlatformSource {
   sensitivity: SourceSensitivity;
   fields: TrackerField[];
   /** Lee hasta `cap` filas con el handle del espacio. */
-  read(db: SupabaseClient, cap: number, today: string): Promise<PlatformSourceRead>;
+  read(
+    db: SupabaseClient,
+    cap: number,
+    today: string,
+    ctx: SourceReadContext,
+  ): Promise<PlatformSourceRead>;
 }
 
 // ---------------------------------------------------------------------------
@@ -742,31 +758,490 @@ const prospectos: PlatformSource = {
 };
 
 // ---------------------------------------------------------------------------
+// Activaciones: lo que cada persona puso a vigilar sus fuentes del Feed
+// ---------------------------------------------------------------------------
+
+/**
+ * ACTIVACIONES, SEGUIMIENTOS Y OPERACIONES SON DE CADA PERSONA.
+ *
+ * Toda lectura de `activation_runs`, `activation_automations` y
+ * `activation_operations` en la app filtra por `actor_id` (ver
+ * apps/web/app/api/activations/** y lib/management/activation-execution.ts):
+ * nacen de fuentes privadas del Feed y ni un administrador ve las de otro.
+ * Una vista no cambia esa regla: estas fuentes leen SÓLO las filas de quien
+ * mira (`ctx.viewerId`). Un tablero de «mis activaciones» abierto por un
+ * compañero muestra las de ese compañero, nunca las del autor de la vista.
+ *
+ * Lo que sí es de la empresa —los asuntos de Gerencia que una activación
+ * publicó— ya está en `cortex.gestion`.
+ */
+const RUN_STATE: Record<string, string> = { simulated: 'Simulada', committed: 'Publicada' };
+const RULE_KIND = ['Facturas duplicadas', 'Duplicados', 'Condiciones'];
+const ORIGIN = ['Manual', 'Seguimiento'];
+
+/**
+ * Cada simulación carga hasta mil candidatos con sus valores, y contarlos
+ * exige leerlos (PostgREST no cuenta dentro de un jsonb sin una función). La
+ * pantalla de Activaciones lee 50; una vista que se refresca sola lee las 100
+ * más recientes y se marca parcial si hay más.
+ */
+const RUNS_CAP = 100;
+
+function ruleKind(definition: unknown): string | null {
+  const d = (definition ?? {}) as { kind?: unknown; rule?: unknown };
+  if (d.kind === 'invoice_duplicates') return 'Facturas duplicadas';
+  if (d.kind === 'table_rule') return d.rule === 'duplicates' ? 'Duplicados' : 'Condiciones';
+  return null;
+}
+
+const nameOf = (definition: unknown): string | null => {
+  const name = (definition as { name?: unknown } | null)?.name;
+  return typeof name === 'string' && name.trim() ? name.trim().slice(0, 120) : null;
+};
+
+const activaciones: PlatformSource = {
+  id: 'cortex.activaciones',
+  name: 'Mis activaciones (simulaciones y publicaciones)',
+  description:
+    'Cada vez que una regla revisó una fuente del Feed: cuándo, con qué regla, cuántas filas coincidieron, cuántas quedaron inválidas y cuántos asuntos publicó. Cada persona ve sólo las suyas.',
+  sensitivity: 'personal',
+  fields: [
+    field('fecha', 'Fecha', 'date'),
+    field('estado', 'Estado', 'select', Object.values(RUN_STATE)),
+    field('regla', 'Tipo de regla', 'select', RULE_KIND),
+    field('origen', 'Origen', 'select', ORIGIN),
+    field('fuente', 'Fuente', 'text'),
+    field('hoja', 'Hoja', 'text'),
+    field('filas', 'Filas revisadas', 'number'),
+    field('coincidencias', 'Coincidencias', 'number'),
+    field('invalidas', 'Filas inválidas', 'number'),
+    field('asuntos', 'Asuntos publicados', 'number'),
+    field('publicada', 'Publicada el', 'date'),
+  ],
+  async read(db, cap, _today, ctx) {
+    if (!ctx.viewerId) return { rows: [], truncated: false };
+    const limit = Math.min(cap, RUNS_CAP);
+    const { data, error } = await db
+      .from('activation_runs')
+      .select(
+        'id, source_name, sheet_name, definition, candidates, status, case_ids, identity_namespace, created_at, committed_at',
+      )
+      .eq('actor_id', ctx.viewerId)
+      .order('created_at', { ascending: false })
+      .limit(limit + 1);
+    if (error) throw error;
+    const all = (data ?? []) as Array<{
+      id: string;
+      source_name: string;
+      sheet_name: string;
+      definition: unknown;
+      candidates: Array<{ status?: string }> | null;
+      status: string;
+      case_ids: string[] | null;
+      identity_namespace: string | null;
+      created_at: string;
+      committed_at: string | null;
+    }>;
+    const rows = all.slice(0, limit).map((r) => {
+      const values: Values = {};
+      const candidates = Array.isArray(r.candidates) ? r.candidates : [];
+      put(values, 'fecha', dayOf(r.created_at));
+      put(values, 'estado', RUN_STATE[r.status] ?? r.status);
+      put(values, 'regla', ruleKind(r.definition));
+      put(
+        values,
+        'origen',
+        r.identity_namespace?.startsWith('automation:') ? 'Seguimiento' : 'Manual',
+      );
+      put(values, 'fuente', r.source_name?.slice(0, 200));
+      put(values, 'hoja', r.sheet_name?.slice(0, 200));
+      put(values, 'filas', candidates.length);
+      put(values, 'coincidencias', candidates.filter((c) => c?.status === 'matched').length);
+      put(values, 'invalidas', candidates.filter((c) => c?.status === 'invalid').length);
+      put(values, 'asuntos', r.case_ids?.length ?? 0);
+      put(values, 'publicada', dayOf(r.committed_at));
+      return row(
+        r.id,
+        nameOf(r.definition) ?? r.source_name ?? 'Activación',
+        values,
+        r.created_at,
+        r.committed_at ?? r.created_at,
+      );
+    });
+    return { rows, truncated: all.length > limit };
+  },
+};
+
+const AUTOMATION_STATE: Record<string, string> = {
+  active: 'Activa',
+  paused: 'En pausa',
+  needs_review: 'Necesita revisión',
+};
+const TRIGGER_LABEL: Record<string, string> = {
+  on_change: 'Al cambiar la fuente',
+  scheduled: 'Por frecuencia',
+};
+const INTERVAL_LABEL: Record<number, string> = {
+  60: 'Cada hora',
+  360: 'Cada 6 horas',
+  1440: 'Cada día',
+  10080: 'Cada semana',
+};
+const OUTCOME_LABEL: Record<string, string> = {
+  unchanged: 'Sin cambios',
+  checked: 'Revisada',
+  needs_review: 'Necesita revisión',
+  error: 'Error',
+};
+
+const seguimientos: PlatformSource = {
+  id: 'cortex.seguimientos',
+  name: 'Mis seguimientos automáticos',
+  description:
+    'Las reglas autorizadas para revisar solas una fuente conectada: si están activas, en pausa o necesitan revisión, cada cuánto corren, cuándo revisaron y qué encontraron. Cada persona ve sólo los suyos.',
+  sensitivity: 'personal',
+  fields: [
+    field('estado', 'Estado', 'select', Object.values(AUTOMATION_STATE)),
+    field('disparador', 'Cuándo corre', 'select', Object.values(TRIGGER_LABEL)),
+    field('frecuencia', 'Frecuencia', 'select', Object.values(INTERVAL_LABEL)),
+    field('fuente', 'Fuente conectada', 'text'),
+    field('ultima_revision', 'Última revisión', 'date'),
+    field('proxima_revision', 'Próxima revisión', 'date'),
+    field('resultado', 'Último resultado', 'select', Object.values(OUTCOME_LABEL)),
+    field('coincidencias', 'Coincidencias en la última', 'number'),
+    field('asuntos_nuevos', 'Asuntos nuevos en la última', 'number'),
+    field('mensaje', 'Mensaje', 'text'),
+  ],
+  async read(db, cap, _today, ctx) {
+    if (!ctx.viewerId) return { rows: [], truncated: false };
+    const { data, error } = await db
+      .from('activation_automations')
+      .select(
+        'id, name, source_connection_id, trigger, interval_minutes, status, next_run_at, last_checked_at, last_result, created_at, updated_at',
+      )
+      .eq('actor_id', ctx.viewerId)
+      .order('created_at', { ascending: false })
+      .limit(cap + 1);
+    if (error) throw error;
+    const all = (data ?? []) as Array<{
+      id: string;
+      name: string;
+      source_connection_id: string;
+      trigger: string;
+      interval_minutes: number;
+      status: string;
+      next_run_at: string | null;
+      last_checked_at: string | null;
+      last_result: Record<string, unknown> | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+    const list = all.slice(0, cap);
+    const viewer = ctx.viewerId;
+    const conns = await inChunks(unique(list.map((a) => a.source_connection_id)), async (chunk) => {
+      const read = await db
+        .from('feed_sources')
+        .select('id, name')
+        .eq('actor_id', viewer)
+        .in('id', chunk);
+      if (read.error) throw read.error;
+      return (read.data ?? []) as Array<{ id: string; name: string }>;
+    });
+    const connName = new Map(conns.map((c) => [c.id, c.name]));
+    const rows = list.map((a) => {
+      const values: Values = {};
+      const last = a.last_result ?? {};
+      const num0 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+      put(values, 'estado', AUTOMATION_STATE[a.status] ?? a.status);
+      put(values, 'disparador', TRIGGER_LABEL[a.trigger] ?? a.trigger);
+      put(values, 'frecuencia', INTERVAL_LABEL[a.interval_minutes] ?? null);
+      put(values, 'fuente', connName.get(a.source_connection_id)?.slice(0, 200));
+      put(values, 'ultima_revision', dayOf(a.last_checked_at));
+      if (a.status === 'active') put(values, 'proxima_revision', dayOf(a.next_run_at));
+      put(
+        values,
+        'resultado',
+        typeof last.outcome === 'string' ? (OUTCOME_LABEL[last.outcome] ?? null) : null,
+      );
+      put(values, 'coincidencias', num0(last.matched));
+      put(values, 'asuntos_nuevos', num0(last.created));
+      put(values, 'mensaje', typeof last.message === 'string' ? last.message.slice(0, 300) : null);
+      return row(a.id, a.name?.slice(0, 120) || 'Seguimiento', values, a.created_at, a.updated_at);
+    });
+    return { rows, truncated: all.length > cap };
+  },
+};
+
+/** Los mismos nombres que la pantalla de Activaciones (ActivationExecution.tsx). */
+const OPERATION_STATE: Record<string, string> = {
+  awaiting_approval: 'Pendiente de aprobación',
+  executing: 'Ejecutando',
+  verifying: 'Verificando',
+  succeeded: 'Verificado',
+  blocked: 'Bloqueado',
+  failed: 'Falló',
+  cancelled: 'Cancelado',
+  outcome_unknown: 'Resultado desconocido',
+  verification_failed: 'No coincidió la verificación',
+};
+
+/**
+ * La comprobación, en una palabra. «Verificado» sólo cuando el verificador GET
+ * coincidió: una respuesta HTTP exitosa no basta (docs/features/activations.md).
+ */
+function verificationOf(status: string): string {
+  if (status === 'succeeded') return 'Comprobada';
+  if (status === 'verification_failed') return 'No coincidió';
+  if (status === 'outcome_unknown') return 'Incierta';
+  if (status === 'awaiting_approval' || status === 'executing' || status === 'verifying')
+    return 'En curso';
+  return 'Sin comprobar';
+}
+const VERIFICATION = ['Comprobada', 'No coincidió', 'Incierta', 'En curso', 'Sin comprobar'];
+
+const operaciones: PlatformSource = {
+  id: 'cortex.operaciones',
+  name: 'Mis operaciones (acciones comprobadas)',
+  description:
+    'Las acciones externas que salieron de una activación: qué herramienta, sobre qué asunto, en qué estado, si la verificación posterior coincidió, cuántos intentos y cuánto tardó. Cada persona ve sólo las suyas.',
+  sensitivity: 'personal',
+  fields: [
+    field('estado', 'Estado', 'select', Object.values(OPERATION_STATE)),
+    field('verificacion', 'Verificación', 'select', VERIFICATION),
+    field('accion', 'Herramienta', 'text'),
+    field('verificador', 'Verificador', 'text'),
+    field('asunto', 'Asunto', 'text'),
+    field('intentos', 'Intentos', 'number'),
+    field('creada', 'Preparada el', 'date'),
+    field('terminada', 'Terminada el', 'date'),
+    field('duracion_s', 'Duración (segundos)', 'number'),
+    field('error', 'Error', 'text'),
+  ],
+  async read(db, cap, _today, ctx) {
+    if (!ctx.viewerId) return { rows: [], truncated: false };
+    // Columnas nombradas: ni la entrada de la herramienta, ni su respuesta, ni
+    // la evidencia copiada del Feed viajan a una vista.
+    const { data, error } = await db
+      .from('activation_operations')
+      .select(
+        'id, case_id, action_tool_id, verifier_tool_id, status, attempt, error, started_at, completed_at, created_at, updated_at',
+      )
+      .eq('actor_id', ctx.viewerId)
+      .order('created_at', { ascending: false })
+      .limit(cap + 1);
+    if (error) throw error;
+    const all = (data ?? []) as Array<{
+      id: string;
+      case_id: string;
+      action_tool_id: string;
+      verifier_tool_id: string;
+      status: string;
+      attempt: number;
+      error: string | null;
+      started_at: string | null;
+      completed_at: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+    const list = all.slice(0, cap);
+    const cases = await inChunks(unique(list.map((o) => o.case_id)), async (chunk) => {
+      const read = await db.from('management_cases').select('id, data').in('id', chunk);
+      if (read.error) throw read.error;
+      return (read.data ?? []) as Array<{ id: string; data: { title?: unknown } | null }>;
+    });
+    const caseTitle = new Map(
+      cases.map((c) => [c.id, typeof c.data?.title === 'string' ? c.data.title : null]),
+    );
+    const tool = (id: string) => id.replace(/^custom\./, '');
+    const rows = list.map((o) => {
+      const values: Values = {};
+      const title = caseTitle.get(o.case_id) ?? null;
+      put(values, 'estado', OPERATION_STATE[o.status] ?? o.status);
+      put(values, 'verificacion', verificationOf(o.status));
+      put(values, 'accion', tool(o.action_tool_id));
+      put(values, 'verificador', tool(o.verifier_tool_id));
+      put(values, 'asunto', title?.slice(0, 200));
+      put(values, 'intentos', o.attempt);
+      put(values, 'creada', dayOf(o.created_at));
+      put(values, 'terminada', dayOf(o.completed_at));
+      if (o.started_at && o.completed_at) {
+        const ms = Date.parse(o.completed_at) - Date.parse(o.started_at);
+        if (Number.isFinite(ms) && ms >= 0) put(values, 'duracion_s', Math.round(ms / 1000));
+      }
+      put(values, 'error', o.error?.slice(0, 300));
+      return row(o.id, title ?? tool(o.action_tool_id), values, o.created_at, o.updated_at);
+    });
+    return { rows, truncated: all.length > cap };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Rutinas: las corridas de lo programado
+// ---------------------------------------------------------------------------
+
+const JOB_RUN_STATE: Record<string, string> = {
+  running: 'En curso',
+  ok: 'Correcta',
+  error: 'Con error',
+};
+const JOB_STATE: Record<string, string> = {
+  active: 'Activa',
+  paused: 'En pausa',
+  completed: 'Completada',
+  cancelled: 'Cancelada',
+};
+const JOB_KIND: Record<string, string> = { tool: 'Herramienta', agent: 'Agente' };
+const JOB_SCOPE = ['Mía', 'De todo el equipo'];
+
+/**
+ * Las mismas rutinas que /schedules le muestra a cada quien: las suyas y las
+ * globales del equipo (`user_id = yo OR is_global`). Ni la salida ni la
+ * instrucción viajan: sólo si corrió, cuándo, cuánto tardó y el error.
+ */
+const rutinas: PlatformSource = {
+  id: 'cortex.rutinas',
+  name: 'Corridas de mis rutinas',
+  description:
+    'Cada vez que corrió una rutina programada (las tuyas y las globales del equipo): si salió bien o con error, cuándo, cuánto tardó y el error. Cada persona ve las que su pantalla de Rutinas le muestra.',
+  sensitivity: 'personal',
+  fields: [
+    field('estado', 'Resultado', 'select', Object.values(JOB_RUN_STATE)),
+    field('inicio', 'Corrió el', 'date'),
+    field('duracion_s', 'Duración (segundos)', 'number'),
+    field('tipo', 'Tipo', 'select', Object.values(JOB_KIND)),
+    field('alcance', 'De quién', 'select', JOB_SCOPE),
+    field('rutina_estado', 'Estado de la rutina', 'select', Object.values(JOB_STATE)),
+    field('error', 'Error', 'text'),
+  ],
+  async read(db, cap, _today, ctx) {
+    if (!ctx.viewerId) return { rows: [], truncated: false };
+    // Dos lecturas en vez de un `.or()` armado con texto: el id de quien mira
+    // nunca se interpola en un filtro.
+    const JOB_COLUMNS = 'id, name, kind, status, is_global, user_id';
+    const [own, global] = await Promise.all([
+      db.from('scheduled_jobs').select(JOB_COLUMNS).eq('user_id', ctx.viewerId).limit(300),
+      db.from('scheduled_jobs').select(JOB_COLUMNS).eq('is_global', true).limit(300),
+    ]);
+    if (own.error) throw own.error;
+    if (global.error) throw global.error;
+    type Job = {
+      id: string;
+      name: string;
+      kind: string;
+      status: string;
+      is_global: boolean | null;
+      user_id: string;
+    };
+    const byId = new Map(
+      [...((own.data ?? []) as Job[]), ...((global.data ?? []) as Job[])].map((j) => [j.id, j]),
+    );
+    const jobs = [...byId.values()];
+    if (!jobs.length) return { rows: [], truncated: false };
+    const runs = await inChunks(
+      jobs.map((j) => j.id),
+      async (chunk) => {
+        const read = await db
+          .from('scheduled_job_runs')
+          .select('id, job_id, status, started_at, finished_at, error')
+          .in('job_id', chunk)
+          .order('started_at', { ascending: false })
+          .limit(cap + 1);
+        if (read.error) throw read.error;
+        return (read.data ?? []) as Array<{
+          id: string;
+          job_id: string;
+          status: string;
+          started_at: string;
+          finished_at: string | null;
+          error: string | null;
+        }>;
+      },
+    );
+    runs.sort((a, b) => b.started_at.localeCompare(a.started_at));
+    const rows = runs.slice(0, cap).map((r) => {
+      const job = byId.get(r.job_id);
+      const values: Values = {};
+      put(values, 'estado', JOB_RUN_STATE[r.status] ?? r.status);
+      put(values, 'inicio', dayOf(r.started_at));
+      if (r.finished_at) {
+        const ms = Date.parse(r.finished_at) - Date.parse(r.started_at);
+        if (Number.isFinite(ms) && ms >= 0) put(values, 'duracion_s', Math.round(ms / 1000));
+      }
+      put(values, 'tipo', job ? (JOB_KIND[job.kind] ?? job.kind) : null);
+      put(
+        values,
+        'alcance',
+        job ? (job.user_id === ctx.viewerId ? 'Mía' : 'De todo el equipo') : null,
+      );
+      put(values, 'rutina_estado', job ? (JOB_STATE[job.status] ?? job.status) : null);
+      put(values, 'error', r.error?.slice(0, 300));
+      return row(
+        r.id,
+        job?.name?.slice(0, 120) ?? 'Rutina',
+        values,
+        r.started_at,
+        r.finished_at ?? r.started_at,
+      );
+    });
+    return { rows, truncated: runs.length > cap };
+  },
+};
+
+// ---------------------------------------------------------------------------
 // El registro
 // ---------------------------------------------------------------------------
 
 export const PLATFORM_SOURCES: ReadonlyMap<string, PlatformSource> = new Map(
-  [ventas, pagos, clientes, vencimientos, compromisos, metas, gestion, prospectos].map((s) => [
-    s.id,
-    s,
-  ]),
+  [
+    ventas,
+    pagos,
+    clientes,
+    vencimientos,
+    compromisos,
+    metas,
+    gestion,
+    prospectos,
+    activaciones,
+    seguimientos,
+    operaciones,
+    rutinas,
+  ].map((s) => [s.id, s]),
 );
 
 export function platformSource(id: string): PlatformSource | null {
   return PLATFORM_SOURCES.get(id) ?? null;
 }
 
-/** Las fuentes internas que un spec usa, por nombre. Vacío = se puede compartir. */
-export function internalSourcesOf(spec: ViewSpec): PlatformSource[] {
-  return trackersOf(spec)
+/** Lo mínimo para decir por qué una vista no sale del equipo. */
+export interface UnshareableSource {
+  id: string;
+  name: string;
+}
+
+/** Cómo se nombra, en el aviso de compartir, una tabla del Feed (sin leerla). */
+export const FEED_SOURCE_SHARE_NAME = 'tablas del Feed privado';
+
+/**
+ * Las fuentes de un spec que impiden abrir la puerta de afuera: las internas,
+ * las personales y cualquier tabla del Feed. Vacío = se puede compartir. Las
+ * del Feed no se leen para nombrarlas (el nombre de un archivo del Feed
+ * también es privado): salen todas como una sola entrada genérica.
+ */
+export function internalSourcesOf(spec: ViewSpec): UnshareableSource[] {
+  const refs = trackersOf(spec);
+  const out: UnshareableSource[] = refs
     .map((ref) => PLATFORM_SOURCES.get(ref))
-    .filter((s): s is PlatformSource => s?.sensitivity === 'internal');
+    .filter((s): s is PlatformSource => Boolean(s) && s?.sensitivity !== 'shareable')
+    .map((s) => ({ id: s.id, name: s.name }));
+  const feed = refs.filter(isFeedSourceId);
+  if (feed.length) out.push({ id: feed[0] as string, name: FEED_SOURCE_SHARE_NAME });
+  return out;
 }
 
 /** Lo que se le dice a quien intenta abrir la puerta de una vista con fuentes internas. */
-export function internalShareRefusal(sources: PlatformSource[]): string {
+export function internalShareRefusal(sources: UnshareableSource[]): string {
   const names = sources.map((s) => `«${s.name}»`).join(', ');
-  return `Esta vista usa información interna del equipo (${names}) y no se puede compartir por enlace ni con contraseña. Quita esos bloques, o haz otra vista sólo con datos que se puedan mostrar afuera.`;
+  return `Esta vista usa información interna del equipo o de cada persona (${names}) y no se puede compartir por enlace ni con contraseña. Quita esos bloques, o haz otra vista sólo con datos que se puedan mostrar afuera.`;
 }
 
 /** Lee una fuente de la plataforma. `today` en Bogotá por defecto. */
@@ -775,10 +1250,11 @@ export async function readPlatformSource(
   id: string,
   cap: number,
   today: string = bogotaToday(),
+  ctx: SourceReadContext = { viewerId: null },
 ): Promise<PlatformSourceRead | null> {
   const source = PLATFORM_SOURCES.get(id);
   if (!source) return null;
-  return source.read(db, Math.max(1, cap), today);
+  return source.read(db, Math.max(1, cap), today, ctx);
 }
 
 /**
@@ -787,10 +1263,16 @@ export async function readPlatformSource(
  * lea una lista de campos distinta de la que `checkSpecAgainst` comprueba.
  */
 export function platformSourcesGrammar(): string {
+  const note: Record<SourceSensitivity, string> = {
+    shareable: '',
+    internal: '; INTERNAL: a view using it cannot be shared by link',
+    personal:
+      '; PERSONAL: each viewer sees only their own rows; a view using it cannot be shared by link',
+  };
   return [...PLATFORM_SOURCES.values()]
     .map(
       (s) =>
-        `- ${s.id} (${s.name}${s.sensitivity === 'internal' ? '; INTERNAL: a view using it cannot be shared by link' : ''}): ${s.fields
+        `- ${s.id} (${s.name}${note[s.sensitivity]}): ${s.fields
           .map((f) => `${f.key}:${f.type}${f.options ? `[${f.options.join('|')}]` : ''}`)
           .join(', ')}`,
     )

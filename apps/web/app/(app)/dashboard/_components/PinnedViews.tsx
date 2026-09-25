@@ -27,7 +27,14 @@ import Link from 'next/link';
 
 const MAX_BLOCKS_ON_HOME = 6;
 
-export async function PinnedViews({ organizationId }: { organizationId: string }) {
+export async function PinnedViews({
+  organizationId,
+  viewerId,
+}: {
+  organizationId: string;
+  /** Quién mira: las fuentes personales y las del Feed leen SUS filas. */
+  viewerId: string;
+}) {
   const db = getOrgScopedClient(organizationId);
   const pinned = await listPinnedViews(db, 3).catch(() => []);
   if (!pinned.length) return null;
@@ -35,7 +42,7 @@ export async function PinnedViews({ organizationId }: { organizationId: string }
   const computed = await Promise.all(
     pinned.map(async (view) => {
       try {
-        const full = computeView(view.spec, await loadViewSources(db, view.spec));
+        const full = computeView(view.spec, await loadViewSources(db, view.spec, { viewerId }));
         const blocks = full.blocks.filter((b) => b.type !== 'form').slice(0, MAX_BLOCKS_ON_HOME);
         return {
           view,

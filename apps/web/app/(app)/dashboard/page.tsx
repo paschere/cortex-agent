@@ -218,7 +218,7 @@ export default async function DashboardPage() {
 
       {/* Lo que el equipo fijó a propósito desde /views. Sin fijadas, nada. */}
       <Suspense fallback={null}>
-        <PinnedViews organizationId={user.organization.id} />
+        <PinnedViews organizationId={user.organization.id} viewerId={user.id} />
       </Suspense>
 
       <ManagementOverview />

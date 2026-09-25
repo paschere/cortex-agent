@@ -18,7 +18,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const db = getOrgScopedClient(user.organization.id);
   const view = await getView(db, id);
   if (!view) return NextResponse.json({ error: 'Esa vista ya no existe.' }, { status: 404 });
-  const computed = computeView(view.spec, await loadViewSources(db, view.spec), new Date(), {
+  const sources = await loadViewSources(db, view.spec, { viewerId: user.id });
+  const computed = computeView(view.spec, sources, new Date(), {
     writable: canWriteView(view, 'member'),
   });
   return NextResponse.json(

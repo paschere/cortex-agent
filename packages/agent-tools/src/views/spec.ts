@@ -39,11 +39,63 @@ export function isPlatformSourceId(ref: string): boolean {
   return PLATFORM_SOURCE_RE.test(ref);
 }
 
+/**
+ * LAS TABLAS DEL FEED, TERCERA FAMILIA (ver feed-sources.ts).
+ *
+ * Una hoja de una captura del Feed, una hoja de la última captura de una
+ * fuente conectada, o una vista preparada. Sus ids llevan el uuid de la fila
+ * dueña y, en las hojas, el número de hoja (0–19, el tope del Feed):
+ *
+ *   feed.<uuid de la captura>.<hoja>       una captura fija (archivo, texto, URL)
+ *   feedsrc.<uuid de la conexión>.<hoja>   la ÚLTIMA captura de una fuente conectada
+ *   feedview.<uuid de la vista preparada>  la tabla que Cortex preparó de un texto
+ *
+ * Tampoco caben en un slug de tabla (llevan puntos y guiones) ni en un
+ * `cortex.*`, así que las tres familias no chocan. Son de sólo lectura, como
+ * las de la plataforma: el Feed no se escribe desde una vista.
+ */
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const SHEET = '(?:1[0-9]|[0-9])';
+export const FEED_SOURCE_RE = new RegExp(
+  `^(?:feed\\.${UUID}\\.${SHEET}|feedsrc\\.${UUID}\\.${SHEET}|feedview\\.${UUID})$`,
+);
+
+export type FeedSourceRef =
+  | { kind: 'entry'; id: string; sheet: number }
+  | { kind: 'connection'; id: string; sheet: number }
+  | { kind: 'prepared'; id: string; sheet: 0 };
+
+export function isFeedSourceId(ref: string): boolean {
+  return FEED_SOURCE_RE.test(ref);
+}
+
+/** Desarma un id del Feed. Null si no es uno. */
+export function parseFeedSourceId(ref: string): FeedSourceRef | null {
+  if (!FEED_SOURCE_RE.test(ref)) return null;
+  const [prefix, id = '', sheet] = ref.split('.');
+  if (prefix === 'feedview') return { kind: 'prepared', id, sheet: 0 };
+  return { kind: prefix === 'feed' ? 'entry' : 'connection', id, sheet: Number(sheet) };
+}
+
+export function feedSourceId(ref: FeedSourceRef): string {
+  if (ref.kind === 'prepared') return `feedview.${ref.id}`;
+  return `${ref.kind === 'entry' ? 'feed' : 'feedsrc'}.${ref.id}.${ref.sheet}`;
+}
+
+/**
+ * Lo que una vista NO puede escribir: las fuentes de la plataforma y las del
+ * Feed. Formularios, celdas editables, tableros que se arrastran y botones
+ * sólo existen sobre las tablas propias del espacio.
+ */
+export function isReadOnlySource(ref: string): boolean {
+  return isPlatformSourceId(ref) || isFeedSourceId(ref);
+}
+
 const sourceRef = z
   .string()
   .refine(
-    (v) => TRACKER_SLUG_RE.test(v) || PLATFORM_SOURCE_RE.test(v),
-    'Usa el slug de una tabla del espacio o el id de una fuente de la plataforma (cortex.…).',
+    (v) => TRACKER_SLUG_RE.test(v) || PLATFORM_SOURCE_RE.test(v) || FEED_SOURCE_RE.test(v),
+    'Usa el slug de una tabla del espacio, el id de una fuente de la plataforma (cortex.…) o el de una tabla del Feed (feed.…).',
   );
 export const BLOCK_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 export const MAX_VIEW_BLOCKS = 24;
@@ -319,6 +371,14 @@ export interface CatalogTracker {
   slug: string;
   name: string;
   fields: TrackerField[];
+  /**
+   * Una tabla del Feed que la vista YA usaba y que quien la edita no puede
+   * leer (es del Feed privado de otra persona, o venció). Se acepta tal cual
+   * para no dejar a un compañero sin poder cambiar el resto de la vista, pero
+   * sin comprobar campos: comprobarlos exigiría leer una tabla que no es suya.
+   * Las reglas de sólo lectura sí se comprueban.
+   */
+  opaque?: boolean;
 }
 
 /** Tipo de un campo, incluidos los tres que toda fila tiene. */
@@ -332,6 +392,9 @@ export function fieldType(
 }
 
 const NUMERIC = new Set(['number', 'money']);
+
+const readOnlyWhat = (ref: string) =>
+  isFeedSourceId(ref) ? 'una tabla del Feed' : 'una fuente de la plataforma';
 
 /**
  * Qué del spec nombra cosas que no existen. Devuelve una lista de problemas en
@@ -349,11 +412,14 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
       problems.push(
         isPlatformSourceId(block.tracker)
           ? `${where}: «${block.tracker}» no es una fuente de la plataforma.`
-          : `${where}: la tabla «${block.tracker}» no existe.`,
+          : isFeedSourceId(block.tracker)
+            ? `${where}: la tabla del Feed «${block.tracker}» no está disponible: venció, se borró o es del Feed privado de otra persona.`
+            : `${where}: la tabla «${block.tracker}» no existe.`,
       );
       continue;
     }
     const need = (key: string, what: string) => {
+      if (tracker.opaque) return true;
       if (!fieldType(tracker, key)) {
         problems.push(
           `${where}: «${key}» no es un campo de ${tracker.name} (${what}). Campos: label, ${tracker.fields.map((f) => f.key).join(', ')}.`,
@@ -366,9 +432,9 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
     const checkWrites = (editable: string[], actions: RowAction[]) => {
       const writes = editable.length > 0 || actions.length > 0;
       if (!writes) return;
-      if (isPlatformSourceId(block.tracker)) {
+      if (isReadOnlySource(block.tracker)) {
         problems.push(
-          `${where}: «${tracker.name}» es una fuente de la plataforma y es de sólo lectura; sólo las tablas propias se editan o llevan botones en una vista.`,
+          `${where}: «${tracker.name}» es ${readOnlyWhat(block.tracker)} y es de sólo lectura; sólo las tablas propias se editan o llevan botones en una vista.`,
         );
         return;
       }
@@ -398,6 +464,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
             problems.push(`${where}: «${block.aggregate}» necesita un campo numérico.`);
           else if (
             need(block.field, 'cifra') &&
+            !tracker.opaque &&
             !NUMERIC.has(String(fieldType(tracker, block.field)))
           )
             problems.push(
@@ -415,6 +482,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
       case 'board': {
         if (
           need(block.groupBy, 'columnas del tablero') &&
+          !tracker.opaque &&
           fieldType(tracker, block.groupBy) !== 'select'
         )
           problems.push(
@@ -425,9 +493,9 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         break;
       }
       case 'form':
-        if (isPlatformSourceId(block.tracker)) {
+        if (isReadOnlySource(block.tracker)) {
           problems.push(
-            `${where}: un formulario sólo agrega filas a una tabla propia del espacio; «${tracker.name}» es una fuente de la plataforma y es de sólo lectura. Crea una tabla para lo que el formulario recibe.`,
+            `${where}: un formulario sólo agrega filas a una tabla propia del espacio; «${tracker.name}» es ${readOnlyWhat(block.tracker)} y es de sólo lectura. Crea una tabla para lo que el formulario recibe.`,
           );
           break;
         }
@@ -445,6 +513,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
       problems.push(`Alerta «${alert.id}»: «${alert.source}» no existe.`);
       continue;
     }
+    if (tracker.opaque) continue;
     for (const f of alert.filters)
       if (!fieldType(tracker, f.field))
         problems.push(`Alerta «${alert.id}»: «${f.field}» no es un campo de ${tracker.name}.`);
