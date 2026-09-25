@@ -1,4 +1,5 @@
 import { isSameOrigin } from '@/lib/activations/request';
+import { bellForSubmission } from '@/lib/views/activity';
 import { isUnlocked, openPublicView, unlockCookieName } from '@/lib/views/public';
 import { SubmissionLimitError, submitViewForm } from '@cortex/agent-tools';
 import { NotFoundError, ValidationError } from '@cortex/core';
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       values: parsed.data.values,
       submittedBy: null,
     });
+    await bellForSubmission(db, view, parsed.data.blockId, 'Alguien con el enlace');
     return NextResponse.json({ message: res.message });
   } catch (err) {
     if (err instanceof SubmissionLimitError)

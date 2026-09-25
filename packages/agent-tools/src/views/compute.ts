@@ -2,6 +2,7 @@ import type { TrackerField } from '../trackers/schema';
 import {
   type Aggregate,
   type CatalogTracker,
+  type RowAction,
   type Tone,
   type ViewBlock,
   type ViewFilter,
@@ -75,11 +76,18 @@ export type ComputedBlock =
   | (BlockBase & {
       type: 'table';
       title: string;
-      columns: Array<{ key: string; label: string; kind: 'text' | 'number' | 'date' }>;
+      columns: Array<{
+        key: string;
+        label: string;
+        kind: 'text' | 'number' | 'date';
+        /** Presente sólo si la columna se edita Y quien mira puede escribir. */
+        edit?: { type: TrackerField['type']; options: string[]; required: boolean };
+      }>;
       rows: Array<{ id: string; cells: string[]; sort: Array<string | number | null> }>;
       total: number;
       searchable: boolean;
       source: string;
+      actions: ComputedAction[];
     })
   | (BlockBase & {
       type: 'chart';
@@ -93,6 +101,9 @@ export type ComputedBlock =
   | (BlockBase & {
       type: 'board';
       title: string;
+      /** El campo que se cambia al arrastrar, si se puede arrastrar. */
+      dragField: string | null;
+      actions: ComputedAction[];
       columns: Array<{
         key: string;
         label: string;
@@ -122,11 +133,38 @@ export type ComputedBlock =
     })
   | (BlockBase & { type: 'problem'; title: string; message: string });
 
+/** Un botón por fila, sin el valor que escribe: ése lo decide el servidor. */
+export interface ComputedAction {
+  id: string;
+  label: string;
+  kind: 'set_field' | 'notify';
+  confirm: boolean;
+  tone: Tone;
+}
+
+/**
+ * Lo necesario para darse cuenta de que entró algo: por alerta, las filas más
+ * recientes que cumplen sus filtros (id, nombre, cuándo). El navegador compara
+ * con el refresco anterior; el servidor no lleva la cuenta de quién vio qué.
+ */
+export interface ComputedAlertFeed {
+  id: string;
+  source: string;
+  message: string | null;
+  sound: boolean;
+  desktop: boolean;
+  rows: Array<{ id: string; label: string; createdAt: string }>;
+}
+
 export interface ComputedView {
   blocks: ComputedBlock[];
   computedAt: string;
   /** Tablas cuya lectura se cortó en el tope: las cifras son parciales. */
   partial: string[];
+  refreshSeconds: number;
+  /** Si quien mira puede editar y usar botones en esta vista. */
+  writable: boolean;
+  alerts: ComputedAlertFeed[];
 }
 
 // ---------------------------------------------------------------------------
@@ -323,10 +361,20 @@ function problem(block: ViewBlock, message: string): ComputedBlock {
   };
 }
 
+function toAction(a: RowAction): ComputedAction {
+  return { id: a.id, label: a.label, kind: a.kind, confirm: a.confirm, tone: a.tone };
+}
+
+interface ComputeOptions {
+  /** Quien mira puede editar y usar botones (lo decide el servidor, no el spec). */
+  writable: boolean;
+}
+
 function computeBlock(
   block: ViewBlock,
   sources: Map<string, ViewSource>,
   today: string,
+  opts: ComputeOptions,
 ): ComputedBlock {
   if (block.type === 'text') {
     return { type: 'text', id: block.id, width: block.width, markdown: block.markdown };
@@ -417,6 +465,7 @@ function computeBlock(
         title: block.title,
         columns: keys.map((key) => {
           const t = fieldType(tracker, key);
+          const field = tracker.fields.find((f) => f.key === key);
           return {
             key,
             label: fieldLabel(tracker, key),
@@ -426,6 +475,15 @@ function computeBlock(
                 : t === 'date' || t === 'builtin_date'
                   ? 'date'
                   : 'text',
+            ...(opts.writable && field && block.editable.includes(key)
+              ? {
+                  edit: {
+                    type: field.type,
+                    options: field.options ?? [],
+                    required: field.required,
+                  },
+                }
+              : {}),
           };
         }),
         rows: sorted.slice(0, block.limit).map((r) => ({
@@ -439,6 +497,7 @@ function computeBlock(
         total: rows.length,
         searchable: block.searchable,
         source: tracker.name,
+        actions: opts.writable ? block.actions.map(toAction) : [],
       };
     }
 
@@ -532,6 +591,8 @@ function computeBlock(
         id: block.id,
         width: block.width,
         title: block.title,
+        dragField: opts.writable && block.draggable ? block.groupBy : null,
+        actions: opts.writable ? block.actions.map(toAction) : [],
         columns: columns.map((c) => ({
           key: c.key,
           label: c.label,
@@ -577,15 +638,41 @@ function computeBlock(
   }
 }
 
+/** Cuántas filas recientes viajan por alerta para detectar las nuevas. */
+const ALERT_FEED_ROWS = 15;
+
 export function computeView(
   spec: ViewSpec,
   sources: Map<string, ViewSource>,
   now: Date = new Date(),
+  opts: Partial<ComputeOptions> = {},
 ): ComputedView {
   const today = todayIn(now);
+  const options: ComputeOptions = { writable: Boolean(opts.writable) };
+  const alerts: ComputedAlertFeed[] = [];
+  for (const alert of spec.alerts) {
+    const src = sources.get(alert.source);
+    if (!src) continue;
+    const rows = src.rows
+      .filter((r) => alert.filters.every((f) => matches(src.tracker, r, f, today)))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, ALERT_FEED_ROWS)
+      .map((r) => ({ id: r.id, label: r.label, createdAt: r.created_at }));
+    alerts.push({
+      id: alert.id,
+      source: src.tracker.name,
+      message: alert.message ?? null,
+      sound: alert.sound,
+      desktop: alert.desktop,
+      rows,
+    });
+  }
   return {
-    blocks: spec.blocks.map((block) => computeBlock(block, sources, today)),
+    blocks: spec.blocks.map((block) => computeBlock(block, sources, today, options)),
     computedAt: now.toISOString(),
     partial: [...sources.values()].filter((s) => s.truncated).map((s) => s.tracker.name),
+    refreshSeconds: spec.refreshSeconds,
+    writable: options.writable,
+    alerts,
   };
 }

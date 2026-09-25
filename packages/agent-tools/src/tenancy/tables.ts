@@ -443,6 +443,8 @@ export const TABLE_TENANCY: Readonly<Record<string, TableTenancy>> = {
   custom_views: tenant(),
   custom_view_versions: tenant(),
   custom_view_submissions: tenant(),
+  // 0160: cada edición, tarjeta movida o botón usado en una vista, con quién.
+  custom_view_events: tenant(),
 
   // --- Plans, consumption and first run (migration 0085) --------------------
   // What a workspace is on, what it has consumed, and where it is in its first

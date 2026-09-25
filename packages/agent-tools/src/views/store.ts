@@ -85,6 +85,9 @@ function adapt(row: Record<string, unknown>): CustomViewRow {
       : {
           version: 1,
           accent: 'primary',
+          refreshSeconds: 0,
+          editing: 'off',
+          alerts: [],
           blocks: [
             {
               id: 'aviso',
@@ -765,6 +768,233 @@ export async function submitViewForm(
   });
 
   return { rowId, message: block.successMessage };
+}
+
+// ---------------------------------------------------------------------------
+// Editar y botones (migración 0160)
+// ---------------------------------------------------------------------------
+
+/** Cambios por hora que una vista acepta desde afuera (ediciones + botones). */
+export const PUBLIC_WRITES_PER_HOUR = 120;
+
+export class ViewWriteLimitError extends Error {
+  constructor() {
+    super('Esta vista recibió demasiados cambios en la última hora. Intenta más tarde.');
+    this.name = 'ViewWriteLimitError';
+  }
+}
+
+/**
+ * ¿Puede ESTA persona escribir en ESTA vista? La regla vive aquí para que la
+ * pantalla, la ruta pública y el cálculo digan lo mismo:
+ *   - `editing: 'off'`  nadie.
+ *   - `editing: 'team'` sólo alguien del espacio, dentro de la app.
+ *   - `editing: 'public'` también quien abre el enlace (y, si la vista pide
+ *     contraseña, ya la escribió: eso lo comprueba la ruta antes de llegar).
+ */
+export function canWriteView(view: Pick<CustomViewRow, 'spec'>, who: 'member' | 'public'): boolean {
+  if (view.spec.editing === 'off') return false;
+  if (who === 'member') return true;
+  return view.spec.editing === 'public';
+}
+
+async function assertPublicBudget(db: SupabaseClient, viewId: string) {
+  const since = new Date(Date.now() - 3_600_000).toISOString();
+  const { count, error } = await db
+    .from('custom_view_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('view_id', viewId)
+    .is('actor', null)
+    .gte('created_at', since);
+  if (error) throw error;
+  if ((count ?? 0) >= PUBLIC_WRITES_PER_HOUR) throw new ViewWriteLimitError();
+}
+
+async function trackerForBlock(db: SupabaseClient, slug: string): Promise<TrackerRow> {
+  if (isPlatformSourceId(slug))
+    throw new ValidationError('Esa fuente es de la plataforma y es de sólo lectura.');
+  const { data, error } = await db
+    .from('trackers')
+    .select(TRACKER_COLUMNS)
+    .eq('slug', slug)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new NotFoundError('La tabla de este bloque ya no existe.');
+  return data as unknown as TrackerRow;
+}
+
+/**
+ * Cambia campos de UNA fila. `allowed` son los campos que el bloque deja
+ * tocar; lo que llegue fuera de esa lista se rechaza entero, no se ignora en
+ * silencio. Se valida con el esquema de la tabla sobre la fila COMPLETA (lo que
+ * había más lo nuevo), así que un cambio no puede dejar vacío un obligatorio.
+ */
+async function patchRow(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: {
+    blockId: string;
+    tracker: TrackerRow;
+    rowId: string;
+    patch: Record<string, unknown>;
+    allowed: ReadonlySet<string>;
+    kind: 'edit' | 'move' | 'action';
+    actionId?: string;
+    actor: string | null;
+  },
+): Promise<{ label: string; changes: Record<string, { from: unknown; to: unknown }> }> {
+  const keys = Object.keys(input.patch);
+  if (!keys.length) throw new ValidationError('No hay nada que cambiar.');
+  const outside = keys.filter((k) => !input.allowed.has(k));
+  if (outside.length)
+    throw new ValidationError(
+      `Esta vista no deja cambiar ${outside.map((k) => `«${k}»`).join(', ')}.`,
+    );
+
+  const { data: current, error: readError } = await db
+    .from('tracker_rows')
+    .select('id, values')
+    .eq('id', input.rowId)
+    .eq('tracker_id', input.tracker.id)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!current) throw new NotFoundError('Esa fila ya no está en la tabla.');
+  const before = ((current as { values: Record<string, string | number> }).values ?? {}) as Record<
+    string,
+    string | number
+  >;
+  // Sólo lo que la tabla todavía declara: un campo que se borró del esquema no
+  // puede tumbar la edición de otro.
+  const known = Object.fromEntries(
+    Object.entries(before).filter(([k]) => input.tracker.fields.some((f) => f.key === k)),
+  );
+  const values = shapeValues(input.tracker.fields, { ...known, ...input.patch });
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const k of keys)
+    if (before[k] !== values[k]) changes[k] = { from: before[k] ?? null, to: values[k] ?? null };
+  const label = rowLabel(input.tracker.fields, values);
+  if (!Object.keys(changes).length) return { label, changes };
+
+  const { error } = await db
+    .from('tracker_rows')
+    .update({ values, label, updated_at: new Date().toISOString() })
+    .eq('id', input.rowId)
+    .eq('tracker_id', input.tracker.id);
+  if (error) throw error;
+  await db.from('custom_view_events').insert({
+    view_id: view.id,
+    block_id: input.blockId,
+    kind: input.kind,
+    action_id: input.actionId ?? null,
+    tracker_row_id: input.rowId,
+    changes,
+    actor: input.actor,
+  });
+  return { label, changes };
+}
+
+/** Editar una celda de una tabla o mover una tarjeta del tablero. */
+export async function editViewRow(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: { blockId: string; rowId: string; patch: Record<string, unknown>; actor: string | null },
+): Promise<{ label: string }> {
+  if (!canWriteView(view, input.actor ? 'member' : 'public'))
+    throw new ValidationError('Esta vista no se puede editar.');
+  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (!block || (block.type !== 'table' && block.type !== 'board'))
+    throw new NotFoundError('Ese bloque no está en esta vista.');
+  const allowed = new Set(
+    block.type === 'table' ? block.editable : block.draggable ? [block.groupBy] : [],
+  );
+  if (!allowed.size) throw new ValidationError('Este bloque no se edita.');
+  if (!input.actor) await assertPublicBudget(db, view.id);
+  const tracker = await trackerForBlock(db, block.tracker);
+  const { label } = await patchRow(db, view, {
+    blockId: block.id,
+    tracker,
+    rowId: input.rowId,
+    patch: input.patch,
+    allowed,
+    kind: block.type === 'board' ? 'move' : 'edit',
+    actor: input.actor,
+  });
+  return { label };
+}
+
+export type ViewActionOutcome =
+  | { kind: 'set_field'; label: string; message: string }
+  | { kind: 'notify'; label: string; message: string; actionLabel: string };
+
+/**
+ * Un botón de fila. `set_field` escribe el valor que dice el SPEC (nunca uno
+ * que mande el navegador); `notify` no escribe nada en la tabla y devuelve lo
+ * necesario para que la capa web mande los avisos de campana.
+ */
+export async function runViewAction(
+  db: SupabaseClient,
+  view: CustomViewRow,
+  input: { blockId: string; actionId: string; rowId: string; actor: string | null },
+): Promise<ViewActionOutcome> {
+  if (!canWriteView(view, input.actor ? 'member' : 'public'))
+    throw new ValidationError('Los botones de esta vista no están activos.');
+  const block = view.spec.blocks.find((b) => b.id === input.blockId);
+  if (!block || (block.type !== 'table' && block.type !== 'board'))
+    throw new NotFoundError('Ese bloque no está en esta vista.');
+  const action = block.actions.find((a) => a.id === input.actionId);
+  if (!action) throw new NotFoundError('Ese botón ya no está en la vista.');
+  if (!input.actor) await assertPublicBudget(db, view.id);
+
+  if (action.kind === 'set_field' && action.field && action.value !== undefined) {
+    const tracker = await trackerForBlock(db, block.tracker);
+    const { label } = await patchRow(db, view, {
+      blockId: block.id,
+      tracker,
+      rowId: input.rowId,
+      patch: { [action.field]: action.value },
+      allowed: new Set([action.field]),
+      kind: 'action',
+      actionId: action.id,
+      actor: input.actor,
+    });
+    return {
+      kind: 'set_field',
+      label,
+      message: `Listo: ${action.label.toLowerCase()} en «${label}».`,
+    };
+  }
+
+  // notify: la fila tiene que existir y ser de la tabla del bloque.
+  const tracker = await trackerForBlock(db, block.tracker);
+  const { data, error } = await db
+    .from('tracker_rows')
+    .select('id, label')
+    .eq('id', input.rowId)
+    .eq('tracker_id', tracker.id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new NotFoundError('Esa fila ya no está en la tabla.');
+  const label = String((data as { label: string }).label);
+  await db.from('custom_view_events').insert({
+    view_id: view.id,
+    block_id: block.id,
+    kind: 'action',
+    action_id: action.id,
+    tracker_row_id: input.rowId,
+    changes: {},
+    actor: input.actor,
+  });
+  return {
+    kind: 'notify',
+    label,
+    actionLabel: action.label,
+    message: 'Listo, avisamos al equipo.',
+  };
+}
+
+/** Si un envío por el formulario de este bloque debe sonar en la campana. */
+export function bellAlertFor(view: Pick<CustomViewRow, 'spec'>, trackerSlug: string) {
+  return view.spec.alerts.find((a) => a.bell && a.source === trackerSlug) ?? null;
 }
 
 export function viewSummary(view: CustomViewRow) {

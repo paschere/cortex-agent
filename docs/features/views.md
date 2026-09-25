@@ -75,6 +75,16 @@ Fuera a propósito: `vehicles` (es por persona, no del espacio: una vista de tod
 - Formularios públicos: tope de 60 envíos por hora por vista, registrados en `custom_view_submissions`.
 - `/v`, `/api/views/public/*` están en `PUBLIC_PATHS`. `lib/views/public.ts` es el único archivo de vistas con el cliente de servicio sin alcance (búsqueda por token); todo lo demás se lee con el handle del espacio de la vista.
 
+## Editar, botones, en vivo y avisos (0160)
+
+- **En vivo:** `spec.refreshSeconds` (0, 10, 30 o 60; por defecto 30). La vista abierta se recalcula sola mientras la pestaña está visible y después de cada cambio. Es sondeo, no un canal en tiempo real.
+- **Edición** (sólo tablas propias): `table.editable` (celdas que se editan en el sitio) y `board.draggable` (arrastrar una tarjeta cambia su campo de opciones; en el teléfono, un menú). Cada cambio se valida con el esquema de la tabla sobre la fila completa.
+- **Botones por fila:** `set_field` (pone el valor que dice el spec, nunca uno enviado por el navegador) y `notify` (avisa en la campana a quien creó la vista y a los administradores). Máximo 3 por bloque.
+- **Quién escribe:** `spec.editing` = `off` (por defecto), `team` (sólo dentro de la app) o `public` (también quien tenga el enlace, con la contraseña si la vista la pide). Desde afuera hay un tope de 120 cambios por hora por vista.
+- **Rastro:** cada edición, movimiento o botón queda en `custom_view_events` con qué cambió, en qué fila y quién (null = alguien con el enlace).
+- **Avisos:** `spec.alerts` (hasta 5). Cuando aparece una fila nueva que cumple los filtros mientras la vista está abierta: aviso en pantalla, sonido y, si la persona lo permite, notificación del sistema. El sonido se activa con «Activar avisos» (los navegadores exigen un clic). `bell` suena además en la campana de quien creó la vista cuando entra una fila por un formulario de esa vista, esté o no abierta.
+- Todo se configura con texto en el diseñador («que se pueda cambiar el estado arrastrando», «que suene cuando entre una factura de más de 5 millones»).
+
 ## Límites
 
 - Cada vista lee hasta 2.000 filas por tabla; si hay más, las cifras se marcan como parciales.

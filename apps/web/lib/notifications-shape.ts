@@ -61,6 +61,11 @@ export const NOTIFICATION_KINDS = [
    * 60, 90 días). Una vez por escalón y factura; ver la 0159.
    */
   'receivables_overdue',
+  /**
+   * Alguien usó una vista: un botón de «avisar» en una fila, o entró una fila
+   * por un formulario con alerta de campana. Ver la 0160.
+   */
+  'view_activity',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -103,6 +108,7 @@ export const NOTIFICATION_TONE_BY_KIND: Record<NotificationKind, NotificationTon
   mail_worth_seeing: 'warning',
   management_attention: 'warning',
   receivables_overdue: 'warning',
+  view_activity: 'info',
 };
 
 /** Cómo se llama cada clase en la bandeja, en dos palabras. */
@@ -120,6 +126,7 @@ export const NOTIFICATION_KIND_LABEL: Record<NotificationKind, string> = {
   mail_worth_seeing: 'Correo',
   management_attention: 'Gerencia',
   receivables_overdue: 'Cartera',
+  view_activity: 'Vistas',
 };
 
 /** Una fila de la bandeja, tal y como viaja del servidor a la pantalla. */

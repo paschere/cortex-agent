@@ -2,15 +2,18 @@
 
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
+import { bellForSubmission, notifyViewActivity } from '@/lib/views/activity';
 import {
   SubmissionLimitError,
   ViewConflictError,
   archiveView,
   createView,
   defineTracker,
+  editViewRow,
   getTrackerBySlug,
   mustGetView,
   restoreViewVersion,
+  runViewAction,
   setViewAccess,
   submitViewForm,
   trackerFieldsSchema,
@@ -201,10 +204,50 @@ export async function submitViewFormAction(
     const db = getOrgScopedClient(user.organization.id);
     const view = await mustGetView(db, viewId);
     const res = await submitViewForm(db, view, { blockId, values, submittedBy: user.id });
+    await bellForSubmission(db, view, blockId, user.name || user.email);
     revalidatePath(`/views/${view.slug}`);
     return { ok: true, message: res.message };
   } catch (err) {
     if (err instanceof SubmissionLimitError) return { ok: false, error: err.message };
     return { ok: false, error: describe(err, 'No se pudo enviar el formulario.') };
+  }
+}
+
+export async function editViewRowAction(
+  viewId: string,
+  blockId: string,
+  rowId: string,
+  patch: Record<string, string>,
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  try {
+    const user = await requireSession();
+    const db = getOrgScopedClient(user.organization.id);
+    const view = await mustGetView(db, viewId);
+    const res = await editViewRow(db, view, { blockId, rowId, patch, actor: user.id });
+    return { ok: true, message: `Guardado en «${res.label}».` };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo guardar el cambio.') };
+  }
+}
+
+export async function runViewActionAction(
+  viewId: string,
+  blockId: string,
+  actionId: string,
+  rowId: string,
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  try {
+    const user = await requireSession();
+    const db = getOrgScopedClient(user.organization.id);
+    const view = await mustGetView(db, viewId);
+    const res = await runViewAction(db, view, { blockId, actionId, rowId, actor: user.id });
+    if (res.kind === 'notify')
+      await notifyViewActivity(db, view, {
+        title: `${res.actionLabel}: ${res.label}`,
+        body: `${user.name || user.email} lo pidió desde «${view.name}».`,
+      });
+    return { ok: true, message: res.message };
+  } catch (err) {
+    return { ok: false, error: describe(err, 'No se pudo ejecutar el botón.') };
   }
 }

@@ -140,6 +140,37 @@ export const metricBlockSchema = z.object({
   caption: z.string().trim().max(200).optional(),
 });
 
+/**
+ * UN BOTÓN POR FILA. Dos clases y ninguna más:
+ *   - `set_field`: pone un valor fijo en un campo de ESA fila («Marcar pagada»
+ *     → estado = Pagada). Sólo en tablas propias; se valida con el esquema de
+ *     la tabla como cualquier otra escritura.
+ *   - `notify`: avisa en la campana a quien creó la vista y a los
+ *     administradores («Pedir revisión»), con el nombre de la fila. No escribe
+ *     nada en la tabla.
+ * Nada de acciones libres: un botón que ejecutara «lo que diga el modelo» en
+ * una vista pública sería una puerta sin cerradura.
+ */
+export const rowActionSchema = z
+  .object({
+    id: z.string().regex(BLOCK_ID_RE),
+    label: z.string().trim().min(1).max(32),
+    kind: z.enum(['set_field', 'notify']),
+    field: fieldRef.optional(),
+    value: z.union([z.string().max(200), z.number()]).optional(),
+    confirm: z.boolean().default(false),
+    tone: z.enum(TONES).default('primary'),
+  })
+  .superRefine((a, ctx) => {
+    if (a.kind === 'set_field' && (!a.field || a.value === undefined))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `El botón «${a.label}» cambia un campo: necesita field y value.`,
+        path: ['field'],
+      });
+  });
+export type RowAction = z.infer<typeof rowActionSchema>;
+
 export const tableBlockSchema = z.object({
   ...base,
   ...source,
@@ -149,6 +180,9 @@ export const tableBlockSchema = z.object({
   sort: z.object({ field: fieldRef, dir: z.enum(['asc', 'desc']).default('desc') }).optional(),
   limit: z.number().int().min(1).max(200).default(50),
   searchable: z.boolean().default(true),
+  /** Columnas que se pueden editar en el sitio (sólo tablas propias). */
+  editable: z.array(fieldRef).max(10).default([]),
+  actions: z.array(rowActionSchema).max(3).default([]),
 });
 
 export const chartBlockSchema = z.object({
@@ -176,6 +210,9 @@ export const boardBlockSchema = z.object({
   groupBy: fieldRef,
   cardFields: z.array(fieldRef).max(4).default([]),
   limit: z.number().int().min(1).max(60).default(30),
+  /** Arrastrar una tarjeta a otra columna cambia su campo de opciones. */
+  draggable: z.boolean().default(false),
+  actions: z.array(rowActionSchema).max(3).default([]),
 });
 
 export const formBlockSchema = z.object({
@@ -204,6 +241,29 @@ export const blockSchema = z.discriminatedUnion('type', [
 export type ViewBlock = z.infer<typeof blockSchema>;
 export type ViewBlockType = ViewBlock['type'];
 
+/**
+ * AVISAR CUANDO ENTRA ALGO NUEVO. Mientras la vista está abierta, cada
+ * refresco compara lo que había con lo que hay; una fila nueva de `source` que
+ * cumpla los filtros suena (`sound`), aparece en pantalla y, si la persona lo
+ * permitió en su navegador, como notificación del sistema (`desktop`). `bell`
+ * además deja un aviso en la campana de quien creó la vista cuando la fila
+ * entra por un formulario de ESTA vista — ése sí lo manda el servidor, esté o
+ * no la vista abierta.
+ */
+export const viewAlertSchema = z.object({
+  id: z.string().regex(BLOCK_ID_RE),
+  source: sourceRef,
+  filters: z.array(filterSchema).max(4).default([]),
+  message: z.string().trim().max(120).optional(),
+  sound: z.boolean().default(true),
+  desktop: z.boolean().default(false),
+  bell: z.boolean().default(false),
+});
+export type ViewAlert = z.infer<typeof viewAlertSchema>;
+
+/** Cada cuánto se refresca sola una vista abierta. 0 = nunca. */
+export const REFRESH_CHOICES = [0, 10, 30, 60] as const;
+
 export const viewSpecSchema = z
   .object({
     version: z.literal(1),
@@ -211,6 +271,16 @@ export const viewSpecSchema = z
     subtitle: z.string().trim().max(300).optional(),
     accent: z.enum(TONES).default('primary'),
     blocks: z.array(blockSchema).min(1).max(MAX_VIEW_BLOCKS),
+    refreshSeconds: z
+      .union([z.literal(0), z.literal(10), z.literal(30), z.literal(60)])
+      .default(30),
+    /**
+     * Quién puede editar y usar botones: nadie, el equipo (dentro de la app)
+     * o también quien abre el enlace. Por defecto nadie: editar es una
+     * decisión, no un efecto secundario de agregar una columna editable.
+     */
+    editing: z.enum(['off', 'team', 'public']).default('off'),
+    alerts: z.array(viewAlertSchema).max(5).default([]),
   })
   .superRefine((spec, ctx) => {
     const seen = new Set<string>();
@@ -292,6 +362,31 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
       }
       return true;
     };
+    /** Lo que escribe: columnas editables y botones que cambian un campo. */
+    const checkWrites = (editable: string[], actions: RowAction[]) => {
+      const writes = editable.length > 0 || actions.length > 0;
+      if (!writes) return;
+      if (isPlatformSourceId(block.tracker)) {
+        problems.push(
+          `${where}: «${tracker.name}» es una fuente de la plataforma y es de sólo lectura; sólo las tablas propias se editan o llevan botones en una vista.`,
+        );
+        return;
+      }
+      for (const key of editable) {
+        if (key === 'label' || key === 'created_at' || key === 'updated_at')
+          problems.push(`${where}: «${key}» no se edita; edita los campos de la tabla.`);
+        else need(key, 'editable');
+      }
+      for (const a of actions) {
+        if (a.kind !== 'set_field' || !a.field) continue;
+        if (!need(a.field, `botón «${a.label}»`)) continue;
+        const field = tracker.fields.find((f) => f.key === a.field);
+        if (field?.type === 'select' && !field.options?.includes(String(a.value)))
+          problems.push(
+            `${where}: el botón «${a.label}» pone «${a.value}», que no es una opción de ${field.label} (${field.options?.join(', ')}).`,
+          );
+      }
+    };
     if ('filters' in block) {
       for (const f of block.filters) need(f.field, 'filtro');
     }
@@ -315,6 +410,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
       case 'table':
         for (const c of block.columns) need(c, 'columna');
         if (block.sort) need(block.sort.field, 'orden');
+        checkWrites(block.editable, block.actions);
         break;
       case 'board': {
         if (
@@ -325,6 +421,7 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
             `${where}: el tablero agrupa por un campo de opciones; «${block.groupBy}» no lo es.`,
           );
         for (const c of block.cardFields) need(c, 'tarjeta');
+        checkWrites(block.draggable ? [block.groupBy] : [], block.actions);
         break;
       }
       case 'form':
@@ -342,12 +439,36 @@ export function checkSpecAgainst(spec: ViewSpec, catalog: CatalogTracker[]): str
         break;
     }
   }
+  for (const alert of spec.alerts) {
+    const tracker = bySlug.get(alert.source);
+    if (!tracker) {
+      problems.push(`Alerta «${alert.id}»: «${alert.source}» no existe.`);
+      continue;
+    }
+    for (const f of alert.filters)
+      if (!fieldType(tracker, f.field))
+        problems.push(`Alerta «${alert.id}»: «${f.field}» no es un campo de ${tracker.name}.`);
+  }
+  const writes = spec.blocks.some(
+    (b) =>
+      (b.type === 'table' && (b.editable.length > 0 || b.actions.length > 0)) ||
+      (b.type === 'board' && (b.draggable || b.actions.length > 0)),
+  );
+  if (writes && spec.editing === 'off')
+    problems.push(
+      'La vista tiene columnas editables, tableros que se arrastran o botones, pero `editing` está en "off": ponlo en "team" o "public" para que funcionen.',
+    );
   return problems;
 }
 
 /** Las tablas y fuentes que una vista lee, sin repetir. */
 export function trackersOf(spec: ViewSpec): string[] {
-  return [...new Set(spec.blocks.flatMap((b) => (b.type === 'text' ? [] : [b.tracker])))];
+  return [
+    ...new Set([
+      ...spec.blocks.flatMap((b) => (b.type === 'text' ? [] : [b.tracker])),
+      ...spec.alerts.map((a) => a.source),
+    ]),
+  ];
 }
 
 export const BLOCK_LABEL: Record<ViewBlockType, string> = {

@@ -16,6 +16,7 @@ import { useMemo, useState, useTransition } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ViewChart } from './ViewChart';
+import { EditableCell, RowActions, ViewWriterProvider, useViewWriter } from './view-writes';
 
 /**
  * EL LIENZO DE UNA VISTA.
@@ -90,24 +91,29 @@ const TONE_BAR: Record<Tone, string> = {
 export function ViewCanvas({
   view,
   target,
+  onChanged,
 }: {
   view: ComputedView;
   target: SubmitTarget;
+  /** Después de una escritura: el refresco en vivo lo usa para recalcular. */
+  onChanged?: () => void;
 }) {
   const submit = submitterFor(target);
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-      {view.blocks.map((block) => (
-        <section key={block.id} className={clsx('min-w-0', SPAN[block.width])}>
-          <Block block={block} target={target} submit={submit} />
-        </section>
-      ))}
-      {view.partial.length > 0 && (
-        <p className="text-micro text-ink-faint md:col-span-6">
-          Cifras calculadas sobre las 2.000 filas más recientes de {view.partial.join(', ')}.
-        </p>
-      )}
-    </div>
+    <ViewWriterProvider target={view.writable ? target : { kind: 'preview' }} onChanged={onChanged}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+        {view.blocks.map((block) => (
+          <section key={block.id} className={clsx('min-w-0', SPAN[block.width])}>
+            <Block block={block} target={target} submit={submit} />
+          </section>
+        ))}
+        {view.partial.length > 0 && (
+          <p className="text-micro text-ink-faint md:col-span-6">
+            Cifras calculadas sobre las 2.000 filas más recientes de {view.partial.join(', ')}.
+          </p>
+        )}
+      </div>
+    </ViewWriterProvider>
   );
 }
 
@@ -302,6 +308,9 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
                   </button>
                 </th>
               ))}
+              {block.actions.length > 0 && (
+                <th scope="col" className="px-4 py-2" aria-label="Acciones" />
+              )}
             </tr>
           </thead>
           <tbody>
@@ -310,20 +319,42 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
                 key={r.id}
                 className="border-b border-border/60 last:border-0 hover:bg-surface-2/60"
               >
-                {r.cells.map((cell, i) => (
-                  <td
+                {r.cells.map((cell, i) => {
+                  const column = block.columns[i];
+                  const className = clsx(
+                    'px-4 py-2.5 align-top first:pl-4 sm:first:pl-5',
+                    i === 0 ? 'font-medium text-ink' : 'text-ink-muted',
+                    column?.kind !== 'text' && 'tabular font-mono text-xs',
+                    column?.kind === 'number' && 'text-right',
+                  );
+                  return column?.edit ? (
+                    <EditableCell
+                      key={column.key}
+                      blockId={block.id}
+                      rowId={r.id}
+                      field={column.key}
+                      edit={column.edit}
+                      raw={r.sort[i] ?? null}
+                      display={cell}
+                      className={className}
+                    />
+                  ) : (
                     // biome-ignore lint/suspicious/noArrayIndexKey: las columnas son fijas por bloque.
-                    key={i}
-                    className={clsx(
-                      'px-4 py-2.5 align-top first:pl-4 sm:first:pl-5',
-                      i === 0 ? 'font-medium text-ink' : 'text-ink-muted',
-                      block.columns[i]?.kind !== 'text' && 'tabular font-mono text-xs',
-                      block.columns[i]?.kind === 'number' && 'text-right',
-                    )}
-                  >
-                    {cell}
+                    <td key={i} className={className}>
+                      {cell}
+                    </td>
+                  );
+                })}
+                {block.actions.length > 0 && (
+                  <td className="whitespace-nowrap px-4 py-2 text-right align-top">
+                    <RowActions
+                      blockId={block.id}
+                      actions={block.actions}
+                      rowId={r.id}
+                      rowLabel={r.cells[0] ?? ''}
+                    />
                   </td>
-                ))}
+                )}
               </tr>
             ))}
           </tbody>
@@ -344,13 +375,40 @@ function Table({ block }: { block: Extract<ComputedBlock, { type: 'table' }> }) 
 }
 
 function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) {
+  const writer = useViewWriter();
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
+  const canDrag = Boolean(writer && block.dragField);
+  async function moveTo(cardId: string, column: string) {
+    if (!writer || !block.dragField || column === '__none') return;
+    setMoveError(null);
+    const res = await writer.edit(block.id, cardId, { [block.dragField]: column });
+    if (!res.ok) setMoveError(res.error);
+  }
   return (
     <Card title={block.title} source={block.source}>
       <div className="scroll-slim -mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
         {block.columns.map((col) => (
           <div
             key={col.key}
-            className="w-64 min-w-[15rem] flex-1 shrink-0 rounded-sm bg-surface-2 p-2.5"
+            onDragOver={(e) => {
+              if (!canDrag || col.key === '__none') return;
+              e.preventDefault();
+              setOver(col.key);
+            }}
+            onDragLeave={() => setOver((o) => (o === col.key ? null : o))}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOver(null);
+              const id = e.dataTransfer.getData('text/plain') || dragging;
+              setDragging(null);
+              if (id) void moveTo(id, col.key);
+            }}
+            className={clsx(
+              'w-64 min-w-[15rem] flex-1 shrink-0 rounded-sm bg-surface-2 p-2.5 transition-colors',
+              over === col.key && 'bg-primary-soft/60 ring-2 ring-primary/40',
+            )}
           >
             <div className="mb-2 flex items-center justify-between px-1">
               <span className="text-xs font-semibold text-ink">{col.label}</span>
@@ -362,7 +420,17 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
               {col.cards.map((card) => (
                 <li
                   key={card.id}
-                  className="rounded-sm border border-border bg-surface p-3 shadow-card"
+                  draggable={canDrag}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('text/plain', card.id);
+                    setDragging(card.id);
+                  }}
+                  onDragEnd={() => setDragging(null)}
+                  className={clsx(
+                    'rounded-sm border border-border bg-surface p-3 shadow-card',
+                    canDrag && 'cursor-grab active:cursor-grabbing',
+                    dragging === card.id && 'opacity-50',
+                  )}
                 >
                   <p className="text-sm font-medium text-ink">{card.label}</p>
                   {card.details.length > 0 && (
@@ -374,6 +442,33 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
                         </div>
                       ))}
                     </dl>
+                  )}
+                  {(block.actions.length > 0 || canDrag) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <RowActions
+                        blockId={block.id}
+                        actions={block.actions}
+                        rowId={card.id}
+                        rowLabel={card.label}
+                      />
+                      {canDrag && (
+                        // En un teléfono no se arrastra: la misma acción, en un menú.
+                        <select
+                          aria-label={`Mover ${card.label}`}
+                          value={col.key}
+                          onChange={(e) => void moveTo(card.id, e.target.value)}
+                          className="ml-auto rounded-pill border border-border bg-surface px-2 py-0.5 text-micro text-ink-muted sm:hidden"
+                        >
+                          {block.columns
+                            .filter((c) => c.key !== '__none' || c.key === col.key)
+                            .map((c) => (
+                              <option key={c.key} value={c.key} disabled={c.key === '__none'}>
+                                {c.label}
+                              </option>
+                            ))}
+                        </select>
+                      )}
+                    </div>
                   )}
                 </li>
               ))}
@@ -389,6 +484,7 @@ function Board({ block }: { block: Extract<ComputedBlock, { type: 'board' }> }) 
           </div>
         ))}
       </div>
+      {moveError && <p className="mt-2 text-xs text-rose">{moveError}</p>}
     </Card>
   );
 }

@@ -1,6 +1,6 @@
-import { ViewCanvas } from '@/components/views/ViewCanvas';
+import { LiveViewCanvas } from '@/components/views/LiveViewCanvas';
 import { isUnlocked, openPublicView, unlockCookieName } from '@/lib/views/public';
-import { computeView, countPublicOpen, loadViewSources } from '@cortex/agent-tools';
+import { canWriteView, computeView, countPublicOpen, loadViewSources } from '@cortex/agent-tools';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
@@ -48,6 +48,8 @@ export default async function PublicViewPage({ params }: { params: Promise<{ tok
   const computed = computeView(
     view.spec,
     await loadViewSources(db, view.spec, { audience: 'public' }),
+    new Date(),
+    { writable: canWriteView(view, 'public') },
   );
   void countPublicOpen(db, view).catch(() => undefined);
 
@@ -61,7 +63,11 @@ export default async function PublicViewPage({ params }: { params: Promise<{ tok
           </p>
         )}
       </header>
-      <ViewCanvas view={computed} target={{ kind: 'public', token }} />
+      <LiveViewCanvas
+        initial={computed}
+        target={{ kind: 'public', token }}
+        dataUrl={`/api/views/public/data?token=${encodeURIComponent(token)}`}
+      />
       <p className="mt-8 text-micro text-ink-faint">
         Datos al{' '}
         {new Intl.DateTimeFormat('es-CO', {

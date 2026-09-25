@@ -3,6 +3,7 @@ import { ViewToolbar } from '@/components/views/ViewToolbar';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import {
+  canWriteView,
   computeView,
   getView,
   internalShareRefusal,
@@ -41,7 +42,9 @@ export default async function ViewPage({ params }: { params: Promise<{ slug: str
     loadViewSources(db, view.spec),
     listViewVersions(db, view.id, 20),
   ]);
-  const computed = computeView(view.spec, sources);
+  const computed = computeView(view.spec, sources, new Date(), {
+    writable: canWriteView(view, 'member'),
+  });
   const open = view.share_token && shareIsOpen(view) ? publicViewUrl(view.share_token) : null;
   const internal = internalSourcesOf(view.spec);
 

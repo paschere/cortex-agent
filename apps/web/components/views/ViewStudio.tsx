@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { ArrowUp, Check, Loader2, Sparkles, Table2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition } from 'react';
+import { LiveViewCanvas } from './LiveViewCanvas';
 import { ViewCanvas } from './ViewCanvas';
 
 /**
@@ -198,10 +199,15 @@ export function ViewStudio({
 
       {shown ? (
         <div className={clsx('transition-opacity duration-200', designing && 'opacity-60')}>
-          <ViewCanvas
-            view={shown}
-            target={draft || !view ? { kind: 'preview' } : { kind: 'app', viewId: view.id }}
-          />
+          {view && !draft ? (
+            <LiveViewCanvas
+              initial={shown}
+              target={{ kind: 'app', viewId: view.id }}
+              dataUrl={`/api/views/${view.id}/data`}
+            />
+          ) : (
+            <ViewCanvas view={shown} target={{ kind: 'preview' }} />
+          )}
         </div>
       ) : (
         !designing && (
