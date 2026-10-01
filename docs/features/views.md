@@ -103,9 +103,21 @@ Los llamadores pasan `viewerId`: la página de la vista, `/api/views/[id]/data` 
 ## Cómo se crea y se edita
 
 - **En /views**: se describe la vista; `/api/views/design` devuelve un borrador con vista previa calculada con datos reales. Se puede seguir afinando con otra frase. Nada se guarda sin «Crear vista» / «Guardar cambios». Si faltan datos, el diseñador puede proponer hasta 2 tablas nuevas, que se crean al guardar (nunca modifica una tabla existente).
-- **En /views/<slug>**: la barra de abajo («Pídele un cambio a Cortex») edita la vista con texto.
+- **En /views/<slug>**: la barra de abajo («Pídele un cambio a Cortex») edita la vista con texto, y «Editar» (`?editar=1`) abre el lienzo (abajo).
+- **Plantillas en /views**: «Cartera» y «Ventas del mes» son specs sobre `cortex.ventas` que abren directo en el lienzo con datos reales (sin gastar respuestas del plan); «Operación de carga» y «Seguimiento de solicitudes» se le piden a Cortex porque dependen de las tablas de cada empresa; «Lienzo en blanco» arranca con un bloque de texto. `apps/web/lib/views/starter-templates.ts`.
 - **En el chat**: `views.list`, `views.get`, `views.create`, `views.update`, `views.share`, `views.archive`.
 - Cada guardado es una versión (`custom_view_versions`) con la frase que la produjo. Restaurar copia una versión vieja como nueva. Las ediciones simultáneas no se pisan: la segunda recibe un conflicto.
+
+### El lienzo (editar con las manos)
+
+`apps/web/components/views/editor/*`. Para «este gráfico más ancho» o «quita ese filtro» sin escribirle a Cortex:
+
+- **Rejilla**: cada bloque se pinta con el mismo `ViewBlockPreview` de la vista guardada, inerte, dentro de un marco. Arrastrar con el asa (eventos de puntero, sirve en el teléfono; menos de 5 px es un clic); con el teclado, flechas sobre el asa o Alt+flechas sobre el nombre. Al elegir un bloque: ancho (⅓ ½ completo), antes/después, duplicar y eliminar (con «Deshacer» en un aviso). Deshacer/rehacer global (⌘Z / ⇧⌘Z, hasta 60 pasos; las teclas de un mismo campo cuentan como un paso).
+- **Inspector** (columna en escritorio, hoja inferior por debajo de 1024 px): título, fuente (menú agrupado: tablas del espacio, datos de Cortex, Feed propio; lo que el bloque no admite sale deshabilitado con el motivo), campos, agregado, tipo de gráfico, agrupar por, filtros como frases («Estado» «no es» «Pagada»), orden, límite, columnas editables, botones por fila, arrastrar, campos del formulario, markdown. Pestaña «Vista»: nombre, subtítulo, descripción, refresco, quién edita y avisos.
+- **Paleta «Agregar bloque»**: cada plantilla sale válida (`newBlock` elige fuente —la del bloque elegido si sirve—, título y campos probables). «Plano» (`zones`) aparece sólo si `blockSchema` del servidor lo acepta (`/api/views/catalog` devuelve `blockTypes`).
+- **Vista previa**: cada cambio (450 ms después) va a `POST /api/views/preview`, que valida con `viewSpecSchema` + `checkSpecAgainst` (catálogo de quien edita, con `keep` de la versión guardada) y calcula con `loadViewSources` + `computeView`, nunca escribible. Los problemas vuelven atados a su bloque (`problemsFromZod`/`problemsFromCheck`) y se pintan en el marco y en el inspector; «Guardar» espera a que no quede ninguno. No llama al modelo ni gasta respuestas.
+- **Guardar** pasa por `saveViewAction` con `expectedVersion` (versión nueva, historial, conflicto si alguien guardó antes). «Cancelar» descarta. La caja de Cortex sigue abajo y cambia el borrador del lienzo.
+- El vocabulario que el navegador necesita (operadores, agregados, anchos…) está repetido en `lib/views/editor-shape.ts` porque el barril de `@cortex/agent-tools` no entra en el bundle de cliente; `editor-shape.test.ts` falla si se desvía. `editor-spec.test.ts` comprueba que cada plantilla de la paleta y de inicio pasa el contrato y el catálogo.
 
 ## Quién la ve
 
@@ -148,4 +160,5 @@ Los llamadores pasan `viewerId`: la página de la vista, `/api/views/[id]/data` 
 - `packages/agent-tools/src/views/feed-sources.test.ts`: ids del Feed (armar/desarmar, no chocan, la forma rechaza parecidos), encabezados → claves y tipos (dinero sólo en pesos, códigos como texto, fechas día primero), filas y tope parcial, contrato (sólo lectura, no disponible, opacas), y contra un PostgREST de mentira con dos personas y dos espacios: el dueño ve, el compañero ve el aviso sin que se pida el contenido, público y sin `viewerId` no leen, vencidas/borradas/de otro espacio, la conexión sigue su última lectura, vista preparada, compartir rechazado, catálogo sólo del que pregunta, `validateSpec` con `keep`, y las cuatro fuentes personales (cada quien lo suyo; rutinas propias + globales).
 - `scripts/test-views-sql.mjs` (PGlite): CHECK de las puertas, slugs por espacio y el candado de intentos. `PGLITE_MODULE=<ruta> node scripts/test-views-sql.mjs`.
 - `apps/web/lib/shared-links-public-paths.test.ts`: las rutas públicas siguen en el middleware.
-- QA visual con datos de mentira en escritorio, 375 px y el tema oscuro de la app. Sin prueba autenticada end-to-end contra una base con la 0156 aplicada.
+- `apps/web/lib/views/editor-shape.test.ts` y `editor-spec.test.ts`: vocabulario del lienzo contra el contrato; mover/duplicar/borrar; plantillas válidas; problemas atados a su bloque.
+- QA visual con datos de mentira en escritorio, 375 px y el tema oscuro de la app (también el lienzo: seleccionar, inspector, paleta, arrastrar, borrar con deshacer, plantilla «Cartera»). Sin prueba autenticada end-to-end contra una base con la 0156 aplicada.

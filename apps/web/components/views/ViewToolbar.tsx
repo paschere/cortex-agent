@@ -18,12 +18,14 @@ import {
   Link2,
   Loader2,
   Lock,
+  PencilRuler,
   Pin,
   PinOff,
   RefreshCw,
   Users,
   X,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -35,6 +37,11 @@ import { useState, useTransition } from 'react';
  * del botón y no después: quien abre la puerta tiene que saber que saca filas
  * de la empresa. La contraseña se escribe aquí y en ningún otro sitio — no pasa
  * por el chat, porque lo que pasa por el chat queda en la auditoría.
+ *
+ * EDITAR abre el lienzo (`?editar=1`, ver ViewStudio). Va primero porque es lo
+ * que más se hace. En el teléfono la barra queda en una sola fila de iconos
+ * —con su nombre para el lector de pantalla y en el `title`— para no empujar
+ * la vista media pantalla hacia abajo.
  */
 
 type Visibility = 'workspace' | 'link' | 'password';
@@ -63,18 +70,55 @@ export interface ToolbarVersion {
 }
 
 const PILL =
-  'inline-flex items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 py-1.5 text-xs font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 disabled:opacity-45 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary';
+  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-2.5 text-xs font-semibold text-ink shadow-card transition-all duration-150 hover:-translate-y-px hover:bg-surface-2 disabled:opacity-45 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:px-3';
 
-export function ViewToolbar({ view, versions }: { view: ToolbarView; versions: ToolbarVersion[] }) {
+/** El nombre del botón: visible desde sm, siempre para el lector de pantalla. */
+function Label({ children }: { children: React.ReactNode }) {
+  return <span className="sr-only sm:not-sr-only">{children}</span>;
+}
+
+export function ViewToolbar({
+  view,
+  versions,
+  editing = false,
+}: {
+  view: ToolbarView;
+  versions: ToolbarVersion[];
+  /** El lienzo está abierto: «Editar» se muestra como estado, no como botón. */
+  editing?: boolean;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:gap-2">
+      {editing ? (
+        <span
+          className={clsx(
+            PILL,
+            'border-primary/40 bg-primary-soft text-primary hover:translate-y-0',
+          )}
+        >
+          <PencilRuler className="h-3.5 w-3.5" /> Editando
+        </span>
+      ) : (
+        <Link
+          href="?editar=1"
+          scroll={false}
+          title="Editar en el lienzo"
+          className={clsx(
+            PILL,
+            'cortex-primary-button border-primary bg-primary text-white hover:bg-primary-strong',
+          )}
+        >
+          <PencilRuler className="h-3.5 w-3.5" /> Editar
+        </Link>
+      )}
       <button
         type="button"
         className={PILL}
+        title={view.pinned ? 'Quitar de Inicio' : 'Fijar en Inicio'}
         disabled={pending}
         onClick={() =>
           start(async () => {
@@ -85,7 +129,7 @@ export function ViewToolbar({ view, versions }: { view: ToolbarView; versions: T
         }
       >
         {view.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
-        {view.pinned ? 'Quitar de Inicio' : 'Fijar en Inicio'}
+        <Label>{view.pinned ? 'Quitar de Inicio' : 'Fijar en Inicio'}</Label>
       </button>
       <ShareDialog view={view} />
       <HistoryDialog view={view} versions={versions} />
@@ -93,6 +137,7 @@ export function ViewToolbar({ view, versions }: { view: ToolbarView; versions: T
         <button
           type="button"
           className={clsx(PILL, 'text-ink-muted')}
+          title="Archivar"
           disabled={pending}
           onClick={() => {
             if (
@@ -108,7 +153,7 @@ export function ViewToolbar({ view, versions }: { view: ToolbarView; versions: T
             });
           }}
         >
-          <Archive className="h-3.5 w-3.5" /> Archivar
+          <Archive className="h-3.5 w-3.5" /> <Label>Archivar</Label>
         </button>
       )}
       {error && <p className="w-full text-xs text-rose">{error}</p>}
@@ -173,13 +218,15 @@ function ShareDialog({ view }: { view: ToolbarView }) {
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger className={PILL}>
+      <Dialog.Trigger className={PILL} title="Compartir">
         <Icon className="h-3.5 w-3.5" />
-        {view.visibility === 'workspace'
-          ? 'Compartir'
-          : view.visibility === 'link'
-            ? 'Con enlace'
-            : 'Con contraseña'}
+        <Label>
+          {view.visibility === 'workspace'
+            ? 'Compartir'
+            : view.visibility === 'link'
+              ? 'Con enlace'
+              : 'Con contraseña'}
+        </Label>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm" />
@@ -366,8 +413,9 @@ function HistoryDialog({ view, versions }: { view: ToolbarView; versions: Toolba
   const [error, setError] = useState<string | null>(null);
   return (
     <Dialog.Root>
-      <Dialog.Trigger className={PILL}>
-        <History className="h-3.5 w-3.5" /> v{view.version}
+      <Dialog.Trigger className={PILL} title="Historial de versiones">
+        <History className="h-3.5 w-3.5" />
+        <span className="tabular font-mono">v{view.version}</span>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm" />

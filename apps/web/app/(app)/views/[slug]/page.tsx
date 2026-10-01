@@ -20,7 +20,8 @@ import { notFound } from 'next/navigation';
 /**
  * Una vista, adentro. Los datos se calculan en cada visita con el handle del
  * espacio; lo que llega al navegador es sólo lo que los bloques piden. La
- * barra de abajo la cambia hablando; la de arriba decide quién más la ve.
+ * barra de abajo la cambia hablando; «Editar» (`?editar=1`) abre el lienzo
+ * para cambiarla con las manos; la barra de arriba decide quién más la ve.
  */
 
 export const dynamic = 'force-dynamic';
@@ -31,8 +32,15 @@ const WHEN = new Intl.DateTimeFormat('es-CO', {
   timeZone: 'America/Bogota',
 });
 
-export default async function ViewPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+export default async function ViewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ editar?: string }>;
+}) {
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
+  const editing = query.editar === '1';
   const user = await requireSession();
   const db = getOrgScopedClient(user.organization.id);
   const view = await getView(db, decodeURIComponent(slug));
@@ -78,6 +86,7 @@ export default async function ViewPage({ params }: { params: Promise<{ slug: str
             canManage: user.role === 'org_admin' || view.created_by === user.id,
             shareBlocked: internal.length ? internalShareRefusal(internal) : null,
           }}
+          editing={editing}
           versions={versions.map((v) => ({
             version: v.version,
             prompt: v.prompt,
@@ -87,7 +96,14 @@ export default async function ViewPage({ params }: { params: Promise<{ slug: str
       </header>
       <ViewStudio
         key={view.version}
-        view={{ id: view.id, slug: view.slug, version: view.version }}
+        view={{
+          id: view.id,
+          slug: view.slug,
+          version: view.version,
+          name: view.name,
+          description: view.description,
+          spec: view.spec,
+        }}
         initial={computed}
       />
     </>

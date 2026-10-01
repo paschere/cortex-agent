@@ -1,20 +1,23 @@
 import { PageHeader } from '@/components/ui/page-header';
 import { ViewStudio } from '@/components/views/ViewStudio';
+import { ViewThumbnail } from '@/components/views/ViewThumbnail';
 import { requireSession } from '@/lib/session';
 import { getOrgScopedClient } from '@/lib/supabase/service';
 import { BLOCK_LABEL, listTrackers, listViews, shareIsOpen } from '@cortex/agent-tools';
 import { clsx } from 'clsx';
-import { Globe, LayoutPanelTop, Lock, Pin, Users } from 'lucide-react';
+import { Globe, LayoutPanelTop, Lock, PencilRuler, Pin, Users } from 'lucide-react';
 import Link from 'next/link';
 
 /**
  * Vistas: las pantallas que esta empresa se armó hablando.
  *
- * LA FORMA. Arriba la estantería —lo que ya existe, fijadas primero—, abajo el
- * estudio vacío con la caja para describir una nueva. Sin plantillas ni
- * constructor de arrastrar y soltar: la plantilla es la frase, y las
- * sugerencias salen de las tablas que el espacio ya tiene, para que el primer
- * clic produzca algo con datos de verdad y no un ejemplo de mentira.
+ * LA FORMA. Arriba la estantería —lo que ya existe, fijadas primero, cada una
+ * con la miniatura de su forma—, abajo el estudio vacío: plantillas que abren
+ * en el lienzo con datos de verdad (cartera, ventas del mes), las que Cortex
+ * arma con las tablas de esta empresa, un lienzo en blanco y la caja para
+ * describir una nueva. Las sugerencias de frases salen de las tablas que el
+ * espacio ya tiene, para que el primer clic produzca algo con sus datos y no
+ * un ejemplo de mentira.
  */
 
 export const dynamic = 'force-dynamic';
@@ -48,7 +51,7 @@ export default async function ViewsPage() {
     <>
       <PageHeader
         title="Vistas"
-        subtitle="Pantallas a la medida sobre las tablas de tu empresa: tableros, portales y formularios. Se piden y se cambian escribiendo, se fijan en Inicio o se comparten por enlace, con contraseña si hace falta."
+        subtitle="Pantallas a la medida sobre las tablas de tu empresa: tableros, portales y formularios. Se piden escribiendo o se arman a mano en el lienzo; se fijan en Inicio o se comparten por enlace, con contraseña si hace falta."
         icon={<LayoutPanelTop className="h-5 w-5" />}
       />
 
@@ -61,12 +64,13 @@ export default async function ViewsPage() {
               const expired = v.visibility !== 'workspace' && !shareIsOpen(v);
               const kinds = [...new Set(v.spec.blocks.map((b) => BLOCK_LABEL[b.type]))];
               return (
-                <li key={v.id}>
+                <li key={v.id} className="group relative">
                   <Link
                     href={`/views/${v.slug}`}
-                    className="group flex h-full flex-col rounded-card border border-border bg-surface p-4 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:shadow-pop"
+                    className="flex h-full flex-col rounded-card border border-border bg-surface p-3 shadow-card transition-all duration-150 hover:-translate-y-px hover:border-border-strong hover:shadow-pop sm:p-4"
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    <ViewThumbnail blocks={v.spec.blocks} />
+                    <div className="mt-3 flex items-start justify-between gap-2">
                       <span className="text-base font-semibold text-ink group-hover:text-primary">
                         {v.name}
                       </span>
@@ -94,6 +98,15 @@ export default async function ViewsPage() {
                       </span>
                       <span className="text-micro text-ink-faint">{kinds.join(' · ')}</span>
                     </div>
+                  </Link>
+                  {/* Un atajo al lienzo: en el teléfono siempre a la vista; en escritorio al pasar o enfocar. */}
+                  <Link
+                    href={`/views/${v.slug}?editar=1`}
+                    aria-label={`Editar ${v.name} en el lienzo`}
+                    title="Editar en el lienzo"
+                    className="absolute right-5 top-5 grid h-8 w-8 place-items-center rounded-pill border border-border-strong bg-surface text-ink-muted shadow-card transition-all duration-150 hover:text-primary focus-visible:opacity-100 sm:right-6 sm:top-6 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100"
+                  >
+                    <PencilRuler className="h-3.5 w-3.5" />
                   </Link>
                 </li>
               );

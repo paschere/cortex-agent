@@ -118,6 +118,20 @@ export function ViewCanvas({
   );
 }
 
+/**
+ * Un bloque suelto, ya calculado, sin rejilla alrededor y sin escribir nada.
+ * Es lo que el lienzo de edición (components/views/editor) pinta dentro de cada
+ * marco: el mismo dibujo que verá la vista guardada, para que editar no sea
+ * mirar una maqueta distinta de lo que sale.
+ */
+export function ViewBlockPreview({ block }: { block: ComputedBlock }) {
+  return (
+    <ViewWriterProvider target={{ kind: 'preview' }}>
+      <Block block={block} target={{ kind: 'preview' }} />
+    </ViewWriterProvider>
+  );
+}
+
 function Card({
   title,
   source,
